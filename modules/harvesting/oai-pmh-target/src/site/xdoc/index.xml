@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!--
+// ======================================================================== 78
+-->
+<document>
+
+    <properties>
+        <title>Welcome</title>
+    </properties>
+
+    <body>
+        <section name="About SCAM OAI-PMH">
+            <a name="Welcome"/>
+
+        <div style="text-align:left;height:200px">
+        <p>
+        TODO: ...
+         </p>
+		<p>
+		For more info, visit <a href="http://project.iml.umu.se/projects/scam">SCAM project site</a>.  
+		</p>
+        </div>
+      
+        </section>
+    </body>
+</document>

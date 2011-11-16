@@ -1,0 +1,777 @@
+/**
+ * Copyright (c) 2007-2010
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package se.kmr.scam.rest.resources;
+
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.openrdf.model.Graph;
+import org.openrdf.model.Literal;
+import org.openrdf.model.Statement;
+import org.openrdf.model.Value;
+import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.rio.RDFFormat;
+import org.openrdf.rio.n3.N3ParserFactory;
+import org.openrdf.rio.n3.N3Writer;
+import org.openrdf.rio.ntriples.NTriplesParser;
+import org.openrdf.rio.ntriples.NTriplesWriter;
+import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
+import org.openrdf.rio.trig.TriGParser;
+import org.openrdf.rio.trig.TriGWriter;
+import org.openrdf.rio.trix.TriXParser;
+import org.openrdf.rio.trix.TriXWriter;
+import org.openrdf.rio.turtle.TurtleParser;
+import org.openrdf.rio.turtle.TurtleWriter;
+import org.restlet.Context;
+import org.restlet.data.MediaType;
+import org.restlet.data.Request;
+import org.restlet.data.Response;
+import org.restlet.data.Status;
+import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.resource.Representation;
+import org.restlet.resource.StringRepresentation;
+import org.restlet.resource.Variant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import se.kmr.scam.jdil.JDILErrorMessages;
+import se.kmr.scam.repository.AuthorizationException;
+import se.kmr.scam.repository.BuiltinType;
+import se.kmr.scam.repository.Entry;
+import se.kmr.scam.repository.Group;
+import se.kmr.scam.repository.LocationType;
+import se.kmr.scam.repository.Metadata;
+import se.kmr.scam.repository.PrincipalManager;
+import se.kmr.scam.repository.RepositoryProperties;
+import se.kmr.scam.repository.User;
+import se.kmr.scam.repository.PrincipalManager.AccessProperty;
+import se.kmr.scam.repository.impl.StringResource;
+import se.kmr.scam.repository.impl.converters.ConverterUtil;
+import se.kmr.scam.repository.util.EntryUtil;
+import se.kmr.scam.rest.util.RDFJSON;
+import se.kmr.scam.rest.util.Util;
+
+/**
+ * This class is the resource for entries.
+ * 
+ * @author Eric Johansson (eric.johansson@educ.umu.se)
+ * @author Hannes Ebner
+ * @see BaseResource
+ */
+public class EntryResource extends BaseResource {
+	/** Logger. */
+	Logger log = LoggerFactory.getLogger(EntryResource.class);
+
+	/** The given entry from the URL. */
+	Entry entry = null;
+
+	/** The entrys ID. */
+	String entryId = null;
+
+	/** The contexts ID. */
+	String contextId = null;
+
+	/** The context object for the context */
+	se.kmr.scam.repository.Context context = null;
+
+	/** Parameters from the URL. Example: ?scam=umu&shame=kth */
+	HashMap<String, String> parameters = null;
+
+	private MediaType format;
+
+	/**
+	 * Constructor
+	 * 
+	 * @param context
+	 *            The parent context
+	 * @param request
+	 *            The Request from the HTTP connection
+	 * @param response
+	 *            The Response which will be sent back.
+	 */
+	public EntryResource(Context context, Request request, Response response) {
+		super(context, request, response);
+
+		this.contextId = (String) getRequest().getAttributes().get("context-id");
+		this.entryId = (String) getRequest().getAttributes().get("entry-id");
+
+		String remainingPart = request.getResourceRef().getRemainingPart();
+
+		parameters = Util.parseRequest(remainingPart);
+
+		getVariants().add(new Variant(MediaType.ALL));
+		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
+		getVariants().add(new Variant(MediaType.APPLICATION_RDF_XML));
+		getVariants().add(new Variant(MediaType.TEXT_RDF_N3));
+		getVariants().add(new Variant(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType())));
+		getVariants().add(new Variant(new MediaType(RDFFormat.TRIX.getDefaultMIMEType())));
+		getVariants().add(new Variant(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType())));
+		getVariants().add(new Variant(new MediaType(RDFFormat.TRIG.getDefaultMIMEType())));
+
+		if (getCM() != null) {
+			try {
+				this.context = getCM().getContext(contextId);
+			} catch (NullPointerException e) {
+				// not a context
+				this.context = null;
+			}
+		}
+
+		if (this.context != null) {
+			entry = this.context.get(entryId);
+		}
+
+		if (parameters.containsKey("format")) {
+			String format = parameters.get("format");
+			if (format != null) {
+				this.format = new MediaType(format);
+			}
+		}
+		
+		Util.handleIfUnmodifiedSince(entry, getRequest());
+	}
+
+	@Override
+	public boolean allowPut() {
+		return true;
+	}
+
+	@Override
+	public boolean allowPost() {
+		return true;
+	}
+
+	@Override
+	public boolean allowDelete() {
+		return true;
+	}
+
+	/**
+	 * GET
+	 * 
+	 * From the REST API:
+	 * 
+	 * <pre>
+	 * GET {baseURI}/{portfolio-id}/entry/{entry-id}
+	 * </pre>
+	 * 
+	 * @param variant
+	 *            Descriptor for available representations of a resource.
+	 * @return The Representation as JSON
+	 */
+	public Representation represent(Variant variant) {
+		try {
+			if (entry == null) {
+				log.error("Cannot find an entry with that id.");
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+				return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
+			}
+
+			Representation result = getEntry((format != null) ? format : variant.getMediaType());
+			Date lastMod = entry.getModifiedDate();
+			if (lastMod != null) {
+				result.setModificationDate(lastMod);
+			}
+			return result;
+		} catch (AuthorizationException e) {
+			log.error("unauthorizedGET");
+			return unauthorizedGET();
+		}
+	}
+
+	/**
+	 * PUT
+	 */
+	public void storeRepresentation(Representation representation) {
+		log.info("PUT");
+		try {
+			modifyEntry((format != null) ? format : representation.getMediaType());
+		} catch (AuthorizationException e) {
+			unauthorizedPUT();
+		}
+	}
+
+	/**
+	 * POST
+	 */
+	public void acceptRepresentation(Representation representation) {
+		log.info("POST");
+		try {
+			if (entry != null && context != null) {
+				if (parameters.containsKey("method")) {
+					if ("delete".equalsIgnoreCase(parameters.get("method"))) {
+						removeRepresentations();		
+					} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
+						storeRepresentation(representation);
+					}
+				} 
+				return;
+			}
+
+			/*
+			 * Error: If we comes to this point there is an ERROR.
+			 */
+			log.error("Wrong POST request");
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry));
+		} catch (AuthorizationException e) {
+			unauthorizedPOST();
+		}
+	}
+
+	/**
+	 * DELETE
+	 */
+	public void removeRepresentations() {
+		try {
+			if (entry != null && context != null) {
+				if (BuiltinType.List.equals(entry.getBuiltinType()) && parameters.containsKey("recursive")) {
+					se.kmr.scam.repository.List l = (se.kmr.scam.repository.List) entry.getResource();
+					if (l != null) {
+						l.removeTree();
+					} else {
+						log.warn("Resource of the following list is null: " + entry.getEntryURI());
+					}
+				} else {
+					context.remove(entry.getEntryURI());
+				}
+				//getResponse().setEntity(new JsonRepresentation("{\"OK\":\"200\"}"));
+			}
+		} catch (AuthorizationException e) {
+			unauthorizedDELETE();
+		}
+	}
+
+	private Representation getEntry(MediaType mediaType) {
+		String serializedGraph = null;
+		Graph graph = entry.getGraph();
+		if (mediaType.equals(MediaType.APPLICATION_JSON)) {
+			return getEntryInJSON();
+		} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
+			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
+		} else if (mediaType.equals(MediaType.ALL)) {
+			mediaType = MediaType.APPLICATION_RDF_XML;
+			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
+		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
+			serializedGraph = ConverterUtil.serializeGraph(graph, N3Writer.class);
+		} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
+			serializedGraph = ConverterUtil.serializeGraph(graph, TurtleWriter.class);
+		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
+			serializedGraph = ConverterUtil.serializeGraph(graph, TriXWriter.class);
+		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
+			serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
+		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
+			serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
+		} else {
+			getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
+			return new JsonRepresentation(JDILErrorMessages.errorUnknownFormat);
+		}
+
+		if (serializedGraph != null) {
+			getResponse().setStatus(Status.SUCCESS_OK);
+			return new StringRepresentation(serializedGraph, mediaType);
+		}
+
+		return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
+	}
+
+	/**
+	 * Gets the entry JSON
+	 * 
+	 * @return JSON representation
+	 */
+	private Representation getEntryInJSON() {
+		/*
+		 * Create a JDIL object since we need a object to accumulate properties
+		 * to
+		 */
+		JSONObject jdilObj = new JSONObject();
+
+		try {
+			/*
+			 * Entry id
+			 */
+			jdilObj.put("entryId", entry.getId());
+			BuiltinType bt = entry.getBuiltinType();
+			if ((bt == BuiltinType.Context || bt == BuiltinType.SystemContext) && LocationType.Local.equals(entry.getLocationType())) {
+				jdilObj.put("alias", getCM().getContextAlias(entry.getResourceURI()));
+				if (entry.getRepositoryManager().hasQuotas()) {
+					JSONObject quotaObj = new JSONObject();
+					se.kmr.scam.repository.Context c = getCM().getContext(this.entryId);
+					if (c != null) {
+						quotaObj.put("quota", c.getQuota());
+						quotaObj.put("fillLevel", c.getQuotaFillLevel());
+					}
+					quotaObj.put("hasDefaultQuota", c.hasDefaultQuota());
+					jdilObj.put("quota", quotaObj);
+				}
+			}
+
+			/*
+			 * Entry information
+			 */
+			Graph entryGraph = entry.getGraph();
+			JSONObject entryObj = new JSONObject(RDFJSON.graphToRdfJson(entryGraph));
+			jdilObj.accumulate("info", entryObj);
+
+			/*
+			 * Return if the parameter includeAll is not set
+			 */
+			if ((parameters != null && parameters.containsKey("includeAll")) == false) {
+				return new JsonRepresentation(jdilObj.toString(2));
+			}
+			/*
+			 * If the parameter includeAll is set we must return more JDIl with
+			 * example local metadata, cached external metadata and maybe a
+			 * resource.
+			 */
+
+			LocationType lt = entry.getLocationType();
+			
+			/*
+			 * Cached External Metadata
+			 */
+			JSONObject cachedExternalMdObj = null;
+			if (LocationType.LinkReference.equals(lt) || LocationType.Reference.equals(lt)) {
+				try {
+					Metadata cachedExternalMd = entry.getCachedExternalMetadata();
+					Graph g = cachedExternalMd.getGraph();
+					if (g != null) {
+						cachedExternalMdObj = new JSONObject(RDFJSON.graphToRdfJson(g));
+						jdilObj.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, cachedExternalMdObj);
+					}
+				} catch (AuthorizationException ae) {
+					//jdilObj.accumulate("noAccessToMetadata", true);
+					//TODO: Replaced by using "rights" in json, do something else in this catch-clause
+				}
+			}
+
+			/*
+			 * Local Metadata
+			 */
+			JSONObject localMdObj = null;
+			if (LocationType.Local.equals(lt) || LocationType.Link.equals(lt) || LocationType.LinkReference.equals(lt)) {
+				try {
+					Metadata localMd = entry.getLocalMetadata();
+					Graph g = localMd.getGraph();
+					if (g != null) {
+						localMdObj = new JSONObject(RDFJSON.graphToRdfJson(g));
+						jdilObj.accumulate(RepositoryProperties.MD_PATH, localMdObj);
+					}
+				} catch (AuthorizationException ae) {
+					/*if (!jdilObj.has("noAccessToMetadata")) {
+						jdilObj.accumulate("noAccessToMetadata", true);
+					}*/
+//					TODO: Replaced by using "rights" in json, do something else in this catch-clause
+				}
+			}
+
+			/*
+			 *	Relation 
+			 */
+			if (entry.getRelations() != null) {
+				JSONObject relationObj = new JSONObject();
+				relationObj = new JSONObject(RDFJSON.graphToRdfJson(new GraphImpl(entry.getRelations())));
+				jdilObj.accumulate(RepositoryProperties.RELATION, relationObj);
+			}
+			
+			/*
+			 * Rights
+			 */
+			this.accumulateRights(entry, jdilObj);
+
+			/*
+			 * Resource
+			 */
+			JSONObject resourceObj = new JSONObject();
+			if (entry.getLocationType() == LocationType.Local) {
+				/*
+				 *  String
+				 */
+				if(entry.getBuiltinType() == BuiltinType.String) {
+					StringResource stringResource = (StringResource)entry.getResource(); 
+					Graph graph = stringResource.getGraph(); 
+					Iterator<Statement> iter = graph.iterator(); 
+					while(iter.hasNext()) {
+						Statement s = iter.next(); 
+						Value value = s.getObject();
+						Literal lit = (Literal) value;
+						String language = lit.getLanguage();
+						org.openrdf.model.URI datatype = lit.getDatatype();
+						JSONObject object = new JSONObject();
+						object.accumulate("@value", value.stringValue());
+						if (language != null) {
+							object.accumulate("@language", language);
+						} else if (datatype != null) {
+							object.accumulate("@datatype", datatype.stringValue());					
+						}
+						resourceObj.accumulate(s.getPredicate().stringValue(), object);
+					}
+				}
+				/*
+				 * List
+				 */
+				if (entry.getBuiltinType() == BuiltinType.List) {
+
+					int limit = 0;
+					int offset = 0;
+					boolean sort = parameters.containsKey("sort");
+
+					// size of returned entry list
+					if (parameters.containsKey("limit")) {
+						try {
+							limit = Integer.valueOf(parameters.get("limit"));
+							// we don't support more than 100 results per page for now
+							if (limit > 100) {
+								limit = 100;
+							}
+						} catch (NumberFormatException ignored) {}
+					}
+
+					// offset (needed for pagination)
+					if (parameters.containsKey("offset")) {
+						try {
+							offset = Integer.valueOf(parameters.get("offset"));
+						} catch (NumberFormatException ignored) {}
+						if (offset < 0) {
+							offset = 0;
+						}
+					}
+
+					try {
+						// List<JSONObject> childrenObjects = new ArrayList<JSONObject>();
+						JSONArray childrenArray = new JSONArray();
+						se.kmr.scam.repository.Resource res = entry.getResource();
+						se.kmr.scam.repository.List parent = (se.kmr.scam.repository.List) res;
+
+						int maxPos = offset + limit;
+						if (limit == 0) {
+							maxPos = Integer.MAX_VALUE;
+						}
+
+						List<URI> childrenURIs = parent.getChildren();
+						Set<String> childrenIDs = new HashSet<String>();
+						List<Entry> childrenEntries = new ArrayList<Entry>();
+						for (int i = 0; i < childrenURIs.size(); i++) {
+							String u = childrenURIs.get(i).toString();
+							String id = u.substring(u.lastIndexOf('/') + 1);
+							childrenIDs.add(id);
+							Entry childEntry = this.context.get(id);
+							if (childEntry != null) {
+								childrenEntries.add(childEntry);
+							} else {
+								log.warn("Child entry " + id + " in context " + context.getURI() + " does not exist, but is referenced by a list.");
+							}
+						}
+
+						if (sort && (childrenEntries.size() < 501)) {
+							Date before = new Date();
+							boolean asc = true;
+							if ("desc".equalsIgnoreCase(parameters.get("order"))) {
+								asc = false;
+							}
+							BuiltinType prioritizedBuiltinType = null;
+							if (parameters.containsKey("prio")) {
+								prioritizedBuiltinType = BuiltinType.valueOf(parameters.get("prio"));
+							}
+							String sortType = parameters.get("sort");
+							if ("title".equalsIgnoreCase(sortType)) {
+								String lang = parameters.get("lang");
+								EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedBuiltinType);
+							} else if ("modified".equalsIgnoreCase(sortType)) {
+								EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedBuiltinType);
+							} else if ("created".equalsIgnoreCase(sortType)) {
+								EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedBuiltinType);
+							} else if ("size".equalsIgnoreCase(sortType)) {
+								EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedBuiltinType);
+							}
+							long sortDuration = new Date().getTime() - before.getTime();
+							log.debug("List entry sorting took " + sortDuration + " ms");
+						} else if (sort && (childrenEntries.size() > 500)) {
+							log.warn("Ignoring sort parameter for performance reasons because list has more than 500 children");
+						}
+
+						//for (int i = 0; i < childrenURIs.size(); i++) {
+						for (int i = offset; i < maxPos && i < childrenEntries.size(); i++) {
+							JSONObject childJSON = new JSONObject();
+							Entry childEntry = childrenEntries.get(i);
+							
+							/*
+							 * Children-rights
+							 */
+							this.accumulateRights(childEntry, childJSON);
+
+							String uri = childEntry.getEntryURI().toString();
+							String entryId = uri.substring(uri.lastIndexOf('/') + 1);
+							childJSON.put("entryId", entryId);
+							BuiltinType btChild = childEntry.getBuiltinType();
+							LocationType locChild = childEntry.getLocationType();
+							if ((btChild == BuiltinType.Context || btChild == BuiltinType.SystemContext) && LocationType.Local.equals(locChild)) {
+								childJSON.put("alias", getCM().getContextAlias(childEntry.getResourceURI()));
+							} else if (btChild == BuiltinType.List) {
+								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
+									se.kmr.scam.repository.Resource childRes = childEntry.getResource();
+									if (childRes != null && childRes instanceof se.kmr.scam.repository.List) {
+										se.kmr.scam.repository.List childList = (se.kmr.scam.repository.List) childRes;
+										try {
+											childJSON.put("size", childList.getChildren().size());
+										} catch (AuthorizationException ae) {}
+									} else {
+										log.warn("Entry has BuiltinType.List but the resource is either null or not an instance of List");
+									}
+								} else {
+									log.warn("Not calculating list size of " + entryId + " because of potential performance problems");
+								}
+							} else if (btChild == BuiltinType.User && locChild == LocationType.Local) {
+								childJSON.put("name", ((User) childEntry.getResource()).getName());
+							} else if (btChild == BuiltinType.Group && locChild == LocationType.Local) {
+								childJSON.put("name", ((Group) childEntry.getResource()).getName());								
+							}
+							
+							try {
+								LocationType ltC = childEntry.getLocationType();
+								if (LocationType.Reference.equals(ltC) || LocationType.LinkReference.equals(ltC)) {
+									// get the external metadata
+									Metadata cachedExternalMD = childEntry.getCachedExternalMetadata();
+									if (cachedExternalMD != null) {
+										Graph cachedExternalMDGraph = cachedExternalMD.getGraph();
+										if (cachedExternalMDGraph != null) {
+											JSONObject childCachedExternalMDJSON = new JSONObject(RDFJSON.graphToRdfJson(cachedExternalMDGraph));
+											childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMDJSON);
+										}
+									}
+								}
+								
+								if (LocationType.Link.equals(ltC) || LocationType.Local.equals(ltC) || LocationType.LinkReference.equals(ltC)) {
+									// get the local metadata
+									Metadata localMD = childEntry.getLocalMetadata();
+									if (localMD != null) {
+										Graph localMDGraph = localMD.getGraph();
+										if (localMDGraph != null) {
+											JSONObject localMDJSON = new JSONObject(RDFJSON.graphToRdfJson(localMDGraph));
+											childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
+										}
+									}
+								}
+							} catch (AuthorizationException e) {
+								//childJSON.accumulate("noAccessToMetadata", true);
+//								TODO: Replaced by using "rights" in json, do something else in this catch-clause
+								// childJSON.accumulate(RepositoryProperties.MD_PATH_STUB, new JSONObject());
+							}
+
+							Graph childEntryGraph = childEntry.getGraph();
+							JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(childEntryGraph));
+
+							if (childInfo != null) {
+								childJSON.accumulate("info", childInfo);
+							} else {
+								childJSON.accumulate("info", new JSONObject());
+							}
+							//							childrenObjects.add(childJSON);
+							
+							if (childEntry.getRelations() != null) {
+								Graph childRelationsGraph = new GraphImpl(childEntry.getRelations());
+								JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
+								childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
+							}
+							
+							childrenArray.put(childJSON);
+						}
+
+						resourceObj.put("children", childrenArray);
+						resourceObj.put("size", childrenURIs.size());
+						
+						JSONArray childrenIDArray = new JSONArray();
+						for (String id : childrenIDs) {
+							childrenIDArray.put(id);
+						}
+						resourceObj.put("allUnsorted", childrenIDArray);
+					} catch (AuthorizationException ae) {
+						//jdilObj.accumulate("noAccessToResource", true);
+//						TODO: Replaced by using "rights" in json, do something else in this catch-clause
+					}
+				}
+
+				/*
+				 * User
+				 */
+				if (entry.getBuiltinType() == BuiltinType.User) {
+					try {
+						User user = (User) entry.getResource();
+						resourceObj.put("name", user.getName());
+
+						// resourceObj.put("password", user.getSecret());
+
+						se.kmr.scam.repository.Context homeContext = user.getHomeContext();
+						if (homeContext != null) {
+							resourceObj.put("homecontext", homeContext.getEntry().getId());
+						}
+
+						String prefLang = user.getLanguage();
+						if (prefLang != null) {
+							resourceObj.put("language", prefLang);
+						}
+					} catch (AuthorizationException ae) {
+						//jdilObj.accumulate("noAccessToResource", true);
+//						TODO: Replaced by using "rights" in json, do something else in this catch-clause
+					}
+				}
+
+				/*
+				 * Group
+				 */
+				if (entry.getBuiltinType() == BuiltinType.Group) {
+					try {
+						Group group = (Group) entry.getResource();
+						resourceObj.put("name", group.getName());
+						JSONArray userArray = new JSONArray();
+						for (User u : group.members()) {
+							JSONObject childJSON = new JSONObject();
+							JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getGraph()));
+
+							if (childInfo != null) {
+								childJSON.accumulate("info", childInfo);
+							} else {
+								childJSON.accumulate("info", new JSONObject());
+							}
+
+							this.accumulateRights(u.getEntry(), childJSON);
+							try {
+								JSONObject childMd = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getLocalMetadata().getGraph()));
+								if (childMd != null) {
+									childJSON.accumulate(RepositoryProperties.MD_PATH, childMd);
+								} else {
+									childJSON.accumulate(RepositoryProperties.MD_PATH, new JSONObject());
+								}
+							} catch (AuthorizationException ae) {
+								//childJSON.accumulate("noAccessToMetadata", true);
+//								TODO: Replaced by using "rights" in json, do something else in this catch-clause
+							}
+
+							//Relations for every user in this group.
+							if (u.getEntry().getRelations() != null) {
+								Graph childRelationsGraph = new GraphImpl(u.getEntry().getRelations());
+								JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
+								childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
+							}
+							childJSON.put("entryId", u.getEntry().getId());
+							userArray.put(childJSON);
+						}
+
+						resourceObj.put("children", userArray);
+					} catch (AuthorizationException ae) {
+						//jdilObj.accumulate("noAccessToResource", true);
+//						TODO: Replaced by using "rights" in json, do something else in this catch-clause
+					}
+				}
+
+				// TODO other types, for example Context, SystemContext, PrincipalManager, etc
+				
+				jdilObj.accumulate("resource", resourceObj);
+			}
+
+			if (jdilObj != null)
+				return new JsonRepresentation(jdilObj.toString(2));
+
+		} catch (JSONException e) {
+			jdilObj = null;
+		}
+		log.error("Can not find the entry. getEntry()");
+		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
+	}
+	
+	private void accumulateRights(Entry entry, JSONObject jdilObj) throws JSONException {
+		PrincipalManager pm = this.getPM();
+		Set<AccessProperty> rights = pm.getRights(entry);
+		if(rights.size() >0){
+			for(AccessProperty ap : rights){
+				if(ap == PrincipalManager.AccessProperty.Administer)
+					jdilObj.append("rights", "administer");
+				else if (ap == PrincipalManager.AccessProperty.WriteMetadata)
+					jdilObj.append("rights", "writemetadata");
+				else if (ap == PrincipalManager.AccessProperty.WriteResource)
+					jdilObj.append("rights","writeresource");
+				else if (ap == PrincipalManager.AccessProperty.ReadMetadata)
+					jdilObj.append("rights","readmetadata");
+				else if (ap == PrincipalManager.AccessProperty.ReadResource)
+					jdilObj.append("rights","readresource");
+			}
+		}
+
+	}
+
+	private void modifyEntry(MediaType mediaType) throws AuthorizationException {
+		String graphString = null;
+		try {
+			graphString = getRequest().getEntity().getText();
+		} catch (IOException e) {
+			log.error(e.getMessage());
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			return;
+		}
+		Graph deserializedGraph = null;
+		if (mediaType.equals(MediaType.APPLICATION_JSON)) {
+			try {
+				JSONObject jsonObj = new JSONObject(graphString);
+				JSONObject infoObj = null;
+				if ((infoObj = jsonObj.getJSONObject("info")) != null) {
+					deserializedGraph = RDFJSON.rdfJsonToGraph(infoObj);
+				}
+			} catch (JSONException jsone) {
+				log.error(jsone.getMessage());
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return;
+			}
+		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new N3ParserFactory().getParser());
+		} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TurtleParser());
+		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriXParser());
+		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new NTriplesParser());
+		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriGParser());
+		} else {
+			getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
+			return;
+		}
+
+		if (deserializedGraph != null) {
+			entry.setGraph(deserializedGraph);
+			if (parameters.containsKey("applyACLtoChildren") &&
+					BuiltinType.List.equals(entry.getBuiltinType()) &&
+					LocationType.Local.equals(entry.getLocationType())) {
+				((se.kmr.scam.repository.List) entry.getResource()).applyACLtoChildren(true);
+			}
+			getResponse().setStatus(Status.SUCCESS_OK);
+			return;
+		}
+	}
+
+}

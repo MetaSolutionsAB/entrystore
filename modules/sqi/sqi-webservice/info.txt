@@ -1,0 +1,8 @@
+This project creates a SCAM SQI Target (SOAP Web Service) that will be run under
+http://localhost:8080/scam-sqi-webservice-module-4.0-SNAPSHOT/services/
+to change the adress, modify wsdl before building/deploying project:
+Change the soap:address (located in end of files) in
+src/main/webapp/WEB-INF/wsdl/sqiTarget.wsdl
+src/main/webapp/WEB-INF/wsdl/sqiSessionManagement.wsdl
+to location where you intend to deploy the sqi webservices.
+(example http://localhost:8080/scam-sqi-webservice-module-4.0-SNAPSHOT/services/SqiTargetService)

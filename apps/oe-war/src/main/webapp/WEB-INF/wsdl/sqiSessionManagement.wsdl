@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/" xmlns:types="urn:www.cenorm.be/isss/ltws/wsdl/SQIv1p0" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" targetNamespace="urn:www.cenorm.be/isss/ltws/wsdl/SQIv1p0">
+	<types>
+	 <!--sqiFault-->
+	   <xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" 
+            elementFormDefault="qualified"
+            targetNamespace="urn:www.cenorm.be/isss/ltws/wsdl/SQIv1p0">
+            <xsd:simpleType name="faultCodeType">
+                <xsd:restriction base="xsd:string">
+                    <xsd:enumeration value="SQI_00000"/>
+                    <xsd:enumeration value="SQI_00001"/>
+                    <xsd:enumeration value="SQI_00002"/>
+                    <xsd:enumeration value="SQI_00003"/>
+                    <xsd:enumeration value="SQI_00004"/>
+                    <xsd:enumeration value="SQI_00005"/>
+                    <xsd:enumeration value="SQI_00006"/>
+                    <xsd:enumeration value="SQI_00007"/>
+                    <xsd:enumeration value="SQI_00008"/>
+                    <xsd:enumeration value="SQI_00009"/>
+                    <xsd:enumeration value="SQI_00010"/>
+                    <xsd:enumeration value="SQI_00011"/>
+                    <xsd:enumeration value="SQI_00012"/>
+                    <xsd:enumeration value="SQI_00013"/>
+                    <xsd:enumeration value="SQI_00014"/>
+                    <xsd:enumeration value="SQI_00015"/>
+                    <xsd:enumeration value="SQI_00016"/>
+                </xsd:restriction>
+            </xsd:simpleType>
+            <xsd:element name="SQIFaultType">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="sqiFaultCode" type="types:faultCodeType"/>
+                        <xsd:element name="message" type="xsd:string"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+        </xsd:schema>
+        
+	    <!--sqiTarget-->
+		<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" targetNamespace="urn:www.cenorm.be/isss/ltws/wsdl/SQIv1p0">
+			<xsd:element name="createSession">
+				<xsd:complexType>
+					<xsd:sequence>
+						<xsd:element name="userID" type="xsd:string"/>
+						<xsd:element name="password" type="xsd:string"/>
+					</xsd:sequence>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="createSessionResponse">
+				<xsd:complexType>
+					<xsd:sequence>
+						<xsd:element name="createSessionReturn" type="xsd:string"/>
+					</xsd:sequence>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="createAnonymousSession">
+				<xsd:complexType>
+					<xsd:sequence/>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="createAnonymousSessionResponse">
+				<xsd:complexType>
+					<xsd:sequence>
+						<xsd:element name="createAnonymousSessionReturn" type="xsd:string"/>
+					</xsd:sequence>
+				</xsd:complexType>
+			</xsd:element>
+			<xsd:element name="destroySession">
+				<xsd:complexType>
+					<xsd:sequence>
+						<xsd:element name="sessionID" type="xsd:string"/>
+					</xsd:sequence>
+				</xsd:complexType>
+			</xsd:element>
+		</xsd:schema>
+	</types>
+	
+	<message name="SQIFault">
+        <part name="SQIFault" element="types:SQIFaultType"/>
+    </message>
+    
+	<message name="createSessionRequest">
+		<part name="createSession" element="types:createSession"/>
+	</message>
+	<message name="createSessionResponse">
+		<part name="sessionID" element="types:createSessionResponse"/>
+	</message>
+	<message name="createAnonymousSessionRequest">
+		<part name="createAnonymousSession" element="types:createAnonymousSession"/>
+	</message>
+	<message name="createAnonymousSessionResponse">
+		<part name="sessionID" element="types:createAnonymousSessionResponse"/>
+	</message>
+	<message name="destroySessionRequest">
+		<part name="destroySession" element="types:destroySession"/>
+	</message>
+	<message name="destroySessionResponse"/>
+	<portType name="SqiSessionManagementPort">
+		<operation name="createSession">
+			<input message="types:createSessionRequest"/>
+			<output message="types:createSessionResponse"/>
+			<fault name="SQIFault" message="types:SQIFault"/>
+		</operation>
+		<operation name="createAnonymousSession">
+			<input message="types:createAnonymousSessionRequest"/>
+			<output message="types:createAnonymousSessionResponse"/>
+			<fault name="SQIFault" message="types:SQIFault"/>
+		</operation>
+		<operation name="destroySession">
+			<input message="types:destroySessionRequest"/>
+			<output message="types:destroySessionResponse"/>
+			<fault name="SQIFault" message="types:SQIFault"/>
+		</operation>
+	</portType>
+	<binding name="SqiSessionManagementBinding" type="types:SqiSessionManagementPort">
+		<soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+		<operation name="createSession">
+			<soap:operation soapAction="createSession"/>
+			<input>
+				<soap:body use="literal" />
+			</input>
+			<output>
+				<soap:body use="literal" />
+			</output>
+			<fault name="SQIFault">
+				<soap:fault name="SQIFault" use="literal" />
+			</fault>
+		</operation>
+		<operation name="createAnonymousSession">
+			<soap:operation soapAction="createAnonymousSession"/>
+			<input>
+				<soap:body use="literal" />
+			</input>
+			<output>
+				<soap:body use="literal" />
+			</output>
+			<fault name="SQIFault">
+				<soap:fault name="SQIFault" use="literal" />
+			</fault>
+		</operation>
+		<operation name="destroySession">
+			<soap:operation soapAction="destroySession"/>
+			<input>
+				<soap:body use="literal" />
+			</input>
+			<output>
+				<soap:body use="literal" />
+			</output>
+			<fault name="SQIFault">
+				<soap:fault name="SQIFault" use="literal" />
+			</fault>
+		</operation>
+	</binding>
+	
+	<service name="SqiSessionManagementService">
+       <port name="SqiSessionManagementPort" binding="types:SqiSessionManagementBinding">
+          <soap:address location="http://localhost:8080/scam-oe-4.0-SNAPSHOT/sqi/SqiSessionManagementService"/>
+       </port>
+    </service>
+</definitions>

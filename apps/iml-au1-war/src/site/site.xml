@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project name="SCAM Iml-AU1 web app">
+	<!--
+	<skin>
+    	<groupId>org.apache.maven.skins</groupId>
+    	<artifactId>maven-classic-skin</artifactId>
+    	<version>1.0</version>
+  	</skin>
+  	-->
+	<!--
+	<bannerLeft>
+        <name>SCAM Development platform</name>
+        <src>images/scam.png</src>
+        <href>http://back.to.home...</href>
+    </bannerLeft>
+    <bannerRight>
+        <name>SCAM Trac site</name>
+        <src>images/scam2.png</src>
+        <href>http://project.iml.umu.se/projects/scam</href>
+    </bannerRight>
+    -->
+    <body>
+    	
+        <menu name="Main">
+            <item
+                    name="Welcome"
+                    href="index.html"
+                    />
+             <item
+                    name="Getting Started"
+                    href="docs/home.html"
+                    />
+        </menu>
+
+		<menu ref="modules" />
+		<menu ref="reports" />
+        
+    </body>
+</project>

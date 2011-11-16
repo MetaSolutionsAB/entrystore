@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!--
+// ======================================================================== 78
+-->
+<document>
+
+    <properties>
+        <title>Welcome</title>
+    </properties>
+
+    <body>
+        <section name="About SCAM">
+            <a name="Welcome"/>
+
+        <div style="text-align:left;height:200px">
+        <p>
+        SCAM Development Platform is intended to be used as a basis 
+        for building repositories for the Semantic Web. The idea is that SCAM 
+        provides a stable and scalable solution that is capable of storing RDF 
+        data in a relational databases without demanding a lot of programming. 
+        SCAM hides the complexity of Semantic Web technology, and provides a 
+        highly adaptable and flexible out-of-the box solution for developing 
+        Semantic Web repositories with a minimum of development efforts and 
+        resources. SCAM can also be integrated or even embedded into other 
+        systems that are in need of advanced RDF functionality.
+         </p>
+		<p>
+		For more info, visit <a href="http://project.iml.umu.se/projects/scam">SCAM project site</a>.  
+		</p>
+        </div>
+      
+        </section>
+    </body>
+</document>

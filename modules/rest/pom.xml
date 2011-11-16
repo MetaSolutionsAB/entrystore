@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<!-- ================= SCAM REST module ================= -->
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+       <groupId>se.kmr.scam</groupId>
+       <artifactId>scam-modules</artifactId>
+       <version>4.0-SNAPSHOT</version>
+    </parent>
+    <groupId>se.kmr.scam</groupId>
+    <artifactId>scam-rest-module</artifactId>
+    <packaging>war</packaging>
+    <version>4.0-SNAPSHOT</version>
+    <name>SCAM REST module</name>
+	
+	<!-- ================= Properties ================= -->
+	<properties>
+      <clover.licenseLocation>${basedir}/../../src/resources/clover.license</clover.licenseLocation>
+    </properties>
+    
+	<!-- ================= SCM ================= -->
+	<scm>
+       <connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/rest</connection>
+       <developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/rest</developerConnection>
+       <url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/rest</url>
+    </scm>
+    
+    <!-- ================= Profiles ================= -->
+ 
+    
+	<!-- ================= Build ================= -->
+	<build>
+    	<resources>
+    		<resource>
+    			<directory>src/main/resources</directory>
+    		</resource>
+    	</resources>
+    	<testResources>
+    		<testResource>
+    			<directory>src/test/resources</directory>
+    			<includes>
+    				<include>**/*.xml</include>
+    				<include>**/*.properties</include>
+    			</includes>
+    		</testResource>
+    	</testResources>
+    	<plugins>
+    	  	<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>make-a-jar</id>
+						<phase>compile</phase>
+						<goals>
+							<goal>jar</goal>
+						</goals>
+						<configuration>
+							<excludes>
+								<!-- not store scam.properties in generated jar only in war-->	
+								<exclude>**/scam.properties</exclude>
+							</excludes>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-install-plugin</artifactId>
+				<executions>
+					<execution>
+						<phase>install</phase>
+						<goals>
+							<goal>install-file</goal>
+						</goals>
+						<configuration>
+							<packaging>jar</packaging>
+							<artifactId>${project.artifactId}</artifactId>
+							<groupId>${project.groupId}</groupId>
+							<version>${project.version}</version>
+							<file>${project.build.directory}/${project.artifactId}-${project.version}.jar</file>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+    		<plugin>
+    			<groupId>org.codehaus.cargo</groupId>
+    			<artifactId>cargo-maven2-plugin</artifactId>
+    			<version>1.0-beta-2</version>
+    			<configuration>
+    				<container>
+    					<containerId>${cargo.deploy.container}</containerId>
+    					<home>${cargo.deploy.container.home}</home>
+	    				<type>installed</type>
+					</container>
+  					<configuration>
+						<type>existing</type> 
+						<home>${cargo.deploy.container.home}</home>
+					</configuration>
+					<wait>true</wait>
+    			</configuration>
+    		</plugin>
+    	</plugins>
+    </build>
+    
+	<!-- ================= Reporting ================= -->
+	<reporting>
+     	 <!-- Needed in order to generate the report properly -->
+        <outputDirectory>
+            ${basedir}/../../target/site/scam-modules/${project.artifactId}
+        </outputDirectory>
+    </reporting>
+    
+    <!-- ================= Dependencies ================= -->      	
+    <dependencies>
+
+		<dependency>
+   			<groupId>com.noelios.restlet</groupId>
+   			<artifactId>com.noelios.restlet</artifactId>
+   			<version>1.1.10</version>
+		</dependency>
+		<dependency>
+   			<groupId>com.noelios.restlet</groupId>
+   			<artifactId>com.noelios.restlet.ext.servlet</artifactId>
+   			<version>1.1.10</version>
+		</dependency>
+		<dependency>
+   			<groupId>com.noelios.restlet</groupId>
+   			<artifactId>com.noelios.restlet.ext.simple</artifactId>
+   			<version>1.1.10</version>
+		</dependency>
+		<dependency>
+		   <groupId>org.restlet</groupId>
+           <artifactId>org.restlet.ext.json</artifactId>
+           <version>1.1.10</version>
+        </dependency>
+        <dependency>
+		   <groupId>org.restlet</groupId>
+           <artifactId>org.restlet.ext.fileupload</artifactId>
+           <version>1.1.10</version>
+        </dependency>
+		<dependency>
+   			<groupId>org.simpleframework</groupId>
+   			<artifactId>org.simpleframework</artifactId>
+   			<version>3.1.3</version>
+		</dependency>
+		<!-- should not be deployed to the web container (hence the scope is 'provided')-->	  
+		<dependency>
+		   <groupId>javax.servlet</groupId>
+           <artifactId>servlet-api</artifactId>
+           <version>2.4</version>
+           <scope>provided</scope>
+        </dependency>
+        <dependency>
+		   <groupId>org.json</groupId>
+           <artifactId>json</artifactId>
+           <version>20070829</version>
+        </dependency>
+        <dependency>
+        	<groupId>org.codehaus.jackson</groupId>
+        	<artifactId>jackson-core-asl</artifactId>
+        	<version>1.5.4</version>
+        </dependency>
+        <dependency>
+        	<groupId>se.kmr.scam</groupId>
+    		<artifactId>scam-jdil-module</artifactId>
+    		<version>${pom.version}</version>
+    	</dependency>	
+    	<dependency>
+        	<groupId>se.kmr.scam</groupId>
+    		<artifactId>scam-harvester-factory-module</artifactId>
+    		<version>${pom.version}</version>
+    	</dependency>
+    	<dependency>
+        	<groupId>se.kmr.scam</groupId>
+    		<artifactId>scam-oai-pmh-harvester-module</artifactId>
+    		<version>${pom.version}</version>
+    	</dependency>
+    	<dependency>
+        	<groupId>se.kmr.scam</groupId>
+    		<artifactId>scam-fao-harvester-module</artifactId>
+    		<version>${pom.version}</version>
+    	</dependency>
+    	<dependency>
+    		<groupId>mysql</groupId>
+    		<artifactId>mysql-connector-java</artifactId>
+    		<version>5.1.6</version>
+    		<!--<scope>test</scope>--> 
+		</dependency>
+		<dependency>
+			<groupId>commons-dbcp</groupId>
+			<artifactId>commons-dbcp</artifactId>
+			<version>1.2</version>
+			<exclusions>
+   				<exclusion>
+     			<groupId>xml-apis</groupId>
+     				<artifactId>xml-apis</artifactId>
+   			</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>commons-lang</groupId>
+			<artifactId>commons-lang</artifactId>
+			<version>2.6</version>
+		</dependency>
+		<dependency>
+		   <groupId>net.tanesha.recaptcha4j</groupId>
+           <artifactId>recaptcha4j</artifactId>
+           <version>0.0.7</version>
+		</dependency>
+		<dependency>
+		 	<groupId>javax.mail</groupId>
+ 			<artifactId>mail</artifactId>
+  			<version>1.4</version>
+   		</dependency>
+	 </dependencies>
+</project>

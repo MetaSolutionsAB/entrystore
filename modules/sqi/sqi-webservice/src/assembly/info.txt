@@ -1,0 +1,3 @@
+The Maven Assembly Plugin uses file jaxwsjar.xml to create a 
+JAR containing the JAX-WS generated artifacts (generated from wsdl2java). 
+This JAR will be used by both the service and client.

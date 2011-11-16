@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app id="WebApp_9" version="2.4" 
+	xmlns="http://java.sun.com/xml/ns/j2ee" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+	xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee http://java.sun.com/xml/ns/j2ee/web-app_2_4.xsd">
+	
+	<!-- ============================================= 
+						SCAM Iml-AU1 
+	     ========================================== -->
+    <display-name>SCAM Iml-AU1 Application</display-name>
+	
+	<welcome-file-list>
+        <welcome-file>index.html</welcome-file>
+    </welcome-file-list>
+	
+	 <listener>
+          <listener-class>se.kmr.scam.au1.ContextLoaderListener</listener-class>
+	 </listener>
+	
+	<!-- ============================================= 
+						REST Module 
+	     ========================================== -->
+	<!-- Application class name -->
+	<context-param>
+		<param-name>org.restlet.application</param-name>
+		<param-value>se.kmr.scam.rest.ScamApplication</param-value>
+	</context-param>
+
+	<!-- Restlet adapter -->
+	<servlet>
+		<servlet-name>RestletServlet</servlet-name>
+		<servlet-class>com.noelios.restlet.ext.servlet.ServerServlet</servlet-class>
+	</servlet>
+    
+	<!-- Catch all requests -->
+	<servlet-mapping>
+		<servlet-name>RestletServlet</servlet-name>
+		<url-pattern>/rest/*</url-pattern>
+	</servlet-mapping>
+	
+	<!-- ============================================= 
+						OAI-PMH Target Module 
+	     ========================================== -->
+	<!-- The filename of the oai-pmh.properties file containing
+        datapairs used to initialize the OAIcat repository software. -->
+	<context-param>
+      <param-name>properties</param-name>
+      <param-value>oai-pmh.properties</param-value>
+    </context-param>
+		
+	<!--   This servlet processes OAI verbs.  -->
+	<servlet>
+      <servlet-name>OAIHandler</servlet-name>
+      <servlet-class>ORG.oclc.oai.server.OAIHandler</servlet-class>
+      <!-- Load this servlet at server startup time -->
+      <load-on-startup>5</load-on-startup>
+    </servlet>
+    
+	<!-- Catch OAI-PMH requests -->
+	<servlet-mapping>
+      <servlet-name>OAIHandler</servlet-name>
+      <url-pattern>/oai</url-pattern>
+    </servlet-mapping>
+
+	<!-- ============================================= 
+						SQI WEBSERVICE Module 
+	     ========================================== -->
+    <listener>
+        <listener-class>
+            org.springframework.web.context.ContextLoaderListener
+        </listener-class>
+    </listener>
+    <context-param>
+        <param-name>contextConfigLocation</param-name>
+        <param-value>
+	      classpath:META-INF/cxf/cxf.xml 
+	      classpath:META-INF/cxf/cxf-extension-soap.xml
+	      classpath:META-INF/cxf/cxf-servlet.xml
+        </param-value>
+    </context-param>
+    <servlet>
+        <description>SCAM SQI Webservice</description>
+        <display-name>scam-sqi-ws</display-name>
+        <servlet-name>WebServicePort</servlet-name>
+        <servlet-class>org.apache.cxf.transport.servlet.CXFServlet</servlet-class>
+        <load-on-startup>6</load-on-startup>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>WebServicePort</servlet-name>
+        <url-pattern>/sqi/*</url-pattern>
+    </servlet-mapping>
+    <session-config>
+        <session-timeout>60</session-timeout>
+    </session-config>
+</web-app>
+

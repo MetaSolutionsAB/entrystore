@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<!-- ================= SCAM SQI Webservice client ================= -->
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>se.kmr.scam</groupId>
+		<artifactId>scam-sqi</artifactId>
+		<version>4.0-SNAPSHOT</version>
+	</parent>
+	<groupId>se.kmr.scam</groupId>
+	<artifactId>scam-sqi-webservice-client</artifactId>
+	<packaging>jar</packaging>
+	<version>4.0-SNAPSHOT</version>
+	<name>SCAM SQI webservice client</name>
+
+	<!-- ================= Properties ================= -->
+	<properties>
+		<clover.licenseLocation>${basedir}/../../../src/resources/clover.license</clover.licenseLocation>
+		<cxf.version>2.1.4</cxf.version>
+	</properties>
+
+	<!-- ================= SCM ================= -->
+	<scm>
+		<connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/sqi-webservice</connection>
+		<developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/sqi-webservice</developerConnection>
+		<url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/sqi-webservice</url>
+	</scm>
+
+	<!-- ================= Profiles ================= -->
+
+
+	<!-- ================= Build ================= -->
+	<build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+			</resource>
+		</resources>
+		<testResources>
+			<testResource>
+				<directory>src/test/resources</directory>
+				<includes>
+					<include>**/*.xml</include>
+					<include>**/*.properties</include>
+				</includes>
+			</testResource>
+		</testResources>
+		<plugins>
+			 <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+               <execution>
+                  <goals>
+                     <goal>exec</goal>
+                  </goals>
+               </execution>
+            </executions>
+            <configuration>
+               <executable>java</executable>
+               <arguments>
+                  <argument>-classpath</argument>
+                  <classpath />
+                  <!-- Uncomment below for debug output with CXF.  Will need to supply a
+                          java.util.logging properties file, see here for a sample:
+                          http://preview.tinyurl.com/9en8ec
+                   -->
+                  <!--argument>
+                     -Djava.util.logging.config.file=mylogging.properties
+                  </argument-->
+                  <argument>
+                     se.kmr.scam.sqi.webservice.client.WSClient
+                  </argument>
+               </arguments>
+            </configuration>
+         </plugin>
+		</plugins>
+	</build>
+
+	<!-- ================= Reporting ================= -->
+	<reporting>
+		<!-- Needed in order to generate the report properly -->
+		<outputDirectory>
+            ${basedir}/../../../target/site/scam-modules/scam-sqi/${project.artifactId}
+        </outputDirectory>
+	</reporting>
+
+	<!-- ================= Dependencies ================= -->
+	<dependencies>
+		<!-- dependency the jaxws jar created by Maven Assembly Plugin
+			 in the sqi-webservice project-->
+		 <dependency>
+        	<groupId>se.kmr.scam</groupId>
+         	<artifactId>scam-sqi-webservice-module</artifactId>
+         	<!-- classifiers used with Maven Assembly Plugin to 
+	            specify subset of above artifact needed -->
+         	<classifier>jaxws</classifier>
+         	<version>${pom.version}</version>
+      	</dependency>
+	
+		<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-frontend-jaxws</artifactId>
+			<version>${cxf.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-transports-http</artifactId>
+			<version>${cxf.version}</version>
+		</dependency>
+		<!-- remove this if problem (CXF uses Sun's JAXB implementation) -->
+		<dependency>
+			<groupId>javax.xml.bind</groupId>
+			<artifactId>jaxb-api</artifactId>
+			<version>2.1</version>
+		</dependency>
+		<!-- Jetty is needed if you're are not using the CXFServlet -->
+		<!--<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-transports-http-jetty</artifactId>
+			<version>${cxf.version}</version>
+		</dependency>-->
+	</dependencies>
+
+
+</project>

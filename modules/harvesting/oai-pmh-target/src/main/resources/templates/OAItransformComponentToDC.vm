@@ -1,0 +1,50 @@
+<oai_dc:dc xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/oai_dc/ http://www.openarchives.org/OAI/2.0/oai_dc.xsd" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	#if( $!component.title )
+   		<dc:title>$!component.title</dc:title>
+	#end
+	#if($!component.description )
+   		<dc:description>$!component.description</dc:description> 
+	#end
+	#if($!component.contributor )
+   		<dc:contributor>$!component.contributor</dc:contributor> 
+	#end
+	#if($!component.coverage )
+   		<dc:description>$!component.coverage</dc:description> 
+	#end
+	#if($!component.creator )
+   		<dc:creator>$!component.creator</dc:creator> 
+	#end
+	#if($!component.date )
+   		<dc:date>$!component.date</dc:date> 
+	#end
+	#if($!component.format )
+   		<dc:format>$!component.format</dc:format> 
+	#end
+	#if($!component.identifier )
+   		<dc:identifier>$!component.identifier</dc:identifier> 
+	#end
+	#if($!component.language )
+   		<dc:language>$!component.language</dc:language> 
+	#end
+	#if($!component.publisher )
+   		<dc:publisher>$!component.publisher</dc:publisher> 
+	#end
+	#if($!component.relation )
+   		<dc:relation>$!component.relation</dc:relation> 
+	#end
+	#if($!component.publisher )
+   		<dc:publisher>$!component.publisher</dc:publisher> 
+	#end
+	#if($!component.rights )
+   		<dc:rights>$!component.rights</dc:rights> 
+	#end
+	#if($!component.source )
+   		<dc:source>$!component.source</dc:source> 
+	#end
+	#if($!component.subject )
+   		<dc:subject>$!component.subject</dc:subject> 
+	#end
+	#if($!component.type )
+   		<dc:type>$!component.type</dc:type> 
+	#end
+</oai_dc:dc>

@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<!-- ================= SCAM OAI-PMH Harvester module ================= -->
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+       <groupId>se.kmr.scam</groupId>
+       <artifactId>scam-harvesting</artifactId>
+       <version>4.0-SNAPSHOT</version>
+    </parent>
+    <groupId>se.kmr.scam</groupId>
+    <artifactId>scam-oai-pmh-harvester-module</artifactId>
+    <packaging>jar</packaging>
+    <version>4.0-SNAPSHOT</version>
+    <name>SCAM OAI-PMH Harvester module</name>
+	
+	<!-- ================= Properties ================= -->
+	<properties>
+      <clover.licenseLocation>${basedir}/../../../src/resources/clover.license</clover.licenseLocation>
+    </properties>
+    
+	<!-- ================= SCM ================= -->
+	<scm>
+       <connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/harvesting/oai-pmh-harvester</connection>
+       <developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/harvesting/oai-pmh-harvester</developerConnection>
+       <url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/harvesting/oai-pmh-harvester</url>
+    </scm>
+    
+    <!-- ================= Profiles ================= -->
+ 
+    
+	<!-- ================= Build ================= -->
+	<build>
+    	<resources>
+    		<resource>
+    			<directory>src/main/resources</directory>
+    		</resource>
+    	</resources>
+    	<testResources>
+    		<testResource>
+    			<directory>src/test/resources</directory>
+    			<includes>
+    				<include>**/*.xml</include>
+    				<include>**/*.properties</include>
+    			</includes>
+    		</testResource>
+    	</testResources>
+    	
+	</build>
+    
+	<!-- ================= Reporting ================= -->
+	<reporting>
+     	 <!-- Needed in order to generate the report properly -->
+        <outputDirectory>
+            ${basedir}/../../../target/site/scam-modules/scam-harvesting/${project.artifactId}
+        </outputDirectory>
+    </reporting>
+    
+    <!-- ================= Dependencies ================= -->      	
+    <dependencies>
+    	<!-- should not be deployed to the web container (hence the scope is 'provided')-->	  
+		<dependency>
+		   <groupId>javax.servlet</groupId>
+           <artifactId>servlet-api</artifactId>
+           <version>2.4</version>
+           <scope>provided</scope>
+        </dependency>
+        <dependency>
+		   <groupId>xalan</groupId>
+           <artifactId>xalan</artifactId>
+           <version>2.7.1</version>
+        </dependency>
+	<!--
+        <dependency>
+		   <groupId>xml-apis</groupId>
+           <artifactId>xml-apis</artifactId>
+           <version>2.0.2</version>
+        </dependency>
+	-->
+         <dependency>
+		   <groupId>quartz</groupId>
+           <artifactId>quartz</artifactId>
+           <version>1.5.2</version>
+        </dependency>
+        <dependency>
+			<groupId>org.oclc.oai</groupId>
+			<artifactId>harvester2</artifactId>
+			<version>1.0</version>
+			<type>jar</type>
+		</dependency>
+         	<dependency>
+        	<groupId>se.kmr.scam</groupId>
+    		<artifactId>scam-harvester-factory-module</artifactId>
+    		<version>${pom.version}</version>
+   		 </dependency>
+		
+		<!-- start of deps for lom-j -->
+                <dependency>
+                        <groupId>xerces</groupId>
+                        <artifactId>xercesImpl</artifactId>
+                        <version>2.7.1</version>
+                </dependency>
+                <dependency>
+                        <groupId>org.ieee.ltsc</groupId>
+                        <artifactId>lom-j-api</artifactId>
+                        <version>1.2.0</version>
+                        <type>jar</type>
+                </dependency>
+                <dependency>
+                        <groupId>org.ieee.ltsc</groupId>
+                        <artifactId>lom-j-impl</artifactId>
+                        <version>1.2.1-scam2</version>
+                        <type>jar</type>
+                </dependency>
+                <dependency>
+                        <groupId>org.ieee.ltsc</groupId>
+                        <artifactId>lom-j-xml</artifactId>
+                        <version>1.3.1-scam</version>
+                        <type>jar</type>
+                </dependency>
+                <dependency>
+                        <groupId>org.ietf.mimedir</groupId>
+                        <artifactId>mime-dir-j-api</artifactId>
+                        <version>2.2.0-scam</version>
+                </dependency>
+                <dependency>
+                        <groupId>org.ietf.mimedir</groupId>
+                        <artifactId>mime-dir-j-vcard4j</artifactId>
+                        <version>1.4.1</version>
+                        <type>jar</type>
+                </dependency>
+                <dependency>
+                        <groupId>javax.xml.bind</groupId>
+                        <artifactId>jaxb-api</artifactId>
+                        <version>2.0.5</version>
+                </dependency>
+                <dependency>
+                        <groupId>javax.xml.bind</groupId>
+                        <artifactId>jaxb-impl</artifactId>
+                        <version>2.0.5</version>
+                </dependency>
+				<dependency>
+                        <groupId>javax.activation</groupId>
+                        <artifactId>activation</artifactId>
+                        <version>1.1.1</version>
+                </dependency>
+                <!-- end of deps for lom-j -->
+
+    </dependencies>   
+</project>

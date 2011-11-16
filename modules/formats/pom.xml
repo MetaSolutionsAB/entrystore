@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+	
+	<!-- ================= SCAM Formats ================= -->
+	<modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>se.kmr.scam</groupId>
+        <artifactId>scam-modules</artifactId>
+        <version>4.0-SNAPSHOT</version>
+    </parent>
+    <groupId>se.kmr.scam</groupId>
+    <artifactId>scam-formats</artifactId>
+    <packaging>pom</packaging>
+    <name>SCAM Formats</name>
+    
+    <!-- ================= Properties ================= -->
+	<properties>
+      <clover.licenseLocation>${basedir}/../../src/resources/clover.license</clover.licenseLocation>
+    </properties>
+    
+    <!-- ================= Modules ================= -->
+    <modules>
+        <module>jdil</module>
+    </modules>
+	
+	<!-- ================= SCM ================= -->
+    <scm>
+       <connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/formats</connection>
+       <developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/formats</developerConnection>
+       <url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/formats</url>
+    </scm>
+ 	
+ 	<!-- ================= Reporting ================= -->
+ 	<reporting>
+        <!-- Needed in order to generate the report properly -->
+        <outputDirectory>
+            ${basedir}/../../target/site/${project.artifactId}
+        </outputDirectory>
+    </reporting>
+    
+    <!-- ================= Dependencies ================= -->
+    
+</project>

@@ -1,0 +1,17 @@
+<lom xmlns="http://ltsc.ieee.org/xsd/LOM" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://ltsc.ieee.org/xsd/LOM http://standards.ieee.org/reading/ieee/downloads/LOM/lomv1.0/xsd/lom.xsd">
+    <general>
+            <identifier>
+                <catalog>SCAM</catalog>
+                <entry>$component.entryURI</entry>
+            </identifier>
+            <title>
+                <string language="en">$!component.title</string>
+            </title>
+			<language>en</language>
+  	    #if("$!component.description.toString()" != "")
+            <description>
+                <string language="en">$!component.description</string>
+            </description>
+		#end
+        </general>
+</lom>

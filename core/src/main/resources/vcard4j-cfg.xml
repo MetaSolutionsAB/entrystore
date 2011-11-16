@@ -1,0 +1,262 @@
+<?xml version="1.0"?>
+<vcard4jConfiguration lang="C" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://vcard4j.sf.net/xml/vcard4j-cfg.xsd">
+
+<!-- 
+ XML File describing all vCards elements and their constraints.
+ -->
+
+  <type name="FN" format="single" mandatory="true">
+    <description>
+      To specify the formatted text corresponding to the name of the object the vCard represents.
+    </description>
+    <implementation className="net.sf.vcard4j.type.ext.FN"/>
+  </type>
+
+  <type name="N" format="structured" mandatory="false">
+    <value name="Family"><description>Family Name</description></value>
+    <value name="Given"><description>Given Name</description></value>
+    <value name="Other"><description>Additional Names</description></value>
+    <value name="Prefix"><description>Honorific Prefixes</description></value>
+    <value name="Suffix"><description>Honorific Suffixes</description></value>
+    <description>
+      To specify the components of the name of the object the vCard represents.
+    </description>
+  </type>
+
+  <type name="NICKNAME" format="list" mandatory="false">
+    <description>
+      To specify the text corresponding to the nickname of the object the vCard represents.
+    </description>
+  </type>
+
+  <type name="PHOTO" format="single" mandatory="false">
+    <parameter name="ENCODING">
+      <value name="b"/>
+    </parameter>
+    <parameter name="VALUE">
+      <value name="uri"/>
+    </parameter>
+    <description>
+      To specify an image or photograph information that annotates some aspect of the object the vCard represents.
+    </description>
+  </type>
+
+  <type name="BDAY" format="single" mandatory="false">
+    <value>
+      <implementation className="net.sf.vcard4j.java.type.util.VDate"/>
+    </value>
+    <description>
+      To specify the birth date of the object the vCard represents.
+    </description>
+  </type>
+  
+  <type name="ADR" format="structured" mandatory="false">
+    <value name="Pobox"><description>Post Box Office</description></value>
+    <value name="Extadd"><description>Extended Address</description></value>
+    <value name="Street"><description>Street Address</description></value>
+    <value name="Locality"><description>Locality</description></value>
+    <value name="Region"><description>Region</description></value>
+    <value name="Pcode"><description>Postal Code</description></value>
+    <value name="Country"><description>Country Name</description></value>
+    <parameter name="TYPE">
+      <value name="dom"/>
+      <value name="intl"/>
+      <value name="postal"/>
+      <value name="parcel"/>
+      <value name="home"><description>Home</description></value>
+      <value name="work"><description>Office</description></value>
+      <value name="pref"><description>Prefered</description></value>
+    </parameter>
+    <description>
+      To specify the components of the delivery address for the vCard object.
+    </description>
+  </type>      
+
+  <type name="LABEL" format="single" mandatory="false">
+    <parameter name="TYPE">
+      <value name="dom"/>
+      <value name="intl"/>
+      <value name="postal"/>
+      <value name="parcel"/>
+      <value name="home"><description>Home</description></value>
+      <value name="work"><description>Office</description></value>
+      <value name="pref"><description>Prefered</description></value>
+    </parameter>
+    <description>
+      To specify the formatted text corresponding to delivery address of the object the vCard represents.
+    </description>
+  </type>
+
+  <type name="TEL" format="single" mandatory="false">
+    <parameter name="TYPE">
+      <value name="home"/>
+      <value name="msg"/>
+      <value name="work"/>
+      <value name="pref"/>
+      <value name="fax"/>
+      <value name="cell"/>
+      <value name="video"/>
+      <value name="pager"/>
+      <value name="bbs"/>
+      <value name="modem"/>
+      <value name="car"/>
+      <value name="isdn"/>
+      <value name="pcs"/>
+      <value name="voice"/>
+    </parameter>
+    <description>
+      To specify the telephone number for telephony communication with the object the vCard represents."
+    </description>
+  </type>
+
+  <type name="EMAIL" format="single" mandatory="false">
+    <parameter name="TYPE">
+      <value name="internet"/>
+      <value name="x400"/>
+      <value name="pref"/>
+    </parameter>
+    <description>
+      To specify the electronic mail address for communication with the object the vCard represents.
+    </description>
+  </type>
+
+  <type name="MAILER" format="single" mandatory="false">
+    <description>
+      To specify the type of electronic mail software that is used by the individual associated with the vCard.
+    </description>
+  </type>
+
+  <type name="TZ" format="single" mandatory="false">
+    <description>
+      To specify information related to the time zone of the object the vCard represents.
+    </description>
+  </type>
+
+  <type name="GEO" format="structured" mandatory="false">
+    <value name="Latitude"><description>Latitude</description></value>
+    <value name="Longitude"><description>Longitude</description></value>
+    <description>
+      To specify information related to the global positioning of the object the vCard represents.
+    </description>
+  </type>
+
+  <type name="TITLE" format="single" mandatory="false">
+    <description>
+      To specify the job title, functional position or function of the object the vCard represents.
+    </description>
+  </type>
+
+  <type name="ROLE" format="single" mandatory="false">
+    <description>
+      To specify information concerning the role, occupation, or business category of the object the vCard represents.
+    </description>
+  </type>
+
+  <type name="LOGO" format="single" mandatory="false">
+    <parameter name="ENCODING">
+      <value name="b"/>
+    </parameter>
+    <parameter name="VALUE">
+      <value name="uri"/>
+    </parameter>
+    <description>
+      To specify a graphic image of a logo associated with the object the vCard represents.
+    </description>
+  </type>
+
+  <type name="AGENT" format="single" mandatory="false">
+    <description>
+      To specify information about another person who will act on behalf of the individual or resource associated with the vCard.
+    </description>
+  </type>
+
+  <type name="ORG" format="structured" mandatory="false">
+    <value name="Orgname"><description>Organization Name</description></value>
+    <value name="Orgunit"><description>Organization Unit</description></value>
+    <description>
+      To specify the organizational name and units associated with the vCard.
+    </description>
+  </type>
+
+  <type name="CATEGORY" format="list" mandatory="false">
+    <description>
+      To specify application category information about the vCard.
+    </description>
+  </type>
+
+  <type name="NOTE" format="single" mandatory="false">
+    <description>
+      To specify supplemental information or a comment that is associated with the vCard.
+    </description>
+  </type>
+
+  <type name="PROID" format="single" mandatory="false">
+    <description>
+      To specify the identifier for the product that created the vCard object.
+    </description>
+  </type>
+
+  <type name="REV" format="single" mandatory="false">
+    <description>
+      To specify revision information about the current vCard.
+    </description>
+  </type>
+
+  <type name="SORT-STRING" format="single" mandatory="false">
+    <description>
+      To specify the family name or given name text to be used for national-language-specific sorting of the FN and N types.
+    </description>
+  </type>
+
+  <type name="SOUND" format="single" mandatory="false">
+    <parameter name="ENCODING">
+      <value name="b"/>
+    </parameter>
+    <parameter name="VALUE">
+      <value name="uri"/>
+    </parameter>
+    <description>
+      To specify a digital sound content information that annotates some aspect of the vCard. By default this type is used to specify the proper pronunciation of the name type value of the vCard.
+    </description>
+  </type>
+
+  <type name="UID" format="single" mandatory="false">
+    <description>
+      To specify a value that represents a globally unique identifier corresponding to the individual or resource associated with the vCard.
+    </description>
+  </type>
+
+  <type name="URL" format="single" mandatory="false">
+    <description>
+      To specify a uniform resource locator associated with the object that the vCard refers to.
+    </description>
+  </type>
+
+  <type name="VERSION" format="single" mandatory="true">
+    <description>
+      To specify the version of the vCard specification used to format this vCard.
+    </description>
+  </type>
+
+  <type name="CLASS" format="single" mandatory="false">
+    <description>
+      To specify the access classification for a vCard object.
+    </description>
+  </type>
+
+  <type name="KEY" format="single" mandatory="false">
+    <parameter name="ENCODING">
+      <value name="b"/>
+    </parameter>
+    <description>
+      To specify a public key or authentication certificate associated with the object that the vCard represents.
+    </description>
+  </type>
+  
+  <type name="X" format="single" mandatory="false">
+    <description>
+      To specify application specific data.
+    </description>
+  </type>
+
+</vcard4jConfiguration>

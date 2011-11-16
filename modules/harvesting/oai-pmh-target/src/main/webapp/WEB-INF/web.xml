@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app id="WebApp_ID" version="2.4" xmlns="http://java.sun.com/xml/ns/j2ee" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee http://java.sun.com/xml/ns/j2ee/web-app_2_4.xsd">
+	<display-name>SCAM OAI-PMH Module</display-name>
+	
+	<!-- The filename of the oai-pmh.properties file containing
+        datapairs used to initialize the OAIcat repository software. -->
+	<context-param>
+      <param-name>properties</param-name>
+      <param-value>oai-pmh.properties</param-value>
+    </context-param>
+	
+	
+	<!--   This servlet processes OAI verbs.  -->
+	<servlet>
+      <servlet-name>OAIHandler</servlet-name>
+      <servlet-class>ORG.oclc.oai.server.OAIHandler</servlet-class>
+      <!-- Load this servlet at server startup time -->
+      <load-on-startup>5</load-on-startup>
+    </servlet>
+    
+	<!-- Catch OAI-PMH requests -->
+	<servlet-mapping>
+      <servlet-name>OAIHandler</servlet-name>
+      <url-pattern>/oai</url-pattern>
+    </servlet-mapping>
+	
+</web-app>

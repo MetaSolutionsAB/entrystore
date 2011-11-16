@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<!-- ================= SCAM Showcase Webapp ================= -->
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+       <groupId>se.kmr.scam</groupId>
+       <artifactId>scam-apps</artifactId>
+       <version>4.0-SNAPSHOT</version>
+    </parent>
+    <groupId>se.kmr.scam</groupId>
+    <artifactId>scam-showcase</artifactId>
+    <packaging>war</packaging>
+    <version>4.0-SNAPSHOT</version>
+    <name>SCAM Showcase Webapp</name>
+	
+	<!-- ================= Properties ================= -->
+	<properties>
+      <clover.licenseLocation>${basedir}/../../src/resources/clover.license</clover.licenseLocation>
+    </properties>
+	
+	<!-- ================= SCM ================= -->
+	<scm>
+       <connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/apps/showcase-war</connection>
+       <developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/apps/showcase-war</developerConnection>
+       <url>http://project.iml.umu.se/projects/scam/browser/trunk/apps/showcase-war</url>
+    </scm>
+    
+    <!-- ================= Build ================= -->
+	<build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+        </resources>
+        <testResources>
+			<testResource>
+				<directory>src/test/resources</directory>
+				<includes>
+					<include>**/*.xml</include>
+					<include>**/*.properties</include>
+				</includes>
+			</testResource>
+		</testResources> 
+    </build>
+    
+    <!-- ================= Reporting ================= -->
+    <reporting>
+     	  <!-- Needed in order to generate the report properly -->
+        <outputDirectory>
+            ${basedir}/../../target/site/scam-apps/${project.artifactId}
+        </outputDirectory>
+	</reporting>
+    
+    <!-- ================= Dependencies ================= -->
+    <dependencies>
+    	<!-- SCAM Core -->
+    	<dependency>
+            <groupId>se.kmr.scam</groupId>
+            <artifactId>scam-core</artifactId>
+            <version>${pom.version}</version>
+            <exclusions>
+				<exclusion>
+					<groupId>javax.xml.bind</groupId>
+					<artifactId>jaxb-impl</artifactId>
+				</exclusion>
+			</exclusions>
+        </dependency>
+    
+        <!-- SCAM Modules -->
+        <!-- 	REST Module -->
+        <dependency>
+        	<groupId>se.kmr.scam</groupId>
+    		<artifactId>scam-rest-module</artifactId>
+        	<version>${pom.version}</version>
+        	<exclusions>
+				<exclusion>
+					<groupId>se.kmr.scam</groupId>
+					<artifactId>scam-core</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>javax.xml.bind</groupId>
+					<artifactId>jaxb-impl</artifactId>
+				</exclusion>
+			</exclusions>
+        </dependency>
+
+        <!-- 	OAI-PMH Module -->
+        <dependency>
+        	<groupId>se.kmr.scam</groupId>
+			 <artifactId>scam-oai-pmh-target-module</artifactId>
+        	<version>${pom.version}</version>
+        	<exclusions>
+				<exclusion>
+					<groupId>se.kmr.scam</groupId>
+					<artifactId>scam-core</artifactId>
+				</exclusion>
+			</exclusions>
+        </dependency>
+
+         <!-- 	SQI Module -->	
+        <dependency>
+        	<groupId>se.kmr.scam</groupId>
+			<artifactId>scam-sqi-webservice-module</artifactId>
+        	<version>${pom.version}</version>
+        	<exclusions>
+				<exclusion>
+					<groupId>se.kmr.scam</groupId>
+					<artifactId>scam-core</artifactId>
+				</exclusion>
+			</exclusions>
+        </dependency>		
+        
+      	<!-- try scope provided, remove this if problem (CXF uses Sun's JAXB implementation) -->
+		<dependency>
+			<groupId>javax.xml.bind</groupId>
+			<artifactId>jaxb-api</artifactId>
+			<version>2.1</version>
+		</dependency> 
+		
+		<!-- try scope provided, might be AbstractMethodError when loading wsdl when provided and not there -->
+		<dependency>
+		    <groupId>xerces</groupId>
+		    <artifactId>xercesImpl</artifactId>
+		    <version>2.9.1</version>
+		</dependency>  
+    </dependencies>
+	
+</project>
+

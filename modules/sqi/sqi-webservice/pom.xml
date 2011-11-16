@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<!-- ================= SCAM SQI Webservice module ================= -->
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>se.kmr.scam</groupId>
+		<artifactId>scam-sqi</artifactId>
+		<version>4.0-SNAPSHOT</version>
+	</parent>
+	<groupId>se.kmr.scam</groupId>
+	<artifactId>scam-sqi-webservice-module</artifactId>
+	<packaging>war</packaging>
+	<version>4.0-SNAPSHOT</version>
+	<name>SCAM SQI webservice module</name>
+
+	<!-- ================= Properties ================= -->
+	<properties>
+		<clover.licenseLocation>${basedir}/../../../src/resources/clover.license</clover.licenseLocation>
+		<cxf.version>2.1.4</cxf.version>
+	</properties>
+
+	<!-- ================= SCM ================= -->
+	<scm>
+		<connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/sqi-webservice</connection>
+		<developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/sqi-webservice</developerConnection>
+		<url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/sqi-webservice</url>
+	</scm>
+
+	<!-- ================= Profiles ================= -->
+
+
+	<!-- ================= Build ================= -->
+	<build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+			</resource>
+		</resources>
+		<testResources>
+			<testResource>
+				<directory>src/test/resources</directory>
+				<includes>
+					<include>**/*.xml</include>
+					<include>**/*.properties</include>
+				</includes>
+			</testResource>
+		</testResources>
+		<plugins>
+			<!--
+				Below plugin provides a separate JAR for the JAX-WS artifacts (i.e.,
+				the Java classes created by running wsdl2java), as this JAR will
+				also be used by the SOAP client.
+			-->
+			<plugin>
+				<artifactId>maven-assembly-plugin</artifactId>
+				<version>2.2-beta-1</version>
+				<configuration>
+					<descriptors>
+						<descriptor>src/assembly/jaxwsjar.xml</descriptor>
+					</descriptors>
+					<appendAssemblyId>true</appendAssemblyId>
+					<attach>true</attach>
+				</configuration>
+				<executions>
+					<execution>
+						<id>make-assembly</id>
+						<phase>package</phase>
+						<goals>
+							<goal>single</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.cxf</groupId>
+				<artifactId>cxf-codegen-plugin</artifactId>
+				<version>${cxf.version}</version>
+				<executions>
+					<execution>
+						<phase>generate-sources</phase>
+						<configuration>
+							<sourceRoot>${basedir}/target/generated</sourceRoot>
+							<wsdlOptions>
+								<wsdlOption>
+									<wsdl>
+										${basedir}/src/main/webapp/WEB-INF/wsdl/sqiTarget.wsdl
+                                    </wsdl>
+                                   <!--  <extraargs>
+     								   <extraarg>-impl</extraarg>
+      								</extraargs>
+                                    -->
+								</wsdlOption>
+								<wsdlOption>
+									<wsdl>
+										${basedir}/src/main/webapp/WEB-INF/wsdl/sqiSessionManagement.wsdl
+                                    </wsdl>
+                                   <!--  <extraargs>
+     								   <extraarg>-impl</extraarg>
+      								</extraargs>-->
+                       	    	</wsdlOption>
+								
+							</wsdlOptions>
+						</configuration>
+						<goals>
+							<goal>wsdl2java</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>make-a-jar</id>
+						<phase>compile</phase>
+						<goals>
+							<goal>jar</goal>
+						</goals>
+						<configuration>
+							<excludes>
+								<!-- not store scam.properties in generated jar only in war-->	
+								<exclude>**/scam.properties</exclude>
+							</excludes>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-install-plugin</artifactId>
+				<executions>
+					<execution>
+						<phase>install</phase>
+						<goals>
+							<goal>install-file</goal>
+						</goals>
+						<configuration>
+							<packaging>jar</packaging>
+							<artifactId>${project.artifactId}</artifactId>
+							<groupId>${project.groupId}</groupId>
+							<version>${project.version}</version>
+							<file>${project.build.directory}/${project.artifactId}-${project.version}.jar</file>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			
+			<plugin>
+				<groupId>org.codehaus.cargo</groupId>
+				<artifactId>cargo-maven2-plugin</artifactId>
+				<version>1.0-beta-2</version>
+				<configuration>
+					<container>
+						<containerId>${cargo.deploy.container}</containerId>
+						<home>${cargo.deploy.container.home}</home>
+						<type>installed</type>
+					</container>
+					<configuration>
+						<type>existing</type>
+						<home>${cargo.deploy.container.home}</home>
+					</configuration>
+					<wait>true</wait>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+	<!-- ================= Reporting ================= -->
+	<reporting>
+		<!-- Needed in order to generate the report properly -->
+		<outputDirectory>
+            ${basedir}/../../../target/site/scam-modules/scam-sqi/${project.artifactId}
+        </outputDirectory>
+	</reporting>
+
+	<!-- ================= Dependencies ================= -->
+	<dependencies>
+		<dependency>
+        	<groupId>se.kmr.scam</groupId>
+         	<artifactId>scam-sqi-common</artifactId>
+         	<version>${pom.version}</version>
+      	</dependency>
+	
+		<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-frontend-jaxws</artifactId>
+			<version>${cxf.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-transports-http</artifactId>
+			<version>${cxf.version}</version>
+		</dependency>
+		<!-- Jetty is needed if you're are not using the CXFServlet -->
+		<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-transports-http-jetty</artifactId>
+			<version>${cxf.version}</version>
+		</dependency>
+		
+		<!-- current cxf version 2.1.4 seems to use
+		 slf4j-jdk14-1.3.1 as backend.
+		 got problem with slf4j-api-1.5.0.jar from parent pom
+		 So override it here. Todo: Some better solution?-->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-jdk14</artifactId>
+			<version>1.5.0</version>
+		</dependency>
+		
+		<!-- try scope provided, remove this if problem (CXF uses Sun's JAXB implementation) -->
+		<dependency>
+			<groupId>javax.xml.bind</groupId>
+			<artifactId>jaxb-api</artifactId>
+			<version>2.1</version>
+			<!-- <scope>provided</scope>-->
+		</dependency> 
+		
+		<!-- try scope provided, might be AbstractMethodError when loading wsdl when provided and not there -->
+		<dependency>
+		    <groupId>xerces</groupId>
+		    <artifactId>xercesImpl</artifactId>
+		    <version>2.9.1</version>
+		  <!--  <scope>provided</scope>-->
+        </dependency>      
+	    
+		
+	</dependencies>
+
+
+</project>
