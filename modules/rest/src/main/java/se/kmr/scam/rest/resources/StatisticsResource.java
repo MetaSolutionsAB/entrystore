@@ -37,6 +37,8 @@ import org.openrdf.model.Resource;
 import org.openrdf.model.Statement;
 import org.openrdf.model.Value;
 import org.openrdf.model.impl.URIImpl;
+import org.openrdf.model.util.GraphUtil;
+import org.openrdf.model.util.GraphUtilException;
 import org.openrdf.model.vocabulary.RDF;
 import org.restlet.Context;
 import org.restlet.data.MediaType;
@@ -50,10 +52,12 @@ import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.jdil.JDILErrorMessages;
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.BuiltinType;
+import se.kmr.scam.repository.ContextManager;
 import se.kmr.scam.repository.Entry;
+import se.kmr.scam.repository.PrincipalManager;
+import se.kmr.scam.repository.User;
 import se.kmr.scam.repository.config.Config;
 import se.kmr.scam.repository.config.ConfigurationManager;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
@@ -157,7 +161,7 @@ public class StatisticsResource extends BaseResource {
 			if (context == null) {
 				log.error("Cannot find a context with that ID");
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				return new JsonRepresentation(JDILErrorMessages.errorWrongContextIDmsg);
+				return new JsonRepresentation("");//JDILErrorMessages.errorWrongContextIDmsg);
 			}
 			
 			JSONObject result = new JSONObject();
@@ -182,6 +186,11 @@ public class StatisticsResource extends BaseResource {
 					result.put("error", "This statistics type is not supported yet");
 				} else if ("relations".equals(statType)) {
 					result.put("error", "This statistics type is not supported yet");
+				} else if ("competence".equals(statType)){
+					Date before = new Date();
+					result = getCompetenceStatistics(context);
+					Date after = new Date();
+					log.info("Creation of keyword statistics took " + (after.getTime() - before.getTime()) + " ms");
 				} else if ("type".equals(statType)) {
 					result.put("error", "This statistics type is not supported yet");
 				} else {
@@ -604,6 +613,62 @@ public class StatisticsResource extends BaseResource {
 		}
 		
 		return labelMap;
+	}
+	private JSONObject getCompetenceStatistics(se.kmr.scam.repository.Context context2) {
+		HashMap<String, HashMap<String, Integer>> CompDefToCount = new HashMap<String, HashMap<String, Integer>>();
+		
+		PrincipalManager pm = this.getPM();
+		ContextManager cm = this.getCM();
+		List<User> users = pm.getUsers();
+		int nrOfUsers = users.size();
+		//Iterate over all users
+		for (User user: users) {
+			//The competence-profile is stored in a separate entry
+			//and can be found in relations
+			List<Statement> stats = user.getEntry().getRelations();
+			for (Statement s : stats){
+				org.openrdf.model.URI pred = s.getPredicate();
+				if("http://scam.sf.net/schema#aboutPerson".equals(pred.toString())){
+					java.net.URI resourceURI = java.net.URI.create(s.getSubject().toString());
+					String contextId = se.kmr.scam.repository.impl.Util.getContextIdFromURI(this.getRM(), resourceURI);
+					se.kmr.scam.repository.Context context = cm.getContext(contextId);
+					Set<Entry> competenceEntries = context.getByResourceURI(resourceURI);
+					Entry competenceEntry = competenceEntries.iterator().next(); //Should only be one!
+					Graph graph = competenceEntry.getMetadataGraph();
+					Iterator<Statement> compDefsStatements = graph.match( null,
+							graph.getValueFactory().createURI("http://scam.sf.net/schema#competencyDefinition"), (Resource) null);
+					
+					while (compDefsStatements.hasNext()){
+						Statement stat = compDefsStatements.next();
+						try{
+							Value compLevel  = GraphUtil.getUniqueObject(graph, stat.getSubject(), 
+									graph.getValueFactory().createURI("http://scam.sf.net/schema#competenceLevel"));
+							HashMap<String, Integer> current = CompDefToCount.get(stat.getObject().toString());
+							if (current == null){
+								current = new HashMap<String, Integer>();
+								CompDefToCount.put(stat.getObject().toString(), current);
+							}
+							Integer currentInt = current.get(compLevel.toString());
+							if(currentInt == null){
+								currentInt = new Integer(0);
+							}
+							currentInt++;
+							current.put(compLevel.toString(), currentInt);
+						} catch (GraphUtilException gue) {
+							continue;
+						}
+					}
+					break;
+				}
+			}
+		}
+		JSONObject returnObject = new JSONObject(CompDefToCount);
+		try  {
+			returnObject.put("nrOfPersons", nrOfUsers);
+		} catch (JSONException jsone){
+			return null;
+		}
+		return returnObject;
 	}
 
 }
