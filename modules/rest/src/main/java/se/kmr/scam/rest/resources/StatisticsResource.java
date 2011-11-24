@@ -52,6 +52,7 @@ import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import se.kmr.scam.jdil.JDILErrorMessages;
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.BuiltinType;
 import se.kmr.scam.repository.ContextManager;
@@ -161,7 +162,7 @@ public class StatisticsResource extends BaseResource {
 			if (context == null) {
 				log.error("Cannot find a context with that ID");
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				return new JsonRepresentation("");//JDILErrorMessages.errorWrongContextIDmsg);
+				return new JsonRepresentation(JDILErrorMessages.errorWrongContextIDmsg);
 			}
 			
 			JSONObject result = new JSONObject();
