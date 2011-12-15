@@ -33,11 +33,13 @@ import java.util.Set;
 
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
+import org.openrdf.model.Resource;
 import org.openrdf.model.Statement;
 import org.openrdf.model.Value;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.impl.URIImpl;
+import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -579,177 +581,187 @@ public class MetadataCorrection {
 //					}
 //				}
 				
-				String oeNS = "http://www.cc.uah.es/ie/ont/OE-OAAE#";
-				Iterator<Statement> ontStmnts = metadata.match(resURI, null, null);
-				while (ontStmnts.hasNext()) {
-					Statement s = ontStmnts.next();
-					if (s.getObject() instanceof org.openrdf.model.URI) {
-						String o = s.getObject().stringValue();
-						String newO = null;
+//				String oeNS = "http://www.cc.uah.es/ie/ont/OE-OAAE#";
+//				Iterator<Statement> ontStmnts = metadata.match(resURI, null, null);
+//				while (ontStmnts.hasNext()) {
+//					Statement s = ontStmnts.next();
+//					if (s.getObject() instanceof org.openrdf.model.URI) {
+//						String o = s.getObject().stringValue();
+//						String newO = null;
+//
+//						if (o.equals(oeNS + "SheepMilk")) {
+//							newO = oeNS + "Milk";
+//						} else if (o.equals(oeNS + "NaturalPerson")) {
+//							newO = oeNS + "IndividualEntity";
+//						} else if (o.equals(oeNS + "MethodOrTechnique")) {
+//							newO = oeNS + "Method";
+//						} else if (o.equals(oeNS + "Certification")) {
+//							newO = oeNS + "CertificationProcess";
+//						} else if (o.equals(oeNS + "FarmingMethod")) {
+//							newO = oeNS + "AgriculturalMethod";
+//						} else if (o.equals(oeNS + "IdeologyIssue")) {
+//							newO = oeNS + "EthicalIssue";
+//						} else if (o.equals(oeNS + "Legislation")) {
+//							newO = oeNS + "Standard";
+//						} else if (o.equals(oeNS + "FodderCrop")) {
+//							newO = oeNS + "FoddCrop";
+//						} else if (o.equals(oeNS + "FarmersMarket")) {
+//							newO = oeNS + "LocalMarket";
+//						} else if (o.equals(oeNS + "MarketTrends")) {
+//							newO = oeNS + "MarketTrend";
+//						} else if (o.equals(oeNS + "GMOAvoidance")) {
+//							newO = oeNS + "GMO";
+//						} else if (o.equals(oeNS + "ConversionProcess")) {
+//							newO = oeNS + "OrganicConversion";
+//						} else if (o.equals(oeNS + "AnimalTransport")) {
+//							newO = oeNS + "TransportOfAnimals";
+//						} else if (o.equals(oeNS + "ProductsTransport")) {
+//							newO = oeNS + "TransportOfProducts";
+//						} else if (o.equals(oeNS + "MeatProductionProcess")) {
+//							newO = oeNS + "MeatProduction";
+//						} else if (o.equals(oeNS + "MilkProductionProcess")) {
+//							newO = oeNS + "MilkProduction";
+//						} else if (o.equals(oeNS + "LabelingRegulation")) {
+//							newO = oeNS + "Labeling";
+//						} else if (o.equals(oeNS + "EULegislation")) {
+//							newO = oeNS + "Legislation";
+//						} else if (o.equals(oeNS + "EULegislationOnGMO")) {
+//							newO = oeNS + "LegislationOnOrganicAgriculture";
+//						} else if (o.equals(oeNS + "Dairy")) {
+//							newO = oeNS + "DairyProduct";
+//						} else if (o.equals(oeNS + "Fodder")) {
+//							newO = oeNS + "FodderCereal";
+//						} else if (o.equals(oeNS + "BuffaloMilk")) {
+//							newO = oeNS + "Milk";
+//						} else if (o.equals(oeNS + "CattleMeat")) {
+//							newO = oeNS + "Meat";
+//						} else if (o.equals(oeNS + "ChickenMeat")) {
+//							newO = oeNS + "Meat";
+//						} else if (o.equals(oeNS + "CowMilk")) {
+//							newO = oeNS + "Milk";
+//						} else if (o.equals(oeNS + "GoatMilk")) {
+//							newO = oeNS + "Milk";
+//						} else if (o.equals(oeNS + "Jelly")) {
+//							newO = oeNS + "JellyFish";
+//						} else if (o.equals(oeNS + "LambMeat")) {
+//							newO = oeNS + "Meat";
+//						} else if (o.equals(oeNS + "PigMeat")) {
+//							newO = oeNS + "Meat";
+//						} else if (o.equals(oeNS + "PoultryMeat")) {
+//							newO = oeNS + "Meat";
+//						} else if (o.equals(oeNS + "RabbitMeat")) {
+//							newO = oeNS + "Meat";
+//						} else if (o.equals(oeNS + "ActivityType")) {
+//							newO = oeNS + "Activity";
+//						} else if (o.equals(oeNS + "EducationActivity")) {
+//							newO = oeNS + "EducationalActivity";
+//						} else if (o.equals(oeNS + "JuridicalPerson")) {
+//							newO = oeNS + "JuridicalEntity";
+//						} else if (o.equals(oeNS + "ChemicallyOrganicFertilizer")) {
+//							newO = "remove";
+//						} else if (o.equals(oeNS + "ChemicallyInorganicFertilizer")) {
+//							newO = "remove";
+//						} else if (o.equals(oeNS + "UnprocessedProduct")) {
+//							newO = "remove";
+//						} else if (o.equals(oeNS + "ProcessedProduct")) {
+//							newO = "remove";
+//						} else if (o.equals(oeNS + "ProductionProcess")) {
+//							newO = "remove";
+//						} else if (o.equals(oeNS + "ProductIntegrity")) {
+//							newO = "remove";
+//						} else if (o.equals(oeNS + "Fermentation")) {
+//							newO = "remove";
+//						} else if (o.equals(oeNS + "Sterilization")) {
+//							newO = "remove";
+//						} else if (o.equals(oeNS + "Concepts")) {
+//							newO = "remove";
+//						} else if (o.equals(oeNS + "LowInputAgriculture")) {
+//							newO = oeNS + "ExtensiveFarming";
+//						} else if (o.equals(oeNS + "CerealsCultivation")) {
+//							newO = oeNS + "CultivationOfCereals";
+//						} else if (o.equals(oeNS + "Diet")) {
+//							newO = oeNS + "AnimalDiet";
+//						} else if (o.equals(oeNS + "Fertilization")) {
+//							newO = oeNS + "Fertilizing";
+//						} else if (o.equals(oeNS + "NaturalNutrition")) {
+//							newO = oeNS + "AnimalNutrition";
+//						} else if (o.equals(oeNS + "SoilTillage")) {
+//							newO = oeNS + "Tillage";
+//						} else if (o.equals(oeNS + "ProductsExport")) {
+//							newO = oeNS + "Import-ExportIssue";
+//						} else if (o.equals(oeNS + "RenewevableResources")) {
+//							newO = oeNS + "RenewableResources";
+//						} else if (o.equals(oeNS + "ProductsImport")) {
+//							newO = oeNS + "Import-ExportIssue";
+//						} else if (o.equals(oeNS + "SoilBiology")) {
+//							newO = oeNS + "SoilBiologicalActivity";
+//						} else if (o.equals(oeNS + "EUOrganicStandard")) {
+//							newO = oeNS + "OrganicStandard";
+//						} else if (o.equals(oeNS + "CarbonSequestration")) {
+//							newO = oeNS + "EnvironmentalIssue";
+//						} else if (o.equals(oeNS + "HACCP")) {
+//							newO = oeNS + "FoodSafety";
+//						} else if (o.equals(oeNS + "ShellAquaculture")) {
+//							newO = oeNS + "AquaCulture";
+//						} else if (o.equals(oeNS + "Corn")) {
+//							newO = oeNS + "Maize";
+//						} else if (o.equals(oeNS + "IFOAMPrinciples")) {
+//							newO = oeNS + "OrganicPrinciple";
+//						} else if (o.equals(oeNS + "NaturalBehaviour")) {
+//							newO = oeNS + "AnimalBehaviour";
+//						} else if (o.equals(oeNS + "CO2Miles")) {
+//							newO = oeNS + "EcologicalFootprint";
+//						} else if (o.equals(oeNS + "FodderPreference")) {
+//							newO = oeNS + "AnimalDiet";
+//						} else if (o.equals(oeNS + "AnimalProductionDerivedActivity")) {
+//							newO = oeNS + "AnimalProductionActivity";
+//						} else if (o.equals(oeNS + "ShelfLife")) {
+//							newO = oeNS + "Market";
+//						} else if (o.equals(oeNS + "BeeOrigin")) {
+//							newO = oeNS + "Apiculture";
+//						} else if (o.equals(oeNS + "ISO14000Program")) {
+//							newO = oeNS + "FoodQuality";
+//						} else if (o.equals(oeNS + "PlantProductionDerivedActivity")) {
+//							newO = oeNS + "PlantProductionActivity";
+//						} else if (o.equals(oeNS + "EULegislationOnOrganicFertilizers")) {
+//							newO = oeNS + "Legislation";
+//						} else if (o.equals(oeNS + "Sausage")) {
+//							newO = oeNS + "AnimalOriginProcessedProduct";
+//						} else if (o.equals(oeNS + "SoyaDrink")) {
+//							newO = oeNS + "PlantOriginProcessedProduct";
+//						} else if (o.equals(oeNS + "Ecoturism")) {
+//							newO = oeNS + "Ecotourism";
+//						} else if (o.equals(oeNS + "GeneticResistence")) {
+//							newO = oeNS + "GeneticResistance";
+//						} else if (o.equals(oeNS + "LeatherProduction")) {
+//							newO = oeNS + "Leather";
+//						} else if (o.equals(oeNS + "PlantoriginProcessedProduct")) {
+//							newO = oeNS + "PlantOriginProcessedProduct";
+//						} else if (o.equals(oeNS + "AnimaloriginProcessedProduct")) {
+//							newO = oeNS + "AnimalOriginProcessedProduct";
+//						}
+//
+//						if (newO != null) {
+//							if (newO.equals("remove")) {
+//								toRemove.add(s);
+//							} else {
+//								toAdd.add(vf.createStatement(s.getSubject(), s.getPredicate(), vf.createURI(newO)));
+//								toRemove.add(s);
+//							}
+//						}
+//					}
+//				}
 
-						if (o.equals(oeNS + "SheepMilk")) {
-							newO = oeNS + "Milk";
-						} else if (o.equals(oeNS + "NaturalPerson")) {
-							newO = oeNS + "IndividualEntity";
-						} else if (o.equals(oeNS + "MethodOrTechnique")) {
-							newO = oeNS + "Method";
-						} else if (o.equals(oeNS + "Certification")) {
-							newO = oeNS + "CertificationProcess";
-						} else if (o.equals(oeNS + "FarmingMethod")) {
-							newO = oeNS + "AgriculturalMethod";
-						} else if (o.equals(oeNS + "IdeologyIssue")) {
-							newO = oeNS + "EthicalIssue";
-						} else if (o.equals(oeNS + "Legislation")) {
-							newO = oeNS + "Standard";
-						} else if (o.equals(oeNS + "FodderCrop")) {
-							newO = oeNS + "FoddCrop";
-						} else if (o.equals(oeNS + "FarmersMarket")) {
-							newO = oeNS + "LocalMarket";
-						} else if (o.equals(oeNS + "MarketTrends")) {
-							newO = oeNS + "MarketTrend";
-						} else if (o.equals(oeNS + "GMOAvoidance")) {
-							newO = oeNS + "GMO";
-						} else if (o.equals(oeNS + "ConversionProcess")) {
-							newO = oeNS + "OrganicConversion";
-						} else if (o.equals(oeNS + "AnimalTransport")) {
-							newO = oeNS + "TransportOfAnimals";
-						} else if (o.equals(oeNS + "ProductsTransport")) {
-							newO = oeNS + "TransportOfProducts";
-						} else if (o.equals(oeNS + "MeatProductionProcess")) {
-							newO = oeNS + "MeatProduction";
-						} else if (o.equals(oeNS + "MilkProductionProcess")) {
-							newO = oeNS + "MilkProduction";
-						} else if (o.equals(oeNS + "LabelingRegulation")) {
-							newO = oeNS + "Labeling";
-						} else if (o.equals(oeNS + "EULegislation")) {
-							newO = oeNS + "Legislation";
-						} else if (o.equals(oeNS + "EULegislationOnGMO")) {
-							newO = oeNS + "LegislationOnOrganicAgriculture";
-						} else if (o.equals(oeNS + "Dairy")) {
-							newO = oeNS + "DairyProduct";
-						} else if (o.equals(oeNS + "Fodder")) {
-							newO = oeNS + "FodderCereal";
-						} else if (o.equals(oeNS + "BuffaloMilk")) {
-							newO = oeNS + "Milk";
-						} else if (o.equals(oeNS + "CattleMeat")) {
-							newO = oeNS + "Meat";
-						} else if (o.equals(oeNS + "ChickenMeat")) {
-							newO = oeNS + "Meat";
-						} else if (o.equals(oeNS + "CowMilk")) {
-							newO = oeNS + "Milk";
-						} else if (o.equals(oeNS + "GoatMilk")) {
-							newO = oeNS + "Milk";
-						} else if (o.equals(oeNS + "Jelly")) {
-							newO = oeNS + "JellyFish";
-						} else if (o.equals(oeNS + "LambMeat")) {
-							newO = oeNS + "Meat";
-						} else if (o.equals(oeNS + "PigMeat")) {
-							newO = oeNS + "Meat";
-						} else if (o.equals(oeNS + "PoultryMeat")) {
-							newO = oeNS + "Meat";
-						} else if (o.equals(oeNS + "RabbitMeat")) {
-							newO = oeNS + "Meat";
-						} else if (o.equals(oeNS + "ActivityType")) {
-							newO = oeNS + "Activity";
-						} else if (o.equals(oeNS + "EducationActivity")) {
-							newO = oeNS + "EducationalActivity";
-						} else if (o.equals(oeNS + "JuridicalPerson")) {
-							newO = oeNS + "JuridicalEntity";
-						} else if (o.equals(oeNS + "ChemicallyOrganicFertilizer")) {
-							newO = "remove";
-						} else if (o.equals(oeNS + "ChemicallyInorganicFertilizer")) {
-							newO = "remove";
-						} else if (o.equals(oeNS + "UnprocessedProduct")) {
-							newO = "remove";
-						} else if (o.equals(oeNS + "ProcessedProduct")) {
-							newO = "remove";
-						} else if (o.equals(oeNS + "ProductionProcess")) {
-							newO = "remove";
-						} else if (o.equals(oeNS + "ProductIntegrity")) {
-							newO = "remove";
-						} else if (o.equals(oeNS + "Fermentation")) {
-							newO = "remove";
-						} else if (o.equals(oeNS + "Sterilization")) {
-							newO = "remove";
-						} else if (o.equals(oeNS + "Concepts")) {
-							newO = "remove";
-						} else if (o.equals(oeNS + "LowInputAgriculture")) {
-							newO = oeNS + "ExtensiveFarming";
-						} else if (o.equals(oeNS + "CerealsCultivation")) {
-							newO = oeNS + "CultivationOfCereals";
-						} else if (o.equals(oeNS + "Diet")) {
-							newO = oeNS + "AnimalDiet";
-						} else if (o.equals(oeNS + "Fertilization")) {
-							newO = oeNS + "Fertilizing";
-						} else if (o.equals(oeNS + "NaturalNutrition")) {
-							newO = oeNS + "AnimalNutrition";
-						} else if (o.equals(oeNS + "SoilTillage")) {
-							newO = oeNS + "Tillage";
-						} else if (o.equals(oeNS + "ProductsExport")) {
-							newO = oeNS + "Import-ExportIssue";
-						} else if (o.equals(oeNS + "RenewevableResources")) {
-							newO = oeNS + "RenewableResources";
-						} else if (o.equals(oeNS + "ProductsImport")) {
-							newO = oeNS + "Import-ExportIssue";
-						} else if (o.equals(oeNS + "SoilBiology")) {
-							newO = oeNS + "SoilBiologicalActivity";
-						} else if (o.equals(oeNS + "EUOrganicStandard")) {
-							newO = oeNS + "OrganicStandard";
-						} else if (o.equals(oeNS + "CarbonSequestration")) {
-							newO = oeNS + "EnvironmentalIssue";
-						} else if (o.equals(oeNS + "HACCP")) {
-							newO = oeNS + "FoodSafety";
-						} else if (o.equals(oeNS + "ShellAquaculture")) {
-							newO = oeNS + "AquaCulture";
-						} else if (o.equals(oeNS + "Corn")) {
-							newO = oeNS + "Maize";
-						} else if (o.equals(oeNS + "IFOAMPrinciples")) {
-							newO = oeNS + "OrganicPrinciple";
-						} else if (o.equals(oeNS + "NaturalBehaviour")) {
-							newO = oeNS + "AnimalBehaviour";
-						} else if (o.equals(oeNS + "CO2Miles")) {
-							newO = oeNS + "EcologicalFootprint";
-						} else if (o.equals(oeNS + "FodderPreference")) {
-							newO = oeNS + "AnimalDiet";
-						} else if (o.equals(oeNS + "AnimalProductionDerivedActivity")) {
-							newO = oeNS + "AnimalProductionActivity";
-						} else if (o.equals(oeNS + "ShelfLife")) {
-							newO = oeNS + "Market";
-						} else if (o.equals(oeNS + "BeeOrigin")) {
-							newO = oeNS + "Apiculture";
-						} else if (o.equals(oeNS + "ISO14000Program")) {
-							newO = oeNS + "FoodQuality";
-						} else if (o.equals(oeNS + "PlantProductionDerivedActivity")) {
-							newO = oeNS + "PlantProductionActivity";
-						} else if (o.equals(oeNS + "EULegislationOnOrganicFertilizers")) {
-							newO = oeNS + "Legislation";
-						} else if (o.equals(oeNS + "Sausage")) {
-							newO = oeNS + "AnimalOriginProcessedProduct";
-						} else if (o.equals(oeNS + "SoyaDrink")) {
-							newO = oeNS + "PlantOriginProcessedProduct";
-						} else if (o.equals(oeNS + "Ecoturism")) {
-							newO = oeNS + "Ecotourism";
-						} else if (o.equals(oeNS + "GeneticResistence")) {
-							newO = oeNS + "GeneticResistance";
-						} else if (o.equals(oeNS + "LeatherProduction")) {
-							newO = oeNS + "Leather";
-						} else if (o.equals(oeNS + "PlantoriginProcessedProduct")) {
-							newO = oeNS + "PlantOriginProcessedProduct";
-						} else if (o.equals(oeNS + "AnimaloriginProcessedProduct")) {
-							newO = oeNS + "AnimalOriginProcessedProduct";
-						}
-
-						if (newO != null) {
-							if (newO.equals("remove")) {
-								toRemove.add(s);
-							} else {
-								toAdd.add(vf.createStatement(s.getSubject(), s.getPredicate(), vf.createURI(newO)));
-								toRemove.add(s);
-							}
+				Iterator<Statement> rdfsTypeStmnts = metadata.match(null, vf.createURI("http://www.w3.org/TR/rdf-schema/type"), null);
+				while (rdfsTypeStmnts.hasNext()) {
+					Statement rdfsTypeStmnt = rdfsTypeStmnts.next();
+					if (rdfsTypeStmnt.getObject() instanceof Resource) {
+						if (rdfsTypeStmnt.getObject().stringValue().startsWith("http://purl.org/telmap/")) {
+							toAdd.add(vf.createStatement(rdfsTypeStmnt.getSubject(), RDF.TYPE, rdfsTypeStmnt.getObject()));
+							toRemove.add(rdfsTypeStmnt);
 						}
 					}
 				}
-
 				
 				// Logging and graph modification
 				
