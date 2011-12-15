@@ -60,6 +60,7 @@ import se.kmr.scam.repository.impl.converters.LOM2RDFConverter;
 import se.kmr.scam.repository.impl.converters.OAI_DC2RDFGraphConverter;
 import se.kmr.scam.repository.impl.converters.RDF2LOMConverter;
 import se.kmr.scam.repository.test.TestSuite;
+import se.kmr.scam.repository.util.MetadataCorrection;
 import se.kmr.scam.rest.auth.BasicGuard;
 import se.kmr.scam.rest.resources.AliasResource;
 import se.kmr.scam.rest.resources.ContextBackupListResource;
@@ -253,8 +254,8 @@ public class ScamApplication extends Application {
 			boolean correct = config.getBoolean("scam.repository.store.correct-metadata", false);
 			if (correct) {
 //				new OEAutomaticValidation(rm).validateMetadata(URI.create("http://oe.confolio.org/scam/5"), URI.create("http://oe.confolio.org/scam/5/entry/6365"));
-//				MetadataCorrection mc = new MetadataCorrection(rm);
-//				mc.fixMetadataGlobally();
+				MetadataCorrection mc = new MetadataCorrection(rm);
+				mc.fixMetadataGlobally();
 				//mc.fixPrincipalsGlobally();
 //				try {
 //					mc.printUnvalidatedResources("http://oe.confolio.org/scam/30", new FileWriter("/home/hannes/Desktop/bce.csv"));
