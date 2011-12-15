@@ -216,15 +216,22 @@ public class PublicRepository {
 
 			URI entryNG = vf.createURI(e.getEntryURI().toString());
 			URI mdNG = vf.createURI(e.getLocalMetadataURI().toString());
-			URI extMdNG = vf.createURI(e.getCachedExternalMetadataURI().toString());
 			URI resNG = vf.createURI(e.getResourceURI().toString());
+			URI extMdNG = null;
+			if (e.getExternalMetadataURI() != null) {
+				extMdNG = vf.createURI(e.getCachedExternalMetadataURI().toString());
+			}
 
 			synchronized (repository) {
 				RepositoryConnection rc = null;
 				try {
 					rc = repository.getConnection();
 					rc.setAutoCommit(false);
-					rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
+					if (extMdNG != null) {
+						rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
+					} else {
+						rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, resNG);
+					}
 					rc.commit();
 				} catch (RepositoryException re) {
 					log.error(re.getMessage());
