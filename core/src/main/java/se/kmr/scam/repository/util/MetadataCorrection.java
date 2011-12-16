@@ -756,7 +756,9 @@ public class MetadataCorrection {
 				while (rdfsTypeStmnts.hasNext()) {
 					Statement rdfsTypeStmnt = rdfsTypeStmnts.next();
 					if (rdfsTypeStmnt.getObject() instanceof Resource) {
-						if (rdfsTypeStmnt.getObject().stringValue().startsWith("http://purl.org/telmap/")) {
+						String objValue = rdfsTypeStmnt.getObject().stringValue();
+						if (objValue.startsWith("http://purl.org/telmap/") || // fix for telmap
+								objValue.equals("http://http://xmlns.com/foaf/0.1/Person")) { // fix for voa3r
 							toAdd.add(vf.createStatement(rdfsTypeStmnt.getSubject(), RDF.TYPE, rdfsTypeStmnt.getObject()));
 							toRemove.add(rdfsTypeStmnt);
 						}
