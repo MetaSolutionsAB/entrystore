@@ -478,31 +478,37 @@
    		use artifactory proxy instead. -->
 	<repositories>
 		<repository>
-		        <id>Jena</id>
+			<id>OpenRDF</id>
+			<url>http://repo.aduna-software.org/maven2/releases</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+		</repository>
+		<repository>  
+			<id>Restlet</id>  
+			<url>http://maven.restlet.org</url>  
+		</repository>
+		<repository>
+			<id>Maven</id>
+			<url>http://repo1.maven.org/maven2</url>
+			<releases> 
+				<enabled>true</enabled>
+			</releases>
+		</repository>
+<!--	
+		<repository>
+			<id>Jena</id>
 			<url>http://develix.iml.umu.se:8085/artifactory/repo</url>
 			<snapshots>
 				<enabled>false</enabled>
 			</snapshots>
 		</repository>
-		<repository>
-		        <id>Maven</id>
-		        <url>http://repo1.maven.org/maven2</url>
-		        <releases> 
-		                <enabled>true</enabled>
-		       </releases>
-                </repository>                                                
+-->
 		<repository>
 			<id>snapshots</id>
 			<url>http://develix.iml.umu.se:8085/artifactory/repo</url>
 			<releases>
 				<enabled>false</enabled>
-			</releases>
-		</repository>
-		<repository>
-			<id>OpenRDF</id>
-			<url>http://repo.aduna-software.org/maven2/releases</url>
-			<releases>
-				<enabled>true</enabled>
 			</releases>
 		</repository>
 	</repositories>
