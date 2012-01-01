@@ -20,7 +20,6 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
-import java.util.HashMap;
 
 import org.openrdf.model.URI;
 import org.openrdf.model.impl.URIImpl;
@@ -36,21 +35,19 @@ import org.openrdf.query.resultio.sparqljson.SPARQLResultsJSONWriter;
 import org.openrdf.query.resultio.sparqlxml.SPARQLResultsXMLWriter;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
-import org.restlet.Context;
 import org.restlet.data.Form;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
-import org.restlet.resource.InputRepresentation;
-import org.restlet.resource.Representation;
+import org.restlet.representation.InputRepresentation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Get;
+import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
-import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.rest.util.Util;
 
 /**
  * Provides a SPARQL interface to SCAM contexts.
@@ -59,54 +56,16 @@ import se.kmr.scam.rest.util.Util;
  */
 public class SparqlResource extends BaseResource {
 
-	/** The URL parameters */
-	private HashMap<String,String> parameters = null;
-	
-	Logger log = LoggerFactory.getLogger(SparqlResource.class);
+	static Logger log = LoggerFactory.getLogger(SparqlResource.class);
 
-	/** The contexts ID. */
-	String contextId = null;
-
-	/** The context object for the context */
-	se.kmr.scam.repository.Context context = null;
-	
-	private MediaType format;
-	
-	/**
-	 * Constructor
-	 */
-	public SparqlResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
-		this.contextId = (String) getRequest().getAttributes().get("context-id");
-		String remainingPart = request.getResourceRef().getRemainingPart();
-		parameters = Util.parseRequest(remainingPart);
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.ALL));
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		getVariants().add(new Variant(MediaType.APPLICATION_XML));
-
-		if (getCM() != null) {
-			try {
-				this.context = getCM().getContext(contextId);
-			} catch (NullPointerException e) {
-				// not a context
-				this.context = null;
-			}
-		}
-		
-		if (parameters.containsKey("format")) {
-			String format = parameters.get("format");
-			if (format != null) {
-				this.format = new MediaType(format);
-			}
-		}
 	}
 
-	/**
-	 * GET
-	 */
-	@Override
+	@Get
 	public Representation represent(Variant variant) throws ResourceException {
 		try {
 			if (this.getRM().getPublicRepository() == null) {
@@ -138,10 +97,7 @@ public class SparqlResource extends BaseResource {
 		}
 	}
 	
-	/**
-	 * POST
-	 */
-	@Override
+	@Post
 	public void acceptRepresentation(Representation representation) {
 		try {
 			Form form = new Form(getRequest().getEntity());
@@ -221,21 +177,6 @@ public class SparqlResource extends BaseResource {
 			}
 		}
 		return true;
-	}
-	
-	@Override
-	public boolean allowDelete() {
-		return false;
-	}
-	
-	@Override
-	public boolean allowPost() {
-		return true;
-	}
-	
-	@Override
-	public boolean allowPut() {
-		return false;
 	}
 
 }

@@ -20,15 +20,15 @@ import java.io.IOException;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Put;
 import org.restlet.resource.ResourceException;
-import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,40 +38,22 @@ import se.kmr.scam.repository.backup.BackupFactory;
 import se.kmr.scam.repository.backup.BackupScheduler;
 import se.kmr.scam.rest.ScamApplication;
 
-public class RepositoryBackupResource  extends BaseResource  {
+/**
+ * @author Hannes Ebner
+ */
+public class RepositoryBackupResource extends BaseResource  {
 
-	Logger log = LoggerFactory.getLogger(RepositoryBackupResource.class);
+	static Logger log = LoggerFactory.getLogger(RepositoryBackupResource.class);
 	
 	ScamApplication scamApp;
 	
-	public RepositoryBackupResource(Context context, Request request, Response response) {
-		super(context, request, response);
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		scamApp = (ScamApplication) getContext().getAttributes().get(ScamApplication.KEY);
 	}
-	
-	@Override
-	public boolean allowGet() {
-		return true;
-	}
 
-	@Override
-	public boolean allowPut() {
-		return true;
-	}
-
-	@Override
-	public boolean allowPost() {
-		return false;
-	}
-
-	@Override
-	public boolean allowDelete() {
-		return true;
-	}
-
-	//GET
-	@Override
+	@Get
 	public Representation represent(Variant variant) throws ResourceException {
 		try {
 			JSONObject jsonObj = new JSONObject(); 
@@ -112,8 +94,7 @@ public class RepositoryBackupResource  extends BaseResource  {
 		return result;
 	}
 
-	// PUT
-	@Override
+	@Put
 	public void storeRepresentation(Representation representation) throws ResourceException {
 		try {
 			JSONObject jsonObj = getRequestJSON();
@@ -184,8 +165,7 @@ public class RepositoryBackupResource  extends BaseResource  {
 		return jsonObj;
 	}
 
-	// DELETE
-	@Override
+	@Delete
 	public void removeRepresentations() throws ResourceException {
 		try {
 			BackupScheduler bs = scamApp.getBackupScheduler();

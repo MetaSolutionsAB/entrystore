@@ -20,15 +20,11 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Date;
-import java.util.Iterator;
-import java.util.Map;
 import java.util.Properties;
 
-import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.Session;
 import javax.mail.Transport;
-import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
 import net.tanesha.recaptcha.ReCaptchaImpl;
@@ -39,14 +35,11 @@ import org.json.JSONObject;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.ValueFactoryImpl;
-import org.restlet.Context;
-import org.restlet.data.Form;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
-import org.restlet.resource.Representation;
-import org.restlet.resource.StringRepresentation;
-import org.restlet.resource.Variant;
+import org.restlet.representation.Representation;
+import org.restlet.representation.StringRepresentation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,12 +49,12 @@ import se.kmr.scam.repository.ContextManager;
 import se.kmr.scam.repository.Entry;
 import se.kmr.scam.repository.Group;
 import se.kmr.scam.repository.PrincipalManager;
+import se.kmr.scam.repository.PrincipalManager.AccessProperty;
 import se.kmr.scam.repository.RepositoryException;
 import se.kmr.scam.repository.User;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
 import se.kmr.scam.rest.ScamApplication;
-import se.kmr.scam.rest.util.GMailSender;
 
+@Deprecated
 public class RegisterResource extends BaseResource {
 
 	public static final String NSDCTERMS = "http://purl.org/dc/terms/";
@@ -87,40 +80,18 @@ public class RegisterResource extends BaseResource {
 		scam_email = vf.createURI(NSbase + "email");
 		scam_type = vf.createURI(NSbase + "type");
 		scam_group = vf.createURI(NSbase + "group");
-
 	}
 
-	Logger log = LoggerFactory.getLogger(RegisterResource.class);
+	static Logger log = LoggerFactory.getLogger(RegisterResource.class);
 	ScamApplication scamApp;
 
-	public RegisterResource(Context context, Request request, Response response) {
-		super(context, request, response);
+	public RegisterResource() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		scamApp = (ScamApplication) getContext().getAttributes().get(ScamApplication.KEY);
 	}
 
-	@Override
-	public boolean allowGet() {
-		return false;
-	}
-
-	@Override
-	public boolean allowPut() {
-		return false;
-	}
-
-	@Override
-	public boolean allowPost() {
-		return true;
-	}
-
-	@Override
-	public boolean allowDelete() {
-		return true;
-	}
-
+	@Post
 	public void acceptRepresentation(Representation representation) {
-		log.info("POST");
 		getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI()); 
 		try {
 			try {

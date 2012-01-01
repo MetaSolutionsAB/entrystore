@@ -22,7 +22,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Set;
 
 import org.json.JSONArray;
@@ -34,15 +33,15 @@ import org.openrdf.model.Value;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.repository.RepositoryException;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
-import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,66 +52,34 @@ import se.kmr.scam.repository.Entry;
 import se.kmr.scam.repository.Group;
 import se.kmr.scam.repository.List;
 import se.kmr.scam.repository.LocationType;
-import se.kmr.scam.repository.User;
 import se.kmr.scam.repository.PrincipalManager.AccessProperty;
+import se.kmr.scam.repository.User;
 import se.kmr.scam.repository.impl.ContextImpl;
 import se.kmr.scam.repository.impl.RDFResource;
 import se.kmr.scam.repository.impl.StringResource;
 import se.kmr.scam.repository.impl.converters.NS;
 import se.kmr.scam.rest.util.RDFJSON;
-import se.kmr.scam.rest.util.Util;
 
 /**
  * This Resource contains information of all contexts. 
  * 
- * @author Eric Johansson (eric.johansson@educ.umu.se)
  * @author Hannes Ebner
  * @see BaseResource
  */
 public class ContextResource extends BaseResource {
 
-	/** Logger */
-	static Logger log = LoggerFactory.getLogger(ContextResource.class);
-	/** The current context. */
-	private se.kmr.scam.repository.Context context= null; 
-	/** Holds all parameters which comes with the request. */
-	private HashMap<String,String> parameters = null; 
-	/** The JSON text which comes with the request. */
-	private String requestText = null;  
-	/** The context id on the current context. */
-	private String contextId = null; 
+	static Logger log = LoggerFactory.getLogger(ContextResource.class); 
+	
+	private String requestText = null;
 
-	/**
-	 * This constructor will invoke the init() method by default.
-	 * 
-	 * @param context The parent context.
-	 * @param request The request to handle.
-	 * @param response The response to return.
-	 */
-	public ContextResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-
-		contextId =(String)getRequest().getAttributes().get("context-id"); 
-		parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());  
-
 		try {
 			requestText = getRequest().getEntity().getText();
 		} catch (IOException e) {
 			requestText = null;
-		} 
-
-		if (getCM() != null) {
-			try {
-				this.context = getCM().getContext(contextId);	
-			} catch (NullPointerException e) {
-				// not a context
-				e.printStackTrace(); 
-				this.context = null; 
-			}
 		}
-
 	}
 
 	/**
@@ -128,6 +95,7 @@ public class ContextResource extends BaseResource {
 	 * 
 	 * return {@link Representation}
 	 */
+	@Get
 	public Representation represent(Variant variant) throws ResourceException {	
 		if (context == null) {
 			log.info("The given context id does not exist."); 
@@ -186,6 +154,7 @@ public class ContextResource extends BaseResource {
 	 * <li><i>portfolio-id</i> is an integer that uniquely identifies a portfolio within a portfolio installation.</li>
 	 * </ul>
 	 */
+	@Post
 	public void acceptRepresentation(Representation representation) throws ResourceException {
 		try {
 			if (context == null) {
@@ -674,18 +643,8 @@ public class ContextResource extends BaseResource {
 		}
 	}
 
-	@Override
-	public boolean allowPost() {
-		return true;
-	}
-	
-	@Override
-	public boolean allowDelete() {
-		return true;
-	}
-
 	//	DELETE
-	@Override
+	@Delete
 	public void removeRepresentations() throws ResourceException {
 		try {
 			if (context == null) {
@@ -707,16 +666,6 @@ public class ContextResource extends BaseResource {
 			}
 		} catch(AuthorizationException e) {
 			unauthorizedDELETE();
-		}
-	}
-
-	//PUT
-	@Override
-	public void storeRepresentation(Representation entity) throws ResourceException {
-		try {
-
-		} catch(AuthorizationException e) {
-			unauthorizedPUT();
 		}
 	}
 

@@ -18,15 +18,17 @@ package se.kmr.scam.rest.resources;
 
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 
 import org.restlet.Context;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
+import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
-import org.restlet.resource.Resource;
+import org.restlet.representation.Representation;
+import org.restlet.resource.ServerResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,34 +40,52 @@ import se.kmr.scam.repository.RepositoryManager;
 import se.kmr.scam.repository.backup.BackupScheduler;
 import se.kmr.scam.repository.impl.RepositoryManagerImpl;
 import se.kmr.scam.rest.ScamApplication;
+import se.kmr.scam.rest.util.Util;
 /**
  *<p> Base resource class that supports common behaviours or attributes shared by
  * all resources.</p>
  * 
- * <p>A resource is anything that's important enough to be referenced as a thing in 
- * itself. If your might "want to create a hypertext link to it, make or refute
- * assertions about it, retrieve  or cache a representation of it, include all 
- * or part of it by reference into another representation, annote it, or perform 
- * other operations on it", then you should make it a resource. </p>
- * 
- * <p>Usually, a resource is something that can be stored on a computer and 
- * represented as a stream of bits: a document, row in a database, or results of 
- * running algorithm.</p>
- * 
  * @author Eric Johansson
  * @author Hannes Ebner 
  */
-public abstract class BaseResource extends Resource {
+public abstract class BaseResource extends ServerResource {
 	
-	/** Logger. */
-	private Logger logger = LoggerFactory.getLogger(BaseResource.class);
-
-	/**
-	 * Contructor 
-	 */
-	public BaseResource(Context context, Request request, Response response) {
-		super(context, request, response);
+	protected HashMap<String,String> parameters;
+	
+	MediaType format;
+	
+	protected String contextId;
+	
+	protected String entryId;
+	
+	protected se.kmr.scam.repository.Context context;
+	
+	protected se.kmr.scam.repository.Entry entry;
+	
+	private static Logger log = LoggerFactory.getLogger(BaseResource.class);
+	
+	@Override
+	public void init(Context con, Request req, Response res) {
+		parameters = Util.parseRequest(getRequest().getResourceRef().getRemainingPart());
 		
+		contextId = (String) getRequest().getAttributes().get("context-id");
+		if (getCM() != null) {
+			context = getCM().getContext(contextId);
+		}
+		
+		entryId = (String) getRequest().getAttributes().get("entry-id");
+		if (context != null) {
+			entry = context.get(entryId);
+		}
+		
+		if (parameters.containsKey("format")) {
+			String format = parameters.get("format");
+			if (format != null) {
+				this.format = new MediaType(format);
+			}
+		}
+		
+		super.init(con, req, res);
 	}
 
 	/**
@@ -81,7 +101,7 @@ public abstract class BaseResource extends Resource {
 	 * @return The current {@link ContextManager} for the contexts.
 	 */
 	public PrincipalManager getPM() {
-		Map map = getContext().getAttributes();
+		Map<String, Object> map = getContext().getAttributes();
 		return ((ScamApplication) map.get(ScamApplication.KEY)).getPM();
 	}
 
@@ -102,30 +122,30 @@ public abstract class BaseResource extends Resource {
 	}
 
 	public void unauthorizedGETContext() {
-		logger.info("client tried to GET a resource without being authorized for it's context");
+		log.info("client tried to GET a resource without being authorized for it's context");
 		getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.unauthorizedGETContext));
 	}
 
 	public Representation unauthorizedGET() {
-		logger.info("client tried to GET a resource without being authorized for it");
+		log.info("client tried to GET a resource without being authorized for it");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 		return new JsonRepresentation(JDILErrorMessages.unauthorizedGET);
 	}
 
 	public void unauthorizedDELETE() {
-		logger.info("client tried to DELETE a resource without being authorized for it");
+		log.info("client tried to DELETE a resource without being authorized for it");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 		getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.unauthorizedDELETE)); 
 	}
 
 	public void unauthorizedPOST() {
-		logger.info("client tried to POST a resource without being authorized for it");
+		log.info("client tried to POST a resource without being authorized for it");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 		getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.unauthorizedPOST)); 
 	}
 
 	public void unauthorizedPUT() {
-		logger.info("client tried to PUT a resource without being authorized for it");
+		log.info("client tried to PUT a resource without being authorized for it");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 		getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.unauthorizedPUT)); 
 	}

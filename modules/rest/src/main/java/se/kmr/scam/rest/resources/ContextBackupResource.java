@@ -16,61 +16,40 @@
 
 package se.kmr.scam.rest.resources;
 
-import java.util.HashMap;
-
 import org.openrdf.repository.RepositoryException;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.StringRepresentation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
-import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.restlet.resource.StringRepresentation; 
-
 
 import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.rest.util.Util;
+
 /**
  * 
- * @author Eric Johansson (eric.johansson@educ.umu.se) 
- * @see BaseResource
+ * @author Eric Johansson 
  */
 public class ContextBackupResource extends BaseResource {
-	/** Logger. */
-	Logger log = LoggerFactory.getLogger(ContextBackupResource.class);
-	se.kmr.scam.repository.Context context; 
+	
+	static Logger log = LoggerFactory.getLogger(ContextBackupResource.class);
+	
 	String backupId = null; 
-	/** Parameters from the URL. Example: ?scam=umu&shame=kth */
-	HashMap<String,String> parameters = null; 
-	public ContextBackupResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
+	
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		MediaType.register("APPLICATION_TRIG", "application/x-trig"); 
 		getVariants().add(new Variant(MediaType.valueOf("APPLICATION_TRIG")));
-
-		String contextId =(String)getRequest().getAttributes().get("context-id"); 
-		backupId =(String)getRequest().getAttributes().get("backup-id"); 
-		String remainingPart = request.getResourceRef().getRemainingPart(); 
-
-		parameters = Util.parseRequest(remainingPart); 
-
-		if(getCM() != null) {
-			try {
-				this.context = getCM().getContext(contextId);  
-			} catch (NullPointerException e) {
-				// not a context
-				this.context = null; 
-			}
-		}
-
+		backupId =(String) getRequest().getAttributes().get("backup-id");
 	}
-	//GET
-	@Override
+	
+	@Get
 	public Representation represent(Variant variant) throws ResourceException {
 		try {
 			if(context != null && backupId != null) {
@@ -101,13 +80,7 @@ public class ContextBackupResource extends BaseResource {
 		}
 	}
 
-	@Override
-	public boolean allowPost() {
-		return true;
-	}
-
-	//POST
-	@Override
+	@Post
 	public void acceptRepresentation(Representation representation) throws ResourceException {
 		try {
 			if(context != null && backupId != null) {
@@ -120,13 +93,7 @@ public class ContextBackupResource extends BaseResource {
 
 	}
 
-	@Override
-	public boolean allowDelete() {
-		return true;
-	}
-
-	//	DELETE
-	@Override
+	@Delete
 	public void removeRepresentations() throws ResourceException {
 		try {
 			if(context != null && backupId != null) {
@@ -142,15 +109,4 @@ public class ContextBackupResource extends BaseResource {
 		}
 	}
 
-
-	//PUT
-	@Override
-	public void storeRepresentation(Representation entity) throws ResourceException {
-		try {
-
-		}
-		catch(AuthorizationException e) {
-			unauthorizedPUT();
-		}
-	}
 }

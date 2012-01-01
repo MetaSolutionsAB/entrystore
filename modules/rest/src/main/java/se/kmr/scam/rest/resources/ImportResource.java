@@ -20,7 +20,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 
@@ -28,24 +27,20 @@ import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.openrdf.repository.RepositoryException;
-import org.restlet.Context;
+import org.restlet.Request;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.fileupload.RestletFileUpload;
-import org.restlet.resource.Representation;
-import org.restlet.resource.Variant;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.PrincipalManager.AccessProperty;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
 import se.kmr.scam.repository.transformation.SCAM2Import;
 import se.kmr.scam.repository.util.FileOperations;
-import se.kmr.scam.rest.ScamApplication;
-import se.kmr.scam.rest.util.Util;
 
 /**
  * This class supports the import of single contexts. If a context is imported,
@@ -55,53 +50,16 @@ import se.kmr.scam.rest.util.Util;
  */
 public class ImportResource extends BaseResource {
 
-	Logger log = LoggerFactory.getLogger(ImportResource.class);
+	static Logger log = LoggerFactory.getLogger(ImportResource.class);
 
-	/** The contexts ID. */
-	String contextId = null;
-
-	/** The context object for the context */
-	se.kmr.scam.repository.Context context = null;
-
-	/** Parameters from the URL. Example: ?scam=umu&shame=kth */
-	HashMap<String,String> parameters = null;
-	
-	private RepositoryManagerImpl rm;
-
-	public ImportResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
-		this.contextId =(String) getRequest().getAttributes().get("context-id"); 
-		String remainingPart = request.getResourceRef().getRemainingPart(); 
-		parameters = Util.parseRequest(remainingPart); 
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_ZIP));
 		getVariants().add(new Variant(MediaType.MULTIPART_FORM_DATA));
 		getVariants().add(new Variant(MediaType.ALL));
-
-		if(getCM() != null) {
-			try {
-				this.context = getCM().getContext(contextId);  
-			} catch (NullPointerException e) {
-				// not a context
-				this.context = null; 
-			}
-		}
+	}
 		
-		rm = ((ScamApplication) context.getAttributes().get(ScamApplication.KEY)).getRM();
-	}
-	
-	@Override
-	public boolean allowGet() {
-		return false;
-	}
-	
-	@Override
-	public boolean allowPost() {
-		return true;
-	}
-	
-	@Override
+	@Post
 	public void acceptRepresentation(Representation r) {
 		try {
 			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
@@ -130,7 +88,7 @@ public class ImportResource extends BaseResource {
 					}
 					if (input != null) {
 						FileOperations.copyFile(input, new FileOutputStream(tmpFile));
-						rm.getContextManager().importContext(context.getEntry(), tmpFile);
+						getCM().importContext(context.getEntry(), tmpFile);
 						getResponse().setEntity("<textarea></textarea>", MediaType.TEXT_HTML);
 					} else {
 						log.error("Unable to import file, received invalid data");

@@ -17,21 +17,21 @@
 package se.kmr.scam.rest.resources;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Set;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Post;
+import org.restlet.resource.Put;
 import org.restlet.resource.ResourceException;
-import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,56 +43,22 @@ import se.kmr.scam.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.BuiltinType;
 import se.kmr.scam.repository.Entry;
-import se.kmr.scam.rest.util.Util;
 
-public class HarvesterResource  extends BaseResource  {
+public class HarvesterResource extends BaseResource {
 
-	HashMap<String,String> parameters = null; 
-	se.kmr.scam.repository.Context context; 
-	Logger log = LoggerFactory.getLogger(HarvesterResource.class);
+	static Logger log = LoggerFactory.getLogger(HarvesterResource.class);
+	
 	Harvester harvester; 
 
-	public HarvesterResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
-			String remainingPart = request.getResourceRef().getRemainingPart(); 
-			parameters = Util.parseRequest(remainingPart); 
-
-			String contextId = (String)getRequest().getAttributes().get("context-id"); 
-
-			getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-
-			if(getCM() != null) {
-				try {
-					this.context = getCM().getContext(contextId);  
-				} catch (NullPointerException e) {
-					// not a context
-					this.context = null; 
-				}
-			}
-
-			if (this.context != null) {
-				harvester = getHarvester();
-			}
+	@Override
+	public void doInit() {
+		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
+		if (context != null) {
+			harvester = getHarvester();
+		}
 	}
 
-	@Override
-	public boolean allowPut() {
-		return true;
-	}
-
-	@Override
-	public boolean allowPost() {
-		return true;
-	}
-
-	@Override
-	public boolean allowDelete() {
-		return true;
-	}
-
-	//GET
-	@Override
+	@Get
 	public Representation represent(Variant variant) throws ResourceException {
 		try {
 			JSONObject jsonObj = new JSONObject(); 
@@ -138,8 +104,7 @@ public class HarvesterResource  extends BaseResource  {
 		}
 	}
 
-	// POST
-	@Override
+	@Post
 	public void acceptRepresentation(Representation representation) throws ResourceException {
 		try {
 			if (harvester != null) {
@@ -274,8 +239,7 @@ public class HarvesterResource  extends BaseResource  {
 		return null;
 	}
 
-	// DELETE
-	@Override
+	@Delete
 	public void removeRepresentations() throws ResourceException {
 		try {
 			if (harvester == null) {
@@ -304,8 +268,7 @@ public class HarvesterResource  extends BaseResource  {
 		}
 	}
 
-	// PUT
-	@Override
+	@Put
 	public void storeRepresentation(Representation representation) throws ResourceException {
 		try {
 			if (harvester == null) {

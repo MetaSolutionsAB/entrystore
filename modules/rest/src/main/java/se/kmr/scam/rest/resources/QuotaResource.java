@@ -18,18 +18,17 @@ package se.kmr.scam.rest.resources;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
-import org.restlet.resource.Variant;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.Entry;
 import se.kmr.scam.repository.Quota;
 
 /**
@@ -39,38 +38,15 @@ import se.kmr.scam.repository.Quota;
  */
 public class QuotaResource extends BaseResource {
 	
-	/** Logger. */
-	Logger log = LoggerFactory.getLogger(QuotaResource.class);
+	static Logger log = LoggerFactory.getLogger(QuotaResource.class);
 	
-	/** The contexts ID. */
-	String contextId = null;
-	
-	/** The context object for the context */
-	se.kmr.scam.repository.Context context = null;
-	
-	Entry entry = null;
-	
-	public QuotaResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
-		this.contextId = (String) getRequest().getAttributes().get("context-id");
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		getVariants().add(new Variant(MediaType.ALL));
-		
-		if (getCM() != null) {
-			try {	
-				this.context = getCM().getContext(contextId);  
-			} catch (NullPointerException e) {
-				// not a context
-				this.context = null; 
-			}
-		}
 	}
 
-	/**
-	 * GET
-	 */
+	@Get
 	public Representation represent(Variant variant) {
 		if (context != null) {
 			if (context.getEntry().getRepositoryManager().hasQuotas()) {
@@ -93,9 +69,7 @@ public class QuotaResource extends BaseResource {
 		return new JsonRepresentation("{\"error\":\"Cannot find that context or entry\"}"); 
 	}
 
-	/**
-	 * PUT
-	 */
+	@Put
 	public void storeRepresentation(Representation representation) {
 		if (getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI()) || getPM().getAdminGroup().isMember(getPM().getUser(getPM().getAuthenticatedUserURI()))) {
 			if (context != null) {
@@ -119,9 +93,7 @@ public class QuotaResource extends BaseResource {
 		}
 	}
 	
-	/**
-	 * DELETE
-	 */
+	@Delete
 	public void removeRepresentations() {
 		if (getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI()) || getPM().getAdminGroup().isMember(getPM().getUser(getPM().getAuthenticatedUserURI()))) {
 			if (context != null) {
@@ -132,16 +104,6 @@ public class QuotaResource extends BaseResource {
 		} else {
 			getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 		}
-	}
-
-	@Override
-	public boolean allowPut() {
-		return true;
-	}
-	
-	@Override
-	public boolean allowDelete() {
-		return true;
 	}
 	
 }

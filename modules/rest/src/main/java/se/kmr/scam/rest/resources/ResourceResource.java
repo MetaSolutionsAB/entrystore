@@ -29,7 +29,6 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -46,27 +45,29 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
-import org.ieee.ltsc.lom.LOMUtil;
 import org.ieee.ltsc.lom.LOM.Technical.Location;
+import org.ieee.ltsc.lom.LOMUtil;
 import org.ieee.ltsc.lom.impl.LOMImpl;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
-import org.restlet.Context;
-import org.restlet.data.Form;
+import org.restlet.Request;
+import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Reference;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.FileRepresentation;
-import org.restlet.resource.Representation;
-import org.restlet.resource.StringRepresentation;
-import org.restlet.resource.Variant;
+import org.restlet.representation.FileRepresentation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.StringRepresentation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Post;
+import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,12 +85,10 @@ import se.kmr.scam.repository.RepresentationType;
 import se.kmr.scam.repository.User;
 import se.kmr.scam.repository.impl.ListImpl;
 import se.kmr.scam.repository.impl.RDFResource;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
 import se.kmr.scam.repository.impl.StringResource;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
 import se.kmr.scam.repository.util.EntryUtil;
 import se.kmr.scam.repository.util.FileOperations;
-import se.kmr.scam.rest.ScamApplication;
 import se.kmr.scam.rest.util.RDFJSON;
 import se.kmr.scam.rest.util.Util;
 
@@ -111,84 +110,19 @@ import com.sun.syndication.io.SyndFeedOutput;
  */
 public class ResourceResource extends BaseResource {
 
-	Logger log = LoggerFactory.getLogger(ResourceResource.class);
+	static Logger log = LoggerFactory.getLogger(ResourceResource.class);
 
-	/** The given entry from the URL. */
-	Entry entry = null;
-
-	/** The entrys ID. */
-	String entryId = null; 
-
-	/** The contexts ID. */
-	String contextId = null;
-
-	/** The context object for the context */
-	se.kmr.scam.repository.Context context = null;
-
-	/** Parameters from the URL. Example: ?scam=umu&shame=kth */
-	HashMap<String,String> parameters = null;
-	
-	private RepositoryManagerImpl rm;
-
-	/**
-	 * Constructor
-	 * 
-	 * @param context
-	 *            The parent context
-	 * @param request
-	 *            The Request from the HTTP connection
-	 * @param response
-	 *            The Response which will be sent back.
-	 */
-	public ResourceResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
-		this.contextId =(String) getRequest().getAttributes().get("context-id"); 
-		this.entryId =(String) getRequest().getAttributes().get("entry-id");
-
-		String remainingPart = request.getResourceRef().getRemainingPart(); 
-
-		parameters = Util.parseRequest(remainingPart); 
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		getVariants().add(new Variant(MediaType.APPLICATION_ZIP));
-		getVariants().add(new Variant(MediaType.APPLICATION_ATOM_XML));
-		getVariants().add(new Variant(MediaType.APPLICATION_RSS_XML));
+		getVariants().add(new Variant(MediaType.APPLICATION_ATOM));
+		getVariants().add(new Variant(MediaType.APPLICATION_RSS));
 		getVariants().add(new Variant(MediaType.APPLICATION_RDF_XML));
 		getVariants().add(new Variant(MediaType.TEXT_RDF_N3));
 		getVariants().add(new Variant(MediaType.ALL));
-
-		if(getCM() != null) {
-			try {
-				this.context = getCM().getContext(contextId);  
-			} catch (NullPointerException e) {
-				// not a context
-				this.context = null; 
-			}
-		}
-
-		if (this.context != null) {
-			entry = this.context.get(entryId);
-		}
-		
-		rm = ((ScamApplication) context.getAttributes().get(ScamApplication.KEY)).getRM();
 		
 		Util.handleIfUnmodifiedSince(entry, getRequest());
-	}
-
-	@Override
-	public boolean allowPut() {
-		return true;
-	}
-
-	@Override
-	public boolean allowPost() {
-		return true;
-	}
-
-	@Override
-	public boolean allowDelete() {
-		return true;
 	}
 
 	/**
@@ -204,6 +138,7 @@ public class ResourceResource extends BaseResource {
 	 *            Descriptor for available representations of a resource.
 	 * @return The Representation as JSON
 	 */
+	@Get
 	public Representation represent(Variant variant) {
 		try {
 			if (entry == null) {
@@ -217,7 +152,7 @@ public class ResourceResource extends BaseResource {
 			 */
 			if (parameters.containsKey("syndication")) {
 				try {
-					if (rm.getSolrSupport() == null) {
+					if (getRM().getSolrSupport() == null) {
 						getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
 						return new JsonRepresentation("{\"error\":\"Feeds are not supported by this installation\"}");
 					}
@@ -250,12 +185,8 @@ public class ResourceResource extends BaseResource {
 		}
 	}
 
-	/**
-	 * PUT
-	 */
+	@Put
 	public void storeRepresentation(Representation representation) {
-		log.debug("PUT");
-		
 		if (entry == null) {
 			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -269,12 +200,8 @@ public class ResourceResource extends BaseResource {
 		}
 	}
 
-	/**
-	 * POST 
-	 */
+	@Post
 	public void acceptRepresentation(Representation representation) {
-		log.debug("POST");
-		
 		if (entry == null) {
 			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -300,7 +227,7 @@ public class ResourceResource extends BaseResource {
 				String movableEntryString = parameters.get("moveEntry");
 				String movableEntrySourceString = parameters.get("fromList");
 
-				String baseURI = rm.getRepositoryURL().toString();
+				String baseURI = getRM().getRepositoryURL().toString();
 				if (!baseURI.endsWith("/")) {
 					baseURI += "/";
 				}
@@ -348,14 +275,8 @@ public class ResourceResource extends BaseResource {
 		}
 	}
 
-	/**
-	 * DELETE
-	 * 
-	 * The client can delete the resource, metadata or entry with this method.
-	 */
+	@Delete
 	public void removeRepresentations() {
-		log.debug("DELETE");
-		
 		if (entry == null) {
 			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -529,7 +450,7 @@ public class ResourceResource extends BaseResource {
 			se.kmr.scam.repository.List l = (se.kmr.scam.repository.List) listEntry.getResource();
 			List<URI> c = l.getChildren();
 			for (URI uri : c) {
-				Entry e = rm.getContextManager().getEntry(uri);
+				Entry e = getRM().getContextManager().getEntry(uri);
 				if (e != null) {
 					if (BuiltinType.List.equals(e.getBuiltinType())) {
 						result.addAll(getListChildrenRecursively(e));
@@ -545,7 +466,7 @@ public class ResourceResource extends BaseResource {
 	}
 	
 	public StringRepresentation getSyndicationSolr(Entry entry, String type) {
-		if (rm.getSolrSupport() == null) {
+		if (getRM().getSolrSupport() == null) {
 			return null;
 		}
 		
@@ -588,7 +509,7 @@ public class ResourceResource extends BaseResource {
 		solrQuery.setSortField("modified", ORDER.desc);
 
 		List<SyndEntry> syndEntries = new ArrayList<SyndEntry>();
-		Set<Entry> searchEntries = rm.getSolrSupport().sendQuery(solrQuery).getEntries();
+		Set<Entry> searchEntries = getRM().getSolrSupport().sendQuery(solrQuery).getEntries();
 		List<Entry> recursiveEntries = new LinkedList<Entry>();
 		for (Entry e : searchEntries) {
 			recursiveEntries.addAll(getListChildrenRecursively(e));
@@ -625,7 +546,7 @@ public class ResourceResource extends BaseResource {
 			
 			URI creator = e.getCreator();
 			if (creator != null) {
-				Entry creatorEntry = rm.getPrincipalManager().getByEntryURI(creator);
+				Entry creatorEntry = getRM().getPrincipalManager().getByEntryURI(creator);
 				String creatorName = EntryUtil.getName(creatorEntry);
 				if (creatorName != null) {
 					syndEntry.setAuthor(creatorName);
@@ -652,9 +573,9 @@ public class ResourceResource extends BaseResource {
 		MediaType mediaType = null;
 		if (feedType != null) {
 			if (feedType.startsWith("rss_")) {
-				mediaType = MediaType.APPLICATION_RSS_XML;
+				mediaType = MediaType.APPLICATION_RSS;
 			} else if (feedType.startsWith("atom_")) {
-				mediaType = MediaType.APPLICATION_ATOM_XML;
+				mediaType = MediaType.APPLICATION_ATOM;
 			}
 		}
 
@@ -677,7 +598,7 @@ public class ResourceResource extends BaseResource {
 			if (BuiltinType.None.equals(entry.getBuiltinType())) {
 				getResponse().setLocationRef(new Reference(entry.getResourceURI().toString()));
 				getResponse().setStatus(Status.REDIRECTION_SEE_OTHER);
-				return Representation.createEmpty();
+				return null;
 			}
 		} else if (LocationType.Local.equals(entry.getLocationType())) {
 
@@ -791,35 +712,15 @@ public class ResourceResource extends BaseResource {
 							rep = new FileRepresentation(file, MediaType.ALL);
 						}
 						String fileName = entry.getFilename();
-						// FIXME Second statement in the if-clause below: Adobe
-						// Acrobat hangs on some machines, this is a workaround
-						// to make PDFs always downloadable without crashing the
-						// browser
-						if (parameters.containsKey("download")) {// || MediaType.APPLICATION_PDF.equals(rep.getMediaType())) { 
-							rep.setDownloadable(true);
-							if (fileName == null) {
-								fileName = entry.getId();
-							}
-							rep.setDownloadName(fileName); // no null-check need because null is default anyways
-							Form responseHeaders = (Form) getResponse().getAttributes().get("org.restlet.http.headers");
-							if (responseHeaders == null) {
-								responseHeaders = new Form();
-								getResponse().getAttributes().put("org.restlet.http.headers", responseHeaders);
-							}
-							responseHeaders.add("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+						if (fileName == null) {
+							fileName = entry.getId();
+						}
+						Disposition disp = rep.getDisposition();
+						disp.setFilename(fileName);
+						if (parameters.containsKey("download")) {
+							disp.setType(Disposition.TYPE_ATTACHMENT);
 						} else {
-							// FIXME this is only a hack to work around the following
-							// restlet bug: http://restlet.tigris.org/issues/show_bug.cgi?id=752
-							if (fileName != null) {
-								Form responseHeaders = (Form) getResponse().getAttributes().get("org.restlet.http.headers");
-								if (responseHeaders == null) {
-									responseHeaders = new Form();
-									getResponse().getAttributes().put("org.restlet.http.headers", responseHeaders);
-								}
-								if (!responseHeaders.contains("Content-Disposition")) {
-									responseHeaders.add("Content-Disposition", "inline; filename=\"" + fileName + "\"");
-								}
-							}
+							disp.setType(Disposition.TYPE_INLINE);
 						}
 						return rep;
 					}

@@ -18,19 +18,17 @@ package se.kmr.scam.rest.resources;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
-import org.restlet.resource.Variant;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Get;
+import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Entry;
 import se.kmr.scam.repository.Group;
 import se.kmr.scam.repository.User;
 
@@ -42,50 +40,16 @@ import se.kmr.scam.repository.User;
  * @see BaseResource
  */
 public class AliasResource extends BaseResource {
-	/** Logger. */
-	Logger log = LoggerFactory.getLogger(AliasResource.class);
-	/** The contexts ID. */
-	String contextId = null;
-	/** The context object for the context */
-	se.kmr.scam.repository.Context context = null;
 	
-	Entry entry = null;
+	static Logger log = LoggerFactory.getLogger(AliasResource.class);
 	
-	String entryId = null;
-	
-	/**
-	 * Constructor 
-	 * 
-	 * @param context The parent context
-	 * @param request The Request from the HTTP connection
-	 * @param response The Response which will be sent back.
-	 */
-	public AliasResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
-		this.contextId = (String) getRequest().getAttributes().get("context-id");
-		this.entryId = (String) getRequest().getAttributes().get("entry-id");
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		getVariants().add(new Variant(MediaType.ALL));
-		
-		if (getCM() != null) {
-			try {	
-				this.context = getCM().getContext(contextId);  
-			} catch (NullPointerException e) {
-				// not a context
-				this.context = null; 
-			}
-		}
-		
-		if (context != null && entryId != null) {
-			entry = this.context.get(entryId);
-		}
 	}
 
-	/**
-	 * GET
-	 */
+	@Get
 	public Representation represent(Variant variant) {
 		String name = null;
 		String alias = null;
@@ -121,9 +85,7 @@ public class AliasResource extends BaseResource {
 		return new JsonRepresentation("{error:\"Cannot find that context or entry\"}"); 
 	}
 
-	/**
-	 * PUT
-	 */
+	@Put
 	public void storeRepresentation(Representation representation) {
 		try {
 			JSONObject newAliasObj = new JSONObject(this.getRequest().getEntity().getText());
@@ -163,14 +125,6 @@ public class AliasResource extends BaseResource {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(new JsonRepresentation("{error:\"The request doesn't contain a JSON object.\"}"));
 		}
-	}
-
-	/**
-	 * Allow methods.
-	 */
-	@Override
-	public boolean allowPut() {
-		return true;
 	}
 	
 }

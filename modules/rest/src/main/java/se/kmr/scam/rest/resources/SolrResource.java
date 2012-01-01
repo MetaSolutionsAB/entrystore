@@ -17,24 +17,19 @@
 package se.kmr.scam.rest.resources;
 
 import java.net.URI;
-import java.util.HashMap;
 
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
-import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
-import se.kmr.scam.rest.ScamApplication;
 import se.kmr.scam.rest.util.Util;
 
 /**
@@ -44,48 +39,18 @@ import se.kmr.scam.rest.util.Util;
  */
 public class SolrResource extends BaseResource {
 
-	Logger log = LoggerFactory.getLogger(SolrResource.class);
+	static Logger log = LoggerFactory.getLogger(SolrResource.class);
 
-	ScamApplication scamApp;
-	
-	HashMap<String,String> parameters = null;
-
-	public SolrResource(Context context, Request request,	Response response) {
-		super(context, request, response);
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		getVariants().add(new Variant(MediaType.ALL));
-		scamApp = (ScamApplication) getContext().getAttributes().get(ScamApplication.KEY);
-		
-		String remainingPart = request.getResourceRef().getRemainingPart();
-		parameters = Util.parseRequest(remainingPart);
 	}
 	
-	@Override
-	public boolean allowGet() {
-		return true;
-	}
-
-	@Override
-	public boolean allowPut() {
-		return false;
-	}
-
-	@Override
-	public boolean allowPost() {
-		return false;
-	}
-
-	@Override
-	public boolean allowDelete() {
-		return false;
-	}
-
-	//GET
-	@Override
+	@Get
 	public Representation represent(Variant variant) throws ResourceException {
 		try {
-			final RepositoryManagerImpl rm = scamApp.getRM();
-			PrincipalManager pm = rm.getPrincipalManager();
+			PrincipalManager pm = getRM().getPrincipalManager();
 			URI authUser = pm.getAuthenticatedUserURI();
 			if (!pm.getAdminUser().getURI().equals(authUser) && !pm.getAdminGroup().isMember(pm.getUser(authUser))) {
 				return unauthorizedGET();
@@ -94,10 +59,10 @@ public class SolrResource extends BaseResource {
 			if (parameters.containsKey("cmd")) {
 				String command = parameters.get("cmd");
 				if ("reindex".equals(command)) {
-					if (rm.getSolrSupport() != null) {
+					if (getRM().getSolrSupport() != null) {
 						Runnable reindexThread = new Runnable() {
 							public void run() {
-								rm.getSolrSupport().reindexLiterals();
+								getRM().getSolrSupport().reindexLiterals();
 							}
 						};
 						new Thread(reindexThread).start();

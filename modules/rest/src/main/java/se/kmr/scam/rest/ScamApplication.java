@@ -29,12 +29,11 @@ import javax.servlet.ServletContext;
 import org.restlet.Application;
 import org.restlet.Component;
 import org.restlet.Context;
-import org.restlet.Guard;
 import org.restlet.Restlet;
-import org.restlet.Route;
-import org.restlet.Router;
 import org.restlet.data.ChallengeScheme;
 import org.restlet.data.Protocol;
+import org.restlet.routing.Router;
+import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +60,8 @@ import se.kmr.scam.repository.impl.converters.OAI_DC2RDFGraphConverter;
 import se.kmr.scam.repository.impl.converters.RDF2LOMConverter;
 import se.kmr.scam.repository.test.TestSuite;
 import se.kmr.scam.repository.util.MetadataCorrection;
-import se.kmr.scam.rest.auth.BasicGuard;
+import se.kmr.scam.rest.auth.CookieVerifier;
+import se.kmr.scam.rest.auth.PrincipalVerifier;
 import se.kmr.scam.rest.resources.AliasResource;
 import se.kmr.scam.rest.resources.ContextBackupListResource;
 import se.kmr.scam.rest.resources.ContextBackupResource;
@@ -75,6 +75,7 @@ import se.kmr.scam.rest.resources.ImportResource;
 import se.kmr.scam.rest.resources.JSCallbackFilter;
 import se.kmr.scam.rest.resources.LoginResource;
 import se.kmr.scam.rest.resources.MetadataResource;
+import se.kmr.scam.rest.resources.ModificationLockOutFilter;
 import se.kmr.scam.rest.resources.ProxyResource;
 import se.kmr.scam.rest.resources.QuotaResource;
 import se.kmr.scam.rest.resources.RelationResource;
@@ -85,8 +86,6 @@ import se.kmr.scam.rest.resources.SolrResource;
 import se.kmr.scam.rest.resources.SparqlResource;
 import se.kmr.scam.rest.resources.StatisticsResource;
 import se.kmr.scam.rest.resources.StatusResource;
-
-import com.noelios.restlet.ext.servlet.ServletContextAdapter;
 
 
 /**
@@ -153,18 +152,16 @@ public class ScamApplication extends Application {
 	public ScamApplication(Context parentContext) {
 		super(parentContext);
 		getContext().getAttributes().put(KEY, this);
-		getRangeService().setEnabled(false); // should fix the hangs in Acrobat
-												// Reader that occur sometimes
-												// when Acrobat tries to fetch
-												// parts of files
+		getRangeService().setEnabled(false); // should fix the hangs in Acrobat Reader that occur sometimes
+												// when Acrobat tries to fetch parts of files
 		log.warn("Restlet RangeService deactivated");
 
-		if (this.getContext() instanceof ServletContextAdapter) {
+		ServletContext sc = (ServletContext) this.getContext().getAttributes().get("org.restlet.ext.ser​vlet.ServletContext");
+		// alt: ServletContext sc = (ServletContext) getContext().getServerDispatcher().getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext"); 
+		if (sc != null) {
 			// Application created by ServerServlet
 			// Try to get RepositoryManager from ServletContext
-			ServletContextAdapter adapter = (ServletContextAdapter) getContext();
-			ServletContext servletContext = adapter.getServletContext();
-			rm = (RepositoryManagerImpl) servletContext.getAttribute("RepositoryManager");
+			rm = (RepositoryManagerImpl) sc.getAttribute("RepositoryManager");
 		}
 	
 		if (rm != null) {
@@ -274,58 +271,50 @@ public class ScamApplication extends Application {
 	 * from considerations of ROA design. Below you have a mapping from
 	 * URIs to the resources in the REST module.
 	 */
-	public synchronized Restlet createRoot() {
-		// Create a router Restlet
+	@Override
+	public synchronized Restlet createInboundRoot() {
 		Router router = new Router(getContext());
-		Route element = router.attach("/search", SearchResource.class);
-		element = router.attach("/login", LoginResource.class);
-		element = router.attach("/sparql", SparqlResource.class);
-		element = router.attach("/proxy", ProxyResource.class);
-		element = router.attach("/management/backup", RepositoryBackupResource.class);
-		element = router.attach("/management/status", StatusResource.class);
-		element = router.attach("/management/solr", SolrResource.class);
+		router.attach("/search", SearchResource.class);
+		router.attach("/login", LoginResource.class);
+		router.attach("/sparql", SparqlResource.class);
+		router.attach("/proxy", ProxyResource.class);
+		router.attach("/management/backup", RepositoryBackupResource.class);
+		router.attach("/management/status", StatusResource.class);
+		router.attach("/management/solr", SolrResource.class);
 //		element = router.attach("/register", RegisterResource.class); // TODO move to /management
-		element = router.attach("/{context-id}", ContextResource.class);
-		element = router.attach("/{context-id}/sparql", SparqlResource.class);
-		element = router.attach("/{context-id}/export", ExportResource.class);
-		element = router.attach("/{context-id}/import", ImportResource.class);
-		element = router.attach("/{context-id}/statistics/{stat-type}", StatisticsResource.class);
-		element = router.attach("/{context-id}/entry/{entry-id}", EntryResource.class);
-		element = router.attach("/{context-id}/resource/{entry-id}", ResourceResource.class);
-		element = router.attach("/{context-id}/metadata/{entry-id}", MetadataResource.class);
-		element = router.attach("/{context-id}/cached-external-metadata/{entry-id}", ExternalMetadataResource.class);
-		element = router.attach("/{context-id}/harvester", HarvesterResource.class);
-		element = router.attach("/{context-id}/backuplist", ContextBackupListResource.class);
-		element = router.attach("/{context-id}/backup/{backup-id}", ContextBackupResource.class);
-		element = router.attach("/{context-id}/alias", AliasResource.class);
-		element = router.attach("/{context-id}/alias/{entry-id}", AliasResource.class);
-		element = router.attach("/{context-id}/relation/{entry-id}", RelationResource.class);
-		element = router.attach("/{context-id}/quota", QuotaResource.class);
+		router.attach("/{context-id}", ContextResource.class);
+		router.attach("/{context-id}/sparql", SparqlResource.class);
+		router.attach("/{context-id}/export", ExportResource.class);
+		router.attach("/{context-id}/import", ImportResource.class);
+		router.attach("/{context-id}/statistics/{stat-type}", StatisticsResource.class);
+		router.attach("/{context-id}/entry/{entry-id}", EntryResource.class);
+		router.attach("/{context-id}/resource/{entry-id}", ResourceResource.class);
+		router.attach("/{context-id}/metadata/{entry-id}", MetadataResource.class);
+		router.attach("/{context-id}/cached-external-metadata/{entry-id}", ExternalMetadataResource.class);
+		router.attach("/{context-id}/harvester", HarvesterResource.class);
+		router.attach("/{context-id}/backuplist", ContextBackupListResource.class);
+		router.attach("/{context-id}/backup/{backup-id}", ContextBackupResource.class);
+		router.attach("/{context-id}/alias", AliasResource.class);
+		router.attach("/{context-id}/alias/{entry-id}", AliasResource.class);
+		router.attach("/{context-id}/relation/{entry-id}", RelationResource.class);
+		router.attach("/{context-id}/quota", QuotaResource.class);
 
 		router.attachDefault(DefaultResource.class);
 
-		Guard guard = null;
-		String authScheme = rm.getConfiguration().getString(Settings.SCAM_AUTH_SCHEME);
-		if ("cookie".equalsIgnoreCase(authScheme)) {
-			// TODO
-		} else if ("http-basic".equalsIgnoreCase(authScheme)) {
-			guard = new BasicGuard(getContext(), ChallengeScheme.HTTP_BASIC, "SCAM4", rm.getPrincipalManager());			
-		} else {
-			log.warn("Unknown or unconfigured authentication scheme, using HTTP Basic");
-			guard = new BasicGuard(getContext(), ChallengeScheme.HTTP_BASIC, "SCAM4", rm.getPrincipalManager());
-		}
-		
-		if (guard == null) {
-			log.error("Authentication could not be initialized properly");
-			return null;
-		}
-		
+		ChallengeAuthenticator cookieAuth = new ChallengeAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(pm));
+//		DigestAuthenticator digestAuth = new DigestAuthenticator(getContext(), "EntryStore", "3ntry5t0r3");
+//		digestAuth.setOptional(true);
+		ChallengeAuthenticator basicAuth = new ChallengeAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new PrincipalVerifier(pm));
+				
+		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
 		
-		guard.setNext(jsCallback);
-		jsCallback.setNext(router);
+		cookieAuth.setNext(basicAuth);
+		basicAuth.setNext(jsCallback);
+		jsCallback.setNext(modLockOut);
+		modLockOut.setNext(router);
 
-		return guard;
+		return cookieAuth;
 	}
 
 	/**

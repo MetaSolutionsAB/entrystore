@@ -19,7 +19,6 @@ package se.kmr.scam.rest.resources;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Date;
-import java.util.HashMap;
 
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
@@ -36,21 +35,21 @@ import org.openrdf.rio.trix.TriXParser;
 import org.openrdf.rio.trix.TriXWriter;
 import org.openrdf.rio.turtle.TurtleParser;
 import org.openrdf.rio.turtle.TurtleWriter;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
-import org.restlet.resource.StringRepresentation;
-import org.restlet.resource.Variant;
+import org.restlet.representation.Representation;
+import org.restlet.representation.StringRepresentation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Post;
+import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.jdil.JDILErrorMessages;
 import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.Entry;
 import se.kmr.scam.repository.LocationType;
 import se.kmr.scam.repository.Metadata;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
@@ -62,50 +61,13 @@ import se.kmr.scam.rest.util.Util;
  * 
  * @author Hannes Ebner
  * @author Eric Johansson
- * @see BaseResource
  */
 public class MetadataResource extends BaseResource {
 
-	/** Logger. */
-	Logger log = LoggerFactory.getLogger(MetadataResource.class);
+	static Logger log = LoggerFactory.getLogger(MetadataResource.class);
 
-	/** The given entry from the URL. */
-	Entry entry = null;
-
-	/** The entrys ID. */
-	String entryId = null;
-
-	/** The contexts ID. */
-	String contextId = null;
-
-	/** The context object for the context */
-	se.kmr.scam.repository.Context context = null;
-
-	/** Parameters from the URL. Example: ?scam=umu&shame=kth */
-	HashMap<String, String> parameters = null;
-	
-	private MediaType format;
-	
-	/**
-	 * Constructor
-	 * 
-	 * @param context
-	 *            The parent context
-	 * @param request
-	 *            The Request from the HTTP connection
-	 * @param response
-	 *            The Response which will be sent back.
-	 */
-	public MetadataResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
-		this.contextId = (String) getRequest().getAttributes().get("context-id");
-		this.entryId = (String) getRequest().getAttributes().get("entry-id");
-
-		String remainingPart = request.getResourceRef().getRemainingPart();
-
-		parameters = Util.parseRequest(remainingPart);
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.ALL));
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		getVariants().add(new Variant(MediaType.APPLICATION_RDF_XML));
@@ -116,44 +78,9 @@ public class MetadataResource extends BaseResource {
 		getVariants().add(new Variant(new MediaType(RDFFormat.TRIG.getDefaultMIMEType())));
 		getVariants().add(new Variant(new MediaType("application/lom+xml")));
 
-		if (getCM() != null) {
-			try {
-				this.context = getCM().getContext(contextId);
-			} catch (NullPointerException e) {
-				// not a context
-				this.context = null;
-			}
-		}
-
-		if (this.context != null) {
-			entry = this.context.get(entryId);
-		}
-		
-		if (parameters.containsKey("format")) {
-			String format = parameters.get("format");
-			if (format != null) {
-				this.format = new MediaType(format);
-			}
-		}
-		
 		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
 	
-	@Override
-	public boolean allowPut() {
-		return true;
-	}
-
-	@Override
-	public boolean allowPost() {
-		return true;
-	}
-
-	@Override
-	public boolean allowDelete() {
-		return true;
-	}
-
 	/**
 	 * GET
 	 * 
@@ -167,6 +94,7 @@ public class MetadataResource extends BaseResource {
 	 *            Descriptor for available representations of a resource.
 	 * @return The Representation as JSON
 	 */
+	@Get
 	public Representation represent(Variant variant) {
 		try {
 			if (entry == null) {
@@ -187,11 +115,8 @@ public class MetadataResource extends BaseResource {
 		}
 	}
 
-	/**
-	 * PUT
-	 */
+	@Put
 	public void storeRepresentation(Representation representation) {
-		log.info("PUT");
 		try {
 			if (entry != null && context != null) {
 				// we convert from Reference to LinkReference, otherwise we
@@ -212,11 +137,8 @@ public class MetadataResource extends BaseResource {
 		}
 	}
 
-	/**
-	 * POST
-	 */
+	@Post
 	public void acceptRepresentation(Representation representation) {
-		log.info("POST");
 		try {
 			if (entry != null && context != null) {
 				if (parameters.containsKey("method")) {
@@ -237,9 +159,7 @@ public class MetadataResource extends BaseResource {
 		}
 	}
 
-	/**
-	 * DELETE
-	 */
+	@Delete
 	public void removeRepresentations() {
 		try {
 			if (entry != null && context != null) {

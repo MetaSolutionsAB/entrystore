@@ -45,15 +45,13 @@ import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.util.GraphUtil;
 import org.openrdf.model.vocabulary.RDF;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
-import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,44 +63,30 @@ import se.kmr.scam.repository.Group;
 import se.kmr.scam.repository.LocationType;
 import se.kmr.scam.repository.Metadata;
 import se.kmr.scam.repository.PrincipalManager;
+import se.kmr.scam.repository.PrincipalManager.AccessProperty;
 import se.kmr.scam.repository.RepositoryProperties;
 import se.kmr.scam.repository.User;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
 import se.kmr.scam.repository.config.Settings;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
 import se.kmr.scam.repository.impl.converters.NS;
 import se.kmr.scam.repository.util.QueryResult;
 import se.kmr.scam.rest.util.RDFJSON;
-import se.kmr.scam.rest.util.Util;
 
 /**
- * This class is the resource for searching in REST module
+ * Handles searches
  * 
  * @author Hannes Ebner
- * @author Eric Johansson (eric.johansson@educ.umu.se)
- * @see BaseResource
  */
 public class SearchResource extends BaseResource {
 
-	/** The URL parameters */
-	private HashMap<String,String> parameters = null;
+	static Logger log = LoggerFactory.getLogger(SearchResource.class);
 	
-	Logger log = LoggerFactory.getLogger(SearchResource.class);
-	
-	/**
-	 * Constructor
-	 */
-	public SearchResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
 	}
 
-	/**
-	 * GET
-	 */
-	@Override
+	@Get
 	public Representation represent(Variant variant) throws ResourceException {
 		try {
 			if (!parameters.containsKey("type") ||
@@ -832,29 +816,6 @@ public class SearchResource extends BaseResource {
 		}
 		returnString += "}";
 		return returnString;
-	}
-
-	/*private HashMap<String, String> getExampleQuestion(){
-		HashMap<String, String> hm = new HashMap<String, String>();
-		hm.put("http://www.ehaweb.org/rdf/passport#Item1AA", null);
-		hm.put("http://www.ehaweb.org/rdf/passport#Item1AB", "http://www.ehaweb.org/rdf/passport#Knowledge");
-		hm.put("http://www.ehaweb.org/rdf/passport#Item1DA", "http://www.ehaweb.org/rdf/passport#Competence");
-		return hm;
-	}*/
-	
-	@Override
-	public boolean allowDelete() {
-		return false;
-	}
-	
-	@Override
-	public boolean allowPost() {
-		return false;
-	}
-	
-	@Override
-	public boolean allowPut() {
-		return false;
 	}
 
 }

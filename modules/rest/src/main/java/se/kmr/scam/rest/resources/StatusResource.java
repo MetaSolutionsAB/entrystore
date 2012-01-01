@@ -17,81 +17,48 @@
 package se.kmr.scam.rest.resources;
 
 import java.net.URI;
-import java.util.HashMap;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.StringRepresentation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
-import org.restlet.resource.StringRepresentation;
-import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.RepositoryManager;
 import se.kmr.scam.repository.config.Config;
 import se.kmr.scam.repository.config.Settings;
 import se.kmr.scam.repository.impl.RepositoryManagerImpl;
-import se.kmr.scam.rest.ScamApplication;
-import se.kmr.scam.rest.util.Util;
 
 /**
  * @author Hannes Ebner
  */
 public class StatusResource extends BaseResource  {
 
-	Logger log = LoggerFactory.getLogger(StatusResource.class);
-	
-	RepositoryManager rm;
+	static Logger log = LoggerFactory.getLogger(StatusResource.class);
 	
 	Config config;
 	
-	private HashMap<String,String> parameters;
-	
-	public StatusResource(Context context, Request request, Response response) {
-		super(context, request, response);
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		ScamApplication scamApp = (ScamApplication) getContext().getAttributes().get(ScamApplication.KEY);
-		rm = scamApp.getRM();
-		config = rm.getConfiguration();
-		parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
+		config = getRM().getConfiguration();
 	}
 	
-	@Override
-	public boolean allowGet() {
-		return true;
-	}
-
-	@Override
-	public boolean allowPut() {
-		return false;
-	}
-
-	@Override
-	public boolean allowPost() {
-		return false;
-	}
-
-	@Override
-	public boolean allowDelete() {
-		return false;
-	}
-
-	@Override
+	@Get
 	public Representation represent(Variant variant) throws ResourceException {
 		try {
 			if (parameters.containsKey("extended")) {
 				JSONObject result = new JSONObject();
 				try {
-					PrincipalManager pm = rm.getPrincipalManager();
+					PrincipalManager pm = getRM().getPrincipalManager();
 					URI currentUser = pm.getAuthenticatedUserURI();
 
 					if (pm.getGuestUser().getURI().equals(currentUser)) {
@@ -100,7 +67,7 @@ public class StatusResource extends BaseResource  {
 						return new JsonRepresentation(result);
 					}
 
-					result.put("baseURI", rm.getRepositoryURL().toString());
+					result.put("baseURI", getRM().getRepositoryURL().toString());
 					result.put("repositoryType", config.getString(Settings.SCAM_STORE_TYPE, "unconfigured"));
 					result.put("repositoryIndices", config.getString(Settings.SCAM_STORE_INDEXES, "unconfigured"));
 					result.put("repositoryCache", config.getString(Settings.SCAM_REPOSITORY_CACHE, "off"));
@@ -116,13 +83,13 @@ public class StatusResource extends BaseResource  {
 					if (parameters.containsKey("includeStats")) {
 						try {
 							pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-							result.put("portfolioCount", rm.getContextManager().getContextAliases().size());
+							result.put("portfolioCount", getRM().getContextManager().getContextAliases().size());
 							result.put("groupCount", pm.getGroupUris().size());
 							result.put("userCount", pm.getUsersAsUris().size());
 							if (pm.getAdminUser().getURI().equals(currentUser) || pm.getAdminGroup().isMember(pm.getUser(currentUser))) {
-								if (rm instanceof RepositoryManagerImpl) {
-									result.put("namedGraphCount", ((RepositoryManagerImpl) rm).getNamedGraphCount());
-									result.put("tripleCount", ((RepositoryManagerImpl) rm).getTripleCount());
+								if (getRM() instanceof RepositoryManagerImpl) {
+									result.put("namedGraphCount", ((RepositoryManagerImpl) getRM()).getNamedGraphCount());
+									result.put("tripleCount", ((RepositoryManagerImpl) getRM()).getTripleCount());
 								}
 							}
 						} finally {
@@ -135,7 +102,7 @@ public class StatusResource extends BaseResource  {
 					return new JsonRepresentation(result);
 				}
 			} else {
-				if (rm != null) {
+				if (getRM() != null) {
 					return new StringRepresentation("UP", MediaType.TEXT_PLAIN);
 				} else {
 					return new StringRepresentation("DOWN", MediaType.TEXT_PLAIN);

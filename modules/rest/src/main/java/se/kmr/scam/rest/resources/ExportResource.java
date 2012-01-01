@@ -26,7 +26,6 @@ import java.io.InputStream;
 import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
@@ -42,26 +41,22 @@ import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
 import org.openrdf.rio.trig.TriGWriter;
 import org.openrdf.rio.trix.TriXWriter;
 import org.openrdf.rio.turtle.TurtleWriter;
-import org.restlet.Context;
+import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.FileRepresentation;
-import org.restlet.resource.Representation;
-import org.restlet.resource.Variant;
+import org.restlet.representation.FileRepresentation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.jdil.JDILErrorMessages;
 import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.User;
 import se.kmr.scam.repository.PrincipalManager.AccessProperty;
+import se.kmr.scam.repository.User;
 import se.kmr.scam.repository.config.Settings;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
-import se.kmr.scam.rest.ScamApplication;
-import se.kmr.scam.rest.util.Util;
 
 /**
  * This class supports the export of single contexts. 
@@ -70,49 +65,21 @@ import se.kmr.scam.rest.util.Util;
  */
 public class ExportResource extends BaseResource {
 
-	Logger log = LoggerFactory.getLogger(ExportResource.class);
+	static Logger log = LoggerFactory.getLogger(ExportResource.class);
 
-	/** The contexts ID. */
-	String contextId = null;
-
-	/** The context object for the context */
-	se.kmr.scam.repository.Context context = null;
-
-	/** Parameters from the URL. Example: ?scam=umu&shame=kth */
-	HashMap<String,String> parameters = null;
-	
-	private RepositoryManagerImpl rm;
-	
 	private String format;
 
-	public ExportResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
-		this.contextId =(String) getRequest().getAttributes().get("context-id"); 
-	
-		String remainingPart = request.getResourceRef().getRemainingPart(); 
-
-		parameters = Util.parseRequest(remainingPart); 
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_ZIP));
 		getVariants().add(new Variant(MediaType.ALL));
 
-		if(getCM() != null) {
-			try {
-				this.context = getCM().getContext(contextId);  
-			} catch (NullPointerException e) {
-				// not a context
-				this.context = null; 
-			}
-		}
-		
 		if (parameters.containsKey("rdfFormat")) {
 			this.format = parameters.get("rdfFormat");
 		}
-		
-		rm = ((ScamApplication) context.getAttributes().get(ScamApplication.KEY)).getRM();
 	}
 
+	@Get
 	public Representation represent(Variant variant) {
 		try {
 			if (context == null) {
@@ -178,16 +145,16 @@ public class ExportResource extends BaseResource {
 			exportProps.put("contextResourceURI", context.getEntry().getResourceURI().toString());
 			exportProps.put("contextMetadataURI", context.getEntry().getLocalMetadataURI().toString());
 			exportProps.put("contextRelationURI", context.getEntry().getRelationURI().toString());
-			exportProps.put("scamBaseURI", rm.getRepositoryURL().toString());
+			exportProps.put("scamBaseURI", getRM().getRepositoryURL().toString());
 			exportProps.put("exportDate", new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").format(new Date()));
-			exportProps.put("exportingUser", rm.getPrincipalManager().getAuthenticatedUserURI().toString());
+			exportProps.put("exportingUser", getPM().getAuthenticatedUserURI().toString());
 			if (!users.isEmpty()) {
 				StringBuffer userList = new StringBuffer();
 				for (URI uri : users) {
 					String uriStr = uri.toString();
 					String userID = uriStr.substring(uriStr.lastIndexOf("/") + 1);
 					userList.append(userID);
-					User u = rm.getPrincipalManager().getUser(uri);
+					User u = getPM().getUser(uri);
 					if (u != null) {
 						String alias = u.getName();
 						if (alias != null) {
@@ -237,7 +204,7 @@ public class ExportResource extends BaseResource {
             is.close();
             
             // add resource files to zip file
-            String contextPath = rm.getConfiguration().getString(Settings.SCAM_DATA_FOLDER);
+            String contextPath = getRM().getConfiguration().getString(Settings.SCAM_DATA_FOLDER);
             if (contextPath != null) {
             	File contextPathFile = new File(contextPath);
             	File contextFolder = new File(contextPathFile, contextId);
@@ -269,8 +236,8 @@ public class ExportResource extends BaseResource {
 			
 			// return the zip file
 			result = new ExportFileRepresentation(tmpExport, MediaType.APPLICATION_ZIP);
-			result.setDownloadable(true);
-			result.setDownloadName("context_" + contextId + "_export.zip");
+			result.getDisposition().setType(Disposition.TYPE_ATTACHMENT);
+			result.getDisposition().setFilename("context_" + contextId + "_export.zip");
 			result.setSize(tmpExport.length());
 		} catch (IOException ioe) {
 			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL, ioe.getMessage());

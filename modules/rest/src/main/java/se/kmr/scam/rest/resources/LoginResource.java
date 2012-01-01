@@ -16,53 +16,38 @@
 
 package se.kmr.scam.rest.resources;
 
-import java.util.HashMap;
-
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
-import org.restlet.resource.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.PrincipalManager;
 import se.kmr.scam.repository.User;
-import se.kmr.scam.rest.util.Util;
 
 /**
  * This class is the resource for login in.
  * 
- * 
- * @author matthias 
+ * @author matthias
+ * @author Hannes Ebner
  * @see BaseResource
  */
 public class LoginResource extends BaseResource {
 
-	/** The URL parameters */
-	private HashMap<String,String> parameters = null;
-	
 	private static Logger log = LoggerFactory.getLogger(LoginResource.class);
 
-	/**
-	 * Constructor
-	 */
-	public LoginResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
 	}
 
-	/**
-	 * GET
-	 */
+	@Get
 	public Representation represent(Variant variant) throws ResourceException {
 		try {
 			PrincipalManager pm = getPM();
@@ -97,37 +82,4 @@ public class LoginResource extends BaseResource {
 		}
 	}
 
-	//	POST
-	@Override
-	public void acceptRepresentation(Representation representation) throws ResourceException {
-		try {
-
-		}
-		catch(AuthorizationException e) {
-			unauthorizedPOST();
-		}
-	}
-
-	//	DELETE
-	@Override
-	public void removeRepresentations() throws ResourceException {
-		try {
-
-		}
-		catch(AuthorizationException e) {
-			unauthorizedDELETE();
-		}
-	}
-
-
-	//	PUT
-	@Override
-	public void storeRepresentation(Representation entity) throws ResourceException {
-		try {
-
-		}
-		catch(AuthorizationException e) {
-			unauthorizedPUT();
-		}
-	}
 }

@@ -40,15 +40,13 @@ import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.util.GraphUtil;
 import org.openrdf.model.util.GraphUtilException;
 import org.openrdf.model.vocabulary.RDF;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
-import org.restlet.resource.StringRepresentation;
-import org.restlet.resource.Variant;
+import org.restlet.representation.Representation;
+import org.restlet.representation.StringRepresentation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,63 +62,27 @@ import se.kmr.scam.repository.config.ConfigurationManager;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
 import se.kmr.scam.repository.impl.converters.NS;
 import se.kmr.scam.repository.util.EntryUtil;
-import se.kmr.scam.rest.util.Util;
 
 public class StatisticsResource extends BaseResource {
 
-	/** Logger. */
-	Logger log = LoggerFactory.getLogger(StatisticsResource.class);
+	static Logger log = LoggerFactory.getLogger(StatisticsResource.class);
 
 	/** The entrys ID. */
 	String statType = null;
 
-	/** The contexts ID. */
-	String contextId = null;
-	
 	String labels = null;
-
-	/** The context object for the context */
-	se.kmr.scam.repository.Context context = null;
-
-	/** Parameters from the URL. Example: ?scam=umu&shame=kth */
-	HashMap<String, String> parameters = null;
 	
 	Config config = null;
 	
 	public static String STAT_CONFIG_KEY = "se.kmr.scam.rest.statistics";
-	
-	/**
-	 * Constructor
-	 * 
-	 * @param context
-	 *            The parent context
-	 * @param request
-	 *            The Request from the HTTP connection
-	 * @param response
-	 *            The Response which will be sent back.
-	 */
-	public StatisticsResource(Context context, Request request, Response response) {
-		super(context, request, response);
 
-		this.contextId = (String) getRequest().getAttributes().get("context-id");
+	@Override
+	public void doInit() {
 		this.statType = (String) getRequest().getAttributes().get("stat-type");
-
-		String remainingPart = request.getResourceRef().getRemainingPart();
-
-		parameters = Util.parseRequest(remainingPart);
 		this.labels = parameters.get("labels");
 
 		getVariants().add(new Variant(MediaType.ALL));
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-
-		if (getCM() != null) {
-			try {
-				this.context = getCM().getContext(contextId);
-			} catch (NullPointerException e) {
-				// not a context
-				this.context = null;
-			}
-		}
 		
 		this.config = (Config) getContext().getAttributes().get(STAT_CONFIG_KEY);
 		if (this.config == null) {
@@ -141,22 +103,8 @@ public class StatisticsResource extends BaseResource {
 			}
 		}
 	}
-	
-	@Override
-	public boolean allowPut() {
-		return false;
-	}
 
-	@Override
-	public boolean allowPost() {
-		return false;
-	}
-
-	@Override
-	public boolean allowDelete() {
-		return false;
-	}
-
+	@Get
 	public Representation represent(Variant variant) {
 		try {
 			if (context == null) {

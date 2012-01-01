@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -46,15 +45,16 @@ import org.openrdf.rio.trix.TriXParser;
 import org.openrdf.rio.trix.TriXWriter;
 import org.openrdf.rio.turtle.TurtleParser;
 import org.openrdf.rio.turtle.TurtleWriter;
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
-import org.restlet.resource.StringRepresentation;
-import org.restlet.resource.Variant;
+import org.restlet.representation.Representation;
+import org.restlet.representation.StringRepresentation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Post;
+import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,9 +66,9 @@ import se.kmr.scam.repository.Group;
 import se.kmr.scam.repository.LocationType;
 import se.kmr.scam.repository.Metadata;
 import se.kmr.scam.repository.PrincipalManager;
+import se.kmr.scam.repository.PrincipalManager.AccessProperty;
 import se.kmr.scam.repository.RepositoryProperties;
 import se.kmr.scam.repository.User;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
 import se.kmr.scam.repository.impl.StringResource;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
 import se.kmr.scam.repository.util.EntryUtil;
@@ -76,53 +76,18 @@ import se.kmr.scam.rest.util.RDFJSON;
 import se.kmr.scam.rest.util.Util;
 
 /**
- * This class is the resource for entries.
+ * Handles entries.
  * 
  * @author Eric Johansson (eric.johansson@educ.umu.se)
  * @author Hannes Ebner
  * @see BaseResource
  */
 public class EntryResource extends BaseResource {
-	/** Logger. */
-	Logger log = LoggerFactory.getLogger(EntryResource.class);
 
-	/** The given entry from the URL. */
-	Entry entry = null;
+	static Logger log = LoggerFactory.getLogger(EntryResource.class);
 
-	/** The entrys ID. */
-	String entryId = null;
-
-	/** The contexts ID. */
-	String contextId = null;
-
-	/** The context object for the context */
-	se.kmr.scam.repository.Context context = null;
-
-	/** Parameters from the URL. Example: ?scam=umu&shame=kth */
-	HashMap<String, String> parameters = null;
-
-	private MediaType format;
-
-	/**
-	 * Constructor
-	 * 
-	 * @param context
-	 *            The parent context
-	 * @param request
-	 *            The Request from the HTTP connection
-	 * @param response
-	 *            The Response which will be sent back.
-	 */
-	public EntryResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
-		this.contextId = (String) getRequest().getAttributes().get("context-id");
-		this.entryId = (String) getRequest().getAttributes().get("entry-id");
-
-		String remainingPart = request.getResourceRef().getRemainingPart();
-
-		parameters = Util.parseRequest(remainingPart);
-
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.ALL));
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		getVariants().add(new Variant(MediaType.APPLICATION_RDF_XML));
@@ -132,42 +97,7 @@ public class EntryResource extends BaseResource {
 		getVariants().add(new Variant(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType())));
 		getVariants().add(new Variant(new MediaType(RDFFormat.TRIG.getDefaultMIMEType())));
 
-		if (getCM() != null) {
-			try {
-				this.context = getCM().getContext(contextId);
-			} catch (NullPointerException e) {
-				// not a context
-				this.context = null;
-			}
-		}
-
-		if (this.context != null) {
-			entry = this.context.get(entryId);
-		}
-
-		if (parameters.containsKey("format")) {
-			String format = parameters.get("format");
-			if (format != null) {
-				this.format = new MediaType(format);
-			}
-		}
-		
 		Util.handleIfUnmodifiedSince(entry, getRequest());
-	}
-
-	@Override
-	public boolean allowPut() {
-		return true;
-	}
-
-	@Override
-	public boolean allowPost() {
-		return true;
-	}
-
-	@Override
-	public boolean allowDelete() {
-		return true;
 	}
 
 	/**
@@ -183,6 +113,7 @@ public class EntryResource extends BaseResource {
 	 *            Descriptor for available representations of a resource.
 	 * @return The Representation as JSON
 	 */
+	@Get
 	public Representation represent(Variant variant) {
 		try {
 			if (entry == null) {
@@ -203,9 +134,7 @@ public class EntryResource extends BaseResource {
 		}
 	}
 
-	/**
-	 * PUT
-	 */
+	@Put
 	public void storeRepresentation(Representation representation) {
 		log.info("PUT");
 		try {
@@ -215,9 +144,7 @@ public class EntryResource extends BaseResource {
 		}
 	}
 
-	/**
-	 * POST
-	 */
+	@Post
 	public void acceptRepresentation(Representation representation) {
 		log.info("POST");
 		try {
@@ -243,9 +170,7 @@ public class EntryResource extends BaseResource {
 		}
 	}
 
-	/**
-	 * DELETE
-	 */
+	@Delete
 	public void removeRepresentations() {
 		try {
 			if (entry != null && context != null) {

@@ -16,38 +16,29 @@
 
 package se.kmr.scam.rest.resources;
 
-import org.restlet.Context;
 import org.restlet.data.MediaType;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
-import org.restlet.resource.Resource;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
+import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
-import org.restlet.resource.Variant;
 
 
 /**
- * If no other resource can take the URL pattern this class takes it.
- * @author Eric Johansson (eric.johansson@educ.umu.se) 
- * @see Resource
+ * Fallback
+ * 
+ * @author Hannes Ebner
  */
-public class DefaultResource extends Resource {
+public class DefaultResource extends BaseResource {
 
-	/**
-	 * Constructor.
-	 */
-	public DefaultResource(Context context, Request request, Response response) {
-		super(context, request, response);
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.TEXT_PLAIN));
 	}
 
-	/**
-	 * GET
-	 * 
-	 * prints a message to the client.
-	 */
+	@Get
 	public Representation represent(Variant variant) throws ResourceException {
-			return new JsonRepresentation("{\"info\":\"You requested SCAM v4.0 REST-layer. There is no resource on this URI\"}"); 
+		return new JsonRepresentation("{\"info\":\"You made a request against the EntryScape REST API, there is no resource under this URI\"}"); 
 	}
+
 }

@@ -23,7 +23,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -54,25 +53,22 @@ import org.openrdf.rio.trix.TriXParser;
 import org.openrdf.rio.turtle.TurtleParser;
 import org.restlet.Client;
 import org.restlet.Context;
+import org.restlet.Request;
+import org.restlet.Response;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
 import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
-import org.restlet.data.Request;
-import org.restlet.data.Response;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.resource.Representation;
-import org.restlet.resource.Variant;
+import org.restlet.representation.Representation;
+import org.restlet.representation.Variant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
 import se.kmr.scam.repository.impl.converters.NS;
-import se.kmr.scam.rest.ScamApplication;
 import se.kmr.scam.rest.util.RDFJSON;
-import se.kmr.scam.rest.util.Util;
 
 /**
  * This class provides support for proxying requests to web services on other
@@ -82,25 +78,14 @@ import se.kmr.scam.rest.util.Util;
  */
 public class ProxyResource extends BaseResource {
 
-	Logger log = LoggerFactory.getLogger(ProxyResource.class);
-
-	/** The context object for the context */
-	se.kmr.scam.repository.Context context = null;
-
-	/** Parameters from the URL. Example: ?scam=umu&shame=kth */
-	HashMap<String,String> parameters = null;
-	
-	private RepositoryManagerImpl rm;
+	static Logger log = LoggerFactory.getLogger(ProxyResource.class);
 	
 	private String extResourceURL;
 	
 	private Client client;
 
-	public ProxyResource(Context context, Request request, Response response) {
-		super(context, request, response);
-
-		String remainingPart = request.getResourceRef().getRemainingPart(); 
-		parameters = Util.parseRequest(remainingPart);
+	@Override
+	public void doInit() {
 		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		getVariants().add(new Variant(MediaType.APPLICATION_RDF_XML));
 		getVariants().add(new Variant(MediaType.ALL));
@@ -112,8 +97,6 @@ public class ProxyResource extends BaseResource {
 				log.error(e.getMessage());
 			}
 		}
-		
-		rm = ((ScamApplication) context.getAttributes().get(ScamApplication.KEY)).getRM();
 	}
 
 	public Representation represent(Variant variant) {
