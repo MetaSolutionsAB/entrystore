@@ -368,8 +368,11 @@ public class SolrSupport {
 		String escapedURI = StringUtils.replace(entry.getEntryURI().toString(), ":", "\\:");
 		req.deleteByQuery("uri:" + escapedURI);
 		try {
+			log.info("Removing document from Solr: " + entry.getEntryURI());
 			UpdateResponse res = req.process(solrServer);
-			log.info("Solr status code: " + res.getStatus());
+			if (res.getStatus() > 0) {
+				log.error("Removal request was unsuccessful with status " + res.getStatus());
+			}
 		} catch (SolrServerException sse) {
 			log.error(sse.getMessage(), sse);
 		} catch (IOException ioe) {
