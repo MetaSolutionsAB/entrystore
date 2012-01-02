@@ -11,7 +11,7 @@
 	<!-- Restlet adapter -->
 	<servlet>
 		<servlet-name>RestletServlet</servlet-name>
-		<servlet-class>com.noelios.restlet.ext.servlet.ServerServlet</servlet-class>
+		<servlet-class>org.restlet.ext.servlet.ServerServlet</servlet-class>
 	</servlet>
     
 	<!-- Catch all requests -->
