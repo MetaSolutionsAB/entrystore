@@ -37,7 +37,6 @@ import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
@@ -74,7 +73,6 @@ public class ContextResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		try {
 			requestText = getRequest().getEntity().getText();
 		} catch (IOException e) {
@@ -96,7 +94,7 @@ public class ContextResource extends BaseResource {
 	 * return {@link Representation}
 	 */
 	@Get
-	public Representation represent(Variant variant) throws ResourceException {	
+	public Representation represent() throws ResourceException {	
 		if (context == null) {
 			log.info("The given context id does not exist."); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
@@ -155,7 +153,7 @@ public class ContextResource extends BaseResource {
 	 * </ul>
 	 */
 	@Post
-	public void acceptRepresentation(Representation representation) throws ResourceException {
+	public void acceptRepresentation() throws ResourceException {
 		try {
 			if (context == null) {
 				log.info("The given context id doesn't exist."); 
@@ -643,7 +641,6 @@ public class ContextResource extends BaseResource {
 		}
 	}
 
-	//	DELETE
 	@Delete
 	public void removeRepresentations() throws ResourceException {
 		try {

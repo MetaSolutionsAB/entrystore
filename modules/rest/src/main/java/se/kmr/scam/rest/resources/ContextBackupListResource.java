@@ -28,7 +28,6 @@ import org.openrdf.repository.RepositoryException;
 import org.restlet.data.MediaType;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
@@ -47,13 +46,13 @@ public class ContextBackupListResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
+
 	}
 
 	@Get
-	public Representation represent(Variant variant) throws ResourceException {
+	public Representation represent() throws ResourceException {
 		try {
-			if(context != null) {
+			if (context != null) {
 				List<Date> dates = getCM().listBackups(context.getURI()); 
 				JSONArray array = new JSONArray(); 
 				for(Date d : dates) {
@@ -70,7 +69,7 @@ public class ContextBackupListResource extends BaseResource {
 	}
 
 	@Post
-	public void acceptRepresentation(Representation representation) throws ResourceException {
+	public void acceptRepresentation() throws ResourceException {
 		try {
 			if(context != null) {
 				try {

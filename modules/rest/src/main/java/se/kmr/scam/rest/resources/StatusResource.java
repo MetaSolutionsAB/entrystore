@@ -25,7 +25,6 @@ import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
@@ -48,12 +47,11 @@ public class StatusResource extends BaseResource  {
 	
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		config = getRM().getConfiguration();
 	}
 	
 	@Get
-	public Representation represent(Variant variant) throws ResourceException {
+	public Representation represent() throws ResourceException {
 		try {
 			if (parameters.containsKey("extended")) {
 				JSONObject result = new JSONObject();

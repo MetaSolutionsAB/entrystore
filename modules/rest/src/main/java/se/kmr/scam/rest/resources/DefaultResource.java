@@ -16,10 +16,8 @@
 
 package se.kmr.scam.rest.resources;
 
-import org.restlet.data.MediaType;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 
@@ -33,11 +31,11 @@ public class DefaultResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.TEXT_PLAIN));
+		
 	}
 
 	@Get
-	public Representation represent(Variant variant) throws ResourceException {
+	public Representation represent() throws ResourceException {
 		return new JsonRepresentation("{\"info\":\"You made a request against the EntryScape REST API, there is no resource under this URI\"}"); 
 	}
 

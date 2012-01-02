@@ -47,7 +47,6 @@ import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.FileRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,16 +70,13 @@ public class ExportResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_ZIP));
-		getVariants().add(new Variant(MediaType.ALL));
-
 		if (parameters.containsKey("rdfFormat")) {
 			this.format = parameters.get("rdfFormat");
 		}
 	}
 
 	@Get
-	public Representation represent(Variant variant) {
+	public Representation represent() {
 		try {
 			if (context == null) {
 				log.error("Unable to find context with that ID"); 

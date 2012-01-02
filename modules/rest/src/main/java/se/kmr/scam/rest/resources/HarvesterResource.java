@@ -22,11 +22,9 @@ import java.util.Set;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
@@ -52,14 +50,13 @@ public class HarvesterResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		if (context != null) {
 			harvester = getHarvester();
 		}
 	}
 
 	@Get
-	public Representation represent(Variant variant) throws ResourceException {
+	public Representation represent() throws ResourceException {
 		try {
 			JSONObject jsonObj = new JSONObject(); 
 			if (harvester == null) {
@@ -105,10 +102,10 @@ public class HarvesterResource extends BaseResource {
 	}
 
 	@Post
-	public void acceptRepresentation(Representation representation) throws ResourceException {
+	public void acceptRepresentation() throws ResourceException {
 		try {
 			if (harvester != null) {
-				representation = new JsonRepresentation("Harvester exists already");
+				getResponse().setEntity(new JsonRepresentation("Harvester exists already"));
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 				return;
 			}
@@ -116,7 +113,7 @@ public class HarvesterResource extends BaseResource {
 			JSONObject jsonObj = getInputJSON();
 			
 			if (jsonObj == null) {
-				representation = new JsonRepresentation("Invalid harvester configuration");
+				getResponse().setEntity(new JsonRepresentation("Invalid harvester configuration"));
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
@@ -204,7 +201,7 @@ public class HarvesterResource extends BaseResource {
 					}
 				} else {
 					log.info("Parameters missing in JSON"); 
-					representation = new JsonRepresentation("Parameters missing in JSON");
+					getResponse().setEntity(new JsonRepresentation("Parameters missing in JSON"));
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				}
 			} catch (JSONException e) {
@@ -269,10 +266,10 @@ public class HarvesterResource extends BaseResource {
 	}
 
 	@Put
-	public void storeRepresentation(Representation representation) throws ResourceException {
+	public void storeRepresentation() throws ResourceException {
 		try {
 			if (harvester == null) {
-				representation = new JsonRepresentation("Harvester does not exist");
+				getResponse().setEntity(new JsonRepresentation("Harvester does not exist"));
 				getResponse().setStatus(Status.CLIENT_ERROR_EXPECTATION_FAILED);
 				return;
 			}
@@ -280,7 +277,7 @@ public class HarvesterResource extends BaseResource {
 			JSONObject jsonObj = getInputJSON();
 			
 			if (jsonObj == null) {
-				representation = new JsonRepresentation("Invalid configuration");
+				getResponse().setEntity(new JsonRepresentation("Invalid configuration"));
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			} else if (!jsonObj.isNull("updateRecord")) {
 				try {

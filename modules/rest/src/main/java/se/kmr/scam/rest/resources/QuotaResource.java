@@ -18,11 +18,9 @@ package se.kmr.scam.rest.resources;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Put;
@@ -42,12 +40,11 @@ public class QuotaResource extends BaseResource {
 	
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		getVariants().add(new Variant(MediaType.ALL));
+		
 	}
 
 	@Get
-	public Representation represent(Variant variant) {
+	public Representation represent() {
 		if (context != null) {
 			if (context.getEntry().getRepositoryManager().hasQuotas()) {
 				JSONObject result = new JSONObject();
@@ -70,7 +67,7 @@ public class QuotaResource extends BaseResource {
 	}
 
 	@Put
-	public void storeRepresentation(Representation representation) {
+	public void storeRepresentation() {
 		if (getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI()) || getPM().getAdminGroup().isMember(getPM().getUser(getPM().getAuthenticatedUserURI()))) {
 			if (context != null) {
 				try {

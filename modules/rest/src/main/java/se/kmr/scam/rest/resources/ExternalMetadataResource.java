@@ -17,6 +17,8 @@
 package se.kmr.scam.rest.resources;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.openrdf.model.Graph;
 import org.openrdf.rio.RDFFormat;
@@ -51,18 +53,19 @@ import se.kmr.scam.rest.util.RDFJSON;
 public class ExternalMetadataResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(ExternalMetadataResource.class);
+	
+	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.ALL));
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		getVariants().add(new Variant(MediaType.APPLICATION_RDF_XML));
-		getVariants().add(new Variant(MediaType.TEXT_RDF_N3));
-		getVariants().add(new Variant(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType(RDFFormat.TRIX.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType(RDFFormat.TRIG.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType("application/lom+xml")));
+		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
+		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
+		supportedMediaTypes.add(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType("application/lom+xml"));
 	}
 
 	/**
@@ -79,7 +82,7 @@ public class ExternalMetadataResource extends BaseResource {
 	 * @return The Representation as JSON
 	 */
 	@Get
-	public Representation represent(Variant variant) {
+	public Representation represent() {
 		try {
 			if (entry == null) {
 				log.error("Cannot find an entry with that id.");
@@ -87,7 +90,11 @@ public class ExternalMetadataResource extends BaseResource {
 				return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
 			}
 
-			return getCachedExternalMetadata((format != null) ? format : variant.getMediaType());
+			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+			if (preferredMediaType == null) {
+				preferredMediaType = MediaType.APPLICATION_RDF_XML;
+			}
+			return getCachedExternalMetadata((format != null) ? format : preferredMediaType);
 		} catch (AuthorizationException e) {
 			log.error("unauthorizedGET");
 			return unauthorizedGET();
@@ -104,7 +111,7 @@ public class ExternalMetadataResource extends BaseResource {
 					String serializedGraph = null;
 					if (mediaType.equals(MediaType.APPLICATION_JSON)) {
 						serializedGraph = RDFJSON.graphToRdfJson(graph);
-					} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML) || mediaType.equals(MediaType.ALL)) {
+					} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
 						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
 					} else if (mediaType.equals(MediaType.ALL)) {
 						mediaType = MediaType.APPLICATION_RDF_XML;
@@ -124,6 +131,8 @@ public class ExternalMetadataResource extends BaseResource {
 						if (resURI != null) {
 							serializedGraph = ConverterUtil.convertGraphToLOM(graph, graph.getValueFactory().createURI(resURI.toString()));
 						}
+					} else {
+						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
 					}
 
 					if (serializedGraph != null) {

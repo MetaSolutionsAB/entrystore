@@ -21,7 +21,6 @@ import org.restlet.data.MediaType;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
@@ -43,18 +42,14 @@ public class ContextBackupResource extends BaseResource {
 	
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		MediaType.register("APPLICATION_TRIG", "application/x-trig"); 
-		getVariants().add(new Variant(MediaType.valueOf("APPLICATION_TRIG")));
-		backupId =(String) getRequest().getAttributes().get("backup-id");
+		backupId = (String) getRequest().getAttributes().get("backup-id");
 	}
 	
 	@Get
-	public Representation represent(Variant variant) throws ResourceException {
+	public Representation represent() throws ResourceException {
 		try {
-			if(context != null && backupId != null) {
-
-				if(parameters.containsKey("method") && parameters.get("method").equals("restore")) {
+			if (context != null && backupId != null) {
+				if (parameters.containsKey("method") && parameters.get("method").equals("restore")) {
 					try {
 						getCM().restoreBackup(context.getURI(), backupId);
 					} catch (RepositoryException e) {
@@ -81,12 +76,11 @@ public class ContextBackupResource extends BaseResource {
 	}
 
 	@Post
-	public void acceptRepresentation(Representation representation) throws ResourceException {
+	public void acceptRepresentation() throws ResourceException {
 		try {
-			if(context != null && backupId != null) {
+			if (context != null && backupId != null) {
 
 			}
-
 		} catch(AuthorizationException e) {
 			unauthorizedPOST();
 		} 
@@ -102,7 +96,7 @@ public class ContextBackupResource extends BaseResource {
 					return; 
 				} 
 			}
-			log.error("Can not remove the backup"); 
+			log.error("Cannot remove the backup"); 
 			// TODO Error
 		} catch(AuthorizationException e) {
 			unauthorizedDELETE();

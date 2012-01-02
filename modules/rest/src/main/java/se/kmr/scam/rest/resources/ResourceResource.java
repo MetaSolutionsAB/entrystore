@@ -63,7 +63,6 @@ import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.FileRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
@@ -114,14 +113,6 @@ public class ResourceResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		getVariants().add(new Variant(MediaType.APPLICATION_ZIP));
-		getVariants().add(new Variant(MediaType.APPLICATION_ATOM));
-		getVariants().add(new Variant(MediaType.APPLICATION_RSS));
-		getVariants().add(new Variant(MediaType.APPLICATION_RDF_XML));
-		getVariants().add(new Variant(MediaType.TEXT_RDF_N3));
-		getVariants().add(new Variant(MediaType.ALL));
-		
 		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
 
@@ -139,7 +130,7 @@ public class ResourceResource extends BaseResource {
 	 * @return The Representation as JSON
 	 */
 	@Get
-	public Representation represent(Variant variant) {
+	public Representation represent() {
 		try {
 			if (entry == null) {
 				log.info("Cannot find an entry with that ID"); 
@@ -186,7 +177,7 @@ public class ResourceResource extends BaseResource {
 	}
 
 	@Put
-	public void storeRepresentation(Representation representation) {
+	public void storeRepresentation() {
 		if (entry == null) {
 			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -201,7 +192,7 @@ public class ResourceResource extends BaseResource {
 	}
 
 	@Post
-	public void acceptRepresentation(Representation representation) {
+	public void acceptRepresentation() {
 		if (entry == null) {
 			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -213,12 +204,12 @@ public class ResourceResource extends BaseResource {
 				if ("delete".equalsIgnoreCase(parameters.get("method"))) {
 					removeRepresentations();
 				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
-					storeRepresentation(representation);
+					storeRepresentation();
 				}
 			} else if (entry.getBuiltinType().equals(BuiltinType.List) &&
 					parameters.containsKey("import") &&
-					MediaType.APPLICATION_ZIP.equals(representation.getMediaType())) {
-				getResponse().setStatus(importFromZIP(representation));
+					MediaType.APPLICATION_ZIP.equals(getRequestEntity().getMediaType())) {
+				getResponse().setStatus(importFromZIP(getRequestEntity()));
 			} else if (entry.getBuiltinType().equals(BuiltinType.List) &&
 					parameters.containsKey("moveEntry") &&
 					parameters.containsKey("fromList")) {

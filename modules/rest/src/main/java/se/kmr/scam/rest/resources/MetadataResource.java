@@ -18,7 +18,9 @@ package se.kmr.scam.rest.resources;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
@@ -40,7 +42,6 @@ import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
@@ -66,17 +67,18 @@ public class MetadataResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(MetadataResource.class);
 
+	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+	
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.ALL));
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		getVariants().add(new Variant(MediaType.APPLICATION_RDF_XML));
-		getVariants().add(new Variant(MediaType.TEXT_RDF_N3));
-		getVariants().add(new Variant(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType(RDFFormat.TRIX.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType(RDFFormat.TRIG.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType("application/lom+xml")));
+		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
+		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
+		supportedMediaTypes.add(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType("application/lom+xml"));
 
 		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
@@ -95,15 +97,19 @@ public class MetadataResource extends BaseResource {
 	 * @return The Representation as JSON
 	 */
 	@Get
-	public Representation represent(Variant variant) {
+	public Representation represent() {
 		try {
 			if (entry == null) {
 				log.error("Cannot find an entry with that id.");
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
 			}
-
-			Representation result = getMetadata((format != null) ? format : variant.getMediaType());
+			
+			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+			if (preferredMediaType == null) {
+				preferredMediaType = MediaType.APPLICATION_RDF_XML;
+			}
+			Representation result = getMetadata((format != null) ? format : preferredMediaType);
 			Date lastMod = entry.getModifiedDate();
 			if (lastMod != null) {
 				result.setModificationDate(lastMod);
@@ -116,7 +122,7 @@ public class MetadataResource extends BaseResource {
 	}
 
 	@Put
-	public void storeRepresentation(Representation representation) {
+	public void storeRepresentation() {
 		try {
 			if (entry != null && context != null) {
 				// we convert from Reference to LinkReference, otherwise we
@@ -125,7 +131,7 @@ public class MetadataResource extends BaseResource {
 					entry.setLocationType(LocationType.LinkReference);
 				}
 
-				MediaType mt = (format != null) ? format : representation.getMediaType();
+				MediaType mt = (format != null) ? format : getRequestEntity().getMediaType();
 				modifyMetadata(mt);
 			} else {
 				log.error("PUT request failed, entry or context not found");
@@ -138,14 +144,14 @@ public class MetadataResource extends BaseResource {
 	}
 
 	@Post
-	public void acceptRepresentation(Representation representation) {
+	public void acceptRepresentation() {
 		try {
 			if (entry != null && context != null) {
 				if (parameters.containsKey("method")) {
 					if ("delete".equalsIgnoreCase(parameters.get("method"))) {
 						removeRepresentations();	
 					} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
-						storeRepresentation(representation);
+						storeRepresentation();
 					}
 				}
 				return;

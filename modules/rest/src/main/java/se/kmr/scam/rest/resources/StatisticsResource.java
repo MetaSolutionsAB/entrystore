@@ -45,7 +45,6 @@ import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,9 +79,6 @@ public class StatisticsResource extends BaseResource {
 	public void doInit() {
 		this.statType = (String) getRequest().getAttributes().get("stat-type");
 		this.labels = parameters.get("labels");
-
-		getVariants().add(new Variant(MediaType.ALL));
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		
 		this.config = (Config) getContext().getAttributes().get(STAT_CONFIG_KEY);
 		if (this.config == null) {
@@ -105,7 +101,7 @@ public class StatisticsResource extends BaseResource {
 	}
 
 	@Get
-	public Representation represent(Variant variant) {
+	public Representation represent() {
 		try {
 			if (context == null) {
 				log.error("Cannot find a context with that ID");

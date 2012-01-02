@@ -45,11 +45,9 @@ import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.util.GraphUtil;
 import org.openrdf.model.vocabulary.RDF;
-import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
@@ -83,11 +81,11 @@ public class SearchResource extends BaseResource {
 	
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
+		
 	}
 
 	@Get
-	public Representation represent(Variant variant) throws ResourceException {
+	public Representation represent() throws ResourceException {
 		try {
 			if (!parameters.containsKey("type") ||
 					!parameters.containsKey("query") ||

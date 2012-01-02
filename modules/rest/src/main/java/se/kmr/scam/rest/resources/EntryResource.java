@@ -50,7 +50,6 @@ import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
@@ -85,17 +84,18 @@ import se.kmr.scam.rest.util.Util;
 public class EntryResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(EntryResource.class);
+	
+	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.ALL));
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		getVariants().add(new Variant(MediaType.APPLICATION_RDF_XML));
-		getVariants().add(new Variant(MediaType.TEXT_RDF_N3));
-		getVariants().add(new Variant(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType(RDFFormat.TRIX.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType())));
-		getVariants().add(new Variant(new MediaType(RDFFormat.TRIG.getDefaultMIMEType())));
+		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
+		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
+		supportedMediaTypes.add(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
 
 		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
@@ -114,46 +114,47 @@ public class EntryResource extends BaseResource {
 	 * @return The Representation as JSON
 	 */
 	@Get
-	public Representation represent(Variant variant) {
+	public Representation represent() {
 		try {
 			if (entry == null) {
-				log.error("Cannot find an entry with that id.");
+				log.error("Cannot find an entry with that id");
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
 			}
 
-			Representation result = getEntry((format != null) ? format : variant.getMediaType());
+			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+			if (preferredMediaType == null) {
+				preferredMediaType = MediaType.APPLICATION_RDF_XML;
+			}
+			Representation result = getEntry((format != null) ? format : preferredMediaType);
 			Date lastMod = entry.getModifiedDate();
 			if (lastMod != null) {
 				result.setModificationDate(lastMod);
 			}
 			return result;
 		} catch (AuthorizationException e) {
-			log.error("unauthorizedGET");
 			return unauthorizedGET();
 		}
 	}
 
 	@Put
-	public void storeRepresentation(Representation representation) {
-		log.info("PUT");
+	public void storeRepresentation() {
 		try {
-			modifyEntry((format != null) ? format : representation.getMediaType());
+			modifyEntry((format != null) ? format : getRequestEntity().getMediaType());
 		} catch (AuthorizationException e) {
 			unauthorizedPUT();
 		}
 	}
 
 	@Post
-	public void acceptRepresentation(Representation representation) {
-		log.info("POST");
+	public void acceptRepresentation() {
 		try {
 			if (entry != null && context != null) {
 				if (parameters.containsKey("method")) {
 					if ("delete".equalsIgnoreCase(parameters.get("method"))) {
 						removeRepresentations();		
 					} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
-						storeRepresentation(representation);
+						storeRepresentation();
 					}
 				} 
 				return;
@@ -194,26 +195,23 @@ public class EntryResource extends BaseResource {
 	private Representation getEntry(MediaType mediaType) {
 		String serializedGraph = null;
 		Graph graph = entry.getGraph();
-		if (mediaType.equals(MediaType.APPLICATION_JSON)) {
+		if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 			return getEntryInJSON();
-		} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
+		} else if (MediaType.APPLICATION_RDF_XML.equals(mediaType)) {
 			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-		} else if (mediaType.equals(MediaType.ALL)) {
-			mediaType = MediaType.APPLICATION_RDF_XML;
-			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
+		} else if (MediaType.TEXT_RDF_N3.equals(mediaType)) {
 			serializedGraph = ConverterUtil.serializeGraph(graph, N3Writer.class);
-		} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
+		} else if (RDFFormat.TURTLE.getDefaultMIMEType().equals(mediaType.getName())) {
 			serializedGraph = ConverterUtil.serializeGraph(graph, TurtleWriter.class);
-		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
+		} else if (RDFFormat.TRIX.getDefaultMIMEType().equals(mediaType.getName())) {
 			serializedGraph = ConverterUtil.serializeGraph(graph, TriXWriter.class);
-		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
+		} else if (RDFFormat.NTRIPLES.getDefaultMIMEType().equals(mediaType.getName())) {
 			serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
-		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
+		} else if (RDFFormat.TRIG.getDefaultMIMEType().equals(mediaType.getName())) {
 			serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
 		} else {
-			getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-			return new JsonRepresentation(JDILErrorMessages.errorUnknownFormat);
+			mediaType = MediaType.APPLICATION_RDF_XML;
+			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
 		}
 
 		if (serializedGraph != null) {

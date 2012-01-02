@@ -20,11 +20,9 @@ import java.io.IOException;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Put;
@@ -49,12 +47,11 @@ public class RepositoryBackupResource extends BaseResource  {
 	
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		scamApp = (ScamApplication) getContext().getAttributes().get(ScamApplication.KEY);
 	}
 
 	@Get
-	public Representation represent(Variant variant) throws ResourceException {
+	public Representation represent() throws ResourceException {
 		try {
 			JSONObject jsonObj = new JSONObject(); 
 			try {
@@ -95,19 +92,19 @@ public class RepositoryBackupResource extends BaseResource  {
 	}
 
 	@Put
-	public void storeRepresentation(Representation representation) throws ResourceException {
+	public void storeRepresentation() throws ResourceException {
 		try {
 			JSONObject jsonObj = getRequestJSON();
 			
 			if (jsonObj == null) {
-				representation = new JsonRepresentation("Invalid backup configuration");
+				getResponse().setEntity(new JsonRepresentation("\"error\":\"Invalid backup configuration\""));
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
 			
 			if (scamApp.getBackupScheduler() != null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
-				representation = new JsonRepresentation("{\"error\":\"Backup scheduler exists already, please delete first\"}");
+				getResponse().setEntity(new JsonRepresentation("{\"error\":\"Backup scheduler exists already, please delete first\"}"));
 				return;
 			}
 
@@ -140,8 +137,7 @@ public class RepositoryBackupResource extends BaseResource  {
 					scamApp.setBackupScheduler(bs);
 					bs.run();					
 				} else {
-					log.info("Parameters missing in JSON");
-					representation = new JsonRepresentation("Parameters missing in JSON");
+					getResponse().setEntity(new JsonRepresentation("\"error\":\"Parameters missing\""));
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				}
 			} catch (JSONException e) {

@@ -18,11 +18,9 @@ package se.kmr.scam.rest.resources;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Get;
 import org.restlet.resource.Put;
 import org.slf4j.Logger;
@@ -45,12 +43,11 @@ public class AliasResource extends BaseResource {
 	
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		getVariants().add(new Variant(MediaType.ALL));
+
 	}
 
 	@Get
-	public Representation represent(Variant variant) {
+	public Representation represent() {
 		String name = null;
 		String alias = null;
 		if (this.context != null && this.entryId == null) {
@@ -86,16 +83,16 @@ public class AliasResource extends BaseResource {
 	}
 
 	@Put
-	public void storeRepresentation(Representation representation) {
+	public void storeRepresentation() {
 		try {
-			JSONObject newAliasObj = new JSONObject(this.getRequest().getEntity().getText());
+			JSONObject newAliasObj = new JSONObject(getRequestEntity().getText());
 			String alias = null;
 			String name = null;
 			if (newAliasObj.has("alias")) {
 				alias = newAliasObj.getString("alias");
 			}
 			if (newAliasObj.has("name")) {
-				name = newAliasObj.getString("name");	
+				name = newAliasObj.getString("name");
 			}
 			
 			boolean success = false;
@@ -123,7 +120,7 @@ public class AliasResource extends BaseResource {
 			}
 		} catch (Exception e) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(new JsonRepresentation("{error:\"The request doesn't contain a JSON object.\"}"));
+			getResponse().setEntity(new JsonRepresentation("{\"error\":\"The request does not contain JSON\"}"));
 		}
 	}
 	

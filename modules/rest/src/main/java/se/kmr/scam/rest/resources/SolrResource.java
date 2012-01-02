@@ -18,11 +18,9 @@ package se.kmr.scam.rest.resources;
 
 import java.net.URI;
 
-import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
@@ -43,12 +41,11 @@ public class SolrResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		getVariants().add(new Variant(MediaType.ALL));
+
 	}
 	
 	@Get
-	public Representation represent(Variant variant) throws ResourceException {
+	public Representation represent() throws ResourceException {
 		try {
 			PrincipalManager pm = getRM().getPrincipalManager();
 			URI authUser = pm.getAuthenticatedUserURI();

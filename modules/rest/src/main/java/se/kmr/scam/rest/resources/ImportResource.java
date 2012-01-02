@@ -31,8 +31,6 @@ import org.restlet.Request;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.fileupload.RestletFileUpload;
-import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,13 +52,11 @@ public class ImportResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.APPLICATION_ZIP));
-		getVariants().add(new Variant(MediaType.MULTIPART_FORM_DATA));
-		getVariants().add(new Variant(MediaType.ALL));
+
 	}
 		
 	@Post
-	public void acceptRepresentation(Representation r) {
+	public void acceptRepresentation() {
 		try {
 			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
 				throw new AuthorizationException(getPM().getUser(getPM().getAuthenticatedUserURI()), context.getEntry(), AccessProperty.Administer);
@@ -84,7 +80,7 @@ public class ImportResource extends BaseResource {
 					if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 						input = getStreamFromForm(getRequest());
 					} else {
-						input = r.getStream();
+						input = getRequestEntity().getStream();
 					}
 					if (input != null) {
 						FileOperations.copyFile(input, new FileOutputStream(tmpFile));

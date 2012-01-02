@@ -36,9 +36,7 @@ import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.ValueFactoryImpl;
 import org.restlet.data.MediaType;
-import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,12 +84,11 @@ public class RegisterResource extends BaseResource {
 	ScamApplication scamApp;
 
 	public RegisterResource() {
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
 		scamApp = (ScamApplication) getContext().getAttributes().get(ScamApplication.KEY);
 	}
 
 	@Post
-	public void acceptRepresentation(Representation representation) {
+	public void acceptRepresentation() {
 		getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI()); 
 		try {
 			try {

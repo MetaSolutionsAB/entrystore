@@ -20,6 +20,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.openrdf.model.URI;
 import org.openrdf.model.impl.URIImpl;
@@ -40,7 +42,6 @@ import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.InputRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
@@ -57,23 +58,29 @@ import se.kmr.scam.repository.AuthorizationException;
 public class SparqlResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(SparqlResource.class);
+	
+	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
 	@Override
 	public void doInit() {
-		getVariants().add(new Variant(MediaType.ALL));
-		getVariants().add(new Variant(MediaType.APPLICATION_JSON));
-		getVariants().add(new Variant(MediaType.APPLICATION_XML));
+		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
+		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+		supportedMediaTypes.add(MediaType.ALL);
 	}
 
 	@Get
-	public Representation represent(Variant variant) throws ResourceException {
+	public Representation represent() throws ResourceException {
 		try {
 			if (this.getRM().getPublicRepository() == null) {
 				getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
 				return null;
 			}
+			
 			if (format == null) {
-				format = variant.getMediaType();
+				format = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+				if (format == null) {
+					format = MediaType.ALL;
+				}
 			}
 			
 			String queryString = null;
@@ -98,7 +105,7 @@ public class SparqlResource extends BaseResource {
 	}
 	
 	@Post
-	public void acceptRepresentation(Representation representation) {
+	public void acceptRepresentation() {
 		try {
 			Form form = new Form(getRequest().getEntity());
 			String format = form.getFirstValue("output", true, "json");;
