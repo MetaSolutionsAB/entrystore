@@ -65,15 +65,17 @@ public abstract class BaseResource extends ServerResource {
 	private static Logger log = LoggerFactory.getLogger(BaseResource.class);
 	
 	@Override
-	public void init(Context con, Request req, Response res) {
-		parameters = Util.parseRequest(getRequest().getResourceRef().getRemainingPart());
+	public void init(Context c, Request request, Response response) {
+		super.init(c, request, response);
 		
-		contextId = (String) getRequest().getAttributes().get("context-id");
+		parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
+		
+		contextId = (String) request.getAttributes().get("context-id");
 		if (getCM() != null) {
 			context = getCM().getContext(contextId);
 		}
 		
-		entryId = (String) getRequest().getAttributes().get("entry-id");
+		entryId = (String) request.getAttributes().get("entry-id");
 		if (context != null) {
 			entry = context.get(entryId);
 		}
@@ -84,8 +86,6 @@ public abstract class BaseResource extends ServerResource {
 				this.format = new MediaType(format);
 			}
 		}
-		
-		super.init(con, req, res);
 	}
 
 	/**
