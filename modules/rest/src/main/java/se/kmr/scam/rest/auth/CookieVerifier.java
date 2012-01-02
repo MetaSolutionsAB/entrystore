@@ -82,7 +82,7 @@ public class CookieVerifier implements Verifier {
 				if (userEntry == null) {
 					return RESULT_UNKNOWN;
 				}
-				PrincipalVerifier pv = new PrincipalVerifier(pm);
+				BasicVerifier pv = new BasicVerifier(pm);
 				char[] localSecret = pv.getLocalSecret(identifier);
 				if (secret.equals(localSecret)) {
 					userURI = userEntry.getResourceURI();

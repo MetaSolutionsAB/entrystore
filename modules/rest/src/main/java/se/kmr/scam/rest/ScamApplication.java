@@ -60,8 +60,9 @@ import se.kmr.scam.repository.impl.converters.OAI_DC2RDFGraphConverter;
 import se.kmr.scam.repository.impl.converters.RDF2LOMConverter;
 import se.kmr.scam.repository.test.TestSuite;
 import se.kmr.scam.repository.util.MetadataCorrection;
+import se.kmr.scam.rest.auth.BasicVerifier;
 import se.kmr.scam.rest.auth.CookieVerifier;
-import se.kmr.scam.rest.auth.PrincipalVerifier;
+import se.kmr.scam.rest.auth.SimpleAuthenticator;
 import se.kmr.scam.rest.resources.AliasResource;
 import se.kmr.scam.rest.resources.ContextBackupListResource;
 import se.kmr.scam.rest.resources.ContextBackupResource;
@@ -301,10 +302,10 @@ public class ScamApplication extends Application {
 
 		router.attachDefault(DefaultResource.class);
 
-		ChallengeAuthenticator cookieAuth = new ChallengeAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(pm));
+		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(pm), pm);
 //		DigestAuthenticator digestAuth = new DigestAuthenticator(getContext(), "EntryStore", "3ntry5t0r3");
 //		digestAuth.setOptional(true);
-		ChallengeAuthenticator basicAuth = new ChallengeAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new PrincipalVerifier(pm));
+		ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm), pm);
 				
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
@@ -318,10 +319,7 @@ public class ScamApplication extends Application {
 	}
 
 	/**
-	 * This method exists for running stand-alone within Jetty, e.g. Tomcat -
-	 * no container required.
-	 * 
-	 * @param args
+	 * This method exists for running stand-alone without a container.
 	 */
 	public static void main(String[] args) {
 		Component component = new Component();

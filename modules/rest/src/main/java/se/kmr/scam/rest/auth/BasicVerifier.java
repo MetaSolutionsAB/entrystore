@@ -17,8 +17,12 @@
 package se.kmr.scam.rest.auth;
 
 import java.net.URI;
+import java.util.Arrays;
 
-import org.restlet.security.LocalVerifier;
+import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.data.ChallengeScheme;
+import org.restlet.security.Verifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,17 +36,16 @@ import se.kmr.scam.repository.User;
  * 
  * @author Hannes Ebner
  */
-public class PrincipalVerifier extends LocalVerifier {
+public class BasicVerifier implements Verifier {
 	
 	private PrincipalManager pm;
 	
-	private Logger log = LoggerFactory.getLogger(PrincipalVerifier.class);
+	private static Logger log = LoggerFactory.getLogger(BasicVerifier.class);
 
-	public PrincipalVerifier(PrincipalManager pm) {
+	public BasicVerifier(PrincipalManager pm) {
 		this.pm = pm;
 	}
 
-	@Override
 	public char[] getLocalSecret(String identifier) {
 		URI authUser = pm.getAuthenticatedUserURI();
 		try {
@@ -61,6 +64,41 @@ public class PrincipalVerifier extends LocalVerifier {
 		}
 
 		return null;
+	}
+
+	public int verify(Request request, Response response) {
+		if (request.getChallengeResponse() ==  null || !ChallengeScheme.HTTP_BASIC.equals(request.getChallengeResponse().getScheme())) {
+			return RESULT_MISSING;
+		}
+		
+		URI userURI = null;
+
+		try {
+			String identifier = request.getChallengeResponse().getIdentifier();
+			char[] secret = request.getChallengeResponse().getSecret();
+			
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+
+			if (identifier == null) {
+				return RESULT_MISSING;
+			} else if ("_guest".equals(identifier)) {
+				userURI = pm.getGuestUser().getURI();
+				return RESULT_VALID;
+			} else {
+				Entry userEntry = pm.getPrincipalEntry(identifier);
+				if (userEntry == null) {
+					return RESULT_UNKNOWN;
+				}
+				char[] localSecret = getLocalSecret(identifier);
+				if (Arrays.equals(secret, localSecret)) {
+					userURI = userEntry.getResourceURI();
+					return RESULT_VALID;
+				}
+			}
+			return RESULT_INVALID;
+		} finally {
+			pm.setAuthenticatedUserURI(userURI);
+		}
 	}
 
 }
