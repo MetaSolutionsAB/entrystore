@@ -1,4 +1,4 @@
-package se.kmr.scam.rest.resources;
+package se.kmr.scam.rest.filter;
 
 import org.restlet.Request;
 import org.restlet.Response;
@@ -15,7 +15,7 @@ import se.kmr.scam.rest.ScamApplication;
  */
 public class ModificationLockOutFilter extends Filter {
 	
-	private Logger log = LoggerFactory.getLogger(ModificationLockOutFilter.class);
+	static private Logger log = LoggerFactory.getLogger(ModificationLockOutFilter.class);
 	
 	@Override
 	protected int beforeHandle(Request request, Response response) {
@@ -25,8 +25,9 @@ public class ModificationLockOutFilter extends Filter {
 			ScamApplication scamApp = (ScamApplication) getContext().getAttributes().get(ScamApplication.KEY);
 			boolean lockout = scamApp.getRM().hasModificationLockOut();
 			if (lockout) {
-				response.setStatus(Status.SERVER_ERROR_SERVICE_UNAVAILABLE,
-					"The service is being maintained and does not accept modification requests right now, please check back later");
+				String maintMsg = "The service is being maintained and does not accept modification requests right now, please check back later";
+				response.setStatus(Status.SERVER_ERROR_SERVICE_UNAVAILABLE, maintMsg);
+				log.warn(maintMsg);
 				return STOP;
 			}
 		}

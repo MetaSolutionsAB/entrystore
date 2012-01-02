@@ -1,4 +1,4 @@
-package se.kmr.scam.rest.resources;
+package se.kmr.scam.rest.filter;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -20,7 +20,7 @@ import se.kmr.scam.rest.util.Util;
  */
 public class JSCallbackFilter extends Filter {
 	
-	private Logger log = LoggerFactory.getLogger(JSCallbackFilter.class);
+	static private Logger log = LoggerFactory.getLogger(JSCallbackFilter.class);
 	
 	@Override
 	protected void afterHandle(Request request, Response response) {
