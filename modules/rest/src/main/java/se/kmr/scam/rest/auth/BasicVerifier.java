@@ -21,7 +21,6 @@ import java.util.Arrays;
 
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.data.ChallengeScheme;
 import org.restlet.security.Verifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,15 +66,19 @@ public class BasicVerifier implements Verifier {
 	}
 
 	public int verify(Request request, Response response) {
-		if (request.getChallengeResponse() ==  null || !ChallengeScheme.HTTP_BASIC.equals(request.getChallengeResponse().getScheme())) {
+		if (request.getChallengeResponse() == null && "login".equals(request.getResourceRef().getLastSegment())) {
 			return RESULT_MISSING;
 		}
 		
 		URI userURI = null;
 
 		try {
-			String identifier = request.getChallengeResponse().getIdentifier();
-			char[] secret = request.getChallengeResponse().getSecret();
+			String identifier = null;
+			if (request.getChallengeResponse() ==  null) {
+				identifier = "_guest";
+			} else {
+				identifier = request.getChallengeResponse().getIdentifier();
+			}
 			
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
@@ -89,6 +92,8 @@ public class BasicVerifier implements Verifier {
 				if (userEntry == null) {
 					return RESULT_UNKNOWN;
 				}
+				
+				char[] secret = request.getChallengeResponse().getSecret();
 				char[] localSecret = getLocalSecret(identifier);
 				if (Arrays.equals(secret, localSecret)) {
 					userURI = userEntry.getResourceURI();
