@@ -32,9 +32,9 @@ import org.slf4j.LoggerFactory;
 import se.kmr.scam.repository.AuthorizationException;
 
 /**
- * 
  * @author Eric Johansson 
  */
+@Deprecated
 public class ContextBackupResource extends BaseResource {
 	
 	static Logger log = LoggerFactory.getLogger(ContextBackupResource.class);

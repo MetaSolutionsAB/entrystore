@@ -64,8 +64,6 @@ import se.kmr.scam.rest.auth.BasicVerifier;
 import se.kmr.scam.rest.auth.CookieVerifier;
 import se.kmr.scam.rest.auth.SimpleAuthenticator;
 import se.kmr.scam.rest.resources.AliasResource;
-import se.kmr.scam.rest.resources.ContextBackupListResource;
-import se.kmr.scam.rest.resources.ContextBackupResource;
 import se.kmr.scam.rest.resources.ContextResource;
 import se.kmr.scam.rest.resources.DefaultResource;
 import se.kmr.scam.rest.resources.EntryResource;
@@ -293,8 +291,8 @@ public class ScamApplication extends Application {
 		router.attach("/{context-id}/metadata/{entry-id}", MetadataResource.class);
 		router.attach("/{context-id}/cached-external-metadata/{entry-id}", ExternalMetadataResource.class);
 		router.attach("/{context-id}/harvester", HarvesterResource.class);
-		router.attach("/{context-id}/backuplist", ContextBackupListResource.class);
-		router.attach("/{context-id}/backup/{backup-id}", ContextBackupResource.class);
+//		router.attach("/{context-id}/backuplist", ContextBackupListResource.class); // FIXME rewrite
+//		router.attach("/{context-id}/backup/{backup-id}", ContextBackupResource.class); // FIXME rewrite
 		router.attach("/{context-id}/alias", AliasResource.class);
 		router.attach("/{context-id}/alias/{entry-id}", AliasResource.class);
 		router.attach("/{context-id}/relation/{entry-id}", RelationResource.class);

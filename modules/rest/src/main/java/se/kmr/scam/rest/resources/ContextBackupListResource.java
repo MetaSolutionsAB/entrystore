@@ -39,8 +39,8 @@ import se.kmr.scam.repository.AuthorizationException;
 
 /**
  * @author Eric Johansson
- * @see BaseResource
  */
+@Deprecated
 public class ContextBackupListResource extends BaseResource {
 	
 	static Logger log = LoggerFactory.getLogger(ContextBackupListResource.class);
