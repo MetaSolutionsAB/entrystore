@@ -365,7 +365,8 @@ public class SolrSupport {
 	public void removeEntry(Entry entry, SolrServer solrServer) {
 		UpdateRequest req = new UpdateRequest();
 		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
-		req.deleteByQuery("uri:" + entry.getEntryURI().toString());
+		String escapedURI = StringUtils.replace(entry.getEntryURI().toString(), ":", "\\:");
+		req.deleteByQuery("uri:" + escapedURI);
 		try {
 			UpdateResponse res = req.process(solrServer);
 			log.info("Solr status code: " + res.getStatus());
