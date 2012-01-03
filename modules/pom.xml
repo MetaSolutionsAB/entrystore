@@ -22,11 +22,9 @@
     
     <!-- ================= Modules ================= -->
     <modules>
-        <module>formats</module>
         <module>harvesting</module>
         <module>rest</module>
-	<module>sqi</module> 
-
+		<module>sqi</module>
     </modules>
 	
 	<!-- ================= SCM ================= -->
