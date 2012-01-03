@@ -70,7 +70,6 @@ import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.jdil.JDILErrorMessages;
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.BuiltinType;
 import se.kmr.scam.repository.Data;
@@ -88,6 +87,7 @@ import se.kmr.scam.repository.impl.StringResource;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
 import se.kmr.scam.repository.util.EntryUtil;
 import se.kmr.scam.repository.util.FileOperations;
+import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.RDFJSON;
 import se.kmr.scam.rest.util.Util;
 
@@ -135,7 +135,7 @@ public class ResourceResource extends BaseResource {
 			if (entry == null) {
 				log.info("Cannot find an entry with that ID"); 
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
-				return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry); 
+				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry); 
 			}
 
 			/*
@@ -150,12 +150,12 @@ public class ResourceResource extends BaseResource {
 					StringRepresentation rep = getSyndicationSolr(entry, parameters.get("syndication"));
 					if (rep == null) {
 						getResponse().setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
-						return new JsonRepresentation(JDILErrorMessages.errorNotAContext); 
+						return new JsonRepresentation(JSONErrorMessages.errorNotAContext); 
 					}
 					return rep; 
 				} catch (IllegalArgumentException e) {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-					return new JsonRepresentation(JDILErrorMessages.syndicationFormat); 
+					return new JsonRepresentation(JSONErrorMessages.syndicationFormat); 
 				}
 			}
 
@@ -306,7 +306,7 @@ public class ResourceResource extends BaseResource {
 				if (data.delete() == false) {
 					log.error("Unknown kind"); 
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
-					getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.errorUnknownKind));
+					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorUnknownKind));
 				}
 			}
 		}
@@ -787,7 +787,7 @@ public class ResourceResource extends BaseResource {
 
 			log.error("Can not find the resource.");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			return new JsonRepresentation(JDILErrorMessages.errorCantFindResource + " Builtin type: " + entry.getBuiltinType());
+			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource + " Builtin type: " + entry.getBuiltinType());
 		}
 
 		log.info("No resource available.");
@@ -836,7 +836,7 @@ public class ResourceResource extends BaseResource {
 			} catch (JSONException e) {
 				log.error("Wrong JSON syntax: " + e.getMessage()); 
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
-				getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.errorJSONSyntax));
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
 			} catch (IOException e) {
 				log.error("IOException: " + e.getMessage()); 
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
@@ -844,7 +844,7 @@ public class ResourceResource extends BaseResource {
 			} catch (se.kmr.scam.repository.RepositoryException re) {
 				log.warn(re.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
-				getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.errorChildExistsInList));
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorChildExistsInList));
 			}
 			return; // success!
 		}
@@ -1019,7 +1019,7 @@ public class ResourceResource extends BaseResource {
 			} catch (JSONException e) {
 				log.error("Wrong JSON syntax: " + e.getMessage()); 
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
-				getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.errorJSONSyntax));
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
 			} catch (IOException e) {
 				log.error("IOException: " + e.getMessage()); 
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 

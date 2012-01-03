@@ -49,11 +49,11 @@ import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.jdil.JDILErrorMessages;
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.LocationType;
 import se.kmr.scam.repository.Metadata;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
+import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.RDFJSON;
 import se.kmr.scam.rest.util.Util;
 
@@ -102,7 +102,7 @@ public class MetadataResource extends BaseResource {
 			if (entry == null) {
 				log.error("Cannot find an entry with that id.");
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
+				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
 			}
 			
 			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
@@ -136,7 +136,7 @@ public class MetadataResource extends BaseResource {
 			} else {
 				log.error("PUT request failed, entry or context not found");
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry));
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
 			}
 		} catch (AuthorizationException e) {
 			unauthorizedPUT();
@@ -159,7 +159,7 @@ public class MetadataResource extends BaseResource {
 
 			log.error("POST request failed, entry or context not found");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry));
+			getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
 		} catch (AuthorizationException e) {
 			unauthorizedPOST();
 		}
@@ -214,7 +214,7 @@ public class MetadataResource extends BaseResource {
 						}
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-						return new JsonRepresentation(JDILErrorMessages.errorUnknownFormat);
+						return new JsonRepresentation(JSONErrorMessages.errorUnknownFormat);
 					}
 
 					if (serializedGraph != null) {
@@ -227,7 +227,7 @@ public class MetadataResource extends BaseResource {
 
 		log.error("Can not find the metadata.");
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		return new JsonRepresentation(JDILErrorMessages.errorCantFindMetadata);
+		return new JsonRepresentation(JSONErrorMessages.errorCantFindMetadata);
 	}
 
 	/**

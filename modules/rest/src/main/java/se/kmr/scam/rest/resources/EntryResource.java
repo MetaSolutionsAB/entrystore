@@ -57,7 +57,6 @@ import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.jdil.JDILErrorMessages;
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.BuiltinType;
 import se.kmr.scam.repository.Entry;
@@ -71,6 +70,7 @@ import se.kmr.scam.repository.User;
 import se.kmr.scam.repository.impl.StringResource;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
 import se.kmr.scam.repository.util.EntryUtil;
+import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.RDFJSON;
 import se.kmr.scam.rest.util.Util;
 
@@ -119,7 +119,7 @@ public class EntryResource extends BaseResource {
 			if (entry == null) {
 				log.error("Cannot find an entry with that id");
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
+				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
 			}
 
 			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
@@ -165,7 +165,7 @@ public class EntryResource extends BaseResource {
 			 */
 			log.error("Wrong POST request");
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry));
+			getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
 		} catch (AuthorizationException e) {
 			unauthorizedPOST();
 		}
@@ -219,7 +219,7 @@ public class EntryResource extends BaseResource {
 			return new StringRepresentation(serializedGraph, mediaType);
 		}
 
-		return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
+		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
 	}
 
 	/**
@@ -625,7 +625,7 @@ public class EntryResource extends BaseResource {
 		}
 		log.error("Can not find the entry. getEntry()");
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
+		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
 	}
 	
 	private void accumulateRights(Entry entry, JSONObject jdilObj) throws JSONException {

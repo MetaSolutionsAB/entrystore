@@ -33,13 +33,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.harvester.Harvester;
-import se.kmr.scam.jdil.JDILErrorMessages;
 import se.kmr.scam.repository.ContextManager;
 import se.kmr.scam.repository.PrincipalManager;
 import se.kmr.scam.repository.RepositoryManager;
 import se.kmr.scam.repository.backup.BackupScheduler;
 import se.kmr.scam.repository.impl.RepositoryManagerImpl;
 import se.kmr.scam.rest.ScamApplication;
+import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.Util;
 /**
  *<p> Base resource class that supports common behaviours or attributes shared by
@@ -123,31 +123,31 @@ public abstract class BaseResource extends ServerResource {
 
 	public void unauthorizedGETContext() {
 		log.info("client tried to GET a resource without being authorized for it's context");
-		getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.unauthorizedGETContext));
+		getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedGETContext));
 	}
 
 	public Representation unauthorizedGET() {
 		log.info("client tried to GET a resource without being authorized for it");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		return new JsonRepresentation(JDILErrorMessages.unauthorizedGET);
+		return new JsonRepresentation(JSONErrorMessages.unauthorizedGET);
 	}
 
 	public void unauthorizedDELETE() {
 		log.info("client tried to DELETE a resource without being authorized for it");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.unauthorizedDELETE)); 
+		getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedDELETE)); 
 	}
 
 	public void unauthorizedPOST() {
 		log.info("client tried to POST a resource without being authorized for it");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.unauthorizedPOST)); 
+		getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedPOST)); 
 	}
 
 	public void unauthorizedPUT() {
 		log.info("client tried to PUT a resource without being authorized for it");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		getResponse().setEntity(new JsonRepresentation(JDILErrorMessages.unauthorizedPUT)); 
+		getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedPUT)); 
 	}
 	
 }

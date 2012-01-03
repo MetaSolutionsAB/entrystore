@@ -51,11 +51,11 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.jdil.JDILErrorMessages;
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.PrincipalManager.AccessProperty;
 import se.kmr.scam.repository.User;
 import se.kmr.scam.repository.config.Settings;
+import se.kmr.scam.rest.util.JSONErrorMessages;
 
 /**
  * This class supports the export of single contexts. 
@@ -81,7 +81,7 @@ public class ExportResource extends BaseResource {
 			if (context == null) {
 				log.error("Unable to find context with that ID"); 
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
-				return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry); 
+				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry); 
 			}
 			
 			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {

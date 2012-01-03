@@ -31,9 +31,9 @@ import org.slf4j.LoggerFactory;
 * 
 * @author Eric Johansson
 */
-public class JDILErrorMessages {
+public class JSONErrorMessages {
 	
-	private static Logger log = LoggerFactory.getLogger(JDILErrorMessages.class);
+	private static Logger log = LoggerFactory.getLogger(JSONErrorMessages.class);
 	
 	public static String errorWrongContextIDmsg = new String("{\"error\":\"The given context id does not exist.\"}");
 	public static String errorCantCreateEntry = new String("{\"error\":\"Can not create the entry.\"}");

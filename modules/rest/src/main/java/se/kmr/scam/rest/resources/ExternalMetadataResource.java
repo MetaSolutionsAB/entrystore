@@ -38,11 +38,11 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.jdil.JDILErrorMessages;
 import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.LocationType;
 import se.kmr.scam.repository.Metadata;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
+import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.RDFJSON;
 
 /**
@@ -87,7 +87,7 @@ public class ExternalMetadataResource extends BaseResource {
 			if (entry == null) {
 				log.error("Cannot find an entry with that id.");
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				return new JsonRepresentation(JDILErrorMessages.errorCantNotFindEntry);
+				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
 			}
 
 			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
@@ -144,7 +144,7 @@ public class ExternalMetadataResource extends BaseResource {
 
 		log.error("Can not find the cached external metadata.");
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		return new JsonRepresentation(JDILErrorMessages.errorCantFindCachedMetadata);
+		return new JsonRepresentation(JSONErrorMessages.errorCantFindCachedMetadata);
 	}
 
 }
