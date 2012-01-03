@@ -19,7 +19,7 @@
 *  Copyright (c) 2008, IML Lab group at UMU (Umeå University)
 *  Licensed under the GNU LGPL. For full terms see the file COPYRIGHT.
 */
-package se.kmr.scam.jdil;
+package se.kmr.scam.rest.util;
 
 import org.json.JSONException;
 import org.json.JSONObject;

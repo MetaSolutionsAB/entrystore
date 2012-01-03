@@ -15,7 +15,7 @@
  */
 
 
-package se.kmr.scam.jdil;
+package se.kmr.scam.rest.util.jdil;
 
 import java.util.HashMap;
 

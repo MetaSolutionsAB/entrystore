@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.jdil;
+package se.kmr.scam.rest.util.jdil;
 
 public class JDILException extends Exception {
 
