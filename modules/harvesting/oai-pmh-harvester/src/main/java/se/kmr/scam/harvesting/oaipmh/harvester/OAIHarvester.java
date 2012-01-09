@@ -175,12 +175,13 @@ public class OAIHarvester extends Harvester {
 	}
 
 	private JobDetail getJob() {
-		try {
-			return scheduler.getJobDetail(jobName, groupName);
-		} catch (SchedulerException e) {
-			log.error(e.getMessage());
-		}
-		return null;
+		return job;
+//		try {
+//			return scheduler.getJobDetail(jobName, groupName);
+//		} catch (SchedulerException e) {
+//			log.error(e.getMessage());
+//		}
+//		return null;
 	}
 	
 }

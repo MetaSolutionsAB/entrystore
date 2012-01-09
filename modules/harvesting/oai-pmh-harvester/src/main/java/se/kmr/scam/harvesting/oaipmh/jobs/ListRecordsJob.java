@@ -119,8 +119,8 @@ public class ListRecordsJob implements Job, InterruptableJob {
 
 		URI contextURI = (URI)dataMap.get("contextURI"); 
 		String contextId = contextURI.toString().substring(contextURI.toString().lastIndexOf("/")+1); 
-		final Context context = cm.getContext(contextId); 
-		final String metadataType = dataMap.getString("metadataType"); 
+		final Context context = cm.getContext(contextId);
+		final String metadataType = dataMap.getString("metadataType");
 		final String target = dataMap.getString("target");
 		String from = dataMap.getString("from");
 		String until = dataMap.getString("until");  
@@ -221,7 +221,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 					exService.execute(new Runnable() {
 						public void run() {
 							try {
-								pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+								pm.setAuthenticatedUserURI(pm.getAdminUser().getURI()); 
 								createEntry(context, recordElement, target, metadataType);
 							} catch (XPathExpressionException e) {
 								log.error(e.getMessage());
@@ -276,6 +276,11 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		if (identifier == null) {
 			return;
 		}
+		
+		// workaround for bad installations not using oai_lom
+		if ("lom".equalsIgnoreCase(metadataType)) {
+			metadataType = "oai_lom";
+		}
 
 		// We use OpenRDF URI and Java URI, they do different validity checks,
 		// and we need it to work in both.
@@ -288,6 +293,10 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		org.openrdf.model.URI openrdfEntryResourceURI = null;
 		try {
 			String resourceIdentifier = getResourceIdentifier(recordElement, metadataType);
+			if (resourceIdentifier == null) {
+				log.warn("Resource identifier is null, skipping resource");
+				return;
+			}
 			openrdfEntryResourceURI =  vf.createURI(resourceIdentifier);
 		} catch (IllegalArgumentException e) {
 			log.error("Skipping this record, no proper resource URI found: " + e.getMessage());
@@ -326,9 +335,14 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		
 		// if there are no old entries
 		if (entries.isEmpty()) {
-			Entry entry = context.createReference(entryResourceURI, entryMetadataURI, null);
-			setCachedMetadataGraph(entry, recordElement, metadataType);
-			log.info("Added entry " + entry.getEntryURI() + "; resource URI: " + entryResourceURI + "; metadata URI: " + entryMetadataURI);
+			Graph g = getExternalMetadataGraphFromXML(recordElement, metadataType, entryResourceURI);
+			if (g != null) {
+				Entry entry = context.createReference(entryResourceURI, entryMetadataURI, null);
+				setCachedMetadataGraph(entry, g);
+				log.info("Added entry " + entry.getEntryURI() + " with resource " + entryResourceURI + " and metadata " + entryMetadataURI);
+			} else {
+				log.error("Unable to extract metadata from XML for " + entryMetadataURI);
+			}
 		} else {
 			if (!replaceMetadata) {
 				log.info("Cached metadata exists, but harvester is configured to not replace it");
@@ -342,27 +356,27 @@ public class ListRecordsJob implements Job, InterruptableJob {
 						if (entryResourceURI != null) {
 							entry.setResourceURI(entryResourceURI);
 						} else {
-							log.warn("New resource URI is null! Not changing anything.");
+							log.warn("New resource URI is null, no changes applied");
 						}
 					}
 
 					URI extMdURI = entry.getExternalMetadataURI();
 					if (!extMdURI.equals(entryMetadataURI)) {
-						log.warn("THIS SHOULD NOT HAPPEN: " + entry.getEntryURI() + ": setting new metadata URI: " + entryMetadataURI);
+						log.warn("New external metadata URI for " + entry.getEntryURI() + " is " + entryMetadataURI);
 						if (entryMetadataURI != null) {
 							entry.setExternalMetadataURI(entryMetadataURI);
 						}
 					}
 					log.info("Setting new cached external metadata on " + entry.getEntryURI());
-					setCachedMetadataGraph(entry, recordElement, metadataType);
+					setCachedMetadataGraph(entry, getExternalMetadataGraphFromXML(recordElement, metadataType, entry.getResourceURI()));
 				}
 			}
 			
 //			Iterator<Entry> iter = entries.iterator();
 //			while(iter.hasNext()) {
 //				entry = iter.next(); 
-//				String entryURIString = entry.getEntryURI().toString(); 
-//				int indexDateStamp = entryURIString.lastIndexOf("="); 
+//				String entryURIString = entry.getEntryURI().toString();
+//				int indexDateStamp = entryURIString.lastIndexOf("=");
 //				String datestampOld = entryURIString.substring(indexDateStamp+1); 
 //				if (datestamp.equals(datestampOld)) {
 //					// just update modified in the entry since the metadata is the same.
@@ -380,17 +394,18 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		expr = xpath.compile("oai:header/oai:datestamp"); 
 		return (String) expr.evaluate(el, XPathConstants.STRING);
 	}
-
-	private void setCachedMetadataGraph(Entry entry, Element el, String metadataType) throws XPathExpressionException {
+	
+	private Graph getExternalMetadataGraphFromXML(Element el, String metadataType, URI resourceURI) throws XPathExpressionException {
 		Node metadata = getMetadataNode(el, metadataType);
 		if (metadata == null || metadata.getChildNodes() == null) {
-			log.warn("No harvested metadata found for " + entry.getEntryURI());
-			return;
+			return null;
 		}
+		return (Graph) ConverterManagerImpl.convert(metadataType, metadata, resourceURI, null);
+	}
 
-		Graph graph = (Graph) ConverterManagerImpl.convert(metadataType, metadata, entry.getResourceURI(), null);
+	private void setCachedMetadataGraph(Entry entry, Graph graph) {
 		if (graph != null) {
-			Metadata cachedMD = entry.getCachedExternalMetadata(); 
+			Metadata cachedMD = entry.getCachedExternalMetadata();
 			if (cachedMD != null) {
 				cachedMD.setGraph(graph);
 			}
