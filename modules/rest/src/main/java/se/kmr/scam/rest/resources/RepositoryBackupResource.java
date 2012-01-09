@@ -92,7 +92,7 @@ public class RepositoryBackupResource extends BaseResource  {
 	}
 
 	@Put
-	public void storeRepresentation() throws ResourceException {
+	public void storeRepresentation(Representation r) throws ResourceException {
 		try {
 			JSONObject jsonObj = getRequestJSON();
 			

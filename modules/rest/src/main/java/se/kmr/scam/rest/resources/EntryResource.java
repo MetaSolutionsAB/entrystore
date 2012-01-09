@@ -138,7 +138,7 @@ public class EntryResource extends BaseResource {
 	}
 
 	@Put
-	public void storeRepresentation() {
+	public void storeRepresentation(Representation r) {
 		try {
 			modifyEntry((format != null) ? format : getRequestEntity().getMediaType());
 		} catch (AuthorizationException e) {
@@ -147,14 +147,14 @@ public class EntryResource extends BaseResource {
 	}
 
 	@Post
-	public void acceptRepresentation() {
+	public void acceptRepresentation(Representation r) {
 		try {
 			if (entry != null && context != null) {
 				if (parameters.containsKey("method")) {
 					if ("delete".equalsIgnoreCase(parameters.get("method"))) {
 						removeRepresentations();		
 					} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
-						storeRepresentation();
+						storeRepresentation(r);
 					}
 				} 
 				return;

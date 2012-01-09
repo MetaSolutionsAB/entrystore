@@ -67,7 +67,7 @@ public class QuotaResource extends BaseResource {
 	}
 
 	@Put
-	public void storeRepresentation() {
+	public void storeRepresentation(Representation r) {
 		if (getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI()) || getPM().getAdminGroup().isMember(getPM().getUser(getPM().getAuthenticatedUserURI()))) {
 			if (context != null) {
 				try {

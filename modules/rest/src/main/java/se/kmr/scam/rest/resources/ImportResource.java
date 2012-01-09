@@ -31,6 +31,7 @@ import org.restlet.Request;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.fileupload.RestletFileUpload;
+import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +57,7 @@ public class ImportResource extends BaseResource {
 	}
 		
 	@Post
-	public void acceptRepresentation() {
+	public void acceptRepresentation(Representation r) {
 		try {
 			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
 				throw new AuthorizationException(getPM().getUser(getPM().getAuthenticatedUserURI()), context.getEntry(), AccessProperty.Administer);

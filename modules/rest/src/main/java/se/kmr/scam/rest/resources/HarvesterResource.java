@@ -50,13 +50,13 @@ public class HarvesterResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		if (context != null) {
-			harvester = getHarvester();
-		}
 	}
 
 	@Get
 	public Representation represent() throws ResourceException {
+		if (context != null && harvester == null) {
+			harvester = getHarvester();
+		}
 		try {
 			JSONObject jsonObj = new JSONObject(); 
 			if (harvester == null) {
@@ -102,7 +102,10 @@ public class HarvesterResource extends BaseResource {
 	}
 
 	@Post
-	public void acceptRepresentation() throws ResourceException {
+	public void acceptRepresentation(Representation r) throws ResourceException {
+		if (context != null && harvester == null) {
+			harvester = getHarvester();
+		}
 		try {
 			if (harvester != null) {
 				getResponse().setEntity(new JsonRepresentation("Harvester exists already"));
@@ -179,7 +182,6 @@ public class HarvesterResource extends BaseResource {
 							getResponse().setStatus(Status.SERVER_ERROR_INTERNAL, "Unable to create harvester type " + harvesterType);
 						}
 						
-
 						if (!jsonObj.isNull("from")) {
 							harvester.setFrom((String)jsonObj.getString("from")); 
 						}
@@ -238,6 +240,9 @@ public class HarvesterResource extends BaseResource {
 
 	@Delete
 	public void removeRepresentations() throws ResourceException {
+		if (context != null && harvester == null) {
+			harvester = getHarvester();
+		}
 		try {
 			if (harvester == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -266,7 +271,10 @@ public class HarvesterResource extends BaseResource {
 	}
 
 	@Put
-	public void storeRepresentation() throws ResourceException {
+	public void storeRepresentation(Representation r) throws ResourceException {
+		if (context != null && harvester == null) {
+			harvester = getHarvester();
+		}
 		try {
 			if (harvester == null) {
 				getResponse().setEntity(new JsonRepresentation("Harvester does not exist"));

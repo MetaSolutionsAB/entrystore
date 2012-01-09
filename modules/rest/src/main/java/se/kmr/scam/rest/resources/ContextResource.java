@@ -153,7 +153,7 @@ public class ContextResource extends BaseResource {
 	 * </ul>
 	 */
 	@Post
-	public void acceptRepresentation() throws ResourceException {
+	public void acceptRepresentation(Representation r) throws ResourceException {
 		try {
 			if (context == null) {
 				log.info("The given context id doesn't exist."); 

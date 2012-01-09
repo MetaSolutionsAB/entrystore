@@ -83,7 +83,7 @@ public class AliasResource extends BaseResource {
 	}
 
 	@Put
-	public void storeRepresentation() {
+	public void storeRepresentation(Representation r) {
 		try {
 			JSONObject newAliasObj = new JSONObject(getRequestEntity().getText());
 			String alias = null;

@@ -105,7 +105,7 @@ public class SparqlResource extends BaseResource {
 	}
 	
 	@Post
-	public void acceptRepresentation() {
+	public void acceptRepresentation(Representation r) {
 		try {
 			Form form = new Form(getRequest().getEntity());
 			String format = form.getFirstValue("output", true, "json");;

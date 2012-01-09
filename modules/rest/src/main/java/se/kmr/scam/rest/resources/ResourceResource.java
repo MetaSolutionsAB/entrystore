@@ -177,7 +177,7 @@ public class ResourceResource extends BaseResource {
 	}
 
 	@Put
-	public void storeRepresentation() {
+	public void storeRepresentation(Representation r) {
 		if (entry == null) {
 			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -192,7 +192,7 @@ public class ResourceResource extends BaseResource {
 	}
 
 	@Post
-	public void acceptRepresentation() {
+	public void acceptRepresentation(Representation r) {
 		if (entry == null) {
 			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -204,7 +204,7 @@ public class ResourceResource extends BaseResource {
 				if ("delete".equalsIgnoreCase(parameters.get("method"))) {
 					removeRepresentations();
 				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
-					storeRepresentation();
+					storeRepresentation(r);
 				}
 			} else if (entry.getBuiltinType().equals(BuiltinType.List) &&
 					parameters.containsKey("import") &&
