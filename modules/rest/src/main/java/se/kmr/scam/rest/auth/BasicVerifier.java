@@ -21,6 +21,7 @@ import java.util.Arrays;
 
 import org.restlet.Request;
 import org.restlet.Response;
+import org.restlet.data.Status;
 import org.restlet.security.Verifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,20 +67,28 @@ public class BasicVerifier implements Verifier {
 	}
 
 	public int verify(Request request, Response response) {
-		if (request.getChallengeResponse() == null && "login".equals(request.getResourceRef().getLastSegment())) {
-			return RESULT_MISSING;
-		}
-		
 		URI userURI = null;
+		boolean challenge = !"false".equalsIgnoreCase(response.getRequest().getResourceRef().getQueryAsForm().getFirstValue("auth_challenge"));
 
 		try {
+			if (request.getChallengeResponse() == null && "login".equals(request.getResourceRef().getLastSegment())) {
+				if (challenge) {
+					return RESULT_MISSING;
+				} else {
+					// workaround to avoid challenge response window in browsers
+					userURI = pm.getGuestUser().getURI();
+					response.setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+					return RESULT_VALID;
+				}
+			}
+
 			String identifier = null;
 			if (request.getChallengeResponse() ==  null) {
 				identifier = "_guest";
 			} else {
 				identifier = request.getChallengeResponse().getIdentifier();
 			}
-			
+
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
 			if (identifier == null) {
@@ -92,14 +101,22 @@ public class BasicVerifier implements Verifier {
 				if (userEntry == null) {
 					return RESULT_UNKNOWN;
 				}
-				
+
 				char[] secret = request.getChallengeResponse().getSecret();
 				char[] localSecret = getLocalSecret(identifier);
 				if (Arrays.equals(secret, localSecret)) {
 					userURI = userEntry.getResourceURI();
 					return RESULT_VALID;
+				} else {
+					// workaround to avoid challenge response window in browsers
+					if (!challenge) {
+						userURI = pm.getGuestUser().getURI();
+						response.setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+						return RESULT_VALID;
+					}
 				}
 			}
+
 			return RESULT_INVALID;
 		} finally {
 			pm.setAuthenticatedUserURI(userURI);
