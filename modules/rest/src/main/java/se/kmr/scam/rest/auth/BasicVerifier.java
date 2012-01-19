@@ -104,7 +104,7 @@ public class BasicVerifier implements Verifier {
 
 				char[] secret = request.getChallengeResponse().getSecret();
 				char[] localSecret = getLocalSecret(identifier);
-				if (Arrays.equals(secret, localSecret)) {
+				if (secret != null && Arrays.equals(secret, localSecret)) {
 					userURI = userEntry.getResourceURI();
 					return RESULT_VALID;
 				} else {
