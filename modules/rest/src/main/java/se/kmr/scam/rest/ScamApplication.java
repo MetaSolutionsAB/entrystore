@@ -273,14 +273,15 @@ public class ScamApplication extends Application {
 	@Override
 	public synchronized Restlet createInboundRoot() {
 		Router router = new Router(getContext());
+		
 		router.attach("/search", SearchResource.class);
 		router.attach("/login", LoginResource.class);
 		router.attach("/sparql", SparqlResource.class);
 		router.attach("/proxy", ProxyResource.class);
+		router.attach("/auth/basic", LoginResource.class);
 		router.attach("/management/backup", RepositoryBackupResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
-//		element = router.attach("/register", RegisterResource.class); // TODO move to /management
 		router.attach("/{context-id}", ContextResource.class);
 		router.attach("/{context-id}/sparql", SparqlResource.class);
 		router.attach("/{context-id}/export", ExportResource.class);
@@ -297,12 +298,18 @@ public class ScamApplication extends Application {
 		router.attach("/{context-id}/quota", QuotaResource.class);
 
 		router.attachDefault(DefaultResource.class);
+		
+//		OpenIdVerifier oidv = new OpenIdVerifier(OpenIdVerifier.PROVIDER_GOOGLE);
+//		oidv.addRequiredAttribute(AttributeExchange.EMAIL);
+//		RedirectAuthenticator redirAuth = new RedirectAuthenticator(getContext(), oidv, null);
+//		redirAuth.setNext(DefaultResource.class);
+//		router.attach("/auth/openid", redirAuth);
 
 		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(pm), pm);
 //		DigestAuthenticator digestAuth = new DigestAuthenticator(getContext(), "EntryStore", "3ntry5t0r3");
 //		digestAuth.setOptional(true);
 		ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm), pm);
-				
+		
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
 		
