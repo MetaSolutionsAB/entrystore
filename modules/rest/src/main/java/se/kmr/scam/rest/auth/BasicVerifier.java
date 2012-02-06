@@ -22,6 +22,7 @@ import java.util.Map;
 
 import org.restlet.Request;
 import org.restlet.Response;
+import org.restlet.data.ChallengeResponse;
 import org.restlet.data.Status;
 import org.restlet.security.Verifier;
 import org.slf4j.Logger;
@@ -71,6 +72,7 @@ public class BasicVerifier implements Verifier {
 	public int verify(Request request, Response response) {
 		URI userURI = null;
 		boolean challenge = !"false".equalsIgnoreCase(response.getRequest().getResourceRef().getQueryAsForm().getFirstValue("auth_challenge"));
+		Map<String, String> params = Util.parseRequest(request.getResourceRef().getRemainingPart());
 
 		try {
 			if (request.getChallengeResponse() == null && "login".equals(request.getResourceRef().getLastSegment())) {
@@ -86,13 +88,15 @@ public class BasicVerifier implements Verifier {
 
 			String identifier = null;
 			char[] secret = null;
-			if (request.getChallengeResponse() ==  null) {
+			ChallengeResponse cr = request.getChallengeResponse();
+			if (cr == null && !params.containsKey("auth_user")) {
 				identifier = "_guest";
 			} else {
-				identifier = request.getChallengeResponse().getIdentifier();
+				if (cr != null) {
+					identifier = request.getChallengeResponse().getIdentifier();
+				}
 				if (identifier == null) {
 					// fallback for requests where credentials are sent as URL parameters
-					Map<String, String> params = Util.parseRequest(request.getResourceRef().getRemainingPart());
 					identifier = params.get("auth_user");
 					if (params.containsKey("auth_password") && params.get("auth_password") != null) {
 						secret = params.get("auth_password").toCharArray();
