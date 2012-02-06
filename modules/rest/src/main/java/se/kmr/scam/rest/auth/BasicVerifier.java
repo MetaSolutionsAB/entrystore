@@ -18,6 +18,7 @@ package se.kmr.scam.rest.auth;
 
 import java.net.URI;
 import java.util.Arrays;
+import java.util.Map;
 
 import org.restlet.Request;
 import org.restlet.Response;
@@ -30,6 +31,7 @@ import se.kmr.scam.repository.BuiltinType;
 import se.kmr.scam.repository.Entry;
 import se.kmr.scam.repository.PrincipalManager;
 import se.kmr.scam.repository.User;
+import se.kmr.scam.rest.util.Util;
 
 /**
  * Does a simple lookup for the secret of a principal.
@@ -83,10 +85,21 @@ public class BasicVerifier implements Verifier {
 			}
 
 			String identifier = null;
+			char[] secret = null;
 			if (request.getChallengeResponse() ==  null) {
 				identifier = "_guest";
 			} else {
 				identifier = request.getChallengeResponse().getIdentifier();
+				if (identifier == null) {
+					// fallback for requests where credentials are sent as URL parameters
+					Map<String, String> params = Util.parseRequest(request.getResourceRef().getRemainingPart());
+					identifier = params.get("auth_user");
+					if (params.containsKey("auth_password") && params.get("auth_password") != null) {
+						secret = params.get("auth_password").toCharArray();
+					}
+				} else {
+					secret = request.getChallengeResponse().getSecret();
+				}
 			}
 
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
@@ -101,8 +114,6 @@ public class BasicVerifier implements Verifier {
 				if (userEntry == null) {
 					return RESULT_UNKNOWN;
 				}
-
-				char[] secret = request.getChallengeResponse().getSecret();
 				char[] localSecret = getLocalSecret(identifier);
 				if (secret != null && Arrays.equals(secret, localSecret)) {
 					userURI = userEntry.getResourceURI();
