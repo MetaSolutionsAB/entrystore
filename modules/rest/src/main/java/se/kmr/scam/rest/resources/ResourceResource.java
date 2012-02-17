@@ -1002,6 +1002,8 @@ public class ResourceResource extends BaseResource {
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Preferred language could not be set.\"}"));
 						return;
 					}
+				} else {
+					resourceUser.setLanguage(null);
 				}
 				if (entityJSON.has("homecontext")) {
 					String homeContext = entityJSON.getString("homecontext");

@@ -267,7 +267,9 @@ public class UserImpl extends RDFResource implements User {
 			try {
 				synchronized (this) {
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.language, null, false, resourceURI), resourceURI);
-					rc.add(resourceURI, RepositoryProperties.language, vf.createLiteral(language), resourceURI);
+					if (language != null) {
+						rc.add(resourceURI, RepositoryProperties.language, vf.createLiteral(language), resourceURI);
+					}
 					rc.commit();
 				}
 				return true;
