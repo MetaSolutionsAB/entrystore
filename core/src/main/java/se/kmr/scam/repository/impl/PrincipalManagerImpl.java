@@ -561,9 +561,10 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		e.setResource(new SystemGroup(e, e.getSesameResourceURI()) {
 			@Override
 			public boolean isMember(User user) {
-				// return user != PrincipalManagerImpl.this.guestUser;
-				return true;
-				
+				return (user != null &&
+						PrincipalManagerImpl.this.guestUser != null &&
+						user.getURI().equals(PrincipalManagerImpl.this.guestUser.getURI()));
+				// return true;
 			}
 			@Override
 			public List<User> members() {
