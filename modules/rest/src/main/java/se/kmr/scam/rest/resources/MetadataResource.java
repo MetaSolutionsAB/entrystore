@@ -154,12 +154,11 @@ public class MetadataResource extends BaseResource {
 						storeRepresentation(r);
 					}
 				}
-				return;
+			} else {
+				log.error("POST request failed, entry or context not found");
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
 			}
-
-			log.error("POST request failed, entry or context not found");
-			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
 		} catch (AuthorizationException e) {
 			unauthorizedPOST();
 		}
