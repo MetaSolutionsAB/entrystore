@@ -225,7 +225,7 @@ public class MetadataResource extends BaseResource {
 		}
 
 		log.error("Can not find the metadata.");
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		return new JsonRepresentation(JSONErrorMessages.errorCantFindMetadata);
 	}
 

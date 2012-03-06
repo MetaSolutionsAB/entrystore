@@ -33,7 +33,6 @@ import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
-import org.restlet.representation.Variant;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -143,7 +142,7 @@ public class ExternalMetadataResource extends BaseResource {
 		}
 
 		log.error("Can not find the cached external metadata.");
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		return new JsonRepresentation(JSONErrorMessages.errorCantFindCachedMetadata);
 	}
 
