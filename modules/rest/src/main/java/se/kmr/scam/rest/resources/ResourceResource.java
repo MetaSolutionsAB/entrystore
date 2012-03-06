@@ -60,6 +60,7 @@ import org.restlet.data.Reference;
 import org.restlet.data.Status;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.FileRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
@@ -164,7 +165,17 @@ public class ResourceResource extends BaseResource {
 			 * BuiltinTypes: List, String and None.
 			 * RepresentationType: InformationResource, NamesResource and Unknown. 
 			 */
-			Representation result = getResource();
+			Representation result = null;
+
+			// the check for resource safety is necessary to avoid an implicit
+			// getMetadata() in the case of a PUT on (not yet) existant metadata
+			// - this is e.g. the case if conditional requests are issued 
+			if (getRequest().getMethod().isSafe()) {
+				result = getResource();
+			} else {
+				result = new EmptyRepresentation();
+			}
+
 			Date lastMod = entry.getModifiedDate();
 			if (lastMod != null) {
 				result.setModificationDate(lastMod);
