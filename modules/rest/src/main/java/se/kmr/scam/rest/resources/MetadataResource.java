@@ -38,8 +38,10 @@ import org.openrdf.rio.trix.TriXWriter;
 import org.openrdf.rio.turtle.TurtleParser;
 import org.openrdf.rio.turtle.TurtleWriter;
 import org.restlet.data.MediaType;
+import org.restlet.data.Method;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Delete;
@@ -109,7 +111,15 @@ public class MetadataResource extends BaseResource {
 			if (preferredMediaType == null) {
 				preferredMediaType = MediaType.APPLICATION_RDF_XML;
 			}
-			Representation result = getMetadata((format != null) ? format : preferredMediaType);
+			Representation result = null;
+			// the check for resource safety is necessary to avoid an implicit
+			// getMetadata() in the case of a PUT on (not yet) existant metadata
+			// - this is e.g. the case if conditional requests are issued 
+			if (getRequest().getMethod().isSafe()) {
+				result = getMetadata((format != null) ? format : preferredMediaType);
+			} else {
+				result = new EmptyRepresentation();
+			}
 			Date lastMod = entry.getModifiedDate();
 			if (lastMod != null) {
 				result.setModificationDate(lastMod);
