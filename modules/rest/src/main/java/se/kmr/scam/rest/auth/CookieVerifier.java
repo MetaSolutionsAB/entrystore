@@ -19,6 +19,7 @@ package se.kmr.scam.rest.auth;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.util.Arrays;
 
 import org.restlet.Request;
 import org.restlet.Response;
@@ -46,6 +47,12 @@ public class CookieVerifier implements Verifier {
 	}
 
 	public int verify(Request request, Response response) {
+		// to avoid an override of an already existing authentication, e.g. from BasicVerifier
+		URI authUser = pm.getAuthenticatedUserURI();
+		if (authUser != null && !pm.getGuestUser().getURI().equals(authUser)) {
+			return RESULT_VALID;
+		}
+		
 		String identifier = null;
 		char[] secret = null;
 		URI userURI = null;
@@ -84,7 +91,7 @@ public class CookieVerifier implements Verifier {
 				}
 				BasicVerifier pv = new BasicVerifier(pm);
 				char[] localSecret = pv.getLocalSecret(identifier);
-				if (secret.equals(localSecret)) {
+				if (Arrays.equals(secret, localSecret)) {
 					userURI = userEntry.getResourceURI();
 					return RESULT_VALID;
 				}

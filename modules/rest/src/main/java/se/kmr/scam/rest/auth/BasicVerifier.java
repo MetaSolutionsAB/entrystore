@@ -70,6 +70,12 @@ public class BasicVerifier implements Verifier {
 	}
 
 	public int verify(Request request, Response response) {
+		// to avoid an override of an already existing authentication, e.g. from CookieVerifier
+		URI authUser = pm.getAuthenticatedUserURI();
+		if (authUser != null && !pm.getGuestUser().getURI().equals(authUser)) {
+			return RESULT_VALID;
+		}
+		
 		URI userURI = null;
 		boolean challenge = !"false".equalsIgnoreCase(response.getRequest().getResourceRef().getQueryAsForm().getFirstValue("auth_challenge"));
 		Map<String, String> params = Util.parseRequest(request.getResourceRef().getRemainingPart());
