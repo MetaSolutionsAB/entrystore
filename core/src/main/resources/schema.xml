@@ -163,8 +163,19 @@ lexicographic ordering isn't equal to the numeric ordering) -->
                 <filter class="solr.RemoveDuplicatesTokenFilterFactory"/>
             </analyzer>
         </fieldtype>
-    </types>
+        
+		<fieldType name="text_ngram" class="solr.TextField">
+			<analyzer type="index">
+				<tokenizer class="solr.NGramTokenizerFactory" minGramSize="3" maxGramSize="15"/>
+				<filter class="solr.LowerCaseFilterFactory"/>
+			</analyzer>
+			<analyzer type="query">
+				<tokenizer class="solr.WhitespaceTokenizerFactory"/>
+				<filter class="solr.LowerCaseFilterFactory"/>
+			</analyzer>
+		</fieldType>
 
+</types>
 
     <fields>
         <!-- Valid attributes for fields:
@@ -212,6 +223,9 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="literal" type="text" indexed="true" multiValued="true"/>
         <field name="lang" type="string" indexed="true" multiValued="true"/>
         <field name="tag" type="text" indexed="true" stored="true" multiValued="true"/>
+        
+        <!-- we apply ngrams to title for partial search, uses copyField further down -->
+        <field name="title_ngram" type="text_ngram" indexed="true" stored="false" multiValued="true" omitNorms="true" omitTermFreqAndPositions="true"/>
 
 		<!-- title needs to be string in order be sortable, desc and keyword can be text and multi value -->
 		<dynamicField name="title.*" type="string" indexed="true" stored="true" multiValued="true"/>
@@ -257,6 +271,9 @@ or to add multiple fields to the same field for easier/faster searching.  -->
     <copyField source="title" dest="all"/>
     <copyField source="description" dest="all"/>
     <copyField source="keyword" dest="all"/>
+    
+    <!-- needed for partial search: we need to reindex title in title_ngram -->
+    <copyField source="title" dest="title_ngram"/>
 
     <!-- Similarity is the scoring routine for each document vs. a query.
 A custom similarity may be specified here, but the default is fine
