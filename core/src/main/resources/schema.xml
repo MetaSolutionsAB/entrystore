@@ -199,7 +199,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="uri" type="string" indexed="true" stored="true"/>
         <field name="resource" type="string" indexed="true" stored="true"/>
         <field name="context" type="string" indexed="true"/>
-        <field name="rdfType" type="string" indexed="true" multiValued="true"/>
+        <field name="rdfType" type="string" indexed="true" stored="true" multiValued="true"/>
         <field name="creator" type="string" indexed="true"/>
         <field name="contributors" type="string" indexed="true" multiValued="true"/>
         <field name="lists" type="string" indexed="true" multiValued="true"/>
@@ -217,15 +217,12 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="resource.r" type="string" indexed="true" multiValued="true"/>
         <field name="resource.rw" type="string" indexed="true" multiValued="true"/>
         
-        <field name="title" type="text" indexed="true" stored="true" multiValued="true"/>
-        <field name="description" type="text" indexed="true" stored="true" multiValued="true"/>
+        <field name="title" type="text_ngram" indexed="true" multiValued="true" omitNorms="true" omitTermFreqAndPositions="true"/>
+        <field name="description" type="text" indexed="true" multiValued="true"/>
         <field name="keyword" type="text" indexed="true" stored="true" multiValued="true" omitNorms="true"/>
         <field name="literal" type="text" indexed="true" multiValued="true"/>
         <field name="lang" type="string" indexed="true" multiValued="true"/>
-        <field name="tag" type="text" indexed="true" stored="true" multiValued="true"/>
-        
-        <!-- we apply ngrams to title for partial search, uses copyField further down -->
-        <field name="title_ngram" type="text_ngram" indexed="true" stored="false" multiValued="true" omitNorms="true" omitTermFreqAndPositions="true"/>
+        <field name="tag" type="text" indexed="true" stored="true" multiValued="true" omitNorms="true"/>
 
 		<!-- title needs to be string in order be sortable, desc and keyword can be text and multi value -->
 		<dynamicField name="title.*" type="string" indexed="true" stored="true" multiValued="true"/>
@@ -271,9 +268,6 @@ or to add multiple fields to the same field for easier/faster searching.  -->
     <copyField source="title" dest="all"/>
     <copyField source="description" dest="all"/>
     <copyField source="keyword" dest="all"/>
-    
-    <!-- needed for partial search: we need to reindex title in title_ngram -->
-    <copyField source="title" dest="title_ngram"/>
 
     <!-- Similarity is the scoring routine for each document vs. a query.
 A custom similarity may be specified here, but the default is fine
