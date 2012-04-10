@@ -57,8 +57,11 @@ public class CookieVerifier implements Verifier {
 		URI userURI = null;
 
 		try {
+			Series<Cookie> cookies = request.getCookies();
+			Cookie cookieSimpleLogin = cookies.getFirst("scamSimpleLogin");
 			boolean challenge = !"false".equalsIgnoreCase(response.getRequest().getResourceRef().getQueryAsForm().getFirstValue("auth_challenge"));
-			if (request.getChallengeResponse() == null && "login".equals(request.getResourceRef().getLastSegment())) {
+			
+			if (cookieSimpleLogin == null && request.getChallengeResponse() == null && "login".equals(request.getResourceRef().getLastSegment())) {
 				if (challenge) {
 					return RESULT_MISSING;
 				} else {
@@ -74,12 +77,11 @@ public class CookieVerifier implements Verifier {
 			String identifier = null;
 			char[] secret = null;
 			Form query = request.getResourceRef().getQueryAsForm();
-			Series<Cookie> cookies = request.getCookies();
 			
 			if (query.getFirst("auth_user") != null && query.getFirst("auth_password") != null) {
 				identifier = query.getFirstValue("auth_user");
 				secret = query.getFirstValue("auth_password").toCharArray();
-			} else if (cookies.getFirst("scamSimpleLogin") != null) {
+			} else if (cookieSimpleLogin != null) {
 				String cookie = null;
 				try {
 					cookie = URLDecoder.decode(cookies.getFirstValue("scamSimpleLogin"), "UTF-8");
