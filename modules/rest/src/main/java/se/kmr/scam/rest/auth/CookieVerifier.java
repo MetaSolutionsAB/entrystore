@@ -25,6 +25,7 @@ import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Cookie;
 import org.restlet.data.Form;
+import org.restlet.data.Status;
 import org.restlet.security.Verifier;
 import org.restlet.util.Series;
 import org.slf4j.Logger;
@@ -53,15 +54,28 @@ public class CookieVerifier implements Verifier {
 			return RESULT_VALID;
 		}
 		
-		String identifier = null;
-		char[] secret = null;
 		URI userURI = null;
 
 		try {
+			boolean challenge = !"false".equalsIgnoreCase(response.getRequest().getResourceRef().getQueryAsForm().getFirstValue("auth_challenge"));
+			if (request.getChallengeResponse() == null && "login".equals(request.getResourceRef().getLastSegment())) {
+				if (challenge) {
+					return RESULT_MISSING;
+				} else {
+					// workaround to avoid challenge response window in browsers
+					userURI = pm.getGuestUser().getURI();
+					response.setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+					return RESULT_VALID;
+				}
+			}
+			
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-
+			
+			String identifier = null;
+			char[] secret = null;
 			Form query = request.getResourceRef().getQueryAsForm();
 			Series<Cookie> cookies = request.getCookies();
+			
 			if (query.getFirst("auth_user") != null && query.getFirst("auth_password") != null) {
 				identifier = query.getFirstValue("auth_user");
 				secret = query.getFirstValue("auth_password").toCharArray();
