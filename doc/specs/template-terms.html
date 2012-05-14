@@ -22,8 +22,8 @@
     <h3 id="mymw-doctype">Working Draft &mdash; 14 May 2012</h3>
 
     <dl>
-      <dt>This version:</dt>
-      <dd><a href="http://entrystore.googlecode.com/svn-history/r????/store/trunk/doc/terms.html">http://entrystore.googlecode.com/svn-history/r????/store/trunk/doc/terms.html</a></dd>
+      <!--dt>This version:</dt>
+      <dd><a href="http://entrystore.googlecode.com/svn-history/r????/store/trunk/doc/terms.html">http://entrystore.googlecode.com/svn-history/r????/store/trunk/doc/terms.html</a></dd-->
       <dt>Latest version:</dt>
       <dd><a href="http://entrystore.googlecode.com/svn/store/trunk/doc/terms.html">http://entrystore.googlecode.com/svn/store/trunk/doc/terms.html</a></dd>
 
@@ -118,8 +118,23 @@
 
     <p>Here is example entry described:</p>
 
-    <div class="example" style="white-space: pre-wrap;">
-      <pre>	
+    <div class="example">
+      <pre>
+	<div>
+        &lt;entry:Local rdf:about="http://localhost/store/1/entry/1"&gt;
+	    &lt;entry:resource rdf:resource="http://localhost/store/1/resource/1"/&gt;
+	       &lt;rdf:type rdf:resource="http://scam.sf.net/schema#List"&gt;&lt;/rdf:type&gt;
+	       &lt;entry:read rdf:resource="http://localhost/store/_principals/resource/_users"&gt;&lt;/entry:read&gt;
+	       &lt;entry:write rdf:resource="http://localhost/store/_principals/resource/_users"&gt;&lt;/entry:write&gt;
+	    &lt;/entry:resource&gt;
+	    &lt;entry:metadata rdf:resource="http://localhost/store/1/metadata/1"/&gt;
+	       &lt;entry:read rdf:resource="http://localhost/store/_principals/resource/_guest"&gt;&lt;/entry:read&gt;
+	       &lt;entry:write rdf:resource="http://localhost/store/_principals/resource/_users"&gt;&lt;/entry:read&gt;
+	    &lt;/entry:metadata&gt;
+	    &lt;dcterms:creator rdf:resource="http://localhost/store/1/resource/1"/&gt;&lt;/dcterms:creator&gt;
+	    &lt;dcterms:created/&gt;2012-05-14&lt;/dcterms:created&gt;
+	&lt;/entry:Local&gt;
+	
       </pre>
     </div>
 
