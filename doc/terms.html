@@ -15,7 +15,7 @@
   </head>
 
   <body>
-    <h1 id="title">The ReM<sup>3</sup> Specification</h1>
+    <h1 id="title">The ReM3 specification</h1>
 
     <h2 id="subtitle">Specification of ReM<sup>3</sup> (Resource and Metadata Management Model)</h2>
 
@@ -149,7 +149,7 @@
     <!-- The following is the script-generated list of classes and properties -->
     <div class="specterm" id="term_Context">
 <h3>Class: entry:Context</h3>
-<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#Context">http://scam.sf.net/schema#Context</a></p><p><em>Context</em> - A context is a set of entries expressed as an RDF graph containing relations to all its contained Entries. </p>
+<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#Context">http://scam.sf.net/schema#Context</a></p><p><em>Context</em> - A context is a set of entries expressed as an RDF graph containing relations to all its contained entries </p>
 <dl><dt>sub-class-of:</dt><dd><a href="#term_Graph" style="font-family: monospace;">entry:Graph</a></dd></dl>
 <p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
 
@@ -161,7 +161,7 @@
 <h3>Class: entry:Entry</h3>
 <p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#Entry">http://scam.sf.net/schema#Entry</a></p><p><em>Entry</em> - An entry expressed as an RDF graph, including references to a resource, 
       resource metadata, external metadata, and cached external metadata. 
-      The entry also contains access control information and provenance information. </p>
+      The entry also contains information about access control and provenance </p>
 <dl><dt>sub-class-of:</dt><dd><a href="#term_Graph" style="font-family: monospace;">entry:Graph</a></dd><dt>in-domain-of:</dt><dd><a href="#term_resource" style="font-family: monospace;">entry:resource</a></dd><dd><a href="#term_metadata" style="font-family: monospace;">entry:metadata</a></dd></dl>
 <p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
 
@@ -171,7 +171,7 @@
 
 <div class="specterm" id="term_Graph">
 <h3>Class: entry:Graph</h3>
-<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#Graph">http://scam.sf.net/schema#Graph</a></p><p><em>Graph</em> - A retrivable RDF Graph. </p>
+<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#Graph">http://scam.sf.net/schema#Graph</a></p><p><em>Graph</em> - A retrievable RDF graph </p>
 <dl><dt>sub-class-of:</dt><dd><a href="#term_InformationResource" style="font-family: monospace;">entry:InformationResource</a></dd><dt>in-range-of:</dt><dd><a href="#term_metadata" style="font-family: monospace;">entry:metadata</a></dd><dd><a href="#term_cachedExternalMetadata" style="font-family: monospace;">entry:cachedExternalMetadata</a></dd></dl>
 <p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
 
@@ -181,8 +181,8 @@
 
 <div class="specterm" id="term_Group">
 <h3>Class: entry:Group</h3>
-<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#Group">http://scam.sf.net/schema#Group</a></p><p><em>Group</em> - A group expressed as as a list of Entries corresponding to users. 
-      The group is expressedan as an RDF graph containing a rdf:Seq pointing to the entries. </p>
+<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#Group">http://scam.sf.net/schema#Group</a></p><p><em>Group</em> - A group expressed as as a list of entries corresponding to users. 
+      The group is expressed as an RDF graph containing a rdf:Seq pointing to the entries. </p>
 <dl><dt>sub-class-of:</dt><dd><a href="#term_List" style="font-family: monospace;">entry:List</a></dd></dl>
 <p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
 
@@ -192,7 +192,7 @@
 
 <div class="specterm" id="term_InformationResource">
 <h3>Class: entry:InformationResource</h3>
-<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#InformationResource">http://scam.sf.net/schema#InformationResource</a></p><p><em>Information Resource</em> - A resource that has a retrievable representation. </p><p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
+<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#InformationResource">http://scam.sf.net/schema#InformationResource</a></p><p><em>Information Resource</em> - A resource with a retrievable representation </p><p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
 
 
 
@@ -223,7 +223,7 @@
 
 <div class="specterm" id="term_List">
 <h3>Class: entry:List</h3>
-<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#List">http://scam.sf.net/schema#List</a></p><p><em>List</em> - A list of entries expressed as an RDF graph containing an rdf:Seq ordering the entries </p>
+<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#List">http://scam.sf.net/schema#List</a></p><p><em>List</em> - A list of entries expressed as an RDF graph containing an rdf:Seq for ordering the entries </p>
 <dl><dt>sub-class-of:</dt><dd><a href="#term_Graph" style="font-family: monospace;">entry:Graph</a></dd></dl>
 <p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
 
@@ -233,7 +233,7 @@
 
 <div class="specterm" id="term_Local">
 <h3>Class: entry:Local</h3>
-<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#Local">http://scam.sf.net/schema#Local</a></p><p><em>Local entry</em> - A local entry, that is where the resource is contained in the same system as the entry itself. </p>
+<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#Local">http://scam.sf.net/schema#Local</a></p><p><em>Local entry</em> - A local entry, i.e., the resource is contained in the same system as the entry itself </p>
 <dl><dt>sub-class-of:</dt><dd><a href="#term_Entry" style="font-family: monospace;">entry:Entry</a></dd></dl>
 <p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
 
@@ -243,7 +243,7 @@
 
 <div class="specterm" id="term_NamedResource">
 <h3>Class: entry:NamedResource</h3>
-<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#NamedResource">http://scam.sf.net/schema#NamedResource</a></p><p><em>Named Resource</em> - A resource that is not an information resource, that is, have no retrievable representation. </p><p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
+<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#NamedResource">http://scam.sf.net/schema#NamedResource</a></p><p><em>Named Resource</em> - A resource that is not an information resource, that is, has no retrievable representation </p><p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
 
 
 
@@ -253,7 +253,7 @@
 <h3>Class: entry:Reference</h3>
 <p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#Reference">http://scam.sf.net/schema#Reference</a></p><p><em>Reference entry</em> - A reference entry is an entry where both the metadata and the resource are external, that is,
       not contained in the system (or context) as the entry itself. 
-      The external metadata is pointed to via the externalMetadata property and if there is a local cache of the
+      The external metadata is pointed to via the externalMetadata property. If there is a local cache of the
       external metadata it is pointed to via the cachedExternalMetadata property.
       Typically library resources are suitable to describe as reference entries. </p>
 <dl><dt>sub-class-of:</dt><dd><a href="#term_Entry" style="font-family: monospace;">entry:Entry</a></dd></dl>
@@ -265,7 +265,7 @@
 
 <div class="specterm" id="term_String">
 <h3>Class: entry:String</h3>
-<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#String">http://scam.sf.net/schema#String</a></p><p><em>String</em> - An string expressed as a single statement in an RDF graph.
+<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#String">http://scam.sf.net/schema#String</a></p><p><em>String</em> - A string expressed as a single statement in an RDF graph.
       The subject of the statement is the URI to the information resource holding the RDF graph
       the predicate is rdf:value and the object is the string itself. </p>
 <dl><dt>sub-class-of:</dt><dd><a href="#term_Graph" style="font-family: monospace;">entry:Graph</a></dd></dl>
@@ -277,7 +277,7 @@
 
 <div class="specterm" id="term_User">
 <h3>Class: entry:User</h3>
-<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#User">http://scam.sf.net/schema#User</a></p><p><em>User</em> - A user expressed as an RDF graph. </p>
+<p style="font-family:monospace; font-size:0.em;">URI: <a href="http://scam.sf.net/schema#User">http://scam.sf.net/schema#User</a></p><p><em>User</em> - A user expressed as an RDF graph </p>
 <dl><dt>sub-class-of:</dt><dd><a href="#term_Graph" style="font-family: monospace;">entry:Graph</a></dd></dl>
 <p style="float: right; font-size: small;">[<a href="#sec-glance">back to top</a>]</p>
 
@@ -329,4 +329,4 @@
   </body>
 
 </html>
-<!-- specification regenerated by SpecGen5 at 11:04:18 05/15/12 CEST -->
+<!-- specification regenerated by SpecGen5 at 15:40:47 05/16/12 CEST -->
