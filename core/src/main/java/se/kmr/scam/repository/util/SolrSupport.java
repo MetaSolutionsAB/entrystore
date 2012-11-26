@@ -47,32 +47,32 @@ import se.kmr.scam.repository.impl.converters.NS;
  * @author Hannes Ebner
  */
 public class SolrSupport {
-	
+
 	private static Logger log = LoggerFactory.getLogger(SolrSupport.class);
-	
+
 	private static int BATCH_SIZE = 1000;
-	
+
 	private boolean reindexing = false;
-	
+
 	private boolean extractFulltext = false;
-	
+
 	private RepositoryManager rm;
-	
+
 	private SolrServer solrServer;
-	
+
 	private Thread documentSubmitter;
-	
+
 	private final ConcurrentLinkedQueue<SolrInputDocument> postQueue = new ConcurrentLinkedQueue<SolrInputDocument>();
-	
+
 	public class SolrInputDocumentSubmitter extends Thread {
-		
+
 		@Override
 		public void run() {
 			while (!interrupted()) {
 				if (!postQueue.isEmpty()) {
 					UpdateRequest req = new UpdateRequest();
 					req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
-					
+
 					for (int i = 0; i < BATCH_SIZE; i++) {
 						SolrInputDocument doc = postQueue.poll();
 						if (doc == null) {
@@ -80,9 +80,10 @@ public class SolrSupport {
 						}
 						req.add(doc);
 					}
-					
+
 					try {
-						log.info("Sending commit with " + req.getDocuments().size() + " entries to Solr, " + postQueue.size() + " documents remaining in post queue");
+						log.info("Sending commit with " + req.getDocuments().size() + " entries to Solr, "
+								+ postQueue.size() + " documents remaining in post queue");
 						req.process(solrServer);
 					} catch (SolrServerException sse) {
 						log.error(sse.getMessage(), sse);
@@ -99,23 +100,24 @@ public class SolrSupport {
 				}
 			}
 		}
-		
+
 	}
-	
+
 	public SolrSupport(RepositoryManager rm, SolrServer solrServer) {
 		this.rm = rm;
 		this.solrServer = solrServer;
-		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SCAM_SOLR_EXTRACT_FULLTEXT, "off"));
+		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(
+				Settings.SCAM_SOLR_EXTRACT_FULLTEXT, "off"));
 		documentSubmitter = new SolrInputDocumentSubmitter();
 		documentSubmitter.start();
 	}
-	
+
 	public void shutdown() {
 		if (documentSubmitter != null) {
 			documentSubmitter.interrupt();
 		}
 	}
-	
+
 	public void clearSolrIndex(SolrServer solrServer) {
 		UpdateRequest req = new UpdateRequest();
 		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
@@ -143,7 +145,7 @@ public class SolrSupport {
 			log.warn("Ignoring request as Solr is not used by this instance");
 			return;
 		}
-		
+
 		synchronized (solrServer) {
 			if (reindexing) {
 				log.warn("Solr is already being reindexed: ignoring additional reindexing request");
@@ -155,7 +157,7 @@ public class SolrSupport {
 
 		try {
 			clearSolrIndex(solrServer);
-			
+
 			PrincipalManager pm = rm.getPrincipalManager();
 			URI currentUser = pm.getAuthenticatedUserURI();
 			try {
@@ -175,7 +177,7 @@ public class SolrSupport {
 									continue;
 								}
 								log.info("Adding document to Solr post queue: " + entryURI);
-								postQueue.add(constructSolrInputDocument(entry, extractFulltext));								
+								postQueue.add(constructSolrInputDocument(entry, extractFulltext));
 							}
 						}
 					}
@@ -191,18 +193,18 @@ public class SolrSupport {
 	public static SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
 		Graph mdGraph = entry.getMetadataGraph();
 		URI resourceURI = entry.getResourceURI();
-		
+
 		SolrInputDocument doc = new SolrInputDocument();
-		
+
 		// URI
 		doc.setField("uri", entry.getEntryURI().toString());
-		
+
 		// resource URI
 		doc.setField("resource", resourceURI.toString());
-		
+
 		// resource URI of the surrounding context
 		doc.setField("context", entry.getContext().getEntry().getResourceURI().toString());
-		
+
 		// RDF type
 		String rdfTypeE = EntryUtil.getResource(entry.getGraph(), resourceURI, RDF.TYPE);
 		if (rdfTypeE != null) {
@@ -212,48 +214,48 @@ public class SolrSupport {
 		if (rdfTypeM != null) {
 			doc.addField("rdfType", rdfTypeM);
 		}
-		
+
 		// creation date
 		Date creationDate = entry.getCreationDate();
 		if (creationDate != null) {
 			doc.setField("created", creationDate);
 		}
-		
+
 		// modification date
 		Date modificationDate = entry.getModifiedDate();
 		if (modificationDate != null) {
 			doc.setField("modified", modificationDate);
 		}
-	    
-	    // types
-	    doc.setField("builtinType", entry.getBuiltinType().name());
-	    doc.setField("locationType", entry.getLocationType().name());
-	    doc.setField("representationType", entry.getRepresentationType().name());
 
-	    // creator
-	    URI creator = entry.getCreator();
-	    if (creator != null) {
-	    	doc.setField("creator", creator.toString());
-	    }
-	    
-	    // contributors
-	    doc.addField("contributors", entry.getContributors());
-	    
-	    // lists
-	    doc.addField("lists", entry.getReferringListsInSameContext());
-	    
-	    // ACL: admin, metadata r/w, resource r/w
-	    
-	    doc.addField("admin", entry.getAllowedPrincipalsFor(AccessProperty.Administer));
-	    doc.addField("metadata.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
-	    doc.addField("metadata.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
-	    doc.addField("resource.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
-	    doc.addField("resource.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteResource));
-	    
-	    // titles
-	    Map<String, String> titles = EntryUtil.getTitles(entry);
-	    if (titles != null && titles.size() > 0) {
-	    	for (String title : titles.keySet()) {
+		// types
+		doc.setField("builtinType", entry.getBuiltinType().name());
+		doc.setField("locationType", entry.getLocationType().name());
+		doc.setField("representationType", entry.getRepresentationType().name());
+
+		// creator
+		URI creator = entry.getCreator();
+		if (creator != null) {
+			doc.setField("creator", creator.toString());
+		}
+
+		// contributors
+		doc.addField("contributors", entry.getContributors());
+
+		// lists
+		doc.addField("lists", entry.getReferringListsInSameContext());
+
+		// ACL: admin, metadata r/w, resource r/w
+
+		doc.addField("admin", entry.getAllowedPrincipalsFor(AccessProperty.Administer));
+		doc.addField("metadata.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+		doc.addField("metadata.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
+		doc.addField("resource.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+		doc.addField("resource.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteResource));
+
+		// titles
+		Map<String, String> titles = EntryUtil.getTitles(entry);
+		if (titles != null && titles.size() > 0) {
+			for (String title : titles.keySet()) {
 				doc.addField("title", title, 10);
 				// we also store title.{lang} as dynamic field to be able to
 				// sort after titles in a specific language
@@ -262,66 +264,67 @@ public class SolrSupport {
 					doc.addField("title." + lang, title, 10);
 				}
 			}
-	    }
-	    
-	    // description
-	    Map<String, String> descriptions = EntryUtil.getDescriptions(entry);
-	    if (descriptions != null && descriptions.size() > 0) {
-	    	for (String description : descriptions.keySet()) {
-	    		doc.addField("description", description);
-	    		String lang = descriptions.get(description);
-	    		if (lang != null) {
-	    			doc.addField("description." + lang, description);
-	    		}
-	    	}
-	    }
-	    
-	    // keywords
-	    Map<String, String> keywords = EntryUtil.getKeywords(entry);
-	    if (keywords != null && keywords.size() > 0) {
-	    	for (String keyword : keywords.keySet()) {
-	    		doc.addField("keyword", keyword, 20);
-	    		String lang = descriptions.get(keyword);
-	    		if (lang != null) {
-	    			doc.addField("keyword." + lang, keyword, 20);
-	    		}
-	    	}
-	    }
-	    
-	    // language of the resource
-	    String dcLang = EntryUtil.getLabel(mdGraph, resourceURI, new URIImpl(NS.dc + "language"), null);
-	    if (dcLang != null) {
-	    	doc.addField("lang", dcLang);
-	    }
-	    String dctLang = EntryUtil.getLabel(mdGraph, resourceURI, new URIImpl(NS.dcterms + "language"), null);
-	    if (dctLang != null) {
-	    	doc.addField("lang", dctLang);
-	    }
-	    
-	    // tags (dc:subject)
-	    Iterator<Statement> tags = mdGraph.match(null, new URIImpl(NS.dc + "subject"), null);
-	    while (tags.hasNext()) {
-	    	doc.addField("tag", tags.next().getObject().stringValue());
-	    }
-	    
-	    // publicly viewable metadata?
-	    boolean guestReadable = false;
-	    PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
-	    pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
-	    try {
-	    	pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
-	    	guestReadable = true;
-	    } catch (AuthorizationException ae) {}
-	    pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-	    doc.setField("public", guestReadable);
-	    
-	    // validated resource?
-	    doc.setField("validated", ConverterUtil.isValidated(mdGraph, resourceURI));
-	    
-	    // all literal values
-	    Graph metadata = entry.getMetadataGraph();
-	    if (metadata != null) {
-	    	for (Statement s : metadata) {
+		}
+
+		// description
+		Map<String, String> descriptions = EntryUtil.getDescriptions(entry);
+		if (descriptions != null && descriptions.size() > 0) {
+			for (String description : descriptions.keySet()) {
+				doc.addField("description", description);
+				String lang = descriptions.get(description);
+				if (lang != null) {
+					doc.addField("description." + lang, description);
+				}
+			}
+		}
+
+		// keywords
+		Map<String, String> keywords = EntryUtil.getKeywords(entry);
+		if (keywords != null && keywords.size() > 0) {
+			for (String keyword : keywords.keySet()) {
+				doc.addField("keyword", keyword, 20);
+				String lang = descriptions.get(keyword);
+				if (lang != null) {
+					doc.addField("keyword." + lang, keyword, 20);
+				}
+			}
+		}
+
+		// language of the resource
+		String dcLang = EntryUtil.getLabel(mdGraph, resourceURI, new URIImpl(NS.dc + "language"), null);
+		if (dcLang != null) {
+			doc.addField("lang", dcLang);
+		}
+		String dctLang = EntryUtil.getLabel(mdGraph, resourceURI, new URIImpl(NS.dcterms + "language"), null);
+		if (dctLang != null) {
+			doc.addField("lang", dctLang);
+		}
+
+		// tags (dc:subject)
+		Iterator<Statement> tags = mdGraph.match(null, new URIImpl(NS.dc + "subject"), null);
+		while (tags.hasNext()) {
+			doc.addField("tag", tags.next().getObject().stringValue());
+		}
+
+		// publicly viewable metadata?
+		boolean guestReadable = false;
+		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
+		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+		try {
+			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+			guestReadable = true;
+		} catch (AuthorizationException ae) {
+		}
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		doc.setField("public", guestReadable);
+
+		// validated resource?
+		doc.setField("validated", ConverterUtil.isValidated(mdGraph, resourceURI));
+
+		// all literal values
+		Graph metadata = entry.getMetadataGraph();
+		if (metadata != null) {
+			for (Statement s : metadata) {
 				if (s.getObject() instanceof Literal) {
 					Literal l = (Literal) s.getObject();
 					// we only index plain literals (human-readable text)
@@ -329,27 +332,34 @@ public class SolrSupport {
 						doc.addField("literal", l.getLabel());
 					}
 				}
-	    	}
-	    }
+			}
+		}
 
-	    // Full text extraction using Apache Tika
-	    if (extractFulltext &&
-	    		LocationType.Local.equals(entry.getLocationType()) &&
-	    		RepresentationType.InformationResource.equals(entry.getRepresentationType()) &&
-	    		entry.getResource() instanceof Data) {
-	    	Data d = (Data) entry.getResource();
-	    	File f = d.getDataFile();
-	    	if (f != null && f.exists()) {
-	    		String textContent = extractFulltext(f);
-	    		if (textContent != null) {
-	    			doc.addField("fulltext", textContent);
-	    		}
-	    	}
-	    }
+		// all predicates
+		metadata = entry.getMetadataGraph();
+		if (metadata != null) {
+			for (Statement s : metadata) {
+				doc.addField("predicate", s.getPredicate().stringValue());
+			}
+		}
+
+		// Full text extraction using Apache Tika
+		if (extractFulltext && LocationType.Local.equals(entry.getLocationType())
+				&& RepresentationType.InformationResource.equals(entry.getRepresentationType())
+				&& entry.getResource() instanceof Data) {
+			Data d = (Data) entry.getResource();
+			File f = d.getDataFile();
+			if (f != null && f.exists()) {
+				String textContent = extractFulltext(f);
+				if (textContent != null) {
+					doc.addField("fulltext", textContent);
+				}
+			}
+		}
 
 		return doc;
 	}
-	
+
 	public void postEntry(Entry entry, SolrServer solrServer) {
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
@@ -361,7 +371,7 @@ public class SolrSupport {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
 	}
-	
+
 	public void removeEntry(Entry entry, SolrServer solrServer) {
 		UpdateRequest req = new UpdateRequest();
 		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
@@ -379,7 +389,7 @@ public class SolrSupport {
 			log.error(ioe.getMessage(), ioe);
 		}
 	}
-	
+
 	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, SolrServer solrServer, int offset, int limit) {
 		if (offset > -1) {
 			query.setStart(offset);
@@ -387,9 +397,9 @@ public class SolrSupport {
 		if (limit > -1) {
 			query.setRows(limit);
 		}
-		
+
 		long hits = -1;
-		
+
 		Date before = new Date();
 		QueryResponse r = null;
 		try {
@@ -408,7 +418,7 @@ public class SolrSupport {
 			log.error(e.getMessage());
 		}
 		log.info("Solr query took " + (new Date().getTime() - before.getTime()) + " ms");
-		
+
 		return hits;
 	}
 
@@ -436,13 +446,14 @@ public class SolrSupport {
 					Entry entry = rm.getContextManager().getEntry(uri);
 					if (entry != null) {
 						PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
-						// If linkReference or reference to a entry in the same repository
+						// If linkReference or reference to a entry in the same
+						// repository
 						// check that the referenced metadata is accessible.
-						if ((entry.getLocationType() == LocationType.Reference ||
-								entry.getLocationType() == LocationType.LinkReference) &&
-								entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
-							Entry refEntry = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
-							pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);							
+						if ((entry.getLocationType() == LocationType.Reference || entry.getLocationType() == LocationType.LinkReference)
+								&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
+							Entry refEntry = entry.getRepositoryManager().getContextManager()
+									.getEntry(entry.getExternalMetadataURI());
+							pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);
 						} else {
 							// Check that the local metadata is accessible.
 							pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
@@ -459,10 +470,10 @@ public class SolrSupport {
 			}
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");
 		} while ((limit > result.size()) && (hits > (offset + limit)));
-		
+
 		return new QueryResult(result, hits);
 	}
-	
+
 	public static String extractFulltext(File f) {
 		return null;
 
@@ -472,52 +483,25 @@ public class SolrSupport {
 		// following code again.
 
 		/*
-		InputStream stream = null;
-		String textContent = null;
-		String mimeType = null;
-		try {
-			TikaConfig tc = TikaConfig.getDefaultConfig();
-			InputStream mimeIS = null;
-			try {
-				mimeIS = new FileInputStream(f);
-				mimeType = tc.getMimeRepository().getMimeType(mimeIS).getName();	
-			} finally {
-				if (mimeIS != null) {
-					mimeIS.close();
-				}
-			}
-
-			if (mimeType != null) {
-				stream = new BufferedInputStream(new FileInputStream(f));
-				Parser parser = tc.getParser(mimeType);
-				if (parser != null) {
-					ContentHandler handler = new BodyContentHandler();
-					try {
-						log.info("Parsing document with MIME type " + mimeType + ": " + f.toString());
-						parser.parse(stream, handler, new Metadata(), new ParseContext());
-						textContent = handler.toString();
-					} catch (Exception e) {
-						log.error("Unable to parse document: " + e.getMessage());
-					}
-				} else {
-					log.warn("Unable to detect parser for MIME type " + mimeType);
-				}
-			} else {
-				log.warn("Unable to detect the MIME type");
-			}
-		} catch (IOException e) {
-			log.error(e.getMessage());
-		} finally {
-			try {
-				if (stream != null) {
-					stream.close();
-				}
-			} catch (IOException e) {
-				log.error(e.getMessage());
-			}
-		}
-		return textContent;
-		*/
+		 * InputStream stream = null; String textContent = null; String mimeType
+		 * = null; try { TikaConfig tc = TikaConfig.getDefaultConfig();
+		 * InputStream mimeIS = null; try { mimeIS = new FileInputStream(f);
+		 * mimeType = tc.getMimeRepository().getMimeType(mimeIS).getName(); }
+		 * finally { if (mimeIS != null) { mimeIS.close(); } }
+		 * 
+		 * if (mimeType != null) { stream = new BufferedInputStream(new
+		 * FileInputStream(f)); Parser parser = tc.getParser(mimeType); if
+		 * (parser != null) { ContentHandler handler = new BodyContentHandler();
+		 * try { log.info("Parsing document with MIME type " + mimeType + ": " +
+		 * f.toString()); parser.parse(stream, handler, new Metadata(), new
+		 * ParseContext()); textContent = handler.toString(); } catch (Exception
+		 * e) { log.error("Unable to parse document: " + e.getMessage()); } }
+		 * else { log.warn("Unable to detect parser for MIME type " + mimeType);
+		 * } } else { log.warn("Unable to detect the MIME type"); } } catch
+		 * (IOException e) { log.error(e.getMessage()); } finally { try { if
+		 * (stream != null) { stream.close(); } } catch (IOException e) {
+		 * log.error(e.getMessage()); } } return textContent;
+		 */
 	}
 
 }

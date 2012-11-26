@@ -200,6 +200,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="resource" type="string" indexed="true" stored="true"/>
         <field name="context" type="string" indexed="true"/>
         <field name="rdfType" type="string" indexed="true" stored="true" multiValued="true"/>
+        <field name="predicate" type="string" indexed="true" stored="true" multiValued="true"/>
         <field name="creator" type="string" indexed="true"/>
         <field name="contributors" type="string" indexed="true" multiValued="true"/>
         <field name="lists" type="string" indexed="true" multiValued="true"/>
