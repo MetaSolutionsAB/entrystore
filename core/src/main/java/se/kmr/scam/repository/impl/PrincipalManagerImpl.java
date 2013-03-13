@@ -414,8 +414,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 					}
 				} else {
 					if (hasAccess(currentUser, contextEntry, AccessProperty.WriteResource)) {
-						set.add(AccessProperty.WriteMetadata);
-						set.add(AccessProperty.WriteResource);
+						set.add(AccessProperty.Administer);
 					} else if (hasAccess(currentUser, contextEntry, AccessProperty.ReadResource)) {
 						set.add(AccessProperty.ReadMetadata);
 						set.add(AccessProperty.ReadResource);
