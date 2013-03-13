@@ -36,7 +36,7 @@ public class DefaultResource extends BaseResource {
 
 	@Get
 	public Representation represent() throws ResourceException {
-		return new JsonRepresentation("{\"info\":\"You made a request against the EntryScape REST API, there is no resource under this URI\"}"); 
+		return new JsonRepresentation("{\"info\":\"You made a request against the EntryStore REST API, there is no resource under this URI\"}"); 
 	}
 
 }
