@@ -561,11 +561,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	public Entry createLinkReference(URI resourceURI, URI metadataURI, URI listURI) throws AuthorizationException {
+	public Entry createLinkReference(String entryId, URI resourceURI, URI metadataURI, URI listURI) throws AuthorizationException {
 		ListImpl list = getList(listURI);
 		//checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, LocationType.LinkReference, BuiltinType.None, null, null);
+			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, LocationType.LinkReference, BuiltinType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 			}
@@ -573,11 +573,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	public Entry createReference(URI resourceURI, URI metadataURI, URI listURI) {
+	public Entry createReference(String entryId, URI resourceURI, URI metadataURI, URI listURI) {
 		ListImpl list = getList(listURI);
 		//checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, LocationType.Reference, BuiltinType.None, null, null);
+			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, LocationType.Reference, BuiltinType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 				copyACL(list, entry);
@@ -586,11 +586,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	public Entry createLink(URI resourceURI, URI listURI) {
+	public Entry createLink(String entryId, URI resourceURI, URI listURI) {
 		ListImpl list = getList(listURI);
 		checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, null, LocationType.Link, BuiltinType.None, null, null);
+			EntryImpl entry = createNewMinimalItem(resourceURI, null, LocationType.Link, BuiltinType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 				copyACL(list, entry);
@@ -600,7 +600,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	public Entry createResource(BuiltinType buiType, RepresentationType repType, URI listURI) {
+	public Entry createResource(String entryId, BuiltinType buiType, RepresentationType repType, URI listURI) {
 		ListImpl list = null; 
 		if(buiType == BuiltinType.String) {
 			// the user that has logged in must have a home context, inorder to make a string comment. 
@@ -621,7 +621,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(null, null, LocationType.Local, buiType, repType, null);
+			EntryImpl entry = createNewMinimalItem(null, null, LocationType.Local, buiType, repType, entryId);
 			if (list != null) {
 				log.info("Adding entry " + entry.getEntryURI() + " to list " + list.getURI());
 				list.addChild(entry.getEntryURI());
@@ -1314,7 +1314,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		return DATE_PARSER.format(new Date()).toString(); 
 	}
 
-	public Entry createComment(BuiltinType buiType, URI resourceURI,
+	public Entry createComment(String entryId, BuiltinType buiType, URI resourceURI,
 			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception {
 
 
@@ -1344,7 +1344,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					LocationType.Local, 
 					buiType, 
 					RepresentationType.InformationResource, 
-					null);
+					entryId);
 
 		}
 		try {

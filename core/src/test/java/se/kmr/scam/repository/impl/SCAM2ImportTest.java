@@ -53,7 +53,7 @@ public class SCAM2ImportTest {
 	  rm.setCheckForAuthorization(false);
 	  cm = rm.getContextManager();
 	  //A new Context
-	  Entry entry = cm.createResource(BuiltinType.Context, null, null);
+	  Entry entry = cm.createResource(null, BuiltinType.Context, null, null);
 	  context = (Context) entry.getResource();
   }  
   

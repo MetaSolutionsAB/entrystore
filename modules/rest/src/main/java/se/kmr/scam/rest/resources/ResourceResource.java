@@ -421,7 +421,7 @@ public class ResourceResource extends BaseResource {
 				Graph metadataGraph = ConverterUtil.convertLOMtoGraph(lom, resourceURI);
 				Set<Entry> entries = context.getByResourceURI(resourceURI);
 				if (entries.isEmpty()) {
-					Entry newEntry = context.createLink(resourceURI, entry.getResourceURI());
+					Entry newEntry = context.createLink(null, resourceURI, entry.getResourceURI());
 					newEntry.getLocalMetadata().setGraph(metadataGraph);
 					log.info("[IMPORT] Created new entry with URI: " + newEntry.getEntryURI());
 				} else {
@@ -1008,13 +1008,13 @@ public class ResourceResource extends BaseResource {
 				}
 				if (entityJSON.has("language")) {
 					String prefLang = entityJSON.getString("language");
-					if (!resourceUser.setLanguage(prefLang)) {
+					if (prefLang.equals("")) {
+						resourceUser.setLanguage(null);						
+					} else if (!resourceUser.setLanguage(prefLang)) {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Preferred language could not be set.\"}"));
 						return;
 					}
-				} else {
-					resourceUser.setLanguage(null);
 				}
 				if (entityJSON.has("homecontext")) {
 					String homeContext = entityJSON.getString("homecontext");

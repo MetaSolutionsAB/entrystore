@@ -37,6 +37,7 @@ public class JSONErrorMessages {
 	
 	public static String errorWrongContextIDmsg = new String("{\"error\":\"The given context id does not exist.\"}");
 	public static String errorCantCreateEntry = new String("{\"error\":\"Can not create the entry.\"}");
+	public static String errorEntryWithGivenIDExists = new String("{\"error\":\"An entry for the given id already exists.\"}");
 	public static String errorCantNotFindEntry = new String("{\"error\":\"Can not find an entry with that id.\"}");
 	public static String errorCantFindResource = new String("{\"error\":\"Can not find the resource.\"}"); 
 	public static String errorCantFindMetadata = new String("{\"error\":\"Can not find the metadata.\"}");

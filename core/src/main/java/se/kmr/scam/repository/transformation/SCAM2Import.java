@@ -196,7 +196,7 @@ public class SCAM2Import {
 	void handleFolder(Graph graph, URI parent, URI folder) {
 		Graph closure = getAnonymousClosure(graph, folder);
 		java.net.URI parentList = parent == null ? null : uri2Entry.get(parent).getResourceURI();
-		Entry folderEntry = context.createResource(BuiltinType.List, RepresentationType.InformationResource, parentList);
+		Entry folderEntry = context.createResource(null, BuiltinType.List, RepresentationType.InformationResource, parentList);
 		handleItem((EntryImpl) folderEntry, closure, parent, folder);
 	}
 
@@ -206,9 +206,9 @@ public class SCAM2Import {
 		java.net.URI parentList = parent == null ? null : uri2Entry.get(parent).getResourceURI();
 		Entry leafEntry = null;
 		if(isURL(closure, leaf)) {
-			leafEntry = context.createLink(java.net.URI.create(leaf.stringValue()), parentList);
+			leafEntry = context.createLink(null, java.net.URI.create(leaf.stringValue()), parentList);
 		} else if (isFile(closure, leaf)) {
-			leafEntry = context.createResource(BuiltinType.None, RepresentationType.InformationResource, parentList);
+			leafEntry = context.createResource(null, BuiltinType.None, RepresentationType.InformationResource, parentList);
 			setFile((Data) leafEntry.getResource(), closure, leaf);
 		} else {
 			log.warn("Entry, \""+leaf.stringValue()+"\", is neither URL or uploaded file.");

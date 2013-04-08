@@ -69,9 +69,9 @@ public class RelationTest {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
-		Entry parentList1 = duck.createResource(BuiltinType.List, null, null);
-		Entry parentList2 = duck.createResource(BuiltinType.List, null, null);
-		Entry childLink = duck.createLink(URI.create("http://slashdot.org"), null);
+		Entry parentList1 = duck.createResource(null, BuiltinType.List, null, null);
+		Entry parentList2 = duck.createResource(null, BuiltinType.List, null, null);
+		Entry childLink = duck.createLink(null, URI.create("http://slashdot.org"), null);
 		assertTrue(childLink.getRelations().size() == 0);
 		((List) parentList1.getResource()).addChild(childLink.getEntryURI());
 		assertTrue(childLink.getRelations().size() == 1);
@@ -94,9 +94,9 @@ public class RelationTest {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
-		EntryImpl list1 = (EntryImpl) duck.createResource(BuiltinType.List, null, null);
-		EntryImpl list2 = (EntryImpl) duck.createResource(BuiltinType.List, null, null);
-		EntryImpl link = (EntryImpl) duck.createLink(URI.create("http://slashdot.org"), null);
+		EntryImpl list1 = (EntryImpl) duck.createResource(null, BuiltinType.List, null, null);
+		EntryImpl list2 = (EntryImpl) duck.createResource(null, BuiltinType.List, null, null);
+		EntryImpl link = (EntryImpl) duck.createLink(null, URI.create("http://slashdot.org"), null);
 		Metadata md = list1.getLocalMetadata();
 		Graph g = md.getGraph();
 		ValueFactory vf = g.getValueFactory();

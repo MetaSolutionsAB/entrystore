@@ -47,21 +47,22 @@ public interface Context extends Resource{
 	 * <li>A list is provided in the context where the user has write access.</li></ul>
 	 * In the former case the new resources access control will be decided by the 
 	 * context, in the latter by the list.
+	 * @param entryId, optional value to use for id for the new entry.
+	 * @param buiType, which builtin type to use. 
 	 * @param repType, which representation type to use. Ignored if buiType is 
 	 * anything else than None.
 	 * @param listURI the list to add the resource to, or null if the resource
 	 * should be created freely in the context.
-	 * 
-	 * @param buiType, which builtin type to use. 
 	 * @return a {@link Entry} containing the resource, it's metadata, 
 	 * and it's metametadata. Which exact subclass of resource used depends on the 
 	 * {@link BuiltinType}.
 	 * @see {@link BuiltinType}.
 	 */
-	Entry createResource(BuiltinType buiType, RepresentationType repType, URI listURI); // files, folders, persons
+	Entry createResource(String entryId, BuiltinType buiType, RepresentationType repType, URI listURI); // files, folders, persons
 	
 	/**
 	 * 
+	 * @param entryId, optional value to use for id for the new entry.
 	 * @param buiType - None if file and String if text
 	 * @param resourceURI - URI to the resourceURI
 	 * @param metadataURI - URI to the metadataURIURI
@@ -69,7 +70,7 @@ public interface Context extends Resource{
 	 * @return A new comment entry
 	 * @throws Exception 
 	 */
-	Entry createComment(BuiltinType buiType, URI resourceURI,
+	Entry createComment(String entryId, BuiltinType buiType, URI resourceURI,
 			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception; 
 	
 	/**
@@ -80,12 +81,13 @@ public interface Context extends Resource{
 	 * In the former case the new link's access control will be decided by the 
 	 * context, in the latter by the list.
 	 * 
+	 * @param entryId, optional value to use for id for the new entry.
 	 * @param resourceURI any resource to link to, may be internal or external to the repository.
 	 * @param listURI the list to add the link to, or null if the link
 	 * should be created freely in the context.
 	 * @return a {@link Entry} containing the metadata and metametadata for the link.
 	 */
-	Entry createLink(URI resourceURI, URI listURI); // links to pages, bookmarks
+	Entry createLink(String entryId, URI resourceURI, URI listURI); // links to pages, bookmarks
 
 	/**
 	 * Creates an Entry where the {@link LocationType} is {@link LocationType#Reference}.
@@ -95,6 +97,7 @@ public interface Context extends Resource{
 	 * In the former case the new reference's access control will be decided by the 
 	 * context, in the latter by the list.
 	 * 
+	 * @param entryId, optional value to use for id for the new entry.
 	 * @param resourceURI any resource to link to, may be internal or external to the repository.
 	 * @param metadataURI the resources metadata that we intend to reference.
 	 * @param listURI the list to add the reference to, or null if the reference
@@ -102,9 +105,9 @@ public interface Context extends Resource{
 	 * @return a {@link Entry} containing metametadata and potentially cached metadata 
 	 * for the reference.
 	 */
-	Entry createReference(URI resourceURI, URI metadataURI, URI listURI); // references
+	Entry createReference(String entryId, URI resourceURI, URI metadataURI, URI listURI); // references
 	
-	Entry createLinkReference(URI resourceURI, URI metadataURI, URI listURI); 
+	Entry createLinkReference(String entryId, URI resourceURI, URI metadataURI, URI listURI); 
 
 	//void move(URI entryUri, URI fromListURI, URI toListURI);
 	

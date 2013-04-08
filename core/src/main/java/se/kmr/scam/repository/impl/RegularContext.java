@@ -45,7 +45,7 @@ public class RegularContext extends ContextImpl{
 	}
 
 	@Override
-	public Entry createResource(BuiltinType buiType,
+	public Entry createResource(String entryId, BuiltinType buiType,
 			RepresentationType repType, URI listURI) {
 		switch (buiType) {
 		case List:
@@ -53,7 +53,7 @@ public class RegularContext extends ContextImpl{
 		case Graph:  //TODO: Check if OK!!!
 		case String:
 		case None:
-			return super.createResource(buiType, repType, listURI);			
+			return super.createResource(entryId, buiType, repType, listURI);			
 		default:
 			throw new RepositoryException("Regular context only support Lists, ResultLists and None as BuiltinTypes");
 		}

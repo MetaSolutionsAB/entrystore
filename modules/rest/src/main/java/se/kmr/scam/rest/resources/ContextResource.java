@@ -161,6 +161,18 @@ public class ContextResource extends BaseResource {
 				getResponse().setEntity(JSONErrorMessages.errorWrongContextIDmsg, MediaType.APPLICATION_JSON);
 			}
 
+			String entryId = parameters.get("id");
+			if (entryId != null) {
+				Entry preExistingEntry = context.get(entryId);
+				if (preExistingEntry != null) {
+					log.warn("Entry with that id already exists"); 
+					getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT); 
+					getResponse().setLocationRef(context.get(parameters.get("id")).getEntryURI().toString());
+					getResponse().setEntity(JSONErrorMessages.errorEntryWithGivenIDExists, MediaType.APPLICATION_JSON);
+					return;
+				}
+			}
+			
 			Entry entry = null; // A variable to store the new entry in.
 
 			// Local
@@ -244,8 +256,9 @@ public class ContextResource extends BaseResource {
 				getResponse().setEntity(JSONErrorMessages.errorCantCreateEntry, MediaType.APPLICATION_JSON);
 			} else {
 				// Success, return 201 and the new entry id in the response.
-				getResponse().setStatus(Status.SUCCESS_CREATED); 
-				getResponse().setEntity("{entryId:"+entry.getId()+"}", MediaType.APPLICATION_JSON);
+				getResponse().setStatus(Status.SUCCESS_CREATED);
+				getResponse().setLocationRef(entry.getEntryURI().toString());
+//				getResponse().setEntity("{\"entryId\":"+entry.getId()+"}", MediaType.APPLICATION_JSON);
 			}
 		} catch (AuthorizationException e) {
 			unauthorizedPOST();
@@ -272,9 +285,9 @@ public class ContextResource extends BaseResource {
 				}
 				
 				if (parameters.containsKey("listURI")) {
-					entry = context.createLinkReference(resourceURI, metadataURI, new URI(((String) parameters.get("listURI"))));
+					entry = context.createLinkReference(parameters.get("id"), resourceURI, metadataURI, new URI(((String) parameters.get("listURI"))));
 				} else { 
-					entry = context.createLinkReference(resourceURI, metadataURI, null);
+					entry = context.createLinkReference(parameters.get("id"), resourceURI, metadataURI, null);
 				}
 
 				if (entry != null) {
@@ -325,9 +338,9 @@ public class ContextResource extends BaseResource {
 				}
 
 				if (parameters.containsKey("listURI")) {
-					entry = context.createReference(resourceURI, metadataURI, new URI(((String) parameters.get("listURI"))));
+					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, new URI(((String) parameters.get("listURI"))));
 				} else {
-					entry = context.createReference(resourceURI, metadataURI, null);
+					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, null);
 				}
 
 				if (entry != null) {
@@ -403,7 +416,7 @@ public class ContextResource extends BaseResource {
 		}
 
 		BuiltinType bt = getBuiltinType(parameters.get("builtinType"));
-		entry = context.createResource(bt, null, listURI);
+		entry = context.createResource(parameters.get("id"), bt, null, listURI);
 		try {
 			if (setResource(entry, bt)) {
 				setLocalMetadataGraph(entry);
@@ -543,9 +556,9 @@ public class ContextResource extends BaseResource {
 		}
 
 		if(parameters.containsKey("listURI")) {
-			entry = context.createLink(resourceURI, URI.create(parameters.get("listURI")));
+			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("listURI")));
 		} else {
-			entry = context.createLink(resourceURI, null);
+			entry = context.createLink(parameters.get("id"), resourceURI, null);
 		}
 
 		if (entry != null) {

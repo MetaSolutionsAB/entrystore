@@ -75,14 +75,14 @@ public class BackupTest {
 		cm = rm.getContextManager();
 		pm = rm.getPrincipalManager();
 		// A new Context
-		Entry entry = cm.createResource(BuiltinType.Context, null, null);
+		Entry entry = cm.createResource(null, BuiltinType.Context, null, null);
 		context = (Context) entry.getResource();
-		listEntry = context.createResource(BuiltinType.List, null, null);
-		linkEntry = context.createLink(URI.create("http://slashdot.org/"), null);
+		listEntry = context.createResource(null, BuiltinType.List, null, null);
+		linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
 		refEntry = context
-				.createReference(URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
-		refLinkEntry = context.createLinkReference(URI.create("http://vk.se/"), URI.create("http://vk.se/md1"), null);
-		resourceEntry = context.createResource(BuiltinType.None, RepresentationType.InformationResource, null);
+				.createReference(null, URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
+		refLinkEntry = context.createLinkReference(null, URI.create("http://vk.se/"), URI.create("http://vk.se/md1"), null);
+		resourceEntry = context.createResource(null, BuiltinType.None, RepresentationType.InformationResource, null);
 		File pomFile = new File("pom.xml"); 
 		resourceEntry.setFilename(pomFile.getName()); 
 		resourceEntry.setMimetype("text/xml"); 

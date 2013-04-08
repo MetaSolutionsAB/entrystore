@@ -236,20 +236,20 @@ public class ListImpl extends RDFResource implements List {
 			EntryImpl newEntry = null;
 			switch(e.getLocationType()) {
 			case Local:
-				newEntry = (EntryImpl) c.createResource(e.getBuiltinType(), e.getRepresentationType(), getURI());
+				newEntry = (EntryImpl) c.createResource(null, e.getBuiltinType(), e.getRepresentationType(), getURI());
 				if (e.getBuiltinType() == BuiltinType.None && e.getRepresentationType() == RepresentationType.InformationResource) {
 					// FIXME if a QuotaException is thrown here we have already lost the original entry, this should be fixed 				
 					((DataImpl) newEntry.getResource()).useData(((DataImpl) e.getResource()).getDataFile());
 				}
 				break;
 			case Link:
-				newEntry = (EntryImpl) c.createLink(e.getResourceURI(), getURI());
+				newEntry = (EntryImpl) c.createLink(null, e.getResourceURI(), getURI());
 				break;
 			case LinkReference:
-				newEntry = (EntryImpl) c.createLinkReference(e.getResourceURI(), e.getExternalMetadataURI(), getURI());
+				newEntry = (EntryImpl) c.createLinkReference(null, e.getResourceURI(), e.getExternalMetadataURI(), getURI());
 				break;
 			case Reference:
-				newEntry = (EntryImpl) c.createReference(e.getResourceURI(), e.getExternalMetadataURI(), getURI());
+				newEntry = (EntryImpl) c.createReference(null, e.getResourceURI(), e.getExternalMetadataURI(), getURI());
 				break;
 			}
 			copyGraphs(e, newEntry);

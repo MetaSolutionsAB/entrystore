@@ -90,16 +90,16 @@ public class PrincipalManagerTest {
 		//First create a list where daisy has access (she does not have access to mouse context)
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
 		Context mouse = cm.getContext("mouse");
-		Entry listEntry = mouse.createResource(BuiltinType.List, RepresentationType.InformationResource, null);
+		Entry listEntry = mouse.createResource(null, BuiltinType.List, RepresentationType.InformationResource, null);
 		Entry daisy = pm.getPrincipalEntry("Daisy");		
 		listEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, daisy.getResourceURI());
 
 		//Now change to the Daisy user and try to create a resource in the newly created list.
 		pm.setAuthenticatedUserURI(daisy.getResourceURI());
-		mouse.createLink(URI.create("http://www.daisy.org"), listEntry.getResourceURI());
+		mouse.createLink(null, URI.create("http://www.daisy.org"), listEntry.getResourceURI());
 		
 		try {
-			mouse.createLink(URI.create("http://www.daisy2.org"), null);
+			mouse.createLink(null, URI.create("http://www.daisy2.org"), null);
 			fail("Daisy should not have access to create a link in mouse context where she has no rights.");
 		} catch (AuthorizationException ae) {
 			
@@ -113,7 +113,7 @@ public class PrincipalManagerTest {
 	public void ownerCheck() {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Daisy").getResourceURI());
 		Context duck = cm.getContext("duck");
-		duck.createResource(BuiltinType.List, null, null); // since owner
+		duck.createResource(null, BuiltinType.List, null, null); // since owner
 	}
 
 	@Test
@@ -140,7 +140,7 @@ public class PrincipalManagerTest {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context mouse = cm.getContext("mouse");
 		assertTrue(mouse.get("1") != null);
-		mouse.createResource(BuiltinType.List, null, null);
+		mouse.createResource(null, BuiltinType.List, null, null);
 	}
 
 	@Test
