@@ -65,7 +65,7 @@ public class RDFJSON {
 						subject = vf.createURI(subjStr);
 					}
 				} catch (IllegalArgumentException iae) {
-					subject = vf.createBNode(subjStr);
+					subject = vf.createBNode();
 				}
 				JSONObject pObj = input.getJSONObject(subjStr);
 				Iterator<String> predicates = pObj.keys();
@@ -104,7 +104,7 @@ public class RDFJSON {
 							if (id2bnode.containsKey(value)) {
 								object = id2bnode.get(value);
 							} else {
-								object = vf.createBNode(value);
+								object = vf.createBNode();
 								id2bnode.put(value, (BNode) object);
 							}
 						} else if ("uri".equals(type)) {
