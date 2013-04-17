@@ -527,6 +527,9 @@ public class EntryResource extends BaseResource {
 
 						resourceObj.put("children", childrenArray);
 						resourceObj.put("size", childrenURIs.size());
+						resourceObj.put("limit", limit);
+						resourceObj.put("offset", offset);
+						
 						
 						JSONArray childrenIDArray = new JSONArray();
 						for (String id : childrenIDs) {
