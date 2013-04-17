@@ -66,15 +66,6 @@ public class ExportResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(ExportResource.class);
 
-	private String format;
-
-	@Override
-	public void doInit() {
-		if (parameters.containsKey("rdfFormat")) {
-			this.format = parameters.get("rdfFormat");
-		}
-	}
-
 	@Get
 	public Representation represent() {
 		try {
@@ -91,6 +82,11 @@ public class ExportResource extends BaseResource {
 			boolean metadataOnly = false;
 			if (parameters.containsKey("metadataOnly")) {
 				metadataOnly = true;
+			}
+			
+			String format = null;
+			if (parameters.containsKey("rdfFormat")) {
+				format = parameters.get("rdfFormat");
 			}
 			
 			Class<? extends RDFWriter> writer = null;
