@@ -58,7 +58,7 @@ public class RDFJSON {
 						if (id2bnode.containsKey(subjStr)) {
 							subject = id2bnode.get(subjStr);
 						} else {
-							subject = vf.createBNode(subjStr);
+							subject = vf.createBNode();
 							id2bnode.put(subjStr, (BNode) subject);
 						}
 					} else {
