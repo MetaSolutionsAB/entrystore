@@ -337,7 +337,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		if (entries.isEmpty()) {
 			Graph g = getExternalMetadataGraphFromXML(recordElement, metadataType, entryResourceURI);
 			if (g != null) {
-				Entry entry = context.createReference(entryResourceURI, entryMetadataURI, null);
+				Entry entry = context.createReference(null, entryResourceURI, entryMetadataURI, null);
 				setCachedMetadataGraph(entry, g);
 				log.info("Added entry " + entry.getEntryURI() + " with resource " + entryResourceURI + " and metadata " + entryMetadataURI);
 			} else {

@@ -129,7 +129,7 @@ public class FAOHarvestJob implements Job, InterruptableJob{
 
 		// create entry and set cached metadata only if it doesn't exist yet
 		if (entries.isEmpty()) {
-			Entry entry = context.createReference(entryResourceURI, entryMetadataURI, null);
+			Entry entry = context.createReference(null, entryResourceURI, entryMetadataURI, null);
 			setCachedMetadataGraph(entry, metadata, metadataType);
 			log.info("Added entry " + entry.getEntryURI() + "; resource URI: " + entryResourceURI + "; metadata URI: " + entryMetadataURI);
 		} else {
