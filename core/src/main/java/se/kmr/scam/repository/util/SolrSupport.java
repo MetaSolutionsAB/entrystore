@@ -265,6 +265,18 @@ public class SolrSupport {
 				}
 			}
 		}
+		String firstName = EntryUtil.getFirstName(entry);
+		String lastName = EntryUtil.getLastName(entry);
+		String name = "";
+		if (firstName != null) {
+			name += firstName;
+		}
+		if (lastName != null) {
+			name += " " + lastName;
+		}
+		if (name.length() > 0) {
+			doc.addField("title", name, 10);
+		}
 
 		// description
 		Map<String, String> descriptions = EntryUtil.getDescriptions(entry);
