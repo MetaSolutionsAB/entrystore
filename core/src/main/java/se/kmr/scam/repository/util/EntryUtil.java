@@ -525,10 +525,12 @@ public class EntryUtil {
 						result.put(lit.stringValue(), lit.getLanguage());
 					} else if (value instanceof org.openrdf.model.Resource) {
 						Iterator<Statement> descriptions2 = graph.match((org.openrdf.model.Resource) value, RDF.VALUE, null);
-						Value value2 = descriptions2.next().getObject();
-						if (value2 instanceof Literal) {
-							Literal lit2 = (Literal) value2;
-							result.put(lit2.stringValue(), lit2.getLanguage());
+						if (descriptions2.hasNext()) {
+							Value value2 = descriptions2.next().getObject();
+							if (value2 instanceof Literal) {
+								Literal lit2 = (Literal) value2;
+								result.put(lit2.stringValue(), lit2.getLanguage());
+							}
 						}
 					}
 				}
@@ -571,10 +573,12 @@ public class EntryUtil {
 						result.put(lit.stringValue(), lit.getLanguage());
 					} else if (value instanceof org.openrdf.model.Resource) {
 						Iterator<Statement> keywords2 = graph.match((org.openrdf.model.Resource) value, RDF.VALUE, null);
-						Value value2 = keywords2.next().getObject();
-						if (value2 instanceof Literal) {
-							Literal lit2 = (Literal) value2;
-							result.put(lit2.stringValue(), lit2.getLanguage());
+						if (keywords2.hasNext()) {
+							Value value2 = keywords2.next().getObject();
+							if (value2 instanceof Literal) {
+								Literal lit2 = (Literal) value2;
+								result.put(lit2.stringValue(), lit2.getLanguage());
+							}
 						}
 					}
 				}
