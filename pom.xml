@@ -495,21 +495,20 @@
 				<enabled>true</enabled>
 			</releases>
 		</repository>
-<!--	
 		<repository>
-			<id>Jena</id>
-			<url>http://develix.iml.umu.se:8085/artifactory/repo</url>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
-		</repository>
--->
-		<repository>
-			<id>snapshots</id>
+			<id>IML</id>
 			<url>http://develix.iml.umu.se:8085/artifactory/repo</url>
 			<releases>
-				<enabled>false</enabled>
+				<enabled>true</enabled>
 			</releases>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
+		<repository>
+			<id>thirdparty-uploads</id>
+			<name>JBoss Thirdparty Uploads</name>
+			<url>https://repository.jboss.org/nexus/content/repositories/thirdparty-uploads</url>
 		</repository>
 	</repositories>
 	<pluginRepositories>
