@@ -103,14 +103,14 @@
 	<!-- ================= DistributionManagement ================= -->
 	<distributionManagement>
 		<repository>
-			<id>scam-release</id>
-			<name>SCAM release repository</name>
+			<id>libs-releases-local</id>
+			<name>release repository</name>
 			<url>${distribution.url}</url>
 			<uniqueVersion>false</uniqueVersion>
 		</repository>
 		<snapshotRepository>
-			<id>scam-snapshot</id>
-			<name>SCAM snapshot repository</name>
+			<id>libs-snapshots-local</id>
+			<name>snapshot repository</name>
 			<url>${distribution.snapshot.url}</url>
 			<uniqueVersion>false</uniqueVersion>
 		</snapshotRepository>
@@ -217,6 +217,11 @@
 	<build>
 		<pluginManagement>
 			<plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-deploy-plugin</artifactId>
+					<version>2.7</version>
+				</plugin>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-compiler-plugin</artifactId>
@@ -497,7 +502,7 @@
 		</repository>
 		<repository>
 			<id>IML</id>
-			<url>http://develix.iml.umu.se:8085/artifactory/repo</url>
+			<url>https://develix.iml.umu.se:8085/artifactory/repo</url>
 			<releases>
 				<enabled>true</enabled>
 			</releases>

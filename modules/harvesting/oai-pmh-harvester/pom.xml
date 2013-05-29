@@ -130,6 +130,12 @@
                         <artifactId>mime-dir-j-vcard4j</artifactId>
                         <version>1.4.1</version>
                         <type>jar</type>
+                        <exclusions>
+							<exclusion>
+								<groupId>javax.servlet</groupId>
+								<artifactId>servlet-api</artifactId>
+							</exclusion>
+						</exclusions>
                 </dependency>
                 <dependency>
                         <groupId>javax.xml.bind</groupId>

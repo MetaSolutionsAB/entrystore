@@ -19,7 +19,8 @@
 	<!-- ================= Properties ================= -->
 	<properties>
 		<clover.licenseLocation>${basedir}/../../../src/resources/clover.license</clover.licenseLocation>
-		<cxf.version>2.1.4</cxf.version>
+                <!--<cxf.version>2.1.4</cxf.version>-->	
+		<cxf.version>2.7.3</cxf.version>
 	</properties>
 
 	<!-- ================= SCM ================= -->
