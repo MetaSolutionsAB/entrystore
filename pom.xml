@@ -502,7 +502,7 @@
 		</repository>
 		<repository>
 			<id>IML</id>
-			<url>https://develix.iml.umu.se:8085/artifactory/repo</url>
+			<url>http://develix.iml.umu.se:8085/artifactory/repo</url>
 			<releases>
 				<enabled>true</enabled>
 			</releases>
