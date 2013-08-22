@@ -55,6 +55,7 @@ import org.restlet.Client;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
+import org.restlet.Uniform;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
 import org.restlet.data.Protocol;
@@ -63,7 +64,6 @@ import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
-import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,27 +81,27 @@ public class ProxyResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(ProxyResource.class);
 	
-	private String extResourceURL;
-	
 	private Client client;
 	
-	private Response response;
+	private Response clientResponse;
 	
 	Representation representation;
 
 	@Override
-	public void doInit() {		
-		if (parameters.containsKey("url")) {
-			try {
-				this.extResourceURL = URLDecoder.decode(parameters.get("url"), "UTF-8");
-			} catch (UnsupportedEncodingException e) {
-				log.error(e.getMessage());
-			}
-		}
+	public void doInit() {
 	}
 
 	@Get
 	public Representation represent() {
+		String extResourceURL = null;
+		if (parameters.containsKey("url")) {
+			try {
+				extResourceURL = URLDecoder.decode(parameters.get("url"), "UTF-8");
+			} catch (UnsupportedEncodingException e) {
+				log.error(e.getMessage());
+			}
+		}
+		
 		if (extResourceURL == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return null;
@@ -115,11 +115,16 @@ public class ProxyResource extends BaseResource {
 		
 		log.info("Received proxy request for " + extResourceURL);
 		
-		response = getResourceFromURL(extResourceURL, 0);
+		clientResponse = getResourceFromURL(extResourceURL, 0);
 		representation = null;
-		if (response != null) {
-			getResponse().setStatus(response.getStatus());
-			representation = response.getEntity();
+		if (clientResponse != null) {
+			representation = clientResponse.getEntity();
+			getResponse().setStatus(clientResponse.getStatus());
+			getResponse().setOnSent(new Uniform() {
+				public void handle(Request request, Response response) {
+					clientResponse.getEntity().release();
+				}
+			});
 		}
 
 		if (representation != null && representation.isAvailable()) {
@@ -203,19 +208,6 @@ public class ProxyResource extends BaseResource {
 		
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 		return null;
-	}
-	
-	@Override
-	protected void doRelease() throws ResourceException {
-		super.doRelease();
-		if (representation != null) {
-			representation.release();
-			log.info("Proxied representation released");
-		}
-		if (response != null) {
-			response.release();
-			log.info("Proxied response released");
-		}
 	}
 	
 	private Response getResourceFromURL(String url, int loopCount) {
