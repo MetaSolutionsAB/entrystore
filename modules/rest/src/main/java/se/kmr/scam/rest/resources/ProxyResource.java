@@ -210,9 +210,11 @@ public class ProxyResource extends BaseResource {
 		super.doRelease();
 		if (representation != null) {
 			representation.release();
+			log.info("Proxied representation released");
 		}
 		if (response != null) {
 			response.release();
+			log.info("Proxied response released");
 		}
 	}
 	
