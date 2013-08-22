@@ -122,7 +122,13 @@ public class ProxyResource extends BaseResource {
 			getResponse().setStatus(clientResponse.getStatus());
 			getResponse().setOnSent(new Uniform() {
 				public void handle(Request request, Response response) {
-					clientResponse.getEntity().release();
+					try {
+						clientResponse.release();
+						client.stop();
+						client = null;
+					} catch (Exception e) {
+						log.error(e.getMessage());
+					}
 				}
 			});
 		}
@@ -223,6 +229,7 @@ public class ProxyResource extends BaseResource {
 			client.setContext(new Context());
 	        client.getContext().getParameters().add("connectTimeout", "10000");
 	        client.getContext().getParameters().add("readTimeout", "10000");
+	        log.info("Initialized HTTP client for proxy request");
 		}
 
 		Response response = client.handle(request);
