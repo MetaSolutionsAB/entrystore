@@ -16,7 +16,6 @@
 
 package se.kmr.scam.rest.resources;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,7 +38,6 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;
@@ -63,9 +61,9 @@ import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.representation.InputRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
+import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -86,6 +84,10 @@ public class ProxyResource extends BaseResource {
 	private String extResourceURL;
 	
 	private Client client;
+	
+	private Response response;
+	
+	Representation representation;
 
 	@Override
 	public void doInit() {		
@@ -113,26 +115,11 @@ public class ProxyResource extends BaseResource {
 		
 		log.info("Received proxy request for " + extResourceURL);
 		
-		Representation representation = null;
-		Response response  = getResourceFromURL(extResourceURL, 0);
-		try {
-			if (response != null) {
-				getResponse().setStatus(response.getStatus());
-				representation = response.getEntity();
-				if (representation.isAvailable()) {
-					try {
-						byte[] byteRep = IOUtils.toByteArray(representation.getStream());
-						representation = new InputRepresentation(new ByteArrayInputStream(byteRep), representation.getMediaType(), byteRep.length);
-					} catch (IOException ioe) {
-						log.error(ioe.getMessage());
-						representation = null;
-					}
-				}
-			}
-		} finally {
-			if (response != null) {
-				response.release();
-			}
+		response = getResourceFromURL(extResourceURL, 0);
+		representation = null;
+		if (response != null) {
+			getResponse().setStatus(response.getStatus());
+			representation = response.getEntity();
 		}
 
 		if (representation != null && representation.isAvailable()) {
@@ -216,6 +203,17 @@ public class ProxyResource extends BaseResource {
 		
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 		return null;
+	}
+	
+	@Override
+	protected void doRelease() throws ResourceException {
+		super.doRelease();
+		if (representation != null) {
+			representation.release();
+		}
+		if (response != null) {
+			response.release();
+		}
 	}
 	
 	private Response getResourceFromURL(String url, int loopCount) {
