@@ -66,9 +66,8 @@ public abstract class BaseResource extends ServerResource {
 	
 	@Override
 	public void init(Context c, Request request, Response response) {
-		super.init(c, request, response);
-		
 		parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
+		super.init(c, request, response);		
 		
 		contextId = (String) request.getAttributes().get("context-id");
 		if (getCM() != null) {
