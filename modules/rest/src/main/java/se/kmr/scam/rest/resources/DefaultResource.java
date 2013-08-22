@@ -16,6 +16,7 @@
 
 package se.kmr.scam.rest.resources;
 
+import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
@@ -36,7 +37,8 @@ public class DefaultResource extends BaseResource {
 
 	@Get
 	public Representation represent() throws ResourceException {
-		return new JsonRepresentation("{\"info\":\"You made a request against the EntryStore REST API, there is no resource under this URI\"}"); 
+		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+		return new JsonRepresentation("{\"info\":\"You made a request against the EntryStore REST API. There is no resource at this URI.\"}"); 
 	}
 
 }
