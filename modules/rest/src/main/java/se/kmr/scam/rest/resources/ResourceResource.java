@@ -228,6 +228,7 @@ public class ResourceResource extends BaseResource {
 				ListImpl dest = (ListImpl) this.entry.getResource();
 				String movableEntryString = parameters.get("moveEntry");
 				String movableEntrySourceString = parameters.get("fromList");
+				boolean removeAll = parameters.get("removeAll") != null;
 
 				String baseURI = getRM().getRepositoryURL().toString();
 				if (!baseURI.endsWith("/")) {
@@ -237,12 +238,16 @@ public class ResourceResource extends BaseResource {
 				// Entry URI of the Entry to be moved
 				URI movableEntry = movableEntryString.startsWith("http://") ? URI.create(movableEntryString) : URI.create(baseURI + movableEntryString);
 				// Resource URI of the source List
-				URI movableEntrySource = movableEntrySourceString.startsWith("http://") ? URI.create(movableEntrySourceString) : URI.create(baseURI + movableEntrySourceString);
+				
+				URI movableEntrySource = null;
+				if (movableEntrySourceString != null) {
+					movableEntrySource = movableEntrySourceString.startsWith("http://") ? URI.create(movableEntrySourceString) : URI.create(baseURI + movableEntrySourceString);
+				}
 
 				Entry movedEntry = null;
 				String error = null;
 				try {
-					movedEntry = dest.moveEntryHere(movableEntry, movableEntrySource);
+					movedEntry = dest.moveEntryHere(movableEntry, movableEntrySource, removeAll);
 				} catch (QuotaException qe) {
 					error = qe.getMessage();
 					log.warn(qe.getMessage());

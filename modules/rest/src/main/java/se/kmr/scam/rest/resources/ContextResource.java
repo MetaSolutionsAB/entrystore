@@ -51,6 +51,7 @@ import se.kmr.scam.repository.Group;
 import se.kmr.scam.repository.List;
 import se.kmr.scam.repository.LocationType;
 import se.kmr.scam.repository.PrincipalManager.AccessProperty;
+import se.kmr.scam.repository.RepresentationType;
 import se.kmr.scam.repository.User;
 import se.kmr.scam.repository.impl.ContextImpl;
 import se.kmr.scam.repository.impl.RDFResource;
@@ -197,6 +198,10 @@ public class ContextResource extends BaseResource {
 			}
 			
 			if (entry != null) {
+				RepresentationType rt = getRepresentationType(parameters.get("informationResource"));
+				entry.setRepresentationType(rt);
+
+				
 				String template = parameters.get("template");
 				if (template != null) {
 					URI templateEntryURI = null;
@@ -258,7 +263,7 @@ public class ContextResource extends BaseResource {
 				// Success, return 201 and the new entry id in the response.
 				getResponse().setStatus(Status.SUCCESS_CREATED);
 				getResponse().setLocationRef(entry.getEntryURI().toString());
-//				getResponse().setEntity("{\"entryId\":"+entry.getId()+"}", MediaType.APPLICATION_JSON);
+				getResponse().setEntity("{\"entryId\":"+entry.getId()+"}", MediaType.APPLICATION_JSON);
 			}
 		} catch (AuthorizationException e) {
 			unauthorizedPOST();
@@ -272,8 +277,8 @@ public class ContextResource extends BaseResource {
 	 */
 	private Entry createLinkReferenceEntry(Entry entry) {
 		try {
-			if ((parameters.get("resource") != null) && (parameters.get("metadata") != null)
-					&& ("linkreference".equalsIgnoreCase(parameters.get("locationType")))) {
+			if (parameters.get("resource") != null
+					&& "linkreference".equalsIgnoreCase(parameters.get("locationType"))) {
 				URI resourceURI = null;
 				URI metadataURI = null;
 				try {
@@ -342,6 +347,8 @@ public class ContextResource extends BaseResource {
 				} else {
 					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, null);
 				}
+				RepresentationType rt = getRepresentationType(parameters.get("informationResource"));
+				entry.setRepresentationType(rt);
 
 				if (entry != null) {
 					setCachedMetadataGraph(entry);
@@ -369,6 +376,15 @@ public class ContextResource extends BaseResource {
 		return null; 
 	}
 
+	private RepresentationType getRepresentationType(String rt) {
+		if (rt == null || !rt.equals("false")) {
+			return RepresentationType.InformationResource;
+		} else {
+			return RepresentationType.NamedResource;
+		}
+	}
+	
+	
 	private BuiltinType getBuiltinType(String bt) {
 		if (bt == null || "".equals(bt)) {
 			return BuiltinType.None;

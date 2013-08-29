@@ -67,6 +67,8 @@ import se.kmr.scam.repository.PrincipalManager;
 import se.kmr.scam.repository.PrincipalManager.AccessProperty;
 import se.kmr.scam.repository.RepositoryProperties;
 import se.kmr.scam.repository.User;
+import se.kmr.scam.repository.config.Config;
+import se.kmr.scam.repository.config.Settings;
 import se.kmr.scam.repository.impl.StringResource;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
 import se.kmr.scam.repository.util.EntryUtil;
@@ -84,11 +86,13 @@ import se.kmr.scam.rest.util.Util;
 public class EntryResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(EntryResource.class);
+	public static Config config;
 	
 	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
 	@Override
 	public void doInit() {
+		supportedMediaTypes.add(MediaType.TEXT_HTML);
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
@@ -195,7 +199,9 @@ public class EntryResource extends BaseResource {
 	private Representation getEntry(MediaType mediaType) {
 		String serializedGraph = null;
 		Graph graph = entry.getGraph();
-		if (MediaType.APPLICATION_JSON.equals(mediaType)) {
+		if (MediaType.TEXT_HTML.equals(mediaType)) {
+			return getEntryInHTML();
+		} else if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 			return getEntryInJSON();
 		} else if (MediaType.APPLICATION_RDF_XML.equals(mediaType)) {
 			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
@@ -222,19 +228,55 @@ public class EntryResource extends BaseResource {
 		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
 	}
 
+	private Representation getEntryInHTML() {
+		try {	
+			if (parameters != null) {
+				parameters.put("includeAll", "true");
+			}
+			JSONObject jobj = this.getEntryAsJSONObject();
+			String storejs = config.getString(Settings.SCAM_STOREJS_JS, "/storejs/storejs.js");
+			String storecss = config.getString(Settings.SCAM_STOREJS_CSS, "/storejs/storejs.css");
+			if (jobj != null) {
+				return new StringRepresentation(
+						"<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">"+
+						"<script type=\"text/javascript\">dojoConfig = {deps: [\"store/boot\"]};</script>"+
+						"<script type=\"text/javascript\" src=\""+storejs+"\"></script>"+
+						"<link type=\"text/css\" href=\""+storecss+"\" rel=\"stylesheet\"></link></head><body><textarea>" +
+						jobj.toString(2) +
+						"</textarea></body></html>", MediaType.TEXT_HTML);
+			}
+		} catch (JSONException e) {	
+		}		
+		log.error("Can not find the entry. getEntry()");
+		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);			
+	}
+	
+	
 	/**
 	 * Gets the entry JSON
 	 * 
 	 * @return JSON representation
 	 */
 	private Representation getEntryInJSON() {
+		try {	
+			JSONObject jobj = this.getEntryAsJSONObject();
+			if (jobj != null)
+				return new JsonRepresentation(jobj.toString(2));
+		} catch (JSONException e) {	
+		}		
+		log.error("Can not find the entry. getEntry()");
+		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
+	}
+
+	
+	private JSONObject getEntryAsJSONObject() throws JSONException {
 		/*
-		 * Create a JDIL object since we need a object to accumulate properties
-		 * to
+		 * Create a JSONObject to accumulate properties
 		 */
 		JSONObject jdilObj = new JSONObject();
 
-		try {
 			/*
 			 * Entry id
 			 */
@@ -265,7 +307,7 @@ public class EntryResource extends BaseResource {
 			 * Return if the parameter includeAll is not set
 			 */
 			if ((parameters != null && parameters.containsKey("includeAll")) == false) {
-				return new JsonRepresentation(jdilObj.toString(2));
+				return jdilObj;
 			}
 			/*
 			 * If the parameter includeAll is set we must return more JDIl with
@@ -619,17 +661,9 @@ public class EntryResource extends BaseResource {
 				
 				jdilObj.accumulate("resource", resourceObj);
 			}
-
-			if (jdilObj != null)
-				return new JsonRepresentation(jdilObj.toString(2));
-
-		} catch (JSONException e) {
-			jdilObj = null;
-		}
-		log.error("Can not find the entry. getEntry()");
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
+			return jdilObj;
 	}
+	
 	
 	private void accumulateRights(Entry entry, JSONObject jdilObj) throws JSONException {
 		PrincipalManager pm = this.getPM();

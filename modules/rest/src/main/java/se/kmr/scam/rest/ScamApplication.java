@@ -74,6 +74,7 @@ import se.kmr.scam.rest.resources.ExternalMetadataResource;
 import se.kmr.scam.rest.resources.HarvesterResource;
 import se.kmr.scam.rest.resources.ImportResource;
 import se.kmr.scam.rest.resources.LoginResource;
+import se.kmr.scam.rest.resources.MergeResource;
 import se.kmr.scam.rest.resources.MetadataResource;
 import se.kmr.scam.rest.resources.ProxyResource;
 import se.kmr.scam.rest.resources.QuotaResource;
@@ -201,6 +202,7 @@ public class ScamApplication extends Application {
 			}
 		
 			Config config = confManager.getConfiguration();
+			EntryResource.config = config;
 		
 			// Check the URL in the scam.properties file if you get an error here.
 			domainName = config.getString(Settings.SCAM_BASE_URL, "http://scam4.org");
@@ -286,6 +288,7 @@ public class ScamApplication extends Application {
 		router.attach("/{context-id}/sparql", SparqlResource.class);
 		router.attach("/{context-id}/export", ExportResource.class);
 		router.attach("/{context-id}/import", ImportResource.class);
+		router.attach("/{context-id}/merge", MergeResource.class);
 		router.attach("/{context-id}/statistics/{stat-type}", StatisticsResource.class);
 		router.attach("/{context-id}/entry/{entry-id}", EntryResource.class);
 		router.attach("/{context-id}/resource/{entry-id}", ResourceResource.class);
