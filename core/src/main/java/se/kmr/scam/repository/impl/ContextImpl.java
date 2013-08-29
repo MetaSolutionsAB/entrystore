@@ -538,10 +538,17 @@ public class ContextImpl extends ResourceImpl implements Context {
 		return null;
 	}
 
-	protected void checkAccess(Entry secondChance, AccessProperty ap) throws AuthorizationException {
+	/**
+	 * 
+	 * @param secondChance typically a list to check if access is given in that list only.
+	 * @param ap the kind of access requested.
+	 * @return true if user is owner of current context, false otherwise.
+	 * @throws AuthorizationException
+	 */
+	protected boolean checkAccess(Entry secondChance, AccessProperty ap) throws AuthorizationException {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
 		if (pm == null) {
-			return;
+			return true;
 		}
 		try {
 			//			System.out.println("checkAccess: getAuthenticatedUserURI() = " + pm.getAuthenticatedUserURI());
@@ -552,9 +559,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 			//			}
 	
 			pm.checkAuthenticatedUserAuthorized(this.entry, ap);
+			return true;
 		} catch (AuthorizationException ae) {
 			if (secondChance != null) {
 				pm.checkAuthenticatedUserAuthorized(secondChance, ap);
+				return false;
 			} else {
 				throw ae;
 			}
@@ -563,11 +572,15 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public Entry createLinkReference(String entryId, URI resourceURI, URI metadataURI, URI listURI) throws AuthorizationException {
 		ListImpl list = getList(listURI);
-		//checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
+		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
 			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, LocationType.LinkReference, BuiltinType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
+				copyACL(list, entry);
+				if (!isOwner) {
+					entry.setOriginalListSynchronized(listURI.toString());
+				}
 			}
 			return entry;
 		}
@@ -575,12 +588,15 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public Entry createReference(String entryId, URI resourceURI, URI metadataURI, URI listURI) {
 		ListImpl list = getList(listURI);
-		//checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
+		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
 			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, LocationType.Reference, BuiltinType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 				copyACL(list, entry);
+				if (!isOwner) {
+					entry.setOriginalListSynchronized(listURI.toString());
+				}
 			}
 			return entry;
 		}
@@ -588,12 +604,15 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public Entry createLink(String entryId, URI resourceURI, URI listURI) {
 		ListImpl list = getList(listURI);
-		checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
+		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
 			EntryImpl entry = createNewMinimalItem(resourceURI, null, LocationType.Link, BuiltinType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 				copyACL(list, entry);
+				if (!isOwner) {
+					entry.setOriginalListSynchronized(listURI.toString());
+				}
 			}
 
 			return entry;			
@@ -601,7 +620,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public Entry createResource(String entryId, BuiltinType buiType, RepresentationType repType, URI listURI) {
-		ListImpl list = null; 
+		ListImpl list = null;
+		boolean isOwner;
 		if(buiType == BuiltinType.String) {
 			// the user that has logged in must have a home context, inorder to make a string comment. 
 			URI userURI = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI(); 
@@ -614,10 +634,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 			Entry commentsEntry = userContext.get("_comments"); 
 
 			list = getList(commentsEntry.getResourceURI());
-			checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
+			isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		} else {
 			list = getList(listURI);
-			checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
+			isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		}
 
 		synchronized (this.entry.repository) {
@@ -627,6 +647,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 				list.addChild(entry.getEntryURI());
 				log.info("Copying ACL from list " + list.getURI() + " to entry " + entry.getEntryURI());
 				copyACL(list, entry);
+				if (!isOwner) {
+					entry.setOriginalListSynchronized(listURI.toString());
+				}
 			}
 			
 			if (BuiltinType.Context.equals(buiType)) {
@@ -1201,12 +1224,12 @@ public class ContextImpl extends ResourceImpl implements Context {
 							if (BuiltinType.Context.equals(localEntry.getBuiltinType()) 
 									|| BuiltinType.None.equals(localEntry.getBuiltinType())
 									|| BuiltinType.List.equals(localEntry.getBuiltinType())) {
-								try {
-									Integer.parseInt(localEntry.getId());
+//								try {
+//									Integer.parseInt(localEntry.getId());
 									entries.add(localEntry); 
-								} catch (NumberFormatException e) {
-
-								}
+//								} catch (NumberFormatException e) {
+//
+//								}
 							}
 						}
 					}

@@ -21,7 +21,9 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.Vector;
 
@@ -29,6 +31,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
+import org.openrdf.model.Value;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.vocabulary.RDF;
@@ -43,6 +46,7 @@ import se.kmr.scam.repository.DisallowedException;
 import se.kmr.scam.repository.Entry;
 import se.kmr.scam.repository.List;
 import se.kmr.scam.repository.LocationType;
+import se.kmr.scam.repository.PrincipalManager;
 import se.kmr.scam.repository.QuotaException;
 import se.kmr.scam.repository.RepositoryEvent;
 import se.kmr.scam.repository.RepositoryEventObject;
@@ -153,6 +157,17 @@ public class ListImpl extends RDFResource implements List {
 	}
 
 	public void addChild(URI nEntry, boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
+		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
+		boolean isOwnerOfContext = false;
+
+		if (pm != null) {
+			try {
+				pm.checkAuthenticatedUserAuthorized(this.entry.getContext().getEntry(), AccessProperty.WriteResource);
+				isOwnerOfContext = true;
+			} catch(AuthorizationException ae) {
+			}
+		}
+		
 		EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(nEntry);
 		if (singleParentForListsRequirement 
 				&& childEntry.getBuiltinType() == BuiltinType.List
@@ -174,10 +189,13 @@ public class ListImpl extends RDFResource implements List {
 					ValueFactory vf = entry.repository.getValueFactory();
 					rc.setAutoCommit(false);
 
+					if (isOwnerOfContext) {
+						childEntry.setOriginalListSynchronized(null, rc, vf);
+					}
 					if (children.size() == 0) {
 						rc.add(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
 					}
-
+					
 					org.openrdf.model.URI li = vf.createURI(RDF.NAMESPACE+"_"+Integer.toString(children.size()+1));
 					org.openrdf.model.URI childURI = vf.createURI(nEntry.toString());
 					rc.add(this.resourceURI, li, childURI, this.resourceURI);
@@ -200,40 +218,73 @@ public class ListImpl extends RDFResource implements List {
 		}	
 	}
 	
-	public Entry moveEntryHere(URI entry, URI fromList) throws QuotaException, IOException {
-		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
-		EntryImpl fromListEntry = ((EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(fromList));
+	
+	
+	public Entry moveEntryHere(URI entry, URI fromList, boolean removeFromAllLists) throws QuotaException, IOException {
+		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
+		pm.checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
 		EntryImpl e = ((EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(entry));
-		
-		if (fromListEntry == null) {
-			throw new se.kmr.scam.repository.RepositoryException("Cannot find list: "+fromList+" and hence cannot move an entry from it.");
-		}
+
 		if (e == null) {
 			throw new se.kmr.scam.repository.RepositoryException("Cannot find entry: "+entry+" and it cannot be moved.");			
 		}
-		if (fromListEntry.getContext() != e.getContext() 
-				|| fromListEntry.getBuiltinType() != BuiltinType.List
-				|| !((List) fromListEntry.getResource()).getChildren().contains(entry)) {
-			throw new se.kmr.scam.repository.RepositoryException("Entry ("+entry+") is not a child of list ("+fromList+"), hence it cannot be moved from it.");
-		}
 
-		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(fromListEntry, AccessProperty.WriteResource);
+		EntryImpl fromListEntry = ((EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(fromList));
+		if (fromListEntry == null && removeFromAllLists == false) {
+			throw new se.kmr.scam.repository.RepositoryException("Cannot find list: "+fromList+" and hence cannot move an entry from it.");
+		}
+		if (fromListEntry != null) {
+			if (fromListEntry.getContext() != e.getContext() 
+					|| fromListEntry.getBuiltinType() != BuiltinType.List
+					|| !((List) fromListEntry.getResource()).getChildren().contains(entry)) {
+				throw new se.kmr.scam.repository.RepositoryException("Entry ("+entry+") is not a child of list ("+fromList+"), hence it cannot be moved from it.");
+			}
+			pm.checkAuthenticatedUserAuthorized(fromListEntry, AccessProperty.WriteResource);
+		} else {
+			pm.checkAuthenticatedUserAuthorized(e.getContext().getEntry(), AccessProperty.WriteResource);
+		}
 		
-		ListImpl fromListR = (ListImpl) fromListEntry.getResource();
-		if (fromListEntry.getContext() == this.getEntry().getContext()) {
-			fromListR.removeChild(entry, false); //Disable orphan check
+		if (e.getContext() == this.getEntry().getContext()) {
+			if (fromListEntry != null) {
+				//Remove from given list.
+				ListImpl fromListR = (ListImpl) fromListEntry.getResource();
+				fromListR.removeChild(entry, false);
+			} else {
+				//Remove from all lists.
+				Set<URI> lists = e.getReferringListsInSameContext();
+				this.addChild(entry, false, true); //Disable multiple parent check for lists.
+				Context c = e.getContext();
+				for (Iterator<URI> iterator = lists.iterator(); iterator.hasNext();) {
+					Entry refListE = c.getByEntryURI((URI) iterator.next());
+					if (refListE != null) {
+						((ListImpl) refListE.getResource()).removeChild(e.getEntryURI(), false); //Disable orphan check
+					}
+				}
+			}
 			this.addChild(entry, false, true); //Disable multiple parent check for lists.
 			return e;
 		} else {
-			if (e.getReferringListsInSameContext().size() != 1) {
-				throw new se.kmr.scam.repository.RepositoryException("Cannot move entry: "+entry+" to another context since it appears in several lists.");				
+			//TODO change this.
+			int nrOfRefLists = e.getReferringListsInSameContext().size();
+			BuiltinType bt = e.getBuiltinType();
+			if (bt == BuiltinType.SystemContext || bt == BuiltinType.Context || bt == BuiltinType.User || bt == BuiltinType.Group) {
+				throw new se.kmr.scam.repository.RepositoryException("Cannot move SystemContexts, Contexts, Users or Groups.");
 			}
-			if (e.getBuiltinType() != BuiltinType.None) {
-				throw new se.kmr.scam.repository.RepositoryException("Cannot move entry: "+entry+" to another context since the builtin type is not none.");
-			}
-			fromListR.removeChild(entry, false);
-			Context c = this.entry.getContext();
 			EntryImpl newEntry = null;
+			if (bt == BuiltinType.List) {
+				try {
+					newEntry = this.copyEntryHere(e);
+					((List) e.getResource()).removeTree();
+				} catch (se.kmr.scam.repository.RepositoryException re) {
+					if (newEntry != null) {
+						throw new se.kmr.scam.repository.RepositoryException("Succedded in copying folder structure (leaving it there), but failed to remove the old structure (remove manually): "+re.getMessage());
+					} else {
+						throw new se.kmr.scam.repository.RepositoryException("Failed copying the folder structure, nothing is changed: "+re.getMessage());						
+					}
+				}
+				return newEntry;
+			}
+			Context c = this.entry.getContext();
 			switch(e.getLocationType()) {
 			case Local:
 				newEntry = (EntryImpl) c.createResource(null, e.getBuiltinType(), e.getRepresentationType(), getURI());
@@ -253,20 +304,79 @@ public class ListImpl extends RDFResource implements List {
 				break;
 			}
 			copyGraphs(e, newEntry);
-			e.getContext().remove(e.getEntryURI()); //Remove the old entry, it has been succesfully copied into the new list in the new context.
+			if (removeFromAllLists || (nrOfRefLists == 1 &&  e.getReferringListsInSameContext().size() == 0)) {
+				e.getContext().remove(e.getEntryURI()); //Remove the old entry, it has been succesfully copied into the new list in the new context.
+			} else {
+				ListImpl fromListR = (ListImpl) fromListEntry.getResource();
+				fromListR.removeChild(entry, false);
+			}
 			return newEntry;
 		}
 	}
+
+	protected EntryImpl copyEntryHere(EntryImpl entryToCopy) throws QuotaException, IOException {
+		return this._copyEntryHere(entryToCopy, true);
+	}
+	private EntryImpl _copyEntryHere(EntryImpl entryToCopy, boolean first) throws QuotaException, IOException {
+		EntryImpl newEntry = null;
+		try {
+		BuiltinType bt = entryToCopy.getBuiltinType();
+		if (bt == BuiltinType.User || bt == BuiltinType.Context || bt == BuiltinType.Group || bt == BuiltinType.SystemContext) {
+			return null;
+		}
+		
+		Context c = this.entry.getContext();
+		switch(entryToCopy.getLocationType()) {
+		case Local:
+			newEntry = (EntryImpl) c.createResource(null, entryToCopy.getBuiltinType(), entryToCopy.getRepresentationType(), getURI());
+			if (entryToCopy.getBuiltinType() == BuiltinType.None && entryToCopy.getRepresentationType() == RepresentationType.InformationResource) {
+				// FIXME if a QuotaException is thrown here we have already lost the original entry, this should be fixed 				
+				((DataImpl) newEntry.getResource()).useData(((DataImpl) entryToCopy.getResource()).getDataFile());
+			}
+			break;
+		case Link:
+			newEntry = (EntryImpl) c.createLink(null, entryToCopy.getResourceURI(), getURI());
+			break;
+		case LinkReference:
+			newEntry = (EntryImpl) c.createLinkReference(null, entryToCopy.getResourceURI(), entryToCopy.getExternalMetadataURI(), getURI());
+			break;
+		case Reference:
+			newEntry = (EntryImpl) c.createReference(null, entryToCopy.getResourceURI(), entryToCopy.getExternalMetadataURI(), getURI());
+			break;
+		}
+		copyGraphs(entryToCopy, newEntry);
+		if (bt == BuiltinType.List) {
+			ListImpl newList = (ListImpl) newEntry.getResource();
+			List oldList = (List) entryToCopy.getResource();
+			java.util.List<URI> children = oldList.getChildren();
+			for (Iterator iterator = children.iterator(); iterator.hasNext();) {
+				URI uri = (URI) iterator.next();
+				EntryImpl childEntryToCopy = ((EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(uri));
+				newList._copyEntryHere(childEntryToCopy, false);
+			}
+		}
+		} catch (Exception e) {
+			if (first && newEntry != null && newEntry.getBuiltinType() == BuiltinType.List) {
+				((List) newEntry.getResource()).removeTree();
+			}
+			throw new se.kmr.scam.repository.RepositoryException("Failed to copy entry ("+entryToCopy.getEntryURI()+"):"+e.getMessage());
+		}
+		
+		return newEntry;
+	}
+
 	
 	private void copyGraphs(EntryImpl source, EntryImpl dest) {
 		Graph eGraph = source.getGraph();
-		eGraph = replaceURI(eGraph, source.getSesameEntryURI(), dest.getSesameEntryURI());
-		eGraph = replaceURI(eGraph, source.getSesameLocalMetadataURI(), dest.getSesameLocalMetadataURI());
-		eGraph = replaceURI(eGraph, source.getSesameResourceURI(), dest.getSesameResourceURI());
+		HashMap<org.openrdf.model.URI,org.openrdf.model.URI> map = new HashMap<org.openrdf.model.URI,org.openrdf.model.URI>();
+		map.put(source.getSesameEntryURI(), dest.getSesameEntryURI());
+		map.put(source.getSesameLocalMetadataURI(), dest.getSesameLocalMetadataURI());
+		map.put(source.getSesameResourceURI(), dest.getSesameResourceURI());
 		if (source.getLocationType() == LocationType.LinkReference || source.getLocationType() == LocationType.Reference) {
-			eGraph = replaceURI(eGraph, source.getSesameExternalMetadataURI(), dest.getSesameExternalMetadataURI());			
-			eGraph = replaceURI(eGraph, source.getSesameCachedExternalMetadataURI(), dest.getSesameCachedExternalMetadataURI());			
+			map.put(source.getSesameExternalMetadataURI(), dest.getSesameExternalMetadataURI());
+			map.put(source.getSesameCachedExternalMetadataURI(), dest.getSesameCachedExternalMetadataURI());
 		}
+		eGraph = replaceURIs(eGraph, map);
 		dest.setGraph(eGraph);
 
 		dest.getLocalMetadata().setGraph(replaceURI(source.getLocalMetadata().getGraph(), source.getSesameResourceURI(), dest.getSesameResourceURI()));
@@ -274,7 +384,7 @@ public class ListImpl extends RDFResource implements List {
 			dest.getCachedExternalMetadata().setGraph(replaceURI(source.getCachedExternalMetadata().getGraph(), source.getSesameResourceURI(), dest.getSesameResourceURI()));
 		}
 		Object obj = source.getResource();
-		if (obj instanceof RDFResource) {
+		if (obj instanceof RDFResource && !(obj instanceof List)) {
 			((RDFResource) dest.getResource()).setGraph(replaceURI(((RDFResource) obj).getGraph(), source.getSesameResourceURI(), dest.getSesameResourceURI()));
 		}
 	}
@@ -297,12 +407,43 @@ public class ListImpl extends RDFResource implements List {
 		return nGraph;
 	}
 
+	private Graph replaceURIs(Graph graph, HashMap<org.openrdf.model.URI,org.openrdf.model.URI> map) {
+		ValueFactory vf = graph.getValueFactory();
+		Graph nGraph = new GraphImpl();
+		for (Statement statement : graph) {
+			org.openrdf.model.Resource subj = statement.getSubject();
+			org.openrdf.model.URI pred = statement.getPredicate();
+			Value obj = statement.getObject();
+			if (map.containsKey(subj)) {
+				subj = (org.openrdf.model.Resource) map.get(subj);
+			}
+			if (map.containsKey(pred)) {
+				pred = map.get(pred);
+			}
+			if (obj instanceof org.openrdf.model.URI && map.containsKey(obj)) {
+				obj = map.get(obj);
+			}
+			nGraph.add(subj, pred, obj);
+		}
+		return nGraph;
+	}
+
 	public boolean setChildren(java.util.List<URI> newChildren) {
 		return setChildren(newChildren, true, true);
 	}
 
 	public boolean setChildren(java.util.List<URI> newChildren,  boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
-		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
+		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
+		boolean isOwnerOfContext = false;
+
+		if (pm != null) {
+			pm.checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
+			try {
+				pm.checkAuthenticatedUserAuthorized(this.entry.getContext().getEntry(), AccessProperty.WriteResource);
+				isOwnerOfContext = true;
+			} catch(AuthorizationException ae) {
+			}
+		}
 		
 		if (children == null) {
 			loadChildren();
@@ -337,7 +478,7 @@ public class ListImpl extends RDFResource implements List {
 				log.warn("List contains entry which does not exist: " + uri);
 				continue;
 			}
-			if (!canRemove(true, childEntry)) {
+			if (!canRemove(true, childEntry, isOwnerOfContext)) {
 				throw new se.kmr.scam.repository.RepositoryException("Cannot set the list since you do not have the rights to remove the child "+uri+" from the list.");
 			}
 		}
@@ -354,6 +495,9 @@ public class ListImpl extends RDFResource implements List {
 						EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri); 
 						if (childEntry != null) {
 							childEntry.addReferringList(this, rc); //TODO deprecate addReferringList.
+							if (isOwnerOfContext) {
+								childEntry.setOriginalListSynchronized(null, rc, entry.repository.getValueFactory());
+							}
 							entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 						}
 					}
@@ -361,6 +505,9 @@ public class ListImpl extends RDFResource implements List {
 						EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
 						if (childEntry != null) {
 							childEntry.removeReferringList(this, rc); //TODO deprecate removeReferringList.
+							if (isOwnerOfContext) {
+								childEntry.setOriginalListSynchronized(null, rc, entry.repository.getValueFactory());
+							}
 							entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 						}
 					}
@@ -432,6 +579,7 @@ public class ListImpl extends RDFResource implements List {
 	}
 	
 	protected boolean removeChild(URI child, boolean checkOrphaned) {
+		
 		if (children == null) {
 			loadChildren();
 		}
@@ -440,14 +588,27 @@ public class ListImpl extends RDFResource implements List {
 		}
 
 		synchronized (this.entry.repository) {
+			boolean isOwnerOfContext = true;
+			PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
+			if (pm != null) {
+				try {
+					pm.checkAuthenticatedUserAuthorized(this.entry.getContext().getEntry(), AccessProperty.WriteResource);
+				} catch(AuthorizationException ae) {
+					isOwnerOfContext = false;
+				}
+			}
+			
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(child);
-			if ((childEntry != null) && canRemove(checkOrphaned, childEntry)) {
+			if ((childEntry != null) && canRemove(checkOrphaned, childEntry, isOwnerOfContext)) {
 				children.remove(child);
 				try {
 					RepositoryConnection rc = entry.repository.getConnection();
 					ValueFactory vf = entry.repository.getValueFactory();
 					try {
 						rc.setAutoCommit(false);
+						if (checkOrphaned && isOwnerOfContext) {
+							childEntry.setOriginalListSynchronized(null, rc, vf); //remains to do the same for list case.
+						}
 						saveChildren(rc);
 						childEntry.removeReferringList(this, rc);
 						rc.commit();
@@ -470,20 +631,16 @@ public class ListImpl extends RDFResource implements List {
 		}
 	}
 
-	private boolean canRemove(boolean checkOrphaned, EntryImpl childEntry) {
+	private boolean canRemove(boolean checkOrphaned, EntryImpl childEntry, boolean isOwnerOfContext) {
 		if (childEntry == null) {
 			return false;
 		}
 		Set<java.net.URI> refLists = childEntry.getReferringListsInSameContext();
 		if ((refLists != null) && checkOrphaned && refLists.size() == 1) {
-			try {
-				EntryImpl contextEntry = ((ContextImpl) this.entry.getContext()).entry;
-				this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(contextEntry, AccessProperty.WriteResource);
-			} catch (AuthorizationException ae) {
-				// Not allowed to remove since user has access only to this list and the only 
-				// use of the child is in this list. I.e. the user are not allowed to orphan 
-				// resources unless he or she has write access to the context.
-				return false; 
+			if (isOwnerOfContext) {
+				return true;
+			} else {
+				return childEntry.getOriginalList() == null;
 			}
 		}
 		return true;

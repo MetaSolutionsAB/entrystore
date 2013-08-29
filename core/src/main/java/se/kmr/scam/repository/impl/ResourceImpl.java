@@ -43,6 +43,10 @@ public class ResourceImpl implements Resource {
 		return URI.create(resourceURI.toString());
 	}
 	
+	public org.openrdf.model.URI getSesameURI() {
+		return resourceURI;
+	}
+	
 	public Entry getEntry() {
 		return this.entry;
 	}

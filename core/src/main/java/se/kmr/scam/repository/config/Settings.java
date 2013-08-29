@@ -59,6 +59,8 @@ public class Settings {
 	public static String SCAM_STORE_PATH = "scam.repository.store.path";
 	public static String SCAM_STORE_INDEXES = "scam.repository.store.indexes";
 	public static String SCAM_STORE_TYPE = "scam.repository.store.type";
+	public static String SCAM_STOREJS_JS = "scam.repository.storejs.js";
+	public static String SCAM_STOREJS_CSS = "scam.repository.storejs.css";
 	
 	public static String SCAM_SOLR = "scam.solr";
 	public static String SCAM_SOLR_URL = "scam.solr.url";

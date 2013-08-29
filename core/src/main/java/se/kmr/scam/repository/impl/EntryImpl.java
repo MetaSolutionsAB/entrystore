@@ -57,6 +57,7 @@ import se.kmr.scam.repository.RepositoryProperties;
 import se.kmr.scam.repository.RepresentationType;
 import se.kmr.scam.repository.Resource;
 import se.kmr.scam.repository.PrincipalManager.AccessProperty;
+import se.kmr.scam.repository.User;
 import se.kmr.scam.repository.util.URISplit;
 
 //TODO change expression to match paper.
@@ -100,6 +101,7 @@ public class EntryImpl implements Entry {
 	private long fileSize = -1;
 	private String filename;
 	private Boolean readOrWrite;
+	private String originalList;
 
 
 	//A ugly hack to be able to initialize the ContextManager itself.
@@ -396,6 +398,8 @@ public class EntryImpl implements Entry {
 			return BuiltinType.Group;
 		} else if (bt.equals(RepositoryProperties.String)) {
 			return BuiltinType.String;
+		} else if (bt.equals(RepositoryProperties.Graph)) {
+			return BuiltinType.Graph;
 		} else if (bt.equals(RepositoryProperties.None)) {
 			return BuiltinType.None;
 		} 
@@ -515,7 +519,14 @@ public class EntryImpl implements Entry {
 			rc = this.repository.getConnection();
 			RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, entryURI);
 			List<Statement> stmnts = rr.asList();
-			Graph graph = new GraphImpl(this.repository.getValueFactory(), stmnts);
+			ValueFactory vf = this.repository.getValueFactory();
+			Graph graph = new GraphImpl(vf, stmnts);
+			//TODO following is a fix for backwards compatability where homeContext is set on user object rather than in the entryinfo.
+			if (this.resource instanceof User && ((User) this.resource).getHomeContext() != null) {
+				Context context = ((User) this.resource).getHomeContext();
+				graph.add(this.getSesameResourceURI(), RepositoryProperties.homeContext, ((ContextImpl) context).getSesameURI());
+			}
+			//End of fix.
 			return graph;
 		} catch (RepositoryException e) {
 			log.error(e.getMessage(), e);
@@ -533,7 +544,8 @@ public class EntryImpl implements Entry {
 		HashSet<java.net.URI> set = new HashSet<java.net.URI>();
 		List<Statement> relations = getRelations();
 		for (Statement statement : relations) {
-			if (statement.getPredicate().equals(RepositoryProperties.hasListMember)) {
+			if (statement.getPredicate().equals(RepositoryProperties.hasListMember) ||
+				statement.getPredicate().equals(RepositoryProperties.hasGroupMember)) {
 				set.add(java.net.URI.create(statement.getSubject().toString()));
 			}
 		}
@@ -1199,6 +1211,7 @@ public class EntryImpl implements Entry {
 				setExternalMetadataURI(java.net.URI.create(newResourceURI.toString()));
 			}
 		}
+		String originalList = this.getOriginalList();
 		
 		try {
 			synchronized (this.repository) {
@@ -1295,6 +1308,10 @@ public class EntryImpl implements Entry {
 							URI contrib =  iter.next();
 							rc.add(entryURI, RepositoryProperties.Contributor, contrib, entryURI);
 						}
+					}
+					
+					if (originalList !=null) {
+						rc.add(entryURI, RepositoryProperties.originallyCreatedIn, vf.createURI(originalList), entryURI);
 					}
 
 					modified = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
@@ -1522,28 +1539,37 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	public boolean replaceStatement(URI subject, URI predicate, Value object) {
+	public boolean replaceStatementSynchronized(URI subject, URI predicate, Value object, RepositoryConnection rc, ValueFactory vf) throws RepositoryException {
+		rc.remove(subject, predicate, null, entryURI);
+		rc.add(subject, predicate, object, entryURI);
+		registerEntryModified(rc, vf);
+		return true;
+	}
+	
+	public boolean replaceStatementSynchronized(URI subject, URI predicate, Value object) {
 		try {
-			synchronized (this.repository) {
-				RepositoryConnection rc = this.repository.getConnection();
-				rc.setAutoCommit(false);
-				try {
-					rc.remove(subject, predicate, null, entryURI);
-					rc.add(subject, predicate, object, entryURI);
-					registerEntryModified(rc, this.repository.getValueFactory());
-					rc.commit();
-					return true;
-				} catch (Exception e) {
-					rc.rollback();
-					e.printStackTrace();
-					throw new se.kmr.scam.repository.RepositoryException("Error in repository connection.", e);
-				} finally {
-					rc.close();
-				}
+			RepositoryConnection rc = this.repository.getConnection();
+			rc.setAutoCommit(false);
+			try {
+				boolean result = this.replaceStatementSynchronized(subject, predicate, object, rc, this.repository.getValueFactory());
+				rc.commit();
+				return result;
+			} catch (Exception e) {
+				rc.rollback();
+				e.printStackTrace();
+				throw new se.kmr.scam.repository.RepositoryException("Error in repository connection.", e);
+			} finally {
+				rc.close();
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
 			throw new se.kmr.scam.repository.RepositoryException("Failed to connect to Repository.", e);
+		}		
+	}
+	
+	public boolean replaceStatement(URI subject, URI predicate, Value object) {
+		synchronized (this.repository) {
+			return this.replaceStatementSynchronized(subject, predicate, object);
 		}
 	}
 
@@ -1601,6 +1627,61 @@ public class EntryImpl implements Entry {
 		}
 	}
 
+	/**
+	 * @return the original list where the entry was created, null if the creator was the owner of 
+	 * the current context or has since added it to another list or removed it from all lists.
+	 */
+	public String getOriginalList () {
+		if (this.originalList == null) {
+			Statement st = this.getStatement(this.entryURI, RepositoryProperties.originallyCreatedIn, null);
+			if (st != null &&  st.getObject() instanceof URI) {
+				this.originalList = st.getObject().stringValue();
+			} else {
+				this.originalList = "";
+			}
+		}
+		if (this.originalList.equals("")) {
+			return null;
+		}
+		return this.originalList;
+	}
+
+	public void setOriginalListSynchronized(String list, RepositoryConnection rc, ValueFactory vf) throws RepositoryException {
+		rc.remove(this.entryURI, RepositoryProperties.originallyCreatedIn, null, this.entryURI);
+		if (list != null) {
+			rc.add(this.entryURI, RepositoryProperties.originallyCreatedIn, vf.createURI(list), this.entryURI);
+			this.originalList = list;
+		} else {
+			this.originalList = "";
+		}
+	}
+
+	public void setOriginalListSynchronized(String list) {
+		try {
+			RepositoryConnection rc = this.repository.getConnection();
+			rc.setAutoCommit(false);
+			try {
+				rc.remove(this.entryURI, RepositoryProperties.originallyCreatedIn, null, this.entryURI);
+				if (list != null) {
+					rc.add(this.entryURI, RepositoryProperties.originallyCreatedIn, this.repository.getValueFactory().createURI(list), this.entryURI);
+					this.originalList = list;
+				} else {
+					this.originalList = "";
+				}
+				rc.commit();
+			} catch (Exception e) {
+				rc.rollback();
+				e.printStackTrace();
+				throw new se.kmr.scam.repository.RepositoryException("Error in repository connection.", e);
+			} finally {
+				rc.close();
+			}
+		} catch (RepositoryException e) {
+			e.printStackTrace();
+			throw new se.kmr.scam.repository.RepositoryException("Failed to connect to Repository.", e);
+		}		
+	}
+	
 	public List<Statement> getRelations() {
 		if (this.relations == null) {
 			RepositoryConnection rc = null;

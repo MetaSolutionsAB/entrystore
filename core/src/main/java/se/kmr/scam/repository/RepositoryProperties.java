@@ -87,6 +87,7 @@ public class RepositoryProperties {
 	public static final URI hasListMember;
 	public static final URI hasGroupMember;
 	
+	
 	public static final URI Local;
 	public static final URI Reference;
 	public static final URI Link;
@@ -104,6 +105,7 @@ public class RepositoryProperties {
 	public static final URI homeContext;
 	public static final URI secret;
 	public static final URI language;
+	public static final URI originallyCreatedIn;
 
 	public static final URI Graph;
 	
@@ -168,6 +170,8 @@ public class RepositoryProperties {
 		secret = vf.createURI(NSbase + "secret");
 		homeContext = vf.createURI(NSbase + "homeContext");
 		language = vf.createURI(NSbase + "language");
+		
+		originallyCreatedIn = vf.createURI(NSbase + "originallyCreatedIn");
 		
 		Graph = vf.createURI("http://www.w3.org/2004/03/trix/rdfg-1/Graph");
 

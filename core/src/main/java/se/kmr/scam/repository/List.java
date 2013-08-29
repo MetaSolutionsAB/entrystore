@@ -57,13 +57,14 @@ public interface List extends Resource {
 	/**
 	 * Moves an entry to this list and removes it from another.
 	 * 
-	 * @param entry to move
-	 * @param fromList a list wherefrom the entry will be removed.
-	 * @param the moved entry, a new entry if the move was to another context.
+	 * @param entry to move can be an entire folder tree.
+	 * @param fromList a list where from the entry will be removed.
+	 * @param removeFromAllLists if true the entry(or entries in case of a folder tree) 
+	 * will be removed from all lists in the originating context, not only fromList.
 	 * @throws IOException 
 	 * @throws QuotaException 
 	 */
-	Entry moveEntryHere(URI entry, URI fromList) throws QuotaException, IOException;
+	Entry moveEntryHere(URI entry, URI fromList, boolean removeAll) throws QuotaException, IOException;
 	
 	/**
 	 * Moves one child after another.

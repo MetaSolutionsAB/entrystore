@@ -562,7 +562,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			public boolean isMember(User user) {
 				return (user != null &&
 						PrincipalManagerImpl.this.guestUser != null &&
-						user.getURI().equals(PrincipalManagerImpl.this.guestUser.getURI()));
+						!user.getURI().equals(PrincipalManagerImpl.this.guestUser.getURI()));
 				// return true;
 			}
 			@Override
