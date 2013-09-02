@@ -158,7 +158,11 @@ public class RDFJSON {
 					while (stmnts.hasNext()) {
 						Value v = stmnts.next().getObject();
 						JSONObject valueObj = new JSONObject();
-						valueObj.put("value", v.stringValue());
+						if (v instanceof BNode && !v.stringValue().startsWith("_:")) {
+							valueObj.put("value", "_:"+v.stringValue());
+						} else {
+							valueObj.put("value", v.stringValue());							
+						}
 						if (v instanceof Literal) {
 							valueObj.put("type", "literal");	
 							Literal l = (Literal) v;
@@ -176,7 +180,11 @@ public class RDFJSON {
 					}
 					predicateObj.put(predicate.stringValue(), valueArray);
 				}
-				result.put(subject.stringValue(), predicateObj);
+				if (subject instanceof BNode && !subject.stringValue().startsWith("_:")) {
+					result.put("_:"+subject.stringValue(), predicateObj);					
+				} else {
+					result.put(subject.stringValue(), predicateObj);					
+				}
 			}
 			return result.toString(2);
 		} catch (JSONException e) {
@@ -220,7 +228,11 @@ public class RDFJSON {
 				subjects.add(s1.getSubject());
 			}
 			for (Resource subject : subjects) {
-				g.writeObjectFieldStart(subject.stringValue()); // subject
+				if (subject instanceof BNode && !subject.stringValue().startsWith("_:")) {
+					g.writeObjectFieldStart("_:"+subject.stringValue()); // subject
+				} else {
+					g.writeObjectFieldStart(subject.stringValue()); // subject					
+				}
 				Set<URI> predicates = new HashSet<URI>();
 				Iterator<Statement> s2 = graph.match(subject, null, null);
 				while (s2.hasNext()) {
@@ -232,7 +244,11 @@ public class RDFJSON {
 					while (stmnts.hasNext()) {
 						Value v = stmnts.next().getObject();
 						g.writeStartObject(); // value
-						g.writeStringField("value", v.stringValue());
+						if (v instanceof BNode && ! v.stringValue().startsWith("_:")) {
+							g.writeStringField("value", "_:"+v.stringValue());							
+						} else {
+							g.writeStringField("value", v.stringValue());							
+						}
 						if (v instanceof Literal) {
 							g.writeStringField("type", "literal");
 							Literal l = (Literal) v;
