@@ -25,6 +25,7 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -58,6 +59,7 @@ import org.restlet.Response;
 import org.restlet.Uniform;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
+import org.restlet.data.Preference;
 import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.data.Status;
@@ -222,7 +224,6 @@ public class ProxyResource extends BaseResource {
 			return null;
 		}
 
-		Request request = new Request(Method.GET, url);
 		if (client == null) {
 			client = new Client(Protocol.HTTP);
 			client.setConnectTimeout(10000);
@@ -232,6 +233,8 @@ public class ProxyResource extends BaseResource {
 	        log.info("Initialized HTTP client for proxy request");
 		}
 
+		Request request = new Request(Method.GET, url);
+		request.getClientInfo().setAcceptedMediaTypes(getRequest().getClientInfo().getAcceptedMediaTypes());
 		Response response = client.handle(request);
 		
 		if (response.getStatus().isRedirection()) {
