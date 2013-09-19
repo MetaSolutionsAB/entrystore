@@ -19,7 +19,7 @@
 	<!-- ================= Properties ================= -->
 	<properties>
       <clover.licenseLocation>${basedir}/../../src/resources/clover.license</clover.licenseLocation>
-      <restlet.version>2.1.2</restlet.version>
+      <restlet.version>2.1.4</restlet.version>
     </properties>
     
 	<!-- ================= SCM ================= -->
