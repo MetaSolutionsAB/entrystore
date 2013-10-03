@@ -34,6 +34,7 @@ import java.util.StringTokenizer;
 
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
+import org.apache.solr.common.SolrException;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -45,9 +46,11 @@ import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.util.GraphUtil;
 import org.openrdf.model.vocabulary.RDF;
+import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
+import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
@@ -505,9 +508,15 @@ public class SearchResource extends BaseResource {
 					q.addSortField("modified", ORDER.desc);
 				}
 				
-				QueryResult qResult = getRM().getSolrSupport().sendQuery(q);
-				entries = new LinkedList<Entry>(qResult.getEntries());
-				results = qResult.getHits();
+				try {
+					QueryResult qResult = getRM().getSolrSupport().sendQuery(q);
+					entries = new LinkedList<Entry>(qResult.getEntries());
+					results = qResult.getHits();
+				} catch (SolrException se) {
+					log.warn(se.getMessage());
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					return new StringRepresentation("{\"error\":\"Search failed due to wrong parameters\"}", MediaType.APPLICATION_JSON);
+				}
 			}
 
 			try {
