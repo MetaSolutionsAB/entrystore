@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -35,9 +36,9 @@ import se.kmr.scam.repository.Data;
 import se.kmr.scam.repository.Entry;
 import se.kmr.scam.repository.LocationType;
 import se.kmr.scam.repository.PrincipalManager;
+import se.kmr.scam.repository.PrincipalManager.AccessProperty;
 import se.kmr.scam.repository.RepositoryManager;
 import se.kmr.scam.repository.RepresentationType;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
 import se.kmr.scam.repository.config.Settings;
 import se.kmr.scam.repository.impl.LocalMetadataWrapper;
 import se.kmr.scam.repository.impl.converters.ConverterUtil;
@@ -255,13 +256,16 @@ public class SolrSupport {
 		// titles
 		Map<String, String> titles = EntryUtil.getTitles(entry);
 		if (titles != null && titles.size() > 0) {
+			Set<String> langs = new HashSet<String>();
 			for (String title : titles.keySet()) {
 				doc.addField("title", title, 10);
 				// we also store title.{lang} as dynamic field to be able to
 				// sort after titles in a specific language
 				String lang = titles.get(title);
-				if (lang != null) {
+				// we only want one title per language, otherwise sorting will not work
+				if (lang != null && !langs.contains(lang)) {
 					doc.addField("title." + lang, title, 10);
+					langs.add(lang);
 				}
 			}
 		}
@@ -477,6 +481,7 @@ public class SolrSupport {
 						}
 					}
 				} catch (AuthorizationException ae) {
+					hits--;
 					continue;
 				}
 			}

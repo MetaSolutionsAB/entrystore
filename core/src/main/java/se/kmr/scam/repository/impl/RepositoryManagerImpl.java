@@ -47,7 +47,7 @@ import net.sf.ehcache.CacheManager;
 
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
-import org.apache.solr.client.solrj.impl.CommonsHttpSolrServer;
+import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.core.CoreContainer;
 import org.openrdf.model.Resource;
 import org.openrdf.model.Statement;
@@ -86,9 +86,9 @@ import se.kmr.scam.repository.config.Config;
 import se.kmr.scam.repository.config.Settings;
 import se.kmr.scam.repository.util.FileOperations;
 import se.kmr.scam.repository.util.InterceptingRDFInserter;
+import se.kmr.scam.repository.util.InterceptingRDFInserter.StatementModifier;
 import se.kmr.scam.repository.util.SolrSupport;
 import se.kmr.scam.repository.util.StringUtils;
-import se.kmr.scam.repository.util.InterceptingRDFInserter.StatementModifier;
 
 public class RepositoryManagerImpl implements RepositoryManager {
 
@@ -701,12 +701,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		String solrURL = config.getString(Settings.SCAM_SOLR_URL);
 		if (solrURL.startsWith("http://")) {
 			log.info("Using HTTP Solr server");
-			try {
-				solrServer = new CommonsHttpSolrServer(solrURL);
-			} catch (MalformedURLException e) {
-				log.error("Unable to initialize Solr: " + e.getMessage());
-			}
-			((CommonsHttpSolrServer) solrServer).setAllowCompression(true);
+			solrServer = new HttpSolrServer(solrURL);
+			((HttpSolrServer) solrServer).setAllowCompression(true);
 		} else {
 			log.info("Using embedded Solr server");
 			File solrDir = new File(solrURL);
@@ -717,6 +713,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			try {
 				System.setProperty("solr.solr.home", solrURL);
 				log.info("solr.solr.home set to " + solrURL);
+				// URL solrConfig = ConverterUtil.findResource("solrconfig.xml");
+				// solrServer = new EmbeddedSolrServer(CoreContainer.createAndLoad(solrURL, new File(solrConfig.getPath())), "");
 				CoreContainer.Initializer initializer = new CoreContainer.Initializer();
 				CoreContainer coreContainer = initializer.initialize();
 				solrServer = new EmbeddedSolrServer(coreContainer, "");
