@@ -119,7 +119,7 @@ public class ListTest {
 		Entry listE2 = duck.createResource(null, BuiltinType.List, null, null); // since owner
 		Entry linkEntry = duck.createLink(null, URI.create("http://slashdot.org/"), listE1.getResourceURI());
 
-		((List) listE2.getResource()).moveEntryHere(linkEntry.getEntryURI(), listE1.getEntryURI());
+		((List) listE2.getResource()).moveEntryHere(linkEntry.getEntryURI(), listE1.getEntryURI(), false);
 		assertTrue(((List) listE1.getResource()).getChildren().size() == 0);
 		assertTrue(((List) listE2.getResource()).getChildren().size() == 1);
 	}
@@ -134,7 +134,7 @@ public class ListTest {
 		Entry linkEntry = duck.createLink(null, URI.create("http://slashdot.org/"), listE1.getResourceURI());
 
 		Entry listE2 = mouse.createResource(null, BuiltinType.List, null, null); // since owner
-		Entry newEntry = ((List) listE2.getResource()).moveEntryHere(linkEntry.getEntryURI(), listE1.getEntryURI());
+		Entry newEntry = ((List) listE2.getResource()).moveEntryHere(linkEntry.getEntryURI(), listE1.getEntryURI(), false);
 		assertTrue(duck.getByEntryURI(linkEntry.getEntryURI()) == null);
 		assertTrue(newEntry.getContext() == mouse);
 		assertTrue(((List) listE2.getResource()).getChildren().size() == 1);
