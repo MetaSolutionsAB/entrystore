@@ -583,22 +583,32 @@
 		<!-- the slf4j commons-logging replacement -->
 		<dependency>
 			<groupId>org.slf4j</groupId>
-			<artifactId>jcl104-over-slf4j</artifactId>
-			<version>1.5.0</version>
+			<!--<artifactId>jcl104-over-slf4j</artifactId>-->
+			<artifactId>jcl-over-slf4j</artifactId>
+			<version>1.7.5</version>
 		</dependency>
 		<!-- the other slf4j jars -->
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-api</artifactId>
-			<version>1.5.0</version>
+			<version>1.7.5</version>
 		</dependency>
 		<!-- using log4j as backend -->
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-log4j12</artifactId>
-			<version>1.5.0</version>
+			<version>1.7.5</version>
 		</dependency>
 	</dependencies>
+	
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.apache.httpcomponents</groupId>
+				<artifactId>httpclient</artifactId>
+				<version>4.2.3</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 
 </project>
-
