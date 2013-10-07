@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.oaipmh;
+package org.entrystore.harvesting.oaipmh;
 
 import java.io.InputStream;
 

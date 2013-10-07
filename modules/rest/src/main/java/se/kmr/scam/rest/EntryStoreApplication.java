@@ -28,6 +28,7 @@ import javax.servlet.ServletContext;
 
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
+import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Converter;
@@ -59,7 +60,6 @@ import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 import se.kmr.scam.rest.auth.BasicVerifier;
 import se.kmr.scam.rest.auth.CookieVerifier;
 import se.kmr.scam.rest.auth.SimpleAuthenticator;

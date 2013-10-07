@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.oaipmh.harvester.factory;
+package org.entrystore.harvesting.oaipmh.harvester.factory;
 
 
 import java.net.URI;
@@ -24,6 +24,7 @@ import java.util.Collection;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactory;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
+import org.entrystore.harvesting.oaipmh.harvester.OAIHarvester;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryProperties;
@@ -35,7 +36,6 @@ import org.openrdf.model.ValueFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.harvesting.oaipmh.harvester.OAIHarvester;
 
 
 public class OAIHarvesterFactory implements HarvesterFactory {

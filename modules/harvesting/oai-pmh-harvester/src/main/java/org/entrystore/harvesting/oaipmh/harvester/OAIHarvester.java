@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.oaipmh.harvester;
+package org.entrystore.harvesting.oaipmh.harvester;
 
 import java.net.URI;
 import java.text.ParseException;
@@ -22,6 +22,7 @@ import java.text.ParseException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.harvester.Harvester;
+import org.entrystore.harvesting.oaipmh.jobs.ListRecordsJob;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
@@ -30,7 +31,6 @@ import org.quartz.SchedulerException;
 import org.quartz.Trigger;
 import org.quartz.impl.StdSchedulerFactory;
 
-import se.kmr.scam.harvesting.oaipmh.jobs.ListRecordsJob;
 
 
 public class OAIHarvester extends Harvester {

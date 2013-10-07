@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.oaipmh.jobs;
+package org.entrystore.harvesting.oaipmh.jobs;
 
 import java.io.IOException;
 import java.util.Iterator;

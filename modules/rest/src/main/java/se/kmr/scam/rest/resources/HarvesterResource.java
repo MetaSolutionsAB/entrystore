@@ -24,6 +24,7 @@ import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactory;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.fao.FAOHarvesterFactory;
+import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Entry;
@@ -40,7 +41,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 
 public class HarvesterResource extends BaseResource {
 
