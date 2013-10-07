@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.oaipmh.target.integrationtest;
+package org.entrystore.harvesting.oaipmh.target.integrationtest;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;

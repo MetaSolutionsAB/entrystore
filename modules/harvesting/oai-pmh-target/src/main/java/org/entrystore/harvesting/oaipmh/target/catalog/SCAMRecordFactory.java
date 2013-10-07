@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.oaipmh.target.catalog;
+package org.entrystore.harvesting.oaipmh.target.catalog;
 
 import java.net.URI;
 import java.text.SimpleDateFormat;

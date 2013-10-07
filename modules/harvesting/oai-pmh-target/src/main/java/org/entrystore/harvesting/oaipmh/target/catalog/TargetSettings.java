@@ -14,26 +14,21 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.oaipmh.target;
-
-import java.io.InputStream;
-
-import static org.junit.Assert.assertNotNull;
-import org.junit.Test; 
-
+package org.entrystore.harvesting.oaipmh.target.catalog;
 
 /**
- * A class to test that JUnit 4 works with build environment
- *
- * Todo: remove this class before first release
- *
- * @author mlkn
- * @version $Id$
+ * @author Hannes Ebner
  */
-public class SimpleTest {
-	@Test
-	public void testFindProperty() {
-		  InputStream is = getClass().getResourceAsStream( "/log4j.properties" );
-		  assertNotNull(is); 
-	}
+public class TargetSettings {
+	
+	public static String OAI_SETS_AUTOMATIC = "scam.oai-pmh.sets.automatic";
+	
+	public static String OAI_SETS_LIST = "scam.oai-pmh.sets";
+	
+	public static String OAI_SET_DEFINITION_BASE = "scam.oai-pmh.set.";
+	
+	public static String OAI_SET_ALL = "scam.oai-pmh.set.all.contexts.1";
+	
+	public static String OAI_CACHE_ENABLED = "scam.oai-pmh.cache.enabled";
+
 }

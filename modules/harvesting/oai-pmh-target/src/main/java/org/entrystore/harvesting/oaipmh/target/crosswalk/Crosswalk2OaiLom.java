@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.oaipmh.target.crosswalk;
+package org.entrystore.harvesting.oaipmh.target.crosswalk;
 
 import java.io.File;
 import java.io.StringWriter;
