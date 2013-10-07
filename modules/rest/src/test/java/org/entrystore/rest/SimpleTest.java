@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.rest;
+package org.entrystore.rest;
 
 import java.io.InputStream;
 

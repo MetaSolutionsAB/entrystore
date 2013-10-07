@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.rest.integrationtest;
+package org.entrystore.rest.integrationtest;
 
 import java.io.File;
 import java.net.URL;
