@@ -42,8 +42,6 @@ import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.harvester.Harvester;
 import se.kmr.scam.harvester.factory.HarvesterFactoryException;
-import se.kmr.scam.harvesting.fao.FAO2RDFGraphConverter;
-import se.kmr.scam.harvesting.fao.FAOHarvesterFactory;
 import se.kmr.scam.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 import se.kmr.scam.repository.BuiltinType;
 import se.kmr.scam.repository.ContextManager;
@@ -213,7 +211,6 @@ public class ScamApplication extends Application {
 			Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
 			ConverterManagerImpl.register("oai_dc", oaiDcRdfConverter);
 			ConverterManagerImpl.register("rdn_dc", oaiDcRdfConverter);
-			ConverterManagerImpl.register("fao_xml", new FAO2RDFGraphConverter());
 			ConverterManagerImpl.register("rdf2lom", new RDF2LOMConverter());
 			Converter lomRdfConverter = new LOM2RDFConverter();
 			ConverterManagerImpl.register("lom2rdf", lomRdfConverter);
@@ -418,18 +415,6 @@ public class ScamApplication extends Application {
 							Harvester har = fac.getHarvester(rm, entry.getEntryURI());
 							har.run();
 							harvesters.add(har);
-						} catch (HarvesterFactoryException e) {
-							log.error(e.getMessage());
-							e.printStackTrace();
-						}
-					}
-					
-					FAOHarvesterFactory faoHF = new FAOHarvesterFactory();
-					if (faoHF.isFAOHarvester(entry)) {
-						try {
-							Harvester h = faoHF.getHarvester(rm, entry.getEntryURI());
-							h.run();
-							harvesters.add(h);
 						} catch (HarvesterFactoryException e) {
 							log.error(e.getMessage());
 							e.printStackTrace();
