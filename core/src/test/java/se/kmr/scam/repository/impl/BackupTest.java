@@ -22,26 +22,26 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.Context;
+import org.entrystore.repository.ContextManager;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.LocationType;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.RepositoryProperties;
+import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.backup.BackupFactory;
+import org.entrystore.repository.backup.BackupScheduler;
+import org.entrystore.repository.config.Config;
+import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.junit.Before;
 import org.junit.Test;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.vocabulary.RDF;
-
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Context;
-import se.kmr.scam.repository.ContextManager;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.LocationType;
-import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.RepositoryException;
-import se.kmr.scam.repository.RepositoryProperties;
-import se.kmr.scam.repository.RepresentationType;
-import se.kmr.scam.repository.backup.BackupFactory;
-import se.kmr.scam.repository.backup.BackupScheduler;
-import se.kmr.scam.repository.config.Config;
-import se.kmr.scam.repository.config.ConfigurationManager;
-import se.kmr.scam.repository.config.Settings;
 
 public class BackupTest {
 	private RepositoryManagerImpl rm;

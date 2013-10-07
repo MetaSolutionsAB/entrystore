@@ -24,6 +24,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.Context;
+import org.entrystore.repository.ContextManager;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.repository.util.CommonQueries;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -31,14 +39,6 @@ import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.query.MalformedQueryException;
 import org.openrdf.repository.RepositoryException;
-
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Context;
-import se.kmr.scam.repository.ContextManager;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.config.ConfigurationManager;
-import se.kmr.scam.repository.config.Settings;
-import se.kmr.scam.repository.util.CommonQueries;
 
 /**
  */
@@ -225,7 +225,7 @@ public class ContextManagerTest {
 	@Test
 	public void systemEntriesListCheck() {
 		Entry seEntry = cm.get("_systemEntries");
-		se.kmr.scam.repository.List listOfSEEntries = (se.kmr.scam.repository.List) seEntry.getResource();
+		org.entrystore.repository.List listOfSEEntries = (org.entrystore.repository.List) seEntry.getResource();
 		int nrOfSE = listOfSEEntries.getChildren().size();
 		int nrOfSC = rm.getSystemContextAliases().size();
 		assertTrue(nrOfSE == nrOfSC+4); //All #SystemEntries = #SystemContext + the special _all,  _top, and _backup systemEntries

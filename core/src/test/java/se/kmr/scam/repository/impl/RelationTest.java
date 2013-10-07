@@ -21,25 +21,25 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.net.URI;
 
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.Context;
+import org.entrystore.repository.ContextManager;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.List;
+import org.entrystore.repository.Metadata;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.User;
+import org.entrystore.repository.config.Config;
+import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.EntryImpl;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.repository.test.TestSuite;
 import org.junit.Before;
 import org.junit.Test;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
-import org.openrdf.model.vocabulary.RDF;
 import org.openrdf.model.vocabulary.RDFS;
-
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Context;
-import se.kmr.scam.repository.ContextManager;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.List;
-import se.kmr.scam.repository.Metadata;
-import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.User;
-import se.kmr.scam.repository.config.Config;
-import se.kmr.scam.repository.config.ConfigurationManager;
-import se.kmr.scam.repository.config.Settings;
-import se.kmr.scam.repository.test.TestSuite;
 
 /**
  */

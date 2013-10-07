@@ -24,24 +24,23 @@ import java.net.URI;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.Context;
+import org.entrystore.repository.ContextManager;
+import org.entrystore.repository.DisallowedException;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.Group;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.config.Config;
+import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.repository.test.TestSuite;
 import org.junit.Before;
 import org.junit.Test;
-
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Context;
-import se.kmr.scam.repository.ContextManager;
-import se.kmr.scam.repository.DisallowedException;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.Group;
-import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.RepositoryException;
-import se.kmr.scam.repository.RepresentationType;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
-import se.kmr.scam.repository.config.Config;
-import se.kmr.scam.repository.config.ConfigurationManager;
-import se.kmr.scam.repository.config.Settings;
-import se.kmr.scam.repository.test.TestSuite;
 
 /**
  */

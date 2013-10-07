@@ -17,22 +17,17 @@
 
 package se.kmr.scam.repository.impl;
 
-import static org.junit.Assert.assertTrue;
-
 import java.io.IOException;
 
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.Context;
+import org.entrystore.repository.ContextManager;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.junit.Before;
 import org.junit.Test;
-
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Context;
-import se.kmr.scam.repository.ContextManager;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.config.Config;
-import se.kmr.scam.repository.config.ConfigurationManager;
-import se.kmr.scam.repository.config.Settings;
-import se.kmr.scam.repository.transformation.SCAM2Import;
-import se.kmr.scam.repository.transformation.ZipExport;
 
 public class SCAM2ImportTest {
 	private RepositoryManagerImpl rm;
