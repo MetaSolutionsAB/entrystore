@@ -23,7 +23,6 @@ import java.util.Set;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactory;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
-import org.entrystore.harvesting.fao.FAOHarvesterFactory;
 import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.BuiltinType;
@@ -163,15 +162,6 @@ public class HarvesterResource extends BaseResource {
 									jsonObj.getString("timeRegularExpression"), 
 									getRM(),
 									context.getEntry().getEntryURI());
-						} else if (harvesterType.equalsIgnoreCase("FAO")) {
-							factory = new FAOHarvesterFactory();
-							harvester = factory.createHarvester(
-									jsonObj.getString("target"),
-									jsonObj.getString("metadataType"),
-									null,
-									jsonObj.getString("timeRegularExpression"),
-									getRM(),
-									context.getEntry().getEntryURI());
 						} else {
 							log.error("Harvester type unknown: " + harvesterType);
 							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Harvester type unknown: " + harvesterType);
@@ -253,9 +243,6 @@ public class HarvesterResource extends BaseResource {
 			String type = harvester.getName();
 			if (type.equals("OAI-PMH")) {
 				HarvesterFactory factory = new OAIHarvesterFactory();
-				factory.deleteHarvester(context.getEntry());
-			} else if (type.equals("FAO")) {
-				HarvesterFactory factory = new FAOHarvesterFactory();
 				factory.deleteHarvester(context.getEntry());
 			} else {
 				log.error("Unknown harvester: " + type);
