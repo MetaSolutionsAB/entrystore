@@ -111,6 +111,32 @@ public class MetadataStatistics {
 		return sb.toString();
 	}
 	
+	public void writeContextStatistics(Writer writer, String contextURI) {
+		String contextId = contextURI.substring(contextURI.toString().lastIndexOf("/")+1);
+		Context context = cm.getContext(contextId);
+		log.info("Context has URI: " + context.getURI());
+		if (context == null) {
+			log.warn("Context not found: " + contextURI);
+			return;
+		}
+		
+		Set<URI> entries = context.getEntries();
+		
+		log.info("Found " + entries.size() + " for " + contextId);
+
+		try {
+			for (URI entryURI : entries) {
+				String entryStats = getEntryStatistics(context, entryURI);
+				if (entryStats != null) {
+					writer.append("\r\n");
+					writer.append(entryStats);
+				}
+			}
+		} catch (IOException ioe) {
+			log.error(ioe.getMessage());
+		}
+	}
+	
 	public String getEntryStatistics(Context context, URI entryURI) {
 		URI currentUserURI = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
@@ -169,7 +195,7 @@ public class MetadataStatistics {
 	}
 	
 	public void writeStatsToFile(String path, Map<String, String> contexts) {
-		writeStatsOfAllToFile(path, contexts);
+		//writeStatsOfAllToFile(path, contexts);
 		for (String contextURI : contexts.keySet()) {
 			String fileName = contexts.get(contextURI) + ".csv";
 			writeStatsOfContextToFile(path, fileName, contextURI);
@@ -216,7 +242,8 @@ public class MetadataStatistics {
 			writer.write(getHeaders());
 			writer.write("\r\n");
 			log.info("Getting statistics for context " + contextURI);
-			writer.write(getContextStatistics(contextURI));
+			//writer.write(getContextStatistics(contextURI));
+			writeContextStatistics(writer, contextURI);
 			writer.write("\r\n");
 		} catch (IOException e) {
 			log.error(e.getMessage());
@@ -230,24 +257,30 @@ public class MetadataStatistics {
 	
 	public void run() {
 		Map<String, String> contexts = new HashMap<String, String>();
-		contexts.put("http://oe.confolio.org/scam/4", "fao_capacity");
-		contexts.put("http://oe.confolio.org/scam/96", "fao_document");
-		contexts.put("http://oe.confolio.org/scam/5", "intute");
-		contexts.put("http://oe.confolio.org/scam/55", "aua");
-		contexts.put("http://oe.confolio.org/scam/30", "bce");
-		contexts.put("http://oe.confolio.org/scam/36", "bmukk-bmlfuw");
-		contexts.put("http://oe.confolio.org/scam/33", "ea");
-		contexts.put("http://oe.confolio.org/scam/32", "euls");
-		contexts.put("http://oe.confolio.org/scam/31", "mogert");
-		contexts.put("http://oe.confolio.org/scam/29", "uah");
-		contexts.put("http://oe.confolio.org/scam/34", "umb");
-		contexts.put("http://oe.confolio.org/scam/49", "usamvb-fa");
-		contexts.put("http://oe.confolio.org/scam/57", "miksike");
-		contexts.put("http://oe.confolio.org/scam/95", "orgeprints");
-		contexts.put("http://oe.confolio.org/scam/81", "nova-agroasis");
-		contexts.put("http://oe.confolio.org/scam/82", "noan");
+		contexts.put("http://knowone.csc.kth.se/scam/8", "aua");
+		contexts.put("http://knowone.csc.kth.se/scam/7", "bmukk");
+		contexts.put("http://knowone.csc.kth.se/scam/6", "grnet");
+		contexts.put("http://knowone.csc.kth.se/scam/5", "kth");
+//		contexts.put("http://knowone.csc.kth.se/scam/2", "ariadne");
+//		contexts.put("http://knowone.csc.kth.se/scam/9", "ariadne-big");
+//		contexts.put("http://oe.confolio.org/scam/4", "fao_capacity");
+//		contexts.put("http://oe.confolio.org/scam/96", "fao_document");
+//		contexts.put("http://oe.confolio.org/scam/5", "intute");
+//		contexts.put("http://oe.confolio.org/scam/55", "aua");
+//		contexts.put("http://oe.confolio.org/scam/30", "bce");
+//		contexts.put("http://oe.confolio.org/scam/36", "bmukk-bmlfuw");
+//		contexts.put("http://oe.confolio.org/scam/33", "ea");
+//		contexts.put("http://oe.confolio.org/scam/32", "euls");
+//		contexts.put("http://oe.confolio.org/scam/31", "mogert");
+//		contexts.put("http://oe.confolio.org/scam/29", "uah");
+//		contexts.put("http://oe.confolio.org/scam/34", "umb");
+//		contexts.put("http://oe.confolio.org/scam/49", "usamvb-fa");
+//		contexts.put("http://oe.confolio.org/scam/57", "miksike");
+//		contexts.put("http://oe.confolio.org/scam/95", "orgeprints");
+//		contexts.put("http://oe.confolio.org/scam/81", "nova-agroasis");
+//		contexts.put("http://oe.confolio.org/scam/82", "noan");
 		
-		writeStatsToFile("/home/hannes/Desktop/oe-stats-all/", contexts);
+		writeStatsToFile("/home/hannes/Desktop/stats/", contexts);
 	}
 
 }
