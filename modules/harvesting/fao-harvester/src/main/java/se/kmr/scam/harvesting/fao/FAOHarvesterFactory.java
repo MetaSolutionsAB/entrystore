@@ -21,6 +21,11 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.RepositoryProperties;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
 import org.openrdf.model.ValueFactory;
@@ -30,11 +35,6 @@ import org.slf4j.LoggerFactory;
 import se.kmr.scam.harvester.Harvester;
 import se.kmr.scam.harvester.factory.HarvesterFactory;
 import se.kmr.scam.harvester.factory.HarvesterFactoryException;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.RepositoryException;
-import se.kmr.scam.repository.RepositoryProperties;
-import se.kmr.scam.repository.config.Settings;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
 
 
 /**

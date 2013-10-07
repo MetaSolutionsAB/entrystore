@@ -36,6 +36,15 @@ import javax.xml.xpath.XPathFactory;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.entrystore.repository.Context;
+import org.entrystore.repository.ContextManager;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.LocationType;
+import org.entrystore.repository.Metadata;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.repository.impl.converters.ConverterManagerImpl;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.quartz.InterruptableJob;
@@ -48,15 +57,6 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import se.kmr.scam.repository.Context;
-import se.kmr.scam.repository.ContextManager;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.LocationType;
-import se.kmr.scam.repository.Metadata;
-import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.config.Settings;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
-import se.kmr.scam.repository.impl.converters.ConverterManagerImpl;
 import ORG.oclc.oai.harvester2.verb.ListRecords;
 
 public class ListRecordsJob implements Job, InterruptableJob {

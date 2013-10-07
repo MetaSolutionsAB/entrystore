@@ -18,7 +18,8 @@ package se.kmr.scam.harvester;
 
 import java.net.URI;
 
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
+
 
 
 public abstract class Harvester {

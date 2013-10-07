@@ -34,6 +34,16 @@ import net.sf.ehcache.CacheManager;
 import net.sf.ehcache.Element;
 import net.sf.ehcache.store.MemoryStoreEvictionPolicy;
 
+import org.entrystore.repository.Data;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.User;
+import org.entrystore.repository.impl.converters.LRE;
+import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.impl.converters.OERDF2LOMConverter;
+import org.entrystore.repository.impl.converters.RDF2LOMConverter;
+import org.entrystore.repository.util.EntryUtil;
 import org.ieee.ltsc.datatype.impl.EntityImpl;
 import org.ieee.ltsc.lom.LOM;
 import org.ieee.ltsc.lom.LOMUtil;
@@ -51,16 +61,6 @@ import org.openrdf.model.impl.URIImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.Data;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.RepositoryManager;
-import se.kmr.scam.repository.RepresentationType;
-import se.kmr.scam.repository.User;
-import se.kmr.scam.repository.impl.converters.LRE;
-import se.kmr.scam.repository.impl.converters.NS;
-import se.kmr.scam.repository.impl.converters.OERDF2LOMConverter;
-import se.kmr.scam.repository.impl.converters.RDF2LOMConverter;
-import se.kmr.scam.repository.util.EntryUtil;
 import ORG.oclc.oai.server.crosswalk.Crosswalk;
 import ORG.oclc.oai.server.verb.CannotDisseminateFormatException;
 

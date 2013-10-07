@@ -24,6 +24,11 @@ import javax.xml.xpath.XPathExpressionException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.entrystore.repository.Context;
+import org.entrystore.repository.ContextManager;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.repository.impl.converters.ConverterManagerImpl;
 import org.openrdf.model.Graph;
 import org.quartz.InterruptableJob;
 import org.quartz.Job;
@@ -32,11 +37,6 @@ import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 import org.quartz.UnableToInterruptJobException;
 
-import se.kmr.scam.repository.Context;
-import se.kmr.scam.repository.ContextManager;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
-import se.kmr.scam.repository.impl.converters.ConverterManagerImpl;
 
 /**
  * Harvests metadata objects using iterations over a list we get from FAO.

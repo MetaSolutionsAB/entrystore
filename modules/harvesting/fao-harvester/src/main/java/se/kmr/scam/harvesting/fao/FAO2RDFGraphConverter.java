@@ -18,6 +18,7 @@ package se.kmr.scam.harvesting.fao;
 
 import java.util.List;
 
+import org.entrystore.repository.Converter;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
@@ -25,7 +26,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.harvesting.fao.FAOSubject.Scheme;
-import se.kmr.scam.repository.Converter;
 
 /**
  * Maps FAO metadata to Dublin Core.

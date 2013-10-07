@@ -21,6 +21,7 @@ import java.text.ParseException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
@@ -30,7 +31,6 @@ import org.quartz.impl.StdSchedulerFactory;
 
 import se.kmr.scam.harvester.Harvester;
 import se.kmr.scam.harvesting.oaipmh.jobs.ListRecordsJob;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
 
 
 public class OAIHarvester extends Harvester {

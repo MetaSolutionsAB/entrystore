@@ -22,6 +22,8 @@ import java.util.Iterator;
 import java.util.Properties;
 
 import org.apache.commons.lang.StringEscapeUtils;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.impl.converters.NS;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Resource;
@@ -32,8 +34,6 @@ import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.impl.converters.NS;
 import ORG.oclc.oai.server.crosswalk.Crosswalk;
 import ORG.oclc.oai.server.verb.CannotDisseminateFormatException;
 

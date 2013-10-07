@@ -25,17 +25,17 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.RepositoryProperties;
+import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.repository.impl.DeletedEntryInfo;
+import org.entrystore.repository.util.URISplit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.RepositoryManager;
-import se.kmr.scam.repository.RepositoryProperties;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
-import se.kmr.scam.repository.impl.DeletedEntryInfo;
-import se.kmr.scam.repository.util.URISplit;
 import ORG.oclc.oai.server.catalog.RecordFactory;
 
 /**

@@ -18,9 +18,10 @@ package se.kmr.scam.harvester.factory;
 
 import java.net.URI;
 
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
+
 import se.kmr.scam.harvester.Harvester;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
 
 public interface HarvesterFactory {
 	

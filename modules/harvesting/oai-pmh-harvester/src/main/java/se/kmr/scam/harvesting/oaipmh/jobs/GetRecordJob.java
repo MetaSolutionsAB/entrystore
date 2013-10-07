@@ -28,11 +28,11 @@ import javax.xml.xpath.XPathFactory;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.entrystore.repository.Context;
 import org.quartz.UnableToInterruptJobException;
 import org.w3c.dom.Element;
 import org.xml.sax.SAXException;
 
-import se.kmr.scam.repository.Context;
 import ORG.oclc.oai.harvester2.verb.GetRecord;
 
 public class GetRecordJob {

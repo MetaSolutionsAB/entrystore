@@ -19,6 +19,8 @@ package se.kmr.scam.harvesting.oaipmh.target.crosswalk;
 import java.io.StringWriter;
 import java.util.Properties;
 
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.impl.converters.NS;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
 import org.openrdf.rio.RDFHandlerException;
@@ -27,8 +29,6 @@ import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriterFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.impl.converters.NS;
 import ORG.oclc.oai.server.crosswalk.Crosswalk;
 import ORG.oclc.oai.server.verb.CannotDisseminateFormatException;
 
