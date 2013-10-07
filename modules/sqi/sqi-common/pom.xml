@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
 	<!-- ================= EntryStore SQI common module ================= -->
-    <modelVersion>4.1.0</modelVersion>
+    <modelVersion>4.0.0</modelVersion>
     <parent>
        <groupId>org.entrystore</groupId>
        <artifactId>entrystore-sqi</artifactId>
