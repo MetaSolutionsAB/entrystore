@@ -8,7 +8,7 @@ import org.restlet.routing.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.rest.ScamApplication;
+import se.kmr.scam.rest.EntryStoreApplication;
 
 /**
  * @author Hannes Ebner
@@ -22,7 +22,7 @@ public class ModificationLockOutFilter extends Filter {
 		if (request.getMethod().equals(Method.GET)) {
 			return CONTINUE;
 		} else {
-			ScamApplication scamApp = (ScamApplication) getContext().getAttributes().get(ScamApplication.KEY);
+			EntryStoreApplication scamApp = (EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY);
 			boolean lockout = scamApp.getRM().hasModificationLockOut();
 			if (lockout) {
 				String maintMsg = "The service is being maintained and does not accept modification requests right now, please check back later";

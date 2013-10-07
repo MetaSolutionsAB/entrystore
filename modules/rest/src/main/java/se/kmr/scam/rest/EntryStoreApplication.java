@@ -90,67 +90,34 @@ import se.kmr.scam.rest.resources.StatusResource;
 
 
 /**
- * <p>Applications are guaranteed to receive calls with their base 
- * reference set relatively to the VirtualHost that served them. 
- * This class is both a descriptor able to create the root Restlet 
- * and the actual Restlet that can be attached to one or 
- * more VirtualHost instances.</p>
- * 
- * 
- *<p> Intended conceptual target of a hypertext reference. 
- * "Any information that can be named can be a resource: a document or image, 
- * a temporal service (e.g. "today's weather in Los Angeles"), a collection 
- * of other resources, a non-virtual object (e.g. a person), and so on. In other 
- * words, any concept that might be the target of an author's hypertext 
- * reference must fit within the definition of a resource. The only thing 
- * that is required to be static for a resource is the semantics of the 
- * mapping, since the semantics is what distinguishes one resource from another.
- * " - Roy T. Fielding</p>
+ * Main class to start EntryStore as a Restlet Application.
  *
- * <p>Root Restlet that will receive all incoming calls from Web browsers etc.</p>
- * 
- * <p>The RESTful S3 service provides three types of resources. Here they are, 
- * with sample URIs for each:
- * <ul>
- * <li>The list of your contexts (https://scam4.org/). There's only
- * one resource of this type.</li>
- * <li>A particular context (https://scam4.org/{context-id}). There can be 
- * many resorces of this type.</li>
- *<li>A particular S3 object(entry) inside a context 
- *(https://scam4.org/{context-id}/{kind/{entry-id}})
- *. There can be infinitely many resources of this type.</li> 
- * </ul>
- * 
- * Each resource can corresponds to the five standard HTTP methods: 
- * GET, POST, PUT, DELETE, HEAD</p>
- *
- * @author Eric Johansson (eric.johansson@educ.umu.se) 
  * @author Hannes Ebner
  */
-public class ScamApplication extends Application {
+public class EntryStoreApplication extends Application {
 
 	public static String KEY = "se.kmr.scam.rest.ScamApplication";
 	
 	/** Logger */
-	static Logger log = LoggerFactory.getLogger(ScamApplication.class);
+	static Logger log = LoggerFactory.getLogger(EntryStoreApplication.class);
+	
 	/** This object is the central point for accessing a SCAM repository. */
 	private RepositoryManagerImpl rm;
+	
 	/** Manages all non-system {@link Context} */
 	private ContextManager cm;
+	
 	/** Manages all system {@link Context} */
 	private PrincipalManager pm;
+	
 	/** baseURL for the {@link RepositoryManager}*/
-	private String domainName; 
+	private String baseURI; 
 
 	private ArrayList<Harvester> harvesters = new ArrayList<Harvester>();
 	
 	private BackupScheduler backupScheduler; 
 
-	/**
-	 * Constructor
-	 * @param parentContext a {@link Context}
-	 */
-	public ScamApplication(Context parentContext) {
+	public EntryStoreApplication(Context parentContext) {
 		super(parentContext);
 		getContext().getAttributes().put(KEY, this);
 		getRangeService().setEnabled(false); // should fix the hangs in Acrobat Reader that occur sometimes
@@ -158,20 +125,19 @@ public class ScamApplication extends Application {
 		log.warn("Restlet RangeService deactivated");
 
 		ServletContext sc = (ServletContext) this.getContext().getAttributes().get("org.restlet.ext.ser​vlet.ServletContext");
-		// alt: ServletContext sc = (ServletContext) getContext().getServerDispatcher().getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext"); 
+		// Alt: sc = (ServletContext) getContext().getServerDispatcher().getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext"); 
 		if (sc != null) {
-			// Application created by ServerServlet
-			// Try to get RepositoryManager from ServletContext
+			// Application created by ServerServlet, try to get RepositoryManager from ServletContext
 			rm = (RepositoryManagerImpl) sc.getAttribute("RepositoryManager");
 		}
 	
 		if (rm != null) {
-			// SCAM initialized by a ServletContextListener
-			log.info("SCAM initialized with a ServletContextListener");
+			// Initialized by a ServletContextListener
+			log.info("EntryStore initialized with a ServletContextListener");
 			cm = rm.getContextManager();
 			pm = rm.getPrincipalManager();
 			
-			// the following objects are fetched from the context attributes,
+			// The following objects are fetched from the context attributes,
 			// after they have been set in the ContextLoaderListener
 			harvesters = (ArrayList) getContext().getAttributes().get("Harvesters");
 			backupScheduler = (BackupScheduler) getContext().getAttributes().get("BackupScheduler");
@@ -205,8 +171,7 @@ public class ScamApplication extends Application {
 			Config config = confManager.getConfiguration();
 			EntryResource.config = config;
 		
-			// Check the URL in the scam.properties file if you get an error here.
-			domainName = config.getString(Settings.SCAM_BASE_URL, "http://scam4.org");
+			baseURI = config.getString(Settings.SCAM_BASE_URL);
 
 			Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
 			ConverterManagerImpl.register("oai_dc", oaiDcRdfConverter);
@@ -216,7 +181,7 @@ public class ScamApplication extends Application {
 			ConverterManagerImpl.register("lom2rdf", lomRdfConverter);
 			ConverterManagerImpl.register("oai_lom", lomRdfConverter);
 
-			rm = new RepositoryManagerImpl(domainName, confManager.getConfiguration());
+			rm = new RepositoryManagerImpl(baseURI, confManager.getConfiguration());
 			cm = rm.getContextManager();
 			pm = rm.getPrincipalManager();
 
@@ -332,7 +297,7 @@ public class ScamApplication extends Application {
 		component.getServers().add(Protocol.HTTP, 8181);
 		component.getClients().add(Protocol.FILE);
 		Context childContext = component.getContext().createChildContext();
-		ScamApplication scamApp = new ScamApplication(childContext);
+		EntryStoreApplication scamApp = new EntryStoreApplication(childContext);
 		childContext.getAttributes().put(KEY, scamApp);
 		component.getDefaultHost().attach(scamApp);
 

@@ -34,7 +34,7 @@ import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.repository.Entry;
 import se.kmr.scam.repository.backup.BackupFactory;
 import se.kmr.scam.repository.backup.BackupScheduler;
-import se.kmr.scam.rest.ScamApplication;
+import se.kmr.scam.rest.EntryStoreApplication;
 
 /**
  * @author Hannes Ebner
@@ -43,11 +43,11 @@ public class RepositoryBackupResource extends BaseResource  {
 
 	static Logger log = LoggerFactory.getLogger(RepositoryBackupResource.class);
 	
-	ScamApplication scamApp;
+	EntryStoreApplication scamApp;
 	
 	@Override
 	public void doInit() {
-		scamApp = (ScamApplication) getContext().getAttributes().get(ScamApplication.KEY);
+		scamApp = (EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY);
 	}
 
 	@Get

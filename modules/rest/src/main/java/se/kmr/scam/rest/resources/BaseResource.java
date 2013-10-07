@@ -38,7 +38,7 @@ import se.kmr.scam.repository.PrincipalManager;
 import se.kmr.scam.repository.RepositoryManager;
 import se.kmr.scam.repository.backup.BackupScheduler;
 import se.kmr.scam.repository.impl.RepositoryManagerImpl;
-import se.kmr.scam.rest.ScamApplication;
+import se.kmr.scam.rest.EntryStoreApplication;
 import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.Util;
 /**
@@ -92,7 +92,7 @@ public abstract class BaseResource extends ServerResource {
 	 * @return The current {@link ContextManager} for the contexts.
 	 */
 	public ContextManager getCM() {
-		return ((ScamApplication) getContext().getAttributes().get(ScamApplication.KEY)).getCM();
+		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getCM();
 	}
 
 	/**
@@ -101,7 +101,7 @@ public abstract class BaseResource extends ServerResource {
 	 */
 	public PrincipalManager getPM() {
 		Map<String, Object> map = getContext().getAttributes();
-		return ((ScamApplication) map.get(ScamApplication.KEY)).getPM();
+		return ((EntryStoreApplication) map.get(EntryStoreApplication.KEY)).getPM();
 	}
 
 	/**
@@ -109,15 +109,15 @@ public abstract class BaseResource extends ServerResource {
 	 * @return the current {@link RepositoryManager}.
 	 */
 	public RepositoryManagerImpl getRM() {
-		return ((ScamApplication) getContext().getAttributes().get(ScamApplication.KEY)).getRM();
+		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getRM();
 	}
 
 	public ArrayList<Harvester> getHarvesters() {
-		return ((ScamApplication) getContext().getAttributes().get(ScamApplication.KEY)).getHarvesters();
+		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getHarvesters();
 	}
 	
 	public BackupScheduler getBackupScheduler() {
-		return ((ScamApplication) getContext().getAttributes().get(ScamApplication.KEY)).getBackupScheduler();
+		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getBackupScheduler();
 	}
 
 	public void unauthorizedGETContext() {
