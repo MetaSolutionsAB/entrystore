@@ -32,6 +32,9 @@ import org.restlet.Context;
 import org.restlet.Restlet;
 import org.restlet.data.ChallengeScheme;
 import org.restlet.data.Protocol;
+import org.restlet.ext.openid.AttributeExchange;
+import org.restlet.ext.openid.OpenIdVerifier;
+import org.restlet.ext.openid.RedirectAuthenticator;
 import org.restlet.routing.Router;
 import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
@@ -302,11 +305,11 @@ public class ScamApplication extends Application {
 
 		router.attachDefault(DefaultResource.class);
 		
-//		OpenIdVerifier oidv = new OpenIdVerifier(OpenIdVerifier.PROVIDER_GOOGLE);
-//		oidv.addRequiredAttribute(AttributeExchange.EMAIL);
-//		RedirectAuthenticator redirAuth = new RedirectAuthenticator(getContext(), oidv, null);
-//		redirAuth.setNext(DefaultResource.class);
-//		router.attach("/auth/openid", redirAuth);
+		OpenIdVerifier oidv = new OpenIdVerifier(OpenIdVerifier.PROVIDER_GOOGLE);
+		oidv.addRequiredAttribute(AttributeExchange.EMAIL);
+		RedirectAuthenticator redirAuth = new RedirectAuthenticator(getContext(), oidv, null);
+		redirAuth.setNext(DefaultResource.class);
+		router.attach("/auth/openid", redirAuth);
 
 		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(pm), pm);
 //		DigestAuthenticator digestAuth = new DigestAuthenticator(getContext(), "EntryStore", "3ntry5t0r3");
@@ -441,7 +444,7 @@ public class ScamApplication extends Application {
 	
 	@Override
 	public synchronized void stop() throws Exception {
-		log.info("Shutting down SCAM");
+		log.info("Shutting down");
 		if (rm != null) {
 			rm.shutdown();
 		}
