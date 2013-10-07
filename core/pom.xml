@@ -3,17 +3,17 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
-	<!-- ================= SCAM Core ================= -->
-	<modelVersion>4.0.0</modelVersion>
+	<!-- ================= EntryStore Core ================= -->
+	<modelVersion>4.1.0</modelVersion>
 	<parent>
-		<groupId>se.kmr.scam</groupId>
-		<artifactId>scam-parent</artifactId>
-		<version>4.0-SNAPSHOT</version>
+		<groupId>org.entrystore</groupId>
+		<artifactId>entrystore-parent</artifactId>
+		<version>4.1-SNAPSHOT</version>
 	</parent>
-	<groupId>se.kmr.scam</groupId>
-	<artifactId>scam-core</artifactId>
+	<groupId>org.entrystore</groupId>
+	<artifactId>entrystore-core</artifactId>
 	<packaging>jar</packaging>
-	<name>SCAM Core</name>
+	<name>EntryStore Core</name>
 
 	<!-- ================= Properties ================= -->
 	<properties>
