@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.fao.integrationtest;
+package org.entrystore.harvesting.fao.integrationtest;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.fao;
+package org.entrystore.harvesting.fao;
 
 import java.net.URI;
 import java.text.ParseException;

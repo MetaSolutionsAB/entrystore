@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.Set;
 
+import org.entrystore.harvesting.fao.FAOHarvesterFactory;
 import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Entry;
@@ -39,7 +40,6 @@ import org.slf4j.LoggerFactory;
 import se.kmr.scam.harvester.Harvester;
 import se.kmr.scam.harvester.factory.HarvesterFactory;
 import se.kmr.scam.harvester.factory.HarvesterFactoryException;
-import se.kmr.scam.harvesting.fao.FAOHarvesterFactory;
 import se.kmr.scam.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 
 public class HarvesterResource extends BaseResource {

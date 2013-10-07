@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.fao;
+package org.entrystore.harvesting.fao;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -26,6 +26,7 @@ import java.util.Date;
 import java.util.List;
 
 import org.apache.xerces.parsers.DOMParser;
+import org.entrystore.harvesting.fao.FAOSubject.Scheme;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
@@ -35,7 +36,6 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
-import se.kmr.scam.harvesting.fao.FAOSubject.Scheme;
 
 /**
  * Fetches metadata from FAO and parses the output into metadata objects.

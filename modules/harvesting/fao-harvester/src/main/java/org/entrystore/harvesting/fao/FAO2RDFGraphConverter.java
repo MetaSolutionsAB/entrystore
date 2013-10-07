@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.fao;
+package org.entrystore.harvesting.fao;
 
 import java.util.List;
 
+import org.entrystore.harvesting.fao.FAOSubject.Scheme;
 import org.entrystore.repository.Converter;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
@@ -25,7 +26,6 @@ import org.openrdf.model.impl.GraphImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.harvesting.fao.FAOSubject.Scheme;
 
 /**
  * Maps FAO metadata to Dublin Core.

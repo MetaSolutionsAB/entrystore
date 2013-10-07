@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.fao.integrationtest;
+package org.entrystore.harvesting.fao.integrationtest;
 
 import java.io.File;
 import java.net.URL;
