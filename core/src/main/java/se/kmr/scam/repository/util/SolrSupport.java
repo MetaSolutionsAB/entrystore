@@ -108,7 +108,7 @@ public class SolrSupport {
 		this.rm = rm;
 		this.solrServer = solrServer;
 		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(
-				Settings.SCAM_SOLR_EXTRACT_FULLTEXT, "off"));
+				Settings.SOLR_EXTRACT_FULLTEXT, "off"));
 		documentSubmitter = new SolrInputDocumentSubmitter();
 		documentSubmitter.start();
 	}

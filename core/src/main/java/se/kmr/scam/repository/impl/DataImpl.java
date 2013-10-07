@@ -55,7 +55,7 @@ public class DataImpl extends ResourceImpl implements Data {
 
 	private File getFile() {
 		if (file == null) {
-			String dataPath = entry.getRepositoryManager().getConfiguration().getString(Settings.SCAM_DATA_FOLDER, System.getProperty("user.home") + "/scam-data-files/");
+			String dataPath = entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER, System.getProperty("user.home") + "/scam-data-files/");
 			File dataDir = new File(dataPath);
 			if (dataDir.exists() == false) {
 				if (dataDir.mkdirs() == false) {

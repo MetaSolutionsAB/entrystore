@@ -196,7 +196,7 @@ public class ExportResource extends BaseResource {
             is.close();
             
             // add resource files to zip file
-            String contextPath = getRM().getConfiguration().getString(Settings.SCAM_DATA_FOLDER);
+            String contextPath = getRM().getConfiguration().getString(Settings.DATA_FOLDER);
             if (contextPath != null) {
             	File contextPathFile = new File(contextPath);
             	File contextFolder = new File(contextPathFile, contextId);

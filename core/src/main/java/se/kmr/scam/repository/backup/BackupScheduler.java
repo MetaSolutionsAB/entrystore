@@ -72,7 +72,7 @@ public class BackupScheduler {
 	}
 
 	public void run() {
-		String backupStatus = rm.getConfiguration().getString(Settings.SCAM_BACKUP_SCHEDULER, "off");
+		String backupStatus = rm.getConfiguration().getString(Settings.BACKUP_SCHEDULER, "off");
 		if ("off".equalsIgnoreCase(backupStatus.trim())) {
 			log.warn("Backup is disabled in configuration");
 			return;

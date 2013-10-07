@@ -43,7 +43,7 @@ public class OAIHarvesterFactory implements HarvesterFactory {
 	static Logger log = LoggerFactory.getLogger(OAIHarvesterFactory.class);
 
 	public Harvester createHarvester(String target, String metadataType, String set, String timeRegExp, RepositoryManagerImpl rm, URI ownerContextURI) throws HarvesterFactoryException {
-		String oai = rm.getConfiguration().getString(Settings.SCAM_HARVESTER_OAI, "off"); 
+		String oai = rm.getConfiguration().getString(Settings.HARVESTER_OAI, "off"); 
 		if (oai.equals("off")) {
 			throw new HarvesterFactoryException("The OAI-PMH harvester module is not enabled"); 
 		}
@@ -64,7 +64,7 @@ public class OAIHarvesterFactory implements HarvesterFactory {
 	}
 
 	public Harvester getHarvester(RepositoryManagerImpl rm, URI ownerContextURI) throws HarvesterFactoryException {
-		String oai = rm.getConfiguration().getString(Settings.SCAM_HARVESTER_OAI, "off"); 
+		String oai = rm.getConfiguration().getString(Settings.HARVESTER_OAI, "off"); 
 		if(oai.equals("off")) {
 			throw new HarvesterFactoryException("The OAI-PMH harvester module is not enabled"); 
 		}

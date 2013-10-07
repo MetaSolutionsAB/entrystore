@@ -125,8 +125,8 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		String from = dataMap.getString("from");
 		String until = dataMap.getString("until");  
 		String set = dataMap.getString("set");
-		replaceMetadata = "replace".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SCAM_HARVESTER_OAI_METADATA_POLICY, "skip"));
-		boolean fromAutoDetect = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SCAM_HARVESTER_OAI_FROM_AUTO_DETECT, "on"));
+		replaceMetadata = "replace".equalsIgnoreCase(rm.getConfiguration().getString(Settings.HARVESTER_OAI_METADATA_POLICY, "skip"));
+		boolean fromAutoDetect = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.HARVESTER_OAI_FROM_AUTO_DETECT, "on"));
 		
 		if (from == null && fromAutoDetect) {
 			Date latestEntry = null;
@@ -165,7 +165,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		}
 		
 		ThreadPoolExecutor exService = null;
-		if ("on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SCAM_HARVESTER_OAI_MULTITHREADED, "off"))) {
+		if ("on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.HARVESTER_OAI_MULTITHREADED, "off"))) {
 			int cpuCount = Runtime.getRuntime().availableProcessors();
 			if (cpuCount == 1) {
 				log.info("Multi-threaded harvesting activated, but only one CPU found; continuing single-threaded");

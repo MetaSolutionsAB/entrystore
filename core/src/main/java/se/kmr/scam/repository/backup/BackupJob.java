@@ -101,9 +101,9 @@ public class BackupJob implements Job, InterruptableJob {
 		boolean gzip = dataMap.getBoolean("gzip");
 		log.info("Backup gzip: " + gzip);
 
-		String exportPath = rm.getConfiguration().getString(Settings.SCAM_BACKUP_FOLDER);
+		String exportPath = rm.getConfiguration().getString(Settings.BACKUP_FOLDER);
 		if (exportPath == null) {
-			log.error("Unknown backup path, please check the following setting: " + Settings.SCAM_BACKUP_FOLDER);			
+			log.error("Unknown backup path, please check the following setting: " + Settings.BACKUP_FOLDER);			
 		} else {
 			// -- make the triG backup -- 
 			SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
@@ -123,9 +123,9 @@ public class BackupJob implements Job, InterruptableJob {
 			// -- end triG --
 
 			// -- start to backup files/binary data --
-			String dataPath = rm.getConfiguration().getString(Settings.SCAM_DATA_FOLDER);
+			String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
 			if (dataPath == null) {
-				log.error("Unknown data path, please check the following setting: " + Settings.SCAM_DATA_FOLDER);			
+				log.error("Unknown data path, please check the following setting: " + Settings.DATA_FOLDER);			
 			} else {
 				File dataPathFile = new File(dataPath);
 				log.info("Copying data folder from " + dataPathFile + " to " + newBackupDirectory);
@@ -151,11 +151,11 @@ public class BackupJob implements Job, InterruptableJob {
 		
 		log.info("upperlimit: " + upperLimit + ", lowerLimit: " + lowerLimit + ", expiresAfterDays: " + expiresAfterDays);
 
-		String exportPath = rm.getConfiguration().getString(Settings.SCAM_BACKUP_FOLDER);
+		String exportPath = rm.getConfiguration().getString(Settings.BACKUP_FOLDER);
 		Date today = new Date();
 
 		if (exportPath == null) {
-			log.error("Unknown backup path, please check the following setting: " + Settings.SCAM_BACKUP_FOLDER);			
+			log.error("Unknown backup path, please check the following setting: " + Settings.BACKUP_FOLDER);			
 		} else {
 			File backupFolder = new File(exportPath);
 			DateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");

@@ -47,8 +47,8 @@ public class SCAM2ImportTest {
 	  } catch (IOException e) {
 		  e.printStackTrace();
 	  }
-	  confMan.getConfiguration().setProperty(Settings.SCAM_STORE_TYPE, "memory");
-	  confMan.getConfiguration().setProperty(Settings.SCAM_DATA_FOLDER, "/tmp/scam/");
+	  confMan.getConfiguration().setProperty(Settings.STORE_TYPE, "memory");
+	  confMan.getConfiguration().setProperty(Settings.DATA_FOLDER, "/tmp/scam/");
 	  rm = new RepositoryManagerImpl("http://my.confolio.org/", confMan.getConfiguration());
 	  rm.setCheckForAuthorization(false);
 	  cm = rm.getContextManager();

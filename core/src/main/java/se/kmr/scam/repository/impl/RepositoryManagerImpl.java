@@ -141,13 +141,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	public RepositoryManagerImpl(String baseURL, Config config) {
 		System.setProperty("org.openrdf.repository.debug", "true");
 		this.config = config;
-		String storeType = config.getString(Settings.SCAM_STORE_TYPE, "memory").trim();
+		String storeType = config.getString(Settings.STORE_TYPE, "memory").trim();
 				
 		log.info("Store type: " + storeType);
 		
 		if (storeType.equalsIgnoreCase("memory")) {
-			if (config.containsKey(Settings.SCAM_STORE_PATH)) {
-				MemoryStore ms = new MemoryStore(new File(config.getURI(Settings.SCAM_STORE_PATH)));
+			if (config.containsKey(Settings.STORE_PATH)) {
+				MemoryStore ms = new MemoryStore(new File(config.getURI(Settings.STORE_PATH)));
 				ms.setPersist(true);
 				ms.setSyncDelay(5000);
 				this.repository = new SailRepository(ms);
@@ -155,12 +155,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				this.repository = new SailRepository(new MemoryStore());	
 			}
 		} else if (storeType.equalsIgnoreCase("native")) {
-			if (!config.containsKey(Settings.SCAM_STORE_PATH)) {
+			if (!config.containsKey(Settings.STORE_PATH)) {
 				log.error("Incomplete configuration");
 				throw new IllegalStateException("Incomplete configuration");
 			} else {
-				File path = new File(config.getURI(Settings.SCAM_STORE_PATH));
-				String indexes = config.getString(Settings.SCAM_STORE_INDEXES);
+				File path = new File(config.getURI(Settings.STORE_PATH));
+				String indexes = config.getString(Settings.STORE_INDEXES);
 				
 				log.info("Path: " + path);
 				log.info("Indexes: " + indexes);
@@ -176,24 +176,24 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			}
 		} else if (storeType.equalsIgnoreCase("mysql") || storeType.equalsIgnoreCase("postgresql")) {
-			if (!config.containsKey(Settings.SCAM_STORE_USER) ||
-					!config.containsKey(Settings.SCAM_STORE_PWD) ||
-					!config.containsKey(Settings.SCAM_STORE_SERVERNAME) ||
-					!config.containsKey(Settings.SCAM_STORE_DBNAME) ||
-					!config.containsKey(Settings.SCAM_STORE_PORTNR)) {
+			if (!config.containsKey(Settings.STORE_USER) ||
+					!config.containsKey(Settings.STORE_PWD) ||
+					!config.containsKey(Settings.STORE_SERVERNAME) ||
+					!config.containsKey(Settings.STORE_DBNAME) ||
+					!config.containsKey(Settings.STORE_PORTNR)) {
 				log.error("Incomplete configuration");
 				throw new IllegalStateException("Incomplete configuration");
 			} else {
-				String user = config.getString(Settings.SCAM_STORE_USER);
-				String password = config.getString(Settings.SCAM_STORE_PWD);
-				String database = config.getString(Settings.SCAM_STORE_DBNAME);
-				int portNr = config.getInt(Settings.SCAM_STORE_PORTNR);
-				String serverName = config.getString(Settings.SCAM_STORE_SERVERNAME);
+				String user = config.getString(Settings.STORE_USER);
+				String password = config.getString(Settings.STORE_PWD);
+				String database = config.getString(Settings.STORE_DBNAME);
+				int portNr = config.getInt(Settings.STORE_PORTNR);
+				String serverName = config.getString(Settings.STORE_SERVERNAME);
 				
 				log.info("Server: " + serverName + ":" + portNr);
 				log.info("Database: " + database);
 				log.info("User name: " + user);
-				log.info("Max number of triple tables: " + config.getString(Settings.SCAM_STORE_MAX_TRIPLE_TABLES));
+				log.info("Max number of triple tables: " + config.getString(Settings.STORE_MAX_TRIPLE_TABLES));
 				
 				if (storeType.equalsIgnoreCase("mysql")) {
 					MySqlStore store = new MySqlStore();
@@ -202,8 +202,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					store.setDatabaseName(database);
 					store.setPortNumber(portNr);
 					store.setServerName(serverName);
-					if (config.containsKey(Settings.SCAM_STORE_MAX_TRIPLE_TABLES)) {
-						store.setMaxNumberOfTripleTables(config.getInt(Settings.SCAM_STORE_MAX_TRIPLE_TABLES));
+					if (config.containsKey(Settings.STORE_MAX_TRIPLE_TABLES)) {
+						store.setMaxNumberOfTripleTables(config.getInt(Settings.STORE_MAX_TRIPLE_TABLES));
 					}
 					this.repository = new SailRepository(store);
 				} else if (storeType.equalsIgnoreCase("postgresql")) {
@@ -213,8 +213,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					store.setDatabaseName(database);
 					store.setPortNumber(portNr);
 					store.setServerName(serverName);
-					if (config.containsKey(Settings.SCAM_STORE_MAX_TRIPLE_TABLES)) {
-						store.setMaxNumberOfTripleTables(config.getInt(Settings.SCAM_STORE_MAX_TRIPLE_TABLES));
+					if (config.containsKey(Settings.STORE_MAX_TRIPLE_TABLES)) {
+						store.setMaxNumberOfTripleTables(config.getInt(Settings.STORE_MAX_TRIPLE_TABLES));
 					}
 					this.repository = new SailRepository(store);
 				}
@@ -229,8 +229,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		// create soft cache
 		softCache = new SoftCache();
 		
-		if (config.getString(Settings.SCAM_REPOSITORY_CACHE, "off").equalsIgnoreCase("on")) {
-			String cachePath = config.getString(Settings.SCAM_REPOSITORY_CACHE_PATH);
+		if (config.getString(Settings.REPOSITORY_CACHE, "off").equalsIgnoreCase("on")) {
+			String cachePath = config.getString(Settings.REPOSITORY_CACHE_PATH);
 			if (cachePath != null) {
 				System.setProperty("ehcache.disk.store.dir", cachePath);
 			} else {
@@ -249,10 +249,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			log.info("Disk cache not activated");
 		}
 		
-		quotaEnabled = config.getString(Settings.SCAM_DATA_QUOTA, "off").equalsIgnoreCase("on");
+		quotaEnabled = config.getString(Settings.DATA_QUOTA, "off").equalsIgnoreCase("on");
 		if (quotaEnabled) {
 			log.info("Context quotas enabled");
-			String quotaValue = config.getString(Settings.SCAM_DATA_QUOTA_DEFAULT);
+			String quotaValue = config.getString(Settings.DATA_QUOTA_DEFAULT);
 			if (quotaValue == null) {
 				log.info("Quota default set to UNLIMITED");
 			} else {
@@ -299,8 +299,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				e.printStackTrace();
 			}
 			
-			if (config.getBoolean(Settings.SCAM_REPOSITORY_IMPORT, false)) {
-				String importFile = config.getString(Settings.SCAM_REPOSITORY_IMPORT_FILE);
+			if (config.getBoolean(Settings.REPOSITORY_IMPORT, false)) {
+				String importFile = config.getString(Settings.REPOSITORY_IMPORT_FILE);
 				if (importFile != null) {
 					URI importURI = null;
 					try {
@@ -309,8 +309,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 						log.error("Repository could not be imported: " + e.getMessage());
 					}
 					if (importURI != null) {
-						String oldBase = config.getString(Settings.SCAM_REPOSITORY_IMPORT_BASE);
-						String newBase = config.getString(Settings.SCAM_BASE_URL);
+						String oldBase = config.getString(Settings.REPOSITORY_IMPORT_BASE);
+						String newBase = config.getString(Settings.BASE_URL);
 						if (oldBase != null && newBase != null) {
 							importFromFile(importURI, false, oldBase, newBase);
 						} else {
@@ -318,13 +318,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 						}
 					}
 				} else {
-					log.warn(Settings.SCAM_REPOSITORY_IMPORT + " is true, but no import file is given");
+					log.warn(Settings.REPOSITORY_IMPORT + " is true, but no import file is given");
 				}
 			}
 
 			this.intitialize();
 			
-			String baseURI = config.getString(Settings.SCAM_BASE_URL);
+			String baseURI = config.getString(Settings.BASE_URL);
 			if (instances.containsKey(baseURI) || instances.containsValue(this)) {
 				log.warn("This RepositoryManager instance has already been created, something is wrong");
 			} else {
@@ -335,13 +335,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			setCheckForAuthorization(true);
 		}
 		
-		if ("on".equalsIgnoreCase(config.getString(Settings.SCAM_SOLR, "off")) && config.containsKey(Settings.SCAM_SOLR_URL)) {
+		if ("on".equalsIgnoreCase(config.getString(Settings.SOLR, "off")) && config.containsKey(Settings.SOLR_URL)) {
 			log.info("Initializing Solr");
 			initSolr();
 			registerSolrListeners();
 		}
 		
-		if ("on".equalsIgnoreCase(config.getString(Settings.SCAM_REPOSITORY_PUBLIC, "off"))) {
+		if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PUBLIC, "off"))) {
 			log.info("Initializing public repository");
 			publicRepository = new PublicRepository(this);
 			registerPublicRepositoryListeners();
@@ -488,7 +488,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				if (oldBase != null) {
 					parser.parse(in, oldBase.toString());
 				} else {
-					parser.parse(in, config.getString(Settings.SCAM_BASE_URL));
+					parser.parse(in, config.getString(Settings.BASE_URL));
 				}
 
 				// print how much time we needed
@@ -697,8 +697,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		log.info("Manually setting property \"javax.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");
 		System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
 
-		boolean reindex = "on".equalsIgnoreCase(config.getString(Settings.SCAM_SOLR_REINDEX_ON_STARTUP, "off"));
-		String solrURL = config.getString(Settings.SCAM_SOLR_URL);
+		boolean reindex = "on".equalsIgnoreCase(config.getString(Settings.SOLR_REINDEX_ON_STARTUP, "off"));
+		String solrURL = config.getString(Settings.SOLR_URL);
 		if (solrURL.startsWith("http://")) {
 			log.info("Using HTTP Solr server");
 			solrServer = new HttpSolrServer(solrURL);

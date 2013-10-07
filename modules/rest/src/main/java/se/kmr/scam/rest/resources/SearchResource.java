@@ -301,7 +301,7 @@ public class SearchResource extends BaseResource {
 //				log.info("Lucene SPARQL query:\n" + luceneQuerySimple);
 				
 				try {
-					String storeType = getRM().getConfiguration().getString(Settings.SCAM_STORE_TYPE);
+					String storeType = getRM().getConfiguration().getString(Settings.STORE_TYPE);
 					
 					Date before = new Date();
 					List<Entry> searchResult = null;

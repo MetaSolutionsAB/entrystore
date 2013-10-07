@@ -69,7 +69,7 @@ public class BackupTest {
 			e.printStackTrace();
 		}
 		Config config = confMan.getConfiguration();
-		config.setProperty(Settings.SCAM_STORE_TYPE, "memory");
+		config.setProperty(Settings.STORE_TYPE, "memory");
 		rm = new RepositoryManagerImpl("http://my.confolio.org/", config);
 		rm.setCheckForAuthorization(false);
 		cm = rm.getContextManager();

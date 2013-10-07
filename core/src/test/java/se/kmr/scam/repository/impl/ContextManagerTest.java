@@ -54,7 +54,7 @@ public class ContextManagerTest {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		confMan.getConfiguration().setProperty(Settings.SCAM_STORE_TYPE, "memory");
+		confMan.getConfiguration().setProperty(Settings.STORE_TYPE, "memory");
 		rm = new RepositoryManagerImpl("http://my.confolio.org/", confMan.getConfiguration());
 		cm = rm.getContextManager();
 		rm.setCheckForAuthorization(false);

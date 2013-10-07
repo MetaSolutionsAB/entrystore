@@ -234,8 +234,8 @@ public class EntryResource extends BaseResource {
 				parameters.put("includeAll", "true");
 			}
 			JSONObject jobj = this.getEntryAsJSONObject();
-			String storejs = config.getString(Settings.SCAM_STOREJS_JS, "/storejs/storejs.js");
-			String storecss = config.getString(Settings.SCAM_STOREJS_CSS, "/storejs/storejs.css");
+			String storejs = config.getString(Settings.STOREJS_JS, "/storejs/storejs.js");
+			String storecss = config.getString(Settings.STOREJS_CSS, "/storejs/storejs.css");
 			if (jobj != null) {
 				return new StringRepresentation(
 						"<html><head><meta http-equiv=\"content-type\" content=\"text/html; charset=UTF-8\">"+

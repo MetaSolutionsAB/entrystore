@@ -148,9 +148,9 @@ public class SCAMOAICatalog extends AbstractCatalog {
 		}
 		maxListSize = Integer.parseInt(propMaxListSize);
 		
-		scamBaseURI = properties.getProperty(Settings.SCAM_HARVESTING_TARGET_OAI_BASE_URI);
+		scamBaseURI = properties.getProperty(Settings.HARVESTING_TARGET_OAI_BASE_URI);
 		if (scamBaseURI == null) {
-			String noPropError = "Property " + Settings.SCAM_HARVESTING_TARGET_OAI_BASE_URI + " is missing in the OAI-PMH target configuration";
+			String noPropError = "Property " + Settings.HARVESTING_TARGET_OAI_BASE_URI + " is missing in the OAI-PMH target configuration";
 			log.error(noPropError);
 			throw new IllegalArgumentException(noPropError);
 		}

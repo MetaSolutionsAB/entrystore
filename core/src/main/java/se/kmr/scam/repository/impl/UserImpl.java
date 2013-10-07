@@ -92,9 +92,9 @@ public class UserImpl extends RDFResource implements User {
 		if (this.secret == null) {
 			// we allow an override of the admin password in the config file
 			if (rm.getPrincipalManager().getAdminUser().getEntry().getId().equals(entry.getId())) {
-				if (rm.getConfiguration().containsKey(Settings.SCAM_AUTH_ADMIN_SECRET)) {
+				if (rm.getConfiguration().containsKey(Settings.AUTH_ADMIN_SECRET)) {
 					log.warn("Admin secret override in config file");
-					this.secret = rm.getConfiguration().getString(Settings.SCAM_AUTH_ADMIN_SECRET);
+					this.secret = rm.getConfiguration().getString(Settings.AUTH_ADMIN_SECRET);
 					return this.secret;
 				}
 			}

@@ -61,7 +61,7 @@ public class PrincipalManagerTest {
 			e.printStackTrace();
 		}
 		Config config = confMan.getConfiguration();
-		config.setProperty(Settings.SCAM_STORE_TYPE, "memory");
+		config.setProperty(Settings.STORE_TYPE, "memory");
 		rm = new RepositoryManagerImpl("http://my.confolio.org/", config);
 		pm = rm.getPrincipalManager();
 		cm = rm.getContextManager();

@@ -167,7 +167,7 @@ public class EntryStoreApplication extends Application {
 			Config config = confManager.getConfiguration();
 			EntryResource.config = config;
 		
-			baseURI = config.getString(Settings.SCAM_BASE_URL);
+			baseURI = config.getString(Settings.BASE_URL);
 
 			Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
 			ConverterManagerImpl.register("oai_dc", oaiDcRdfConverter);
@@ -181,7 +181,7 @@ public class EntryStoreApplication extends Application {
 			cm = rm.getContextManager();
 			pm = rm.getPrincipalManager();
 
-			String storeType = config.getString(Settings.SCAM_STORE_TYPE, null); 
+			String storeType = config.getString(Settings.STORE_TYPE, null); 
 			if(storeType == null || storeType.equals("memory")) {
 				// Create context's, entries and harvesters
 				TestSuite.initDisneySuite(rm);
@@ -194,7 +194,7 @@ public class EntryStoreApplication extends Application {
 			startHarvesters();
 		
 			// Load and start backup scheduler
-			String backupStatus = rm.getConfiguration().getString(Settings.SCAM_BACKUP_SCHEDULER, "off");
+			String backupStatus = rm.getConfiguration().getString(Settings.BACKUP_SCHEDULER, "off");
 			if ("off".equals(backupStatus.trim())) {
 				log.warn("Backup is disabled in configuration");
 			} else {

@@ -204,7 +204,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				
 				// recursively remove the file directory on the hard disk
 				
-				String contextPath = this.entry.getRepositoryManager().getConfiguration().getString(Settings.SCAM_DATA_FOLDER);
+				String contextPath = this.entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER);
 	            if (contextPath != null) {
 	            	File contextPathFile = new File(URI.create(contextPath));
 	            	File contextFolder = new File(contextPathFile, contextId);
@@ -386,7 +386,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		
 		// copy resources/files to data dir of context
 		
-		File dstDir = new File(entry.getRepositoryManager().getConfiguration().getString(Settings.SCAM_DATA_FOLDER), contextEntry.getId());
+		File dstDir = new File(entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER), contextEntry.getId());
 		if (!dstDir.exists()) {
 			dstDir.mkdirs();
 		}
@@ -739,7 +739,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			FileInputStream fileOut = new FileInputStream( new File(folder, "portfolio-index.rdf"));
 			FileInputStream fileOut2 = new FileInputStream(new File(folder,  "portfolio-entries.rdf"));
 
-			String base = entry.getRepositoryManager().getConfiguration().getString(Settings.SCAM_BASE_URL, "http://scam4.org");
+			String base = entry.getRepositoryManager().getConfiguration().getString(Settings.BASE_URL, "http://scam4.org");
 
 			trigParser.parse(fileOut, base);
 			fileOut.close();
@@ -776,7 +776,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	/** FIXME: rewrite
 	 */
 	public String getContextBackupFolder(URI contexturi) {
-		String backupFolder = entry.getRepositoryManager().getConfiguration().getString(Settings.SCAM_BACKUP_FOLDER);
+		String backupFolder = entry.getRepositoryManager().getConfiguration().getString(Settings.BACKUP_FOLDER);
 		String helper = contexturi.toString();
 
 		// TODO use URIStr instead - but we don't have the baseURL

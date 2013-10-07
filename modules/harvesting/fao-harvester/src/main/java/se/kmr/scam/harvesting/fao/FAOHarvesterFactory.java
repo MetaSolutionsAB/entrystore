@@ -47,7 +47,7 @@ public class FAOHarvesterFactory implements HarvesterFactory {
 	static Logger log = LoggerFactory.getLogger(FAOHarvesterFactory.class);
 
 	public Harvester createHarvester(String target, String metadataType, String set, String timeRegExp, RepositoryManagerImpl rm, URI ownerContextURI) throws HarvesterFactoryException {
-		String fao = rm.getConfiguration().getString(Settings.SCAM_HARVESTER_FAO, "off"); 
+		String fao = rm.getConfiguration().getString(Settings.HARVESTER_FAO, "off"); 
 		if (fao.equals("off")) {
 			throw new HarvesterFactoryException("The FAO harvester module is not enabled"); 
 		}
@@ -68,7 +68,7 @@ public class FAOHarvesterFactory implements HarvesterFactory {
 	}
 
 	public Harvester getHarvester(RepositoryManagerImpl rm, URI ownerContextURI) throws HarvesterFactoryException {
-		String fao = rm.getConfiguration().getString(Settings.SCAM_HARVESTER_FAO, "off"); 
+		String fao = rm.getConfiguration().getString(Settings.HARVESTER_FAO, "off"); 
 		if(fao.equals("off")) {
 			throw new HarvesterFactoryException("The FAO harvester module is not enabled"); 
 		}

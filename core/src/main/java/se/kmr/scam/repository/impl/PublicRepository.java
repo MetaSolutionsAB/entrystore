@@ -49,17 +49,17 @@ public class PublicRepository {
 		this.pm = rm.getPrincipalManager();
 		Config config = rm.getConfiguration();
 
-		String storeType = config.getString(Settings.SCAM_REPOSITORY_PUBLIC_TYPE, "memory").trim();
+		String storeType = config.getString(Settings.REPOSITORY_PUBLIC_TYPE, "memory").trim();
 		log.info("Public repository type: " + storeType);
 		
 		if (storeType.equalsIgnoreCase("memory")) {
 			this.repository = new SailRepository(new MemoryStore());
 		} else if (storeType.equalsIgnoreCase("native")) {
-			if (!config.containsKey(Settings.SCAM_REPOSITORY_PUBLIC_PATH)) {
+			if (!config.containsKey(Settings.REPOSITORY_PUBLIC_PATH)) {
 				log.error("Incomplete configuration of public repository");
 			} else {
-				File path = new File(config.getURI(Settings.SCAM_REPOSITORY_PUBLIC_PATH));
-				String indexes = config.getString(Settings.SCAM_REPOSITORY_PUBLIC_INDEXES);
+				File path = new File(config.getURI(Settings.REPOSITORY_PUBLIC_PATH));
+				String indexes = config.getString(Settings.REPOSITORY_PUBLIC_INDEXES);
 				
 				log.info("Public repository path: " + path);
 				log.info("Public repository indexes: " + indexes);
@@ -88,7 +88,7 @@ public class PublicRepository {
 		}
 		
 		if (getTripleCount() == 0 ||
-				"on".equalsIgnoreCase(config.getString(Settings.SCAM_REPOSITORY_PUBLIC_REBUILD_ON_STARTUP, "off"))) {
+				"on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PUBLIC_REBUILD_ON_STARTUP, "off"))) {
 			rebuildRepository();
 		}
 	}

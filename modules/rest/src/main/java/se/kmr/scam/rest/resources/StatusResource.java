@@ -66,17 +66,17 @@ public class StatusResource extends BaseResource  {
 					}
 
 					result.put("baseURI", getRM().getRepositoryURL().toString());
-					result.put("repositoryType", config.getString(Settings.SCAM_STORE_TYPE, "unconfigured"));
-					result.put("repositoryIndices", config.getString(Settings.SCAM_STORE_INDEXES, "unconfigured"));
-					result.put("repositoryCache", config.getString(Settings.SCAM_REPOSITORY_CACHE, "off"));
-					result.put("quota", config.getString(Settings.SCAM_DATA_QUOTA, "off"));
-					result.put("quotaDefault", config.getString(Settings.SCAM_DATA_QUOTA_DEFAULT, "unconfigured"));
-					result.put("solr", config.getString(Settings.SCAM_SOLR, "off"));
-					result.put("solrReindexOnStartup", config.getString(Settings.SCAM_SOLR_REINDEX_ON_STARTUP, "off"));
-					result.put("backup", config.getString(Settings.SCAM_BACKUP_SCHEDULER, "off"));
-					result.put("backupMaintenance", config.getString(Settings.SCAM_BACKUP_MAINTENANCE, "off"));
-					result.put("oaiHarvester", config.getString(Settings.SCAM_HARVESTER_OAI, "off"));
-					result.put("oaiHarvesterMultiThreaded", config.getString(Settings.SCAM_HARVESTER_OAI_MULTITHREADED, "off"));
+					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));
+					result.put("repositoryIndices", config.getString(Settings.STORE_INDEXES, "unconfigured"));
+					result.put("repositoryCache", config.getString(Settings.REPOSITORY_CACHE, "off"));
+					result.put("quota", config.getString(Settings.DATA_QUOTA, "off"));
+					result.put("quotaDefault", config.getString(Settings.DATA_QUOTA_DEFAULT, "unconfigured"));
+					result.put("solr", config.getString(Settings.SOLR, "off"));
+					result.put("solrReindexOnStartup", config.getString(Settings.SOLR_REINDEX_ON_STARTUP, "off"));
+					result.put("backup", config.getString(Settings.BACKUP_SCHEDULER, "off"));
+					result.put("backupMaintenance", config.getString(Settings.BACKUP_MAINTENANCE, "off"));
+					result.put("oaiHarvester", config.getString(Settings.HARVESTER_OAI, "off"));
+					result.put("oaiHarvesterMultiThreaded", config.getString(Settings.HARVESTER_OAI_MULTITHREADED, "off"));
 
 					if (parameters.containsKey("includeStats")) {
 						try {
