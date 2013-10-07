@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.entrystore.harvester.Harvester;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
@@ -37,7 +38,6 @@ import org.restlet.resource.ServerResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.harvester.Harvester;
 import se.kmr.scam.rest.EntryStoreApplication;
 import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.Util;

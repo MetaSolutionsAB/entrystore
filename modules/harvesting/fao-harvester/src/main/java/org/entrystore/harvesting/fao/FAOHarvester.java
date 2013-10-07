@@ -21,6 +21,7 @@ import java.text.ParseException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.entrystore.harvester.Harvester;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
@@ -29,7 +30,6 @@ import org.quartz.SchedulerException;
 import org.quartz.SchedulerFactory;
 import org.quartz.impl.StdSchedulerFactory;
 
-import se.kmr.scam.harvester.Harvester;
 
 
 /**

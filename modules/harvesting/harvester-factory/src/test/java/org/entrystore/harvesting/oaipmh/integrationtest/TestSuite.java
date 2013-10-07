@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.oaipmh.integrationtest;
+package org.entrystore.harvesting.oaipmh.integrationtest;
 
 import java.net.URL;
 

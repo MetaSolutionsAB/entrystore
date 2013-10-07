@@ -14,9 +14,30 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvester;
+package org.entrystore.harvester.factory;
 
-public enum MetadataType {
-	OAI_DC,
-	OAI_LOM
+import org.entrystore.harvester.MetadataType;
+
+/**
+ * 
+ * @author eric
+ *
+ */
+public class MetadataFactory {
+	
+	/**
+	 * 
+	 * @param metadataType
+	 * @return a enum if success or null otherwise.
+	 */
+	public static MetadataType getMetadataType(String metadataType) {
+		
+		if(metadataType.equals("OAI_DC")) {
+			return MetadataType.OAI_DC; 
+		} else if(metadataType.equals("OAI_LOM")) {
+			return MetadataType.OAI_LOM; 
+		}
+		return null;
+	}
+
 }

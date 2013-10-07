@@ -14,27 +14,21 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvesting.oaipmh;
+package org.entrystore.harvester.factory;
 
-import java.io.InputStream;
+import java.net.URI;
 
-import static org.junit.Assert.assertNotNull;
-import org.junit.Test; 
+import org.entrystore.harvester.Harvester;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
 
 
-/**
- * A class to test that JUnit 4 works with build environment
- *
- * Todo: remove this class before first release
- *
- * @author mlkn
- * @version $Id$
- */
-public class SimpleTest {
+public interface HarvesterFactory {
 	
-	@Test
-	public void testFindProperty() {
-		  InputStream is = getClass().getResourceAsStream( "/log4j.properties" );
-		  assertNotNull(is); 
-	}
+	public Harvester createHarvester(String target, String metadataType, String set, String timeRegExp, RepositoryManagerImpl rm, URI ownerContextURI) throws HarvesterFactoryException; 
+	
+	public Harvester getHarvester(RepositoryManagerImpl rm, URI ownerContextURI) throws HarvesterFactoryException;
+	
+	public void deleteHarvester(Entry contextEntry);
+
 }

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvester;
+package org.entrystore.harvester;
 
 import java.net.URI;
 

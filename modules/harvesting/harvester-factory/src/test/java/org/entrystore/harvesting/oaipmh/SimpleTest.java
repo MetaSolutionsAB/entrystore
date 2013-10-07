@@ -14,18 +14,27 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvester.factory;
+package org.entrystore.harvesting.oaipmh;
 
-public class HarvesterFactoryException extends Exception {
+import java.io.InputStream;
 
-	/**
-	 * 
-	 */
-	private static final long serialVersionUID = 1L;
+import static org.junit.Assert.assertNotNull;
+import org.junit.Test; 
+
+
+/**
+ * A class to test that JUnit 4 works with build environment
+ *
+ * Todo: remove this class before first release
+ *
+ * @author mlkn
+ * @version $Id$
+ */
+public class SimpleTest {
 	
-	public HarvesterFactoryException(String message) {
-		super(message);
-		// TODO Auto-generated constructor stub
+	@Test
+	public void testFindProperty() {
+		  InputStream is = getClass().getResourceAsStream( "/log4j.properties" );
+		  assertNotNull(is); 
 	}
-
 }

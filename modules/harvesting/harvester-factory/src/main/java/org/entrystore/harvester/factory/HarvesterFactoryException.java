@@ -14,21 +14,18 @@
  * limitations under the License.
  */
 
-package se.kmr.scam.harvester.factory;
+package org.entrystore.harvester.factory;
 
-import java.net.URI;
+public class HarvesterFactoryException extends Exception {
 
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
-
-import se.kmr.scam.harvester.Harvester;
-
-public interface HarvesterFactory {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
 	
-	public Harvester createHarvester(String target, String metadataType, String set, String timeRegExp, RepositoryManagerImpl rm, URI ownerContextURI) throws HarvesterFactoryException; 
-	
-	public Harvester getHarvester(RepositoryManagerImpl rm, URI ownerContextURI) throws HarvesterFactoryException;
-	
-	public void deleteHarvester(Entry contextEntry);
+	public HarvesterFactoryException(String message) {
+		super(message);
+		// TODO Auto-generated constructor stub
+	}
 
 }
