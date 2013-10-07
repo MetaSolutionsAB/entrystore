@@ -37,17 +37,12 @@ public class ConfigurationManager {
 
 	static Logger log = LoggerFactory.getLogger(ConfigurationManager.class);
 
-	//	/**
-	//	 * Instance of the ConfigurationManager.
-	//	 */
-	//	private static ConfigurationManager configManager;
-
 	/**
 	 * Instance of the configuration object.
 	 */
 	private Config mainConfig;
 
-	public static String CONFIG_FILE = "scam.properties";
+	public static String CONFIG_FILE = "entrystore.properties";
 
 	/* Private methods */
 
@@ -82,7 +77,7 @@ public class ConfigurationManager {
 	}
 
 	private void initMainConfig() {
-		mainConfig = Configurations.synchronizedConfig(new PropertiesConfiguration("SCAM Configuration"));
+		mainConfig = Configurations.synchronizedConfig(new PropertiesConfiguration("EntryStore Configuration"));
 	}
 
 	/**
@@ -105,26 +100,6 @@ public class ConfigurationManager {
 	public Object clone() throws CloneNotSupportedException {
 		throw new CloneNotSupportedException(this.getClass() + " is a Singleton.");
 	}
-
-	//	private synchronized static void initialize(URI configURI) {
-	//		if (configManager != null) {
-	//			throw new IllegalStateException(ConfigurationManager.class + " has already been initialized.");
-	//		}
-	//		try {
-	//			configManager = new ConfigurationManager(configURI);
-	//		} catch (IOException e) {
-	//			log.error("Could not create configuration manager: " + e.getMessage());
-	//		}
-	//	}
-
-	//	/**
-	//	 * This method can be called once to initialize the ConfigurationManager and
-	//	 * its contained configuration object. If the ConfigurationManager has been
-	//	 * initialized already, this method throws an IllegalStateException.
-	//	 */
-	//	private synchronized static void initialize() {
-	//		initialize(getConfigurationURI());
-	//	}
 
 	public ConfigurationType getType() {
 		return ConfigurationType.Properties;
@@ -153,22 +128,6 @@ public class ConfigurationManager {
 	public static URI getConfigurationURI() {
 		return getConfigurationURI(CONFIG_FILE);
 	}
-
-	//	/**
-	//	 * @return Returns the configuration object.
-	//	 */
-	//	public static Config getConfiguration() {
-	//		if (configManager == null) {
-	//			initialize();
-	//		}
-	//		if (mainConfig == null) {
-	//			IllegalStateException ise = new IllegalStateException(ConfigurationManager.class.getSimpleName()
-	//					+ " is in an illegal state: no configuration is managed"); 
-	//			log.error(ise.getMessage());
-	//			throw ise;
-	//		}
-	//		return mainConfig;
-	//	}
 
 	public Config getConfiguration() {
 		return mainConfig;
