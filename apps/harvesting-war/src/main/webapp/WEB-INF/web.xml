@@ -5,16 +5,16 @@
 	xsi:schemaLocation="http://java.sun.com/xml/ns/j2ee http://java.sun.com/xml/ns/j2ee/web-app_2_4.xsd">
 	
 	<!-- ============================================= 
-						SCAM OE 
+				 	Harvesting Target
 	     ========================================== -->
-    <display-name>SCAM OE Application</display-name>
+    <display-name>Harvesting Target Application</display-name>
 	
 	<welcome-file-list>
         <welcome-file>index.html</welcome-file>
     </welcome-file-list>
 	
 	 <listener>
-          <listener-class>se.kmr.scam.oe.ContextLoaderListener</listener-class>
+          <listener-class>org.entrystore.oe.ContextLoaderListener</listener-class>
 	 </listener>
 	
 	<!-- ============================================= 
@@ -23,7 +23,7 @@
 	<!-- Application class name -->
 	<context-param>
 		<param-name>org.restlet.application</param-name>
-		<param-value>se.kmr.scam.rest.ScamApplication</param-value>
+		<param-value>org.entrystore.rest.EntryStoreApplication</param-value>
 	</context-param>
 
 	<!-- Restlet adapter -->
@@ -80,8 +80,8 @@
         </param-value>
     </context-param>
     <servlet>
-        <description>SCAM SQI Webservice</description>
-        <display-name>scam-sqi-ws</display-name>
+        <description>SQI Webservice</description>
+        <display-name>entrystore-sqi-ws</display-name>
         <servlet-name>WebServicePort</servlet-name>
         <servlet-class>org.apache.cxf.transport.servlet.CXFServlet</servlet-class>
         <load-on-startup>6</load-on-startup>
