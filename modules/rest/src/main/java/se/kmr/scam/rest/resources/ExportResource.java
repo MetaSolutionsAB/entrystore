@@ -32,6 +32,10 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.User;
+import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.repository.config.Settings;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.rio.RDFFormat;
 import org.openrdf.rio.RDFWriter;
@@ -51,10 +55,6 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
-import se.kmr.scam.repository.User;
-import se.kmr.scam.repository.config.Settings;
 import se.kmr.scam.rest.util.JSONErrorMessages;
 
 /**

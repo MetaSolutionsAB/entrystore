@@ -18,6 +18,10 @@ package se.kmr.scam.rest.resources;
 
 import java.io.IOException;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.backup.BackupFactory;
+import org.entrystore.repository.backup.BackupScheduler;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Status;
@@ -30,10 +34,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.backup.BackupFactory;
-import se.kmr.scam.repository.backup.BackupScheduler;
 import se.kmr.scam.rest.EntryStoreApplication;
 
 /**

@@ -24,6 +24,19 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Set;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.Group;
+import org.entrystore.repository.List;
+import org.entrystore.repository.LocationType;
+import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.User;
+import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.repository.impl.ContextImpl;
+import org.entrystore.repository.impl.RDFResource;
+import org.entrystore.repository.impl.StringResource;
+import org.entrystore.repository.impl.converters.NS;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -44,19 +57,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.Group;
-import se.kmr.scam.repository.List;
-import se.kmr.scam.repository.LocationType;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
-import se.kmr.scam.repository.RepresentationType;
-import se.kmr.scam.repository.User;
-import se.kmr.scam.repository.impl.ContextImpl;
-import se.kmr.scam.repository.impl.RDFResource;
-import se.kmr.scam.repository.impl.StringResource;
-import se.kmr.scam.repository.impl.converters.NS;
 import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.RDFJSON;
 
@@ -479,7 +479,7 @@ public class ContextResource extends BaseResource {
 			if (jsonObj.has("homecontext")) {
 				Entry homeContextEntry = getCM().get(jsonObj.getString("homecontext"));
 				if (homeContextEntry != null) {
-					user.setHomeContext((se.kmr.scam.repository.Context) homeContextEntry.getResource());
+					user.setHomeContext((org.entrystore.repository.Context) homeContextEntry.getResource());
 				}
 			}
 			if (jsonObj.has("password")) {
@@ -521,7 +521,7 @@ public class ContextResource extends BaseResource {
 			}
 			break;
 		case Context:
-			se.kmr.scam.repository.Context cont = (se.kmr.scam.repository.Context) entry.getResource();
+			org.entrystore.repository.Context cont = (org.entrystore.repository.Context) entry.getResource();
 			if (jsonObj.has("alias")) {
 				getCM().setContextAlias(cont.getURI(), jsonObj.getString("alias"));
 			}

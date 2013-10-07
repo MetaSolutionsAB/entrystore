@@ -19,6 +19,7 @@ package se.kmr.scam.rest.util;
 import java.util.Date;
 import java.util.HashMap;
 
+import org.entrystore.repository.Entry;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.Request;
@@ -26,7 +27,6 @@ import org.restlet.data.Method;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.Entry;
 
 /**
  * A Util class for the REST module

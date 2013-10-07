@@ -18,6 +18,10 @@ package se.kmr.scam.rest.resources;
 
 import java.io.IOException;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.impl.converters.Graph2Entries;
 import org.openrdf.model.Graph;
 import org.openrdf.rio.RDFFormat;
 import org.openrdf.rio.n3.N3ParserFactory;
@@ -33,10 +37,6 @@ import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
-import se.kmr.scam.repository.impl.converters.ConverterUtil;
-import se.kmr.scam.repository.impl.converters.Graph2Entries;
 import se.kmr.scam.rest.util.RDFJSON;
 
 /**

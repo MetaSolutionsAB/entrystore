@@ -45,6 +45,23 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.Data;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.Group;
+import org.entrystore.repository.LocationType;
+import org.entrystore.repository.Metadata;
+import org.entrystore.repository.QuotaException;
+import org.entrystore.repository.RepositoryProperties;
+import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.User;
+import org.entrystore.repository.impl.ListImpl;
+import org.entrystore.repository.impl.RDFResource;
+import org.entrystore.repository.impl.StringResource;
+import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.util.EntryUtil;
+import org.entrystore.repository.util.FileOperations;
 import org.ieee.ltsc.lom.LOM.Technical.Location;
 import org.ieee.ltsc.lom.LOMUtil;
 import org.ieee.ltsc.lom.impl.LOMImpl;
@@ -71,23 +88,6 @@ import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Data;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.Group;
-import se.kmr.scam.repository.LocationType;
-import se.kmr.scam.repository.Metadata;
-import se.kmr.scam.repository.QuotaException;
-import se.kmr.scam.repository.RepositoryProperties;
-import se.kmr.scam.repository.RepresentationType;
-import se.kmr.scam.repository.User;
-import se.kmr.scam.repository.impl.ListImpl;
-import se.kmr.scam.repository.impl.RDFResource;
-import se.kmr.scam.repository.impl.StringResource;
-import se.kmr.scam.repository.impl.converters.ConverterUtil;
-import se.kmr.scam.repository.util.EntryUtil;
-import se.kmr.scam.repository.util.FileOperations;
 import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.RDFJSON;
 import se.kmr.scam.rest.util.Util;
@@ -454,7 +454,7 @@ public class ResourceResource extends BaseResource {
 	public Set<Entry> getListChildrenRecursively(Entry listEntry) {
 		Set<Entry> result = new HashSet<Entry>();
 		if (BuiltinType.List.equals(listEntry.getBuiltinType()) && LocationType.Local.equals(listEntry.getLocationType())) {
-			se.kmr.scam.repository.List l = (se.kmr.scam.repository.List) listEntry.getResource();
+			org.entrystore.repository.List l = (org.entrystore.repository.List) listEntry.getResource();
 			List<URI> c = l.getChildren();
 			for (URI uri : c) {
 				Entry e = getRM().getContextManager().getEntry(uri);
@@ -613,7 +613,7 @@ public class ResourceResource extends BaseResource {
 
 			/*** List ***/
 			if (entry.getBuiltinType() == BuiltinType.List) {
-				se.kmr.scam.repository.List l = (se.kmr.scam.repository.List) entry.getResource(); 
+				org.entrystore.repository.List l = (org.entrystore.repository.List) entry.getResource(); 
 				List<URI> uris = l.getChildren();
 				Set<String> IDs = new HashSet<String>();
 				for (URI u: uris) {
@@ -695,7 +695,7 @@ public class ResourceResource extends BaseResource {
 
 			/*** Context ***/
 			if(entry.getBuiltinType() == BuiltinType.Context || entry.getBuiltinType() == BuiltinType.SystemContext) {
-				se.kmr.scam.repository.Context c = (se.kmr.scam.repository.Context) entry.getResource(); 
+				org.entrystore.repository.Context c = (org.entrystore.repository.Context) entry.getResource(); 
 				Set<URI> uris = c.getEntries(); 
 				for(URI u: uris) {
 					String entryId = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/')+1);
@@ -752,7 +752,7 @@ public class ResourceResource extends BaseResource {
 
 					//jsonUserObj.put("password", user.getSecret());
 
-					se.kmr.scam.repository.Context homeContext = user.getHomeContext();
+					org.entrystore.repository.Context homeContext = user.getHomeContext();
 					if (homeContext != null) {
 						jsonUserObj.put("homecontext", homeContext.getEntry().getId());
 					}
@@ -842,10 +842,10 @@ public class ResourceResource extends BaseResource {
 				}
 				
 				if (entry.getBuiltinType() == BuiltinType.List) {
-					se.kmr.scam.repository.List resourceList = (se.kmr.scam.repository.List) entry.getResource();
+					org.entrystore.repository.List resourceList = (org.entrystore.repository.List) entry.getResource();
 					resourceList.setChildren(newResource);
 				} else {
-					se.kmr.scam.repository.Group resourceGroup = (se.kmr.scam.repository.Group) entry.getResource();
+					org.entrystore.repository.Group resourceGroup = (org.entrystore.repository.Group) entry.getResource();
 					resourceGroup.setChildren(newResource); 
 				}
 				getResponse().setStatus(Status.SUCCESS_OK);
@@ -857,7 +857,7 @@ public class ResourceResource extends BaseResource {
 				log.error("IOException: " + e.getMessage()); 
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"IOException\"}"));
-			} catch (se.kmr.scam.repository.RepositoryException re) {
+			} catch (org.entrystore.repository.RepositoryException re) {
 				log.warn(re.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorChildExistsInList));
@@ -1025,8 +1025,8 @@ public class ResourceResource extends BaseResource {
 					String homeContext = entityJSON.getString("homecontext");
 					Entry entryHomeContext = getCM().get(homeContext);
 					if (entryHomeContext != null) {
-						if (!(entryHomeContext.getResource() instanceof se.kmr.scam.repository.Context)
-								|| !resourceUser.setHomeContext((se.kmr.scam.repository.Context) entryHomeContext.getResource())) {
+						if (!(entryHomeContext.getResource() instanceof org.entrystore.repository.Context)
+								|| !resourceUser.setHomeContext((org.entrystore.repository.Context) entryHomeContext.getResource())) {
 							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 							getResponse().setEntity(new JsonRepresentation("{\"error\":\"Given homecontext is not a context.\"}"));
 							return;						

@@ -21,6 +21,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.entrystore.repository.ContextManager;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.backup.BackupScheduler;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -33,11 +38,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import se.kmr.scam.harvester.Harvester;
-import se.kmr.scam.repository.ContextManager;
-import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.RepositoryManager;
-import se.kmr.scam.repository.backup.BackupScheduler;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
 import se.kmr.scam.rest.EntryStoreApplication;
 import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.Util;
@@ -58,9 +58,9 @@ public abstract class BaseResource extends ServerResource {
 	
 	protected String entryId;
 	
-	protected se.kmr.scam.repository.Context context;
+	protected org.entrystore.repository.Context context;
 	
-	protected se.kmr.scam.repository.Entry entry;
+	protected org.entrystore.repository.Entry entry;
 	
 	private static Logger log = LoggerFactory.getLogger(BaseResource.class);
 	

@@ -16,6 +16,9 @@
 
 package se.kmr.scam.rest.resources;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.User;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.ext.json.JsonRepresentation;
@@ -25,9 +28,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.User;
 
 /**
  * This class is the resource for login in.
@@ -57,7 +57,7 @@ public class LoginResource extends BaseResource {
 				result.put("user", currentUser.getName());
 				result.put("id", currentUser.getEntry().getId());
 
-				se.kmr.scam.repository.Context homeContext = currentUser.getHomeContext();
+				org.entrystore.repository.Context homeContext = currentUser.getHomeContext();
 				if (homeContext != null) {
 					result.put("homecontext", homeContext.getEntry().getId());
 				}

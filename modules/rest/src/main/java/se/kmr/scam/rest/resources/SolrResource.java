@@ -18,6 +18,8 @@ package se.kmr.scam.rest.resources;
 
 import java.net.URI;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.PrincipalManager;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
@@ -26,8 +28,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.PrincipalManager;
 import se.kmr.scam.rest.util.Util;
 
 /**

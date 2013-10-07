@@ -23,6 +23,7 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.entrystore.repository.AuthorizationException;
 import org.openrdf.model.URI;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.query.MalformedQueryException;
@@ -48,7 +49,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
 
 /**
  * Provides a SPARQL interface to SCAM contexts.
@@ -155,7 +155,7 @@ public class SparqlResource extends BaseResource {
 		}
 	}
 	
-	private boolean runSparqlQuery(String queryString, se.kmr.scam.repository.Context context, TupleQueryResultHandler resultHandler) throws RepositoryException, MalformedQueryException, QueryEvaluationException, TupleQueryResultHandlerException {
+	private boolean runSparqlQuery(String queryString, org.entrystore.repository.Context context, TupleQueryResultHandler resultHandler) throws RepositoryException, MalformedQueryException, QueryEvaluationException, TupleQueryResultHandlerException {
 		RepositoryConnection rc = null;
 		try {
 			rc = this.getRM().getPublicRepository().getConnection();

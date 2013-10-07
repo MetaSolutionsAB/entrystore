@@ -18,6 +18,11 @@ package se.kmr.scam.rest.resources;
 
 import java.net.URI;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.config.Config;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.MediaType;
@@ -30,11 +35,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.config.Config;
-import se.kmr.scam.repository.config.Settings;
-import se.kmr.scam.repository.impl.RepositoryManagerImpl;
 
 /**
  * @author Hannes Ebner

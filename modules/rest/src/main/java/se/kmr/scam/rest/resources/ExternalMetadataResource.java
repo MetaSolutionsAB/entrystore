@@ -20,6 +20,10 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.LocationType;
+import org.entrystore.repository.Metadata;
+import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.openrdf.model.Graph;
 import org.openrdf.rio.RDFFormat;
 import org.openrdf.rio.n3.N3Writer;
@@ -37,10 +41,6 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.LocationType;
-import se.kmr.scam.repository.Metadata;
-import se.kmr.scam.repository.impl.converters.ConverterUtil;
 import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.RDFJSON;
 

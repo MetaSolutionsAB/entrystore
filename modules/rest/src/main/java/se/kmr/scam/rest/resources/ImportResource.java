@@ -26,6 +26,10 @@ import java.util.List;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.repository.transformation.SCAM2Import;
+import org.entrystore.repository.util.FileOperations;
 import org.openrdf.repository.RepositoryException;
 import org.restlet.Request;
 import org.restlet.data.MediaType;
@@ -36,10 +40,6 @@ import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
-import se.kmr.scam.repository.transformation.SCAM2Import;
-import se.kmr.scam.repository.util.FileOperations;
 
 /**
  * This class supports the import of single contexts. If a context is imported,

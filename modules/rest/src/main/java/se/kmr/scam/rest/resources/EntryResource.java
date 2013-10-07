@@ -25,6 +25,21 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.Group;
+import org.entrystore.repository.LocationType;
+import org.entrystore.repository.Metadata;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.RepositoryProperties;
+import org.entrystore.repository.User;
+import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.repository.config.Config;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.StringResource;
+import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.util.EntryUtil;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -57,21 +72,6 @@ import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.Group;
-import se.kmr.scam.repository.LocationType;
-import se.kmr.scam.repository.Metadata;
-import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.PrincipalManager.AccessProperty;
-import se.kmr.scam.repository.RepositoryProperties;
-import se.kmr.scam.repository.User;
-import se.kmr.scam.repository.config.Config;
-import se.kmr.scam.repository.config.Settings;
-import se.kmr.scam.repository.impl.StringResource;
-import se.kmr.scam.repository.impl.converters.ConverterUtil;
-import se.kmr.scam.repository.util.EntryUtil;
 import se.kmr.scam.rest.util.JSONErrorMessages;
 import se.kmr.scam.rest.util.RDFJSON;
 import se.kmr.scam.rest.util.Util;
@@ -180,7 +180,7 @@ public class EntryResource extends BaseResource {
 		try {
 			if (entry != null && context != null) {
 				if (BuiltinType.List.equals(entry.getBuiltinType()) && parameters.containsKey("recursive")) {
-					se.kmr.scam.repository.List l = (se.kmr.scam.repository.List) entry.getResource();
+					org.entrystore.repository.List l = (org.entrystore.repository.List) entry.getResource();
 					if (l != null) {
 						l.removeTree();
 					} else {
@@ -286,7 +286,7 @@ public class EntryResource extends BaseResource {
 				jdilObj.put("alias", getCM().getContextAlias(entry.getResourceURI()));
 				if (entry.getRepositoryManager().hasQuotas()) {
 					JSONObject quotaObj = new JSONObject();
-					se.kmr.scam.repository.Context c = getCM().getContext(this.entryId);
+					org.entrystore.repository.Context c = getCM().getContext(this.entryId);
 					if (c != null) {
 						quotaObj.put("quota", c.getQuota());
 						quotaObj.put("fillLevel", c.getQuotaFillLevel());
@@ -430,8 +430,8 @@ public class EntryResource extends BaseResource {
 					try {
 						// List<JSONObject> childrenObjects = new ArrayList<JSONObject>();
 						JSONArray childrenArray = new JSONArray();
-						se.kmr.scam.repository.Resource res = entry.getResource();
-						se.kmr.scam.repository.List parent = (se.kmr.scam.repository.List) res;
+						org.entrystore.repository.Resource res = entry.getResource();
+						org.entrystore.repository.List parent = (org.entrystore.repository.List) res;
 
 						int maxPos = offset + limit;
 						if (limit == 0) {
@@ -499,9 +499,9 @@ public class EntryResource extends BaseResource {
 								childJSON.put("alias", getCM().getContextAlias(childEntry.getResourceURI()));
 							} else if (btChild == BuiltinType.List) {
 								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
-									se.kmr.scam.repository.Resource childRes = childEntry.getResource();
-									if (childRes != null && childRes instanceof se.kmr.scam.repository.List) {
-										se.kmr.scam.repository.List childList = (se.kmr.scam.repository.List) childRes;
+									org.entrystore.repository.Resource childRes = childEntry.getResource();
+									if (childRes != null && childRes instanceof org.entrystore.repository.List) {
+										org.entrystore.repository.List childList = (org.entrystore.repository.List) childRes;
 										try {
 											childJSON.put("size", childList.getChildren().size());
 										} catch (AuthorizationException ae) {}
@@ -594,7 +594,7 @@ public class EntryResource extends BaseResource {
 
 						// resourceObj.put("password", user.getSecret());
 
-						se.kmr.scam.repository.Context homeContext = user.getHomeContext();
+						org.entrystore.repository.Context homeContext = user.getHomeContext();
 						if (homeContext != null) {
 							resourceObj.put("homecontext", homeContext.getEntry().getId());
 						}
@@ -727,7 +727,7 @@ public class EntryResource extends BaseResource {
 			if (parameters.containsKey("applyACLtoChildren") &&
 					BuiltinType.List.equals(entry.getBuiltinType()) &&
 					LocationType.Local.equals(entry.getLocationType())) {
-				((se.kmr.scam.repository.List) entry.getResource()).applyACLtoChildren(true);
+				((org.entrystore.repository.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			getResponse().setStatus(Status.SUCCESS_OK);
 			return;

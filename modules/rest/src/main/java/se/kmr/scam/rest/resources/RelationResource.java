@@ -16,6 +16,7 @@
 
 package se.kmr.scam.rest.resources;
 
+import org.entrystore.repository.AuthorizationException;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.openrdf.model.impl.GraphImpl;
@@ -27,7 +28,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
 import se.kmr.scam.rest.util.RDFJSON;
 
 public class RelationResource extends BaseResource {

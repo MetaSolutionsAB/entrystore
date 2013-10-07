@@ -20,6 +20,9 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.Set;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.Entry;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Status;
@@ -38,9 +41,6 @@ import se.kmr.scam.harvester.factory.HarvesterFactory;
 import se.kmr.scam.harvester.factory.HarvesterFactoryException;
 import se.kmr.scam.harvesting.fao.FAOHarvesterFactory;
 import se.kmr.scam.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Entry;
 
 public class HarvesterResource extends BaseResource {
 

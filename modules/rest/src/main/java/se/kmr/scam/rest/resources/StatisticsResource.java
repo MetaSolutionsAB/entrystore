@@ -28,6 +28,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ContextManager;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.User;
+import org.entrystore.repository.config.Config;
+import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.util.EntryUtil;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -49,17 +60,6 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.AuthorizationException;
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.ContextManager;
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.User;
-import se.kmr.scam.repository.config.Config;
-import se.kmr.scam.repository.config.ConfigurationManager;
-import se.kmr.scam.repository.impl.converters.ConverterUtil;
-import se.kmr.scam.repository.impl.converters.NS;
-import se.kmr.scam.repository.util.EntryUtil;
 import se.kmr.scam.rest.util.JSONErrorMessages;
 
 public class StatisticsResource extends BaseResource {
@@ -153,7 +153,7 @@ public class StatisticsResource extends BaseResource {
 		}
 	}
 	
-	public JSONObject getPropertyStatistics(se.kmr.scam.repository.Context context) {
+	public JSONObject getPropertyStatistics(org.entrystore.repository.Context context) {
 		JSONObject result = new JSONObject();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
@@ -265,7 +265,7 @@ public class StatisticsResource extends BaseResource {
 		return result;
 	}
 	
-	public JSONObject getOntologyStatistics(se.kmr.scam.repository.Context context) {
+	public JSONObject getOntologyStatistics(org.entrystore.repository.Context context) {
 		JSONObject result = new JSONObject();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
@@ -406,7 +406,7 @@ public class StatisticsResource extends BaseResource {
 		return result;
 	}
 	
-	public JSONObject getKeywordStatistics(se.kmr.scam.repository.Context context) {
+	public JSONObject getKeywordStatistics(org.entrystore.repository.Context context) {
 		JSONObject result = new JSONObject();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
@@ -559,7 +559,7 @@ public class StatisticsResource extends BaseResource {
 		
 		return labelMap;
 	}
-	private JSONObject getCompetenceStatistics(se.kmr.scam.repository.Context context2) {
+	private JSONObject getCompetenceStatistics(org.entrystore.repository.Context context2) {
 		HashMap<String, HashMap<String, Integer>> CompDefToCount = new HashMap<String, HashMap<String, Integer>>();
 		
 		PrincipalManager pm = this.getPM();
@@ -575,8 +575,8 @@ public class StatisticsResource extends BaseResource {
 				org.openrdf.model.URI pred = s.getPredicate();
 				if("http://scam.sf.net/schema#aboutPerson".equals(pred.toString())){
 					java.net.URI resourceURI = java.net.URI.create(s.getSubject().toString());
-					String contextId = se.kmr.scam.repository.impl.Util.getContextIdFromURI(this.getRM(), resourceURI);
-					se.kmr.scam.repository.Context context = cm.getContext(contextId);
+					String contextId = org.entrystore.repository.impl.Util.getContextIdFromURI(this.getRM(), resourceURI);
+					org.entrystore.repository.Context context = cm.getContext(contextId);
 					Set<Entry> competenceEntries = context.getByResourceURI(resourceURI);
 					Entry competenceEntry = competenceEntries.iterator().next(); //Should only be one!
 					Graph graph = competenceEntry.getMetadataGraph();

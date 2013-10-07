@@ -1,5 +1,6 @@
 package se.kmr.scam.rest.auth;
 
+import org.entrystore.repository.PrincipalManager;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -7,7 +8,6 @@ import org.restlet.data.ChallengeScheme;
 import org.restlet.security.ChallengeAuthenticator;
 import org.restlet.security.Verifier;
 
-import se.kmr.scam.repository.PrincipalManager;
 
 /**
  * Overrides afterHandle() to make sure no user is set after execution.

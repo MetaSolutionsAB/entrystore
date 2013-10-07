@@ -16,6 +16,9 @@
 
 package se.kmr.scam.rest.resources;
 
+import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.Group;
+import org.entrystore.repository.User;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Status;
@@ -26,9 +29,6 @@ import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.BuiltinType;
-import se.kmr.scam.repository.Group;
-import se.kmr.scam.repository.User;
 
 /**
  * This class is the resource for entries. 
@@ -59,7 +59,7 @@ public class AliasResource extends BaseResource {
 			} else if (BuiltinType.User.equals(bt)) {
 				name = ((User) entry.getResource()).getName();
 			} else if (BuiltinType.Context.equals(bt)) {
-				se.kmr.scam.repository.Context c = getCM().getContext(entryId);
+				org.entrystore.repository.Context c = getCM().getContext(entryId);
 				alias = getCM().getContextAlias(c.getURI());
 			}
 		}
@@ -105,7 +105,7 @@ public class AliasResource extends BaseResource {
 				} else if (BuiltinType.User.equals(bt) && name != null) {
 					success = ((User) entry.getResource()).setName(name);
 				} else if (BuiltinType.Context.equals(bt) && alias != null) {
-					se.kmr.scam.repository.Context c = getCM().getContext(entryId);
+					org.entrystore.repository.Context c = getCM().getContext(entryId);
 					success = getCM().setContextAlias(c.getURI(), alias);
 				}
 			} else {

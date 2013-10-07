@@ -21,6 +21,8 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.util.Arrays;
 
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.PrincipalManager;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Cookie;
@@ -31,8 +33,6 @@ import org.restlet.util.Series;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.Entry;
-import se.kmr.scam.repository.PrincipalManager;
 
 /**
  * @author Hannes Ebner

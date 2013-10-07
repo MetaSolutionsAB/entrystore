@@ -16,6 +16,7 @@
 
 package se.kmr.scam.rest.resources;
 
+import org.entrystore.repository.Quota;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Status;
@@ -27,7 +28,6 @@ import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.Quota;
 
 /**
  * This resource is used to manage Context quotas.

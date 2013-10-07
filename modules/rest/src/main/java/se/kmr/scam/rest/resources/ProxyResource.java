@@ -25,7 +25,6 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -40,6 +39,8 @@ import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 
 import org.apache.commons.lang.StringEscapeUtils;
+import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.impl.converters.NS;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;
 import org.openrdf.model.Statement;
@@ -59,7 +60,6 @@ import org.restlet.Response;
 import org.restlet.Uniform;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
-import org.restlet.data.Preference;
 import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.data.Status;
@@ -69,8 +69,6 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import se.kmr.scam.repository.impl.converters.ConverterUtil;
-import se.kmr.scam.repository.impl.converters.NS;
 import se.kmr.scam.rest.util.RDFJSON;
 
 /**
