@@ -48,7 +48,6 @@ import se.kmr.scam.repository.ContextManager;
 import se.kmr.scam.repository.Converter;
 import se.kmr.scam.repository.Entry;
 import se.kmr.scam.repository.PrincipalManager;
-import se.kmr.scam.repository.RepositoryManager;
 import se.kmr.scam.repository.backup.BackupFactory;
 import se.kmr.scam.repository.backup.BackupScheduler;
 import se.kmr.scam.repository.config.Config;
@@ -101,16 +100,13 @@ public class EntryStoreApplication extends Application {
 	/** Logger */
 	static Logger log = LoggerFactory.getLogger(EntryStoreApplication.class);
 	
-	/** This object is the central point for accessing a SCAM repository. */
+	/** Central point for accessing a repository */
 	private RepositoryManagerImpl rm;
 	
-	/** Manages all non-system {@link Context} */
 	private ContextManager cm;
 	
-	/** Manages all system {@link Context} */
 	private PrincipalManager pm;
 	
-	/** baseURL for the {@link RepositoryManager}*/
 	private String baseURI; 
 
 	private ArrayList<Harvester> harvesters = new ArrayList<Harvester>();
@@ -308,26 +304,14 @@ public class EntryStoreApplication extends Application {
 		}
 	}
 
-	/**
-	 * Gets the {@link ContextManager}.
-	 * @return the current {@link ContextManager} for the contexts.
-	 */
 	public ContextManager getCM() {
 		return this.cm; 
 	}
 
-	/**
-	 * Gets the {@link PrincipalManager}.
-	 * @return the current {@link PrincipalManager} for the contexts.
-	 */
 	public PrincipalManager getPM() {
 		return this.pm;
 	}
 
-	/**
-	 * Gets The current {@link RepositoryManager}.
-	 * @return the current {@link RepositoryManager}.
-	 */
 	public RepositoryManagerImpl getRM() {
 		return this.rm; 
 	}
