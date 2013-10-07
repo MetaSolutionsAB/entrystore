@@ -3,17 +3,17 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     
-    <!-- ================= SCAM Apps ================= -->
-    <modelVersion>4.0.0</modelVersion>
+    <!-- ================= EntryStore Apps ================= -->
+    <modelVersion>4.1.0</modelVersion>
     <parent>
-        <groupId>se.kmr.scam</groupId>
-        <artifactId>scam-parent</artifactId>
-        <version>4.0-SNAPSHOT</version>
+        <groupId>org.entrystore</groupId>
+        <artifactId>entrystore-parent</artifactId>
+        <version>4.1-SNAPSHOT</version>
     </parent>
-    <groupId>se.kmr.scam</groupId>
-    <artifactId>scam-apps</artifactId>
+    <groupId>org.entrystore</groupId>
+    <artifactId>entrystore-apps</artifactId>
     <packaging>pom</packaging>
-    <name>SCAM Apps</name>
+    <name>EntryStore Apps</name>
     
     <!-- ================= Properties ================= -->
 	<properties>
@@ -22,10 +22,7 @@
     
     <!-- ================= Modules ================= -->
     <modules>
-        <module>showcase-war</module>
-	<module>iml-au1-war</module>
-	<module>metaschool-war</module>
-	<module>oe-war</module>
+		<module>harvesting-war</module>
     </modules>
 	
 	<!-- ================= SCM ================= -->
