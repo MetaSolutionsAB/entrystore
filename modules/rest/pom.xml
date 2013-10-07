@@ -3,18 +3,18 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-	<!-- ================= SCAM REST module ================= -->
-    <modelVersion>4.0.0</modelVersion>
+	<!-- ================= EntryStore REST module ================= -->
+    <modelVersion>4.1.0</modelVersion>
     <parent>
-       <groupId>se.kmr.scam</groupId>
-       <artifactId>scam-modules</artifactId>
-       <version>4.0-SNAPSHOT</version>
+       <groupId>org.entrystore</groupId>
+       <artifactId>entrystore-modules</artifactId>
+       <version>4.1-SNAPSHOT</version>
     </parent>
-    <groupId>se.kmr.scam</groupId>
-    <artifactId>scam-rest-module</artifactId>
+    <groupId>org.entrystore</groupId>
+    <artifactId>entrystore-rest-module</artifactId>
     <packaging>war</packaging>
-    <version>4.0-SNAPSHOT</version>
-    <name>SCAM REST module</name>
+    <version>4.1-SNAPSHOT</version>
+    <name>EntryStore REST module</name>
 	
 	<!-- ================= Properties ================= -->
 	<properties>
@@ -62,7 +62,7 @@
 						<configuration>
 							<excludes>
 								<!-- not store scam.properties in generated jar only in war-->	
-								<exclude>**/scam.properties</exclude>
+								<exclude>**/entrystore.properties</exclude>
 							</excludes>
 						</configuration>
 					</execution>
@@ -191,18 +191,13 @@
         	<version>1.9.3</version>
         </dependency>
     	<dependency>
-        	<groupId>se.kmr.scam</groupId>
-    		<artifactId>scam-harvester-factory-module</artifactId>
+        	<groupId>org.entrystore</groupId>
+    		<artifactId>entrystore-harvester-factory-module</artifactId>
     		<version>${pom.version}</version>
     	</dependency>
     	<dependency>
-        	<groupId>se.kmr.scam</groupId>
-    		<artifactId>scam-oai-pmh-harvester-module</artifactId>
-    		<version>${pom.version}</version>
-    	</dependency>
-    	<dependency>
-        	<groupId>se.kmr.scam</groupId>
-    		<artifactId>scam-fao-harvester-module</artifactId>
+        	<groupId>org.entrystore</groupId>
+    		<artifactId>entrystore-oai-pmh-harvester-module</artifactId>
     		<version>${pom.version}</version>
     	</dependency>
     	<dependency>

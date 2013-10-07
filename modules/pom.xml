@@ -4,14 +4,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	
 	<!-- ================= SCAM Modules ================= -->
-	<modelVersion>4.0.0</modelVersion>
+	<modelVersion>4.1.0</modelVersion>
     <parent>
-        <groupId>se.kmr.scam</groupId>
-        <artifactId>scam-parent</artifactId>
-        <version>4.0-SNAPSHOT</version>
+        <groupId>org.entrystore</groupId>
+        <artifactId>entrystore-parent</artifactId>
+        <version>4.1-SNAPSHOT</version>
     </parent>
-    <groupId>se.kmr.scam</groupId>
-    <artifactId>scam-modules</artifactId>
+    <groupId>org.entrystore</groupId>
+    <artifactId>entrystore-modules</artifactId>
     <packaging>pom</packaging>
     <name>SCAM Modules</name>
     
@@ -24,7 +24,9 @@
     <modules>
         <module>harvesting</module>
         <module>rest</module>
-		<module>sqi</module>
+		<!-- SQI not functional at the moment, needs refactoring
+			<module>sqi</module>
+		-->
     </modules>
 	
 	<!-- ================= SCM ================= -->
@@ -45,8 +47,8 @@
     <!-- ================= Dependencies ================= -->
  	<dependencies>
         <dependency>
-            <groupId>se.kmr.scam</groupId>
-            <artifactId>scam-core</artifactId>
+            <groupId>org.entrystore</groupId>
+            <artifactId>entrystore-core</artifactId>
             <version>${pom.version}</version>
         </dependency>
     </dependencies>

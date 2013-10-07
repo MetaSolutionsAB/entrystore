@@ -3,17 +3,17 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	
-	<!-- ================= SCAM Harvesting ================= -->
-	<modelVersion>4.0.0</modelVersion>
+	<!-- ================= EntryStore Harvesting ================= -->
+	<modelVersion>4.1.0</modelVersion>
     <parent>
-        <groupId>se.kmr.scam</groupId>
-        <artifactId>scam-modules</artifactId>
-        <version>4.0-SNAPSHOT</version>
+        <groupId>org.entrystore</groupId>
+        <artifactId>entrystore-modules</artifactId>
+        <version>4.1-SNAPSHOT</version>
     </parent>
-    <groupId>se.kmr.scam</groupId>
-    <artifactId>scam-harvesting</artifactId>
+    <groupId>org.entrystore</groupId>
+    <artifactId>entrystore-harvesting</artifactId>
     <packaging>pom</packaging>
-    <name>SCAM Harvesting</name>
+    <name>EntryStore Harvesting</name>
     
     <!-- ================= Properties ================= -->
 	<properties>
@@ -25,7 +25,6 @@
     	<module>harvester-factory</module>
         <module>oai-pmh-target</module>
         <module>oai-pmh-harvester</module>
- 	    <module>fao-harvester</module>
     </modules>
 	
 	<!-- ================= SCM ================= -->
@@ -42,7 +41,5 @@
             ${basedir}/../../target/site/${project.artifactId}
         </outputDirectory>
     </reporting>
-    
-    <!-- ================= Dependencies ================= -->
     
 </project>

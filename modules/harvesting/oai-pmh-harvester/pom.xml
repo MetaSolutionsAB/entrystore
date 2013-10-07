@@ -3,18 +3,18 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-	<!-- ================= SCAM OAI-PMH Harvester module ================= -->
-    <modelVersion>4.0.0</modelVersion>
+	<!-- ================= EntryStore OAI-PMH Harvester module ================= -->
+    <modelVersion>4.1.0</modelVersion>
     <parent>
-       <groupId>se.kmr.scam</groupId>
-       <artifactId>scam-harvesting</artifactId>
-       <version>4.0-SNAPSHOT</version>
+       <groupId>org.entrystore</groupId>
+       <artifactId>entrystore-harvesting</artifactId>
+       <version>4.1-SNAPSHOT</version>
     </parent>
-    <groupId>se.kmr.scam</groupId>
-    <artifactId>scam-oai-pmh-harvester-module</artifactId>
+    <groupId>org.entrystore</groupId>
+    <artifactId>entrystore-oai-pmh-harvester-module</artifactId>
     <packaging>jar</packaging>
-    <version>4.0-SNAPSHOT</version>
-    <name>SCAM OAI-PMH Harvester module</name>
+    <version>4.1-SNAPSHOT</version>
+    <name>EntryStore OAI-PMH Harvester module</name>
 	
 	<!-- ================= Properties ================= -->
 	<properties>
@@ -27,9 +27,6 @@
        <developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/harvesting/oai-pmh-harvester</developerConnection>
        <url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/harvesting/oai-pmh-harvester</url>
     </scm>
-    
-    <!-- ================= Profiles ================= -->
- 
     
 	<!-- ================= Build ================= -->
 	<build>
@@ -91,8 +88,8 @@
 			<type>jar</type>
 		</dependency>
          	<dependency>
-        	<groupId>se.kmr.scam</groupId>
-    		<artifactId>scam-harvester-factory-module</artifactId>
+        	<groupId>org.entrystore</groupId>
+    		<artifactId>entrystore-harvester-factory-module</artifactId>
     		<version>${pom.version}</version>
    		 </dependency>
 		

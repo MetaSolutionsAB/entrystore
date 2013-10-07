@@ -3,18 +3,18 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-	<!-- ================= SCAM SQI common module ================= -->
-    <modelVersion>4.0.0</modelVersion>
+	<!-- ================= EntryStore SQI common module ================= -->
+    <modelVersion>4.1.0</modelVersion>
     <parent>
-       <groupId>se.kmr.scam</groupId>
-       <artifactId>scam-sqi</artifactId>
-       <version>4.0-SNAPSHOT</version>
+       <groupId>org.entrystore</groupId>
+       <artifactId>entrystore-sqi</artifactId>
+       <version>4.1-SNAPSHOT</version>
     </parent>
-    <groupId>se.kmr.scam</groupId>
-    <artifactId>scam-sqi-common</artifactId>
+    <groupId>org.entrystore</groupId>
+    <artifactId>entrystore-sqi-common</artifactId>
     <packaging>jar</packaging>
-    <version>4.0-SNAPSHOT</version>
-    <name>SCAM SQI common</name>
+    <version>4.1-SNAPSHOT</version>
+    <name>EntryStore SQI common</name>
 	
 	<!-- ================= Properties ================= -->
 	<properties>
@@ -27,9 +27,6 @@
 		<developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/sqi-common</developerConnection>
 		<url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/sqi-common</url>
 	</scm>
-    
-    <!-- ================= Profiles ================= -->
- 
     
 	<!-- ================= Build ================= -->
 	<build>
@@ -57,7 +54,4 @@
         </outputDirectory>
     </reporting>
     
-    <!-- ================= Dependencies ================= -->      	
-    <dependencies>
-    </dependencies>   
 </project>

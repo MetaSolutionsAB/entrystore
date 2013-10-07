@@ -3,18 +3,18 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-	<!-- ================= SCAM SQI Webservice client ================= -->
-	<modelVersion>4.0.0</modelVersion>
+	<!-- ================= EntryStore SQI Webservice client ================= -->
+	<modelVersion>4.1.0</modelVersion>
 	<parent>
-		<groupId>se.kmr.scam</groupId>
-		<artifactId>scam-sqi</artifactId>
-		<version>4.0-SNAPSHOT</version>
+		<groupId>org.entrystore</groupId>
+		<artifactId>entrystore-sqi</artifactId>
+		<version>4.1-SNAPSHOT</version>
 	</parent>
-	<groupId>se.kmr.scam</groupId>
-	<artifactId>scam-sqi-webservice-client</artifactId>
+	<groupId>org.entrystore</groupId>
+	<artifactId>entrystore-sqi-webservice-client</artifactId>
 	<packaging>jar</packaging>
-	<version>4.0-SNAPSHOT</version>
-	<name>SCAM SQI webservice client</name>
+	<version>4.1-SNAPSHOT</version>
+	<name>EntryStore SQI webservice client</name>
 
 	<!-- ================= Properties ================= -->
 	<properties>
@@ -73,7 +73,7 @@
                      -Djava.util.logging.config.file=mylogging.properties
                   </argument-->
                   <argument>
-                     se.kmr.scam.sqi.webservice.client.WSClient
+                     org.entrystore.sqi.webservice.client.WSClient
                   </argument>
                </arguments>
             </configuration>
@@ -94,8 +94,8 @@
 		<!-- dependency the jaxws jar created by Maven Assembly Plugin
 			 in the sqi-webservice project-->
 		 <dependency>
-        	<groupId>se.kmr.scam</groupId>
-         	<artifactId>scam-sqi-webservice-module</artifactId>
+        	<groupId>org.entrystore</groupId>
+         	<artifactId>entrystore-sqi-webservice-module</artifactId>
          	<!-- classifiers used with Maven Assembly Plugin to 
 	            specify subset of above artifact needed -->
          	<classifier>jaxws</classifier>
