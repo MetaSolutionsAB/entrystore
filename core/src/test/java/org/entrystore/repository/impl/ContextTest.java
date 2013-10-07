@@ -15,7 +15,7 @@
  */
 
 
-package se.kmr.scam.repository.impl;
+package org.entrystore.repository.impl;
 
 import static org.junit.Assert.assertTrue;
 

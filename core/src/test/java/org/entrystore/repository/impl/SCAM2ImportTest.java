@@ -15,7 +15,7 @@
  */
 
 
-package se.kmr.scam.repository.impl;
+package org.entrystore.repository.impl;
 
 import java.io.IOException;
 
