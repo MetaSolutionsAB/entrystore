@@ -91,7 +91,6 @@ import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 import com.sun.syndication.feed.synd.SyndContent;
 import com.sun.syndication.feed.synd.SyndContentImpl;
 import com.sun.syndication.feed.synd.SyndEntry;
@@ -104,9 +103,8 @@ import com.sun.syndication.io.SyndFeedOutput;
 /**
  * This class is the resource for entries. 
  * 
- * @author Eric Johansson (eric.johansson@educ.umu.se)
+ * @author Eric Johansson
  * @author Hannes Ebner
- * @see BaseResource
  */
 public class ResourceResource extends BaseResource {
 
@@ -868,12 +866,11 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * Data
 		 */
-		if(entry.getBuiltinType() == BuiltinType.None){
-			// UPLOAD A FILE FROM A FORM.
+		if (entry.getBuiltinType() == BuiltinType.None){
 			boolean textarea = this.parameters.keySet().contains("textarea");
+			String error = null;
 
 			if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
-				String error = null;
 				try {
 					RestletFileUpload upload = new RestletFileUpload(new DiskFileItemFactory());
 					List<FileItem> items = upload.parseRequest(getRequest());
@@ -887,9 +884,9 @@ public class ResourceResource extends BaseResource {
 							mimeType = parameters.get("mimeType");
 						}
 						entry.setMimetype(mimeType);
-						String name = item.getName().trim();
+						String name = item.getName();
 						if (name != null && name.length() != 0) {
-							entry.setFilename(name);
+							entry.setFilename(name.trim());
 						}
 					}
 				} catch (FileUploadException e) {
@@ -903,30 +900,43 @@ public class ResourceResource extends BaseResource {
 					getResponse().setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 				}
 				
-				if (error != null) {
-					if (textarea) {
-						getResponse().setEntity("<textarea>" + error + "</textarea>", MediaType.TEXT_HTML);
-					} else {
-						JSONObject jsonError = new JSONObject();
-						try {
-							jsonError.put("error", error);
-						} catch (JSONException jsone) {
-							log.error(jsone.getMessage());
-						}
-						getResponse().setEntity(new JsonRepresentation(error));
-					}
-					return;
-				}
+
 			} else {
 				Request req = getRequest();
 				try {
 					((Data) entry.getResource()).setData(req.getEntity().getStream());
 					entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
-				} catch (QuotaException e) {
-					e.printStackTrace();
-				} catch (IOException e) {
-					e.printStackTrace();
+					String mimeType = req.getEntity().getMediaType().toString();
+					if (parameters.containsKey("mimeType")) {
+						mimeType = parameters.get("mimeType");
+					} 
+					entry.setMimetype(mimeType);
+					String name = req.getEntity().getDisposition().getFilename();
+					if (name != null && name.length() != 0) {
+						entry.setFilename(name.trim());
+					}
+				} catch (QuotaException qe) {
+					error = qe.getMessage();
+					getResponse().setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
+				} catch (IOException ioe) {
+					error = ioe.getMessage();
+					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				}
+			}
+			
+			if (error != null) {
+				if (textarea) {
+					getResponse().setEntity("<textarea>" + error + "</textarea>", MediaType.TEXT_HTML);
+				} else {
+					JSONObject jsonError = new JSONObject();
+					try {
+						jsonError.put("error", error);
+					} catch (JSONException jsone) {
+						log.error(jsone.getMessage());
+					}
+					getResponse().setEntity(new JsonRepresentation(error));
+				}
+				return;
 			}
 
 			if (textarea) {
