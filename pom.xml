@@ -44,24 +44,6 @@
 		</developer>
 	</developers>
 
-	<!-- ================= SCM ================= -->
-	<scm>
-		<connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk</connection>
-		<developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk</developerConnection>
-		<url>http://project.iml.umu.se/projects/scam/browser/trunk</url>
-	</scm>
-
-	<!-- ================= Management ================= -->
-	<issueManagement>
-		<system>jira</system>
-		<url>http://jira.iml.umu.se</url>
-	</issueManagement>
-
-	<ciManagement>
-   		<system>bamboo</system>
-    	<url>http://bamboo.iml.umu.se</url>
-  	</ciManagement>
-
 	<!-- ================= DistributionManagement ================= -->
 	<distributionManagement>
 		<repository>
