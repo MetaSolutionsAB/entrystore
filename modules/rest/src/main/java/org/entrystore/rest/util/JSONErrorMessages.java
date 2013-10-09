@@ -27,36 +27,34 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
-* This class containing JSON error messages for the resources. 
-* 
-* @author Eric Johansson
-*/
+ * This class containing JSON error messages for the resources.
+ */
 public class JSONErrorMessages {
 	
 	private static Logger log = LoggerFactory.getLogger(JSONErrorMessages.class);
 	
-	public static String errorWrongContextIDmsg = new String("{\"error\":\"The given context id does not exist.\"}");
-	public static String errorCantCreateEntry = new String("{\"error\":\"Can not create the entry.\"}");
-	public static String errorEntryWithGivenIDExists = new String("{\"error\":\"An entry for the given id already exists.\"}");
-	public static String errorCantNotFindEntry = new String("{\"error\":\"Can not find an entry with that id.\"}");
-	public static String errorCantFindResource = new String("{\"error\":\"Can not find the resource.\"}"); 
-	public static String errorCantFindMetadata = new String("{\"error\":\"Can not find the metadata.\"}");
-	public static String errorCantFindCachedMetadata = new String("{\"error\":\"Can not find the cached external metadata.\"}");
-	public static String errorWrongKind = new String("{\"error\":\"Can not find that \"kind\" of the request.\"}");
-	public static String errorJSONSyntax = new String("{\"error\":\"Wrong syntax in the JSON.\"}");
-	public static String errorUnknownKind = new String("{\"error\":\"The kind is unknown.\"}");
-	public static String errorNotAContext = new String("{\"error\":\"It is not a context.\"}");
-	public static String errorCannotSerialize = new String("{\"error\":\"The requested object cannot be serialized.\"}");
-	public static String errorCannotDeserialize = new String("{\"error\":\"The requested object cannot be deserialized.\"}");
-	public static String errorUnknownFormat = new String("{\"error\":\"The requested format is not known.\"}");
+	public static String errorWrongContextIDmsg = new String("{\"error\":\"The requested context ID does not exist\"}");
+	public static String errorCantCreateEntry = new String("{\"error\":\"Cannot create entry\"}");
+	public static String errorEntryWithGivenIDExists = new String("{\"error\":\"Entry already exists with provided ID\"}");
+	public static String errorCantNotFindEntry = new String("{\"error\":\"Entry not found\"}");
+	public static String errorCantFindResource = new String("{\"error\":\"Resource not found\"}"); 
+	public static String errorCantFindMetadata = new String("{\"error\":\"Metadata not found\"}");
+	public static String errorCantFindCachedMetadata = new String("{\"error\":\"Cached external metadata not found\"}");
+	public static String errorJSONSyntax = new String("{\"error\":\"Error in JSON syntax\"}");
+	public static String errorUnknownKind = new String("{\"error\":\"Unknown kind\"}");
+	public static String errorNotAContext = new String("{\"error\":\"Not a context\"}");
+	public static String errorCannotSerialize = new String("{\"error\":\"Requested object cannot be serialized\"}");
+	public static String errorCannotDeserialize = new String("{\"error\":\"Requested object cannot be deserialized\"}");
+	public static String errorUnknownFormat = new String("{\"error\":\"Unknown requested format\"}");
 	public static JSONObject errorChildExistsInList = constructMessage("An entry cannot be added multiple times", "IllegalListMemberDuplicate");
 
-	public static String unauthorizedGETContext = new String("{\"error\":\"client tried to GET a resource without being authorized for it's context.\"}");
-	public static String unauthorizedGET = new String("{\"error\":\"client tried to GET a resource without being authorized for it.\"}");
-	public static String unauthorizedDELETE = new String("{\"error\":\"client tried to DELETE a resource without being authorized for it.\"}");
-	public static String unauthorizedPOST = new String("{\"error\":\"client tried to POST a resource without being authorized for it.\"}");
-	public static String unauthorizedPUT = new String("{\"error\":\"client tried to PUT a resource without being authorized for it.\"}");
-	public static String syndicationFormat = new String("{\"error\":\"Syndication format is not supported.\"}");
+	public static String unauthorizedGETContext = new String("{\"error\":\"Not authorized\"}");
+	public static String unauthorizedGET = new String("{\"error\":\"Not authorized\"}");
+	public static String unauthorizedDELETE = new String("{\"error\":\"Not authorized\"}");
+	public static String unauthorizedPOST = new String("{\"error\":\"Not authorized\"}");
+	public static String unauthorizedPUT = new String("{\"error\":\"Not authorized\"}");
+	
+	public static String syndicationFormat = new String("{\"error\":\"Syndication format is not supported\"}");
 	
 	static JSONObject constructMessage(String error, String code) {
 		JSONObject result = new JSONObject();

@@ -19,6 +19,7 @@ package org.entrystore.rest.resources;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.entrystore.harvester.Harvester;
@@ -36,6 +37,7 @@ import org.restlet.Response;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.ServerResource;
 import org.slf4j.Logger;
@@ -120,33 +122,42 @@ public abstract class BaseResource extends ServerResource {
 		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getBackupScheduler();
 	}
 
-	public void unauthorizedGETContext() {
-		log.info("client tried to GET a resource without being authorized for it's context");
-		getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedGETContext));
-	}
-
 	public Representation unauthorizedGET() {
-		log.info("client tried to GET a resource without being authorized for it");
+		log.info("Unauthorized GET");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		return new JsonRepresentation(JSONErrorMessages.unauthorizedGET);
+		
+		List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+		if (MediaType.APPLICATION_JSON.equals(preferredMediaType)) {
+			return new JsonRepresentation(JSONErrorMessages.unauthorizedGET);
+		} else {
+			return new EmptyRepresentation();
+		}
 	}
 
 	public void unauthorizedDELETE() {
-		log.info("client tried to DELETE a resource without being authorized for it");
+		log.info("Unauthorized DELETE");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedDELETE)); 
+		if (MediaType.APPLICATION_JSON.equals(getRequest().getEntity().getMediaType())) {
+			getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedDELETE));
+		}
 	}
 
 	public void unauthorizedPOST() {
-		log.info("client tried to POST a resource without being authorized for it");
+		log.info("Unauthorized POST");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedPOST)); 
+		if (MediaType.APPLICATION_JSON.equals(getRequest().getEntity().getMediaType())) {
+			getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedPOST));
+		}
 	}
 
 	public void unauthorizedPUT() {
-		log.info("client tried to PUT a resource without being authorized for it");
+		log.info("Unauthorized PUT");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedPUT)); 
+		if (MediaType.APPLICATION_JSON.equals(getRequest().getEntity().getMediaType())) {
+			getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedPUT));
+		}
 	}
 	
 }
