@@ -40,8 +40,9 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * This class supports the import of RDF into several entries into a specified contexts. 
- * Data will be imported into existin entries when so are possible, otherwise new entries will be created.
+ * This class supports the import of RDF into several entries into a specified
+ * contexts. Data will be imported into existing entries if possible, otherwise
+ * new entries will be created.
  * 
  * @author Matthias Palmér
  */
@@ -99,7 +100,6 @@ public class MergeResource extends BaseResource {
 				}
 			}			
 		} catch(AuthorizationException e) {
-			log.error("unauthorizedPOST");
 			unauthorizedPOST();
 		}
 	}
