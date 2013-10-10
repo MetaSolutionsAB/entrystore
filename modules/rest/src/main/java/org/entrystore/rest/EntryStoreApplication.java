@@ -60,6 +60,7 @@ import org.entrystore.rest.resources.ExternalMetadataResource;
 import org.entrystore.rest.resources.HarvesterResource;
 import org.entrystore.rest.resources.ImportResource;
 import org.entrystore.rest.resources.LoginResource;
+import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
 import org.entrystore.rest.resources.MetadataResource;
 import org.entrystore.rest.resources.ProxyResource;
@@ -237,6 +238,11 @@ public class EntryStoreApplication extends Application {
 	public synchronized Restlet createInboundRoot() {
 		Router router = new Router(getContext());
 		
+		// to prevent unnecessary context-id lookups we route favicon.ico to
+		// 404, this may be replaced with some real icon at some later point
+		router.attach("/favicon.ico", DefaultResource.class);
+		
+		// global scope
 		router.attach("/search", SearchResource.class);
 		router.attach("/login", LoginResource.class);
 		router.attach("/sparql", SparqlResource.class);
@@ -245,6 +251,8 @@ public class EntryStoreApplication extends Application {
 		router.attach("/management/backup", RepositoryBackupResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
+		
+		// context scope
 		router.attach("/{context-id}", ContextResource.class);
 		router.attach("/{context-id}/sparql", SparqlResource.class);
 		router.attach("/{context-id}/export", ExportResource.class);
@@ -260,6 +268,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/alias/{entry-id}", AliasResource.class);
 		router.attach("/{context-id}/relation/{entry-id}", RelationResource.class);
 		router.attach("/{context-id}/quota", QuotaResource.class);
+		router.attach("/{context-id}/lookup", LookupResource.class);
 
 		router.attachDefault(DefaultResource.class);
 		
