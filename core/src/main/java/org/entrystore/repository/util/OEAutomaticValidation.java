@@ -136,7 +136,7 @@ public class OEAutomaticValidation {
 		BNode bnodeOrg = vf.createBNode();
 		metadata.add(resourceURI, vf.createURI(NS.lom, "annotation"), bnodeAnn);
 		metadata.add(bnodeAnn, vf.createURI("http://organic-edunet.eu/LOM/rdf/validationStatus"), vf.createURI("http://organic-edunet.eu/LOM/rdf/voc#Accepted"));
-		metadata.add(bnodeAnn, vf.createURI(NS.dcterms, "date"), vf.createLiteral(MetadataCorrection.createW3CDTF(new Date()), vf.createURI("http://purl.org/dc/terms/W3CDTF")));
+		metadata.add(bnodeAnn, vf.createURI(NS.dcterms, "date"), vf.createLiteral(DataCorrection.createW3CDTF(new Date()), vf.createURI("http://purl.org/dc/terms/W3CDTF")));
 		metadata.add(bnodeAnn, vf.createURI(NS.lom, "entity"), bnodeEnt);
 		metadata.add(bnodeEnt, vf.createURI(NS.vcard, "FN"), vf.createLiteral("Lynda Gibbins"));
 		metadata.add(bnodeEnt, vf.createURI(NS.vcard, "EMAIL"), vf.createLiteral("lynda.gibbins@nottingham.ac.uk"));

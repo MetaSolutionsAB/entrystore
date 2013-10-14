@@ -61,9 +61,9 @@ import org.slf4j.LoggerFactory;
  * 
  * @author Hannes Ebner
  */
-public class MetadataCorrection {
+public class DataCorrection {
 	
-	private static Logger log = LoggerFactory.getLogger(MetadataCorrection.class);
+	private static Logger log = LoggerFactory.getLogger(DataCorrection.class);
 	
 	private PrincipalManager pm;
 	
@@ -73,7 +73,7 @@ public class MetadataCorrection {
 	
 //	private Writer writer;
 	
-	public MetadataCorrection(RepositoryManager rm) {
+	public DataCorrection(RepositoryManager rm) {
 		this.pm = rm.getPrincipalManager();
 		this.cm = rm.getContextManager();
 //		this.rm = rm;
