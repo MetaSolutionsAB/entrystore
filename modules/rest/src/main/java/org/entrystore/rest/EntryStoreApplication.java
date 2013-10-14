@@ -45,7 +45,7 @@ import org.entrystore.repository.impl.converters.LOM2RDFConverter;
 import org.entrystore.repository.impl.converters.OAI_DC2RDFGraphConverter;
 import org.entrystore.repository.impl.converters.RDF2LOMConverter;
 import org.entrystore.repository.test.TestSuite;
-import org.entrystore.repository.util.MetadataCorrection;
+import org.entrystore.repository.util.DataCorrection;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.SimpleAuthenticator;
@@ -206,12 +206,12 @@ public class EntryStoreApplication extends Application {
 
 			boolean correct = config.getBoolean("scam.repository.store.correct-metadata", false);
 			if (correct) {
-				MetadataCorrection mc = new MetadataCorrection(rm);
+				DataCorrection mc = new DataCorrection(rm);
 				mc.fixMetadataGlobally();
 			}
 			
 			// For old installations: convert plaintext passwords to salted hashes
-			new MetadataCorrection(rm).convertPasswordsToHashes();
+			new DataCorrection(rm).convertPasswordsToHashes();
 		}
 	}
 
