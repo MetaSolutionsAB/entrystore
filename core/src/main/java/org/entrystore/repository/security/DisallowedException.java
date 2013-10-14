@@ -15,7 +15,7 @@
  */
 
 
-package org.entrystore.repository;
+package org.entrystore.repository.security;
 
 
 public class DisallowedException extends RuntimeException {

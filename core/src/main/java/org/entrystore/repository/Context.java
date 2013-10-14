@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.entrystore.repository.impl.DeletedEntryInfo;
+import org.entrystore.repository.security.AuthorizationException;
 
 
 /**

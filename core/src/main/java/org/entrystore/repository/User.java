@@ -16,13 +16,17 @@
 
 package org.entrystore.repository;
 
+import java.net.URI;
 import java.util.Set;
 
 public interface User extends Resource, java.security.Principal {
 	
 	String getName(); // Already declared in java.security.Principal
 
+	@Deprecated
 	String getSecret();
+	
+	String getSaltedHashedSecret();
 
 	Context getHomeContext();
 	
@@ -43,5 +47,5 @@ public interface User extends Resource, java.security.Principal {
 	 * @return a list of groups, each group represented by a java.net.URI
 	 * referring the resource of the group entry.
 	 */
-	Set<java.net.URI> getGroups();
+	Set<URI> getGroups();
 }

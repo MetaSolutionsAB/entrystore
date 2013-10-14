@@ -16,7 +16,7 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONException;
 import org.json.JSONObject;

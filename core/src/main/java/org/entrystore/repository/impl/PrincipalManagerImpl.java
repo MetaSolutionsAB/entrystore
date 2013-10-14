@@ -25,13 +25,13 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.LocationType;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.User;
+import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.repository.util.URISplit.URIType;
 import org.openrdf.repository.RepositoryException;
@@ -435,9 +435,9 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 * @return true if the email address was valid, false otherwise
 	 */
 	public boolean isValidSecret(String secret) {
-		if(secret == null) {
+		if (secret == null) {
 			return false;
-		} else if(secret.length() < 8) {
+		} else if (secret.length() < 8) {
 			return false;
 		} else {
 			return isSecureSecret(secret);
@@ -446,11 +446,10 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 	/**
 	 * Checks if a secret is secure enough.
-	 * @param secret email address to check if secure enough
 	 * @return true if the email address was valid, false otherwise
 	 */
 	public boolean isSecureSecret(String secret) {
-		if(secret.length() >= 8) {
+		if (secret.length() >= 8) {
 			return true;
 		} else {
 			return false;

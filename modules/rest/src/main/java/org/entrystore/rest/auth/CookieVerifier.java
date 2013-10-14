@@ -19,10 +19,10 @@ package org.entrystore.rest.auth;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
-import java.util.Arrays;
 
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.security.Password;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Cookie;
@@ -75,12 +75,12 @@ public class CookieVerifier implements Verifier {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			
 			String identifier = null;
-			char[] secret = null;
+			String secret = null;
 			Form query = request.getResourceRef().getQueryAsForm();
 			
 			if (query.getFirst("auth_user") != null && query.getFirst("auth_password") != null) {
 				identifier = query.getFirstValue("auth_user");
-				secret = query.getFirstValue("auth_password").toCharArray();
+				secret = query.getFirstValue("auth_password");
 			} else if (cookieSimpleLogin != null) {
 				String cookie = null;
 				try {
@@ -91,7 +91,7 @@ public class CookieVerifier implements Verifier {
 				int separator = cookie.indexOf(":");
 				if (separator >= 0) {
 					identifier = cookie.substring(0, separator);
-					secret = cookie.substring(separator + 1).toCharArray();
+					secret = cookie.substring(separator + 1);
 				}
 			}
 
@@ -106,8 +106,8 @@ public class CookieVerifier implements Verifier {
 					return RESULT_UNKNOWN;
 				}
 				BasicVerifier pv = new BasicVerifier(pm);
-				char[] localSecret = pv.getLocalSecret(identifier);
-				if (Arrays.equals(secret, localSecret)) {
+				String saltedHashedSecret = pv.getSaltedHashedSecret(identifier);
+				if (secret != null && Password.check(secret, saltedHashedSecret)) {
 					userURI = userEntry.getResourceURI();
 					return RESULT_VALID;
 				}

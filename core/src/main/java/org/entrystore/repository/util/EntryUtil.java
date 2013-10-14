@@ -25,12 +25,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.Resource;
 import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.security.AuthorizationException;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;

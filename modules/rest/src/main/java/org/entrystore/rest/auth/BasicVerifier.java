@@ -17,13 +17,13 @@
 package org.entrystore.rest.auth;
 
 import java.net.URI;
-import java.util.Arrays;
 import java.util.Map;
 
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.User;
+import org.entrystore.repository.security.Password;
 import org.entrystore.rest.util.Util;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -49,15 +49,15 @@ public class BasicVerifier implements Verifier {
 		this.pm = pm;
 	}
 
-	public char[] getLocalSecret(String identifier) {
+	public String getSaltedHashedSecret(String identifier) {
 		URI authUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			Entry userEntry = pm.getPrincipalEntry(identifier);
 			if (userEntry != null && BuiltinType.User.equals(userEntry.getBuiltinType())) {
 				User user = ((User) userEntry.getResource());
-				if (user.getSecret() != null) {
-					return user.getSecret().toCharArray();
+				if (user.getSaltedHashedSecret() != null) {
+					return user.getSaltedHashedSecret();
 				} else {
 					log.error("No secret found for principal: " + identifier);
 				}
@@ -93,7 +93,7 @@ public class BasicVerifier implements Verifier {
 			}
 
 			String identifier = null;
-			char[] secret = null;
+			String secret = null;
 			ChallengeResponse cr = request.getChallengeResponse();
 			if (cr == null && !params.containsKey("auth_user")) {
 				identifier = "_guest";
@@ -105,10 +105,10 @@ public class BasicVerifier implements Verifier {
 					// fallback for requests where credentials are sent as URL parameters
 					identifier = params.get("auth_user");
 					if (params.containsKey("auth_password") && params.get("auth_password") != null) {
-						secret = params.get("auth_password").toCharArray();
+						secret = params.get("auth_password");
 					}
 				} else {
-					secret = request.getChallengeResponse().getSecret();
+					secret = new String(request.getChallengeResponse().getSecret());
 				}
 			}
 
@@ -124,8 +124,8 @@ public class BasicVerifier implements Verifier {
 				if (userEntry == null) {
 					return RESULT_UNKNOWN;
 				}
-				char[] localSecret = getLocalSecret(identifier);
-				if (secret != null && Arrays.equals(secret, localSecret)) {
+				String saltedHashedSecret = getSaltedHashedSecret(identifier);
+				if (secret != null && Password.check(secret, saltedHashedSecret)) {
 					userURI = userEntry.getResourceURI();
 					return RESULT_VALID;
 				} else {

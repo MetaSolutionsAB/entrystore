@@ -1003,6 +1003,25 @@ public class MetadataCorrection {
 		}
 	}
 	
+	public void convertPasswordsToHashes() {
+		URI currentUser = pm.getAuthenticatedUserURI();
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		try {
+			List<User> users = pm.getUsers();
+			for (User user : users) {
+				String secret = user.getSecret();
+				if (secret != null) {
+					log.warn("Replacing password with salted hashed password for user " + user.getURI());
+					if (!user.setSecret(secret)) {
+						log.error("Unable to reset password of user " + user.getURI());
+					}
+				}
+			}
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
+	}
+	
 	public void printFileNamesGlobally() {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());

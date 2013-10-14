@@ -24,7 +24,6 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Set;
 
-import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
@@ -37,6 +36,7 @@ import org.entrystore.repository.impl.ContextImpl;
 import org.entrystore.repository.impl.RDFResource;
 import org.entrystore.repository.impl.StringResource;
 import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;

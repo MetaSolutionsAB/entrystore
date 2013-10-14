@@ -20,10 +20,10 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.LocationType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.openrdf.model.Graph;

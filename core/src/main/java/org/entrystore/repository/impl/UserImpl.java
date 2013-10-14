@@ -29,6 +29,7 @@ import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.User;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
 import org.entrystore.repository.test.TestSuite;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
@@ -44,7 +45,7 @@ public class UserImpl extends RDFResource implements User {
 	/** Logger */
 	static Logger log = LoggerFactory.getLogger(UserImpl.class);
 
-	private String secret;
+	private String saltedHashedSecret;
 
 	private String language;
 
@@ -86,29 +87,55 @@ public class UserImpl extends RDFResource implements User {
 	 * Returns the secret of the user
 	 * @return the secret of the user
 	 */
+	@Deprecated
 	public String getSecret() {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 
-		if (this.secret == null) {
+		String secret = null;
+		RepositoryConnection rc = null;
+		try {
+			rc = this.entry.repository.getConnection();
+			List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.secret, null, false, resourceURI).asList();
+			if (!matches.isEmpty()) {
+				secret = matches.get(0).getObject().stringValue();
+			}
+		} catch (org.openrdf.repository.RepositoryException e) {
+			log.error(e.getMessage(), e);
+			throw new RepositoryException("Failed to connect to repository", e);
+		} finally {
+			try {
+				rc.close();
+			} catch (org.openrdf.repository.RepositoryException e) {
+				log.error(e.getMessage(), e);
+			}
+		}
+
+		return secret;
+	}
+	
+	public String getSaltedHashedSecret() {
+		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
+
+		if (this.saltedHashedSecret == null) {
 			// we allow an override of the admin password in the config file
 			if (rm.getPrincipalManager().getAdminUser().getEntry().getId().equals(entry.getId())) {
 				if (rm.getConfiguration().containsKey(Settings.AUTH_ADMIN_SECRET)) {
 					log.warn("Admin secret override in config file");
-					this.secret = rm.getConfiguration().getString(Settings.AUTH_ADMIN_SECRET);
-					return this.secret;
+					this.saltedHashedSecret = Password.getSaltedHash(rm.getConfiguration().getString(Settings.AUTH_ADMIN_SECRET));
+					return this.saltedHashedSecret;
 				}
 			}
 
 			RepositoryConnection rc = null;
 			try {
 				rc = this.entry.repository.getConnection();
-				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.secret, null,false, resourceURI).asList();
+				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.saltedHashedSecret, null, false, resourceURI).asList();
 				if (!matches.isEmpty()) {
-					this.secret = matches.get(0).getObject().stringValue();
+					this.saltedHashedSecret = matches.get(0).getObject().stringValue();
 				}
 			} catch (org.openrdf.repository.RepositoryException e) {
 				log.error(e.getMessage(), e);
-				throw new RepositoryException("Failed to connect to Repository.", e);
+				throw new RepositoryException("Failed to connect to repository", e);
 			} finally {
 				try {
 					rc.close();
@@ -118,18 +145,23 @@ public class UserImpl extends RDFResource implements User {
 			}
 		}
 
-		return this.secret;
+		return this.saltedHashedSecret;
 	}
-
+	
 	/**
-	 * Tries to sets the users secret (password).
-	 * @param secret the requested secret
-	 * @param pm The PrincipalManager that contains this principal
-	 * @return true if the secret was approved, false otherwise
+	 * Sets the user's password. Does not store the password in clear-text, it is salted and hashed.
+	 * 
+	 * @param secret The new password
+	 * @return True if the password was approved and successfully set, false otherwise
 	 */
 	public boolean setSecret(String secret) {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
-		if(!entry.getRepositoryManager().getPrincipalManager().isValidSecret(secret)) {
+		if (!entry.getRepositoryManager().getPrincipalManager().isValidSecret(secret)) {
+			return false;
+		}
+		
+		String shSecret = Password.getSaltedHash(secret);
+		if (shSecret ==  null) {
 			return false;
 		}
 
@@ -139,21 +171,23 @@ public class UserImpl extends RDFResource implements User {
 			rc.setAutoCommit(false);
 			try {
 				synchronized (this) {
-					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.secret, null,false, resourceURI), resourceURI);
-					rc.add(resourceURI,RepositoryProperties.secret, vf.createLiteral(secret), resourceURI);
+					// remove an eventually existing plaintext password and store only a salted hash
+					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.secret, null, false, resourceURI), resourceURI);
+					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.saltedHashedSecret, null, false, resourceURI), resourceURI);
+					rc.add(resourceURI, RepositoryProperties.saltedHashedSecret, vf.createLiteral(shSecret), resourceURI);
 					rc.commit();
 				}
+				this.saltedHashedSecret = shSecret;
 				return true;
 			} catch (Exception e) {
 				log.error(e.getMessage(), e);
 				rc.rollback();
 			} finally {
 				rc.close();
-				this.secret = secret;
 			}
 		} catch (org.openrdf.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
-			throw new RepositoryException("Failed to connect to Repository.", e);
+			throw new RepositoryException("Failed to connect to repository", e);
 		}
 		return false;
 	}

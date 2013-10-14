@@ -23,7 +23,7 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.entrystore.repository.AuthorizationException;
+import org.entrystore.repository.security.AuthorizationException;
 import org.openrdf.model.URI;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.query.MalformedQueryException;

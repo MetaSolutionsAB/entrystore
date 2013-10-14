@@ -25,7 +25,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
-import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
@@ -39,6 +38,7 @@ import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.StringResource;
 import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;

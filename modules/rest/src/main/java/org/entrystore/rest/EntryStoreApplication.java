@@ -115,8 +115,12 @@ public class EntryStoreApplication extends Application {
 	public EntryStoreApplication(Context parentContext) {
 		super(parentContext);
 		getContext().getAttributes().put(KEY, this);
-		getRangeService().setEnabled(false); // should fix the hangs in Acrobat Reader that occur sometimes
-												// when Acrobat tries to fetch parts of files
+		
+		/*
+		 * should fix the hangs in Acrobat Reader that occur sometimes when
+		 * Acrobat tries to fetch parts of files
+		 */
+		getRangeService().setEnabled(false);
 		log.warn("Restlet RangeService deactivated");
 
 		ServletContext sc = (ServletContext) this.getContext().getAttributes().get("org.restlet.ext.ser​vlet.ServletContext");
@@ -148,7 +152,7 @@ public class EntryStoreApplication extends Application {
 				log.warn(e.getMessage());
 			}
 			
-			// Initialize SCAM below
+			// Initialize EntryStore
 			ConfigurationManager confManager = null;
 			try {
 				if (manualConfigURI != null) {
@@ -181,8 +185,8 @@ public class EntryStoreApplication extends Application {
 			pm = rm.getPrincipalManager();
 
 			String storeType = config.getString(Settings.STORE_TYPE, null); 
-			if(storeType == null || storeType.equals("memory")) {
-				// Create context's, entries and harvesters
+			if (storeType == null || storeType.equals("memory")) {
+				// Create contexts, entries and harvesters
 				TestSuite.initDisneySuite(rm);
 				TestSuite.addEntriesInDisneySuite(rm);
 				TestSuite.HarvesterTestSuite(rm, pm, cm);
@@ -200,27 +204,14 @@ public class EntryStoreApplication extends Application {
 				startBackupScheduler();
 			}
 
-			//		URI currentUserURI = pm.getAuthenticatedUserURI();
-			//		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			//		TestSuite.RDF2LOMConverterTestSuite(rm, pm, cm);
-			//		pm.setAuthenticatedUserURI(currentUserURI);
-		
-//			log.info("Starting processing metadata stats");
-//			new MetadataStatistics(rm).run();
-//			log.info("Done with metadata stats");
-		
 			boolean correct = config.getBoolean("scam.repository.store.correct-metadata", false);
 			if (correct) {
-//				new OEAutomaticValidation(rm).validateMetadata(URI.create("http://oe.confolio.org/scam/5"), URI.create("http://oe.confolio.org/scam/5/entry/6365"));
 				MetadataCorrection mc = new MetadataCorrection(rm);
 				mc.fixMetadataGlobally();
-				//mc.fixPrincipalsGlobally();
-//				try {
-//					mc.printUnvalidatedResources("http://oe.confolio.org/scam/30", new FileWriter("/home/hannes/Desktop/bce.csv"));
-//				} catch (IOException e) {
-//					e.printStackTrace();
-//				}
 			}
+			
+			// For old installations: convert plaintext passwords to salted hashes
+			new MetadataCorrection(rm).convertPasswordsToHashes();
 		}
 	}
 

@@ -24,10 +24,10 @@ import java.util.Date;
 import java.util.List;
 import java.util.Set;
 
-import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.LocationType;
 import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;
 import org.openrdf.model.Graph;

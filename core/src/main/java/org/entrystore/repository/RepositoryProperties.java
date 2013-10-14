@@ -40,7 +40,7 @@ public class RepositoryProperties {
 	public static final String LIST_PATH = "resource";
 	public static final String DATA_PATH = "resource";
 	public static final String NAME_PATH = "resource";
-	public static final String MD_PATH_STUB = "metadata_stub"; 
+	public static final String MD_PATH_STUB = "metadata_stub";
 	public static final String RELATION = "relations";
 
 	public static String getResourcePath(BuiltinType bt) {
@@ -66,7 +66,6 @@ public class RepositoryProperties {
 	public static final URI mdHasEntry;
 	public static final URI resHasEntry;
 	public static final URI body;
-	
 
 	public static final URI resource;
 	public static final URI metadata;
@@ -74,7 +73,6 @@ public class RepositoryProperties {
 	public static final URI externalMetadata;
 	public static final URI cachedExternalMetadata;
 	public static final URI cached;
-	
 	
 	public static final URI alias;
 	
@@ -86,7 +84,6 @@ public class RepositoryProperties {
 	public static final URI referredIn;
 	public static final URI hasListMember;
 	public static final URI hasGroupMember;
-	
 	
 	public static final URI Local;
 	public static final URI Reference;
@@ -104,6 +101,7 @@ public class RepositoryProperties {
 
 	public static final URI homeContext;
 	public static final URI secret;
+	public static final URI saltedHashedSecret;
 	public static final URI language;
 	public static final URI originallyCreatedIn;
 
@@ -168,6 +166,7 @@ public class RepositoryProperties {
 		String = vf.createURI(NSbase + "String");
 		
 		secret = vf.createURI(NSbase + "secret");
+		saltedHashedSecret = vf.createURI(NSbase + "saltedHashedSecret");
 		homeContext = vf.createURI(NSbase + "homeContext");
 		language = vf.createURI(NSbase + "language");
 		

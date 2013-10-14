@@ -18,36 +18,48 @@ package org.entrystore.repository;
 
 import java.net.URI;
 import java.util.Set;
+import java.util.List;
+
+import org.entrystore.repository.security.AuthorizationException;
 
 public interface PrincipalManager extends Context {
-	
-	public enum AccessProperty{
-		ReadResource,
-		ReadMetadata,
-		WriteResource,
-		WriteMetadata,
-		Administer
+
+	public enum AccessProperty {
+		ReadResource, ReadMetadata, WriteResource, WriteMetadata, Administer
 	};
-	
+
 	String getPrincipalName(URI principal);
+
 	Entry getPrincipalEntry(String name);
+
 	boolean setPrincipalName(URI principal, String newName);
-	
-	public java.util.List<URI> getUsersAsUris();
-	public java.util.List<User> getUsers();
+
+	public List<URI> getUsersAsUris();
+
+	public List<User> getUsers();
+
 	public User getUser(URI userEntryUri);
 
 	public Set<URI> getGroupUris();
+
 	public Group getGroup(URI groupEntryUri);
 
 	public void setAuthenticatedUserURI(URI userUri);
+
 	public URI getAuthenticatedUserURI();
 
 	public Set<AccessProperty> getRights(Entry entry);
-	public void checkAuthenticatedUserAuthorized(Entry entry, AccessProperty accessProperty) throws  AuthorizationException;
+
+	public void checkAuthenticatedUserAuthorized(Entry entry, AccessProperty accessProperty)
+			throws AuthorizationException;
+
 	public boolean isValidSecret(String name);
+
 	public User getAdminUser();
+
 	public Group getAdminGroup();
+
 	public User getGuestUser();
+
 	public Group getUserGroup();
 }

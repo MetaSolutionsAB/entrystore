@@ -16,9 +16,9 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.User;
+import org.entrystore.repository.security.AuthorizationException;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.ext.json.JsonRepresentation;

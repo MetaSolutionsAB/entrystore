@@ -3,7 +3,6 @@ package org.entrystore.repository.impl;
 import java.io.File;
 import java.util.Set;
 
-import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
@@ -14,6 +13,7 @@ import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.AuthorizationException;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;
 import org.openrdf.model.URI;
