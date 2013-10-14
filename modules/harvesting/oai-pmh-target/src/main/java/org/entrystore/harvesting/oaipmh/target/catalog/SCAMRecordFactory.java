@@ -25,13 +25,13 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
 
-import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.impl.DeletedEntryInfo;
+import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.util.URISplit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -37,7 +37,6 @@ import java.util.StringTokenizer;
 import java.util.TimeZone;
 import java.util.Vector;
 
-import org.entrystore.repository.AuthorizationException;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
@@ -49,6 +48,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.DeletedEntryInfo;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.security.AuthorizationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
