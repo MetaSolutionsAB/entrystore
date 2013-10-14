@@ -87,8 +87,6 @@ import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
-
 /**
  * Main class to start EntryStore as a Restlet Application.
  *
@@ -96,7 +94,7 @@ import org.slf4j.LoggerFactory;
  */
 public class EntryStoreApplication extends Application {
 
-	public static String KEY = "se.kmr.scam.rest.ScamApplication";
+	public static String KEY = EntryStoreApplication.class.getCanonicalName();
 	
 	/** Logger */
 	static Logger log = LoggerFactory.getLogger(EntryStoreApplication.class);
