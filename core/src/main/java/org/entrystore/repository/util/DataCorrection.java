@@ -912,20 +912,6 @@ public class DataCorrection {
 		return null;
 	}
 	
-	public static void main(String[] argv) {
-//		System.out.println(parseDateFromString("2008"));
-//		System.out.println(parseDateFromString("12 November 2008"));
-//		System.out.println(parseDateFromString("May 2009"));
-		System.out.println(parseDateFromString("02.04.09"));
-		System.out.println(parseDateFromString("02.04.23"));
-		System.out.println(parseDateFromString("2009-05-01T00:00:00+0200"));
-//		System.out.println(parseDateFromString("18.10.2008"));
-//		System.out.println(parseDateFromString("6.May 2009"));
-//		System.out.println(parseDateFromString("08/04/2008"));
-//		System.out.println(parseDateFromString("25-06-2006"));
-//		System.out.println(parseDateFromString("04/1935"));
-	}
-	
 	public void checkAllDates() {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
@@ -980,11 +966,6 @@ public class DataCorrection {
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
-//		try {
-//			writer.flush();
-//		} catch (IOException e) {
-//			e.printStackTrace();
-//		}
 	}
 	
 	public void fixPrincipalsGlobally() {
@@ -1039,43 +1020,4 @@ public class DataCorrection {
 		}
 	}
 	
-	public void printUnvalidatedResources(String contextURI, Writer writer) {
-		URI currentUser = pm.getAuthenticatedUserURI();
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-		try {
-			if (writer != null) {
-				writer.write("Identifier\tTitle\tDescription\r\n");
-			}
-			Set<URI> contexts = new HashSet<URI>();
-			contexts.add(URI.create(contextURI));
-			List<Entry> entries = getEntries(contexts);
-			for (Entry entry : entries) {
-				if (!BuiltinType.None.equals(entry.getBuiltinType())) {
-					continue;
-				}
-				Graph md = entry.getMetadataGraph();
-				if (!ConverterUtil.isValidated(md, entry.getResourceURI())) {
-					String info = entry.getEntryURI() + "\t" + EntryUtil.getTitle(entry, "en") + "\t" + EntryUtil.getLabel(md, entry.getResourceURI(), new URIImpl(NS.dcterms + "description"), "en"); 
-					if (writer != null) {
-						writer.write(info);
-						writer.write("\r\n");
-					}
-					log.info(info);
-				}
-			}
-		} catch (IOException e) {
-			e.printStackTrace();
-		} finally {
-			if (writer != null) {
-				try {
-					writer.flush();
-					writer.close();
-				} catch (IOException e) {
-					log.error(e.getMessage());
-				}
-			}
-			pm.setAuthenticatedUserURI(currentUser);
-		}
-	}
-
 }
