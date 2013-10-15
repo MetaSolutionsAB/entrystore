@@ -16,9 +16,17 @@
 
 package org.entrystore.rest.auth;
 
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 
+import javax.crypto.spec.SecretKeySpec;
+
+import org.apache.commons.codec.binary.Base64;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
@@ -44,6 +52,8 @@ public class BasicVerifier implements Verifier {
 	private PrincipalManager pm;
 	
 	private static Logger log = LoggerFactory.getLogger(BasicVerifier.class);
+	
+	private static Map<String, Long> loginCache = new HashMap<String, Long>();
 
 	public BasicVerifier(PrincipalManager pm) {
 		this.pm = pm;
@@ -124,9 +134,15 @@ public class BasicVerifier implements Verifier {
 				if (userEntry == null) {
 					return RESULT_UNKNOWN;
 				}
+				// check whether login is cached, setting max age to 2 hours (7200 seconds)
+				if (isLoginCached(userEntry.getEntryURI().toString(), secret, 7200)) {
+					userURI = userEntry.getResourceURI();
+					return RESULT_VALID;
+				}
 				String saltedHashedSecret = getSaltedHashedSecret(identifier);
 				if (secret != null && Password.check(secret, saltedHashedSecret)) {
 					userURI = userEntry.getResourceURI();
+					addLoginToCache(userEntry.getEntryURI().toString(), secret);
 					return RESULT_VALID;
 				} else {
 					// workaround to avoid challenge response window in browsers
@@ -142,6 +158,46 @@ public class BasicVerifier implements Verifier {
 		} finally {
 			pm.setAuthenticatedUserURI(userURI);
 		}
+	}
+	
+	private String sha256(String s) {
+		MessageDigest digester;
+		try {
+			digester = MessageDigest.getInstance("SHA-256");
+			digester.update(s.getBytes("UTF-8"));
+			byte[] key = digester.digest();
+			SecretKeySpec spec = new SecretKeySpec(key, "AES");
+			return Base64.encodeBase64String(spec.getEncoded());
+		} catch (NoSuchAlgorithmException nsae) {
+			log.error(nsae.getMessage());
+		} catch (UnsupportedEncodingException uee) {
+			log.error(uee.getMessage());
+		}
+		return null;
+	}
+	
+	private boolean addLoginToCache(String user, String password) {
+		String hash = sha256(user + password);
+		if (hash != null) {
+			loginCache.put(hash, new Date().getTime());
+			return true;
+		}
+		return false;
+	}
+	
+	private boolean isLoginCached(String user, String password, long seconds) {
+		String hash = sha256(user + password);
+		if (hash == null || !loginCache.containsKey(hash)) {
+			return false;
+		}
+		long loginTime = loginCache.get(hash);
+		long expirationTime = new Date().getTime() - (seconds * 1000);
+		if (loginTime < expirationTime) {
+			log.info("Login has expired for user " + user);
+			loginCache.remove(hash);
+			return false;
+		}
+		return true;
 	}
 
 }
