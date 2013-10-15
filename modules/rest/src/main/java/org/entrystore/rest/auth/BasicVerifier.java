@@ -134,8 +134,8 @@ public class BasicVerifier implements Verifier {
 				if (userEntry == null) {
 					return RESULT_UNKNOWN;
 				}
-				// check whether login is cached, setting max age to 2 hours (7200 seconds)
-				if (isLoginCached(userEntry.getEntryURI().toString(), secret, 7200)) {
+				// check whether login is cached, setting max age to 1 hour (3600 seconds)
+				if (isLoginCached(userEntry.getEntryURI().toString(), secret, 3600)) {
 					userURI = userEntry.getResourceURI();
 					return RESULT_VALID;
 				}
