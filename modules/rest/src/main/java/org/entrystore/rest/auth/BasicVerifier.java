@@ -99,21 +99,11 @@ public class BasicVerifier implements Verifier {
 			String identifier = null;
 			String secret = null;
 			ChallengeResponse cr = request.getChallengeResponse();
-			if (cr == null && !params.containsKey("auth_user")) {
+			if (cr == null) {
 				identifier = "_guest";
 			} else {
-				if (cr != null) {
-					identifier = request.getChallengeResponse().getIdentifier();
-				}
-				if (identifier == null) {
-					// fallback for requests where credentials are sent as URL parameters
-					identifier = params.get("auth_user");
-					if (params.containsKey("auth_password") && params.get("auth_password") != null) {
-						secret = params.get("auth_password");
-					}
-				} else {
-					secret = new String(request.getChallengeResponse().getSecret());
-				}
+				identifier = request.getChallengeResponse().getIdentifier();
+				secret = new String(request.getChallengeResponse().getSecret());
 			}
 
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
@@ -123,6 +113,8 @@ public class BasicVerifier implements Verifier {
 			} else if ("_guest".equals(identifier)) {
 				userURI = pm.getGuestUser().getURI();
 				return RESULT_VALID;
+			} else if (identifier != null && secret == null) { 
+				return RESULT_MISSING;
 			} else {
 				Entry userEntry = pm.getPrincipalEntry(identifier);
 				if (userEntry == null) {
