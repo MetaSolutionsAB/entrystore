@@ -16,17 +16,11 @@
 
 package org.entrystore.rest.auth;
 
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-import javax.crypto.spec.SecretKeySpec;
-
-import org.apache.commons.codec.binary.Base64;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
@@ -59,7 +53,7 @@ public class BasicVerifier implements Verifier {
 		this.pm = pm;
 	}
 
-	public String getSaltedHashedSecret(String identifier) {
+	public static String getSaltedHashedSecret(PrincipalManager pm , String identifier) {
 		URI authUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
@@ -91,7 +85,7 @@ public class BasicVerifier implements Verifier {
 		Map<String, String> params = Util.parseRequest(request.getResourceRef().getRemainingPart());
 
 		try {
-			if (request.getChallengeResponse() == null && "login".equals(request.getResourceRef().getLastSegment())) {
+			if (request.getChallengeResponse() == null && "basic".equals(request.getResourceRef().getLastSegment())) {
 				if (challenge) {
 					return RESULT_MISSING;
 				} else {
@@ -139,7 +133,7 @@ public class BasicVerifier implements Verifier {
 					userURI = userEntry.getResourceURI();
 					return RESULT_VALID;
 				}
-				String saltedHashedSecret = getSaltedHashedSecret(identifier);
+				String saltedHashedSecret = getSaltedHashedSecret(pm, identifier);
 				if (secret != null && Password.check(secret, saltedHashedSecret)) {
 					userURI = userEntry.getResourceURI();
 					addLoginToCache(userEntry.getEntryURI().toString(), secret);
@@ -160,24 +154,8 @@ public class BasicVerifier implements Verifier {
 		}
 	}
 	
-	private String sha256(String s) {
-		MessageDigest digester;
-		try {
-			digester = MessageDigest.getInstance("SHA-256");
-			digester.update(s.getBytes("UTF-8"));
-			byte[] key = digester.digest();
-			SecretKeySpec spec = new SecretKeySpec(key, "AES");
-			return Base64.encodeBase64String(spec.getEncoded());
-		} catch (NoSuchAlgorithmException nsae) {
-			log.error(nsae.getMessage());
-		} catch (UnsupportedEncodingException uee) {
-			log.error(uee.getMessage());
-		}
-		return null;
-	}
-	
 	private boolean addLoginToCache(String user, String password) {
-		String hash = sha256(user + password);
+		String hash = Password.sha256(user + password);
 		if (hash != null) {
 			loginCache.put(hash, new Date().getTime());
 			return true;
@@ -186,7 +164,7 @@ public class BasicVerifier implements Verifier {
 	}
 	
 	private boolean isLoginCached(String user, String password, long seconds) {
-		String hash = sha256(user + password);
+		String hash = Password.sha256(user + password);
 		if (hash == null || !loginCache.containsKey(hash)) {
 			return false;
 		}

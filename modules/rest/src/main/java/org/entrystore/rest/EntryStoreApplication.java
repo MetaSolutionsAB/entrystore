@@ -53,13 +53,13 @@ import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
 import org.entrystore.rest.resources.AliasResource;
 import org.entrystore.rest.resources.ContextResource;
+import org.entrystore.rest.resources.CookieLoginResource;
 import org.entrystore.rest.resources.DefaultResource;
 import org.entrystore.rest.resources.EntryResource;
 import org.entrystore.rest.resources.ExportResource;
 import org.entrystore.rest.resources.ExternalMetadataResource;
 import org.entrystore.rest.resources.HarvesterResource;
 import org.entrystore.rest.resources.ImportResource;
-import org.entrystore.rest.resources.LoginResource;
 import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
 import org.entrystore.rest.resources.MetadataResource;
@@ -73,6 +73,7 @@ import org.entrystore.rest.resources.SolrResource;
 import org.entrystore.rest.resources.SparqlResource;
 import org.entrystore.rest.resources.StatisticsResource;
 import org.entrystore.rest.resources.StatusResource;
+import org.entrystore.rest.resources.UserResource;
 import org.restlet.Application;
 import org.restlet.Component;
 import org.restlet.Context;
@@ -233,10 +234,12 @@ public class EntryStoreApplication extends Application {
 		
 		// global scope
 		router.attach("/search", SearchResource.class);
-		router.attach("/login", LoginResource.class);
 		router.attach("/sparql", SparqlResource.class);
 		router.attach("/proxy", ProxyResource.class);
-		router.attach("/auth/basic", LoginResource.class);
+		router.attach("/auth/user", UserResource.class);
+		router.attach("/auth/cookie", CookieLoginResource.class);
+		router.attach("/auth/basic", UserResource.class);
+		
 		router.attach("/management/backup", RepositoryBackupResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
@@ -268,8 +271,6 @@ public class EntryStoreApplication extends Application {
 		router.attach("/auth/openid", redirAuth);
 
 		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(pm), pm);
-//		DigestAuthenticator digestAuth = new DigestAuthenticator(getContext(), "EntryStore", "3ntry5t0r3");
-//		digestAuth.setOptional(true);
 		ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm), pm);
 		
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();

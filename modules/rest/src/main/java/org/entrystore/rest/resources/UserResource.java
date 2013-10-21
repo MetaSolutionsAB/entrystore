@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.User;
 import org.entrystore.repository.security.AuthorizationException;
 import org.json.JSONException;
@@ -30,26 +29,19 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * This class is the resource for login in.
+ * This resource provides basic information about the currently logged in user.
  * 
- * @author matthias
  * @author Hannes Ebner
- * @see BaseResource
  */
-public class LoginResource extends BaseResource {
+public class UserResource extends BaseResource {
 
-	private static Logger log = LoggerFactory.getLogger(LoginResource.class);
-
-	@Override
-	public void doInit() {
-	
-	}
+	private static Logger log = LoggerFactory.getLogger(UserResource.class);
 
 	@Get
 	public Representation represent() throws ResourceException {
 		try {
-			PrincipalManager pm = getPM();
-			User currentUser = pm.getUser(pm.getAuthenticatedUserURI());
+			User currentUser = getPM().getUser(getPM().getAuthenticatedUserURI());
+			boolean guest = currentUser.getURI().equals(getPM().getGuestUser().getURI()); 
 			
 			JSONObject result = new JSONObject();
 			
@@ -57,14 +49,15 @@ public class LoginResource extends BaseResource {
 				result.put("user", currentUser.getName());
 				result.put("id", currentUser.getEntry().getId());
 
-				org.entrystore.repository.Context homeContext = currentUser.getHomeContext();
-				if (homeContext != null) {
-					result.put("homecontext", homeContext.getEntry().getId());
-				}
-
-				String userLang = currentUser.getLanguage();
-				if (userLang != null) {
-					result.put("language", userLang);
+				if (!guest) {
+					org.entrystore.repository.Context homeContext = currentUser.getHomeContext();
+					if (homeContext != null) {
+						result.put("homecontext", homeContext.getEntry().getId());
+					}
+					String userLang = currentUser.getLanguage();
+					if (userLang != null) {
+						result.put("language", userLang);
+					}
 				}
 			} catch (JSONException e) {
 				JSONObject error = new JSONObject();

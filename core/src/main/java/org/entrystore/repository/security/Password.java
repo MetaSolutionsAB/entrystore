@@ -1,6 +1,8 @@
 package org.entrystore.repository.security;
 
+import java.io.UnsupportedEncodingException;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Date;
@@ -8,6 +10,7 @@ import java.util.Date;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
 
 import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
@@ -82,6 +85,9 @@ public class Password {
 		if (password == null || password.length() == 0) {
 			throw new IllegalArgumentException("Empty passwords are not supported");
 		}
+		if (stored == null) {
+			throw new IllegalArgumentException("Stored password must not be null");
+		}
 		String[] saltAndPass = stored.split("\\$");
 		if (saltAndPass.length != 2) {
 			return false;
@@ -101,6 +107,28 @@ public class Password {
 			return Base64.encodeBase64String(key.getEncoded());
 		} catch (GeneralSecurityException gse) {
 			log.error(gse.getMessage());
+		}
+		return null;
+	}
+	
+	public static String getRandomBase64(int length) {
+		byte[] result = new byte[length];
+		random.nextBytes(result);
+		return Base64.encodeBase64String(result);
+	}
+	
+	public static String sha256(String s) {
+		MessageDigest digester;
+		try {
+			digester = MessageDigest.getInstance("SHA-256");
+			digester.update(s.getBytes("UTF-8"));
+			byte[] key = digester.digest();
+			SecretKeySpec spec = new SecretKeySpec(key, "AES");
+			return Base64.encodeBase64String(spec.getEncoded());
+		} catch (NoSuchAlgorithmException nsae) {
+			log.error(nsae.getMessage());
+		} catch (UnsupportedEncodingException uee) {
+			log.error(uee.getMessage());
 		}
 		return null;
 	}
