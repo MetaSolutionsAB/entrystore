@@ -26,6 +26,7 @@ import org.restlet.data.CookieSetting;
 import org.restlet.data.Form;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
+import org.restlet.resource.Get;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,26 @@ public class CookieLoginResource extends BaseResource {
 
 	private static Logger log = LoggerFactory.getLogger(CookieLoginResource.class);
 
+	@Get
+	public Representation represent() {
+		if ("logout".equals(parameters.get("action"))) {
+			Form query = new Form(getRequestEntity());
+			String token = query.getFirstValue("auth_token");
+			String maxAge = query.getFirstValue("auth_maxage");
+			if (token != null && "0".equals(maxAge)) {
+				CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
+				tokenCookieSetting.setMaxAge(0);
+				tokenCookieSetting.setPath(getRM().getRepositoryURL().getPath());
+		        getResponse().getCookieSettings().add(tokenCookieSetting);
+		        getResponse().setStatus(Status.SUCCESS_OK);
+		        CookieVerifier.removeTokenFromCache(token);
+		        return null;
+			}
+		}
+		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		return null;
+	}
+	
 	@Post
 	public void acceptRepresentation(Representation r) {
 		Form query = new Form(r);
@@ -66,7 +87,7 @@ public class CookieLoginResource extends BaseResource {
 			
 			String token = Password.getRandomBase64(128);
 			Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
-			CookieVerifier.addLoginToTokenCache(token, new UserInfo(userName, loginExpiration));
+			CookieVerifier.addTokenToCache(token, new UserInfo(userName, loginExpiration));
 			
 			CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 			tokenCookieSetting.setMaxAge(maxAge);

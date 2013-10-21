@@ -26,6 +26,7 @@ import org.entrystore.repository.PrincipalManager;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Cookie;
+import org.restlet.data.CookieSetting;
 import org.restlet.security.Verifier;
 import org.restlet.util.Series;
 import org.slf4j.Logger;
@@ -47,8 +48,12 @@ public class CookieVerifier implements Verifier {
 		this.pm = pm;
 	}
 	
-	public static void addLoginToTokenCache(String token, UserInfo userInfo) {
+	public static void addTokenToCache(String token, UserInfo userInfo) {
 		tokenCache.put(token, userInfo);
+	}
+	
+	public static void removeTokenFromCache(String token) {
+		tokenCache.remove(token);
 	}
 
 	public int verify(Request request, Response response) {
@@ -75,6 +80,10 @@ public class CookieVerifier implements Verifier {
 						Entry userEntry = pm.getPrincipalEntry(userName);
 						userURI = userEntry.getResourceURI();
 					} else {
+						CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", authToken);
+						tokenCookieSetting.setMaxAge(0);
+						tokenCookieSetting.setPath(authTokenCookie.getPath());
+				        response.getCookieSettings().add(tokenCookieSetting);
 						tokenCache.remove(authToken);
 					}
 				}
