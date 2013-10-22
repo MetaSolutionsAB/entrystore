@@ -16,19 +16,24 @@ entrystore.solr.extract-fulltext=off
 entrystore.harvester.oai=on
 entrystore.harvester.oai.multithreaded=off
 
+<!-- Cache for metadata instances produced by the harvesting target -->
 entrystore.repository.cache=off
 entrystore.repository.cache.path=/srv/entrystore/files/cache/
 
 <!-- entrystore.auth.adminpw=newtempadminpw -->
 
+<!-- Quota defaults -->
 entrystore.data.quota=off
 entrystore.data.quota.default=100k
 
+<!-- SPARQL endpoint with public metadata in all contexts -->
 entrystore.repository.public=off
 entrystore.repository.public.type=native
 entrystore.repository.public.path=file:///srv/entrystore/store/public/
 entrystore.repository.public.indexes=cspo,spoc,posc
 
+<!-- Run metadata correction methods                   -->
+<!-- Only for development and/or migration purposes    -->
 entrystore.repository.store.correct-metadata=false
 
 <!-- Repository import from TriG file -->
@@ -45,9 +50,9 @@ entrystore.repository.store.indexes=cspo,posc
 
 <!-- If store type is mysql or postgresql these properties must be specified -->
 <!-- Databases as backend have never been tested properly, use with care -->
-entrystore.repository.store.user=scam
-entrystore.repository.store.password=scam
-entrystore.repository.store.database.name=scam
+entrystore.repository.store.user=entrystore
+entrystore.repository.store.password=longpassword
+entrystore.repository.store.database.name=entrystoredb
 entrystore.repository.store.port.number=3306
 entrystore.repository.store.server.name=localhost
 <!-- optional: maximum number of triple tables -->
