@@ -1,14 +1,15 @@
 <!-- Basic configuration -->
-entrystore.data.folder=/home/hannes/workspace/scam/oe.confolio.org-files/
-entrystore.backup.folder=unconfigured
+entrystore.data.folder=/srv/entrystore/files/
+entrystore.backup.folder=/srv/entrystore/backup/
 entrystore.backup.scheduler=off
+
 <!-- Base URI how it is seen from external clients -->
-entrystore.baseurl.folder=http://oe.confolio.org/scam/
+entrystore.baseurl.folder=http://entrystore.org/store/
 
 <!-- Solr -->
 entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
-entrystore.solr.url=/home/hannes/workspace/entrystore/solr/
+entrystore.solr.url=/srv/entrystore/files/solr/
 entrystore.solr.extract-fulltext=off
 
 <!-- OAI-PMH harvester (not to confuse with the OAI-PMH target which is an own WebApp -->
@@ -16,7 +17,7 @@ entrystore.harvester.oai=on
 entrystore.harvester.oai.multithreaded=off
 
 entrystore.repository.cache=off
-entrystore.repository.cache.path=/home/hannes/workspace/scam/cache/
+entrystore.repository.cache.path=/srv/entrystore/files/cache/
 
 <!-- entrystore.auth.adminpw=newtempadminpw -->
 
@@ -25,21 +26,21 @@ entrystore.data.quota.default=100k
 
 entrystore.repository.public=off
 entrystore.repository.public.type=native
-entrystore.repository.public.path=file:///home/hannes/workspace/scam/knowone-store/public/
+entrystore.repository.public.path=file:///srv/entrystore/store/public/
 entrystore.repository.public.indexes=cspo,spoc,posc
 
 entrystore.repository.store.correct-metadata=false
 
 <!-- Repository import from TriG file -->
 entrystore.repository.import=false
-entrystore.repository.import.file=file:///home/hannes/Desktop/oer.rdf
-entrystore.repository.import.base=http://localhost:8080/scam/
+entrystore.repository.import.file=file:///srv/toimport.rdf
+entrystore.repository.import.base=http://localhost:8080/store/
 
 <!-- Repository store: memory | native | mysql | postgresql -->
 entrystore.repository.store.type=native
 <!-- If store type is native these properties must be specified -->
 <!-- If store type is memory a path can be specified for persisting the repository -->
-entrystore.repository.store.path=file:///home/hannes/workspace/entrystore/oe.confolio.org-store/
+entrystore.repository.store.path=file:///srv/entrystore/store/
 entrystore.repository.store.indexes=cspo,posc
 
 <!-- If store type is mysql or postgresql these properties must be specified -->
