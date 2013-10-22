@@ -48,8 +48,8 @@ entrystore.repository.store.type=native
 entrystore.repository.store.path=file:///srv/entrystore/store/
 entrystore.repository.store.indexes=cspo,posc
 
-<!-- If store type is mysql or postgresql these properties must be specified -->
-<!-- Databases as backend have never been tested properly, use with care -->
+<!-- If store type is mysql or postgresql these properties must be specified   -->
+<!-- Databases as backend have never been tested properly, use with care       -->
 entrystore.repository.store.user=entrystore
 entrystore.repository.store.password=longpassword
 entrystore.repository.store.database.name=entrystoredb
