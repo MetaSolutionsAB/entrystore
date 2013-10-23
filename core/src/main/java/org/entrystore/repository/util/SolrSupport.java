@@ -27,12 +27,11 @@ import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.LocationType;
 import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.RepresentationType;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.LocalMetadataWrapper;
-import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.repository.impl.converters.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.openrdf.model.Graph;
@@ -321,6 +320,12 @@ public class SolrSupport {
 		while (tags.hasNext()) {
 			doc.addField("tag", tags.next().getObject().stringValue());
 		}
+		
+		// email (foaf:mbox)
+		String email = EntryUtil.getEmail(entry);
+		if (email != null) {
+			doc.addField("email", email);
+		}
 
 		// publicly viewable metadata?
 		boolean guestReadable = false;
@@ -334,8 +339,8 @@ public class SolrSupport {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		doc.setField("public", guestReadable);
 
-		// validated resource?
-		doc.setField("validated", ConverterUtil.isValidated(mdGraph, resourceURI));
+//		// validated resource?
+//		doc.setField("validated", ConverterUtil.isValidated(mdGraph, resourceURI));
 
 		// all literal values
 		Graph metadata = entry.getMetadataGraph();
