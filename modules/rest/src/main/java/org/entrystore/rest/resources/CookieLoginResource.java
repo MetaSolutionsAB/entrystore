@@ -21,6 +21,7 @@ import java.util.Date;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.rest.auth.TokenCache;
 import org.entrystore.rest.auth.UserInfo;
 import org.restlet.data.CookieSetting;
 import org.restlet.data.Form;
@@ -48,14 +49,10 @@ public class CookieLoginResource extends BaseResource {
 		if ("logout".equals(parameters.get("action"))) {
 			Form query = new Form(getRequestEntity());
 			String token = query.getFirstValue("auth_token");
-			String maxAge = query.getFirstValue("auth_maxage");
-			if (token != null && "0".equals(maxAge)) {
-				CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
-				tokenCookieSetting.setMaxAge(0);
-				tokenCookieSetting.setPath(getRM().getRepositoryURL().getPath());
-		        getResponse().getCookieSettings().add(tokenCookieSetting);
+			if (token != null) {
+				CookieVerifier.cleanCookies("auth_token", getRequest(), getResponse());
+				TokenCache.removeToken(token);
 		        getResponse().setStatus(Status.SUCCESS_OK);
-		        CookieVerifier.removeTokenFromCache(token);
 		        return null;
 			}
 		}
@@ -87,7 +84,7 @@ public class CookieLoginResource extends BaseResource {
 			
 			String token = Password.getRandomBase64(128);
 			Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
-			CookieVerifier.addTokenToCache(token, new UserInfo(userName, loginExpiration));
+			TokenCache.addToken(token, new UserInfo(userName, loginExpiration));
 			
 			CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 			tokenCookieSetting.setMaxAge(maxAge);
