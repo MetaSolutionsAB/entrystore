@@ -31,21 +31,28 @@ import org.entrystore.repository.Group;
 import org.entrystore.repository.LocationType;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.User;
+import org.entrystore.repository.impl.converters.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.repository.util.URISplit.URIType;
+import org.openrdf.model.Resource;
+import org.openrdf.model.Statement;
+import org.openrdf.model.ValueFactory;
+import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
+import org.openrdf.repository.RepositoryResult;
 
 
 /**
  * Creates a 
  * @author Olov Wikberg, IML Umeå University
  * @author matthias
+ * @author Hannes Ebner
  *
  */
 public class PrincipalManagerImpl extends EntryNamesContext implements PrincipalManager {
 	private static Log log = LogFactory.getLog(PrincipalManagerImpl.class);
-	private static final ThreadLocal < URI > authenticatedUserURI = new ThreadLocal < URI > ();
+	private static final ThreadLocal<URI> authenticatedUserURI = new ThreadLocal<URI>();
 	public User adminUser = null;
 	public Group adminGroup = null;
 	public User guestUser = null;
@@ -168,7 +175,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	
 	public Set <URI> getGroupUris() {
 		Iterator <URI> entryIterator = getEntries().iterator();
-		Set < URI > groupUris = new HashSet < URI > ();
+		Set < URI > groupUris = new HashSet <URI> ();
 
 		//sort out the groups
 		while(entryIterator.hasNext()) {
@@ -183,9 +190,9 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		return groupUris;
 	}
 
-	public Set < URI > getGroupUris(URI userUri) {
-		Iterator < URI > entryIterator = getEntries().iterator();
-		Set < URI > groupUris = new HashSet < URI > ();
+	public Set <URI> getGroupUris(URI userUri) {
+		Iterator <URI> entryIterator = getEntries().iterator();
+		Set <URI> groupUris = new HashSet <URI> ();
 
 		User user = getUser(userUri);
 		if (user != null) {
@@ -430,30 +437,15 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 	
 	/**
-	 * Checks if a secret is valid. This includes that is is safe enough (according to function isSecureSecret).
-	 * @param secret email address to check if valid
-	 * @return true if the email address was valid, false otherwise
+	 * Checks if a secret is valid.
+	 * @param secret Secret to be checked.
+	 * @return true If the secret fullfils minimum requirements, currently a minimum length of 8 characters.
 	 */
 	public boolean isValidSecret(String secret) {
-		if (secret == null) {
-			return false;
-		} else if (secret.length() < 8) {
-			return false;
-		} else {
-			return isSecureSecret(secret);
-		}
-	}
-
-	/**
-	 * Checks if a secret is secure enough.
-	 * @return true if the email address was valid, false otherwise
-	 */
-	public boolean isSecureSecret(String secret) {
-		if (secret.length() >= 8) {
-			return true;
-		} else {
+		if (secret == null || secret.length() < 8) {
 			return false;
 		}
+		return true;
 	}
 
 	public User getAdminUser() {
@@ -605,6 +597,32 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			}
 		});
 		addSystemEntryToSystemEntries(allPrincipals.getEntryURI());
-
 	}
+	
+	public User getUserByOpenID(String openIdEmail) {
+		RepositoryConnection rc = null;
+		Resource userResourceURI = null;
+		try {
+			rc = entry.getRepository().getConnection();
+			ValueFactory vf = rc.getValueFactory();
+			RepositoryResult<Statement> rr = rc.getStatements(null, vf.createURI(NS.sc, "openid"), vf.createURI("mailto:", openIdEmail), false);
+			if (rr.hasNext()) {
+				userResourceURI = rr.next().getSubject();
+			}
+			rr.close();
+		} catch (RepositoryException re) {
+			log.error(re.getMessage(), re);
+		} finally {
+			if (rc != null) {
+				try {
+					rc.close();
+				} catch (RepositoryException ignore) {}
+			}
+		}
+		if (userResourceURI == null) {
+			return null;
+		}
+		return getUser(URI.create(userResourceURI.stringValue()));
+	}
+
 }

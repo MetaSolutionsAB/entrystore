@@ -62,4 +62,7 @@ public interface PrincipalManager extends Context {
 	public User getGuestUser();
 
 	public Group getUserGroup();
+	
+	public User getUserByOpenID(String openid);
+
 }
