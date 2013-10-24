@@ -18,8 +18,6 @@ package org.entrystore.rest.auth;
 
 import java.net.URI;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
@@ -42,18 +40,8 @@ public class CookieVerifier implements Verifier {
 
 	private Logger log = LoggerFactory.getLogger(CookieVerifier.class);
 
-	private static Map<String, UserInfo> tokenCache = new HashMap<String, UserInfo>();
-
 	public CookieVerifier(PrincipalManager pm) {
 		this.pm = pm;
-	}
-	
-	public static void addTokenToCache(String token, UserInfo userInfo) {
-		tokenCache.put(token, userInfo);
-	}
-	
-	public static void removeTokenFromCache(String token) {
-		tokenCache.remove(token);
 	}
 
 	public int verify(Request request, Response response) {
@@ -66,25 +54,20 @@ public class CookieVerifier implements Verifier {
 		URI userURI = null;
 
 		try {
-			Series<Cookie> cookies = request.getCookies();
-			Cookie authTokenCookie = cookies.getFirst("auth_token");
-						
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-				
+			
+			Cookie authTokenCookie = request.getCookies().getFirst("auth_token");
 			if (authTokenCookie != null) {
-				String authToken = authTokenCookie.getValue();				
-				if (tokenCache.containsKey(authToken)) {
-					UserInfo ui = tokenCache.get(authToken);
+				String authToken = authTokenCookie.getValue();
+				if (TokenCache.hasToken(authToken)) {
+					UserInfo ui = TokenCache.getUserInfo(authToken);
 					if (ui.getLoginExpiration().getTime() > (new Date().getTime())) {
 						String userName = ui.getUserName();
 						Entry userEntry = pm.getPrincipalEntry(userName);
 						userURI = userEntry.getResourceURI();
 					} else {
-						CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", authToken);
-						tokenCookieSetting.setMaxAge(0);
-						tokenCookieSetting.setPath(authTokenCookie.getPath());
-				        response.getCookieSettings().add(tokenCookieSetting);
-						tokenCache.remove(authToken);
+						cleanCookies("auth_token", request, response);
+						TokenCache.removeToken(authToken);
 					}
 				}
 			}
@@ -97,6 +80,17 @@ public class CookieVerifier implements Verifier {
 			return RESULT_INVALID;
 		} finally {
 			pm.setAuthenticatedUserURI(userURI);
+		}
+	}
+	
+	public static void cleanCookies(String cookieName, Request request, Response response) {
+		Series<Cookie> cookies = request.getCookies();		
+		for (Cookie c : cookies) {
+			if (c.getName().equals(cookieName)) {
+				CookieSetting cs = new CookieSetting(c.getVersion(), c.getName(), c.getValue(), c.getPath(), c.getDomain());
+				cs.setMaxAge(0);
+				response.getCookieSettings().add(cs);
+			}
 		}
 	}
 	
