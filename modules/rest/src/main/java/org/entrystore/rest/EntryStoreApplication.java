@@ -83,16 +83,11 @@ import org.restlet.Context;
 import org.restlet.Restlet;
 import org.restlet.data.ChallengeScheme;
 import org.restlet.data.Protocol;
-import org.restlet.data.Status;
 import org.restlet.ext.openid.AttributeExchange;
 import org.restlet.ext.openid.OpenIdVerifier;
 import org.restlet.ext.openid.RedirectAuthenticator;
-import org.restlet.representation.EmptyRepresentation;
-import org.restlet.representation.Representation;
-import org.restlet.representation.StringRepresentation;
-import org.restlet.resource.Get;
-import org.restlet.resource.ResourceException;
 import org.restlet.routing.Router;
+import org.restlet.security.Authenticator;
 import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -251,6 +246,9 @@ public class EntryStoreApplication extends Application {
 		router.attach("/auth/cookie", CookieLoginResource.class);
 		router.attach("/auth/basic", UserResource.class);
 		router.attach("/auth/logout", LogoutResource.class);
+		router.attach("/auth/openid", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_MYOPENID));
+		router.attach("/auth/google", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_GOOGLE));
+		router.attach("/auth/yahoo", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_YAHOO));
 		
 		// management/configuration resources
 		router.attach("/management/backup", RepositoryBackupResource.class);
@@ -276,13 +274,6 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/lookup", LookupResource.class);
 
 		router.attachDefault(DefaultResource.class);
-		
-		OpenIdVerifier oidv = new OpenIdVerifier(OpenIdVerifier.PROVIDER_GOOGLE);
-		oidv.addRequiredAttribute(AttributeExchange.EMAIL);
-		RedirectAuthenticator redirAuth = new ExistingUserRedirectAuthenticator(getContext(), oidv, null, rm);
-		redirAuth.setOptional(true);
-		redirAuth.setNext(OpenIdResource.class);
-		router.attach("/auth/openid", redirAuth);
 
 		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(pm), pm);
 		ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm), pm);
@@ -296,6 +287,15 @@ public class EntryStoreApplication extends Application {
 		modLockOut.setNext(router);
 
 		return cookieAuth;
+	}
+	
+	public Authenticator createRedirectAuthenticator(String verifier) {
+		OpenIdVerifier oidv = new OpenIdVerifier(verifier);
+		oidv.addRequiredAttribute(AttributeExchange.EMAIL);
+		RedirectAuthenticator redirAuth = new ExistingUserRedirectAuthenticator(getContext(), oidv, null, rm);
+		redirAuth.setOptional(true);
+		redirAuth.setNext(OpenIdResource.class);
+		return redirAuth;
 	}
 
 	/**
