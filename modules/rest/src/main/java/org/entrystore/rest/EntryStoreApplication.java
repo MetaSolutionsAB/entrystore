@@ -61,6 +61,7 @@ import org.entrystore.rest.resources.ExportResource;
 import org.entrystore.rest.resources.ExternalMetadataResource;
 import org.entrystore.rest.resources.HarvesterResource;
 import org.entrystore.rest.resources.ImportResource;
+import org.entrystore.rest.resources.LogoutResource;
 import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
 import org.entrystore.rest.resources.MetadataResource;
@@ -244,10 +245,14 @@ public class EntryStoreApplication extends Application {
 		router.attach("/search", SearchResource.class);
 		router.attach("/sparql", SparqlResource.class);
 		router.attach("/proxy", ProxyResource.class);
+		
+		// authentication resources
 		router.attach("/auth/user", UserResource.class);
 		router.attach("/auth/cookie", CookieLoginResource.class);
 		router.attach("/auth/basic", UserResource.class);
+		router.attach("/auth/logout", LogoutResource.class);
 		
+		// management/configuration resources
 		router.attach("/management/backup", RepositoryBackupResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);

@@ -20,14 +20,12 @@ import java.util.Date;
 
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.BasicVerifier;
-import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.TokenCache;
 import org.entrystore.rest.auth.UserInfo;
 import org.restlet.data.CookieSetting;
 import org.restlet.data.Form;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
-import org.restlet.resource.Get;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,22 +42,6 @@ public class CookieLoginResource extends BaseResource {
 
 	private static Logger log = LoggerFactory.getLogger(CookieLoginResource.class);
 
-	@Get
-	public Representation represent() {
-		if ("logout".equals(parameters.get("action"))) {
-			Form query = new Form(getRequestEntity());
-			String token = query.getFirstValue("auth_token");
-			if (token != null) {
-				CookieVerifier.cleanCookies("auth_token", getRequest(), getResponse());
-				TokenCache.removeToken(token);
-		        getResponse().setStatus(Status.SUCCESS_OK);
-		        return null;
-			}
-		}
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		return null;
-	}
-	
 	@Post
 	public void acceptRepresentation(Representation r) {
 		Form query = new Form(r);
