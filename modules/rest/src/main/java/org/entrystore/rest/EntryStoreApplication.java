@@ -245,10 +245,12 @@ public class EntryStoreApplication extends Application {
 		router.attach("/auth/user", UserResource.class);
 		router.attach("/auth/cookie", CookieLoginResource.class);
 		router.attach("/auth/basic", UserResource.class);
+		router.attach("/auth/openid/myopenid", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_MYOPENID));
+		router.attach("/auth/openid/google", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_GOOGLE));
+		router.attach("/auth/openid/yahoo", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_YAHOO));
+		// this should work, but it doesn't... something wrong at KTH?
+		// router.attach("/auth/openid/kth", createRedirectAuthenticator("https://openid.sys.kth.se/"));
 		router.attach("/auth/logout", LogoutResource.class);
-		router.attach("/auth/openid", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_MYOPENID));
-		router.attach("/auth/google", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_GOOGLE));
-		router.attach("/auth/yahoo", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_YAHOO));
 		
 		// management/configuration resources
 		router.attach("/management/backup", RepositoryBackupResource.class);
