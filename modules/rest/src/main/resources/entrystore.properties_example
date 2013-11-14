@@ -6,6 +6,12 @@ entrystore.backup.scheduler=off
 <!-- Base URI how it is seen from external clients -->
 entrystore.baseurl.folder=http://entrystore.org/store/
 
+<!-- Authentication via OpenID (default: off) -->
+entrystore.auth.openid=on
+entrystore.auth.openid.google=on
+entrystore.auth.openid.yahoo=off
+entrystore.auth.openid.myopenid=off
+
 <!-- Solr -->
 entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
