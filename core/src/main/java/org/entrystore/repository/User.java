@@ -48,4 +48,5 @@ public interface User extends Resource, java.security.Principal {
 	 * referring the resource of the group entry.
 	 */
 	Set<URI> getGroups();
+
 }
