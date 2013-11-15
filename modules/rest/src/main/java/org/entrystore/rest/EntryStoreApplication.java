@@ -308,7 +308,7 @@ public class EntryStoreApplication extends Application {
 		return cookieAuth;
 	}
 	
-	public Authenticator createRedirectAuthenticator(String verifier, boolean createOnDemand) {
+	private Authenticator createRedirectAuthenticator(String verifier, boolean createOnDemand) {
 		OpenIdVerifier oidv = new OpenIdVerifier(verifier);
 		oidv.addRequiredAttribute(AttributeExchange.EMAIL);
 		oidv.addRequiredAttribute(AttributeExchange.FIRST_NAME);
@@ -331,6 +331,8 @@ public class EntryStoreApplication extends Application {
 		Component component = new Component();
 		component.getServers().add(Protocol.HTTP, 8181);
 		component.getClients().add(Protocol.FILE);
+		component.getClients().add(Protocol.HTTP);
+		component.getClients().add(Protocol.HTTPS);
 		Context childContext = component.getContext().createChildContext();
 		EntryStoreApplication scamApp = new EntryStoreApplication(childContext);
 		childContext.getAttributes().put(KEY, scamApp);
