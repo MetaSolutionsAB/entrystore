@@ -63,6 +63,6 @@ public interface PrincipalManager extends Context {
 
 	public Group getUserGroup();
 	
-	public User getUserByOpenID(String openid);
+	public User getUserByExternalID(String openid);
 
 }
