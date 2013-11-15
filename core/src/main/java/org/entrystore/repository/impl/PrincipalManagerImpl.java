@@ -30,8 +30,8 @@ import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.LocationType;
 import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.User;
-import org.entrystore.repository.impl.converters.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.repository.util.URISplit.URIType;
@@ -599,13 +599,20 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		addSystemEntryToSystemEntries(allPrincipals.getEntryURI());
 	}
 	
-	public User getUserByOpenID(String openIdEmail) {
+	/**
+	 * @param externID
+	 *            An E-Mail address
+	 * @return A user that can be mapped to the external E-Mail address (that
+	 *         e.g. originates from an OpenID service)
+	 * @see org.entrystore.repository.PrincipalManager#getUserByExternalID(java.lang.String)
+	 */
+	public User getUserByExternalID(String externalID) {
 		RepositoryConnection rc = null;
 		Resource userResourceURI = null;
 		try {
 			rc = entry.getRepository().getConnection();
 			ValueFactory vf = rc.getValueFactory();
-			RepositoryResult<Statement> rr = rc.getStatements(null, vf.createURI(NS.sc, "openid"), vf.createURI("mailto:", openIdEmail), false);
+			RepositoryResult<Statement> rr = rc.getStatements(null, RepositoryProperties.externalID, vf.createURI("mailto:", externalID), false);
 			if (rr.hasNext()) {
 				userResourceURI = rr.next().getSubject();
 			}
