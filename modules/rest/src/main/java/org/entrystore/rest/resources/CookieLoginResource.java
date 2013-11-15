@@ -58,7 +58,7 @@ public class CookieLoginResource extends BaseResource {
 		if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
 			// 24h default, lifetime in seconds
 			int maxAge = 24 * 3600;
-			if (maxAgeStr == null) {
+			if (maxAgeStr != null) {
 				try {
 					maxAge = Integer.parseInt(maxAgeStr);
 				} catch (NumberFormatException nfe) {}
