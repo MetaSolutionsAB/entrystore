@@ -291,9 +291,11 @@ public class EntryUtil {
 						lit = (Literal) value;
 					} else if (value instanceof org.openrdf.model.Resource) {
 						Iterator<Statement> indirectLables = graph.match((org.openrdf.model.Resource) value, RDF.VALUE, null);
-						Value indirectValue = indirectLables.next().getObject();
-						if (indirectValue instanceof Literal) {
-							lit = (Literal) indirectValue;
+						if (indirectLables.hasNext()) {
+							Value indirectValue = indirectLables.next().getObject();
+							if (indirectValue instanceof Literal) {
+								lit = (Literal) indirectValue;
+							}
 						}
 					}
 					if (lit != null) {
