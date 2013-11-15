@@ -51,6 +51,8 @@ public class UserImpl extends RDFResource implements User {
 
 	private java.net.URI homeContext;
 	
+	private String externalID;
+	
 	private RepositoryManager rm;
 	
 	/**
@@ -317,6 +319,74 @@ public class UserImpl extends RDFResource implements User {
 		} catch (org.openrdf.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new RepositoryException("Failed to connect to Repository.", e);
+		}
+		return false;
+	}
+	
+	/**
+	 * @return An E-Mail address that can be mapped to an external authentication service, e.g. OpenID.
+	 * 
+	 * @see org.entrystore.repository.User#getExternalID()
+	 */
+	public String getExternalID() {
+		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
+		if (externalID == null) {
+			RepositoryConnection rc = null;
+			try {
+				rc = this.entry.repository.getConnection();
+				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.externalID, null, false, resourceURI).asList();
+				if (!matches.isEmpty()) {
+					externalID = matches.get(0).getObject().stringValue();
+					String prefix = "mailto:";
+					if (externalID.contains(prefix)) {
+						externalID = externalID.substring(externalID.lastIndexOf(prefix) + prefix.length());
+					}
+				}
+			} catch (org.openrdf.repository.RepositoryException e) {
+				log.error(e.getMessage(), e);
+				throw new RepositoryException("Failed to connect to repository", e);
+			} finally {
+				try {
+					rc.close();
+				} catch (org.openrdf.repository.RepositoryException e) {
+					log.error(e.getMessage(), e);
+				}
+			}
+		}
+		return this.externalID;
+	}
+
+	/**
+	 * @param eid External ID, expects an E-Mail address.
+	 * 
+	 * @see org.entrystore.repository.User#setExternalID(java.lang.String)
+	 */
+	public boolean setExternalID(String eid) {
+		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
+		
+		try {
+			RepositoryConnection rc = this.entry.repository.getConnection();
+			ValueFactory vf = this.entry.repository.getValueFactory();
+			rc.setAutoCommit(false);
+			try {
+				synchronized (this) {
+					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.externalID, null, false, resourceURI), resourceURI);
+					if (eid != null) {
+						rc.add(resourceURI, RepositoryProperties.externalID, vf.createURI("mailto:", eid), resourceURI);
+					}
+					rc.commit();
+				}
+				return true;
+			} catch (Exception e) {
+				log.error(e.getMessage(), e);
+				rc.rollback();
+			} finally {
+				rc.close();
+				this.externalID = eid;
+			}
+		} catch (org.openrdf.repository.RepositoryException e) {
+			log.error(e.getMessage(), e);
+			throw new RepositoryException("Failed to connect to repository", e);
 		}
 		return false;
 	}

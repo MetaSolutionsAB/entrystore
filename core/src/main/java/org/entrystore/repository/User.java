@@ -23,25 +23,26 @@ public interface User extends Resource, java.security.Principal {
 	
 	String getName(); // Already declared in java.security.Principal
 
+	boolean setName(String newName);
+
+	Context getHomeContext();
+
+	boolean setHomeContext(Context context);
+	
+	String getLanguage();
+
+	boolean setLanguage(String language);
+
 	@Deprecated
 	String getSecret();
 	
 	String getSaltedHashedSecret();
-
-	Context getHomeContext();
 	
-	/**
-	 * @return Preferred language of the user.
-	 */
-	String getLanguage();
-
-	boolean setName(String newName);
-
 	boolean setSecret(String newSecret);
-
-	boolean setHomeContext(Context context);
 	
-	boolean setLanguage(String language);
+	String getExternalID();
+	
+	boolean setExternalID(String id);
 	
 	/**
 	 * @return a list of groups, each group represented by a java.net.URI

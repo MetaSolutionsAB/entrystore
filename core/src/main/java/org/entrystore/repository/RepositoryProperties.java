@@ -104,6 +104,7 @@ public class RepositoryProperties {
 	public static final URI saltedHashedSecret;
 	public static final URI language;
 	public static final URI originallyCreatedIn;
+	public static final URI externalID;
 
 	public static final URI Graph;
 	
@@ -169,6 +170,7 @@ public class RepositoryProperties {
 		saltedHashedSecret = vf.createURI(NSbase + "saltedHashedSecret");
 		homeContext = vf.createURI(NSbase + "homeContext");
 		language = vf.createURI(NSbase + "language");
+		externalID = vf.createURI(NSbase, "externalID");
 		
 		originallyCreatedIn = vf.createURI(NSbase + "originallyCreatedIn");
 		
