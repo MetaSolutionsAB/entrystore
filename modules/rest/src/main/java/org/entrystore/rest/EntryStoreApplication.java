@@ -311,9 +311,8 @@ public class EntryStoreApplication extends Application {
 	public Authenticator createRedirectAuthenticator(String verifier, boolean createOnDemand) {
 		OpenIdVerifier oidv = new OpenIdVerifier(verifier);
 		oidv.addRequiredAttribute(AttributeExchange.EMAIL);
-		oidv.addOptionalAttribute(AttributeExchange.FIRST_NAME);
-		oidv.addOptionalAttribute(AttributeExchange.LAST_NAME);
-		oidv.addOptionalAttribute(AttributeExchange.FULL_NAME);
+		oidv.addRequiredAttribute(AttributeExchange.FIRST_NAME);
+		oidv.addRequiredAttribute(AttributeExchange.LAST_NAME);
 		RedirectAuthenticator redirAuth;
 		if (createOnDemand) {
 			redirAuth = new NewUserRedirectAuthenticator(getContext(), oidv, null, rm);
