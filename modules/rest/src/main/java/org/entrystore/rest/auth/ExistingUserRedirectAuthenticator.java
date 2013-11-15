@@ -10,6 +10,7 @@ import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.Restlet;
 import org.restlet.data.CookieSetting;
+import org.restlet.data.Status;
 import org.restlet.ext.openid.RedirectAuthenticator;
 import org.restlet.security.Verifier;
 import org.slf4j.Logger;
@@ -45,19 +46,27 @@ public class ExistingUserRedirectAuthenticator extends RedirectAuthenticator {
 	protected void handleUser(org.restlet.security.User user) {
 		String email = user.getEmail();
 		if (email == null) {
+			this.user = null;
 			log.warn("Unable to perform OpenID login, no user email set");
 			return;
 		}
 		
-		User u = rm.getPrincipalManager().getUserByOpenID(email);
+		User u = rm.getPrincipalManager().getUserByExternalID(email);
 		if (u != null) {
 			this.user = u;
+			log.info("Found matching user " + u.getURI() + " for OpenID E-Mail " + email);
+		} else {
+			this.user = null;
 		}
 	}
 	
 	@Override
 	protected int authenticated(Request request, Response response) {
 		if (this.user == null) {
+			CookieVerifier.cleanCookies("auth_token", request, response);
+			CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_IDENTIFIER_COOKIE, request, response);
+			CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, request, response);
+			response.setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 			return SKIP;
 		}
 		

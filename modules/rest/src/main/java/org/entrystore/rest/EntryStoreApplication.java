@@ -49,6 +49,7 @@ import org.entrystore.repository.util.DataCorrection;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.ExistingUserRedirectAuthenticator;
+import org.entrystore.rest.auth.NewUserRedirectAuthenticator;
 import org.entrystore.rest.auth.SimpleAuthenticator;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
@@ -250,15 +251,18 @@ public class EntryStoreApplication extends Application {
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"))) {
 			if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_MYOPENID, "off"))) {
-				router.attach("/auth/openid/myopenid", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_MYOPENID));
+				router.attach("/auth/openid/myopenid", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_MYOPENID, false));
+				router.attach("/auth/openid/myopenid/signup", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_MYOPENID, true));
 				log.info("Authentication via MyOpenID enabled");
 			}
 			if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_GOOGLE, "off"))) {
-				router.attach("/auth/openid/google", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_GOOGLE));
+				router.attach("/auth/openid/google", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_GOOGLE, false));
+				router.attach("/auth/openid/google/signup", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_GOOGLE, true));
 				log.info("Authentication via Google enabled");
 			}
 			if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_YAHOO, "off"))) {
-				router.attach("/auth/openid/yahoo", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_YAHOO));
+				router.attach("/auth/openid/yahoo", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_YAHOO, false));
+				router.attach("/auth/openid/yahoo/signup", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_YAHOO, true));
 				log.info("Authentication via Yahoo! enabled");
 			}
 			// this should work, but it doesn't... something wrong at KTH?
@@ -304,10 +308,18 @@ public class EntryStoreApplication extends Application {
 		return cookieAuth;
 	}
 	
-	public Authenticator createRedirectAuthenticator(String verifier) {
+	public Authenticator createRedirectAuthenticator(String verifier, boolean createOnDemand) {
 		OpenIdVerifier oidv = new OpenIdVerifier(verifier);
 		oidv.addRequiredAttribute(AttributeExchange.EMAIL);
-		RedirectAuthenticator redirAuth = new ExistingUserRedirectAuthenticator(getContext(), oidv, null, rm);
+		oidv.addOptionalAttribute(AttributeExchange.FIRST_NAME);
+		oidv.addOptionalAttribute(AttributeExchange.LAST_NAME);
+		oidv.addOptionalAttribute(AttributeExchange.FULL_NAME);
+		RedirectAuthenticator redirAuth;
+		if (createOnDemand) {
+			redirAuth = new NewUserRedirectAuthenticator(getContext(), oidv, null, rm);
+		} else {
+			redirAuth = new ExistingUserRedirectAuthenticator(getContext(), oidv, null, rm);
+		}
 		redirAuth.setOptional(true);
 		redirAuth.setNext(OpenIdResource.class);
 		return redirAuth;
