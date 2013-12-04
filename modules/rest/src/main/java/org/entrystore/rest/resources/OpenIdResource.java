@@ -16,6 +16,9 @@
 
 package org.entrystore.rest.resources;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+
 import org.entrystore.rest.auth.CookieVerifier;
 import org.restlet.data.Status;
 import org.restlet.ext.openid.RedirectAuthenticator;
@@ -23,6 +26,8 @@ import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -31,6 +36,8 @@ import org.restlet.resource.ResourceException;
  * @author Hannes Ebner
  */
 public class OpenIdResource extends BaseResource {
+	
+	private static Logger log = LoggerFactory.getLogger(OpenIdResource.class);
 
 	@Get
 	public Representation represent() throws ResourceException {
@@ -43,12 +50,20 @@ public class OpenIdResource extends BaseResource {
 		
 		if (!getPM().getGuestUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
 			if (parameters.containsKey("redirectOnSuccess")) {
-				getResponse().redirectTemporary(parameters.get("redirectOnSuccess"));
+				try {
+					getResponse().redirectTemporary(URLDecoder.decode(parameters.get("redirectOnSuccess"), "UTF-8"));
+				} catch (UnsupportedEncodingException e) {
+					log.warn("Unable to decode URL parameter redirectOnSuccess: " + e.getMessage());
+				}
 			}
 			return new StringRepresentation("OpenID login succeeded");
 		} else {
 			if (parameters.containsKey("redirectOnFailure")) {
-				getResponse().redirectTemporary(parameters.get("redirectOnFailure"));
+				try {
+					getResponse().redirectTemporary(URLDecoder.decode(parameters.get("redirectOnFailure"), "UTF-8"));
+				} catch (UnsupportedEncodingException e) {
+					log.warn("Unable to decode URL parameter redirectOnFailure: " + e.getMessage());
+				}
 			}
 		}
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
