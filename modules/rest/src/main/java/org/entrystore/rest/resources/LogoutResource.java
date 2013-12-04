@@ -18,7 +18,6 @@ package org.entrystore.rest.resources;
 
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.TokenCache;
-import org.restlet.data.Form;
 import org.restlet.data.Status;
 import org.restlet.ext.openid.RedirectAuthenticator;
 import org.restlet.representation.Representation;

@@ -87,7 +87,8 @@ public class CookieVerifier implements Verifier {
 		Series<Cookie> cookies = request.getCookies();		
 		for (Cookie c : cookies) {
 			if (c.getName().equals(cookieName)) {
-				CookieSetting cs = new CookieSetting(c.getVersion(), c.getName(), c.getValue(), c.getPath(), c.getDomain());
+				CookieSetting cs = new CookieSetting(c.getVersion(), c.getName(), c.getValue());
+				cs.setPath(c.getPath());
 				cs.setMaxAge(0);
 				response.getCookieSettings().add(cs);
 			}
