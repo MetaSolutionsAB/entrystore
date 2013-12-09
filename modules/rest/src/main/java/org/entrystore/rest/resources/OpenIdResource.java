@@ -47,20 +47,23 @@ public class OpenIdResource extends BaseResource {
 		// to keep track of OpenID logins mapped to internal users.
 		CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_IDENTIFIER_COOKIE, getRequest(), getResponse());
 		CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, getRequest(), getResponse());
-		
+
 		if (!getPM().getGuestUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
 			if (parameters.containsKey("redirectOnSuccess")) {
 				try {
 					getResponse().redirectTemporary(URLDecoder.decode(parameters.get("redirectOnSuccess"), "UTF-8"));
+					return null;
 				} catch (UnsupportedEncodingException e) {
 					log.warn("Unable to decode URL parameter redirectOnSuccess: " + e.getMessage());
 				}
+			} else {
+				return new StringRepresentation("OpenID login succeeded");
 			}
-			return new StringRepresentation("OpenID login succeeded");
 		} else {
 			if (parameters.containsKey("redirectOnFailure")) {
 				try {
 					getResponse().redirectTemporary(URLDecoder.decode(parameters.get("redirectOnFailure"), "UTF-8"));
+					return null;
 				} catch (UnsupportedEncodingException e) {
 					log.warn("Unable to decode URL parameter redirectOnFailure: " + e.getMessage());
 				}
