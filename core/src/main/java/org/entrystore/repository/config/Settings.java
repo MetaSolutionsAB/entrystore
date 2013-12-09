@@ -75,6 +75,8 @@ public class Settings {
 	public static String REPOSITORY_IMPORT_FILE = "entrystore.repository.import.file";
 	public static String REPOSITORY_IMPORT_BASE = "entrystore.repository.import.base";
 	
+	public static String REPOSITORY_REWRITE_BASEREFERENCE = "entrystore.repository.rewrite-basereference";
+	
 	public static String REPOSITORY_CACHE = "entrystore.repository.cache";
 	public static String REPOSITORY_CACHE_PATH = "entrystore.repository.cache.path";
 	

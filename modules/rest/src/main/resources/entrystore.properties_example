@@ -63,3 +63,10 @@ entrystore.repository.store.port.number=3306
 entrystore.repository.store.server.name=localhost
 <!-- optional: maximum number of triple tables -->
 <!-- entrystore.respository.store.max-triple-tables=200 -->
+
+<!-- By default all references are rewritten. This is necessary to makes -->
+<!-- installations work where the internal references are different from -->
+<!-- the external ones (this happens when reverse proxying is used). This -->
+<!-- option can be used to deactivate this feature, e.g. if EntryStore is -->
+<!-- to be started via EntryStoreApplication.main() -->
+entrystore.repository.rewrite-basereference=true

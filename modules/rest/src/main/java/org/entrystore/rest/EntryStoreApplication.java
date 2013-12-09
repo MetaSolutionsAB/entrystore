@@ -81,12 +81,16 @@ import org.entrystore.rest.resources.UserResource;
 import org.restlet.Application;
 import org.restlet.Component;
 import org.restlet.Context;
+import org.restlet.Request;
+import org.restlet.Response;
 import org.restlet.Restlet;
 import org.restlet.data.ChallengeScheme;
 import org.restlet.data.Protocol;
+import org.restlet.data.Reference;
 import org.restlet.ext.openid.AttributeExchange;
 import org.restlet.ext.openid.OpenIdVerifier;
 import org.restlet.ext.openid.RedirectAuthenticator;
+import org.restlet.routing.Filter;
 import org.restlet.routing.Router;
 import org.restlet.security.Authenticator;
 import org.restlet.security.ChallengeAuthenticator;
@@ -151,8 +155,8 @@ public class EntryStoreApplication extends Application {
 			URI manualConfigURI = null;
 			try {
 				env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
-				if (env != null && env.lookup("scam.config") != null) {
-					manualConfigURI = new File((String) env.lookup("scam.config")).toURI();
+				if (env != null && env.lookup("entrystore.config") != null) {
+					manualConfigURI = new File((String) env.lookup("entrystore.config")).toURI();
 				}
 			} catch (NamingException e) {
 				log.warn(e.getMessage());
@@ -169,7 +173,7 @@ public class EntryStoreApplication extends Application {
 					confManager = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
 				}
 			} catch (IOException e) {
-				log.error("Unable to load SCAM configuration: " + e.getMessage());
+				log.error("Unable to load configuration: " + e.getMessage());
 				return;
 			}
 		
@@ -233,6 +237,7 @@ public class EntryStoreApplication extends Application {
 	public synchronized Restlet createInboundRoot() {
 		Config config = rm.getConfiguration();
 		Router router = new Router(getContext());
+		//router.setDefaultMatchingMode(Template.MODE_STARTS_WITH);
 		
 		// to prevent unnecessary context-id lookups we route favicon.ico to
 		// 404, this may be replaced with some real icon at some later point
@@ -305,7 +310,30 @@ public class EntryStoreApplication extends Application {
 		jsCallback.setNext(modLockOut);
 		modLockOut.setNext(router);
 
-		return cookieAuth;
+		if (config.getBoolean(Settings.REPOSITORY_REWRITE_BASEREFERENCE, true)) {
+			// The following Filter resolves a problem that occurs with reverse
+			// proxying, i.e., the internal base reference (as seen e.g. by Tomcat)
+			// is different from the external one (as seen e.g. by Apache)
+			log.info("Rewriting of base reference is enabled");
+			Filter referenceFix = new Filter(getContext()) {
+				@Override
+				protected int beforeHandle(Request request, Response response) {
+					Reference origRef = request.getResourceRef();
+					String newBaseRef = rm.getRepositoryURL().toString();
+					if (newBaseRef.endsWith("/")) {
+						newBaseRef = newBaseRef.substring(0, newBaseRef.length() - 1);
+					}
+					origRef.setIdentifier(newBaseRef + origRef.getRemainingPart());
+					origRef.setBaseRef(newBaseRef);
+					return super.beforeHandle(request, response);
+				}
+			};
+			referenceFix.setNext(cookieAuth);
+			return referenceFix;
+		} else {
+			log.warn("Rewriting of base reference has been manually disabled");
+			return cookieAuth;
+		}
 	}
 	
 	private Authenticator createRedirectAuthenticator(String verifier, boolean createOnDemand) {
