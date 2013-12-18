@@ -1,0 +1,7 @@
+*.eml
+*.iml
+.classpath
+.project
+pom.xml.versionsBackup
+**/target/**
+**/.settings/**
