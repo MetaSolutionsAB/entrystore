@@ -1,5 +1,6 @@
 package org.entrystore.repository.util;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -15,6 +16,8 @@ import org.openrdf.repository.Repository;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
+import org.openrdf.repository.sail.SailRepository;
+import org.openrdf.sail.nativerdf.NativeStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,7 +25,7 @@ public class BNodeRewriter {
 
     private static Logger log = LoggerFactory.getLogger(BNodeRewriter.class);
 
-	public void rewriteBNodes(Repository r) {
+	public static void rewriteBNodes(Repository r) {
 		RepositoryConnection rc = null;
 		try {
             Set<Statement> toAdd = new HashSet<Statement>();
@@ -64,24 +67,33 @@ public class BNodeRewriter {
             log.info("Committing transaction");
 			rc.commit();
 		} catch (RepositoryException re) {
+			log.error(re.getMessage());
+		} finally {
 			if (rc != null) {
 				try {
 					rc.close();
 				} catch (RepositoryException e) {
-                    log.error(e.getMessage());
-					e.printStackTrace();
+					log.error(e.getMessage());
 				}
 			}
 		}
 	}
 
-	private BNode getNewBNode(Map<String, BNode> m, BNode oldBNode, ValueFactory vf) {
+	private static BNode getNewBNode(Map<String, BNode> m, BNode oldBNode, ValueFactory vf) {
 		BNode newBNode = (BNode) m.get(oldBNode.stringValue());
 		if (newBNode == null) {
 			newBNode = vf.createBNode();
 			m.put(oldBNode.stringValue(), newBNode);
 		}
 		return newBNode;
+	}
+
+	public static void main(String[] args) throws RepositoryException {
+		NativeStore store = new NativeStore(new File("PATH-TO-REPOSITORY"));
+		Repository repository = new SailRepository(store);
+		repository.initialize();
+		rewriteBNodes(repository);
+		repository.shutDown();
 	}
 
 }
