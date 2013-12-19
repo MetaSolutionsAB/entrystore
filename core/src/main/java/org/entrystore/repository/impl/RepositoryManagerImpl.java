@@ -196,10 +196,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			log.error("Failed to create SailRepository");
 			throw new IllegalStateException("Failed to create SailRepository");
 		}
-
-        // FIXME this should be removed again, is needed only once, hopefully
-        log.info("Rewriting all BNodes");
-        new BNodeRewriter().rewriteBNodes(this.repository);
 		
 		// create soft cache
 		softCache = new SoftCache();
@@ -259,8 +255,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			try {
 				this.baseURL = new URL(baseURL);
 			} catch (MalformedURLException e1) {
+                log.error(e1.getMessage());
 				e1.printStackTrace();
 			}
+
+            // FIXME this should be removed again, is needed only once, hopefully
+            log.info("Rewriting all BNodes");
+            new BNodeRewriter().rewriteBNodes(this.repository);
 
 			systemContextAliasList.add("_contexts");
 			systemContextAliasList.add("_principals");
@@ -271,6 +272,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			try {
 				repository.initialize();
 			} catch (RepositoryException e) {
+                log.error(e.getMessage());
 				e.printStackTrace();
 			}
 			
