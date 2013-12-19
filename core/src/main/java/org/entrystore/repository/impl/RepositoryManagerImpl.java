@@ -17,52 +17,15 @@
 
 package org.entrystore.repository.impl;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
-
 import net.sf.ehcache.CacheManager;
-
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.core.CoreContainer;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.Quota;
-import org.entrystore.repository.RepositoryEvent;
-import org.entrystore.repository.RepositoryEventObject;
-import org.entrystore.repository.RepositoryListener;
-import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.*;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.util.FileOperations;
-import org.entrystore.repository.util.InterceptingRDFInserter;
-import org.entrystore.repository.util.SolrSupport;
-import org.entrystore.repository.util.StringUtils;
+import org.entrystore.repository.util.*;
 import org.entrystore.repository.util.InterceptingRDFInserter.StatementModifier;
 import org.openrdf.model.Resource;
 import org.openrdf.model.Statement;
@@ -73,11 +36,7 @@ import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
 import org.openrdf.repository.sail.SailRepository;
-import org.openrdf.rio.RDFHandler;
-import org.openrdf.rio.RDFHandlerException;
-import org.openrdf.rio.RDFParseException;
-import org.openrdf.rio.RDFParser;
-import org.openrdf.rio.RDFWriter;
+import org.openrdf.rio.*;
 import org.openrdf.rio.trig.TriGParser;
 import org.openrdf.rio.trig.TriGWriterFactory;
 import org.openrdf.sail.memory.MemoryStore;
@@ -88,6 +47,18 @@ import org.quartz.SchedulerException;
 import org.quartz.impl.StdSchedulerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.util.*;
+import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 
 public class RepositoryManagerImpl implements RepositoryManager {
@@ -225,6 +196,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			log.error("Failed to create SailRepository");
 			throw new IllegalStateException("Failed to create SailRepository");
 		}
+
+        // FIXME this should be removed again, is needed only once, hopefully
+        log.info("Rewriting all BNodes");
+        new BNodeRewriter().rewriteBNodes(this.repository);
 		
 		// create soft cache
 		softCache = new SoftCache();
