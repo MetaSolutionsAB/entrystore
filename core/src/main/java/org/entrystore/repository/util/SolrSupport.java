@@ -136,9 +136,6 @@ public class SolrSupport {
 	 * completed. All subsequent calls to this method are ignored until other
 	 * eventually running reindexing processes are completed, this means that
 	 * this method is thread-safe.
-	 * 
-	 * @param rm
-	 *            A RepositoryManager instance.
 	 */
 	public void reindexLiterals() {
 		if (solrServer == null) {
