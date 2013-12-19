@@ -259,10 +259,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				e1.printStackTrace();
 			}
 
-            // FIXME this should be removed again, is needed only once, hopefully
-            log.info("Rewriting all BNodes");
-            new BNodeRewriter().rewriteBNodes(this.repository);
-
 			systemContextAliasList.add("_contexts");
 			systemContextAliasList.add("_principals");
 			
@@ -275,8 +271,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
                 log.error(e.getMessage());
 				e.printStackTrace();
 			}
-			
-			if (config.getBoolean(Settings.REPOSITORY_IMPORT, false)) {
+
+            // FIXME this should be removed again, is needed only once, hopefully
+            log.info("Rewriting all BNodes");
+            new BNodeRewriter().rewriteBNodes(this.repository);
+
+            if (config.getBoolean(Settings.REPOSITORY_IMPORT, false)) {
 				String importFile = config.getString(Settings.REPOSITORY_IMPORT_FILE);
 				if (importFile != null) {
 					URI importURI = null;

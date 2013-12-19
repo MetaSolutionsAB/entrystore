@@ -1,7 +1,9 @@
 package org.entrystore.repository.util;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.openrdf.model.BNode;
 import org.openrdf.model.Resource;
@@ -23,6 +25,8 @@ public class BNodeRewriter {
 	public void rewriteBNodes(Repository r) {
 		RepositoryConnection rc = null;
 		try {
+            Set<Statement> toAdd = new HashSet<Statement>();
+            Set<Statement> toRemove = new HashSet<Statement>();
 			rc = r.getConnection();
 			rc.setAutoCommit(false);
 			ValueFactory vf = rc.getValueFactory();
@@ -46,11 +50,18 @@ public class BNodeRewriter {
 						replace = true;
 					}
 					if (replace) {
-						rc.add(subj, pred, obj, ng);
-						rc.remove(oldStmnt, ng);
+                        Statement newStmnt = vf.createStatement(subj, pred, obj, ng);
+						toAdd.add(newStmnt);
+                        toRemove.add(oldStmnt);
+                        log.info("Replacing " + oldStmnt + " with " + newStmnt);
 					}
 				}
 			}
+            log.info("Adding new statements");
+            rc.add(toAdd);
+            log.info("Removing old statements");
+            rc.remove(toRemove);
+            log.info("Committing transaction");
 			rc.commit();
 		} catch (RepositoryException re) {
 			if (rc != null) {

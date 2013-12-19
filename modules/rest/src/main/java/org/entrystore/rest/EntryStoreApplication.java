@@ -45,6 +45,7 @@ import org.entrystore.repository.impl.converters.LOM2RDFConverter;
 import org.entrystore.repository.impl.converters.OAI_DC2RDFGraphConverter;
 import org.entrystore.repository.impl.converters.RDF2LOMConverter;
 import org.entrystore.repository.test.TestSuite;
+import org.entrystore.repository.util.BNodeRewriter;
 import org.entrystore.repository.util.DataCorrection;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
@@ -214,7 +215,7 @@ public class EntryStoreApplication extends Application {
 				startBackupScheduler();
 			}
 
-			boolean correct = config.getBoolean("scam.repository.store.correct-metadata", false);
+			boolean correct = config.getBoolean("entrystore.repository.store.correct-metadata", false);
 			if (correct) {
 				DataCorrection mc = new DataCorrection(rm);
 				mc.fixMetadataGlobally();
