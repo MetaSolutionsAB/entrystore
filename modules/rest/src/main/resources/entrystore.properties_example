@@ -47,6 +47,12 @@ entrystore.repository.import=false
 entrystore.repository.import.file=file:///srv/toimport.rdf
 entrystore.repository.import.base=http://localhost:8080/store/
 
+<!-- Rewriting base URI; it is recommended to restart EntryStore -->
+<!-- and reindex Solr after using this feature                   -->
+entrystore.repository.rewrite.baseuri=false
+entrystore.repository.rewrite.baseuri.old=http://localhost:8080/store/
+entrystore.repository.rewrite.baseuri.new=https://new.domain.com/store/
+
 <!-- Repository store: memory | native | mysql | postgresql -->
 entrystore.repository.store.type=native
 <!-- If store type is native these properties must be specified -->
