@@ -27,10 +27,8 @@ import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.*;
 import org.entrystore.repository.util.InterceptingRDFInserter.StatementModifier;
+import org.openrdf.model.*;
 import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
 import org.openrdf.repository.Repository;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
@@ -272,9 +270,62 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				e.printStackTrace();
 			}
 
-            // FIXME this should be removed again, is needed only once, hopefully
-            log.info("Rewriting all BNodes");
-            new BNodeRewriter().rewriteBNodes(this.repository);
+            if (config.getBoolean(Settings.REPOSITORY_REWRITE_BASEURI, false)) {
+                String oldBase = config.getString(Settings.REPOSITORY_REWRITE_BASEURI_OLD);
+                String newBase = config.getString(Settings.REPOSITORY_REWRITE_BASEURI_NEW);
+                if (oldBase == null || newBase == null) {
+                    log.warn("Arguments missing for base URI rewriting");
+                } else {
+                    RepositoryConnection rc = null;
+                    try {
+                        rc = this.repository.getConnection();
+                        rc.setAutoCommit(false);
+                        ValueFactory vf = rc.getValueFactory();
+
+                        Set<Statement> toAdd = new HashSet<Statement>();
+                        Set<Statement> toRemove = new HashSet<Statement>();
+
+                        RepositoryResult<Statement> oldStmnts = rc.getStatements(null, null, null, false);
+                        while (oldStmnts.hasNext()) {
+                            Statement oldStmnt = oldStmnts.next();
+                            Resource s = oldStmnt.getSubject();
+                            org.openrdf.model.URI p = oldStmnt.getPredicate();
+                            Value o = oldStmnt.getObject();
+                            Resource c = oldStmnt.getContext();
+                            if (s instanceof org.openrdf.model.URI) {
+                                s = vf.createURI(StringUtils.replace(s.stringValue(), oldBase, newBase));
+                            }
+                            if (p instanceof org.openrdf.model.URI) {
+                                p = vf.createURI(StringUtils.replace(p.stringValue(), oldBase, newBase));
+                            }
+                            if (o instanceof org.openrdf.model.URI) {
+                                o = vf.createURI(StringUtils.replace(o.stringValue(), oldBase, newBase));
+                            }
+                            if (c != null && c instanceof org.openrdf.model.URI) {
+                                c = vf.createURI(StringUtils.replace(c.stringValue(), oldBase, newBase));
+                            }
+                            Statement newStmnt = vf.createStatement(s, p, o, c);
+                            toAdd.add(newStmnt);
+                            toRemove.add(oldStmnt);
+                            log.info("Replacing " + oldStmnt + " with " + newStmnt);
+                        }
+                        log.info("Adding new statements");
+                        rc.add(toAdd);
+                        log.info("Removing old statements");
+                        rc.remove(toRemove);
+                        log.info("Committing transaction");
+                        rc.commit();
+                    } catch (RepositoryException re) {
+                        if (rc != null) {
+                            try {
+                                rc.close();
+                            } catch (RepositoryException e) {
+                                log.error(e.getMessage());
+                            }
+                        }
+                    }
+                }
+            }
 
             if (config.getBoolean(Settings.REPOSITORY_IMPORT, false)) {
 				String importFile = config.getString(Settings.REPOSITORY_IMPORT_FILE);
