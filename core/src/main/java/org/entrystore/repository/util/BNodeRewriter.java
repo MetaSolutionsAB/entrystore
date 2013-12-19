@@ -13,8 +13,12 @@ import org.openrdf.repository.Repository;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class BNodeRewriter {
+
+    private static Logger log = LoggerFactory.getLogger(BNodeRewriter.class);
 
 	public void rewriteBNodes(Repository r) {
 		RepositoryConnection rc = null;
@@ -53,6 +57,7 @@ public class BNodeRewriter {
 				try {
 					rc.close();
 				} catch (RepositoryException e) {
+                    log.error(e.getMessage());
 					e.printStackTrace();
 				}
 			}
