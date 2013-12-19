@@ -227,6 +227,8 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="lang" type="string" indexed="true" multiValued="true"/>
         <field name="tag" type="text" indexed="true" stored="true" multiValued="true"/>
 
+        <field name="email" type="string" indexed="true" stored="true" multiValued="true"/>
+
 		<!-- title needs to be single-valued in order be sortable, desc and keyword can be text and multi value -->
 		<dynamicField name="title.*" type="text" indexed="true" stored="true" multiValued="false"/>
         <dynamicField name="description.*" type="text" indexed="true" stored="true" multiValued="true"/>
