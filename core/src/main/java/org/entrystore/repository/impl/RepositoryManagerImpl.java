@@ -316,11 +316,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
                         log.info("Committing transaction");
                         rc.commit();
                     } catch (RepositoryException re) {
+                        log.error(re.getMessage());
+                    } finally {
                         if (rc != null) {
                             try {
                                 rc.close();
-                            } catch (RepositoryException e) {
-                                log.error(e.getMessage());
+                            } catch (RepositoryException re) {
+                                log.error(re.getMessage());
                             }
                         }
                     }
