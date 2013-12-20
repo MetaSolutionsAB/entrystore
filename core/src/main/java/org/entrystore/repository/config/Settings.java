@@ -70,15 +70,7 @@ public class Settings {
 	public static String SOLR_URL = "entrystore.solr.url";
 	public static String SOLR_REINDEX_ON_STARTUP = "entrystore.solr.reindex-on-startup";
 	public static String SOLR_EXTRACT_FULLTEXT = "entrystore.solr.extract-fulltext";
-	
-	public static String REPOSITORY_IMPORT = "entrystore.repository.import";
-	public static String REPOSITORY_IMPORT_FILE = "entrystore.repository.import.file";
-	public static String REPOSITORY_IMPORT_BASE = "entrystore.repository.import.base";
 
-    public static String REPOSITORY_REWRITE_BASEURI = "entrystore.repository.rewrite.baseuri";
-    public static String REPOSITORY_REWRITE_BASEURI_OLD = "entrystore.repository.rewrite.baseuri.old";
-    public static String REPOSITORY_REWRITE_BASEURI_NEW = "entrystore.repository.rewrite.baseuri.new";
-	
 	public static String REPOSITORY_REWRITE_BASEREFERENCE = "entrystore.repository.rewrite-basereference";
 	
 	public static String REPOSITORY_CACHE = "entrystore.repository.cache";
