@@ -22,8 +22,6 @@
 		<solr.version>4.3.1</solr.version>
 		<sesame.version>2.7.9</sesame.version>
 		<slf4j.version>1.7.5</slf4j.version>
-		<!-- Clover license -->
-		<clover.licenseLocation>${basedir}/src/resources/clover.license</clover.licenseLocation>
 	</properties>
 		
 	<!-- ================= Developers ================= -->
@@ -91,78 +89,10 @@
 		<url>http://www.metasolutions.se</url>
 	</organization>
 	
-	<!-- ================= Profiles ================= -->
-	<!-- Default dev, run other profile with -Denvironment. 
-		 Example mvn deploy -Denvironment=nightlybuild-->
-	<profiles>
-		<profile>
-			<id>dev</id>
-			<activation>
-				<property>
-					<name>!environment</name>
-				</property>
-			</activation>
-			<properties>
-				<!-- Cargo settings (War Deploy) -->
-				<cargo.deploy.container>tomcat5x</cargo.deploy.container>
-				<cargo.deploy.container.home>target/installs/apache-tomcat-5.5.26/apache-tomcat-5.5.26</cargo.deploy.container.home>
-      
-		        <!-- Cargo settings (Integration tests) -->
-			    <cargo.container>tomcat5x</cargo.container>
-			    <cargo.container.home>${env.CATALINA_HOME}</cargo.container.home>
-			    <cargo.container.download.url>http://archive.apache.org/dist/tomcat/tomcat-5/v5.5.26/bin/apache-tomcat-5.5.26.zip</cargo.container.download.url>
-			    <cargo.installDir>target/installs</cargo.installDir>
-			    <cargo.host>localhost</cargo.host>
-			    <cargo.servlet.port>8081</cargo.servlet.port>
-			    <cargo.wait>false</cargo.wait>
-
-			    <!-- Deploy(distribution) setting  -->
-			    <distribution.url>file:///var/www/entrystore/maven-repository</distribution.url>
-			    <distribution.snapshot.url>file:///var/www/entrystore/maven-snapshot-repository</distribution.snapshot.url>
-		        <site.url>file:///var/www/entrystore/site/</site.url>
-     		</properties>
-		</profile>
-		<profile>
-			<id>nightlybuild</id>
-			<activation>
-				<property>
-					<name>environment</name>
-					<value>nightlybuild</value>
-				</property>
-			</activation>
-			<properties>
-				<!-- Cargo settings (War Deploy) -->
-				<cargo.deploy.container>tomcat5x</cargo.deploy.container>
-				<cargo.deploy.container.home>/opt/cargo/tomcat/apache-tomcat-5.5.26-dep</cargo.deploy.container.home>
-                                
-				<!-- Cargo settings (Integration tests) -->
-				<cargo.container>tomcat5x</cargo.container>
-				<cargo.container.home>/opt/cargo/apache-tomcat-5.5.26-int</cargo.container.home>
-				<cargo.container.download.url></cargo.container.download.url>
-				<cargo.host>localhost</cargo.host>
-				<cargo.servlet.port>9999</cargo.servlet.port>
-				<cargo.wait>false</cargo.wait>
-
-				<!-- Deploy(distribution) setting  -->
-				<distribution.url>http://develix.iml.umu.se:8085/artifactory/libs-releases-local</distribution.url>
-				<distribution.snapshot.url>http://develix.iml.umu.se:8085/artifactory/libs-snapshots-local</distribution.snapshot.url>
-				<site.url>file:///home/system/wmaster/http/projects/scam4/scam/site</site.url>
-			</properties>
-		</profile>
-		
-		<!-- ================= Container Profiles ================= -->
-        <profile>
-            <id>jboss</id>
-            <properties>
-                <cargo.container>jboss4x</cargo.container>
-                <cargo.container.home>${env.JBOSS_HOME}</cargo.container.home>
-                <cargo.container.url>http://easynews.dl.sourceforge.net/sourceforge/jboss/jboss-4.0.5.GA.zip</cargo.container.url>
-            </properties>
-        </profile>
-	</profiles>
-
 	<!-- ================= Build ================= -->
 	<build>
+		<defaultGoal>install</defaultGoal>
+
 		<pluginManagement>
 			<plugins>
 				<plugin>
@@ -186,249 +116,56 @@
 					</configuration>
 				</plugin>
 				<plugin>
-					<artifactId>maven-surefire-plugin</artifactId>
-					<executions>
-						<execution>
-							<id>surfire-test</id>
-							<phase>test</phase>
-							<goals>
-								<goal>test</goal>
-							</goals>
-						</execution>
-						<execution>
-							<id>surefire-it</id>
-							<phase>integration-test</phase>
-							<goals>
-								<goal>test</goal>
-							</goals>
-							<configuration>
-								<excludes>
-									<exclude>none</exclude>
-								</excludes>
-								<includes>
-									<include>**/integrationtest/TestSuite**</include>
-								</includes>
-							</configuration>
-						</execution>
-					</executions>
+					<inherited>false</inherited>
+					<groupId>com.mycila.maven-license-plugin</groupId>
+					<artifactId>maven-license-plugin</artifactId>
+					<version>1.5.1</version>
 					<configuration>
+						<header>${basedir}/LICENSE_header.txt</header>
+						<failIfMissing>true</failIfMissing>
+						<aggregate>true</aggregate>
+						<properties>
+							<owner>MetaSolutions AB</owner>
+							<year>${project.inceptionYear}</year>
+							<email>info@metasolutions.se</email>-->
+						</properties>
+						<includes>
+							<include>**/src/**</include>
+							<include>**/test/**</include>
+							<include>**/*.java</include>
+						</includes>
 						<excludes>
-							<exclude>**/integrationtest/**</exclude>
+							<exclude>LICENSE_header.txt</exclude>
+							<exclude>LICENSE.txt</exclude>
+							<exclude>**/src/test/resources/**</exclude>
+							<exclude>**/src/test/data/**</exclude>
+							<exclude>**/*.txt</exclude>
+							<exclude>**/*.xml</exclude>
+							<exclude>**/*.properties</exclude>
+							<exclude>**/*.licen*</exclude>
+							<exclude>**/*.xsd</exclude>
+							<exclude>**/*.wsdl</exclude>
+							<exclude>**/*.html</exclude>
+                	                                <exclude>**/*.svg</exclude>
+                        	                        <exclude>**/*.odt</exclude>
 						</excludes>
-						<systemProperties>
-							<property>
-								<name>url</name>
-								<value>http://${cargo.host}:${cargo.servlet.port}/${project.artifactId}-${project.version}</value>
-							</property>
-							<property>
-								<name>cargo.container</name>
-								<value>${cargo.container}</value>
-							</property>
-							<property>
-								<name>cargo.container.download.url</name>
-								<value>${cargo.container.download.url}</value>
-							</property>
-							<property>
-								<name>cargo.container.home</name>
-								<value>${cargo.container.home}</value>
-							</property>
-							<property>
-								<name>cargo.installDir</name>
-								<value>${cargo.installDir}</value>
-							</property>
-							<property>
-								<name>cargo.host</name>
-								<value>${cargo.host}</value>
-							</property>
-							<property>
-								<name>cargo.servlet.port</name>
-								<value>${cargo.servlet.port}</value>
-							</property>
-							<property>
-								<name>cargo.container.output</name>
-								<value>${basedir}/target/container.output</value>
-							</property>
-							<property>
-								<name>cargo.container.log</name>
-								<value>${basedir}/target/container.log</value>
-							</property>
-							<property>
-								<name>cargo.deployable</name>
-								<value>${basedir}/target/${project.artifactId}-${project.version}.${project.packaging}</value>
-							</property>
-						</systemProperties>
-					</configuration>
-				</plugin>
-				<plugin>
-					<groupId>com.atlassian.maven.plugins</groupId>
-					<artifactId>maven-clover-plugin</artifactId>
-					<configuration>
-						<licenseLocation>${clover.licenseLocation}</licenseLocation>
 					</configuration>
 					<executions>
+						<!-- Do not automatically check licenses in every build
 						<execution>
-							<id>main</id>
+							<id>check-headers</id>
 							<phase>verify</phase>
 							<goals>
-								<goal>instrument</goal>
-								<!-- <goal>aggregate</goal>-->
+								<goal>check</goal>
 							</goals>
-						</execution>
-						<execution>
-							<id>site</id>
-							<phase>pre-site</phase>
-							<goals>
-								<goal>instrument</goal>
-								<!-- <goal>aggregate</goal>-->
-							</goals>
-						</execution>
+						</execution>-->
 					</executions>
 				</plugin>
 			</plugins>
 		</pluginManagement>
-		<plugins>
-			<plugin>
-				<inherited>false</inherited>
-				<groupId>com.mycila.maven-license-plugin</groupId>
-				<artifactId>maven-license-plugin</artifactId>
-				<version>1.5.1</version>
-				<configuration>
-					<header>${basedir}/LICENSE_header.txt</header>
-					<failIfMissing>true</failIfMissing>
-					<aggregate>true</aggregate>
-					<properties>
-						<!--<owner>Owner</owner>
-						<year>${project.inceptionYear}</year>
-						<email>owner@example.com</email>-->
-					</properties>
-					<includes>
-						<include>**/src/**</include>
-						<include>**/test/**</include>
-						<include>**/*.java</include>
-					</includes>
-					<excludes>
-						<exclude>LICENSE_header.txt</exclude>
-						<exclude>LICENSE.txt</exclude>
-						<exclude>**/src/test/resources/**</exclude>
-						<exclude>**/src/test/data/**</exclude>
-						<exclude>**/*.txt</exclude>
-						<exclude>**/*.xml</exclude>
-						<exclude>**/*.properties</exclude>
-						<exclude>**/*.licen*</exclude>
-						<exclude>**/*.xsd</exclude>
-						<exclude>**/*.wsdl</exclude>
-						<exclude>**/*.html</exclude>
-                                                <exclude>**/*.svg</exclude>
-                                                <exclude>**/*.odt</exclude>
-					</excludes>
-				</configuration>
-				<executions>
-					<!-- Do not automatically check licenses in every build
-					<execution>
-						<id>check-headers</id>
-						<phase>verify</phase>
-						<goals>
-							<goal>check</goal>
-						</goals>
-					</execution>-->
-				</executions>
-			</plugin>
-		</plugins>
-		<defaultGoal>install</defaultGoal>
 	</build>
 	
-	<!-- ================= Reporting ================= -->
-	<reporting>
-		<excludeDefaults>true</excludeDefaults>
-		<plugins>
-		 	<plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-project-info-reports-plugin</artifactId>
-            </plugin>
-			<plugin>
-				<artifactId>maven-jxr-plugin</artifactId>
-				<configuration>
-					<aggregate>true</aggregate>
-				</configuration>
-			</plugin>
-			
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-javadoc-plugin</artifactId>
-				<configuration>
-					<aggregate>false</aggregate>
-					<excludePackageNames>org.entrystore.rest.security</excludePackageNames>
-					<links>
-						<link>http://java.sun.com/j2se/1.5.0/docs/api</link>
-					</links>
-					<show>private</show>
-					<doclet>gr.spinellis.umlgraph.doclet.UmlGraphDoc</doclet>
-					<!--docletPath>/path/to/UmlGraph.jar</docletPath-->
-					<!-- Install www.graphviz.org/ needed by UmlGraph-->
-					<!-- http://www.umlgraph.org/-->
-					<docletArtifact>
-						<groupId>gr.spinellis</groupId>
-						<artifactId>UmlGraph</artifactId>
-						<version>4.4</version>
-					</docletArtifact>
-					<additionalparam>
-						-inferrel -collpackages java.util.* -hide java.* -outputencoding UTF-8
-					</additionalparam>
-				</configuration>
-			</plugin>
-
-			<plugin>
-				<artifactId>maven-surefire-report-plugin</artifactId>
-				<configuration>
-					<xrefLocation>${project.reporting.outputDirectory}/../xref-test</xrefLocation>
-				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>com.atlassian.maven.plugins</groupId>
-				<artifactId>maven-clover-plugin</artifactId>
-					<configuration>
-						<licenseLocation>${clover.licenseLocation}</licenseLocation>
-					</configuration>
-			</plugin>
-			<!--
-			<plugin>
-				<artifactId>maven-pmd-plugin</artifactId>
-				<configuration>
-					<linkXref>true</linkXref>
-				    <targetjdk>1.5</targetjdk>
-					<xrefLocation>${project.reporting.outputDirectory}/../xref</xrefLocation>
-				</configuration>
-			</plugin>
-			-->
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-checkstyle-plugin</artifactId>
-				<configuration>
-					<enableRulesSummary>false</enableRulesSummary>
-					<xrefLocation>${project.reporting.outputDirectory}/../xref</xrefLocation>
-				</configuration>
-			</plugin>
-			
-			<plugin>
-        		  <groupId>org.codehaus.mojo</groupId>
-        		  <artifactId>taglist-maven-plugin</artifactId>
-        		  <configuration>
-					<xrefLocation>${project.reporting.outputDirectory}/../xref-test</xrefLocation>
-				</configuration>
-            </plugin>
-            
-            <!-- The dashboard plugin should be specified as the last report. -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>dashboard-maven-plugin</artifactId>
-                <version>1.0-SNAPSHOT</version>
-            </plugin>
-		</plugins>
-	</reporting>
-	
 	<!-- ================= Repositories ================= -->
-	<!--Override the built-in central and snapshots repositories of Maven, 
-   		use artifactory proxy instead. -->
 	<repositories>
 		<repository>
 			<id>OpenRDF</id>
