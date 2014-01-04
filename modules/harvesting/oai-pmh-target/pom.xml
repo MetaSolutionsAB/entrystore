@@ -3,51 +3,34 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-	<!-- ================= EntryStore OAI-PMH Target module ================= -->
-    <modelVersion>4.0.0</modelVersion>
-    <parent>
-       <groupId>org.entrystore</groupId>
-       <artifactId>entrystore-harvesting</artifactId>
-       <version>4.1-SNAPSHOT</version>
-    </parent>
-    <groupId>org.entrystore</groupId>
-    <artifactId>entrystore-oai-pmh-target-module</artifactId>
-    <packaging>war</packaging>
-    <version>4.1-SNAPSHOT</version>
-    <name>EntryStore OAI-PMH Target module</name>
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.entrystore</groupId>
+		<artifactId>entrystore-harvesting</artifactId>
+		<version>4.1-SNAPSHOT</version>
+	</parent>
+	<groupId>org.entrystore</groupId>
+	<artifactId>entrystore-oai-pmh-target-module</artifactId>
+	<packaging>war</packaging>
+	<version>4.1-SNAPSHOT</version>
+	<name>EntryStore OAI-PMH Target module</name>
 	
-	<!-- ================= Properties ================= -->
-	<properties>
-      <clover.licenseLocation>${basedir}/../../../src/resources/clover.license</clover.licenseLocation>
-    </properties>
-    
-	<!-- ================= SCM ================= -->
-	<scm>
-       <connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/oai-pmh</connection>
-       <developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/oai-pmh</developerConnection>
-       <url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/oai-pmh</url>
-    </scm>
-    
-    <!-- ================= Profiles ================= -->
- 
-    
-	<!-- ================= Build ================= -->
 	<build>
-    	<resources>
-    		<resource>
-    			<directory>src/main/resources</directory>
-    		</resource>
-    	</resources>
-    	<testResources>
-    		<testResource>
-    			<directory>src/test/resources</directory>
-    			<includes>
-    				<include>**/*.xml</include>
-    				<include>**/*.properties</include>
-    			</includes>
-    		</testResource>
-    	</testResources>
-    	<plugins>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+			</resource>
+		</resources>
+		<testResources>
+			<testResource>
+				<directory>src/test/resources</directory>
+				<includes>
+					<include>**/*.xml</include>
+					<include>**/*.properties</include>
+				</includes>
+			</testResource>
+		</testResources>
+	    	<plugins>
     			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
@@ -87,54 +70,28 @@
 					</execution>
 				</executions>
 			</plugin>
-    		<plugin>
-    			<groupId>org.codehaus.cargo</groupId>
-    			<artifactId>cargo-maven2-plugin</artifactId>
-    			<version>1.0-beta-2</version>
-    			<configuration>
-    				<container>
-    					<containerId>${cargo.deploy.container}</containerId>
-    					<home>${cargo.deploy.container.home}</home>
-	    				<type>installed</type>
-					</container>
-  					<configuration>
-						<type>existing</type> 
-						<home>${cargo.deploy.container.home}</home>
-					</configuration>
-					<wait>true</wait>
-    			</configuration>
-    		</plugin>
-    	</plugins>
-    </build>
-    
-	<!-- ================= Reporting ================= -->
-	<reporting>
-     	 <!-- Needed in order to generate the report properly -->
-        <outputDirectory>
-            ${basedir}/../../../target/site/scam-modules/scam-harvesting/${project.artifactId}
-        </outputDirectory>
-    </reporting>
-    
-    <!-- ================= Dependencies ================= -->      	
-    <dependencies>
-    	<!-- should not be deployed to the web container (hence the scope is 'provided')-->	  
+		</plugins>
+	</build>
+
+	<dependencies>
+    		<!-- should not be deployed to the web container (hence the scope is 'provided')-->	  
 		<dependency>
-		   <groupId>javax.servlet</groupId>
-           <artifactId>servlet-api</artifactId>
-           <version>2.4</version>
-           <scope>provided</scope>
-        </dependency>
-        <dependency>
-    		<groupId>org.dspace</groupId>
-    		<artifactId>oaicat</artifactId>
-    		<version>1.5.48</version>
-    		<type>jar</type>
+			<groupId>javax.servlet</groupId>
+			<artifactId>servlet-api</artifactId>
+			<version>2.4</version>
+			<scope>provided</scope>
 		</dependency>
-		 <dependency>
-            <groupId>org.apache.velocity</groupId>
-            <artifactId>velocity</artifactId>
-            <version>1.5</version>
-        </dependency>
-    </dependencies>
+		<dependency>
+			<groupId>org.dspace</groupId>
+			<artifactId>oaicat</artifactId>
+			<version>1.5.48</version>
+			<type>jar</type>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.velocity</groupId>
+			<artifactId>velocity</artifactId>
+			<version>1.5</version>
+		</dependency>
+	</dependencies>
    
 </project>

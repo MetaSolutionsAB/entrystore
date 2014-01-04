@@ -16,24 +16,10 @@
 	<version>4.1-SNAPSHOT</version>
 	<name>EntryStore SQI webservice client</name>
 
-	<!-- ================= Properties ================= -->
 	<properties>
-		<clover.licenseLocation>${basedir}/../../../src/resources/clover.license</clover.licenseLocation>
-	         <cxf.version>2.1.4</cxf.version>
                 <cxf.version>2.7.3</cxf.version>
 	</properties>
 
-	<!-- ================= SCM ================= -->
-	<scm>
-		<connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/sqi-webservice</connection>
-		<developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/sqi-webservice</developerConnection>
-		<url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/sqi-webservice</url>
-	</scm>
-
-	<!-- ================= Profiles ================= -->
-
-
-	<!-- ================= Build ================= -->
 	<build>
 		<resources>
 			<resource>
@@ -81,15 +67,6 @@
 		</plugins>
 	</build>
 
-	<!-- ================= Reporting ================= -->
-	<reporting>
-		<!-- Needed in order to generate the report properly -->
-		<outputDirectory>
-            ${basedir}/../../../target/site/scam-modules/scam-sqi/${project.artifactId}
-        </outputDirectory>
-	</reporting>
-
-	<!-- ================= Dependencies ================= -->
 	<dependencies>
 		<!-- dependency the jaxws jar created by Maven Assembly Plugin
 			 in the sqi-webservice project-->

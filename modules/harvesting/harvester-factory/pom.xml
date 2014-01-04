@@ -3,69 +3,43 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-	<!-- ================= EntryStore Harvester Factory module ================= -->
-    <modelVersion>4.0.0</modelVersion>
-    <parent>
-       <groupId>org.entrystore</groupId>
-       <artifactId>entrystore-harvesting</artifactId>
-       <version>4.1-SNAPSHOT</version>
-    </parent>
-    <groupId>org.entrystore</groupId>
-    <artifactId>entrystore-harvester-factory-module</artifactId>
-    <packaging>jar</packaging>
-    <version>4.1-SNAPSHOT</version>
-    <name>EntryStore Harvester Factory module</name>
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.entrystore</groupId>
+		<artifactId>entrystore-harvesting</artifactId>
+		<version>4.1-SNAPSHOT</version>
+	</parent>
+	<groupId>org.entrystore</groupId>
+	<artifactId>entrystore-harvester-factory-module</artifactId>
+	<packaging>jar</packaging>
+	<version>4.1-SNAPSHOT</version>
+	<name>EntryStore Harvester Factory module</name>
 	
-	<!-- ================= Properties ================= -->
-	<properties>
-      <clover.licenseLocation>${basedir}/../../../src/resources/clover.license</clover.licenseLocation>
-    </properties>
-    
-	<!-- ================= SCM ================= -->
-	<scm>
-       <connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/harvesting/harvester-factory</connection>
-       <developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/harvester-factory</developerConnection>
-       <url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/harvesting/harvester-factory</url>
-    </scm>
-    
-    <!-- ================= Profiles ================= -->
- 
-    
-	<!-- ================= Build ================= -->
 	<build>
-    	<resources>
-    		<resource>
-    			<directory>src/main/resources</directory>
-    		</resource>
-    	</resources>
-    	<testResources>
-    		<testResource>
-    			<directory>src/test/resources</directory>
-    			<includes>
-    				<include>**/*.xml</include>
-    				<include>**/*.properties</include>
-    			</includes>
-    		</testResource>
-    	</testResources>
+    		<resources>
+    			<resource>
+    				<directory>src/main/resources</directory>
+	    		</resource>
+    		</resources>
+	    	<testResources>
+    			<testResource>
+    				<directory>src/test/resources</directory>
+    				<includes>
+    					<include>**/*.xml</include>
+	    				<include>**/*.properties</include>
+    				</includes>
+    			</testResource>
+	    	</testResources>
 	</build>
     
-	<!-- ================= Reporting ================= -->
-	<reporting>
-     	 <!-- Needed in order to generate the report properly -->
-        <outputDirectory>
-            ${basedir}/../../../target/site/scam-modules/scam-harvesting/${project.artifactId}
-        </outputDirectory>
-    </reporting>
-    
-    <!-- ================= Dependencies ================= -->      	
-    <dependencies>
-    	<!-- should not be deployed to the web container (hence the scope is 'provided')-->	  
+	<dependencies>
+		<!-- should not be deployed to the web container (hence the scope is 'provided')-->	  
 		<dependency>
-		   <groupId>javax.servlet</groupId>
-           <artifactId>servlet-api</artifactId>
-           <version>2.4</version>
-           <scope>provided</scope>
-        </dependency>
-    </dependencies>  
- 
+			<groupId>javax.servlet</groupId>
+			<artifactId>servlet-api</artifactId>
+			<version>2.4</version>
+			<scope>provided</scope>
+		</dependency>
+	</dependencies>
+
 </project>

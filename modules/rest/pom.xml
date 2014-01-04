@@ -3,52 +3,35 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-	<!-- ================= EntryStore REST module ================= -->
-    <modelVersion>4.0.0</modelVersion>
-    <parent>
-       <groupId>org.entrystore</groupId>
-       <artifactId>entrystore-modules</artifactId>
-       <version>4.1-SNAPSHOT</version>
-    </parent>
-    <groupId>org.entrystore</groupId>
-    <artifactId>entrystore-rest-module</artifactId>
-    <packaging>war</packaging>
-    <version>4.1-SNAPSHOT</version>
-    <name>EntryStore REST module</name>
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.entrystore</groupId>
+		<artifactId>entrystore-modules</artifactId>
+		<version>4.1-SNAPSHOT</version>
+	</parent>
+	<groupId>org.entrystore</groupId>
+	<artifactId>entrystore-rest-module</artifactId>
+	<packaging>war</packaging>
+	<version>4.1-SNAPSHOT</version>
+	<name>EntryStore REST module</name>
 	
-	<!-- ================= Properties ================= -->
-	<properties>
-		<clover.licenseLocation>${basedir}/../../src/resources/clover.license</clover.licenseLocation>
-	</properties>
-    
-	<!-- ================= SCM ================= -->
-	<scm>
-       <connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/rest</connection>
-       <developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules/rest</developerConnection>
-       <url>http://project.iml.umu.se/projects/scam/browser/trunk/modules/rest</url>
-    </scm>
-    
-    <!-- ================= Profiles ================= -->
- 
-    
-	<!-- ================= Build ================= -->
 	<build>
-    	<resources>
-    		<resource>
-    			<directory>src/main/resources</directory>
-    		</resource>
-    	</resources>
-    	<testResources>
-    		<testResource>
-    			<directory>src/test/resources</directory>
-    			<includes>
-    				<include>**/*.xml</include>
-    				<include>**/*.properties</include>
-    			</includes>
-    		</testResource>
-    	</testResources>
-    	<plugins>
-    	  	<plugin>
+		<resources>
+    			<resource>
+    				<directory>src/main/resources</directory>
+			</resource>
+		</resources>
+		<testResources>
+			<testResource>
+				<directory>src/test/resources</directory>
+				<includes>
+					<include>**/*.xml</include>
+					<include>**/*.properties</include>
+				</includes>
+			</testResource>
+		</testResources>
+		<plugins>
+			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-jar-plugin</artifactId>
 				<executions>
@@ -86,37 +69,10 @@
 					</execution>
 				</executions>
 			</plugin>
-    		<plugin>
-    			<groupId>org.codehaus.cargo</groupId>
-    			<artifactId>cargo-maven2-plugin</artifactId>
-    			<version>1.0-beta-2</version>
-    			<configuration>
-    				<container>
-    					<containerId>${cargo.deploy.container}</containerId>
-    					<home>${cargo.deploy.container.home}</home>
-	    				<type>installed</type>
-					</container>
-  					<configuration>
-						<type>existing</type> 
-						<home>${cargo.deploy.container.home}</home>
-					</configuration>
-					<wait>true</wait>
-    			</configuration>
-    		</plugin>
-    	</plugins>
-    </build>
-    
-	<!-- ================= Reporting ================= -->
-	<reporting>
-     	 <!-- Needed in order to generate the report properly -->
-        <outputDirectory>
-            ${basedir}/../../target/site/scam-modules/${project.artifactId}
-        </outputDirectory>
-    </reporting>
-    
-    <!-- ================= Dependencies ================= -->      	
-    <dependencies>
+		</plugins>
+	</build>
 
+	<dependencies>
 		<dependency>
    			<groupId>org.restlet.jee</groupId>
    			<artifactId>org.restlet</artifactId>
@@ -221,4 +177,5 @@
 			<version>2.6</version>
 		</dependency>
 	 </dependencies>
+
 </project>
