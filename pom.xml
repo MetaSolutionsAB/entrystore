@@ -31,18 +31,12 @@
 			<id>matthias</id>
 			<email>matthias at metasolutions.se</email>
 			<organization>MetaSolutions AB</organization>
-			<roles>
-				<role>Developer</role>
-			</roles>
 		</developer>
 		<developer>
 			<name>Hannes Ebner</name>
 			<id>hannes</id>
 			<email>hannes at metasolutions.se</email>
 			<organization>MetaSolutions AB</organization>
-			<roles>
-				<role>Developer</role>
-			</roles>
 		</developer>
 	</developers>
 

@@ -3,54 +3,30 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	
-	<!-- ================= EntryStore Modules ================= -->
 	<modelVersion>4.0.0</modelVersion>
-    <parent>
-        <groupId>org.entrystore</groupId>
-        <artifactId>entrystore-parent</artifactId>
-        <version>4.1-SNAPSHOT</version>
-    </parent>
-    <groupId>org.entrystore</groupId>
-    <artifactId>entrystore-modules</artifactId>
-    <packaging>pom</packaging>
-    <name>EntryStore Modules</name>
+	<parent>
+		<groupId>org.entrystore</groupId>
+		<artifactId>entrystore-parent</artifactId>
+		<version>4.1-SNAPSHOT</version>
+	</parent>
+	<groupId>org.entrystore</groupId>
+	<artifactId>entrystore-modules</artifactId>
+	<packaging>pom</packaging>
+	<name>EntryStore Modules</name>
     
-    <!-- ================= Properties ================= -->
-	<properties>
-      <clover.licenseLocation>${basedir}/../src/resources/clover.license</clover.licenseLocation>
-    </properties>
-    
-    <!-- ================= Modules ================= -->
-    <modules>
-        <module>harvesting</module>
-        <module>rest</module>
-		<!-- SQI not functional at the moment, needs refactoring
-			<module>sqi</module>
-		-->
-    </modules>
+	<modules>
+		<module>harvesting</module>
+		<module>rest</module>
+		<!-- SQI not functional at the moment, needs refactoring -->
+		<!-- <module>sqi</module>-->
+	</modules>
 	
-	<!-- ================= SCM ================= -->
-    <scm>
-       <connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules</connection>
-       <developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/modules</developerConnection>
-       <url>http://project.iml.umu.se/projects/scam/browser/trunk/modules</url>
-    </scm>
- 	
- 	<!-- ================= Reporting ================= -->
- 	<reporting>
-        <!-- Needed in order to generate the report properly -->
-        <outputDirectory>
-            ${basedir}/../target/site/${project.artifactId}
-        </outputDirectory>
-    </reporting>
-    
-    <!-- ================= Dependencies ================= -->
- 	<dependencies>
-        <dependency>
-            <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-core</artifactId>
-            <version>${pom.version}</version>
-        </dependency>
-    </dependencies>
+	<dependencies>
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-core</artifactId>
+			<version>${pom.version}</version>
+		</dependency>
+	</dependencies>
     
 </project>
