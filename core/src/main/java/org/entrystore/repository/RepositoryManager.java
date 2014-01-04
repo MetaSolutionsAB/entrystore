@@ -67,18 +67,11 @@ public interface RepositoryManager {
 	 * @return class to use for all regular contexts.
 	 */
 	Class getRegularContextClass();
+
 	/**
 	 * @return the Repository URL from which this system is accessed.
 	 */
 	URL getRepositoryURL();
-	
-	/**
-	 * This operation is potentially very time consuming as it changes
-	 * all repository URIs of the system to have this base.
-	 * @param base is the new Repository URL.
-	 */
-	void setRepositoryURL(URL base);
-//	Context getTypeManager();
 
 	public boolean isCheckForAuthorization();
 	

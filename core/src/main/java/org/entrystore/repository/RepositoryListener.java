@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
  * Implements Runnable to be used with Executors to make asynchronous execution
  * possible. The event object needs to be set before the executor can call the
  * run() method, otherwise the listener does not get any information about the
- * even.
+ * event.
  * 
  * @author Hannes Ebner
  */

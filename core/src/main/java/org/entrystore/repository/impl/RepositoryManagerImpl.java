@@ -311,9 +311,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 //	}
 
 	/**
-	 * Init all SystemContext
-	 * 
-	 * Pretty nice :-)
+	 * Init all System Contexts
 	 */
 	private void intitialize() {
 		this.contextManager = new ContextManagerImpl(this, repository);
@@ -398,14 +396,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				} catch (SchedulerException se) {
 					log.error("Cannot shutdown Quartz scheduler: " + se.getMessage());
 				}
-				if (repository != null) {
-					log.info("Shutting down Sesame Repository");
-					try {
-						repository.shutDown();
-					} catch (RepositoryException re) {
-						log.error("Error when shutting down Sesame Repository: " + re.getMessage());
-						re.printStackTrace();
-					}
+				if (repositoryListeners != null) {
+					log.info("Shutting down repository listeners and executor");
+					listenerExecutor.shutdown();
+					repositoryListeners.clear();
 				}
 				if (softCache != null) {
 					softCache.shutdown();
@@ -421,6 +415,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				if (solrCoreContainer != null) {
 					log.info("Shutting down Solr core container");
 					solrCoreContainer.shutdown();
+				}
+				if (repository != null) {
+					log.info("Shutting down Sesame repository");
+					try {
+						repository.shutDown();
+					} catch (RepositoryException re) {
+						log.error("Error when shutting down Sesame repository: " + re.getMessage());
+						re.printStackTrace();
+					}
 				}
 				if (publicRepository != null) {
 					log.info("Shutting down public repository");
@@ -447,10 +450,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	public URL getRepositoryURL() {
 		return this.baseURL;
-	}
-
-	public void setRepositoryURL(URL base) {
-		// TODO Auto-generated method stub
 	}
 
 	public boolean isCheckForAuthorization() {
@@ -540,7 +539,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			if (listeners != null) {
 				listeners.remove(listener);
 				repositoryListeners.put(event, listeners);
-				log.info("Unregistered new RepositoryListener: " + listener);
+				log.info("Unregistered RepositoryListener: " + listener);
 			}
 		}
 	}
