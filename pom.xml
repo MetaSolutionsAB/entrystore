@@ -233,26 +233,6 @@
 			<version>4.4</version>
 			<scope>test</scope>
 		</dependency>
-		<dependency>
-            <groupId>org.codehaus.cargo</groupId>
-            <artifactId>cargo-core-uberjar</artifactId>
-            <version>0.9</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.codehaus.cargo</groupId>
-            <artifactId>cargo-ant</artifactId>
-            <version>0.9</version>
-            <scope>test</scope>
-        </dependency>
-		<!--
-		<dependency>
-			<groupId>httpunit</groupId>
-			<artifactId>httpunit</artifactId>
-			<version>1.6.2</version>
-			<scope>test</scope>
-		</dependency>
-		-->
 		<!-- use no-commons-logging -->
 		<dependency>
 			<groupId>commons-logging</groupId>
