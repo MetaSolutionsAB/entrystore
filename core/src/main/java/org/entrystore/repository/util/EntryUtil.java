@@ -58,7 +58,7 @@ public class EntryUtil {
 	 *            The list of entries to sort.
 	 * @param ascending
 	 *            True if the entry with the earliest date should come first.
-	 * @param prio
+	 * @param prioritizedBuiltinType
 	 *            Determines which BuiltinType should always have higher priority
 	 *            than entries with a different one.
 	 */
@@ -88,7 +88,7 @@ public class EntryUtil {
 	 *            The list of entries to sort.
 	 * @param ascending
 	 *            True if the entry with the earliest date should come first.
-	 * @param prio
+	 * @param prioritizedBuiltinType
 	 *            Determines which BuiltinType should always have higher priority
 	 *            than entries with a different one.
 	 */
@@ -120,7 +120,7 @@ public class EntryUtil {
 	 *            The list of entries to sort.
 	 * @param ascending
 	 *            True if the entry with the smallest size should come first.
-	 * @param prio
+	 * @param prioritizedBuiltinType
 	 *            Determines which BuiltinType should always have higher priority
 	 *            than entries with a different one.
 	 */
@@ -191,7 +191,7 @@ public class EntryUtil {
 	 * @param ascending
 	 *            True if the entries should be sorted A-Z. Does not take the
 	 *            locale into consideration.
-	 * @param prio
+	 * @param prioritizedBuiltinType
 	 *            Determines which BuiltinType should always have higher priority
 	 *            than entries with a different one.
 	 */
