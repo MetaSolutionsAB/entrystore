@@ -18,9 +18,8 @@
 	
 	<!-- ================= Properties ================= -->
 	<properties>
-      <clover.licenseLocation>${basedir}/../../src/resources/clover.license</clover.licenseLocation>
-      <restlet.version>2.1.4</restlet.version>
-    </properties>
+		<clover.licenseLocation>${basedir}/../../src/resources/clover.license</clover.licenseLocation>
+	</properties>
     
 	<!-- ================= SCM ================= -->
 	<scm>
@@ -159,52 +158,51 @@
    			<version>${restlet.version}</version>
 		</dependency>
 		<dependency>
-		   <groupId>org.restlet.jee</groupId>
-           <artifactId>org.restlet.ext.json</artifactId>
-           <version>${restlet.version}</version>
-        </dependency>
-        <dependency>
-		   <groupId>org.restlet.jee</groupId>
-           <artifactId>org.restlet.ext.fileupload</artifactId>
-           <version>${restlet.version}</version>
-        </dependency>
+			<groupId>org.restlet.jee</groupId>
+			<artifactId>org.restlet.ext.json</artifactId>
+			<version>${restlet.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.restlet.jee</groupId>
+			<artifactId>org.restlet.ext.fileupload</artifactId>
+			<version>${restlet.version}</version>
+		</dependency>
 		<dependency>
    			<groupId>org.simpleframework</groupId>
    			<artifactId>org.simpleframework</artifactId>
    			<version>4.1.1</version>
 		</dependency>	  
 		<dependency>
-		   <groupId>javax.servlet</groupId>
-           <artifactId>servlet-api</artifactId>
-           <version>2.5</version>
-           <!-- should not be deployed to the web container (hence the scope is 'provided')-->
-           <scope>provided</scope>
-        </dependency>
-        <dependency>
-		   <groupId>org.json</groupId>
-           <artifactId>json</artifactId>
-           <version>20070829</version>
-        </dependency>
-        <dependency>
-        	<groupId>org.codehaus.jackson</groupId>
-        	<artifactId>jackson-core-asl</artifactId>
-        	<version>1.9.3</version>
-        </dependency>
-    	<dependency>
-        	<groupId>org.entrystore</groupId>
-    		<artifactId>entrystore-harvester-factory-module</artifactId>
-    		<version>${pom.version}</version>
-    	</dependency>
-    	<dependency>
-        	<groupId>org.entrystore</groupId>
-    		<artifactId>entrystore-oai-pmh-harvester-module</artifactId>
-    		<version>${pom.version}</version>
-    	</dependency>
-    	<dependency>
-    		<groupId>mysql</groupId>
-    		<artifactId>mysql-connector-java</artifactId>
-    		<version>5.1.6</version>
-    		<!--<scope>test</scope>--> 
+			<groupId>javax.servlet</groupId>
+			<artifactId>servlet-api</artifactId>
+			<version>2.5</version>
+			<!-- should not be deployed to the web container (hence the scope is 'provided')-->
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.json</groupId>
+			<artifactId>json</artifactId>
+			<version>20131018</version>
+		</dependency>
+		<dependency>
+        		<groupId>org.codehaus.jackson</groupId>
+	        	<artifactId>jackson-core-asl</artifactId>
+        		<version>1.9.3</version>
+		</dependency>
+		<dependency>
+        		<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-harvester-factory-module</artifactId>
+			<version>${pom.version}</version>
+		</dependency>
+		<dependency>
+        		<groupId>org.entrystore</groupId>
+	    		<artifactId>entrystore-oai-pmh-harvester-module</artifactId>
+    			<version>${pom.version}</version>
+	    	</dependency>
+    		<dependency>
+			<groupId>mysql</groupId>
+			<artifactId>mysql-connector-java</artifactId>
+			<version>5.1.6</version>
 		</dependency>
 		<dependency>
 			<groupId>commons-dbcp</groupId>

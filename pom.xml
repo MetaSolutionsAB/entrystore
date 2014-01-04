@@ -18,9 +18,13 @@
 	
 	<!-- ================= Default Properties ================= -->
 	<properties>
+		<restlet.version>2.1.6</restlet.version>
+		<solr.version>4.3.1</solr.version>
+		<sesame.version>2.7.9</sesame.version>
+		<slf4j.version>1.7.5</slf4j.version>
 		<!-- Clover license -->
 		<clover.licenseLocation>${basedir}/src/resources/clover.license</clover.licenseLocation>
-    </properties>
+	</properties>
 		
 	<!-- ================= Developers ================= -->
 	<developers>
@@ -529,19 +533,19 @@
 			<groupId>org.slf4j</groupId>
 			<!--<artifactId>jcl104-over-slf4j</artifactId>-->
 			<artifactId>jcl-over-slf4j</artifactId>
-			<version>1.7.5</version>
+			<version>${slf4j.version}</version>
 		</dependency>
 		<!-- the other slf4j jars -->
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-api</artifactId>
-			<version>1.7.5</version>
+			<version>${slf4j.version}</version>
 		</dependency>
 		<!-- using log4j as backend -->
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-log4j12</artifactId>
-			<version>1.7.5</version>
+			<version>${slf4j.version}</version>
 		</dependency>
 	</dependencies>
 	
