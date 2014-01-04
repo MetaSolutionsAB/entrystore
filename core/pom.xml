@@ -3,7 +3,6 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
-	<!-- ================= EntryStore Core ================= -->
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
 		<groupId>org.entrystore</groupId>
@@ -15,19 +14,6 @@
 	<packaging>jar</packaging>
 	<name>EntryStore Core</name>
 
-	<!-- ================= Properties ================= -->
-	<properties>
-		<clover.licenseLocation>${basedir}/../src/resources/clover.license</clover.licenseLocation>
-	</properties>
-
-	<!-- ================= SCM ================= -->
-	<scm>
-		<connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/core</connection>
-		<developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/core</developerConnection>
-		<url>http://project.iml.umu.se/projects/scam/browser/trunk/core</url>
-	</scm>
-
-	<!-- ================= Build ================= -->
 	<build>
 		<resources>
 			<resource>
@@ -46,15 +32,6 @@
 		</testResources>
 	</build>
 
-	<!-- ================= Reporting ================= -->
-	<reporting>
-		<!-- Needed in order to generate the report properly -->
-		<outputDirectory>
-            ${basedir}/../target/site/${project.artifactId}
-        </outputDirectory>
-	</reporting>
-
-	<!-- ================= Dependencies ================= -->
 	<dependencies>
 		<dependency>
 			<groupId>org.openrdf.sesame</groupId>
@@ -111,14 +88,6 @@
 			<artifactId>sesame-queryresultio-sparqlxml</artifactId>
 			<version>${sesame.version}</version>
 		</dependency>
-		<!--
-		<dependency>
-			<groupId>org.openrdf.sesame</groupId>
-			<artifactId>openrdf-sesame</artifactId>
-			<version>2.3.3-onejar</version>
-			<type>jar</type>
-		</dependency>
-		-->
 		<dependency>
 			<groupId>commons-io</groupId>
 			<artifactId>commons-io</artifactId>
@@ -241,15 +210,11 @@
 			<artifactId>solr-solrj</artifactId>
 			<groupId>org.apache.solr</groupId>
 			<version>${solr.version}</version>
-			<type>jar</type>
-			<scope>compile</scope>
-        </dependency>
+		</dependency>
 		<dependency>
 			<artifactId>solr-core</artifactId>
 			<groupId>org.apache.solr</groupId>
 			<version>${solr.version}</version>
-			<type>jar</type>
-			<scope>compile</scope>
 		</dependency>
 		
 		<!--
