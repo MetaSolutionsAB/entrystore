@@ -155,7 +155,7 @@ public class EntryNamesContext extends ContextImpl {
 							names2EntryURI.put(name, entryURI);
 							entryURI2Name.put(entryURI, name);
 						} catch (Exception e) {
-							e.printStackTrace();
+							log.error(e.getMessage());
 							throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 						}
 					}
@@ -164,7 +164,7 @@ public class EntryNamesContext extends ContextImpl {
 				}
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Cannot connect to repository", e);
 		}
 	}
