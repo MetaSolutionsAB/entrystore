@@ -240,7 +240,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
-					rc.setAutoCommit(false);
 					res2entry = new HashMap<URI, Object>();
 					extMdUri2entry = new HashMap<URI, Object>();
 					List<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI).asList();
@@ -259,7 +258,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 								this.counter = ((Literal) statement.getObject()).intValue();
 							}
 						} catch (Exception e) {
-							e.printStackTrace();
+							log.error(e.getMessage());
 						}
 					}
 				} finally {
