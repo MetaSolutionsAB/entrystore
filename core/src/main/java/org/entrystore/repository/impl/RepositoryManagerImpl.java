@@ -33,14 +33,14 @@ import org.openrdf.repository.Repository;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
+import org.openrdf.repository.http.HTTPRepository;
 import org.openrdf.repository.sail.SailRepository;
+import org.openrdf.repository.sparql.SPARQLRepository;
 import org.openrdf.rio.*;
 import org.openrdf.rio.trig.TriGParser;
 import org.openrdf.rio.trig.TriGWriterFactory;
 import org.openrdf.sail.memory.MemoryStore;
 import org.openrdf.sail.nativerdf.NativeStore;
-import org.openrdf.sail.rdbms.mysql.MySqlStore;
-import org.openrdf.sail.rdbms.postgresql.PgSqlStore;
 import org.quartz.SchedulerException;
 import org.quartz.impl.StdSchedulerFactory;
 import org.slf4j.Logger;
@@ -115,6 +115,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		log.info("Store type: " + storeType);
 		
 		if (storeType.equalsIgnoreCase("memory")) {
+			log.info("Using Memory Store");
 			if (config.containsKey(Settings.STORE_PATH)) {
 				MemoryStore ms = new MemoryStore(new File(config.getURI(Settings.STORE_PATH)));
 				ms.setPersist(true);
@@ -130,10 +131,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			} else {
 				File path = new File(config.getURI(Settings.STORE_PATH));
 				String indexes = config.getString(Settings.STORE_INDEXES);
-				
-				log.info("Path: " + path);
+				log.info("Using Native Store at " + path);
 				log.info("Indexes: " + indexes);
-				
 				NativeStore store = null;
 				if (indexes != null) {
 					store = new NativeStore(path, indexes);
@@ -144,48 +143,34 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					this.repository = new SailRepository(store);
 				}
 			}
-		} else if (storeType.equalsIgnoreCase("mysql") || storeType.equalsIgnoreCase("postgresql")) {
-			if (!config.containsKey(Settings.STORE_USER) ||
-					!config.containsKey(Settings.STORE_PWD) ||
-					!config.containsKey(Settings.STORE_SERVERNAME) ||
-					!config.containsKey(Settings.STORE_DBNAME) ||
-					!config.containsKey(Settings.STORE_PORTNR)) {
+		} else if (storeType.equalsIgnoreCase("http")) {
+			if (!config.containsKey(Settings.STORE_URL)) {
 				log.error("Incomplete configuration");
 				throw new IllegalStateException("Incomplete configuration");
 			} else {
+				String url = config.getString(Settings.STORE_PATH);
 				String user = config.getString(Settings.STORE_USER);
 				String password = config.getString(Settings.STORE_PWD);
-				String database = config.getString(Settings.STORE_DBNAME);
-				int portNr = config.getInt(Settings.STORE_PORTNR);
-				String serverName = config.getString(Settings.STORE_SERVERNAME);
-				
-				log.info("Server: " + serverName + ":" + portNr);
-				log.info("Database: " + database);
-				log.info("User name: " + user);
-				log.info("Max number of triple tables: " + config.getString(Settings.STORE_MAX_TRIPLE_TABLES));
-				
-				if (storeType.equalsIgnoreCase("mysql")) {
-					MySqlStore store = new MySqlStore();
-					store.setUser(user);
-					store.setPassword(password);
-					store.setDatabaseName(database);
-					store.setPortNumber(portNr);
-					store.setServerName(serverName);
-					if (config.containsKey(Settings.STORE_MAX_TRIPLE_TABLES)) {
-						store.setMaxNumberOfTripleTables(config.getInt(Settings.STORE_MAX_TRIPLE_TABLES));
-					}
-					this.repository = new SailRepository(store);
-				} else if (storeType.equalsIgnoreCase("postgresql")) {
-					PgSqlStore store = new PgSqlStore();
-					store.setUser(user);
-					store.setPassword(password);
-					store.setDatabaseName(database);
-					store.setPortNumber(portNr);
-					store.setServerName(serverName);
-					if (config.containsKey(Settings.STORE_MAX_TRIPLE_TABLES)) {
-						store.setMaxNumberOfTripleTables(config.getInt(Settings.STORE_MAX_TRIPLE_TABLES));
-					}
-					this.repository = new SailRepository(store);
+				log.info("Using HTTP repository at " + url);
+				this.repository = new HTTPRepository(url);
+				if (user != null && password != null) {
+					((HTTPRepository) this.repository).setUsernameAndPassword(user, password);
+				}
+			}
+		} else if (storeType.equalsIgnoreCase("sparql")) {
+			if (!config.containsKey(Settings.STORE_ENDPOINT_QUERY) ||
+					!config.containsKey(Settings.STORE_ENDPOINT_UPDATE)) {
+				log.error("Incomplete configuration");
+				throw new IllegalStateException("Incomplete configuration");
+			} else {
+				String endpointQuery = config.getString(Settings.STORE_ENDPOINT_QUERY);
+				String endpointUpdate = config.getString(Settings.STORE_ENDPOINT_UPDATE);
+				String user = config.getString(Settings.STORE_USER);
+				String password = config.getString(Settings.STORE_PWD);
+				log.info("Using SPARQL repository at " + endpointQuery + ", " + endpointUpdate);
+				this.repository = new SPARQLRepository(endpointQuery, endpointUpdate);
+				if (user != null && password != null) {
+					((SPARQLRepository) this.repository).setUsernameAndPassword(user, password);
 				}
 			}
 		}
@@ -302,13 +287,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		});
 	}
-
-//	public RepositoryManagerImpl(Repository repository, URL baseURL, Config config) {
-//		this.baseURL = baseURL;
-//		this.repository = repository;
-//		this.config = config;
-//		this.intitialize();
-//	}
 
 	/**
 	 * Init all System Contexts

@@ -59,10 +59,13 @@ public class Settings {
 	public static String STORE_DBNAME = "entrystore.repository.store.database.name";
 	public static String STORE_PORTNR = "entrystore.repository.store.port.number";
 	public static String STORE_SERVERNAME = "entrystore.repository.store.server.name";
-	public static String STORE_MAX_TRIPLE_TABLES = "entrystore.repository.store.max-triple-tables";
 	public static String STORE_PATH = "entrystore.repository.store.path";
+	public static String STORE_URL = "entrystore.repository.store.url";
+	public static String STORE_ENDPOINT_QUERY = "entrystore.repository.store.endpoint-query";
+	public static String STORE_ENDPOINT_UPDATE = "entrystore.repository.store.endpoint-update";
 	public static String STORE_INDEXES = "entrystore.repository.store.indexes";
 	public static String STORE_TYPE = "entrystore.repository.store.type";
+
 	public static String STOREJS_JS = "entrystore.repository.storejs.js";
 	public static String STOREJS_CSS = "entrystore.repository.storejs.css";
 	

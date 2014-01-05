@@ -17,7 +17,7 @@
 	
 	<build>
 		<resources>
-    			<resource>
+    		<resource>
     				<directory>src/main/resources</directory>
 			</resource>
 		</resources>
@@ -43,7 +43,7 @@
 						</goals>
 						<configuration>
 							<excludes>
-								<!-- not store scam.properties in generated jar only in war-->	
+								<!-- don't store properties in generated jar, only in war -->
 								<exclude>**/entrystore.properties</exclude>
 							</excludes>
 						</configuration>
