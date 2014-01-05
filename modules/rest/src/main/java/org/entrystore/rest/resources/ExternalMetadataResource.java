@@ -20,6 +20,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.github.jsonldjava.impl.SesameJSONLDWriter;
 import org.entrystore.repository.LocationType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.impl.converters.ConverterUtil;
@@ -64,6 +65,7 @@ public class ExternalMetadataResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType("application/lom+xml"));
 	}
 
@@ -76,8 +78,6 @@ public class ExternalMetadataResource extends BaseResource {
 	 * GET {baseURI}/{portfolio-id}/cached-external-metadata/{entry-id}
 	 * </pre>
 	 * 
-	 * @param variant
-	 *            Descriptor for available representations of a resource.
 	 * @return The Representation as JSON
 	 */
 	@Get
@@ -125,6 +125,8 @@ public class ExternalMetadataResource extends BaseResource {
 						serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
 					} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 						serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
+					} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
+						serializedGraph = ConverterUtil.serializeGraph(graph, SesameJSONLDWriter.class);
 					} else if (mediaType.getName().equals("application/lom+xml")) {
 						URI resURI = entry.getResourceURI();
 						if (resURI != null) {

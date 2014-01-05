@@ -25,6 +25,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import com.github.jsonldjava.impl.SesameJSONLDParser;
+import com.github.jsonldjava.impl.SesameJSONLDWriter;
 import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
@@ -100,6 +102,7 @@ public class EntryResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 
 		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
@@ -113,8 +116,6 @@ public class EntryResource extends BaseResource {
 	 * GET {baseURI}/{portfolio-id}/entry/{entry-id}
 	 * </pre>
 	 * 
-	 * @param variant
-	 *            Descriptor for available representations of a resource.
 	 * @return The Representation as JSON
 	 */
 	@Get
@@ -215,6 +216,8 @@ public class EntryResource extends BaseResource {
 			serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
 		} else if (RDFFormat.TRIG.getDefaultMIMEType().equals(mediaType.getName())) {
 			serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
+		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(mediaType.getName())) {
+			serializedGraph = ConverterUtil.serializeGraph(graph, SesameJSONLDWriter.class);
 		} else {
 			mediaType = MediaType.APPLICATION_RDF_XML;
 			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
@@ -717,6 +720,8 @@ public class EntryResource extends BaseResource {
 			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new NTriplesParser());
 		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriGParser());
+		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new SesameJSONLDParser());
 		} else {
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
 			return;

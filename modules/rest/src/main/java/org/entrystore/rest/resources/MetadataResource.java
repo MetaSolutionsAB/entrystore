@@ -22,6 +22,11 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import com.github.jsonldjava.core.JSONLD;
+import com.github.jsonldjava.impl.SesameJSONLDParser;
+import com.github.jsonldjava.impl.SesameJSONLDParserFactory;
+import com.github.jsonldjava.impl.SesameJSONLDWriter;
+import com.github.jsonldjava.impl.SesameJSONLDWriterFactory;
 import org.entrystore.repository.LocationType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.impl.converters.ConverterUtil;
@@ -79,6 +84,7 @@ public class MetadataResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType("application/lom+xml"));
 
 		Util.handleIfUnmodifiedSince(entry, getRequest());
@@ -90,11 +96,9 @@ public class MetadataResource extends BaseResource {
 	 * From the REST API:
 	 * 
 	 * <pre>
-	 * GET {baseURI}/{portfolio-id}/metadata/{entry-id}
+	 * GET {baseURI}/{context-id}/metadata/{entry-id}
 	 * </pre>
 	 * 
-	 * @param variant
-	 *            Descriptor for available representations of a resource.
 	 * @return The Representation as JSON
 	 */
 	@Get
@@ -215,11 +219,10 @@ public class MetadataResource extends BaseResource {
 						serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
 					} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 						serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
+					} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
+						serializedGraph = ConverterUtil.serializeGraph(graph, SesameJSONLDWriter.class);
 					} else if (mediaType.getName().equals("application/lom+xml")) {
-						URI resURI = entry.getResourceURI();
-						if (resURI != null) {
-							serializedGraph = ConverterUtil.convertGraphToLOM(graph, graph.getValueFactory().createURI(resURI.toString()));
-						}
+						serializedGraph = ConverterUtil.convertGraphToLOM(graph, graph.getValueFactory().createURI(entry.getResourceURI().toString()));
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
 						return new JsonRepresentation(JSONErrorMessages.errorUnknownFormat);
@@ -266,11 +269,10 @@ public class MetadataResource extends BaseResource {
 				deserializedGraph = ConverterUtil.deserializeGraph(graphString, new NTriplesParser());
 			} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 				deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriGParser());
+			} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
+				deserializedGraph = ConverterUtil.deserializeGraph(graphString, new SesameJSONLDParser());
 			} else if (mediaType.getName().equals("application/lom+xml")) {
-				URI resURI = entry.getResourceURI();
-				if (resURI != null) {
-					deserializedGraph = ConverterUtil.convertLOMtoGraph(graphString, entry.getResourceURI());
-				}
+				deserializedGraph = ConverterUtil.convertLOMtoGraph(graphString, entry.getResourceURI());
 			} else {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
 				return;
