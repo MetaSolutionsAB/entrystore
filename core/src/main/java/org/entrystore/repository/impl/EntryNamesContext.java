@@ -145,7 +145,6 @@ public class EntryNamesContext extends ContextImpl {
 				}
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
-					rc.setAutoCommit(false);
 					names2EntryURI = new HashMap<String, URI>();
 					entryURI2Name = new HashMap<URI, String>();
 					List<Statement> statements = rc.getStatements(null, RepositoryProperties.alias, null, false, this.resourceURI).asList();
