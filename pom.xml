@@ -270,6 +270,18 @@
 			<artifactId>slf4j-log4j12</artifactId>
 			<version>${slf4j.version}</version>
 		</dependency>
+        <dependency>
+            <groupId>org.codehaus.cargo</groupId>
+            <artifactId>cargo-core-uberjar</artifactId>
+            <version>0.9</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.codehaus.cargo</groupId>
+            <artifactId>cargo-ant</artifactId>
+            <version>0.9</version>
+            <scope>test</scope>
+        </dependency>
 	</dependencies>
 	
 	<dependencyManagement>
