@@ -148,7 +148,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				log.error("Incomplete configuration");
 				throw new IllegalStateException("Incomplete configuration");
 			} else {
-				String url = config.getString(Settings.STORE_PATH);
+				String url = config.getString(Settings.STORE_URL);
 				String user = config.getString(Settings.STORE_USER);
 				String password = config.getString(Settings.STORE_PWD);
 				log.info("Using HTTP repository at " + url);
