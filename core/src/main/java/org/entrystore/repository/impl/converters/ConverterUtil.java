@@ -56,6 +56,7 @@ import org.openrdf.rio.RDFParseException;
 import org.openrdf.rio.RDFParser;
 import org.openrdf.rio.RDFWriter;
 import org.openrdf.rio.helpers.StatementCollector;
+import org.openrdf.rio.trig.TriGWriter;
 import org.openrdf.rio.turtle.TurtleWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -213,7 +214,26 @@ public class ConverterUtil {
 		}
 		return stringWriter.toString();
 	}
-	
+
+	public static void serializeGraph(Graph graph, RDFWriter rdfWriter) {
+		if (graph == null || rdfWriter == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
+		try {
+			Map<String, String> namespaces = NS.getMap();
+			for (String nsName : namespaces.keySet()) {
+				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
+			}
+			rdfWriter.startRDF();
+			for (Statement statement : graph) {
+				rdfWriter.handleStatement(statement);
+			}
+			rdfWriter.endRDF();
+		} catch (RDFHandlerException rdfe) {
+			log.error(rdfe.getMessage());
+		}
+	}
+
 	public static boolean isValidated(Graph graph, URI resURI) {
 		if (graph == null || resURI == null) {
 			return false;
@@ -284,7 +304,7 @@ public class ConverterUtil {
 	/**
 	 * @param serializedGraph
 	 *            The Graph to be deserialized.
-	 * @param rdfParser
+	 * @param parser
 	 *            Instance of the following: N3Parser, NTriplesParser,
 	 *            RDFXMLParser, TriGParser, TriXParser, TurtleParser
 	 * @return A String representation of the serialized Graph.
@@ -339,60 +359,5 @@ public class ConverterUtil {
 		converter.convertAll(lom, graph, new URIImpl(resourceURI.toString()), null);
 		return graph;
 	}
-		
-	public static void main(String[] argv) {
-		Reader input = null;
-		try {
-			input = new FileReader("/home/hannes/Desktop/ultimatelom.xml");
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		}
-		if (input != null) {
-			LOMImpl lom = readLOMfromReader(input);
-			//System.out.println(lom);
-			LOM2RDFConverter conv = new LOM2RDFConverter();
-			conv.setLRESupport(true);
-			Graph graph = new GraphImpl();
-			Location location = LOMUtil.getTechnicalLocation(lom, 0);
-			org.openrdf.model.URI resourceURI = null;
-			if (location != null) {
-				resourceURI = graph.getValueFactory().createURI(location.string().trim()); 
-				conv.convertAll(lom, graph, resourceURI, null);
-			}
-//			for (Statement statement : graph) {
-//				System.out.println(statement);
-//			}
-			
-			try {
-				FileWriter file1 = new FileWriter("/home/hannes/Desktop/ultimate.turtle");
-				file1.write(serializeGraph(graph, TurtleWriter.class));
-				file1.close();
-			} catch (IOException ioe) {
-				ioe.printStackTrace();
-			}
-			
-//			try {
-//				FileWriter file1 = new FileWriter("/home/hannes/Desktop/ultimate.trix");
-//				file1.write(serializeGraphToTriX(graph));
-//				file1.close();
-//			} catch (IOException ioe) {
-//				ioe.printStackTrace();
-//			}
-			
-//			JDIL jdil = new JDIL(new Namespaces(null, new HashMap<String, String>()));
-//			JSONObject json = jdil.exportGraphToJDIL(graph, resourceURI);
-//			if (json != null) {
-//				try {
-//					FileWriter writer = new FileWriter("/home/hannes/Desktop/jdil.txt");
-//					writer.write(json.toString(2));
-//					writer.close();
-//				} catch (JSONException e) {
-//					e.printStackTrace();
-//				} catch (IOException e) {
-//					e.printStackTrace();
-//				}
-//			}
-		}
-	}
-	
+
 }
