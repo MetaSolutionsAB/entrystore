@@ -16,7 +16,9 @@
 
 package org.entrystore.rest.resources;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.StringWriter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
@@ -40,6 +42,7 @@ import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.StringResource;
 import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.impl.converters.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
@@ -54,6 +57,10 @@ import org.openrdf.model.Statement;
 import org.openrdf.model.Value;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
+import org.openrdf.rio.RDFHandlerException;
+import org.openrdf.rio.Rio;
+import org.openrdf.rio.helpers.JSONLDMode;
+import org.openrdf.rio.helpers.JSONLDSettings;
 import org.openrdf.rio.n3.N3ParserFactory;
 import org.openrdf.rio.n3.N3Writer;
 import org.openrdf.rio.ntriples.NTriplesParser;
@@ -217,7 +224,11 @@ public class EntryResource extends BaseResource {
 		} else if (RDFFormat.TRIG.getDefaultMIMEType().equals(mediaType.getName())) {
 			serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
 		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(mediaType.getName())) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, SesameJSONLDWriter.class);
+			StringWriter writer = new StringWriter();
+			org.openrdf.rio.RDFWriter rdfWriter = Rio.createWriter(RDFFormat.JSONLD, writer);
+			rdfWriter.getWriterConfig().set(JSONLDSettings.JSONLD_MODE, JSONLDMode.COMPACT);
+			ConverterUtil.serializeGraph(graph, rdfWriter);
+			serializedGraph = writer.toString();
 		} else {
 			mediaType = MediaType.APPLICATION_RDF_XML;
 			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
