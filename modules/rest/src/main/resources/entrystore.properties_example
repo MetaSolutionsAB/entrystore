@@ -42,33 +42,15 @@ entrystore.repository.public.indexes=cspo,spoc,posc
 <!-- Only for development and/or migration purposes    -->
 entrystore.repository.store.correct-metadata=false
 
-<!-- Repository import from TriG file -->
-entrystore.repository.import=false
-entrystore.repository.import.file=file:///srv/toimport.rdf
-entrystore.repository.import.base=http://localhost:8080/store/
-
-<!-- Rewriting base URI; it is recommended to restart EntryStore -->
-<!-- and reindex Solr after using this feature                   -->
-entrystore.repository.rewrite.baseuri=false
-entrystore.repository.rewrite.baseuri.old=http://localhost:8080/store/
-entrystore.repository.rewrite.baseuri.new=https://new.domain.com/store/
-
-<!-- Repository store: memory | native | mysql | postgresql -->
+<!-- Repository store: memory | native | http | sparql -->
 entrystore.repository.store.type=native
 <!-- If store type is native these properties must be specified -->
 <!-- If store type is memory a path can be specified for persisting the repository -->
 entrystore.repository.store.path=file:///srv/entrystore/store/
 entrystore.repository.store.indexes=cspo,posc
-
-<!-- If store type is mysql or postgresql these properties must be specified   -->
-<!-- Databases as backend have never been tested properly, use with care       -->
-entrystore.repository.store.user=entrystore
-entrystore.repository.store.password=longpassword
-entrystore.repository.store.database.name=entrystoredb
-entrystore.repository.store.port.number=3306
-entrystore.repository.store.server.name=localhost
-<!-- optional: maximum number of triple tables -->
-<!-- entrystore.respository.store.max-triple-tables=200 -->
+<!-- if type=http: entrystore.repository.store.url=URL of Sesame HTTP repository -->
+<!-- if type=sparql: entrystore.repository.store.endpoint-query=Query URL of SPARQL repository -->
+<!-- if type=sparql: entrystore.repository.store.endpoint-update=Update URL of SPARQL repository -->
 
 <!-- By default all references are rewritten. This is necessary to makes -->
 <!-- installations work where the internal references are different from -->
