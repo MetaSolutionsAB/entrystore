@@ -18,7 +18,7 @@ The company [MetaSolutions AB](http://www.metasolutions.se) provides professiona
 
 EntryStore and EntryScape are being actively developed by [MetaSolutions AB](http://www.metasolutions.se).
 
-The following organizations have contributed to the development of earlier versions of EntryStore (then: SCAM) and EntryScape (then: Confolio) in the context of various international research and applied projects:
+The following organizations have contributed to the development of earlier versions of EntryStore (then: SCAM) and EntryScape (then: Confolio) in the context of various international research projects:
 
   * [KTH Royal Institute of Technology](http://www.kth.se)
   * [Uppsala University](http://www.uu.se)
