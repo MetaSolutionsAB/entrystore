@@ -21,7 +21,7 @@ EntryStore and EntryScape are being actively developed by [MetaSolutions AB](htt
 The following organizations have contributed to the development of earlier versions of EntryStore (then: SCAM) and EntryScape (then: Confolio) in the context of various international research and applied projects:
 
   * [KTH Royal Institute of Technology](http://www.kth.se)
-  * [Uppsala University](http://www.uu.se)Apache License
+  * [Uppsala University](http://www.uu.se)
   * [Umeå University](http://www.umu.se)
 
 ## License
