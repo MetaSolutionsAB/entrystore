@@ -124,8 +124,6 @@ public class ResourceResource extends BaseResource {
 	 * GET {baseURI}/{portfolio-id}/resource/{entry-id}
 	 * </pre>
 	 * 
-	 * @param variant
-	 *            Descriptor for available representations of a resource.
 	 * @return The Representation as JSON
 	 */
 	@Get
@@ -909,11 +907,14 @@ public class ResourceResource extends BaseResource {
 					String mimeType = req.getEntity().getMediaType().toString();
 					if (parameters.containsKey("mimeType")) {
 						mimeType = parameters.get("mimeType");
-					} 
+					}
 					entry.setMimetype(mimeType);
-					String name = req.getEntity().getDisposition().getFilename();
-					if (name != null && name.length() != 0) {
-						entry.setFilename(name.trim());
+					Disposition disp = req.getEntity().getDisposition();
+					if (disp != null) {
+						String name = disp.getFilename();
+						if (name != null && name.length() != 0) {
+							entry.setFilename(name.trim());
+						}
 					}
 				} catch (QuotaException qe) {
 					error = qe.getMessage();
