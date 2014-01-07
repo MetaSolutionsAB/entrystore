@@ -1431,10 +1431,12 @@ public class EntryImpl implements Entry {
 	public void remove(RepositoryConnection rc) throws Exception { 
 		rc.clear(entryURI);
 		if (locType == LocationType.Local || locType == LocationType.Link) {
-			rc.clear(localMdURI);
+			localMetadata.removeGraphSynchronized(rc);
+			//rc.clear(localMdURI);
 		}
 		if (locType == LocationType.LinkReference) {
-			rc.clear(localMdURI);
+			localMetadata.removeGraphSynchronized(rc);
+			//rc.clear(localMdURI);
 			rc.clear(cachedExternalMdURI);
 		}
 

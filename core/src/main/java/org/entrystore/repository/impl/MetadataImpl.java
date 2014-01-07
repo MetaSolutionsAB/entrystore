@@ -20,6 +20,8 @@ package org.entrystore.repository.impl;
 import java.net.URI;
 import java.util.Iterator;
 
+import javax.xml.datatype.DatatypeConfigurationException;
+
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryEvent;
@@ -109,66 +111,15 @@ public class MetadataImpl implements Metadata {
 				RepositoryConnection rc = this.entry.repository.getConnection();
 				rc.setAutoCommit(false);
 				try {
-					String base = this.entry.repositoryManager.getRepositoryURL().toString();
-					//Old graph, remove from target entry relation index.
-					if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.
-
-						Iterator<Statement> iter = rc.getStatements(null, null, null, false, mdContext).asList().iterator(); 
-						while(iter.hasNext()) {
-							Statement statement = iter.next();
-							Value obj = statement.getObject();
-							Resource subj = statement.getSubject();
-							//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-							if (obj instanceof org.openrdf.model.URI 
-								&& obj.stringValue().startsWith(base)
-								&& subj.stringValue().startsWith(base)) {
-								URI entryURI = URI.create(statement.getObject().stringValue()); 
-
-								EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(entryURI); 
-								sourceEntry.removeRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
-							}
-						}
-					}
-
-
-					rc.clear(mdContext);
-
-					rc.add(graph, mdContext);
-					if (cached) {
-						((EntryImpl) this.entry).updateCachedExternalMetadataDateSynchronized(rc, this.entry.repository.getValueFactory());
-					} else {
-						((EntryImpl) this.entry).updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
-					}
-
-
-
-					// Check if there are any relations in the metadata graph.
-					// If it is, then add them to the source entry's relation graph.
-					//Old graph, remove from target entry relation index.
-					if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.
-						Iterator<Statement> iter = graph.iterator(); 
-						while(iter.hasNext()) {
-							Statement statement = iter.next();
-							Value obj = statement.getObject();
-							Resource subj = statement.getSubject();
-							//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-							if (obj instanceof org.openrdf.model.URI 
-								&& obj.stringValue().startsWith(base)
-								&& subj.stringValue().startsWith(base)) {
-								URI entryURI = URI.create(statement.getObject().stringValue()); 
-
-								EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(entryURI); 
-								sourceEntry.addRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
-							}
-						}
-					}
+					removeGraphSynchronized(rc);
+					addGraphSynchronized(rc, graph);
 					rc.commit();
-
 					if (cached) {
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ExternalMetadataUpdated, graph));
 					} else {
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.MetadataUpdated, graph));
 					}
+				
 				} catch (Exception e) {
 					rc.rollback();
 					e.printStackTrace();
@@ -176,10 +127,65 @@ public class MetadataImpl implements Metadata {
 				} finally {
 					rc.close();
 				}
-			} 
+			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+		}
+	}
+	public void removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {
+		String base = this.entry.repositoryManager.getRepositoryURL().toString();
+		//Old graph, remove from target entry relation index.
+		if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.
+
+			Iterator<Statement> iter = rc.getStatements(null, null, null, false, mdContext).asList().iterator(); 
+			while(iter.hasNext()) {
+				Statement statement = iter.next();
+				Value obj = statement.getObject();
+				Resource subj = statement.getSubject();
+				//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
+				if (obj instanceof org.openrdf.model.URI 
+					&& obj.stringValue().startsWith(base)
+					&& subj.stringValue().startsWith(base)) {
+					URI entryURI = URI.create(statement.getObject().stringValue()); 
+
+					EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(entryURI); 
+					sourceEntry.removeRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
+				}
+			}
+		}
+		rc.clear(mdContext);
+	}
+	
+	public void addGraphSynchronized(RepositoryConnection rc, Graph graph) throws RepositoryException, DatatypeConfigurationException {
+		String base = this.entry.repositoryManager.getRepositoryURL().toString();
+
+		rc.add(graph, mdContext);
+		if (cached) {
+			((EntryImpl) this.entry).updateCachedExternalMetadataDateSynchronized(rc, this.entry.repository.getValueFactory());
+		} else {
+			((EntryImpl) this.entry).updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
+		}
+
+		// Check if there are any relations in the metadata graph.
+		// If it is, then add them to the source entry's relation graph.
+		//Old graph, remove from target entry relation index.
+		if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.
+			Iterator<Statement> iter = graph.iterator(); 
+			while(iter.hasNext()) {
+				Statement statement = iter.next();
+				Value obj = statement.getObject();
+				Resource subj = statement.getSubject();
+				//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
+				if (obj instanceof org.openrdf.model.URI 
+					&& obj.stringValue().startsWith(base)
+					&& subj.stringValue().startsWith(base)) {
+					URI entryURI = URI.create(statement.getObject().stringValue()); 
+
+					EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(entryURI); 
+					sourceEntry.addRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
+				}
+			}
 		}
 	}
 
