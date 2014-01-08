@@ -10,7 +10,7 @@
 		<version>4.1-SNAPSHOT</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
-	<artifactId>entrystore-harvester-factory-module</artifactId>
+	<artifactId>entrystore-harvesting-factory</artifactId>
 	<packaging>jar</packaging>
 	<version>4.1-SNAPSHOT</version>
 	<name>EntryStore Harvester Factory module</name>

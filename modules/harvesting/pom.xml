@@ -15,9 +15,9 @@
 	<name>EntryStore Harvesting</name>
 
 	<modules>
-		<module>harvester-factory</module>
-		<module>oai-pmh-target</module>
-		<module>oai-pmh-harvester</module>
+		<module>factory</module>
+		<module>oaipmh-target</module>
+		<module>oaipmh-harvester</module>
 	</modules>
 
 </project>

@@ -10,7 +10,7 @@
 		<version>4.1-SNAPSHOT</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
-	<artifactId>entrystore-oai-pmh-target-module</artifactId>
+	<artifactId>entrystore-harvesting-oaipmh-target</artifactId>
 	<packaging>war</packaging>
 	<version>4.1-SNAPSHOT</version>
 	<name>EntryStore OAI-PMH Target module</name>
