@@ -1,4 +1,4 @@
-package org.entrystore.transforms;
+package org.entrystore.transforms.tabular;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -27,7 +27,7 @@ import com.hp.hpl.jena.rdf.model.ModelFactory;
 import com.hp.hpl.jena.shared.NotFoundException;
 import com.hp.hpl.jena.sparql.algebra.table.TableData;
 
-public class TarqlTransform extends Transform{
+public class TarqlTransform extends Transform {
 	public Graph transform(InputStream data, String mimetype) {
 		try {
 			TableData table;

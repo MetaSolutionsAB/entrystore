@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.entrystore</groupId>
+		<artifactId>entrystore-transforms</artifactId>
+		<version>4.1-SNAPSHOT</version>
+	</parent>
+	<groupId>org.entrystore</groupId>
+	<artifactId>entrystore-transforms-tabular</artifactId>
+	<packaging>jar</packaging>
+	<version>4.1-SNAPSHOT</version>
+	<name>EntryStore Tabular Transforms</name>
+    
+	<dependencies>
+		<dependency>
+			<groupId>org.apache.jena</groupId>
+			<artifactId>jena-arq</artifactId>
+			<version>2.9.4</version>
+		</dependency>
+		<dependency>
+			<groupId>net.sf.opencsv</groupId>
+			<artifactId>opencsv</artifactId>
+			<version>2.0</version>
+		</dependency>
+		<dependency>
+			<groupId>net.sourceforge.jchardet</groupId>
+			<artifactId>jchardet</artifactId>
+			<version>1.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi</artifactId>
+			<version>3.10-beta1</version>
+		</dependency>
+		<!-- Causes conflicts with running the tests (potentially more), something with XML-APIs
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+			<version>3.10-beta1</version>
+		</dependency>
+		-->
+	</dependencies>
+</project>

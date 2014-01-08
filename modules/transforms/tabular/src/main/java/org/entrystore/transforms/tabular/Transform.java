@@ -1,4 +1,4 @@
-package org.entrystore.transforms;
+package org.entrystore.transforms.tabular;
 
 import java.io.InputStream;
 import java.util.ArrayList;
