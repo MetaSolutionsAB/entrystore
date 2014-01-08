@@ -17,6 +17,7 @@
 	<modules>
 		<module>harvesting</module>
 		<module>rest</module>
+		<module>transforms</module>
 		<!-- SQI not functional at the moment, needs refactoring -->
 		<!-- <module>sqi</module>-->
 	</modules>

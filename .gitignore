@@ -7,3 +7,5 @@ pom.xml.versionsBackup
 target
 .settings
 .idea
+build.log
+entrystore.properties
