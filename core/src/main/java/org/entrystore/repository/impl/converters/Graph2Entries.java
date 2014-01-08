@@ -51,8 +51,8 @@ import org.slf4j.LoggerFactory;
 public class Graph2Entries {
 	
 	private static ValueFactory vf = ValueFactoryImpl.getInstance();
-	private static URI mergeResourceId = vf.createURI("http://ns.entrystore.com/entry/mergeResourceId");
-	private static URI referenceResourceId = vf.createURI("http://ns.entrystore.com/entry/referenceResourceId");
+	private static URI mergeResourceId = vf.createURI(NS.entrystore, "mergeResourceId");
+	private static URI referenceResourceId = vf.createURI(NS.entrystore, "referenceResourceId");
 
 	private static Logger log = LoggerFactory.getLogger(Graph2Entries.class);
 	private Context context;
