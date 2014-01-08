@@ -13,7 +13,7 @@
 	<artifactId>entrystore-transforms-pcaxis</artifactId>
 	<packaging>jar</packaging>
 	<version>4.1-SNAPSHOT</version>
-	<name>EntryStore PC-Axis Transforms</name>
+	<name>EntryStore Transforms PC-Axis</name>
     
 	<dependencies>
 		<dependency>

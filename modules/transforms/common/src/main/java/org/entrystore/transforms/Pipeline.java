@@ -131,8 +131,8 @@ public class Pipeline {
 		if (type2Class == null || format2Class == null) {
 			type2Class = new HashMap<String, Class<?>>();
 			format2Class = new HashMap<String, Class<?>>();
-
 			Reflections reflections = new Reflections("org.entrystore.transforms");
+
 			Set<Class<?>> classes = reflections.getTypesAnnotatedWith(TransformParameters.class);
 			for (Class c : classes) {
 				if (c.isAnnotationPresent(TransformParameters.class)) {

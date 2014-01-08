@@ -13,7 +13,7 @@
 	<artifactId>entrystore-transforms-tabular</artifactId>
 	<packaging>jar</packaging>
 	<version>4.1-SNAPSHOT</version>
-	<name>EntryStore Tabular Transforms</name>
+	<name>EntryStore Transforms Tabular</name>
     
 	<dependencies>
 		<dependency>

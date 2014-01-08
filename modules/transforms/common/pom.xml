@@ -13,7 +13,7 @@
 	<artifactId>entrystore-transforms-common</artifactId>
 	<packaging>jar</packaging>
 	<version>4.1-SNAPSHOT</version>
-	<name>EntryStore Transforms common</name>
+	<name>EntryStore Transforms Common</name>
 
 	<dependencies>
 		<dependency>
