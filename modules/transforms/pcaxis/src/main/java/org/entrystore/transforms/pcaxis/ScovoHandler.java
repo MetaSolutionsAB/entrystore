@@ -66,7 +66,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Created by hannes on 1/7/14.
+ * Based on com.mysema.stat.scovo.RDFDatasetHandler by sasa, see https://github.com/mysema/mysemastat.
+ *
+ * Forked an modified by Hannes Ebner to work directly against Sesame Model instead of RDFBean repositories.
+ *
+ * @author sasa
+ * @author Hannes Ebner
  */
 public class ScovoHandler implements DatasetHandler {
 
