@@ -85,7 +85,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.entrystore</groupId>
-			<artifactId>entrystore-transforms</artifactId>
+			<artifactId>entrystore-transforms-common</artifactId>
 			<version>${pom.version}</version>
 		</dependency>
 
