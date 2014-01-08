@@ -13,6 +13,8 @@ import org.deri.tarql.CSVToValues;
 import org.deri.tarql.TarqlParser;
 import org.deri.tarql.TarqlQuery;
 import org.deri.tarql.XLSToValues;
+import org.entrystore.transforms.Transform;
+import org.entrystore.transforms.TransformParameters;
 import org.openrdf.model.Graph;
 import org.openrdf.rio.RDFHandlerException;
 import org.openrdf.rio.RDFParseException;
@@ -26,8 +28,14 @@ import com.hp.hpl.jena.rdf.model.Model;
 import com.hp.hpl.jena.rdf.model.ModelFactory;
 import com.hp.hpl.jena.shared.NotFoundException;
 import com.hp.hpl.jena.sparql.algebra.table.TableData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class TarqlTransform extends Transform {
+@TransformParameters(type="tabular", formats={"csv","xls","xlsx"})
+public class TabularTransform extends Transform {
+
+	private static Logger log = LoggerFactory.getLogger(TabularTransform.class);
+
 	public Graph transform(InputStream data, String mimetype) {
 		try {
 			TableData table;
@@ -39,25 +47,25 @@ public class TarqlTransform extends Transform {
 				int sheetNr = 0;
 				table = new XLSToValues(data, false, sheetNr).read();
 			}
-			
+
 			String tarqlstr = args.get(0);
 			TarqlQuery q = new TarqlParser(new StringReader(tarqlstr)).getResult();
 			Model resultModel = ModelFactory.createDefaultModel();
 			executeQuery(table, q, resultModel);
-			
+
 			if (!resultModel.isEmpty()) {
 				return model2Graph(resultModel, q.getPrologue().getBaseURI());
 			}
 		} catch (NotFoundException ex) {
-			//cmdError("Not found: " + ex.getMessage());
+			log.error("Not found: " + ex.getMessage());
 		}
 		return null;
 	}
-	
+
 	private boolean isCSV(String mimetype) {
 		return mimetype.toLowerCase().contains("csv");
 	}
-	
+
 	private Graph model2Graph(Model model, String baseUri) {
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		model.write(out, "N-TRIPLE", baseUri);
@@ -68,17 +76,17 @@ public class TarqlTransform extends Transform {
 			parser.setRDFHandler(collector);
 			parser.parse(new InputStreamReader(bais), "");
 		} catch (RDFHandlerException rdfe) {
-//			log.error(rdfe.getMessage());
+			log.error(rdfe.getMessage());
 		} catch (RDFParseException rdfpe) {
-//			log.error(rdfpe.getMessage());
+			log.error(rdfpe.getMessage());
 		} catch (IOException ioe) {
-//			log.error(ioe.getMessage());
+			log.error(ioe.getMessage());
 		}
 		return new org.openrdf.model.impl.LinkedHashModel(collector.getStatements());
 	}
-	
+
 	private void executeQuery(TableData table, TarqlQuery query, Model resultModel) {
-		for (Query q: query.getQueries()) {
+		for (Query q : query.getQueries()) {
 			Model previousResults = ModelFactory.createDefaultModel();
 			previousResults.add(resultModel);
 			CSVQueryExecutionFactory.setPreviousResults(previousResults);
@@ -86,17 +94,18 @@ public class TarqlTransform extends Transform {
 			CSVQueryExecutionFactory.resetPreviousResults();
 		}
 	}
-	
+
 	private void processResults(QueryExecution ex, Model resultModel) {
 		if (ex.getQuery().isSelectType()) {
-			System.out.println(ResultSetFormatter.asText(ex.execSelect()));
+			log.info(ResultSetFormatter.asText(ex.execSelect()));
 		} else if (ex.getQuery().isAskType()) {
-			System.out.println(ResultSetFormatter.asText(ex.execSelect()));
+			log.info(ResultSetFormatter.asText(ex.execSelect()));
 		} else if (ex.getQuery().isConstructType()) {
 			resultModel.setNsPrefixes(resultModel);
 			ex.execConstruct(resultModel);
 		} else {
-			//cmdError("Only query forms CONSTRUCT, SELECT and ASK are supported");
+			log.error("Only query forms CONSTRUCT, SELECT and ASK are supported");
 		}
 	}
+
 }

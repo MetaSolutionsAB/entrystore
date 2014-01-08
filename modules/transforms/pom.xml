@@ -15,6 +15,7 @@
 	<name>EntryStore Transforms</name>
 
 	<modules>
+		<module>common</module>
 		<module>tabular</module>
 		<module>pcaxis</module>
 	</modules>

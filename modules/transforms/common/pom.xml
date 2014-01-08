@@ -10,21 +10,17 @@
 		<version>4.1-SNAPSHOT</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
-	<artifactId>entrystore-transforms-pcaxis</artifactId>
+	<artifactId>entrystore-transforms-common</artifactId>
 	<packaging>jar</packaging>
 	<version>4.1-SNAPSHOT</version>
-	<name>EntryStore PC-Axis Transforms</name>
-    
+	<name>EntryStore Transforms common</name>
+
 	<dependencies>
 		<dependency>
-			<groupId>org.entrystore</groupId>
-			<artifactId>entrystore-transforms-common</artifactId>
-			<version>${pom.version}</version>
+			<groupId>org.reflections</groupId>
+			<artifactId>reflections</artifactId>
+			<version>0.9.9-RC1</version>
 		</dependency>
-	        <dependency>
-        	    <groupId>com.mysema.stat</groupId>
-	            <artifactId>stat</artifactId>
-        	    <version>0.5.2</version>
-	        </dependency>
 	</dependencies>
+    
 </project>
