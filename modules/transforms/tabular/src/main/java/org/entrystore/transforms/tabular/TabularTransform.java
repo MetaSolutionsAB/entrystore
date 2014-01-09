@@ -1,13 +1,12 @@
 package org.entrystore.transforms.tabular;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.io.StringReader;
-
+import com.hp.hpl.jena.query.Query;
+import com.hp.hpl.jena.query.QueryExecution;
+import com.hp.hpl.jena.query.ResultSetFormatter;
+import com.hp.hpl.jena.rdf.model.Model;
+import com.hp.hpl.jena.rdf.model.ModelFactory;
+import com.hp.hpl.jena.shared.NotFoundException;
+import com.hp.hpl.jena.sparql.algebra.table.TableData;
 import org.deri.tarql.CSVQueryExecutionFactory;
 import org.deri.tarql.CSVToValues;
 import org.deri.tarql.TarqlParser;
@@ -20,18 +19,18 @@ import org.openrdf.rio.RDFHandlerException;
 import org.openrdf.rio.RDFParseException;
 import org.openrdf.rio.helpers.StatementCollector;
 import org.openrdf.rio.ntriples.NTriplesParser;
-
-import com.hp.hpl.jena.query.Query;
-import com.hp.hpl.jena.query.QueryExecution;
-import com.hp.hpl.jena.query.ResultSetFormatter;
-import com.hp.hpl.jena.rdf.model.Model;
-import com.hp.hpl.jena.rdf.model.ModelFactory;
-import com.hp.hpl.jena.shared.NotFoundException;
-import com.hp.hpl.jena.sparql.algebra.table.TableData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@TransformParameters(type="tabular", formats={"csv","xls","xlsx"})
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringReader;
+
+@TransformParameters(type="tabular", extensions={"csv", "xls"})
 public class TabularTransform extends Transform {
 
 	private static Logger log = LoggerFactory.getLogger(TabularTransform.class);
@@ -48,7 +47,7 @@ public class TabularTransform extends Transform {
 				table = new XLSToValues(data, false, sheetNr).read();
 			}
 
-			String tarqlstr = args.get(0);
+			String tarqlstr = getArguments().get("tarqlstring");
 			TarqlQuery q = new TarqlParser(new StringReader(tarqlstr)).getResult();
 			Model resultModel = ModelFactory.createDefaultModel();
 			executeQuery(table, q, resultModel);

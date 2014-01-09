@@ -28,8 +28,14 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface TransformParameters {
 
-	String[] formats() default { };
+	/**
+	 * @return Supported file extensions
+	 */
+	String[] extensions() default { };
 
+	/**
+	 * @return Supported type or format
+	 */
 	String type();
 
 }
