@@ -17,9 +17,7 @@
 package org.entrystore.repository;
 
 /**
- * There are a few kinds of resources that will be specially treated by SCAM,
- * they need to be easily recognized. This is accomplished via a BuiltinType 
- * in the metametadata.
+ * Entries with a set BuiltinType get special treatment in EntryStore.
  * 
  * @author Matthias Palmér
  * @author Hannes Ebner
