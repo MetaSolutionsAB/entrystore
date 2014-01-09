@@ -21,7 +21,8 @@ package org.entrystore.repository;
  * they need to be easily recognized. This is accomplished via a BuiltinType 
  * in the metametadata.
  * 
- * @author matthias
+ * @author Matthias Palmér
+ * @author Hannes Ebner
  * @author Eric Johansson
  */
 public enum BuiltinType {
@@ -44,14 +45,14 @@ public enum BuiltinType {
 	/**
 	 * A user or group used in access control lists for managing access to 
 	 * various entries.
-	 * @see Principal
+	 * @see org.entrystore.repository.User
 	 */
 	User,
 
 	/**
 	 * A user or group used in access control lists for managing access to 
 	 * various entries.
-	 * @see Principal
+	 * @see org.entrystore.repository.Group
 	 */
 	Group,
 	
@@ -76,11 +77,15 @@ public enum BuiltinType {
 	 * A named graph
 	 */
 	Graph,
-	
+
+	/**
+	 * A pipeline for data transformations
+	 */
+	Pipeline,
 	
 	/**
 	 * All other resource that have no specific treatment in the repository.
 	 */
-	None, 
+	None
 	
 }
