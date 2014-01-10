@@ -24,7 +24,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Set;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -32,7 +32,6 @@ import org.entrystore.repository.List;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -56,7 +55,7 @@ public class ContextTest {
 		rm.setCheckForAuthorization(false);
 		cm = rm.getContextManager();
 		// A new Context
-		Entry entry = cm.createResource(null, BuiltinType.Context, null, null);
+		Entry entry = cm.createResource(null, ResourceType.Context, null, null);
 		context = (Context) entry.getResource();
 	}  
 
@@ -64,7 +63,7 @@ public class ContextTest {
   public void createAndRemoveEntries() {
 	  //Some Entries
 	  int oldSize = context.getResources().size();
-	  Entry listEntry = context.createResource(null, BuiltinType.List, null, null);
+	  Entry listEntry = context.createResource(null, ResourceType.List, null, null);
 	  Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
 	  Entry refEntry = context.createReference(null, URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
 	  Set<URI> resources = context.getResources();
@@ -84,7 +83,7 @@ public class ContextTest {
 
   @Test
   public void accessToEntries() {
-	  Entry listEntry = context.createResource(null, BuiltinType.List, null, null);  
+	  Entry listEntry = context.createResource(null, ResourceType.List, null, null);
 	  assertTrue(listEntry.equals(context.getByResourceURI(listEntry.getResourceURI()).iterator().next()));
 	  assertTrue(listEntry.equals(context.getByEntryURI(listEntry.getEntryURI())));
 
@@ -108,15 +107,15 @@ public class ContextTest {
   
   @Test
   public void lists() {
-	  Entry listEntry = context.createResource(null, BuiltinType.List, null, null);
+	  Entry listEntry = context.createResource(null, ResourceType.List, null, null);
 	  List list = (List) listEntry.getResource();
-	  Entry sublistEntry1 = context.createResource(null, BuiltinType.List, null, listEntry.getResource().getURI());	  
+	  Entry sublistEntry1 = context.createResource(null, ResourceType.List, null, listEntry.getResource().getURI());
 	  java.util.List<URI> children = list.getChildren();
 	  //Assert that something can be added to a list.
 	  assertTrue(children.size() == 1 && children.contains(sublistEntry1.getEntryURI()));
 	  
 	  //Assert that several things can be added to a list.
-	  Entry sublistEntry2 = context.createResource(null, BuiltinType.List, null, listEntry.getResource().getURI());
+	  Entry sublistEntry2 = context.createResource(null, ResourceType.List, null, listEntry.getResource().getURI());
 	  children = list.getChildren();
 	  assertTrue(children.size() == 2 && children.contains(sublistEntry2.getEntryURI()));
 	  

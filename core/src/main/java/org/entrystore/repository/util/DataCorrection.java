@@ -31,7 +31,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import org.entrystore.repository.BuiltinType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -959,7 +958,7 @@ public class DataCorrection {
 		try {
 			List<Entry> entries = getEntries(getContexts());
 			for (Entry entry : entries) {
-				if (!entry.getLocationType().equals(LocationType.Reference)) {// && !entry.getBuiltinType().equals(BuiltinType.None)) {
+				if (!entry.getLocationType().equals(LocationType.Reference)) {// && !entry.getResourceType().equals(ResourceType.None)) {
 					fixMetadataOfEntry(entry);
 				}
 			}

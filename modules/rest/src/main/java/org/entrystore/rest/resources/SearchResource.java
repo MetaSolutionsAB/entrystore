@@ -35,7 +35,7 @@ import java.util.StringTokenizer;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.common.SolrException;
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
@@ -210,28 +210,28 @@ public class SearchResource extends BaseResource {
 						}
 					}
 				}
-				Set<BuiltinType> builtinType = null;
+				Set<ResourceType> resourceType = null;
 				if(parameters.containsKey("builtintype")){
-					builtinType = new HashSet<BuiltinType>();
+					resourceType = new HashSet<ResourceType>();
 					StringTokenizer tokenizer = new StringTokenizer(parameters.get("builtintype"),",");
 					while (tokenizer.hasMoreTokens()){
 						String builtinTypeToken = tokenizer.nextToken();
 						if("context".equalsIgnoreCase(builtinTypeToken)){
-							builtinType.add(BuiltinType.Context);
+							resourceType.add(ResourceType.Context);
 						}else if("group".equalsIgnoreCase(builtinTypeToken)){
-							builtinType.add(BuiltinType.Group);
+							resourceType.add(ResourceType.Group);
 						}else if("user".equalsIgnoreCase(builtinTypeToken)){
-							builtinType.add(BuiltinType.User);
+							resourceType.add(ResourceType.User);
 						}else if("list".equalsIgnoreCase(builtinTypeToken)){
-							builtinType.add(BuiltinType.List);
+							resourceType.add(ResourceType.List);
 						}else if("resultList".equalsIgnoreCase(builtinTypeToken)){
-							builtinType.add(BuiltinType.ResultList);
+							resourceType.add(ResourceType.ResultList);
 						}else if("string".equalsIgnoreCase(builtinTypeToken)){
-							builtinType.add(BuiltinType.String);
+							resourceType.add(ResourceType.String);
 						}else if("none".equalsIgnoreCase(builtinTypeToken)){
-							builtinType.add(BuiltinType.None);
+							resourceType.add(ResourceType.None);
 						}else if("graph".equalsIgnoreCase(builtinTypeToken)){
-							builtinType.add(BuiltinType.Graph);
+							resourceType.add(ResourceType.Graph);
 						}
 					}
 				}
@@ -260,7 +260,7 @@ public class SearchResource extends BaseResource {
 				}
 				
 				String userQueryAddition = "";
-				if(builtinType != null && builtinType.contains(BuiltinType.User)){
+				if(resourceType != null && resourceType.contains(ResourceType.User)){
 					userQueryAddition += " UNION {?x foaf:name ?y} UNION {?x foaf:surname ?y} UNION {?x foaf:firstname ?y} ";
 				}
 				
@@ -313,7 +313,7 @@ public class SearchResource extends BaseResource {
 						preds.add(new URIImpl(NS.dc + "description"));
 						preds.add(new URIImpl(NS.dcterms + "title"));
 						preds.add(RDF.VALUE);
-						if (builtinType != null && builtinType.contains(BuiltinType.User)) {
+						if (resourceType != null && resourceType.contains(ResourceType.User)) {
 							preds.add(new URIImpl(NS.foaf + "name"));
 							preds.add(new URIImpl(NS.foaf + "surname"));
 							preds.add(new URIImpl(NS.foaf + "firstname"));
@@ -330,16 +330,16 @@ public class SearchResource extends BaseResource {
 					
 					// Filter for LocationType
 					
-					if (locationType != null && builtinType != null){
+					if (locationType != null && resourceType != null){
 						entries = new ArrayList<Entry>();
 						for(Entry entry : searchResult){
-							if(locationType.contains(entry.getLocationType()) && builtinType.contains(entry.getBuiltinType())){
+							if(locationType.contains(entry.getLocationType()) && resourceType.contains(entry.getResourceType())){
 								entries.add(entry);
 							}
 						}
 						Date afterContextFilter = new Date();
 						timeDiff = afterContextFilter.getTime() - after.getTime();
-						log.info("Context filtering took " + timeDiff + " ms (both BuiltinType and LocationType)");
+						log.info("Context filtering took " + timeDiff + " ms (both ResourceType and LocationType)");
 					} else if (locationType != null) {
 						entries = new ArrayList<Entry>();
 						for (Entry entry : searchResult) {
@@ -350,10 +350,10 @@ public class SearchResource extends BaseResource {
 						Date afterContextFilter = new Date();
 						timeDiff = afterContextFilter.getTime() - after.getTime();
 						log.info("Context filtering took " + timeDiff + " ms (only location type)");
-					} else if (builtinType != null) {
+					} else if (resourceType != null) {
 						entries = new ArrayList<Entry>();
 						for (Entry entry : searchResult) {
-							if (builtinType.contains(entry.getBuiltinType())) {
+							if (resourceType.contains(entry.getResourceType())) {
 								entries.add(entry);
 							}
 						}
@@ -547,13 +547,13 @@ public class SearchResource extends BaseResource {
 							JSONObject childJSON = new JSONObject(); 
 							childJSON.put("entryId", e.getId());
 							childJSON.put("contextId", e.getContext().getEntry().getId());
-							BuiltinType btChild = e.getBuiltinType();
+							ResourceType btChild = e.getResourceType();
 							LocationType locChild = e.getLocationType();
-							if (btChild == BuiltinType.Context || btChild == BuiltinType.SystemContext) {
+							if (btChild == ResourceType.Context || btChild == ResourceType.SystemContext) {
 								childJSON.put("alias", getCM().getContextAlias(e.getResourceURI()));
-							} else if (btChild == BuiltinType.User && locChild == LocationType.Local) {
+							} else if (btChild == ResourceType.User && locChild == LocationType.Local) {
 								childJSON.put("name", ((User) e.getResource()).getName());
-							} else if (btChild == BuiltinType.Group && locChild == LocationType.Local) {
+							} else if (btChild == ResourceType.Group && locChild == LocationType.Local) {
 								childJSON.put("name", ((Group) e.getResource()).getName());								
 							}
 							PrincipalManager PM = this.getPM();

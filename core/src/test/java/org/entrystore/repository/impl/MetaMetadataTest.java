@@ -21,7 +21,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.net.URI;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -32,7 +32,6 @@ import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.junit.Before;
 import org.junit.Test;
 import org.openrdf.model.Graph;
@@ -68,9 +67,9 @@ public class MetaMetadataTest {
 		rm.setCheckForAuthorization(false);
 		cm = rm.getContextManager();
 		// A new Context
-		Entry entry = cm.createResource(null, BuiltinType.Context, null, null);
+		Entry entry = cm.createResource(null, ResourceType.Context, null, null);
 		context = (Context) entry.getResource();
-		listEntry = context.createResource(null, BuiltinType.List, null, null);
+		listEntry = context.createResource(null, ResourceType.List, null, null);
 		linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
 		refEntry = context
 				.createReference(null, URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
@@ -81,20 +80,20 @@ public class MetaMetadataTest {
 	public void builtinType() {
 		// Checking that builtintype cannot be changed for local resources
 		try {
-			listEntry.setBuiltinType(BuiltinType.None);
+			listEntry.setResourceType(ResourceType.None);
 			assertTrue("Succesfully (and erronously) changed the builtintype" + " of a local resource!", false);
 		} catch (RepositoryException re) {
 		}
 
 		// Checking that builtintype CAN be changed for links.
-		assertTrue(linkEntry.getBuiltinType() == BuiltinType.None);
-		linkEntry.setBuiltinType(BuiltinType.List);
-		assertTrue(linkEntry.getBuiltinType() == BuiltinType.List);
+		assertTrue(linkEntry.getResourceType() == ResourceType.None);
+		linkEntry.setResourceType(ResourceType.List);
+		assertTrue(linkEntry.getResourceType() == ResourceType.List);
 
 		// Checking that builtintype CAN be changed for references.
-		assertTrue(refEntry.getBuiltinType() == BuiltinType.None);
-		refEntry.setBuiltinType(BuiltinType.List);
-		assertTrue(refEntry.getBuiltinType() == BuiltinType.List);
+		assertTrue(refEntry.getResourceType() == ResourceType.None);
+		refEntry.setResourceType(ResourceType.List);
+		assertTrue(refEntry.getResourceType() == ResourceType.List);
 	}
 
 	@Test

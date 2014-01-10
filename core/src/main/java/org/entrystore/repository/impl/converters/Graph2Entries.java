@@ -23,7 +23,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.RepositoryProperties;
@@ -110,7 +110,7 @@ public class Graph2Entries {
 
 			Entry entry = this.context.get(resourceId); //Try to fetch existing entry.
 			if (entry == null) {
-				entry = this.context.createResource(resourceId, BuiltinType.Graph, RepresentationType.InformationResource, null);					
+				entry = this.context.createResource(resourceId, ResourceType.Graph, RepresentationType.InformationResource, null);
 			}
 			Graph resg = this.translate(graph, translate);
 			((RDFResource) entry.getResource()).setGraph(resg);
@@ -144,7 +144,7 @@ public class Graph2Entries {
 			Graph subg = this.extract(graph, oldResources.get(entryId), ignore, translate);
 			Entry entry = this.context.get(entryId); //Try to fetch existing entry.
 			if (entry == null) {  //If none exist, create it.
-				entry = this.context.createResource(entryId, BuiltinType.None, RepresentationType.NamedResource, null);
+				entry = this.context.createResource(entryId, ResourceType.None, RepresentationType.NamedResource, null);
 				newResCounter++;
 			} else {
 				updResCounter++;

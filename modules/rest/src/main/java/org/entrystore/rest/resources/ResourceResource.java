@@ -45,7 +45,7 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
@@ -213,11 +213,11 @@ public class ResourceResource extends BaseResource {
 				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
 					storeRepresentation(r);
 				}
-			} else if (entry.getBuiltinType().equals(BuiltinType.List) &&
+			} else if (entry.getResourceType().equals(ResourceType.List) &&
 					parameters.containsKey("import") &&
 					MediaType.APPLICATION_ZIP.equals(getRequestEntity().getMediaType())) {
 				getResponse().setStatus(importFromZIP(getRequestEntity()));
-			} else if (entry.getBuiltinType().equals(BuiltinType.List) &&
+			} else if (entry.getResourceType().equals(ResourceType.List) &&
 					parameters.containsKey("moveEntry") &&
 					parameters.containsKey("fromList")) {
 				// POST 3/resource/45?moveEntry=2/entry/34&fromList=2/resource/67
@@ -300,7 +300,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * List
 		 */
-		if (entry.getBuiltinType() == BuiltinType.List) {
+		if (entry.getResourceType() == ResourceType.List) {
 			ListImpl l = (ListImpl) entry.getResource();
 			if (parameters.containsKey("recursive")) {
 				l.removeTree();
@@ -312,7 +312,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * None
 		 */
-		if (entry.getBuiltinType() == BuiltinType.None ) {
+		if (entry.getResourceType() == ResourceType.None ) {
 			if(entry.getRepresentationType() == RepresentationType.InformationResource) {
 				Data data = (Data)entry.getResource(); 
 				if (data.delete() == false) {
@@ -325,7 +325,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * String
 		 */
-		if (BuiltinType.String.equals(entry.getBuiltinType())) {
+		if (ResourceType.String.equals(entry.getResourceType())) {
 			StringResource strRes = (StringResource) entry.getResource(); // FIXME ?!
 			GraphImpl g = new GraphImpl(); 
 			entry.setGraph(g); 
@@ -336,7 +336,7 @@ public class ResourceResource extends BaseResource {
 	protected boolean isFile(Entry entry) {
 		if (entry != null) {
 			return LocationType.Local.equals(entry.getLocationType()) &&
-				BuiltinType.None.equals(entry.getBuiltinType()) &&
+				ResourceType.None.equals(entry.getResourceType()) &&
 				RepresentationType.InformationResource.equals(entry.getRepresentationType());
 		} else {
 			return false;
@@ -449,13 +449,13 @@ public class ResourceResource extends BaseResource {
 	
 	public Set<Entry> getListChildrenRecursively(Entry listEntry) {
 		Set<Entry> result = new HashSet<Entry>();
-		if (BuiltinType.List.equals(listEntry.getBuiltinType()) && LocationType.Local.equals(listEntry.getLocationType())) {
+		if (ResourceType.List.equals(listEntry.getResourceType()) && LocationType.Local.equals(listEntry.getLocationType())) {
 			org.entrystore.repository.List l = (org.entrystore.repository.List) listEntry.getResource();
 			List<URI> c = l.getChildren();
 			for (URI uri : c) {
 				Entry e = getRM().getContextManager().getEntry(uri);
 				if (e != null) {
-					if (BuiltinType.List.equals(e.getBuiltinType())) {
+					if (ResourceType.List.equals(e.getResourceType())) {
 						result.addAll(getListChildrenRecursively(e));
 					} else {
 						result.add(e);
@@ -485,15 +485,15 @@ public class ResourceResource extends BaseResource {
 		SyndFeed feed = new SyndFeedImpl();
 		feed.setFeedType(type);
 
-		BuiltinType bt = entry.getBuiltinType();
-		if (!BuiltinType.Context.equals(bt) && !BuiltinType.List.equals(bt)) {
+		ResourceType bt = entry.getResourceType();
+		if (!ResourceType.Context.equals(bt) && !ResourceType.List.equals(bt)) {
 			return null;
 		}
 
 		String solrQueryValue;
 		String alias;
 
-		if (BuiltinType.Context.equals(bt)) {
+		if (ResourceType.Context.equals(bt)) {
 			alias = getCM().getContextAlias(entry.getResourceURI());
 			solrQueryValue = "context:";
 		} else {
@@ -598,7 +598,7 @@ public class ResourceResource extends BaseResource {
 		if (LocationType.Link.equals(entry.getLocationType()) ||
 				LocationType.LinkReference.equals(entry.getLocationType()) ||
 				LocationType.Reference.equals(entry.getLocationType())) {
-			if (BuiltinType.None.equals(entry.getBuiltinType())) {
+			if (ResourceType.None.equals(entry.getResourceType())) {
 				getResponse().setLocationRef(new Reference(entry.getResourceURI().toString()));
 				getResponse().setStatus(Status.REDIRECTION_SEE_OTHER);
 				return null;
@@ -608,7 +608,7 @@ public class ResourceResource extends BaseResource {
 			JSONArray array = new JSONArray(); 
 
 			/*** List ***/
-			if (entry.getBuiltinType() == BuiltinType.List) {
+			if (entry.getResourceType() == ResourceType.List) {
 				org.entrystore.repository.List l = (org.entrystore.repository.List) entry.getResource(); 
 				List<URI> uris = l.getChildren();
 				Set<String> IDs = new HashSet<String>();
@@ -633,20 +633,20 @@ public class ResourceResource extends BaseResource {
 					if ("desc".equalsIgnoreCase(parameters.get("order"))) {
 						asc = false;
 					}
-					BuiltinType prioritizedBuiltinType = null;
+					ResourceType prioritizedResourceType = null;
 					if (parameters.containsKey("prio")) {
-						prioritizedBuiltinType = BuiltinType.valueOf(parameters.get("prio"));
+						prioritizedResourceType = ResourceType.valueOf(parameters.get("prio"));
 					}
 					String sortType = parameters.get("sort");
 					if ("title".equalsIgnoreCase(sortType)) {
 						String lang = parameters.get("lang");
-						EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedBuiltinType);
+						EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedResourceType);
 					} else if ("modified".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedBuiltinType);
+						EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedResourceType);
 					} else if ("created".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedBuiltinType);
+						EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedResourceType);
 					} else if ("size".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedBuiltinType);
+						EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedResourceType);
 					}
 					long sortDuration = new Date().getTime() - before.getTime();
 					log.debug("List entry sorting took " + sortDuration + " ms");
@@ -669,7 +669,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** String ***/
-			if(entry.getBuiltinType() == BuiltinType.String) {
+			if(entry.getResourceType() == ResourceType.String) {
 				StringResource stringResource = (StringResource)entry.getResource(); 
 				Graph graph = stringResource.getGraph(); 
 				if (graph == null) {
@@ -679,7 +679,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Graph ***/
-			if (BuiltinType.Graph.equals(entry.getBuiltinType())) {
+			if (ResourceType.Graph.equals(entry.getResourceType())) {
 				RDFResource graphResource = (RDFResource) entry.getResource(); 
 				Graph graph = graphResource.getGraph();
 				if (graph == null) {
@@ -690,7 +690,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Context ***/
-			if(entry.getBuiltinType() == BuiltinType.Context || entry.getBuiltinType() == BuiltinType.SystemContext) {
+			if(entry.getResourceType() == ResourceType.Context || entry.getResourceType() == ResourceType.SystemContext) {
 				org.entrystore.repository.Context c = (org.entrystore.repository.Context) entry.getResource(); 
 				Set<URI> uris = c.getEntries(); 
 				for(URI u: uris) {
@@ -701,7 +701,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** None ***/
-			if(entry.getBuiltinType() == BuiltinType.None) {
+			if(entry.getResourceType() == ResourceType.None) {
 
 				// Local data
 				if(entry.getRepresentationType() == RepresentationType.InformationResource) {
@@ -740,7 +740,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** User ***/
-			if(entry.getBuiltinType() == BuiltinType.User) {
+			if(entry.getResourceType() == ResourceType.User) {
 				JSONObject jsonUserObj = new JSONObject();  
 				User user = (User) entry.getResource(); 
 				try {
@@ -765,7 +765,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Group ***/
-			if(entry.getBuiltinType() == BuiltinType.Group) {
+			if(entry.getResourceType() == ResourceType.Group) {
 				JSONObject jsonGroupObj = new JSONObject(); 
 				Group group = (Group) entry.getResource(); 
 				JSONArray userArray = new JSONArray(); 
@@ -799,7 +799,7 @@ public class ResourceResource extends BaseResource {
 
 			log.error("Can not find the resource.");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource + " Builtin type: " + entry.getBuiltinType());
+			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource + " Builtin type: " + entry.getResourceType());
 		}
 
 		log.info("No resource available.");
@@ -816,7 +816,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * List and Group
 		 */
-		if (entry.getBuiltinType() == BuiltinType.List || entry.getBuiltinType() == BuiltinType.Group) {
+		if (entry.getResourceType() == ResourceType.List || entry.getResourceType() == ResourceType.Group) {
 			JSONObject entityJSON = null; 
 			try {
 				entityJSON = new JSONObject(getRequest().getEntity().getText());
@@ -837,7 +837,7 @@ public class ResourceResource extends BaseResource {
 					}
 				}
 				
-				if (entry.getBuiltinType() == BuiltinType.List) {
+				if (entry.getResourceType() == ResourceType.List) {
 					org.entrystore.repository.List resourceList = (org.entrystore.repository.List) entry.getResource();
 					resourceList.setChildren(newResource);
 				} else {
@@ -864,7 +864,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * Data
 		 */
-		if (entry.getBuiltinType() == BuiltinType.None){
+		if (entry.getResourceType() == ResourceType.None){
 			boolean textarea = this.parameters.keySet().contains("textarea");
 			String error = null;
 
@@ -950,7 +950,7 @@ public class ResourceResource extends BaseResource {
 
 		/*** String  ***/
 		// {"@id":"http://localhost:8080/scam/1/resource/11","sc:body":{"@language":"english","@value":"<h1>Title<\/h1>"}}
-		if(entry.getBuiltinType() == BuiltinType.String) {
+		if(entry.getResourceType() == ResourceType.String) {
 			JSONObject entityJSON = null; 
 			try {
 				entityJSON = new JSONObject(getRequest().getEntity().getText());
@@ -974,7 +974,7 @@ public class ResourceResource extends BaseResource {
 		}
 		
 		/*** Graph ***/
-		if (BuiltinType.Graph.equals(entry.getBuiltinType())) {
+		if (ResourceType.Graph.equals(entry.getResourceType())) {
 			RDFResource graphResource = (RDFResource) entry.getResource(); 
 			if (graphResource != null) {
 				Graph graph = null;
@@ -995,12 +995,12 @@ public class ResourceResource extends BaseResource {
 			} else {
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"No RDF resource found for this entry\"}"));
-				log.error("No RDF resource found for this entry with BuiltinType Graph");
+				log.error("No RDF resource found for this entry with ResourceType Graph");
 			}
 		}
 
 		/*** User ***/
-		if (entry.getBuiltinType() == BuiltinType.User) {
+		if (entry.getResourceType() == ResourceType.User) {
 			JSONObject entityJSON = null; 
 			try {
 				entityJSON = new JSONObject(getRequest().getEntity().getText());

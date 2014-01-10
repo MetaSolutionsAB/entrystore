@@ -20,17 +20,14 @@ package org.entrystore.repository.test;
 import java.net.URI;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 
 import java.util.HashSet;
-import java.util.Iterator;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
-import org.entrystore.repository.List;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryManager;
@@ -39,7 +36,6 @@ import org.entrystore.repository.User;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.ValueFactoryImpl;
 
@@ -74,14 +70,14 @@ public class TestSuite {
 
 	private static void createTeacher(PrincipalManager pm, ContextManager cm, Group group, String name, String password, String email,
 			ArrayList<Group> studentGroups) {
-		Entry entry = pm.createResource(null, BuiltinType.User, null, null);
+		Entry entry = pm.createResource(null, ResourceType.User, null, null);
 		pm.setPrincipalName(entry.getResourceURI(), name);
 		setMetadata(entry, name, "teacher", null, null, "teacher");
 		User u = (User) entry.getResource();
 		u.setSecret(password);
 		u.setName(email); 
 		group.addMember(u); 
-		Entry userHomeContextE = cm.createResource(null, BuiltinType.Context, null, null); 
+		Entry userHomeContextE = cm.createResource(null, ResourceType.Context, null, null);
 		userHomeContextE.addAllowedPrincipalsFor(AccessProperty.Administer, u.getURI()); 
 		
 		userHomeContextE.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getGuestUser().getEntry().getEntryURI());
@@ -94,20 +90,20 @@ public class TestSuite {
 		for(Group g : studentGroups) {
 			
 			Entry linkRefEntry = c.createLinkReference(null, g.getURI(), g.getEntry().getLocalMetadata().getURI(), c.get("_top").getResourceURI());
-			linkRefEntry.setBuiltinType(BuiltinType.List);
+			linkRefEntry.setResourceType(ResourceType.List);
 			setMetadata(linkRefEntry, g.getName(), null, null, "text/html", null);
 		}
 
 //		if(supervisor) {
-//			Entry groupAEntry = c.createResource(BuiltinType.List, null, c.get("_top").getResourceURI()); 
+//			Entry groupAEntry = c.createResource(ResourceType.List, null, c.get("_top").getResourceURI());
 //			setMetadata(groupAEntry, "Grupp A", "Grupp A", null, null, null); 
-//			Entry groupBEntry = c.createResource(BuiltinType.List, null, c.get("_top").getResourceURI()); 
+//			Entry groupBEntry = c.createResource(ResourceType.List, null, c.get("_top").getResourceURI());
 //			setMetadata(groupBEntry, "Grupp B", "Grupp B", null, null, null); 
-//			Entry groupCEntry = c.createResource(BuiltinType.List, null, c.get("_top").getResourceURI()); 
+//			Entry groupCEntry = c.createResource(ResourceType.List, null, c.get("_top").getResourceURI());
 //			setMetadata(groupCEntry, "Grupp C", "Grupp C", null, null, null); 
-//			Entry groupDEntry = c.createResource(BuiltinType.List, null, c.get("_top").getResourceURI()); 
+//			Entry groupDEntry = c.createResource(ResourceType.List, null, c.get("_top").getResourceURI());
 //			setMetadata(groupDEntry, "Grupp D", "Grupp D", null, null, null); 
-//			Entry groupOvikEntry = c.createResource(BuiltinType.List, null, c.get("_top").getResourceURI()); 
+//			Entry groupOvikEntry = c.createResource(ResourceType.List, null, c.get("_top").getResourceURI());
 //			setMetadata(groupOvikEntry, "Grupp Ö-vik", "Grupp Ö-vik", null, null, null); 
 //		} else {
 //			Entry supContextEntry = cm.getEntry(cm.getContextURI("Supervisor"));
@@ -128,7 +124,7 @@ public class TestSuite {
 //								|| s.getObject().stringValue().equals("Grupp D") 
 //								|| s.getObject().stringValue().equals("Grupp Ö-vik")) {
 //							Entry linkRefEntry = c.createLinkReference(e.getResourceURI(), e.getLocalMetadataURI(), c.get("_top").getResourceURI());
-//							linkRefEntry.setBuiltinType(BuiltinType.List);
+//							linkRefEntry.setResourceType(ResourceType.List);
 //							//linkRefEntry.getCachedExternalMetadata().setGraph(e.getLocalMetadata().getGraph());
 //							setMetadata(linkRefEntry, s.getObject().stringValue(), null, null, "text/html", null);
 //
@@ -148,7 +144,7 @@ public class TestSuite {
 		URI currentUserURI = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		
-		Entry teacherGroupE = pm.createResource(null, BuiltinType.Group, null, null);
+		Entry teacherGroupE = pm.createResource(null, ResourceType.Group, null, null);
 		pm.setPrincipalName(teacherGroupE.getResourceURI(), "Teacher Group");
 		setMetadata(teacherGroupE, "Teacher Group", "Teachers of the course", null, null, null);
 		Group teacherGroup = (Group) teacherGroupE.getResource();
@@ -204,7 +200,7 @@ public class TestSuite {
 	}
 
 	private static Group createStudentGroup(PrincipalManager pm, String groupName, Group teacherGroup) {
-		Entry groupE = pm.createResource(null, BuiltinType.Group, null, null);
+		Entry groupE = pm.createResource(null, ResourceType.Group, null, null);
 		pm.setPrincipalName(groupE.getResourceURI(), groupName);
 		setMetadata(groupE, groupName, groupName, null, null, null);
 		groupE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, teacherGroup.getURI());
@@ -214,7 +210,7 @@ public class TestSuite {
 
 	private static void createStudent(PrincipalManager pm, ContextManager cm, String name, String email, Group group, String password, Group teacherGroup) {
 
-		Entry userEntry = pm.createResource(null, BuiltinType.User, null, null); 
+		Entry userEntry = pm.createResource(null, ResourceType.User, null, null);
 		setStudentMetadata(userEntry, "Student "+ name, "student", name, email); 
 		pm.setPrincipalName(userEntry.getResourceURI(), name);
 	
@@ -228,7 +224,7 @@ public class TestSuite {
 		group.addMember(u); 
 		
 
-		Entry contextEntry = cm.createResource(null, BuiltinType.Context, null, null); 
+		Entry contextEntry = cm.createResource(null, ResourceType.Context, null, null);
 		contextEntry.addAllowedPrincipalsFor(AccessProperty.Administer, u.getURI());
 		contextEntry.addAllowedPrincipalsFor(AccessProperty.Administer, teacherGroup.getURI());
 		
@@ -237,13 +233,13 @@ public class TestSuite {
 		org.entrystore.repository.Context contextResource = (org.entrystore.repository.Context) contextEntry.getResource();
 
 		Entry top = contextResource.get("_top"); 
-		Entry folderEntry1 = contextResource.createResource(null, BuiltinType.List, null, top.getResourceURI()); 		
+		Entry folderEntry1 = contextResource.createResource(null, ResourceType.List, null, top.getResourceURI());
 		setStudentMetadata(folderEntry1, "Arbetsportfolio", null, null, null); 
 
-		Entry folderEntry2 = contextResource.createResource(null, BuiltinType.List, null, top.getResourceURI()); 		
+		Entry folderEntry2 = contextResource.createResource(null, ResourceType.List, null, top.getResourceURI());
 		setStudentMetadata(folderEntry2, "Redovisningsportfolio", null, null, null); 
 
-		Entry folderEntry3 = contextResource.createResource(null, BuiltinType.List, null, top.getResourceURI()); 		
+		Entry folderEntry3 = contextResource.createResource(null, ResourceType.List, null, top.getResourceURI());
 		setStudentMetadata(folderEntry3, "Utv\u00e4rderingsportfolio", null, null, null); 
 
 		cm.setContextAlias(contextEntry.getEntryURI(), name);
@@ -300,7 +296,7 @@ public class TestSuite {
 //					if(s.getObject().stringValue().equals(group)) {
 //						
 //						Entry linkRefEntry = supContext.createLinkReference(top.getResourceURI(), top.getLocalMetadataURI(), e.getResourceURI());
-//						linkRefEntry.setBuiltinType(BuiltinType.List);
+//						linkRefEntry.setResourceType(ResourceType.List);
 //						setMetadata(linkRefEntry, name +" portfolio", "Detta är "+name+"s portfolio", null, "text/html", null);
 //
 //						break; 
@@ -357,7 +353,7 @@ public class TestSuite {
 
 		try {
 			//Donald Duck user
-			Entry donaldE = pm.createResource(null, BuiltinType.User, null, null);
+			Entry donaldE = pm.createResource(null, ResourceType.User, null, null);
 			pm.setPrincipalName(donaldE.getResourceURI(), "Donald");
 			//donaldE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			setMetadata(donaldE, "Donald Duck", "I am easily provoked and have an occasionally explosive temper, so thread carefully around me.", null, null, null);
@@ -365,7 +361,7 @@ public class TestSuite {
 			donald.setSecret("donalddonald");
 
 			//Daisy Duck user
-			Entry daisyE = pm.createResource(null, BuiltinType.User, null, null);
+			Entry daisyE = pm.createResource(null, ResourceType.User, null, null);
 			pm.setPrincipalName(daisyE.getResourceURI(), "Daisy");
 			setMetadata(daisyE, "Daisy Duck", "I am Donald's girlfriend, but I am far more sophisticated!", null, null, null);
 			//daisyE.addAllowedPrinccontextipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
@@ -373,7 +369,7 @@ public class TestSuite {
 			daisy.setSecret("daisydaisy");
 
 			//Mickey Mouse user
-			Entry mickeyE = pm.createResource(null, BuiltinType.User, null, null);
+			Entry mickeyE = pm.createResource(null, ResourceType.User, null, null);
 			pm.setPrincipalName(mickeyE.getResourceURI(), "Mickey");
 			setMetadata(mickeyE, "Mickey Mouse", "I am older than I look although I still speek in a famously shy, falsetto voice.", null, null, null);		
 			//mickeyE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
@@ -381,7 +377,7 @@ public class TestSuite {
 			mickey.setSecret("mickeymickey");
 
 			//Friends of Mickey group
-			Entry friendsOfMickeyE = pm.createResource(null, BuiltinType.Group, null, null);
+			Entry friendsOfMickeyE = pm.createResource(null, ResourceType.Group, null, null);
 			pm.setPrincipalName(friendsOfMickeyE.getResourceURI(), "friendsOfMickey");
 			setMetadata(friendsOfMickeyE, "Old friends of Mickey", null, null, null, null);
 			friendsOfMickeyE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
@@ -390,7 +386,7 @@ public class TestSuite {
 			friendsOfMickey.addMember(mickey);
 
 			//The duck context.
-			Entry duckE = cm.createResource(null, BuiltinType.Context, null, null);
+			Entry duckE = cm.createResource(null, ResourceType.Context, null, null);
 			setMetadata(duckE, "Donald and Daisy Duck's place", "Scrooge has a vault, we have this.", null, null, null);
 			duckE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			Context duck = (Context) duckE.getResource();
@@ -402,7 +398,7 @@ public class TestSuite {
 			donald.setHomeContext(duck);
 
 			//The mouse context.
-			Entry mouseE = cm.createResource(null, BuiltinType.Context, null, null);
+			Entry mouseE = cm.createResource(null, ResourceType.Context, null, null);
 			setMetadata(mouseE, "Mickey Mouse's place", "Mickey's creephole with old cheese and other goodies.", null, null, null);
 			mouseE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			Context mouse = (Context) mouseE.getResource();
@@ -415,10 +411,10 @@ public class TestSuite {
 			//Add mickey and originals group as contacts in duck context (as references).
 			Entry contactsEntry = duck.get("_contacts");
 			Entry mickeyRefE = duck.createReference(null, mickey.getURI(), mickeyE.getLocalMetadataURI(), contactsEntry.getResourceURI());
-			mickeyRefE.setBuiltinType(BuiltinType.User);
+			mickeyRefE.setResourceType(ResourceType.User);
 			//			mickeyRefE.getCachedExternalMetadata().setGraph(mickeyE.getLocalMetadata().getGraph());
 			Entry friendsRefE = duck.createReference(null, friendsOfMickey.getURI(), friendsOfMickeyE.getLocalMetadataURI(), contactsEntry.getResourceURI());
-			friendsRefE.setBuiltinType(BuiltinType.Group);
+			friendsRefE.setResourceType(ResourceType.Group);
 			//			friendsRefE.getCachedExternalMetadata().setGraph(friendsOfMickeyE.getLocalMetadata().getGraph());
 
 
@@ -442,8 +438,8 @@ public class TestSuite {
 			Context mouse = cm.getContext("mouse");
 
 			//Test resources, using lists.
-			duck.createResource(null, BuiltinType.List, null, null);
-			mouse.createResource(null, BuiltinType.List, null, null);
+			duck.createResource(null, ResourceType.List, null, null);
+			mouse.createResource(null, ResourceType.List, null, null);
 		} finally {
 			pm.setAuthenticatedUserURI(currentUserURI);
 		}
@@ -490,17 +486,17 @@ public class TestSuite {
 			//A LinkReference to the mickeys context ("mouse"). 
 			//The referenced metadata is explicitly cached and additional local metadata is provided.
 			Entry linkRefEntry = duck.createLinkReference(null, topMouseEntry.getResourceURI(), topMouseEntry.getLocalMetadataURI(), topEntry.getResourceURI());
-			linkRefEntry.setBuiltinType(BuiltinType.List);
+			linkRefEntry.setResourceType(ResourceType.List);
 			//			linkRefEntry.getCachedExternalMetadata().setGraph(topMouseEntry.getLocalMetadata().getGraph());
 			setMetadata(linkRefEntry, "Our old friend Mickeys place", "Useful shortcut, sorry Daisy, you are not allowed in here.", null, "text/html", null);
 
 			//A plain reference to mickeys user (no local metadata).
 			//TODO move this to the special system entry friends list when it is introduced.
 			Entry linkEntry = duck.createReference(null, Mickey.getURI(), Mickey.getEntry().getLocalMetadataURI(), topEntry.getResourceURI());
-			linkEntry.setBuiltinType(BuiltinType.User);
+			linkEntry.setResourceType(ResourceType.User);
 			//			linkEntry.getCachedExternalMetadata().setGraph(Mickey.getEntry().getLocalMetadata().getGraph());
 
-			Entry subListEntry = duck.createResource(null, BuiltinType.List, null, topEntry.getResourceURI()); // list (folder) 1.
+			Entry subListEntry = duck.createResource(null, ResourceType.List, null, topEntry.getResourceURI()); // list (folder) 1.
 			setMetadata(subListEntry, "Material", "Mixed material.", null, null, null);
 
 			//A link to the wikipedia page on the nephews.
@@ -512,19 +508,19 @@ public class TestSuite {
 			setMetadata(familyTree, "Family tree", "The duck family from Dingus to Donald, Daisy is not in there yet...", null, null, null);
 
 			//A picture of the fourth nephew that sometimes appears.
-			Entry phooey = duck.createResource(null, BuiltinType.None, RepresentationType.NamedResource, topEntry.getResourceURI());
+			Entry phooey = duck.createResource(null, ResourceType.None, RepresentationType.NamedResource, topEntry.getResourceURI());
 			setMetadata(phooey, "Phooey Duck", "A mysterius fourth nephew, a freak of nature. Drawn by accident?", null, null, null);
 
 			//A picture of the fourth nephew that sometimes appears.
 			//TODO upload jpeg as well.
-			Entry image = duck.createResource(null, BuiltinType.None, RepresentationType.InformationResource, topEntry.getResourceURI());
+			Entry image = duck.createResource(null, ResourceType.None, RepresentationType.InformationResource, topEntry.getResourceURI());
 			setMetadata(image, "An image", "A image, remains to be uploaded.", null, "image/jpeg", null);
 
 
 			//			try {
 			//				// Create Comment Entries
 			//				Entry commentEntryString1 = duck.createComment(
-			//						BuiltinType.String, 
+			//						ResourceType.String,
 			//						null, 
 			//						null, 
 			//
@@ -532,7 +528,7 @@ public class TestSuite {
 			//						"commentsOf");
 			//
 			//				Entry commentEntryString2 = duck.createComment(
-			//						BuiltinType.String, 
+			//						ResourceType.String,
 			//						null, 
 			//						null, 
 			//
@@ -540,14 +536,14 @@ public class TestSuite {
 			//						"reviewsOf"); 
 			//
 			//				Entry commentEntryString3 = duck.createComment(
-			//						BuiltinType.String, 
+			//						ResourceType.String,
 			//						null, 
 			//						null, 
 			//
 			//						nephews.getEntryURI(), 
 			//						"commentsOf"); 
 			//
-			//				Entry commentEntryString4 = duck.createResource(BuiltinType.String, RepresentationType.InformationResource, null); 
+			//				Entry commentEntryString4 = duck.createResource(ResourceType.String, RepresentationType.InformationResource, null);
 			//
 			//				Graph graph = commentEntryString4.getLocalMetadata().getGraph(); 
 			//				ValueFactory vf = graph.getValueFactory(); 
@@ -616,9 +612,9 @@ public class TestSuite {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
 			//			// Harvester 1
-			//			Entry entryHarvesterDC = cm.createResource(BuiltinType.Context, null, null);		
+			//			Entry entryHarvesterDC = cm.createResource(ResourceType.Context, null, null);
 			//			se.kmr.scam.repository.Context contextHarvesterDC = (se.kmr.scam.repository.Context) entryHarvesterDC.getResource();
-			//			Entry entryDC = contextHarvesterDC.createResource(BuiltinType.List, null, null); // folder
+			//			Entry entryDC = contextHarvesterDC.createResource(ResourceType.List, null, null); // folder
 			//			
 			//			Graph graph = entryHarvesterDC.getGraph(); 
 			//			ValueFactory vf = graph.getValueFactory(); 
@@ -632,9 +628,9 @@ public class TestSuite {
 			//			entryHarvesterDC.setGraph(graph);
 			//
 			//			// Harvester 2
-			//			Entry entryHarvesterLOM = cm.createResource(BuiltinType.Context, null, null);
+			//			Entry entryHarvesterLOM = cm.createResource(ResourceType.Context, null, null);
 			//			se.kmr.scam.repository.Context contextHarvesterLOM = (se.kmr.scam.repository.Context) entryHarvesterLOM.getResource();
-			//			Entry entryLOM = contextHarvesterLOM.createResource(BuiltinType.List, null, null); // folder
+			//			Entry entryLOM = contextHarvesterLOM.createResource(ResourceType.List, null, null); // folder
 			//
 			//			graph = entryHarvesterLOM.getGraph(); 
 			//			vf = graph.getValueFactory(); 
@@ -647,9 +643,9 @@ public class TestSuite {
 			//			entryHarvesterLOM.setGraph(graph);
 
 			// Harvester Intute
-			//			Entry entryHarvesterDCIntute = cm.createResource(BuiltinType.Context, null, null);		
+			//			Entry entryHarvesterDCIntute = cm.createResource(ResourceType.Context, null, null);
 			//			se.kmr.scam.repository.Context contextHarvesterDCIntute = (se.kmr.scam.repository.Context) entryHarvesterDCIntute.getResource();
-			//			Entry entryDCIntute = contextHarvesterDCIntute.createResource(BuiltinType.List, null, null); // folder
+			//			Entry entryDCIntute = contextHarvesterDCIntute.createResource(ResourceType.List, null, null); // folder
 			//			
 			//			Graph graph = entryHarvesterDCIntute.getGraph(); 
 			//			ValueFactory vf = graph.getValueFactory(); 
@@ -664,9 +660,9 @@ public class TestSuite {
 			//			entryHarvesterDCIntute.setGraph(graph);
 
 			// Harvester FAO
-			//			Entry entryHarvesterFAO = cm.createResource(BuiltinType.Context, null, null);		
+			//			Entry entryHarvesterFAO = cm.createResource(ResourceType.Context, null, null);
 			//			se.kmr.scam.repository.Context contextHarvesterFAO = (se.kmr.scam.repository.Context) entryHarvesterFAO.getResource();
-			//			Entry entryFAO = contextHarvesterFAO.createResource(BuiltinType.List, null, null); // folder
+			//			Entry entryFAO = contextHarvesterFAO.createResource(ResourceType.List, null, null); // folder
 			//			
 			//			Graph graph = entryHarvesterFAO.getGraph(); 
 			//			ValueFactory vf = graph.getValueFactory(); 

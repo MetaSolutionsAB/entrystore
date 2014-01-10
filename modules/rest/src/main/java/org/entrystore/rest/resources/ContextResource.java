@@ -24,7 +24,7 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Set;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.List;
@@ -142,7 +142,7 @@ public class ContextResource extends BaseResource {
 	 * These URL:s can be requested from a Web browser etc. This method will 
 	 * execute these requests and deliver a response.
 	 * <ul>
-	 * <li>POST {base-uri}/{portfolio-id}?locationType=local&builtinType={builtinType}[&listURI={uri}]</li>
+	 * <li>POST {base-uri}/{portfolio-id}?locationType=local&resourceType={resourceType}[&listURI={uri}]</li>
 	 * <li>POST {base-uri}/{portfolio-id}?locationType=link&resource={resource-uri}[&listURI={listURI}]</li>
 	 * <li>POST {base-uri}/{portfolio-id}?locationType=reference&resource={resource-uri}&metadata={metadata-uri}[&listURI={uri}]</li>
 	 * <li>POST {base-uri}/{portfolio-id}?locationType=linkreference&resource={resource-uri}&metadata={metadata-uri}[&listURI={uri}]</li>
@@ -299,9 +299,9 @@ public class ContextResource extends BaseResource {
 					setLocalMetadataGraph(entry);
 					setCachedMetadataGraph(entry);
 					setEntryGraph(entry);
-					if (parameters.containsKey("builtinType")) {
-						BuiltinType bt = getBuiltinType(parameters.get("builtinType"));
-						entry.setBuiltinType(bt);
+					if (parameters.containsKey("resourceType")) {
+						ResourceType bt = getBuiltinType(parameters.get("resourceType"));
+						entry.setResourceType(bt);
 					}
 					if (parameters.containsKey("listURI")) {
 						try {
@@ -353,9 +353,9 @@ public class ContextResource extends BaseResource {
 				if (entry != null) {
 					setCachedMetadataGraph(entry);
 					setEntryGraph(entry);
-					if (parameters.containsKey("builtinType")) {
-						BuiltinType bt = getBuiltinType(parameters.get("builtinType"));
-						entry.setBuiltinType(bt);
+					if (parameters.containsKey("resourceType")) {
+						ResourceType bt = getBuiltinType(parameters.get("resourceType"));
+						entry.setResourceType(bt);
 					}
 					if (parameters.containsKey("listURI")) {
 						try {
@@ -385,35 +385,35 @@ public class ContextResource extends BaseResource {
 	}
 	
 	
-	private BuiltinType getBuiltinType(String bt) {
+	private ResourceType getBuiltinType(String bt) {
 		if (bt == null || "".equals(bt)) {
-			return BuiltinType.None;
+			return ResourceType.None;
 		}
 		if (bt.equalsIgnoreCase("list")) {
-			return BuiltinType.List;
+			return ResourceType.List;
 		}
 		if (bt.equalsIgnoreCase("resultlist")) {
-			return BuiltinType.ResultList;
+			return ResourceType.ResultList;
 		}
 		if (bt.equalsIgnoreCase("context")) {
-			return BuiltinType.Context;
+			return ResourceType.Context;
 		}		
 		if (bt.equalsIgnoreCase("user")) {
-			return BuiltinType.User;
+			return ResourceType.User;
 		}
 		if (bt.equalsIgnoreCase("group")) {
-			return BuiltinType.Group;
+			return ResourceType.Group;
 		}
 		if (bt.equalsIgnoreCase("systemcontext")) {
-			return BuiltinType.SystemContext;
+			return ResourceType.SystemContext;
 		}
 		if (bt.equalsIgnoreCase("string")) {
-			return BuiltinType.String;
+			return ResourceType.String;
 		}
 		if (bt.equalsIgnoreCase("graph")) {
-			return BuiltinType.Graph;
+			return ResourceType.Graph;
 		}
-		return BuiltinType.None;
+		return ResourceType.None;
 	}
 
 	/**
@@ -431,7 +431,7 @@ public class ContextResource extends BaseResource {
 			}
 		}
 
-		BuiltinType bt = getBuiltinType(parameters.get("builtinType"));
+		ResourceType bt = getBuiltinType(parameters.get("resourceType"));
 		entry = context.createResource(parameters.get("id"), bt, null, listURI);
 		try {
 			if (setResource(entry, bt)) {
@@ -456,7 +456,7 @@ public class ContextResource extends BaseResource {
 	 * @return the entry with the resource.
 	 * @throws JSONException 
 	 */
-	private boolean setResource(Entry entry, BuiltinType bt) throws JSONException {
+	private boolean setResource(Entry entry, ResourceType bt) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
 		if (requestText != null) {
 			jsonObj = new JSONObject(requestText);
@@ -580,9 +580,9 @@ public class ContextResource extends BaseResource {
 		if (entry != null) {
 			setLocalMetadataGraph(entry);
 			setEntryGraph(entry);
-			if (parameters.containsKey("builtinType")) {
-				BuiltinType bt = getBuiltinType(parameters.get("builtinType"));
-				entry.setBuiltinType(bt);
+			if (parameters.containsKey("resourceType")) {
+				ResourceType bt = getBuiltinType(parameters.get("resourceType"));
+				entry.setResourceType(bt);
 			}
 			if (parameters.containsKey("listURI")) {
 				try {

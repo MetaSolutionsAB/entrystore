@@ -25,7 +25,7 @@ import java.io.OutputStream;
  * Data resources contains digital information, e.g. a file, that is managed
  * within the repository. For a resource to be a data resource the
  * {@link LocationType} must be {@link LocationType#Local} and the
- * {@link BuiltinType} must be {@link BuiltinType#None}.
+ * {@link ResourceType} must be {@link ResourceType#None}.
  * 
  * @author matthias
  */

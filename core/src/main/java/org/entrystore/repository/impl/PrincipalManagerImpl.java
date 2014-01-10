@@ -25,7 +25,7 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.LocationType;
@@ -82,8 +82,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		Entry principalEntry = getEntryByName(name);
 		if (principalEntry == null) {
 			return null;
-		} else if (principalEntry.getBuiltinType() == BuiltinType.User ||
-						principalEntry.getBuiltinType() == BuiltinType.Group) {
+		} else if (principalEntry.getResourceType() == ResourceType.User ||
+						principalEntry.getResourceType() == ResourceType.Group) {
 			return principalEntry;
 		}
 		throw new org.entrystore.repository.RepositoryException("Found entry for the name is not a principal...\n" +
@@ -95,8 +95,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		Entry principalEntry = getByEntryURI(us.getMetaMetadataURI());
 		if (principalEntry == null) {
 			throw new org.entrystore.repository.RepositoryException("Cannot find an entry for the specified URI");
-		} else if (principalEntry.getBuiltinType() == BuiltinType.User ||
-					principalEntry.getBuiltinType() == BuiltinType.Group) {
+		} else if (principalEntry.getResourceType() == ResourceType.User ||
+					principalEntry.getResourceType() == ResourceType.Group) {
 			return setEntryName(us.getMetaMetadataURI(), newName);
 		}
 		throw new org.entrystore.repository.RepositoryException("Given URI does not refer to a Principal.");			
@@ -115,7 +115,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			URI nextURI = entryIterator.next();
 
 			Entry nextEntry = getByEntryURI(nextURI);
-			if(nextEntry.getBuiltinType() == BuiltinType.User) {
+			if(nextEntry.getResourceType() == ResourceType.User) {
 				userUris.add(nextEntry.getResourceURI());
 			}
 		}
@@ -136,7 +136,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			URI nextURI = entryIterator.next();
 			
 			Entry nextEntry = getByEntryURI(nextURI);
-			if(nextEntry.getBuiltinType() == BuiltinType.User) {
+			if(nextEntry.getResourceType() == ResourceType.User) {
 				userUris.add((User) nextEntry.getResource());
 			}
 		}
@@ -152,7 +152,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 */
 	public User getUser(URI userUri) {
 		for(Entry user: getByResourceURI(userUri)) {
-			if (user.getBuiltinType() == BuiltinType.User) {
+			if (user.getResourceType() == ResourceType.User) {
 				return (User) user.getResource();
 			}
 		}
@@ -166,7 +166,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 */
 	public Group getGroup(URI groupUri) {
 		for(Entry user: getByResourceURI(groupUri)) {
-			if (user.getBuiltinType() == BuiltinType.Group) {
+			if (user.getResourceType() == ResourceType.Group) {
 				return (Group) user.getResource();
 			}
 		}
@@ -182,7 +182,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			URI nextURI = entryIterator.next();
 
 			Entry nextGroup = getByEntryURI(nextURI);
-			if(nextGroup.getBuiltinType() == BuiltinType.Group) {
+			if(nextGroup.getResourceType() == ResourceType.Group) {
 				groupUris.add(nextGroup.getResourceURI());
 			}
 		}
@@ -199,7 +199,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			while(entryIterator.hasNext()) {
 				URI nextURI = entryIterator.next();
 				Entry nextEntry = getByEntryURI(nextURI); 
-				if(nextEntry.getBuiltinType() == BuiltinType.Group) {
+				if(nextEntry.getResourceType() == ResourceType.Group) {
 					Group nextGroup = (Group) nextEntry.getResource();
 					if(nextGroup != null) {
 						if(nextGroup.isMember(user)) {
@@ -221,7 +221,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		while(entryIterator.hasNext()) {
 			URI nextURI = entryIterator.next();
 			Entry e = getByEntryURI(nextURI); 
-			if(e.getBuiltinType() == BuiltinType.Group) {
+			if(e.getResourceType() == ResourceType.Group) {
 				groupUris.add(nextURI);
 			}
 		}
@@ -469,7 +469,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if (newEntry.getLocationType() != LocationType.Local) {
 			return;
 		}
-		switch (newEntry.getBuiltinType()) {
+		switch (newEntry.getResourceType()) {
 		case User:
 			newEntry.setResource(new UserImpl(newEntry, newEntry.getSesameResourceURI(), cache));
 			break;
@@ -491,7 +491,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		
 		top = get("_top");
 		if(top == null) {
-			top = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_top");
+			top = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_top");
 			setMetadata(top, "Top folder", null);
 			log.info("Successfully added the top list");
 		}
@@ -502,7 +502,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if(guestUserEntry != null) {
 			guestUser = (User) guestUserEntry.getResource();
 		} else {
-			guestUserEntry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.User, null, "_guest");
+			guestUserEntry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.User, null, "_guest");
 			setMetadata(guestUserEntry, "Guest user", "All non logged in users will automatically appear as this user.");
 			guestUser = (User) guestUserEntry.getResource();
 			guestUser.setName("guest");
@@ -516,7 +516,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if(adminUserEntry != null) {
 			adminUser = (User) adminUserEntry.getResource();
 		} else {
-			adminUserEntry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.User, null, "_admin");
+			adminUserEntry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.User, null, "_admin");
 			setMetadata(adminUserEntry, "Admin user", "Default super user, has all rights.");
 			adminUser = (User) adminUserEntry.getResource();
 			adminUser.setName("admin");
@@ -530,7 +530,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if(adminGroupEntry != null) {
 			adminGroup = (Group) adminGroupEntry.getResource();
 		} else {
-			adminGroupEntry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.Group, null, "_admins");
+			adminGroupEntry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.Group, null, "_admins");
 			setMetadata(adminGroupEntry, "Admin group", "All members of this group have super user rights.");
 			adminGroup = (Group) adminGroupEntry.getResource();
 			adminGroup.setName("admins");
@@ -541,7 +541,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 		userGroupEntry = get("_users");
 		if(userGroupEntry == null) {
-			userGroupEntry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.Group, null, "_users");
+			userGroupEntry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.Group, null, "_users");
 			setMetadata(userGroupEntry, "Users group", "All regular users are part of this group.");
 			setPrincipalName(userGroupEntry.getResourceURI(), "users");
 			userGroupEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, guestUser.getURI());
@@ -571,7 +571,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		
 		allPrincipals = (EntryImpl) get("_all");
 		if(allPrincipals == null) {
-			allPrincipals = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_all");
+			allPrincipals = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_all");
 			setMetadata(allPrincipals, "all principals", "This is a list of all principals in the PrincipalManager.");
 			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, this.getGuestUser().getURI());
 			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadResource, this.getGuestUser().getURI());
@@ -588,8 +588,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 					URI nextURI = entryIterator.next();
 					
 					Entry nextEntry = getByEntryURI(nextURI);
-					BuiltinType bt = nextEntry.getBuiltinType(); 
-					if(bt == BuiltinType.User || bt == BuiltinType.Group) {
+					ResourceType bt = nextEntry.getResourceType();
+					if(bt == ResourceType.User || bt == ResourceType.Group) {
 						principalUris.add(nextEntry.getEntryURI());
 					}
 				}

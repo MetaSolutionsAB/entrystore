@@ -31,7 +31,7 @@ import org.openrdf.model.Statement;
 /**
  * An Entry in a Context keeps track of information such as date of creation/modification
  * who was the initial contributor, who has contributed, who has access (read/write) etc.
- * It also maintains the LocationType, the RepresentationType and the BuiltinType.
+ * It also maintains the LocationType, the RepresentationType and the ResourceType.
  * All this information is represented as an RDF graph as well as through separate methods.
  * Hence, if you need to extend the amount of information stored on the entry level you
  * can use the RDF graph for this.
@@ -226,7 +226,7 @@ public interface Entry {
 	RepresentationType getRepresentationType();
 
 	/**
-	 * If the {@link BuiltinType} is {@link BuiltinType#None} any value on
+	 * If the {@link ResourceType} is {@link ResourceType#None} any value on
 	 * {@link RepresentationType} is allowed, otherwise only
 	 * {@link RepresentationType#True} is allowed.
 	 * 
@@ -235,10 +235,10 @@ public interface Entry {
 	void setRepresentationType(RepresentationType ir);
 
 	/**
-	 * @return the {@link BuiltinType} of the resource, independent of wether 
+	 * @return the {@link ResourceType} of the resource, independent of wether
 	 * it is managed by the repository, a link or a reference.
 	 */
-	BuiltinType getBuiltinType();
+	ResourceType getResourceType();
 	
 	/**
 	 * Changing the builtin type is only allowed for links and references and 
@@ -248,7 +248,7 @@ public interface Entry {
 	 * 
 	 * @param bt the new builtin type.
 	 */
-	void setBuiltinType(BuiltinType bt);
+	void setResourceType(ResourceType bt);
 	
 	/**
 	 * @return the {@link LocationType}

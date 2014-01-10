@@ -3,7 +3,7 @@ package org.entrystore.repository.impl;
 import java.io.File;
 import java.util.Set;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -131,7 +131,7 @@ public class PublicRepository {
 			// resource
 			Graph resGraph = null;
 			URI resNG = null;
-			if (BuiltinType.Graph.equals(e.getBuiltinType()) && LocationType.Local.equals(e.getLocationType())) {
+			if (ResourceType.Graph.equals(e.getResourceType()) && LocationType.Local.equals(e.getLocationType())) {
 				resGraph = (Graph) e.getResource();
 				resNG = vf.createURI(e.getResourceURI().toString());
 			}
@@ -179,9 +179,9 @@ public class PublicRepository {
 			return;
 		}
 		
-		// If entry is BuiltinType.Context we update all its
+		// If entry is ResourceType.Context we update all its
 		// entries, just in case the ACL has changed
-		if (BuiltinType.Context.equals(e.getBuiltinType()) && LocationType.Local.equals(e.getLocationType())) {
+		if (ResourceType.Context.equals(e.getResourceType()) && LocationType.Local.equals(e.getLocationType())) {
 			
 			// TODO needs to be tested
 			

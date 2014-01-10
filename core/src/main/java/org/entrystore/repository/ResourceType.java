@@ -17,13 +17,13 @@
 package org.entrystore.repository;
 
 /**
- * Entries with a set BuiltinType get special treatment in EntryStore.
+ * Entries with a set ResourceType get special treatment in EntryStore.
  * 
  * @author Matthias Palmér
  * @author Hannes Ebner
  * @author Eric Johansson
  */
-public enum BuiltinType {
+public enum ResourceType {
 
 	/**
 	 * Special container resource which keeps track of a set of entries 

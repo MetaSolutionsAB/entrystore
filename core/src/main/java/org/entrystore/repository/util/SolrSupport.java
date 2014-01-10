@@ -225,7 +225,7 @@ public class SolrSupport {
 		}
 
 		// types
-		doc.setField("builtinType", entry.getBuiltinType().name());
+		doc.setField("resourceType", entry.getResourceType().name());
 		doc.setField("locationType", entry.getLocationType().name());
 		doc.setField("representationType", entry.getRepresentationType().name());
 

@@ -210,7 +210,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="validated" type="boolean" indexed="true"/>
 		<field name="created" type="date" indexed="true"/>
         <field name="modified" type="date" indexed="true"/>
-		<field name="builtinType" type="string" indexed="true"/>
+		<field name="resourceType" type="string" indexed="true"/>
         <field name="locationType" type="string" indexed="true"/>
         <field name="representationType" type="string" indexed="true"/>
         

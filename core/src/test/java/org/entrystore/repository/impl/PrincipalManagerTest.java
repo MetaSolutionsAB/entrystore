@@ -24,7 +24,7 @@ import java.net.URI;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -35,7 +35,6 @@ import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;
@@ -89,7 +88,7 @@ public class PrincipalManagerTest {
 		//First create a list where daisy has access (she does not have access to mouse context)
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
 		Context mouse = cm.getContext("mouse");
-		Entry listEntry = mouse.createResource(null, BuiltinType.List, RepresentationType.InformationResource, null);
+		Entry listEntry = mouse.createResource(null, ResourceType.List, RepresentationType.InformationResource, null);
 		Entry daisy = pm.getPrincipalEntry("Daisy");		
 		listEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, daisy.getResourceURI());
 
@@ -112,7 +111,7 @@ public class PrincipalManagerTest {
 	public void ownerCheck() {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Daisy").getResourceURI());
 		Context duck = cm.getContext("duck");
-		duck.createResource(null, BuiltinType.List, null, null); // since owner
+		duck.createResource(null, ResourceType.List, null, null); // since owner
 	}
 
 	@Test
@@ -139,7 +138,7 @@ public class PrincipalManagerTest {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context mouse = cm.getContext("mouse");
 		assertTrue(mouse.get("1") != null);
-		mouse.createResource(null, BuiltinType.List, null, null);
+		mouse.createResource(null, ResourceType.List, null, null);
 	}
 
 	@Test

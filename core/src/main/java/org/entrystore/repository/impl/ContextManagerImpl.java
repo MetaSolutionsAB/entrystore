@@ -49,7 +49,7 @@ import java.util.Set;
 import java.util.TimeZone;
 
 import org.apache.commons.io.FileUtils;
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -117,7 +117,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				RepositoryProperties.SYSTEM_CONTEXTS_ID));
 		//If it does not exist, create it.
 		if (e == null) {
-			e = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.SystemContext, 
+			e = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.SystemContext,
 					null, rman.getSystemContextAliases().get(0));
 		}
 		this.entry = e;
@@ -676,9 +676,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 							|| e.getLocationType() == LocationType.LinkReference) {
 						conn.export(entryHandler, f.createURI(e.getLocalMetadata().getURI().toString()));
 					}
-					if (e.getLocationType() == LocationType.Local && e.getBuiltinType() != BuiltinType.None) {
+					if (e.getLocationType() == LocationType.Local && e.getResourceType() != ResourceType.None) {
 						conn.export(entryHandler, f.createURI(e.getResourceURI().toString()));
-					} else if (e.getLocationType() == LocationType.Local && e.getBuiltinType() == BuiltinType.None
+					} else if (e.getLocationType() == LocationType.Local && e.getResourceType() == ResourceType.None
 							&& e.getRepresentationType() == RepresentationType.InformationResource) {
 						// File dataFolder = new
 						// File(entry.getRepositoryManager().getConfiguration().getString(Settings.SCAM_DATA_FOLDER));
@@ -831,8 +831,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		Entry contextEntry = getEntryByName(contextAlias);
 		if (contextEntry == null) {
 			return null;
-		} else if (contextEntry.getBuiltinType() == BuiltinType.Context ||
-						contextEntry.getBuiltinType() == BuiltinType.SystemContext) {
+		} else if (contextEntry.getResourceType() == ResourceType.Context ||
+						contextEntry.getResourceType() == ResourceType.SystemContext) {
 			return contextEntry.getResourceURI();
 		}
 		throw new org.entrystore.repository.RepositoryException("Found entry for the alias is not a context...\n" +
@@ -848,8 +848,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		Entry contextEntry = getByEntryURI(us.getMetaMetadataURI());
 		if (contextEntry == null) {
 			throw new org.entrystore.repository.RepositoryException("Cannot find an entry for the specified URI");
-		} else if (contextEntry.getBuiltinType() == BuiltinType.Context ||
-				contextEntry.getBuiltinType() == BuiltinType.SystemContext) {
+		} else if (contextEntry.getResourceType() == ResourceType.Context ||
+				contextEntry.getResourceType() == ResourceType.SystemContext) {
 			return setEntryName(us.getMetaMetadataURI(), newAlias);
 		}
 		throw new org.entrystore.repository.RepositoryException("Given URI does not refer to a Context.");
@@ -877,8 +877,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 		}*/
 		if(entry != null) {
-			if (entry.getBuiltinType() == BuiltinType.Context ||
-					entry.getBuiltinType() == BuiltinType.SystemContext) {
+			if (entry.getResourceType() == ResourceType.Context ||
+					entry.getResourceType() == ResourceType.SystemContext) {
 				Resource context = entry.getResource();
 				if (context != null && context instanceof Context) {
 					return (Context) context;
@@ -971,7 +971,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			return;
 		}
 
-		switch (newEntry.getBuiltinType()) {
+		switch (newEntry.getResourceType()) {
 		case Context:
 			Class clsReg = this.entry.repositoryManager.getRegularContextClass();
 			try {
@@ -1372,7 +1372,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			Entry scon = this.getByEntryURI(URISplit.fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID,
 					RepositoryProperties.ENTRY_PATH, id));
 			if (scon == null) {
-				scon = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.SystemContext, null, id);
+				scon = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.SystemContext, null, id);
 				setMetadata(scon, id, null);
 			}
 //			repMan.setSystemContext(scon.getId(), scon);			
@@ -1401,7 +1401,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		
 		allContexts = (EntryImpl) get("_all");
 		if (allContexts == null) {
-			allContexts = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_all");
+			allContexts = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_all");
 			setMetadata(allContexts, "all contexts", "This is a list of all contexts in the ContextManager.");
 			allContexts.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, repMan.getPrincipalManager().getGuestUser().getURI());
 			allContexts.addAllowedPrincipalsFor(AccessProperty.ReadResource, repMan.getPrincipalManager().getGuestUser().getURI());
@@ -1419,8 +1419,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					URI nextURI = entryIterator.next();
 					
 					Entry nextEntry = getByEntryURI(nextURI);
-					BuiltinType bt = nextEntry.getBuiltinType(); 
-					if(bt == BuiltinType.Context || bt == BuiltinType.SystemContext) {
+					ResourceType bt = nextEntry.getResourceType();
+					if(bt == ResourceType.Context || bt == ResourceType.SystemContext) {
 						contextUris.add(nextEntry.getEntryURI());
 					}
 				}
@@ -1432,7 +1432,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		
 		Entry top = get("_top");
 		if(top == null) {
-			top = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_top");
+			top = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_top");
 			setMetadata(top, "Top folder", null);
 			log.info("Successfully added the top list");
 		}
@@ -1440,7 +1440,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		
 		Entry backup = get("_backup");
 		if (backup == null) {
-			backup = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.None, null, RepositoryProperties.BACKUP_ID);
+			backup = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.None, null, RepositoryProperties.BACKUP_ID);
 			setMetadata(backup, "Backup entry", "Holds information for the backup scheduler");
 			log.info("Successfully added _backup entry: " + backup.getEntryURI());
 		}

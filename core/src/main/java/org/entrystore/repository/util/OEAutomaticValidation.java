@@ -23,7 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -173,13 +173,13 @@ public class OEAutomaticValidation {
 			contexts.add(context);
 			List<Entry> entries = getEntries(contexts);
 			Entry list = cm.getByEntryURI(listEntryURI);
-			if (!BuiltinType.List.equals(list.getBuiltinType())) {
+			if (!ResourceType.List.equals(list.getResourceType())) {
 				log.error("List parameter is not a list, interrupting");
 				return;
 			}
 			org.entrystore.repository.List l = (org.entrystore.repository.List) list.getResource();
 			for (Entry entry : entries) {
-				if (LocationType.Reference.equals(entry.getLocationType()) && BuiltinType.None.equals(entry.getBuiltinType())) {
+				if (LocationType.Reference.equals(entry.getLocationType()) && ResourceType.None.equals(entry.getResourceType())) {
 					validateMetadataOfEntry(entry);
 					l.addChild(entry.getEntryURI());
 				}

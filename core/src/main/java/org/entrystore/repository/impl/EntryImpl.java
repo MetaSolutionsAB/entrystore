@@ -30,7 +30,7 @@ import javax.xml.datatype.XMLGregorianCalendar;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
@@ -81,7 +81,7 @@ public class EntryImpl implements Entry {
 	protected URI resURI;
 	protected LocationType locType = LocationType.Local;
 	protected RepresentationType repType = RepresentationType.InformationResource;
-	protected BuiltinType builtinType = BuiltinType.None;
+	protected ResourceType resourceType = ResourceType.None;
 	protected XMLGregorianCalendar created;
 	protected XMLGregorianCalendar modified;
 	protected XMLGregorianCalendar cachedAt;
@@ -190,7 +190,7 @@ public class EntryImpl implements Entry {
 	 * @throws DatatypeConfigurationException 
 	 * @throws RepositoryException 
 	 */
-	protected void create(URI resURI, URI externalMetadataURI, BuiltinType bType, LocationType lType, RepresentationType rType, RepositoryConnection rc) 
+	protected void create(URI resURI, URI externalMetadataURI, ResourceType bType, LocationType lType, RepresentationType rType, RepositoryConnection rc)
 	throws RepositoryException, DatatypeConfigurationException {
 		String base = repositoryManager.getRepositoryURL().toString();
 		ValueFactory vf = repository.getValueFactory();
@@ -210,13 +210,13 @@ public class EntryImpl implements Entry {
 
 	}
 
-	private void initialize(BuiltinType bt, LocationType locT, RepresentationType repT, RepositoryConnection rc) 
+	private void initialize(ResourceType bt, LocationType locT, RepresentationType repT, RepositoryConnection rc)
 	throws RepositoryException, DatatypeConfigurationException {
 		ValueFactory vf = rc.getRepository().getValueFactory();
 		if (bt != null) {
 			setBuiltinType(bt, rc);
 		}
-		if (repT != null && builtinType == BuiltinType.None ) {
+		if (repT != null && resourceType == ResourceType.None ) {
 			setRepresentationType(repT, rc);
 		}
 		setLocationType(locT, rc);
@@ -279,7 +279,7 @@ public class EntryImpl implements Entry {
 		cachedAt = null;
 		locType = LocationType.Local;
 		repType = RepresentationType.InformationResource;
-		builtinType = BuiltinType.None;
+		resourceType = ResourceType.None;
 
 		//Following are cached on request. (Move more values here if possible)
 		format = null;
@@ -331,9 +331,9 @@ public class EntryImpl implements Entry {
 				org.openrdf.model.Resource subject = statement.getSubject();
 				if ( statement.getPredicate().equals(RDF.TYPE)) {
 					if (this.resURI.equals(subject)) {
-						BuiltinType bt = getBuiltinType(statement.getObject());
+						ResourceType bt = getBuiltinType(statement.getObject());
 						if (bt != null) {
-							this.builtinType = bt;
+							this.resourceType = bt;
 						} else {
 							RepresentationType rt = getRepresentationType(statement.getObject());
 							if (rt != null) {
@@ -354,7 +354,7 @@ public class EntryImpl implements Entry {
 //						log.info("resURI :" + resURI);
 //						log.info("locType :" + locType);
 //						log.info("repType :" + repType);
-//						log.info("builtinType :" + builtinType);
+//						log.info("resourceType :" + resourceType);
 //						log.info("created :" + created);
 //						log.info("modified :" + modified);
 //						log.info("externalMdURI :" + externalMdURI);
@@ -383,25 +383,25 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	private BuiltinType getBuiltinType(Value bt) {
+	private ResourceType getBuiltinType(Value bt) {
 		if (bt.equals(RepositoryProperties.Context)) {
-			return BuiltinType.Context;
+			return ResourceType.Context;
 		} else if (bt.equals(RepositoryProperties.SystemContext)) {
-			return BuiltinType.SystemContext;
+			return ResourceType.SystemContext;
 		} else if (bt.equals(RepositoryProperties.List)) {
-			return BuiltinType.List;
+			return ResourceType.List;
 		} else if (bt.equals(RepositoryProperties.ResultList)) {
-			return BuiltinType.ResultList;
+			return ResourceType.ResultList;
 		} else if (bt.equals(RepositoryProperties.User)) {
-			return BuiltinType.User;
+			return ResourceType.User;
 		} else if (bt.equals(RepositoryProperties.Group)) {
-			return BuiltinType.Group;
+			return ResourceType.Group;
 		} else if (bt.equals(RepositoryProperties.String)) {
-			return BuiltinType.String;
+			return ResourceType.String;
 		} else if (bt.equals(RepositoryProperties.Graph)) {
-			return BuiltinType.Graph;
+			return ResourceType.Graph;
 		} else if (bt.equals(RepositoryProperties.None)) {
-			return BuiltinType.None;
+			return ResourceType.None;
 		} 
 		return null;
 	}
@@ -498,8 +498,8 @@ public class EntryImpl implements Entry {
 		return modified != null ? modified.toGregorianCalendar().getTime() : null;
 	}
 
-	public BuiltinType getBuiltinType() {
-		return builtinType;
+	public ResourceType getResourceType() {
+		return resourceType;
 	}
 
 	public RepresentationType getRepresentationType() {
@@ -676,7 +676,7 @@ public class EntryImpl implements Entry {
 
 		// update resource graph if resource is builtin
 		Graph newResourceGraph = null;
-		if (!getBuiltinType().equals(BuiltinType.None)) {
+		if (!getResourceType().equals(ResourceType.None)) {
 			Graph resourceGraph = getResource().getEntry().getGraph();
 			if (resourceGraph != null && resourceGraph.size() != 0) {
 				newResourceGraph = new GraphImpl();
@@ -988,9 +988,9 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	public void setBuiltinType(BuiltinType bt) {
+	public void setResourceType(ResourceType bt) {
 		checkAdministerRights();
-		if (this.builtinType != bt && this.locType == LocationType.Local) {
+		if (this.resourceType != bt && this.locType == LocationType.Local) {
 			throw new org.entrystore.repository.RepositoryException("Cannot change the builtin type of a local resource");
 		}
 		try {
@@ -1021,12 +1021,12 @@ public class EntryImpl implements Entry {
 	 * the transaction is rolled back, than the cached built-in type will be wrong, 
 	 * call {@link #refreshFromRepository(RepositoryConnection)} to correct this.
 	 * 
-	 * @param bt the new {@link BuiltinType}
+	 * @param bt the new {@link org.entrystore.repository.ResourceType}
 	 * @param rc a RepositoryConnection 
 	 * @throws RepositoryException
 	 * @throws DatatypeConfigurationException
 	 */
-	protected void setBuiltinType(BuiltinType bt, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
+	protected void setBuiltinType(ResourceType bt, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
 		List<Statement> statements = rc.getStatements(resURI, RDF.TYPE, null, false, entryURI).asList();
 		for (Statement statement : statements) {
 			if (getBuiltinType(statement.getObject()) != null) {
@@ -1059,12 +1059,12 @@ public class EntryImpl implements Entry {
 			rc.add(resURI, RDF.TYPE, RepositoryProperties.Graph, entryURI);
 		}
 		
-		builtinType = bt;
+		resourceType = bt;
 	}
 
 	public void setRepresentationType(RepresentationType representType) {
 		checkAdministerRights();
-		if (this.repType != representType && this.locType == LocationType.Local && this.builtinType != BuiltinType.None) {
+		if (this.repType != representType && this.locType == LocationType.Local && this.resourceType != ResourceType.None) {
 			throw new org.entrystore.repository.RepositoryException("Cannot change the representationtype of a local and / or builtin resource");
 		}
 		try {
@@ -1249,10 +1249,10 @@ public class EntryImpl implements Entry {
 									localMdURI = vf.createURI(URISplit.fabricateURI(repositoryManager.getRepositoryURL().toString(), context.id, RepositoryProperties.MD_PATH, this.id).toString());
 								}
 							} else {
-								BuiltinType bt = getBuiltinType(statement.getObject());
+								ResourceType bt = getBuiltinType(statement.getObject());
 								if (bt != null) {
 									if (locType != LocationType.Local) { //Only allowed to change builtintype for non local resources.
-										this.builtinType = bt;
+										this.resourceType = bt;
 									}
 								} else {
 									RepresentationType rt = getRepresentationType(statement.getObject());
@@ -1273,7 +1273,7 @@ public class EntryImpl implements Entry {
 					//----------Start basic structure:
 					//Since we cleared the previous graph, we set the types again, they might have been updated in the loop above.
 					setLocationType(this.locType, rc);
-					setBuiltinType(this.builtinType, rc);
+					setBuiltinType(this.resourceType, rc);
 					setRepresentationType(this.repType, rc);
 
 					rc.add(entryURI, RepositoryProperties.resource, getSesameResourceURI(), entryURI);

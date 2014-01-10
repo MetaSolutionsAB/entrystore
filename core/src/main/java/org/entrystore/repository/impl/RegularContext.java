@@ -20,7 +20,7 @@ import java.net.URI;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.LocationType;
 import org.entrystore.repository.RepositoryException;
@@ -45,7 +45,7 @@ public class RegularContext extends ContextImpl{
 	}
 
 	@Override
-	public Entry createResource(String entryId, BuiltinType buiType,
+	public Entry createResource(String entryId, ResourceType buiType,
 			RepresentationType repType, URI listURI) {
 		switch (buiType) {
 		case List:
@@ -65,7 +65,7 @@ public class RegularContext extends ContextImpl{
 
 		Entry comments = get("_comments");
 		if(comments == null) {
-			comments = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_comments");
+			comments = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_comments");
 			setMetadata(comments, "Comments folder", null);
 			log.info("Successfully added the comments list");
 		} 
@@ -73,7 +73,7 @@ public class RegularContext extends ContextImpl{
 
 		entry = get("_top");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_top");
+			entry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_top");
 			setMetadata(entry, "Top folder", null);
 			log.info("Successfully added the top list");
 		}
@@ -81,7 +81,7 @@ public class RegularContext extends ContextImpl{
 
 		entry = get("_contacts");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_contacts");
+			entry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_contacts");
 			setMetadata(entry, "Contacts", "A list of all your contacts.");
 			log.info("Successfully added the contact list");
 		}
@@ -89,7 +89,7 @@ public class RegularContext extends ContextImpl{
 
 		entry = get("_featured");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_featured");
+			entry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_featured");
 			setMetadata(entry, "Featured", "A list of featured content divided into sublists.");
 			log.info("Successfully added the featured list");
 		}
@@ -97,7 +97,7 @@ public class RegularContext extends ContextImpl{
 
 		entry = get("_feeds");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_feeds");
+			entry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_feeds");
 			setMetadata(entry, "Feeds", "A list of feeds.");
 			log.info("Successfully added the feeds list");
 		}
@@ -105,7 +105,7 @@ public class RegularContext extends ContextImpl{
 
 /*		entry = get("_ontologies");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_ontologies");
+			entry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_ontologies");
 			setMetadata(entry, "Ontologies", null);
 			log.info("Successfully added the ontologies list");
 		}
@@ -113,7 +113,7 @@ public class RegularContext extends ContextImpl{
 
 		entry = get("_types");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_types");
+			entry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_types");
 			setMetadata(entry, "Types", null);
 			log.info("Successfully added the types list");
 		}
@@ -121,7 +121,7 @@ public class RegularContext extends ContextImpl{
 */
 		entry = get("_trash");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, LocationType.Local, BuiltinType.List, null, "_trash");
+			entry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_trash");
 			setMetadata(entry, "Garbage bin", null);
 			log.info("Successfully added the trash list");
 		}

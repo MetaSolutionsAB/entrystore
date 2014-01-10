@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.net.URI;
@@ -28,8 +27,7 @@ import java.util.List;
 import java.util.Set;
 
 import com.github.jsonldjava.impl.SesameJSONLDParser;
-import com.github.jsonldjava.impl.SesameJSONLDWriter;
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.LocationType;
@@ -42,7 +40,6 @@ import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.StringResource;
 import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.impl.converters.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
@@ -57,7 +54,6 @@ import org.openrdf.model.Statement;
 import org.openrdf.model.Value;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.RDFHandlerException;
 import org.openrdf.rio.Rio;
 import org.openrdf.rio.helpers.JSONLDMode;
 import org.openrdf.rio.helpers.JSONLDSettings;
@@ -187,7 +183,7 @@ public class EntryResource extends BaseResource {
 	public void removeRepresentations() {
 		try {
 			if (entry != null && context != null) {
-				if (BuiltinType.List.equals(entry.getBuiltinType()) && parameters.containsKey("recursive")) {
+				if (ResourceType.List.equals(entry.getResourceType()) && parameters.containsKey("recursive")) {
 					org.entrystore.repository.List l = (org.entrystore.repository.List) entry.getResource();
 					if (l != null) {
 						l.removeTree();
@@ -295,8 +291,8 @@ public class EntryResource extends BaseResource {
 			 * Entry id
 			 */
 			jdilObj.put("entryId", entry.getId());
-			BuiltinType bt = entry.getBuiltinType();
-			if ((bt == BuiltinType.Context || bt == BuiltinType.SystemContext) && LocationType.Local.equals(entry.getLocationType())) {
+			ResourceType bt = entry.getResourceType();
+			if ((bt == ResourceType.Context || bt == ResourceType.SystemContext) && LocationType.Local.equals(entry.getLocationType())) {
 				jdilObj.put("alias", getCM().getContextAlias(entry.getResourceURI()));
 				if (entry.getRepositoryManager().hasQuotas()) {
 					JSONObject quotaObj = new JSONObject();
@@ -391,7 +387,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 *  String
 				 */
-				if(entry.getBuiltinType() == BuiltinType.String) {
+				if(entry.getResourceType() == ResourceType.String) {
 					StringResource stringResource = (StringResource)entry.getResource(); 
 					Graph graph = stringResource.getGraph(); 
 					Iterator<Statement> iter = graph.iterator(); 
@@ -414,7 +410,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 * List
 				 */
-				if (entry.getBuiltinType() == BuiltinType.List) {
+				if (entry.getResourceType() == ResourceType.List) {
 
 					int limit = 0;
 					int offset = 0;
@@ -473,20 +469,20 @@ public class EntryResource extends BaseResource {
 							if ("desc".equalsIgnoreCase(parameters.get("order"))) {
 								asc = false;
 							}
-							BuiltinType prioritizedBuiltinType = null;
+							ResourceType prioritizedResourceType = null;
 							if (parameters.containsKey("prio")) {
-								prioritizedBuiltinType = BuiltinType.valueOf(parameters.get("prio"));
+								prioritizedResourceType = ResourceType.valueOf(parameters.get("prio"));
 							}
 							String sortType = parameters.get("sort");
 							if ("title".equalsIgnoreCase(sortType)) {
 								String lang = parameters.get("lang");
-								EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedBuiltinType);
+								EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedResourceType);
 							} else if ("modified".equalsIgnoreCase(sortType)) {
-								EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedBuiltinType);
+								EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedResourceType);
 							} else if ("created".equalsIgnoreCase(sortType)) {
-								EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedBuiltinType);
+								EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedResourceType);
 							} else if ("size".equalsIgnoreCase(sortType)) {
-								EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedBuiltinType);
+								EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedResourceType);
 							}
 							long sortDuration = new Date().getTime() - before.getTime();
 							log.debug("List entry sorting took " + sortDuration + " ms");
@@ -507,11 +503,11 @@ public class EntryResource extends BaseResource {
 							String uri = childEntry.getEntryURI().toString();
 							String entryId = uri.substring(uri.lastIndexOf('/') + 1);
 							childJSON.put("entryId", entryId);
-							BuiltinType btChild = childEntry.getBuiltinType();
+							ResourceType btChild = childEntry.getResourceType();
 							LocationType locChild = childEntry.getLocationType();
-							if ((btChild == BuiltinType.Context || btChild == BuiltinType.SystemContext) && LocationType.Local.equals(locChild)) {
+							if ((btChild == ResourceType.Context || btChild == ResourceType.SystemContext) && LocationType.Local.equals(locChild)) {
 								childJSON.put("alias", getCM().getContextAlias(childEntry.getResourceURI()));
-							} else if (btChild == BuiltinType.List) {
+							} else if (btChild == ResourceType.List) {
 								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
 									org.entrystore.repository.Resource childRes = childEntry.getResource();
 									if (childRes != null && childRes instanceof org.entrystore.repository.List) {
@@ -520,14 +516,14 @@ public class EntryResource extends BaseResource {
 											childJSON.put("size", childList.getChildren().size());
 										} catch (AuthorizationException ae) {}
 									} else {
-										log.warn("Entry has BuiltinType.List but the resource is either null or not an instance of List");
+										log.warn("Entry has ResourceType.List but the resource is either null or not an instance of List");
 									}
 								} else {
 									log.warn("Not calculating list size of " + entryId + " because of potential performance problems");
 								}
-							} else if (btChild == BuiltinType.User && locChild == LocationType.Local) {
+							} else if (btChild == ResourceType.User && locChild == LocationType.Local) {
 								childJSON.put("name", ((User) childEntry.getResource()).getName());
-							} else if (btChild == BuiltinType.Group && locChild == LocationType.Local) {
+							} else if (btChild == ResourceType.Group && locChild == LocationType.Local) {
 								childJSON.put("name", ((Group) childEntry.getResource()).getName());								
 							}
 							
@@ -601,7 +597,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 * User
 				 */
-				if (entry.getBuiltinType() == BuiltinType.User) {
+				if (entry.getResourceType() == ResourceType.User) {
 					try {
 						User user = (User) entry.getResource();
 						resourceObj.put("name", user.getName());
@@ -626,7 +622,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 * Group
 				 */
-				if (entry.getBuiltinType() == BuiltinType.Group) {
+				if (entry.getResourceType() == ResourceType.Group) {
 					try {
 						Group group = (Group) entry.getResource();
 						resourceObj.put("name", group.getName());
@@ -741,7 +737,7 @@ public class EntryResource extends BaseResource {
 		if (deserializedGraph != null) {
 			entry.setGraph(deserializedGraph);
 			if (parameters.containsKey("applyACLtoChildren") &&
-					BuiltinType.List.equals(entry.getBuiltinType()) &&
+					ResourceType.List.equals(entry.getResourceType()) &&
 					LocationType.Local.equals(entry.getLocationType())) {
 				((org.entrystore.repository.List) entry.getResource()).applyACLtoChildren(true);
 			}

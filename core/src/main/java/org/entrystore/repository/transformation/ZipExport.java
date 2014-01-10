@@ -22,7 +22,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
@@ -105,13 +105,13 @@ public class ZipExport {
 	
 	protected boolean isFile(Entry entry) {
 		return entry.getLocationType() == LocationType.Local 
-				&& entry.getBuiltinType() == BuiltinType.None
+				&& entry.getResourceType() == ResourceType.None
 				&& entry.getRepresentationType() == RepresentationType.InformationResource;
 	}
 
 	protected boolean isLocalDir(Entry entry) {
 		return entry.getLocationType() == LocationType.Local 
-				&& entry.getBuiltinType() == BuiltinType.List;
+				&& entry.getResourceType() == ResourceType.List;
 	}
 
 	protected String getLabel(Entry entry) {

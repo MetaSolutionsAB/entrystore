@@ -43,7 +43,7 @@ public class RepositoryProperties {
 	public static final String MD_PATH_STUB = "metadata_stub";
 	public static final String RELATION = "relations";
 
-	public static String getResourcePath(BuiltinType bt) {
+	public static String getResourcePath(ResourceType bt) {
 		switch (bt) {
 		case List:
 		case ResultList:

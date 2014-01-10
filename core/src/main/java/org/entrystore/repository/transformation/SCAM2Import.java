@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
@@ -159,7 +159,7 @@ public class SCAM2Import {
 					list.addChild(entryChild.getEntryURI());
 				} catch(RepositoryException re) {
 				}
-				if (entryChild.getBuiltinType() == BuiltinType.List) {
+				if (entryChild.getResourceType() == ResourceType.List) {
 					recurseFix(graph, child, (org.entrystore.repository.List) entryChild.getResource());
 				}
 			} else {
@@ -196,7 +196,7 @@ public class SCAM2Import {
 	void handleFolder(Graph graph, URI parent, URI folder) {
 		Graph closure = getAnonymousClosure(graph, folder);
 		java.net.URI parentList = parent == null ? null : uri2Entry.get(parent).getResourceURI();
-		Entry folderEntry = context.createResource(null, BuiltinType.List, RepresentationType.InformationResource, parentList);
+		Entry folderEntry = context.createResource(null, ResourceType.List, RepresentationType.InformationResource, parentList);
 		handleItem((EntryImpl) folderEntry, closure, parent, folder);
 	}
 
@@ -208,7 +208,7 @@ public class SCAM2Import {
 		if(isURL(closure, leaf)) {
 			leafEntry = context.createLink(null, java.net.URI.create(leaf.stringValue()), parentList);
 		} else if (isFile(closure, leaf)) {
-			leafEntry = context.createResource(null, BuiltinType.None, RepresentationType.InformationResource, parentList);
+			leafEntry = context.createResource(null, ResourceType.None, RepresentationType.InformationResource, parentList);
 			setFile((Data) leafEntry.getResource(), closure, leaf);
 		} else {
 			log.warn("Entry, \""+leaf.stringValue()+"\", is neither URL or uploaded file.");

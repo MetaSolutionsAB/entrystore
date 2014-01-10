@@ -28,7 +28,7 @@ import org.openrdf.repository.RepositoryConnection;
  * structure which is known by the repository, a data-structure 
  * is maintained in the repository and accessed via specific methods.
  * This is the case for all {@link LocationType#Local} {@link LocationType}s 
- * with a {@link BuiltinType}s that is not {@link BuiltinType#None}.
+ * with a {@link ResourceType}s that is not {@link ResourceType#None}.
  * Examples include {@link List}, {@link Context}, {@link ContextManager}, {@link User}, 
  * {@link Group} and {@link PrincipalManager}.
  * 

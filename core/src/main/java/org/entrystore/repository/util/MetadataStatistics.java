@@ -27,7 +27,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.BuiltinType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -150,8 +150,8 @@ public class MetadataStatistics {
 		}
 		log.info("Entry found: " + entry.getEntryURI());
 		
-		if (!entry.getBuiltinType().equals(BuiltinType.None)) {
-			log.info("Found BuiltinType. Skipping.");
+		if (!entry.getResourceType().equals(ResourceType.None)) {
+			log.info("Found ResourceType. Skipping.");
 			return null;
 		}
 		
