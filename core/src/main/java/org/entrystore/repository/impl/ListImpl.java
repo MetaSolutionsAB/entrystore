@@ -29,11 +29,11 @@ import java.util.Vector;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.List;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.QuotaException;
 import org.entrystore.repository.RepositoryEvent;
@@ -372,7 +372,7 @@ public class ListImpl extends RDFResource implements List {
 		map.put(source.getSesameEntryURI(), dest.getSesameEntryURI());
 		map.put(source.getSesameLocalMetadataURI(), dest.getSesameLocalMetadataURI());
 		map.put(source.getSesameResourceURI(), dest.getSesameResourceURI());
-		if (source.getLocationType() == LocationType.LinkReference || source.getLocationType() == LocationType.Reference) {
+		if (source.getLocationType() == EntryType.LinkReference || source.getLocationType() == EntryType.Reference) {
 			map.put(source.getSesameExternalMetadataURI(), dest.getSesameExternalMetadataURI());
 			map.put(source.getSesameCachedExternalMetadataURI(), dest.getSesameCachedExternalMetadataURI());
 		}
@@ -674,7 +674,7 @@ public class ListImpl extends RDFResource implements List {
 		for (URI uri : tchildren) {
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
 			if (childEntry != null) {
-				if (ResourceType.List.equals(childEntry.getResourceType()) && LocationType.Local.equals(childEntry.getLocationType())) {
+				if (ResourceType.List.equals(childEntry.getResourceType()) && EntryType.Local.equals(childEntry.getLocationType())) {
 					((List) childEntry.getResource()).removeTree();
 				} else if (childEntry.getReferringListsInSameContext().size() == 0) {
 					c.remove(uri);
@@ -700,7 +700,7 @@ public class ListImpl extends RDFResource implements List {
 				for (AccessProperty ap : AccessProperty.values()) {
 					childEntry.setAllowedPrincipalsFor(ap, entry.getAllowedPrincipalsFor(ap));
 				}
-				if (ResourceType.List.equals(childEntry.getResourceType()) && LocationType.Local.equals(childEntry.getLocationType())) {
+				if (ResourceType.List.equals(childEntry.getResourceType()) && EntryType.Local.equals(childEntry.getLocationType())) {
 					Resource childResource = childEntry.getResource();
 					if (childResource instanceof List) {
 						((List) childEntry.getResource()).applyACLtoChildren(recursive);

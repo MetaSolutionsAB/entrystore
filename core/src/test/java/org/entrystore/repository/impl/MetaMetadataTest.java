@@ -25,7 +25,7 @@ import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.LocationType;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.RepresentationType;
@@ -98,9 +98,9 @@ public class MetaMetadataTest {
 
 	@Test
 	public void referenceType() {
-		assertTrue(listEntry.getLocationType() == LocationType.Local);
-		assertTrue(linkEntry.getLocationType() == LocationType.Link);
-		assertTrue(refEntry.getLocationType() == LocationType.Reference);
+		assertTrue(listEntry.getLocationType() == EntryType.Local);
+		assertTrue(linkEntry.getLocationType() == EntryType.Link);
+		assertTrue(refEntry.getLocationType() == EntryType.Reference);
 	}
 
 	@Test

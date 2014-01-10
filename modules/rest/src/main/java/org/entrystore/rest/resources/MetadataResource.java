@@ -17,17 +17,13 @@
 package org.entrystore.rest.resources;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import com.github.jsonldjava.core.JSONLD;
 import com.github.jsonldjava.impl.SesameJSONLDParser;
-import com.github.jsonldjava.impl.SesameJSONLDParserFactory;
 import com.github.jsonldjava.impl.SesameJSONLDWriter;
-import com.github.jsonldjava.impl.SesameJSONLDWriterFactory;
-import org.entrystore.repository.LocationType;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.repository.security.AuthorizationException;
@@ -140,8 +136,8 @@ public class MetadataResource extends BaseResource {
 			if (entry != null && context != null) {
 				// we convert from Reference to LinkReference, otherwise we
 				// can't store any (local) metadata
-				if (LocationType.Reference.equals(entry.getLocationType())) {
-					entry.setLocationType(LocationType.LinkReference);
+				if (EntryType.Reference.equals(entry.getLocationType())) {
+					entry.setLocationType(EntryType.LinkReference);
 				}
 
 				MediaType mt = (format != null) ? format : getRequestEntity().getMediaType();
@@ -195,8 +191,8 @@ public class MetadataResource extends BaseResource {
 	 * @return JSON representation
 	 */
 	private Representation getMetadata(MediaType mediaType) throws AuthorizationException {
-		LocationType locType = entry.getLocationType();
-		if (LocationType.Local.equals(locType) || LocationType.Link.equals(locType)	|| LocationType.LinkReference.equals(locType)) {
+		EntryType locType = entry.getLocationType();
+		if (EntryType.Local.equals(locType) || EntryType.Link.equals(locType)	|| EntryType.LinkReference.equals(locType)) {
 			Metadata metadata = entry.getLocalMetadata();
 			if (metadata != null) {
 				Graph graph = metadata.getGraph();

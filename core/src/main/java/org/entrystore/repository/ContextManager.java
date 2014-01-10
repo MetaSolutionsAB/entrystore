@@ -80,7 +80,7 @@ public interface ContextManager extends Context{
 	 * 
 	 * @return an Entry, if null the given URI was not a repository URI. If the 
 	 * anyURI corresponds to a repository managed resource the returned entry 
-	 * will be {@link LocationType#Local} (guaranteed to be unique).
+	 * will be {@link EntryType#Local} (guaranteed to be unique).
 	 * @throws RepositoryException if something goes wrong, e.g. connection problems 
 	 * with the underlying storage or plainly that no item was found for the given URI.
 	 * @see #getItems(URI)
@@ -93,7 +93,7 @@ public interface ContextManager extends Context{
 	 * Entry where you lack read-access (to the metadata) are excluded.
 	 * 
 	 * @param metadataURI is a URI to metadata for a resource. 
-	 * @return a set of Entry {@link LocationType#Reference}s to the specified metadata URI.
+	 * @return a set of Entry {@link EntryType#Reference}s to the specified metadata URI.
 	 */
 	Set<Entry> getReferences(URI metadataURI);
 
@@ -102,7 +102,7 @@ public interface ContextManager extends Context{
 	 * Entries where you lack read-access (to the metadata) are excluded.
 	 * 
 	 * @param resourceURI is any URI that you whish to find resources for.
-	 * @return a set of Entry {@link LocationType#Link}s to the specified resource.
+	 * @return a set of Entry {@link EntryType#Link}s to the specified resource.
 	 */
 	Set<Entry> getLinks(URI resourceURI);
 

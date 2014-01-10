@@ -39,7 +39,7 @@ import org.apache.commons.logging.LogFactory;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.LocationType;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.config.Settings;
@@ -133,7 +133,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 			Set<URI> allEntries = context.getEntries();
 			for (URI uri : allEntries) {
 				Entry entry = context.getByEntryURI(uri);
-				if (entry != null && (LocationType.Reference.equals(entry.getLocationType()) || LocationType.LinkReference.equals(entry.getLocationType()))) {
+				if (entry != null && (EntryType.Reference.equals(entry.getLocationType()) || EntryType.LinkReference.equals(entry.getLocationType()))) {
 					Date cachedDate = entry.getExternalMetadataCacheDate();
 					if (cachedDate != null) {
 						if (latestEntry == null || cachedDate.after(latestEntry)) {

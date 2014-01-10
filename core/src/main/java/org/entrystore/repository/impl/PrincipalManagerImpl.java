@@ -25,10 +25,10 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.User;
@@ -466,7 +466,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 	@Override
 	public void initResource(EntryImpl newEntry) throws RepositoryException {
-		if (newEntry.getLocationType() != LocationType.Local) {
+		if (newEntry.getLocationType() != EntryType.Local) {
 			return;
 		}
 		switch (newEntry.getResourceType()) {
@@ -491,7 +491,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		
 		top = get("_top");
 		if(top == null) {
-			top = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_top");
+			top = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_top");
 			setMetadata(top, "Top folder", null);
 			log.info("Successfully added the top list");
 		}
@@ -502,7 +502,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if(guestUserEntry != null) {
 			guestUser = (User) guestUserEntry.getResource();
 		} else {
-			guestUserEntry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.User, null, "_guest");
+			guestUserEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.User, null, "_guest");
 			setMetadata(guestUserEntry, "Guest user", "All non logged in users will automatically appear as this user.");
 			guestUser = (User) guestUserEntry.getResource();
 			guestUser.setName("guest");
@@ -516,7 +516,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if(adminUserEntry != null) {
 			adminUser = (User) adminUserEntry.getResource();
 		} else {
-			adminUserEntry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.User, null, "_admin");
+			adminUserEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.User, null, "_admin");
 			setMetadata(adminUserEntry, "Admin user", "Default super user, has all rights.");
 			adminUser = (User) adminUserEntry.getResource();
 			adminUser.setName("admin");
@@ -530,7 +530,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if(adminGroupEntry != null) {
 			adminGroup = (Group) adminGroupEntry.getResource();
 		} else {
-			adminGroupEntry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.Group, null, "_admins");
+			adminGroupEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.Group, null, "_admins");
 			setMetadata(adminGroupEntry, "Admin group", "All members of this group have super user rights.");
 			adminGroup = (Group) adminGroupEntry.getResource();
 			adminGroup.setName("admins");
@@ -541,7 +541,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 		userGroupEntry = get("_users");
 		if(userGroupEntry == null) {
-			userGroupEntry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.Group, null, "_users");
+			userGroupEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.Group, null, "_users");
 			setMetadata(userGroupEntry, "Users group", "All regular users are part of this group.");
 			setPrincipalName(userGroupEntry.getResourceURI(), "users");
 			userGroupEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, guestUser.getURI());
@@ -571,7 +571,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		
 		allPrincipals = (EntryImpl) get("_all");
 		if(allPrincipals == null) {
-			allPrincipals = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_all");
+			allPrincipals = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_all");
 			setMetadata(allPrincipals, "all principals", "This is a list of all principals in the PrincipalManager.");
 			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, this.getGuestUser().getURI());
 			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadResource, this.getGuestUser().getURI());

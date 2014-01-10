@@ -25,7 +25,7 @@ import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.LocationType;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.RepositoryManager;
@@ -362,7 +362,7 @@ public class SolrSupport {
 		}
 
 		// Full text extraction using Apache Tika
-		if (extractFulltext && LocationType.Local.equals(entry.getLocationType())
+		if (extractFulltext && EntryType.Local.equals(entry.getLocationType())
 				&& RepresentationType.InformationResource.equals(entry.getRepresentationType())
 				&& entry.getResource() instanceof Data) {
 			Data d = (Data) entry.getResource();
@@ -467,7 +467,7 @@ public class SolrSupport {
 						// If linkReference or reference to a entry in the same
 						// repository
 						// check that the referenced metadata is accessible.
-						if ((entry.getLocationType() == LocationType.Reference || entry.getLocationType() == LocationType.LinkReference)
+						if ((entry.getLocationType() == EntryType.Reference || entry.getLocationType() == EntryType.LinkReference)
 								&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
 							Entry refEntry = entry.getRepositoryManager().getContextManager()
 									.getEntry(entry.getExternalMetadataURI());

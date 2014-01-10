@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.LocationType;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.rest.util.RDFJSON;
@@ -138,17 +138,17 @@ public class LookupResource extends BaseResource {
 	}
 	
 	private Representation getMetadata(Entry e, String scope, MediaType mediaType) throws AuthorizationException {
-		LocationType locType = entry.getLocationType();
+		EntryType locType = entry.getLocationType();
 		Graph graph = new GraphImpl();
-		if (LocationType.Local.equals(locType) || LocationType.Link.equals(locType)) {
+		if (EntryType.Local.equals(locType) || EntryType.Link.equals(locType)) {
 			if ("all".equals(scope) || "local".equals(scope)) {
 				graph.addAll(entry.getLocalMetadata().getGraph());
 			}
-		} else if (LocationType.Reference.equals(locType)) {
+		} else if (EntryType.Reference.equals(locType)) {
 			if ("all".equals(scope) || "external".equals(scope)) {
 				graph.addAll(entry.getCachedExternalMetadata().getGraph());
 			}
-		} else if (LocationType.LinkReference.equals(locType)) {
+		} else if (EntryType.LinkReference.equals(locType)) {
 			if ("all".equals(scope) || "local".equals(scope)) {
 				graph.addAll(entry.getLocalMetadata().getGraph());
 			}

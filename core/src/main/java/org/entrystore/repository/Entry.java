@@ -31,13 +31,13 @@ import org.openrdf.model.Statement;
 /**
  * An Entry in a Context keeps track of information such as date of creation/modification
  * who was the initial contributor, who has contributed, who has access (read/write) etc.
- * It also maintains the LocationType, the RepresentationType and the ResourceType.
+ * It also maintains the EntryType, the RepresentationType and the ResourceType.
  * All this information is represented as an RDF graph as well as through separate methods.
  * Hence, if you need to extend the amount of information stored on the entry level you
  * can use the RDF graph for this.
  * 
- * Depending on the LocationType it also maintains references to a metadata and a resource object.
- * If the LocationType is Reference there might be a cached metadata object as well.
+ * Depending on the EntryType it also maintains references to a metadata and a resource object.
+ * If the EntryType is Reference there might be a cached metadata object as well.
  * 
  * @author matthias
  */
@@ -65,16 +65,16 @@ public interface Entry {
 	
 	
 	/**
-	 * @return {@link Resource} object, null if the {@link LocationType} is
-	 * not {@link LocationType#Local}.
+	 * @return {@link Resource} object, null if the {@link EntryType} is
+	 * not {@link EntryType#Local}.
 	 */
 	Resource getResource();
 
 	/**
-	 * returns different things depending on the {@link LocationType}:
-	 * <ul><li>LocalMetadata if {@link LocationType#Local} or {@link LocationType#Link}</li>
-	 * <li>ExternalMetadata if {@link LocationType#Reference}</li>
-	 * <li>A merge between LocalMetadata and ExternalMetadata if {@link LocationType#LinkReference}.</li></ul>
+	 * returns different things depending on the {@link EntryType}:
+	 * <ul><li>LocalMetadata if {@link EntryType#Local} or {@link EntryType#Link}</li>
+	 * <li>ExternalMetadata if {@link EntryType#Reference}</li>
+	 * <li>A merge between LocalMetadata and ExternalMetadata if {@link EntryType#LinkReference}.</li></ul>
 	 * 
 	 * The above requires that the ExternalMetadata is cahced locally, if not an empty graph is returned.
 	 * 
@@ -84,23 +84,23 @@ public interface Entry {
 	Graph getMetadataGraph();
 
 	/**
-	 * @return the URI for retrieving the metadata from the repository, if the {@link LocationType} 
-	 * is {@link LocationType#Reference} it is the URI to the cached metadata within the repository 
+	 * @return the URI for retrieving the metadata from the repository, if the {@link EntryType}
+	 * is {@link EntryType#Reference} it is the URI to the cached metadata within the repository
 	 * that is returned.
 	 * @see 
 	 */
 	URI getLocalMetadataURI();
 	
 	/**
-	 * @return {@link Metadata} object, null if the {@link LocationType} is 
-	 * {@link LocationType#Reference} and there is no cache
+	 * @return {@link Metadata} object, null if the {@link EntryType} is
+	 * {@link EntryType#Reference} and there is no cache
 	 * (check {@link Entry#getExternalMetadataCacheDate()}).
 	 */
 	Metadata getLocalMetadata();
 	
 	/**
 	 * @return an URI to the original source of the metadata, different from {@link #getLocalMetadataURI()} only
-	 * when the {@link LocationType} is {@link LocationType#Reference}.
+	 * when the {@link EntryType} is {@link EntryType#Reference}.
 	 */
 	URI getExternalMetadataURI();
 	
@@ -117,14 +117,14 @@ public interface Entry {
 
 	/** 
 	 * @return false if the externalMetadata is not cached yet or if the 
-	 * {@link LocationType} is {@link LocationType#Local} or {@link LocationType#Link}.
+	 * {@link EntryType} is {@link EntryType#Local} or {@link EntryType#Link}.
 	 * @see Entry#getExternalMetadataCacheDate().
 	 */
 	boolean isExternalMetadataCached();
 	
 	/**
 	 * @return the Date when the external metadata was cached, null if not cached yet or if
-	 * {@link LocationType} is not {@link LocationType#Reference} or {@link LocationType#LinkReference}.
+	 * {@link EntryType} is not {@link EntryType#Reference} or {@link EntryType#LinkReference}.
 	 */
 	Date getExternalMetadataCacheDate();
 	
@@ -251,14 +251,14 @@ public interface Entry {
 	void setResourceType(ResourceType bt);
 	
 	/**
-	 * @return the {@link LocationType}
+	 * @return the {@link EntryType}
 	 */
-	LocationType getLocationType();
+	EntryType getLocationType();
 
 	/**
-	 * Sets the {@link LocationType}.
+	 * Sets the {@link EntryType}.
 	 */
-	void setLocationType(LocationType locationType);
+	void setLocationType(EntryType entryType);
 
 	String getFilename();
 	

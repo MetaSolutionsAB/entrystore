@@ -34,7 +34,7 @@ import java.util.Set;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.LocationType;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
@@ -958,7 +958,7 @@ public class DataCorrection {
 		try {
 			List<Entry> entries = getEntries(getContexts());
 			for (Entry entry : entries) {
-				if (!entry.getLocationType().equals(LocationType.Reference)) {// && !entry.getResourceType().equals(ResourceType.None)) {
+				if (!entry.getLocationType().equals(EntryType.Reference)) {// && !entry.getResourceType().equals(ResourceType.None)) {
 					fixMetadataOfEntry(entry);
 				}
 			}
@@ -1008,7 +1008,7 @@ public class DataCorrection {
 		try {
 			List<Entry> entries = getEntries(getContexts());
 			for (Entry entry : entries) {
-				if (entry.getLocationType().equals(LocationType.Local)) {
+				if (entry.getLocationType().equals(EntryType.Local)) {
 					if (entry.getFilename() != null) {
 						log.info(entry.getFilename());
 					}

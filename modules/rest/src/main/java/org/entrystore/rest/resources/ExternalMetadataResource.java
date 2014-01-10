@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.github.jsonldjava.impl.SesameJSONLDWriter;
-import org.entrystore.repository.LocationType;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.repository.security.AuthorizationException;
@@ -101,8 +101,8 @@ public class ExternalMetadataResource extends BaseResource {
 	}
 
 	private Representation getCachedExternalMetadata(MediaType mediaType) {		
-		LocationType locType = entry.getLocationType();
-		if (LocationType.Reference.equals(locType) || LocationType.LinkReference.equals(locType)) {
+		EntryType locType = entry.getLocationType();
+		if (EntryType.Reference.equals(locType) || EntryType.LinkReference.equals(locType)) {
 			Metadata extMetadata = entry.getCachedExternalMetadata();
 			if (extMetadata != null) {
 				Graph graph = extMetadata.getGraph();

@@ -45,11 +45,11 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.QuotaException;
 import org.entrystore.repository.RepositoryProperties;
@@ -335,7 +335,7 @@ public class ResourceResource extends BaseResource {
 
 	protected boolean isFile(Entry entry) {
 		if (entry != null) {
-			return LocationType.Local.equals(entry.getLocationType()) &&
+			return EntryType.Local.equals(entry.getLocationType()) &&
 				ResourceType.None.equals(entry.getResourceType()) &&
 				RepresentationType.InformationResource.equals(entry.getRepresentationType());
 		} else {
@@ -449,7 +449,7 @@ public class ResourceResource extends BaseResource {
 	
 	public Set<Entry> getListChildrenRecursively(Entry listEntry) {
 		Set<Entry> result = new HashSet<Entry>();
-		if (ResourceType.List.equals(listEntry.getResourceType()) && LocationType.Local.equals(listEntry.getLocationType())) {
+		if (ResourceType.List.equals(listEntry.getResourceType()) && EntryType.Local.equals(listEntry.getLocationType())) {
 			org.entrystore.repository.List l = (org.entrystore.repository.List) listEntry.getResource();
 			List<URI> c = l.getChildren();
 			for (URI uri : c) {
@@ -595,15 +595,15 @@ public class ResourceResource extends BaseResource {
 	 * @return JSON representation
 	 */
 	private Representation getResource() throws AuthorizationException {
-		if (LocationType.Link.equals(entry.getLocationType()) ||
-				LocationType.LinkReference.equals(entry.getLocationType()) ||
-				LocationType.Reference.equals(entry.getLocationType())) {
+		if (EntryType.Link.equals(entry.getLocationType()) ||
+				EntryType.LinkReference.equals(entry.getLocationType()) ||
+				EntryType.Reference.equals(entry.getLocationType())) {
 			if (ResourceType.None.equals(entry.getResourceType())) {
 				getResponse().setLocationRef(new Reference(entry.getResourceURI().toString()));
 				getResponse().setStatus(Status.REDIRECTION_SEE_OTHER);
 				return null;
 			}
-		} else if (LocationType.Local.equals(entry.getLocationType())) {
+		} else if (EntryType.Local.equals(entry.getLocationType())) {
 
 			JSONArray array = new JSONArray(); 
 

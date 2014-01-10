@@ -30,11 +30,11 @@ import javax.xml.datatype.XMLGregorianCalendar;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryEvent;
@@ -79,7 +79,7 @@ public class EntryImpl implements Entry {
 
 	protected URI entryURI;
 	protected URI resURI;
-	protected LocationType locType = LocationType.Local;
+	protected EntryType locType = EntryType.Local;
 	protected RepresentationType repType = RepresentationType.InformationResource;
 	protected ResourceType resourceType = ResourceType.None;
 	protected XMLGregorianCalendar created;
@@ -163,11 +163,11 @@ public class EntryImpl implements Entry {
 	}
 
 	protected void initMetadataObjects() {
-		if (locType == LocationType.Local || locType == LocationType.Link) {
+		if (locType == EntryType.Local || locType == EntryType.Link) {
 
 			this.localMetadata = new MetadataImpl(this, localMdURI, resURI, false);
 		}
-		if (locType == LocationType.LinkReference) {
+		if (locType == EntryType.LinkReference) {
 			this.localMetadata = new MetadataImpl(this, localMdURI, resURI, false);
 			if (externalMdURI.stringValue().startsWith(this.repositoryManager.getRepositoryURL().toString())) {
 				this.cachedExternalMetadata = new LocalMetadataWrapper(this);
@@ -176,7 +176,7 @@ public class EntryImpl implements Entry {
 			}
 		}
 
-		if (locType == LocationType.Reference) {
+		if (locType == EntryType.Reference) {
 			if (externalMdURI.stringValue().startsWith(this.repositoryManager.getRepositoryURL().toString())) {
 				this.cachedExternalMetadata = new LocalMetadataWrapper(this);
 			} else {
@@ -190,18 +190,18 @@ public class EntryImpl implements Entry {
 	 * @throws DatatypeConfigurationException 
 	 * @throws RepositoryException 
 	 */
-	protected void create(URI resURI, URI externalMetadataURI, ResourceType bType, LocationType lType, RepresentationType rType, RepositoryConnection rc)
+	protected void create(URI resURI, URI externalMetadataURI, ResourceType bType, EntryType lType, RepresentationType rType, RepositoryConnection rc)
 	throws RepositoryException, DatatypeConfigurationException {
 		String base = repositoryManager.getRepositoryURL().toString();
 		ValueFactory vf = repository.getValueFactory();
 		this.resURI = resURI;
 
-		if (lType == LocationType.LinkReference) {
+		if (lType == EntryType.LinkReference) {
 			this.cachedExternalMdURI = vf.createURI(URISplit.fabricateURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
 			this.externalMdURI = externalMetadataURI;
 		}
 
-		if (lType == LocationType.Reference) {
+		if (lType == EntryType.Reference) {
 			this.cachedExternalMdURI = vf.createURI(URISplit.fabricateURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
 			this.externalMdURI = externalMetadataURI;
 		}
@@ -210,7 +210,7 @@ public class EntryImpl implements Entry {
 
 	}
 
-	private void initialize(ResourceType bt, LocationType locT, RepresentationType repT, RepositoryConnection rc)
+	private void initialize(ResourceType bt, EntryType locT, RepresentationType repT, RepositoryConnection rc)
 	throws RepositoryException, DatatypeConfigurationException {
 		ValueFactory vf = rc.getRepository().getValueFactory();
 		if (bt != null) {
@@ -233,11 +233,11 @@ public class EntryImpl implements Entry {
 		 */ 
 		rc.add(entryURI, RepositoryProperties.relation, this.relationURI, entryURI);
 
-		if (locT != LocationType.Reference) {
+		if (locT != EntryType.Reference) {
 			rc.add(entryURI, RepositoryProperties.metadata, this.localMdURI, entryURI);
 		}
 
-		if (locT == LocationType.Reference || locT == LocationType.LinkReference) {
+		if (locT == EntryType.Reference || locT == EntryType.LinkReference) {
 			rc.add(entryURI, RepositoryProperties.externalMetadata, this.externalMdURI, entryURI);
 			rc.add(entryURI, RepositoryProperties.cachedExternalMetadata, this.cachedExternalMdURI, entryURI);			
 		}
@@ -277,7 +277,7 @@ public class EntryImpl implements Entry {
 		modified = null;
 		externalMdURI = null;
 		cachedAt = null;
-		locType = LocationType.Local;
+		locType = EntryType.Local;
 		repType = RepresentationType.InformationResource;
 		resourceType = ResourceType.None;
 
@@ -341,7 +341,7 @@ public class EntryImpl implements Entry {
 							}
 						}
 					} else if (this.entryURI.equals(subject)) {
-						LocationType lt = getLocationType(statement.getObject());
+						EntryType lt = getLocationType(statement.getObject());
 						if (lt != null) {
 							locType = lt;
 						}
@@ -406,15 +406,15 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	private LocationType getLocationType(Value rt) {
+	private EntryType getLocationType(Value rt) {
 		if (rt.equals(RepositoryProperties.Reference)) {
-			return LocationType.Reference;
+			return EntryType.Reference;
 		} else if (rt.equals(RepositoryProperties.Link)) {
-			return LocationType.Link;					
+			return EntryType.Link;
 		} else if (rt.equals(RepositoryProperties.LinkReference)) {
-			return LocationType.LinkReference;					
+			return EntryType.LinkReference;
 		} else if (rt.equals(RepositoryProperties.Local)) {
-			return LocationType.Local;		
+			return EntryType.Local;
 		} 
 		return null;
 	}
@@ -506,7 +506,7 @@ public class EntryImpl implements Entry {
 		return repType;
 	}
 
-	public LocationType getLocationType() {
+	public EntryType getLocationType() {
 		return locType;
 	}
 
@@ -572,19 +572,19 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	public void setLocationType(LocationType locationType) {
+	public void setLocationType(EntryType entryType) {
 		checkAdministerRights();
-		LocationType oldLT = locType;
+		EntryType oldLT = locType;
 		try {
 			synchronized (this.repository) {
 				RepositoryConnection rc = this.repository.getConnection();
 				rc.setAutoCommit(false);
 				try {
 					// we add an MD triple of we convert from Reference to LinkReference
-					if (LocationType.Reference.equals(locType) && LocationType.LinkReference.equals(locationType)) {
+					if (EntryType.Reference.equals(locType) && EntryType.LinkReference.equals(entryType)) {
 						rc.add(entryURI, RepositoryProperties.metadata, this.localMdURI, entryURI);
 					}
-					setLocationType(locationType, rc); // this also sets locType, therefore the assignment in the catch clause
+					setLocationType(entryType, rc); // this also sets locType, therefore the assignment in the catch clause
 					registerEntryModified(rc, this.repository.getValueFactory());
 					rc.commit();
 				} catch (Exception e) {
@@ -787,15 +787,15 @@ public class EntryImpl implements Entry {
 	}
 
 	/**
-	 * Sets a location to the entry. If the the locationType is Local no location is set.
-	 * @param locationType
+	 * Sets a location to the entry. If the the entryType is Local no location is set.
+	 * @param entryType
 	 * @param rc
 	 * @throws RepositoryException
 	 * @throws DatatypeConfigurationException
 	 */
-	protected void setLocationType(LocationType locationType, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
+	protected void setLocationType(EntryType entryType, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
 		rc.remove(rc.getStatements(entryURI, RDF.TYPE, null,false, entryURI), entryURI);
-		switch (locationType) {
+		switch (entryType) {
 		case Reference:
 			rc.add(entryURI, RDF.TYPE, RepositoryProperties.Reference, entryURI);
 			break;
@@ -806,7 +806,7 @@ public class EntryImpl implements Entry {
 			rc.add(entryURI, RDF.TYPE, RepositoryProperties.Link, entryURI);
 			break;
 		}
-		locType = locationType;
+		locType = entryType;
 	}
 
 	private Set<java.net.URI> getCachedAllowedPrincipalsFor(AccessProperty prop) {
@@ -990,7 +990,7 @@ public class EntryImpl implements Entry {
 
 	public void setResourceType(ResourceType bt) {
 		checkAdministerRights();
-		if (this.resourceType != bt && this.locType == LocationType.Local) {
+		if (this.resourceType != bt && this.locType == EntryType.Local) {
 			throw new org.entrystore.repository.RepositoryException("Cannot change the builtin type of a local resource");
 		}
 		try {
@@ -1064,7 +1064,7 @@ public class EntryImpl implements Entry {
 
 	public void setRepresentationType(RepresentationType representType) {
 		checkAdministerRights();
-		if (this.repType != representType && this.locType == LocationType.Local && this.resourceType != ResourceType.None) {
+		if (this.repType != representType && this.locType == EntryType.Local && this.resourceType != ResourceType.None) {
 			throw new org.entrystore.repository.RepositoryException("Cannot change the representationtype of a local and / or builtin resource");
 		}
 		try {
@@ -1145,7 +1145,7 @@ public class EntryImpl implements Entry {
 
 	public void updateCachedExternalMetadataDateSynchronized(RepositoryConnection rc, ValueFactory vf) throws RepositoryException, DatatypeConfigurationException {
 		synchronized (this.repository) {
-			if (this.getLocationType() == LocationType.Reference || this.getLocationType() == LocationType.LinkReference) {
+			if (this.getLocationType() == EntryType.Reference || this.getLocationType() == EntryType.LinkReference) {
 				cachedAt = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
 				rc.remove(rc.getStatements(cachedExternalMdURI, RepositoryProperties.cached, null, false, entryURI), entryURI);
 				// TODO: maybe entryUri as context last parameter..
@@ -1243,21 +1243,21 @@ public class EntryImpl implements Entry {
 							//In basic structure below.
 						} else if (predicate.equals(RDF.TYPE)) {
 							if (this.entryURI.equals(statement.getSubject())) {
-								LocationType lt = getLocationType(statement.getObject());
-								if (lt != null && locType == LocationType.Reference && lt == LocationType.LinkReference) { //Only allowed to change from Reference to LinkReference
+								EntryType lt = getLocationType(statement.getObject());
+								if (lt != null && locType == EntryType.Reference && lt == EntryType.LinkReference) { //Only allowed to change from Reference to LinkReference
 									locType = lt;
 									localMdURI = vf.createURI(URISplit.fabricateURI(repositoryManager.getRepositoryURL().toString(), context.id, RepositoryProperties.MD_PATH, this.id).toString());
 								}
 							} else {
 								ResourceType bt = getBuiltinType(statement.getObject());
 								if (bt != null) {
-									if (locType != LocationType.Local) { //Only allowed to change builtintype for non local resources.
+									if (locType != EntryType.Local) { //Only allowed to change builtintype for non local resources.
 										this.resourceType = bt;
 									}
 								} else {
 									RepresentationType rt = getRepresentationType(statement.getObject());
 									if (rt != null) {
-										if (locType != LocationType.Local) { //Only allowed to change representationtype for non local resources.
+										if (locType != EntryType.Local) { //Only allowed to change representationtype for non local resources.
 											repType = rt;
 										}
 									} else { //Some other rdf:type, just add it.
@@ -1407,15 +1407,15 @@ public class EntryImpl implements Entry {
 	}
 
 	public Graph getMetadataGraph() {
-		if (getLocationType().equals(LocationType.Local) || getLocationType().equals(LocationType.Link)) {
+		if (getLocationType().equals(EntryType.Local) || getLocationType().equals(EntryType.Link)) {
 			if (getLocalMetadata() != null && getLocalMetadata().getGraph() != null) {
 				return getLocalMetadata().getGraph();
 			}
-		} else if (getLocationType().equals(LocationType.Reference)) {
+		} else if (getLocationType().equals(EntryType.Reference)) {
 			if (getCachedExternalMetadata() != null && getCachedExternalMetadata().getGraph() != null) {
 				return getCachedExternalMetadata().getGraph();
 			}
-		} else if (getLocationType().equals(LocationType.LinkReference)) {
+		} else if (getLocationType().equals(EntryType.LinkReference)) {
 			Graph mergedMd = new GraphImpl();
 			if (getLocalMetadata() != null && getLocalMetadata().getGraph() != null) {
 				mergedMd.addAll(getLocalMetadata().getGraph());
@@ -1430,17 +1430,17 @@ public class EntryImpl implements Entry {
 
 	public void remove(RepositoryConnection rc) throws Exception { 
 		rc.clear(entryURI);
-		if (locType == LocationType.Local || locType == LocationType.Link) {
+		if (locType == EntryType.Local || locType == EntryType.Link) {
 			localMetadata.removeGraphSynchronized(rc);
 			//rc.clear(localMdURI);
 		}
-		if (locType == LocationType.LinkReference) {
+		if (locType == EntryType.LinkReference) {
 			localMetadata.removeGraphSynchronized(rc);
 			//rc.clear(localMdURI);
 			rc.clear(cachedExternalMdURI);
 		}
 
-		if (locType == LocationType.Reference) {
+		if (locType == EntryType.Reference) {
 			rc.clear(cachedExternalMdURI);
 		}
 

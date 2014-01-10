@@ -43,7 +43,7 @@ public interface Context extends Resource{
 	// in this context.                                                      //
 	//***********************************************************************//
 	/**
-	 * Creates a Entry where the {@link LocationType} is {@link LocationType#Local}. 
+	 * Creates a Entry where the {@link EntryType} is {@link EntryType#Local}.
 	 * The creation is allowed if: 
 	 * <ul><li>The user has write access to the context. Or</li>
 	 * <li>A list is provided in the context where the user has write access.</li></ul>
@@ -76,7 +76,7 @@ public interface Context extends Resource{
 			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception; 
 	
 	/**
-	 * Creates an Entry where the {@link LocationType} is {@link LocationType#Link}.
+	 * Creates an Entry where the {@link EntryType} is {@link EntryType#Link}.
 	 * The creation is allowed if: 
 	 * <ul><li>The user has write access to the context. Or</li>
 	 * <li>A list is provided in the context where the user has write access.</li></ul>
@@ -92,7 +92,7 @@ public interface Context extends Resource{
 	Entry createLink(String entryId, URI resourceURI, URI listURI); // links to pages, bookmarks
 
 	/**
-	 * Creates an Entry where the {@link LocationType} is {@link LocationType#Reference}.
+	 * Creates an Entry where the {@link EntryType} is {@link EntryType#Reference}.
 	 * The creation is allowed if: 
 	 * <ul><li>The user has write access to the context. Or</li>
 	 * <li>A list is provided in the context where the user has write access.</li></ul>

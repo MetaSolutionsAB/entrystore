@@ -27,10 +27,10 @@ import java.util.List;
 import java.util.Set;
 
 import com.github.jsonldjava.impl.SesameJSONLDParser;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryProperties;
@@ -292,7 +292,7 @@ public class EntryResource extends BaseResource {
 			 */
 			jdilObj.put("entryId", entry.getId());
 			ResourceType bt = entry.getResourceType();
-			if ((bt == ResourceType.Context || bt == ResourceType.SystemContext) && LocationType.Local.equals(entry.getLocationType())) {
+			if ((bt == ResourceType.Context || bt == ResourceType.SystemContext) && EntryType.Local.equals(entry.getLocationType())) {
 				jdilObj.put("alias", getCM().getContextAlias(entry.getResourceURI()));
 				if (entry.getRepositoryManager().hasQuotas()) {
 					JSONObject quotaObj = new JSONObject();
@@ -325,13 +325,13 @@ public class EntryResource extends BaseResource {
 			 * resource.
 			 */
 
-			LocationType lt = entry.getLocationType();
+			EntryType lt = entry.getLocationType();
 			
 			/*
 			 * Cached External Metadata
 			 */
 			JSONObject cachedExternalMdObj = null;
-			if (LocationType.LinkReference.equals(lt) || LocationType.Reference.equals(lt)) {
+			if (EntryType.LinkReference.equals(lt) || EntryType.Reference.equals(lt)) {
 				try {
 					Metadata cachedExternalMd = entry.getCachedExternalMetadata();
 					Graph g = cachedExternalMd.getGraph();
@@ -349,7 +349,7 @@ public class EntryResource extends BaseResource {
 			 * Local Metadata
 			 */
 			JSONObject localMdObj = null;
-			if (LocationType.Local.equals(lt) || LocationType.Link.equals(lt) || LocationType.LinkReference.equals(lt)) {
+			if (EntryType.Local.equals(lt) || EntryType.Link.equals(lt) || EntryType.LinkReference.equals(lt)) {
 				try {
 					Metadata localMd = entry.getLocalMetadata();
 					Graph g = localMd.getGraph();
@@ -383,7 +383,7 @@ public class EntryResource extends BaseResource {
 			 * Resource
 			 */
 			JSONObject resourceObj = new JSONObject();
-			if (entry.getLocationType() == LocationType.Local) {
+			if (entry.getLocationType() == EntryType.Local) {
 				/*
 				 *  String
 				 */
@@ -504,8 +504,8 @@ public class EntryResource extends BaseResource {
 							String entryId = uri.substring(uri.lastIndexOf('/') + 1);
 							childJSON.put("entryId", entryId);
 							ResourceType btChild = childEntry.getResourceType();
-							LocationType locChild = childEntry.getLocationType();
-							if ((btChild == ResourceType.Context || btChild == ResourceType.SystemContext) && LocationType.Local.equals(locChild)) {
+							EntryType locChild = childEntry.getLocationType();
+							if ((btChild == ResourceType.Context || btChild == ResourceType.SystemContext) && EntryType.Local.equals(locChild)) {
 								childJSON.put("alias", getCM().getContextAlias(childEntry.getResourceURI()));
 							} else if (btChild == ResourceType.List) {
 								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
@@ -521,15 +521,15 @@ public class EntryResource extends BaseResource {
 								} else {
 									log.warn("Not calculating list size of " + entryId + " because of potential performance problems");
 								}
-							} else if (btChild == ResourceType.User && locChild == LocationType.Local) {
+							} else if (btChild == ResourceType.User && locChild == EntryType.Local) {
 								childJSON.put("name", ((User) childEntry.getResource()).getName());
-							} else if (btChild == ResourceType.Group && locChild == LocationType.Local) {
+							} else if (btChild == ResourceType.Group && locChild == EntryType.Local) {
 								childJSON.put("name", ((Group) childEntry.getResource()).getName());								
 							}
 							
 							try {
-								LocationType ltC = childEntry.getLocationType();
-								if (LocationType.Reference.equals(ltC) || LocationType.LinkReference.equals(ltC)) {
+								EntryType ltC = childEntry.getLocationType();
+								if (EntryType.Reference.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 									// get the external metadata
 									Metadata cachedExternalMD = childEntry.getCachedExternalMetadata();
 									if (cachedExternalMD != null) {
@@ -541,7 +541,7 @@ public class EntryResource extends BaseResource {
 									}
 								}
 								
-								if (LocationType.Link.equals(ltC) || LocationType.Local.equals(ltC) || LocationType.LinkReference.equals(ltC)) {
+								if (EntryType.Link.equals(ltC) || EntryType.Local.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 									// get the local metadata
 									Metadata localMD = childEntry.getLocalMetadata();
 									if (localMD != null) {
@@ -738,7 +738,7 @@ public class EntryResource extends BaseResource {
 			entry.setGraph(deserializedGraph);
 			if (parameters.containsKey("applyACLtoChildren") &&
 					ResourceType.List.equals(entry.getResourceType()) &&
-					LocationType.Local.equals(entry.getLocationType())) {
+					EntryType.Local.equals(entry.getLocationType())) {
 				((org.entrystore.repository.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			getResponse().setStatus(Status.SUCCESS_OK);

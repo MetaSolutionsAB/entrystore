@@ -28,7 +28,7 @@ import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.List;
-import org.entrystore.repository.LocationType;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
@@ -605,7 +605,7 @@ public class ContextResource extends BaseResource {
 			return; 
 		}
 
-		if (LocationType.Reference.equals(entry.getLocationType())) {
+		if (EntryType.Reference.equals(entry.getLocationType())) {
 			return;
 		}
 
@@ -630,8 +630,8 @@ public class ContextResource extends BaseResource {
 			return;
 		}
 		
-		if (LocationType.Reference.equals(entry.getLocationType()) ||
-				LocationType.LinkReference.equals(entry.getLocationType())) {
+		if (EntryType.Reference.equals(entry.getLocationType()) ||
+				EntryType.LinkReference.equals(entry.getLocationType())) {
 			try {
 				JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 				JSONObject obj = (JSONObject) mdObj.get("cached-external-metadata");

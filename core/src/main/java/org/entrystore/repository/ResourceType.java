@@ -30,19 +30,23 @@ public enum ResourceType {
 	 * (resources with corresponding meta- and metametadata) that should be 
 	 * managed together, at a minimum it provides default ownership of the entries.
 	 * In portfolio applications a Context corresponds to a single portfolio.
-	 * @see Context
+	 *
+	 * @see org.entrystore.repository.Context
 	 */
 	Context,
 
 	/**
 	 * A context that has a special meaning in the current context, 
 	 * examples include {@link ContextManager} and {@link PrincipalManager}.
+	 *
+	 * @see org.entrystore.repository.Context
 	 */
 	SystemContext,
 
 	/**
 	 * A user or group used in access control lists for managing access to 
 	 * various entries.
+	 *
 	 * @see org.entrystore.repository.User
 	 */
 	User,
@@ -50,19 +54,22 @@ public enum ResourceType {
 	/**
 	 * A user or group used in access control lists for managing access to 
 	 * various entries.
+	 *
 	 * @see org.entrystore.repository.Group
 	 */
 	Group,
 	
 	/**
 	 * A ordered list of entry.
-	 * @see List
+	 *
+	 * @see org.entrystore.repository.List
 	 */
 	List,
 	
 	/**
 	 * A list that is dynamically generated.
-	 * @see List
+	 *
+	 * @see org.entrystore.repository.List
 	 */
 	ResultList,
 

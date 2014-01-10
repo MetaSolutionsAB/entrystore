@@ -35,11 +35,11 @@ import java.util.StringTokenizer;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.common.SolrException;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryProperties;
@@ -192,21 +192,21 @@ public class SearchResource extends BaseResource {
 					}
 				}
 				
-				// filter for LocationType
-				Set<LocationType> locationType = null;
+				// filter for EntryType
+				Set<EntryType> entryType = null;
 				if (parameters.containsKey("locationtype")) {
-					locationType = new HashSet<LocationType>();
+					entryType = new HashSet<EntryType>();
 					StringTokenizer tok = new StringTokenizer(parameters.get("locationtype"), ",");
 					while (tok.hasMoreTokens()) {
 						String locationTypeToken = tok.nextToken();
 						if ("Reference".equalsIgnoreCase(locationTypeToken)) {
-							locationType.add(LocationType.Reference);
+							entryType.add(EntryType.Reference);
 						} else if ("LinkReference".equalsIgnoreCase(locationTypeToken)) {
-							locationType.add(LocationType.LinkReference);
+							entryType.add(EntryType.LinkReference);
 						} else if ("Link".equalsIgnoreCase(locationTypeToken)) {
-							locationType.add(LocationType.Link);
+							entryType.add(EntryType.Link);
 						} else if ("Local".equalsIgnoreCase(locationTypeToken)) {
-							locationType.add(LocationType.Local);
+							entryType.add(EntryType.Local);
 						}
 					}
 				}
@@ -328,22 +328,22 @@ public class SearchResource extends BaseResource {
 					log.info("Query took " + timeDiff + " ms");
 					log.info("Returned " + searchResult.size() + " results");
 					
-					// Filter for LocationType
+					// Filter for EntryType
 					
-					if (locationType != null && resourceType != null){
+					if (entryType != null && resourceType != null){
 						entries = new ArrayList<Entry>();
 						for(Entry entry : searchResult){
-							if(locationType.contains(entry.getLocationType()) && resourceType.contains(entry.getResourceType())){
+							if(entryType.contains(entry.getLocationType()) && resourceType.contains(entry.getResourceType())){
 								entries.add(entry);
 							}
 						}
 						Date afterContextFilter = new Date();
 						timeDiff = afterContextFilter.getTime() - after.getTime();
-						log.info("Context filtering took " + timeDiff + " ms (both ResourceType and LocationType)");
-					} else if (locationType != null) {
+						log.info("Context filtering took " + timeDiff + " ms (both ResourceType and EntryType)");
+					} else if (entryType != null) {
 						entries = new ArrayList<Entry>();
 						for (Entry entry : searchResult) {
-							if (locationType.contains(entry.getLocationType())) {
+							if (entryType.contains(entry.getLocationType())) {
 								entries.add(entry);
 							}
 						}
@@ -548,12 +548,12 @@ public class SearchResource extends BaseResource {
 							childJSON.put("entryId", e.getId());
 							childJSON.put("contextId", e.getContext().getEntry().getId());
 							ResourceType btChild = e.getResourceType();
-							LocationType locChild = e.getLocationType();
+							EntryType locChild = e.getLocationType();
 							if (btChild == ResourceType.Context || btChild == ResourceType.SystemContext) {
 								childJSON.put("alias", getCM().getContextAlias(e.getResourceURI()));
-							} else if (btChild == ResourceType.User && locChild == LocationType.Local) {
+							} else if (btChild == ResourceType.User && locChild == EntryType.Local) {
 								childJSON.put("name", ((User) e.getResource()).getName());
-							} else if (btChild == ResourceType.Group && locChild == LocationType.Local) {
+							} else if (btChild == ResourceType.Group && locChild == EntryType.Local) {
 								childJSON.put("name", ((Group) e.getResource()).getName());								
 							}
 							PrincipalManager PM = this.getPM();
@@ -575,8 +575,8 @@ public class SearchResource extends BaseResource {
 							}
 
 							try {
-								LocationType ltC = e.getLocationType();
-								if (LocationType.Reference.equals(ltC) || LocationType.LinkReference.equals(ltC)) {
+								EntryType ltC = e.getLocationType();
+								if (EntryType.Reference.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 									// get the external metadata
 									Metadata cachedExternalMD = e.getCachedExternalMetadata();
 									if (cachedExternalMD != null) {
@@ -588,7 +588,7 @@ public class SearchResource extends BaseResource {
 									}
 								}
 								
-								if (LocationType.Link.equals(ltC) || LocationType.Local.equals(ltC) || LocationType.LinkReference.equals(ltC)) {
+								if (EntryType.Link.equals(ltC) || EntryType.Local.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 									// get the local metadata
 									Metadata localMD = e.getLocalMetadata();
 									if (localMD != null) {

@@ -3,11 +3,11 @@ package org.entrystore.repository.impl;
 import java.io.File;
 import java.util.Set;
 
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
@@ -131,7 +131,7 @@ public class PublicRepository {
 			// resource
 			Graph resGraph = null;
 			URI resNG = null;
-			if (ResourceType.Graph.equals(e.getResourceType()) && LocationType.Local.equals(e.getLocationType())) {
+			if (ResourceType.Graph.equals(e.getResourceType()) && EntryType.Local.equals(e.getLocationType())) {
 				resGraph = (Graph) e.getResource();
 				resNG = vf.createURI(e.getResourceURI().toString());
 			}
@@ -181,7 +181,7 @@ public class PublicRepository {
 		
 		// If entry is ResourceType.Context we update all its
 		// entries, just in case the ACL has changed
-		if (ResourceType.Context.equals(e.getResourceType()) && LocationType.Local.equals(e.getLocationType())) {
+		if (ResourceType.Context.equals(e.getResourceType()) && EntryType.Local.equals(e.getLocationType())) {
 			
 			// TODO needs to be tested
 			

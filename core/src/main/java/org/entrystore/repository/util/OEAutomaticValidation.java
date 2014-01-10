@@ -23,11 +23,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
@@ -107,8 +107,8 @@ public class OEAutomaticValidation {
 	}	
 	
 	private void validateMetadataOfEntry(Entry entry) {
-		if (LocationType.Reference.equals(entry.getLocationType())) {
-			entry.setLocationType(LocationType.LinkReference);
+		if (EntryType.Reference.equals(entry.getLocationType())) {
+			entry.setLocationType(EntryType.LinkReference);
 		} else {
 			log.info("Entry is not of location type reference, skipping");
 			return;
@@ -179,7 +179,7 @@ public class OEAutomaticValidation {
 			}
 			org.entrystore.repository.List l = (org.entrystore.repository.List) list.getResource();
 			for (Entry entry : entries) {
-				if (LocationType.Reference.equals(entry.getLocationType()) && ResourceType.None.equals(entry.getResourceType())) {
+				if (EntryType.Reference.equals(entry.getLocationType()) && ResourceType.None.equals(entry.getResourceType())) {
 					validateMetadataOfEntry(entry);
 					l.addChild(entry.getEntryURI());
 				}

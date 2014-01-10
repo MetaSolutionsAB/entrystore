@@ -17,13 +17,13 @@
 package org.entrystore.repository;
 
 /**
- * LocationType specifies which parts of an {@link Entry}, more specifically the 
+ * EntryType specifies which parts of an {@link Entry}, more specifically the
  * {@link Metadata} and the {@link Resource}, that are maintained in the {@link Context}
  * of the entry, i.e. the Context you get by calling {@link Entry#getContext()}.
  * 
- * @author matthias
+ * @author Matthias Palmér
  */
-public enum LocationType {
+public enum EntryType {
 	
 	/**
 	 * Reference means means that both the Resource and the Metadata for 
@@ -57,4 +57,5 @@ public enum LocationType {
 	 * context.
 	 */
 	Local
+
 }

@@ -39,11 +39,11 @@ import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.Quota;
 import org.entrystore.repository.QuotaException;
@@ -397,7 +397,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		return result;
 	}
 
-	synchronized protected EntryImpl createNewMinimalItem(URI resourceURI, URI metadataURI, LocationType lType, ResourceType bType, RepresentationType rType, String entryId) {
+	synchronized protected EntryImpl createNewMinimalItem(URI resourceURI, URI metadataURI, EntryType lType, ResourceType bType, RepresentationType rType, String entryId) {
 		try {
 			//Factory and connection.
 			RepositoryConnection rc = entry.repository.getConnection();
@@ -456,7 +456,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					newEntry = new EntryImpl(identity, this, this.entry.repositoryManager, this.entry.getRepository());
 
 					//Initialize a new information object.
-					if (lType == LocationType.Reference || lType == LocationType.LinkReference) {
+					if (lType == EntryType.Reference || lType == EntryType.LinkReference) {
 						newEntry.create(resURI, vf.createURI(metadataURI.toString()), bType, lType, rType, rc);
 					} else {
 						newEntry.create(resURI, null, bType, lType, rType, rc);					
@@ -496,13 +496,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public void initResource(EntryImpl newEntry) throws RepositoryException {
-		if (newEntry.getLocationType() != LocationType.Local) {
+		if (newEntry.getLocationType() != EntryType.Local) {
 			return;
 		}
 
 		switch (newEntry.getResourceType()) {
 		case None:
-			if (newEntry.getLocationType() == LocationType.Local) {
+			if (newEntry.getLocationType() == EntryType.Local) {
 				//TODO check Representationtype as well.
 				newEntry.setResource(new DataImpl(newEntry));
 			}
@@ -530,7 +530,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			URI listEntryURI = new URISplit(listURI, this.entry.getRepositoryManager().getRepositoryURL()).getMetaMetadataURI();
 			Entry listItem = getByEntryURI(listEntryURI);
 			if (listItem.getResourceType() == ResourceType.List &&
-					listItem.getLocationType() == LocationType.Local) {
+					listItem.getLocationType() == EntryType.Local) {
 				return (ListImpl) listItem.getResource();
 			}
 		}
@@ -573,7 +573,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		ListImpl list = getList(listURI);
 		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, LocationType.LinkReference, ResourceType.None, null, entryId);
+			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, EntryType.LinkReference, ResourceType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 				copyACL(list, entry);
@@ -589,7 +589,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		ListImpl list = getList(listURI);
 		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, LocationType.Reference, ResourceType.None, null, entryId);
+			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, EntryType.Reference, ResourceType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 				copyACL(list, entry);
@@ -605,7 +605,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		ListImpl list = getList(listURI);
 		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, null, LocationType.Link, ResourceType.None, null, entryId);
+			EntryImpl entry = createNewMinimalItem(resourceURI, null, EntryType.Link, ResourceType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 				copyACL(list, entry);
@@ -640,7 +640,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(null, null, LocationType.Local, buiType, repType, entryId);
+			EntryImpl entry = createNewMinimalItem(null, null, EntryType.Local, buiType, repType, entryId);
 			if (list != null) {
 				log.info("Adding entry " + entry.getEntryURI() + " to list " + list.getURI());
 				list.addChild(entry.getEntryURI());
@@ -671,7 +671,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (toEntry instanceof EntryImpl) {
 			EntryImpl entry = (EntryImpl) toEntry;
 			Set<URI> adminPrincipals = fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.Administer);
-			if (toEntry.getResourceType() != ResourceType.List || toEntry.getLocationType() != LocationType.Local) {
+			if (toEntry.getResourceType() != ResourceType.List || toEntry.getLocationType() != EntryType.Local) {
 				PrincipalManager pm = toEntry.getRepositoryManager().getPrincipalManager();
 				try {
 					pm.checkAuthenticatedUserAuthorized(fromList.getEntry(), AccessProperty.Administer);
@@ -741,12 +741,12 @@ public class ContextImpl extends ResourceImpl implements Context {
 			}
 			newEntry = new EntryImpl(split.getID(), this, this.entry.repositoryManager, this.entry.getRepository());
 			if (newEntry.load(rc)) {				
-				if(newEntry.getLocationType() == LocationType.Local) {
+				if(newEntry.getLocationType() == EntryType.Local) {
 					initResource(newEntry);
 				}
 				cache.put(newEntry);
 				if (ResourceType.Context.equals(newEntry.getResourceType()) &&
-						LocationType.Local.equals(newEntry.getLocationType())) {
+						EntryType.Local.equals(newEntry.getLocationType())) {
 					org.entrystore.repository.Resource resource = newEntry.getResource(); 
 					if (resource != null) {
 						((Context) resource).initializeSystemEntries();
@@ -1111,7 +1111,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		Set<URI> entries = getEntries();
 		for (URI uri : entries) {
 			Entry e = getByEntryURI(uri);
-			if (LocationType.Local.equals(e.getLocationType())) {
+			if (EntryType.Local.equals(e.getLocationType())) {
 				if (e.getResource() instanceof Data) {
 					File f = ((Data) e.getResource()).getDataFile();
 					if (f != null) {
@@ -1186,7 +1186,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	public void initializeSystemEntries() {
 		systemEntriesEntry = (EntryImpl) get("_systemEntries");
 		if(systemEntriesEntry == null) {
-			systemEntriesEntry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_systemEntries");
+			systemEntriesEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_systemEntries");
 			setMetadata(systemEntriesEntry, "System entries", null);
 			log.info("Successfully added the systemEntries list");
 		}
@@ -1200,7 +1200,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 		Entry latest = get("_latest");
 		if (latest == null) {
-			latest = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_latest");
+			latest = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_latest");
 			setMetadata(latest, "Latest entries", null);
 			log.info("Successfully added the latest list");
 
@@ -1266,7 +1266,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 		unlistedEntriesEntry = (EntryImpl) get("_unlisted");
 		if (unlistedEntriesEntry == null) {
-			unlistedEntriesEntry = this.createNewMinimalItem(null, null, LocationType.Local, ResourceType.List, null, "_unlisted");
+			unlistedEntriesEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_unlisted");
 			setMetadata(unlistedEntriesEntry, "Unlisted entries", null);
 			log.info("Successfully added the _unlisted list");
 		}
@@ -1363,7 +1363,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			commentEntry = createNewMinimalItem(
 					null, 
 					null, 
-					LocationType.Local, 
+					EntryType.Local,
 					buiType, 
 					RepresentationType.InformationResource, 
 					entryId);

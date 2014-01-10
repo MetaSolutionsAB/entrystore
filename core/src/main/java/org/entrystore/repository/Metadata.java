@@ -22,7 +22,7 @@ import org.openrdf.model.Graph;
 
 /**
  * Represents an RDF graph (Sesame {@link Graph}) for the metadata.
- * If {@link LocationType} is {@link LocationType#Reference} the RDF 
+ * If {@link EntryType} is {@link EntryType#Reference} the RDF
  * graph is a cache of an RDF graph found outside of the repository.
  * 
  * @author matthias
@@ -52,7 +52,7 @@ public interface Metadata {
 
 	/**
 	 * Does not work for cached metadata, i.e. check if
-	 * ({@link Entry#getLocationType()}) returns {@link LocationType#Reference}.
+	 * ({@link Entry#getLocationType()}) returns {@link EntryType#Reference}.
 	 * @param replace the old metadata with the new {@link Graph}. 
 	 */
 	void setGraph(Graph graph);

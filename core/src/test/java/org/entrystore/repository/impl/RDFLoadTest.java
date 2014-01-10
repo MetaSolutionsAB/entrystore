@@ -20,11 +20,11 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.config.Config;
@@ -66,43 +66,43 @@ public class RDFLoadTest {
 		Context duck = cm.getContext("duck");
 
 		//ContextManager correct types.
-		assertTrue(cm.getEntry().getLocationType() == LocationType.Local);
+		assertTrue(cm.getEntry().getLocationType() == EntryType.Local);
 		assertTrue(cm.getEntry().getResourceType() == ResourceType.SystemContext);
 		assertTrue(cm.getEntry().getRepresentationType() == RepresentationType.InformationResource);
 
 		//Duck context
-		assertTrue(duck.getEntry().getLocationType() == LocationType.Local);
+		assertTrue(duck.getEntry().getLocationType() == EntryType.Local);
 		assertTrue(duck.getEntry().getResourceType() == ResourceType.Context);
 		assertTrue(duck.getEntry().getRepresentationType() == RepresentationType.InformationResource);
 
 		//Top list
 		Entry entry = duck.get("_top");
-		assertTrue(entry.getLocationType() == LocationType.Local);
+		assertTrue(entry.getLocationType() == EntryType.Local);
 		assertTrue(entry.getResourceType() == ResourceType.List);
 		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
 		
 		//LinkReference to Mickeys top list.
 		entry = duck.get("3");
 		assertTrue("Locationtype should be LinkReference, it is now: "+entry.getLocationType(), 
-				entry.getLocationType() == LocationType.LinkReference);
+				entry.getLocationType() == EntryType.LinkReference);
 		assertTrue(entry.getResourceType() == ResourceType.List);
 		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
 
 		//Reference to the principal Mickey
 		entry = duck.get("4");
-		assertTrue(entry.getLocationType() == LocationType.Reference);
+		assertTrue(entry.getLocationType() == EntryType.Reference);
 		assertTrue(entry.getResourceType() == ResourceType.User);
 		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
 
 		//Link to wikipedia
 		entry = duck.get("6");
-		assertTrue(entry.getLocationType() == LocationType.Link);
+		assertTrue(entry.getLocationType() == EntryType.Link);
 		assertTrue(entry.getResourceType() == ResourceType.None);
 		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
 
 		//Phooey, a abstract resource
 		entry = duck.get("8");
-		assertTrue(entry.getLocationType() == LocationType.Local);
+		assertTrue(entry.getLocationType() == EntryType.Local);
 		assertTrue(entry.getResourceType() == ResourceType.None);
 		assertTrue(entry.getRepresentationType() == RepresentationType.NamedResource);
 	}

@@ -22,12 +22,12 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.List;
-import org.entrystore.repository.LocationType;
 import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.util.FileOperations;
 import org.openrdf.model.Statement;
@@ -104,13 +104,13 @@ public class ZipExport {
 	}
 	
 	protected boolean isFile(Entry entry) {
-		return entry.getLocationType() == LocationType.Local 
+		return entry.getLocationType() == EntryType.Local
 				&& entry.getResourceType() == ResourceType.None
 				&& entry.getRepresentationType() == RepresentationType.InformationResource;
 	}
 
 	protected boolean isLocalDir(Entry entry) {
-		return entry.getLocationType() == LocationType.Local 
+		return entry.getLocationType() == EntryType.Local
 				&& entry.getResourceType() == ResourceType.List;
 	}
 
