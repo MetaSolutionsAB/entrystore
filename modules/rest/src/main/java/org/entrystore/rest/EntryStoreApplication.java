@@ -19,9 +19,11 @@ package org.entrystore.rest;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Set;
 
+import javax.activation.MimeType;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.servlet.ServletContext;
@@ -53,31 +55,7 @@ import org.entrystore.rest.auth.NewUserRedirectAuthenticator;
 import org.entrystore.rest.auth.SimpleAuthenticator;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
-import org.entrystore.rest.resources.AliasResource;
-import org.entrystore.rest.resources.ContextResource;
-import org.entrystore.rest.resources.CookieLoginResource;
-import org.entrystore.rest.resources.DefaultResource;
-import org.entrystore.rest.resources.EntryResource;
-import org.entrystore.rest.resources.ExportResource;
-import org.entrystore.rest.resources.ExternalMetadataResource;
-import org.entrystore.rest.resources.HarvesterResource;
-import org.entrystore.rest.resources.ImportResource;
-import org.entrystore.rest.resources.LogoutResource;
-import org.entrystore.rest.resources.LookupResource;
-import org.entrystore.rest.resources.MergeResource;
-import org.entrystore.rest.resources.MetadataResource;
-import org.entrystore.rest.resources.OpenIdResource;
-import org.entrystore.rest.resources.ProxyResource;
-import org.entrystore.rest.resources.QuotaResource;
-import org.entrystore.rest.resources.RelationResource;
-import org.entrystore.rest.resources.RepositoryBackupResource;
-import org.entrystore.rest.resources.ResourceResource;
-import org.entrystore.rest.resources.SearchResource;
-import org.entrystore.rest.resources.SolrResource;
-import org.entrystore.rest.resources.SparqlResource;
-import org.entrystore.rest.resources.StatisticsResource;
-import org.entrystore.rest.resources.StatusResource;
-import org.entrystore.rest.resources.UserResource;
+import org.entrystore.rest.resources.*;
 import org.restlet.Application;
 import org.restlet.Component;
 import org.restlet.Context;
@@ -85,11 +63,13 @@ import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.Restlet;
 import org.restlet.data.ChallengeScheme;
+import org.restlet.data.MediaType;
 import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.ext.openid.AttributeExchange;
 import org.restlet.ext.openid.OpenIdVerifier;
 import org.restlet.ext.openid.RedirectAuthenticator;
+import org.restlet.representation.FileRepresentation;
 import org.restlet.routing.Filter;
 import org.restlet.routing.Router;
 import org.restlet.security.Authenticator;
@@ -239,9 +219,8 @@ public class EntryStoreApplication extends Application {
 		Router router = new Router(getContext());
 		//router.setDefaultMatchingMode(Template.MODE_STARTS_WITH);
 		
-		// to prevent unnecessary context-id lookups we route favicon.ico to
-		// 404, this may be replaced with some real icon at some later point
-		router.attach("/favicon.ico", DefaultResource.class);
+		// to prevent unnecessary context-id lookups we route favicon.ico to a real icon
+		router.attach("/favicon.ico", FaviconResource.class);
 		
 		// global scope
 		router.attach("/search", SearchResource.class);
