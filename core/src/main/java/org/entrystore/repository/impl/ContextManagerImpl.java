@@ -672,13 +672,13 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				for (URI uri : portfolioResources) {
 					Entry e = pfContext.getByEntryURI(uri);
 					conn.export(entryHandler, f.createURI(e.getEntryURI().toString()));
-					if (e.getLocationType() == EntryType.Local || e.getLocationType() == EntryType.Link
-							|| e.getLocationType() == EntryType.LinkReference) {
+					if (e.getEntryType() == EntryType.Local || e.getEntryType() == EntryType.Link
+							|| e.getEntryType() == EntryType.LinkReference) {
 						conn.export(entryHandler, f.createURI(e.getLocalMetadata().getURI().toString()));
 					}
-					if (e.getLocationType() == EntryType.Local && e.getResourceType() != ResourceType.None) {
+					if (e.getEntryType() == EntryType.Local && e.getResourceType() != ResourceType.None) {
 						conn.export(entryHandler, f.createURI(e.getResourceURI().toString()));
-					} else if (e.getLocationType() == EntryType.Local && e.getResourceType() == ResourceType.None
+					} else if (e.getEntryType() == EntryType.Local && e.getResourceType() == ResourceType.None
 							&& e.getRepresentationType() == RepresentationType.InformationResource) {
 						// File dataFolder = new
 						// File(entry.getRepositoryManager().getConfiguration().getString(Settings.SCAM_DATA_FOLDER));
@@ -927,7 +927,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					for (Statement statement: resources.asList()) {
 						try {
 							Entry entry = getItemInRepositoryByMMdURI(URI.create(statement.getObject().stringValue()));
-							if (entry.getLocationType() == EntryType.Link) {
+							if (entry.getEntryType() == EntryType.Link) {
 								entries.add(entry);
 							}
 						} catch (AuthorizationException ae) {
@@ -938,7 +938,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					for (Statement statement: resources.asList()) {
 						try {
 							Entry entry = getItemInRepositoryByMMdURI(URI.create(statement.getObject().stringValue()));
-							if (entry.getLocationType() == EntryType.Reference) {
+							if (entry.getEntryType() == EntryType.Reference) {
 								entries.add(entry);
 							}
 						} catch (AuthorizationException ae) {
@@ -967,7 +967,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 	
 	public void initResource(EntryImpl newEntry) throws RepositoryException {
-		if (newEntry.getLocationType() != EntryType.Local) {
+		if (newEntry.getEntryType() != EntryType.Local) {
 			return;
 		}
 
@@ -1159,8 +1159,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		try {
 			//If linkReference or reference to a entry in the same repository
 			//check that the referenced metadata is accessible.
-			if ((entry.getLocationType() == EntryType.Reference
-					|| entry.getLocationType() == EntryType.LinkReference)
+			if ((entry.getEntryType() == EntryType.Reference
+					|| entry.getEntryType() == EntryType.LinkReference)
 					&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
 				Entry refEntry = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
 				pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);							

@@ -466,7 +466,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 	@Override
 	public void initResource(EntryImpl newEntry) throws RepositoryException {
-		if (newEntry.getLocationType() != EntryType.Local) {
+		if (newEntry.getEntryType() != EntryType.Local) {
 			return;
 		}
 		switch (newEntry.getResourceType()) {

@@ -605,7 +605,7 @@ public class ContextResource extends BaseResource {
 			return; 
 		}
 
-		if (EntryType.Reference.equals(entry.getLocationType())) {
+		if (EntryType.Reference.equals(entry.getEntryType())) {
 			return;
 		}
 
@@ -630,8 +630,8 @@ public class ContextResource extends BaseResource {
 			return;
 		}
 		
-		if (EntryType.Reference.equals(entry.getLocationType()) ||
-				EntryType.LinkReference.equals(entry.getLocationType())) {
+		if (EntryType.Reference.equals(entry.getEntryType()) ||
+				EntryType.LinkReference.equals(entry.getEntryType())) {
 			try {
 				JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 				JSONObject obj = (JSONObject) mdObj.get("cached-external-metadata");

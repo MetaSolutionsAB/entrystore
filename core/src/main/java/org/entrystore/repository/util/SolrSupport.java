@@ -226,7 +226,7 @@ public class SolrSupport {
 
 		// types
 		doc.setField("resourceType", entry.getResourceType().name());
-		doc.setField("locationType", entry.getLocationType().name());
+		doc.setField("locationType", entry.getEntryType().name());
 		doc.setField("representationType", entry.getRepresentationType().name());
 
 		// creator
@@ -362,7 +362,7 @@ public class SolrSupport {
 		}
 
 		// Full text extraction using Apache Tika
-		if (extractFulltext && EntryType.Local.equals(entry.getLocationType())
+		if (extractFulltext && EntryType.Local.equals(entry.getEntryType())
 				&& RepresentationType.InformationResource.equals(entry.getRepresentationType())
 				&& entry.getResource() instanceof Data) {
 			Data d = (Data) entry.getResource();
@@ -467,7 +467,7 @@ public class SolrSupport {
 						// If linkReference or reference to a entry in the same
 						// repository
 						// check that the referenced metadata is accessible.
-						if ((entry.getLocationType() == EntryType.Reference || entry.getLocationType() == EntryType.LinkReference)
+						if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
 								&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
 							Entry refEntry = entry.getRepositoryManager().getContextManager()
 									.getEntry(entry.getExternalMetadataURI());

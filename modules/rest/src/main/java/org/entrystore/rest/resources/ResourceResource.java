@@ -335,7 +335,7 @@ public class ResourceResource extends BaseResource {
 
 	protected boolean isFile(Entry entry) {
 		if (entry != null) {
-			return EntryType.Local.equals(entry.getLocationType()) &&
+			return EntryType.Local.equals(entry.getEntryType()) &&
 				ResourceType.None.equals(entry.getResourceType()) &&
 				RepresentationType.InformationResource.equals(entry.getRepresentationType());
 		} else {
@@ -449,7 +449,7 @@ public class ResourceResource extends BaseResource {
 	
 	public Set<Entry> getListChildrenRecursively(Entry listEntry) {
 		Set<Entry> result = new HashSet<Entry>();
-		if (ResourceType.List.equals(listEntry.getResourceType()) && EntryType.Local.equals(listEntry.getLocationType())) {
+		if (ResourceType.List.equals(listEntry.getResourceType()) && EntryType.Local.equals(listEntry.getEntryType())) {
 			org.entrystore.repository.List l = (org.entrystore.repository.List) listEntry.getResource();
 			List<URI> c = l.getChildren();
 			for (URI uri : c) {
@@ -595,15 +595,15 @@ public class ResourceResource extends BaseResource {
 	 * @return JSON representation
 	 */
 	private Representation getResource() throws AuthorizationException {
-		if (EntryType.Link.equals(entry.getLocationType()) ||
-				EntryType.LinkReference.equals(entry.getLocationType()) ||
-				EntryType.Reference.equals(entry.getLocationType())) {
+		if (EntryType.Link.equals(entry.getEntryType()) ||
+				EntryType.LinkReference.equals(entry.getEntryType()) ||
+				EntryType.Reference.equals(entry.getEntryType())) {
 			if (ResourceType.None.equals(entry.getResourceType())) {
 				getResponse().setLocationRef(new Reference(entry.getResourceURI().toString()));
 				getResponse().setStatus(Status.REDIRECTION_SEE_OTHER);
 				return null;
 			}
-		} else if (EntryType.Local.equals(entry.getLocationType())) {
+		} else if (EntryType.Local.equals(entry.getEntryType())) {
 
 			JSONArray array = new JSONArray(); 
 
@@ -804,7 +804,7 @@ public class ResourceResource extends BaseResource {
 
 		log.info("No resource available.");
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-		return new JsonRepresentation("{\"error\":\"No resource available for "+entry.getLocationType()+" entries \"}");
+		return new JsonRepresentation("{\"error\":\"No resource available for "+entry.getEntryType()+" entries \"}");
 
 	}
 

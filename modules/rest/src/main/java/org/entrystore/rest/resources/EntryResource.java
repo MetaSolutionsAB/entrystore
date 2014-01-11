@@ -292,7 +292,7 @@ public class EntryResource extends BaseResource {
 			 */
 			jdilObj.put("entryId", entry.getId());
 			ResourceType bt = entry.getResourceType();
-			if ((bt == ResourceType.Context || bt == ResourceType.SystemContext) && EntryType.Local.equals(entry.getLocationType())) {
+			if ((bt == ResourceType.Context || bt == ResourceType.SystemContext) && EntryType.Local.equals(entry.getEntryType())) {
 				jdilObj.put("alias", getCM().getContextAlias(entry.getResourceURI()));
 				if (entry.getRepositoryManager().hasQuotas()) {
 					JSONObject quotaObj = new JSONObject();
@@ -325,7 +325,7 @@ public class EntryResource extends BaseResource {
 			 * resource.
 			 */
 
-			EntryType lt = entry.getLocationType();
+			EntryType lt = entry.getEntryType();
 			
 			/*
 			 * Cached External Metadata
@@ -383,7 +383,7 @@ public class EntryResource extends BaseResource {
 			 * Resource
 			 */
 			JSONObject resourceObj = new JSONObject();
-			if (entry.getLocationType() == EntryType.Local) {
+			if (entry.getEntryType() == EntryType.Local) {
 				/*
 				 *  String
 				 */
@@ -504,7 +504,7 @@ public class EntryResource extends BaseResource {
 							String entryId = uri.substring(uri.lastIndexOf('/') + 1);
 							childJSON.put("entryId", entryId);
 							ResourceType btChild = childEntry.getResourceType();
-							EntryType locChild = childEntry.getLocationType();
+							EntryType locChild = childEntry.getEntryType();
 							if ((btChild == ResourceType.Context || btChild == ResourceType.SystemContext) && EntryType.Local.equals(locChild)) {
 								childJSON.put("alias", getCM().getContextAlias(childEntry.getResourceURI()));
 							} else if (btChild == ResourceType.List) {
@@ -528,7 +528,7 @@ public class EntryResource extends BaseResource {
 							}
 							
 							try {
-								EntryType ltC = childEntry.getLocationType();
+								EntryType ltC = childEntry.getEntryType();
 								if (EntryType.Reference.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 									// get the external metadata
 									Metadata cachedExternalMD = childEntry.getCachedExternalMetadata();
@@ -738,7 +738,7 @@ public class EntryResource extends BaseResource {
 			entry.setGraph(deserializedGraph);
 			if (parameters.containsKey("applyACLtoChildren") &&
 					ResourceType.List.equals(entry.getResourceType()) &&
-					EntryType.Local.equals(entry.getLocationType())) {
+					EntryType.Local.equals(entry.getEntryType())) {
 				((org.entrystore.repository.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			getResponse().setStatus(Status.SUCCESS_OK);

@@ -101,7 +101,7 @@ public class ExternalMetadataResource extends BaseResource {
 	}
 
 	private Representation getCachedExternalMetadata(MediaType mediaType) {		
-		EntryType locType = entry.getLocationType();
+		EntryType locType = entry.getEntryType();
 		if (EntryType.Reference.equals(locType) || EntryType.LinkReference.equals(locType)) {
 			Metadata extMetadata = entry.getCachedExternalMetadata();
 			if (extMetadata != null) {

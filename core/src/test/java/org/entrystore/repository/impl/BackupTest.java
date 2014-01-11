@@ -135,9 +135,9 @@ public class BackupTest {
 
 	@Test
 	public void referenceType() {
-		assertTrue(listEntry.getLocationType() == EntryType.Local);
-		assertTrue(linkEntry.getLocationType() == EntryType.Link);
-		assertTrue(refEntry.getLocationType() == EntryType.Reference);
+		assertTrue(listEntry.getEntryType() == EntryType.Local);
+		assertTrue(linkEntry.getEntryType() == EntryType.Link);
+		assertTrue(refEntry.getEntryType() == EntryType.Reference);
 	}
 
 	@Test

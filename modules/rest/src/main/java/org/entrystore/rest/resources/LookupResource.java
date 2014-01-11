@@ -138,7 +138,7 @@ public class LookupResource extends BaseResource {
 	}
 	
 	private Representation getMetadata(Entry e, String scope, MediaType mediaType) throws AuthorizationException {
-		EntryType locType = entry.getLocationType();
+		EntryType locType = entry.getEntryType();
 		Graph graph = new GraphImpl();
 		if (EntryType.Local.equals(locType) || EntryType.Link.equals(locType)) {
 			if ("all".equals(scope) || "local".equals(scope)) {

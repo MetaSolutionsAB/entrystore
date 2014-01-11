@@ -107,8 +107,8 @@ public class OEAutomaticValidation {
 	}	
 	
 	private void validateMetadataOfEntry(Entry entry) {
-		if (EntryType.Reference.equals(entry.getLocationType())) {
-			entry.setLocationType(EntryType.LinkReference);
+		if (EntryType.Reference.equals(entry.getEntryType())) {
+			entry.setEntryType(EntryType.LinkReference);
 		} else {
 			log.info("Entry is not of location type reference, skipping");
 			return;
@@ -179,7 +179,7 @@ public class OEAutomaticValidation {
 			}
 			org.entrystore.repository.List l = (org.entrystore.repository.List) list.getResource();
 			for (Entry entry : entries) {
-				if (EntryType.Reference.equals(entry.getLocationType()) && ResourceType.None.equals(entry.getResourceType())) {
+				if (EntryType.Reference.equals(entry.getEntryType()) && ResourceType.None.equals(entry.getResourceType())) {
 					validateMetadataOfEntry(entry);
 					l.addChild(entry.getEntryURI());
 				}

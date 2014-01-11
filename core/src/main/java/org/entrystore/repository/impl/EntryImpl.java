@@ -506,7 +506,7 @@ public class EntryImpl implements Entry {
 		return repType;
 	}
 
-	public EntryType getLocationType() {
+	public EntryType getEntryType() {
 		return locType;
 	}
 
@@ -572,7 +572,7 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	public void setLocationType(EntryType entryType) {
+	public void setEntryType(EntryType entryType) {
 		checkAdministerRights();
 		EntryType oldLT = locType;
 		try {
@@ -1145,7 +1145,7 @@ public class EntryImpl implements Entry {
 
 	public void updateCachedExternalMetadataDateSynchronized(RepositoryConnection rc, ValueFactory vf) throws RepositoryException, DatatypeConfigurationException {
 		synchronized (this.repository) {
-			if (this.getLocationType() == EntryType.Reference || this.getLocationType() == EntryType.LinkReference) {
+			if (this.getEntryType() == EntryType.Reference || this.getEntryType() == EntryType.LinkReference) {
 				cachedAt = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
 				rc.remove(rc.getStatements(cachedExternalMdURI, RepositoryProperties.cached, null, false, entryURI), entryURI);
 				// TODO: maybe entryUri as context last parameter..
@@ -1407,15 +1407,15 @@ public class EntryImpl implements Entry {
 	}
 
 	public Graph getMetadataGraph() {
-		if (getLocationType().equals(EntryType.Local) || getLocationType().equals(EntryType.Link)) {
+		if (getEntryType().equals(EntryType.Local) || getEntryType().equals(EntryType.Link)) {
 			if (getLocalMetadata() != null && getLocalMetadata().getGraph() != null) {
 				return getLocalMetadata().getGraph();
 			}
-		} else if (getLocationType().equals(EntryType.Reference)) {
+		} else if (getEntryType().equals(EntryType.Reference)) {
 			if (getCachedExternalMetadata() != null && getCachedExternalMetadata().getGraph() != null) {
 				return getCachedExternalMetadata().getGraph();
 			}
-		} else if (getLocationType().equals(EntryType.LinkReference)) {
+		} else if (getEntryType().equals(EntryType.LinkReference)) {
 			Graph mergedMd = new GraphImpl();
 			if (getLocalMetadata() != null && getLocalMetadata().getGraph() != null) {
 				mergedMd.addAll(getLocalMetadata().getGraph());

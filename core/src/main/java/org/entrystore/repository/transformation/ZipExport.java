@@ -104,13 +104,13 @@ public class ZipExport {
 	}
 	
 	protected boolean isFile(Entry entry) {
-		return entry.getLocationType() == EntryType.Local
+		return entry.getEntryType() == EntryType.Local
 				&& entry.getResourceType() == ResourceType.None
 				&& entry.getRepresentationType() == RepresentationType.InformationResource;
 	}
 
 	protected boolean isLocalDir(Entry entry) {
-		return entry.getLocationType() == EntryType.Local
+		return entry.getEntryType() == EntryType.Local
 				&& entry.getResourceType() == ResourceType.List;
 	}
 

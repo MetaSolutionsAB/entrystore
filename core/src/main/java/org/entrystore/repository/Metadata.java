@@ -52,7 +52,7 @@ public interface Metadata {
 
 	/**
 	 * Does not work for cached metadata, i.e. check if
-	 * ({@link Entry#getLocationType()}) returns {@link EntryType#Reference}.
+	 * ({@link Entry#getEntryType()}) returns {@link EntryType#Reference}.
 	 * @param replace the old metadata with the new {@link Graph}. 
 	 */
 	void setGraph(Graph graph);

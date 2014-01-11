@@ -958,7 +958,7 @@ public class DataCorrection {
 		try {
 			List<Entry> entries = getEntries(getContexts());
 			for (Entry entry : entries) {
-				if (!entry.getLocationType().equals(EntryType.Reference)) {// && !entry.getResourceType().equals(ResourceType.None)) {
+				if (!entry.getEntryType().equals(EntryType.Reference)) {// && !entry.getResourceType().equals(ResourceType.None)) {
 					fixMetadataOfEntry(entry);
 				}
 			}
@@ -1008,7 +1008,7 @@ public class DataCorrection {
 		try {
 			List<Entry> entries = getEntries(getContexts());
 			for (Entry entry : entries) {
-				if (entry.getLocationType().equals(EntryType.Local)) {
+				if (entry.getEntryType().equals(EntryType.Local)) {
 					if (entry.getFilename() != null) {
 						log.info(entry.getFilename());
 					}

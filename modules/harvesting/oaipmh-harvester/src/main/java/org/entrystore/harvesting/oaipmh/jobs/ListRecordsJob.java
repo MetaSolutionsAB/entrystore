@@ -133,7 +133,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 			Set<URI> allEntries = context.getEntries();
 			for (URI uri : allEntries) {
 				Entry entry = context.getByEntryURI(uri);
-				if (entry != null && (EntryType.Reference.equals(entry.getLocationType()) || EntryType.LinkReference.equals(entry.getLocationType()))) {
+				if (entry != null && (EntryType.Reference.equals(entry.getEntryType()) || EntryType.LinkReference.equals(entry.getEntryType()))) {
 					Date cachedDate = entry.getExternalMetadataCacheDate();
 					if (cachedDate != null) {
 						if (latestEntry == null || cachedDate.after(latestEntry)) {

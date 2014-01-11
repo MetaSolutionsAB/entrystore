@@ -333,7 +333,7 @@ public class SearchResource extends BaseResource {
 					if (entryType != null && resourceType != null){
 						entries = new ArrayList<Entry>();
 						for(Entry entry : searchResult){
-							if(entryType.contains(entry.getLocationType()) && resourceType.contains(entry.getResourceType())){
+							if(entryType.contains(entry.getEntryType()) && resourceType.contains(entry.getResourceType())){
 								entries.add(entry);
 							}
 						}
@@ -343,7 +343,7 @@ public class SearchResource extends BaseResource {
 					} else if (entryType != null) {
 						entries = new ArrayList<Entry>();
 						for (Entry entry : searchResult) {
-							if (entryType.contains(entry.getLocationType())) {
+							if (entryType.contains(entry.getEntryType())) {
 								entries.add(entry);
 							}
 						}
@@ -548,7 +548,7 @@ public class SearchResource extends BaseResource {
 							childJSON.put("entryId", e.getId());
 							childJSON.put("contextId", e.getContext().getEntry().getId());
 							ResourceType btChild = e.getResourceType();
-							EntryType locChild = e.getLocationType();
+							EntryType locChild = e.getEntryType();
 							if (btChild == ResourceType.Context || btChild == ResourceType.SystemContext) {
 								childJSON.put("alias", getCM().getContextAlias(e.getResourceURI()));
 							} else if (btChild == ResourceType.User && locChild == EntryType.Local) {
@@ -575,7 +575,7 @@ public class SearchResource extends BaseResource {
 							}
 
 							try {
-								EntryType ltC = e.getLocationType();
+								EntryType ltC = e.getEntryType();
 								if (EntryType.Reference.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 									// get the external metadata
 									Metadata cachedExternalMD = e.getCachedExternalMetadata();

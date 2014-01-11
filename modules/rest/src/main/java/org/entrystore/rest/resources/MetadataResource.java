@@ -136,8 +136,8 @@ public class MetadataResource extends BaseResource {
 			if (entry != null && context != null) {
 				// we convert from Reference to LinkReference, otherwise we
 				// can't store any (local) metadata
-				if (EntryType.Reference.equals(entry.getLocationType())) {
-					entry.setLocationType(EntryType.LinkReference);
+				if (EntryType.Reference.equals(entry.getEntryType())) {
+					entry.setEntryType(EntryType.LinkReference);
 				}
 
 				MediaType mt = (format != null) ? format : getRequestEntity().getMediaType();
@@ -191,7 +191,7 @@ public class MetadataResource extends BaseResource {
 	 * @return JSON representation
 	 */
 	private Representation getMetadata(MediaType mediaType) throws AuthorizationException {
-		EntryType locType = entry.getLocationType();
+		EntryType locType = entry.getEntryType();
 		if (EntryType.Local.equals(locType) || EntryType.Link.equals(locType)	|| EntryType.LinkReference.equals(locType)) {
 			Metadata metadata = entry.getLocalMetadata();
 			if (metadata != null) {

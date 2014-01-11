@@ -66,43 +66,43 @@ public class RDFLoadTest {
 		Context duck = cm.getContext("duck");
 
 		//ContextManager correct types.
-		assertTrue(cm.getEntry().getLocationType() == EntryType.Local);
+		assertTrue(cm.getEntry().getEntryType() == EntryType.Local);
 		assertTrue(cm.getEntry().getResourceType() == ResourceType.SystemContext);
 		assertTrue(cm.getEntry().getRepresentationType() == RepresentationType.InformationResource);
 
 		//Duck context
-		assertTrue(duck.getEntry().getLocationType() == EntryType.Local);
+		assertTrue(duck.getEntry().getEntryType() == EntryType.Local);
 		assertTrue(duck.getEntry().getResourceType() == ResourceType.Context);
 		assertTrue(duck.getEntry().getRepresentationType() == RepresentationType.InformationResource);
 
 		//Top list
 		Entry entry = duck.get("_top");
-		assertTrue(entry.getLocationType() == EntryType.Local);
+		assertTrue(entry.getEntryType() == EntryType.Local);
 		assertTrue(entry.getResourceType() == ResourceType.List);
 		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
 		
 		//LinkReference to Mickeys top list.
 		entry = duck.get("3");
-		assertTrue("Locationtype should be LinkReference, it is now: "+entry.getLocationType(), 
-				entry.getLocationType() == EntryType.LinkReference);
+		assertTrue("Locationtype should be LinkReference, it is now: "+entry.getEntryType(),
+				entry.getEntryType() == EntryType.LinkReference);
 		assertTrue(entry.getResourceType() == ResourceType.List);
 		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
 
 		//Reference to the principal Mickey
 		entry = duck.get("4");
-		assertTrue(entry.getLocationType() == EntryType.Reference);
+		assertTrue(entry.getEntryType() == EntryType.Reference);
 		assertTrue(entry.getResourceType() == ResourceType.User);
 		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
 
 		//Link to wikipedia
 		entry = duck.get("6");
-		assertTrue(entry.getLocationType() == EntryType.Link);
+		assertTrue(entry.getEntryType() == EntryType.Link);
 		assertTrue(entry.getResourceType() == ResourceType.None);
 		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
 
 		//Phooey, a abstract resource
 		entry = duck.get("8");
-		assertTrue(entry.getLocationType() == EntryType.Local);
+		assertTrue(entry.getEntryType() == EntryType.Local);
 		assertTrue(entry.getResourceType() == ResourceType.None);
 		assertTrue(entry.getRepresentationType() == RepresentationType.NamedResource);
 	}

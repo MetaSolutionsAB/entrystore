@@ -496,13 +496,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public void initResource(EntryImpl newEntry) throws RepositoryException {
-		if (newEntry.getLocationType() != EntryType.Local) {
+		if (newEntry.getEntryType() != EntryType.Local) {
 			return;
 		}
 
 		switch (newEntry.getResourceType()) {
 		case None:
-			if (newEntry.getLocationType() == EntryType.Local) {
+			if (newEntry.getEntryType() == EntryType.Local) {
 				//TODO check Representationtype as well.
 				newEntry.setResource(new DataImpl(newEntry));
 			}
@@ -530,7 +530,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			URI listEntryURI = new URISplit(listURI, this.entry.getRepositoryManager().getRepositoryURL()).getMetaMetadataURI();
 			Entry listItem = getByEntryURI(listEntryURI);
 			if (listItem.getResourceType() == ResourceType.List &&
-					listItem.getLocationType() == EntryType.Local) {
+					listItem.getEntryType() == EntryType.Local) {
 				return (ListImpl) listItem.getResource();
 			}
 		}
@@ -671,7 +671,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (toEntry instanceof EntryImpl) {
 			EntryImpl entry = (EntryImpl) toEntry;
 			Set<URI> adminPrincipals = fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.Administer);
-			if (toEntry.getResourceType() != ResourceType.List || toEntry.getLocationType() != EntryType.Local) {
+			if (toEntry.getResourceType() != ResourceType.List || toEntry.getEntryType() != EntryType.Local) {
 				PrincipalManager pm = toEntry.getRepositoryManager().getPrincipalManager();
 				try {
 					pm.checkAuthenticatedUserAuthorized(fromList.getEntry(), AccessProperty.Administer);
@@ -741,12 +741,12 @@ public class ContextImpl extends ResourceImpl implements Context {
 			}
 			newEntry = new EntryImpl(split.getID(), this, this.entry.repositoryManager, this.entry.getRepository());
 			if (newEntry.load(rc)) {				
-				if(newEntry.getLocationType() == EntryType.Local) {
+				if(newEntry.getEntryType() == EntryType.Local) {
 					initResource(newEntry);
 				}
 				cache.put(newEntry);
 				if (ResourceType.Context.equals(newEntry.getResourceType()) &&
-						EntryType.Local.equals(newEntry.getLocationType())) {
+						EntryType.Local.equals(newEntry.getEntryType())) {
 					org.entrystore.repository.Resource resource = newEntry.getResource(); 
 					if (resource != null) {
 						((Context) resource).initializeSystemEntries();
@@ -1111,7 +1111,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		Set<URI> entries = getEntries();
 		for (URI uri : entries) {
 			Entry e = getByEntryURI(uri);
-			if (EntryType.Local.equals(e.getLocationType())) {
+			if (EntryType.Local.equals(e.getEntryType())) {
 				if (e.getResource() instanceof Data) {
 					File f = ((Data) e.getResource()).getDataFile();
 					if (f != null) {

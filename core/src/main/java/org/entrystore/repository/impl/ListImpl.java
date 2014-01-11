@@ -285,7 +285,7 @@ public class ListImpl extends RDFResource implements List {
 				return newEntry;
 			}
 			Context c = this.entry.getContext();
-			switch(e.getLocationType()) {
+			switch(e.getEntryType()) {
 			case Local:
 				newEntry = (EntryImpl) c.createResource(null, e.getResourceType(), e.getRepresentationType(), getURI());
 				if (e.getResourceType() == ResourceType.None && e.getRepresentationType() == RepresentationType.InformationResource) {
@@ -326,7 +326,7 @@ public class ListImpl extends RDFResource implements List {
 		}
 		
 		Context c = this.entry.getContext();
-		switch(entryToCopy.getLocationType()) {
+		switch(entryToCopy.getEntryType()) {
 		case Local:
 			newEntry = (EntryImpl) c.createResource(null, entryToCopy.getResourceType(), entryToCopy.getRepresentationType(), getURI());
 			if (entryToCopy.getResourceType() == ResourceType.None && entryToCopy.getRepresentationType() == RepresentationType.InformationResource) {
@@ -372,7 +372,7 @@ public class ListImpl extends RDFResource implements List {
 		map.put(source.getSesameEntryURI(), dest.getSesameEntryURI());
 		map.put(source.getSesameLocalMetadataURI(), dest.getSesameLocalMetadataURI());
 		map.put(source.getSesameResourceURI(), dest.getSesameResourceURI());
-		if (source.getLocationType() == EntryType.LinkReference || source.getLocationType() == EntryType.Reference) {
+		if (source.getEntryType() == EntryType.LinkReference || source.getEntryType() == EntryType.Reference) {
 			map.put(source.getSesameExternalMetadataURI(), dest.getSesameExternalMetadataURI());
 			map.put(source.getSesameCachedExternalMetadataURI(), dest.getSesameCachedExternalMetadataURI());
 		}
@@ -674,7 +674,7 @@ public class ListImpl extends RDFResource implements List {
 		for (URI uri : tchildren) {
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
 			if (childEntry != null) {
-				if (ResourceType.List.equals(childEntry.getResourceType()) && EntryType.Local.equals(childEntry.getLocationType())) {
+				if (ResourceType.List.equals(childEntry.getResourceType()) && EntryType.Local.equals(childEntry.getEntryType())) {
 					((List) childEntry.getResource()).removeTree();
 				} else if (childEntry.getReferringListsInSameContext().size() == 0) {
 					c.remove(uri);
@@ -700,7 +700,7 @@ public class ListImpl extends RDFResource implements List {
 				for (AccessProperty ap : AccessProperty.values()) {
 					childEntry.setAllowedPrincipalsFor(ap, entry.getAllowedPrincipalsFor(ap));
 				}
-				if (ResourceType.List.equals(childEntry.getResourceType()) && EntryType.Local.equals(childEntry.getLocationType())) {
+				if (ResourceType.List.equals(childEntry.getResourceType()) && EntryType.Local.equals(childEntry.getEntryType())) {
 					Resource childResource = childEntry.getResource();
 					if (childResource instanceof List) {
 						((List) childEntry.getResource()).applyACLtoChildren(recursive);

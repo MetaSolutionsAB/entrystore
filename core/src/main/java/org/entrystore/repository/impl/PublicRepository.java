@@ -131,7 +131,7 @@ public class PublicRepository {
 			// resource
 			Graph resGraph = null;
 			URI resNG = null;
-			if (ResourceType.Graph.equals(e.getResourceType()) && EntryType.Local.equals(e.getLocationType())) {
+			if (ResourceType.Graph.equals(e.getResourceType()) && EntryType.Local.equals(e.getEntryType())) {
 				resGraph = (Graph) e.getResource();
 				resNG = vf.createURI(e.getResourceURI().toString());
 			}
@@ -181,7 +181,7 @@ public class PublicRepository {
 		
 		// If entry is ResourceType.Context we update all its
 		// entries, just in case the ACL has changed
-		if (ResourceType.Context.equals(e.getResourceType()) && EntryType.Local.equals(e.getLocationType())) {
+		if (ResourceType.Context.equals(e.getResourceType()) && EntryType.Local.equals(e.getEntryType())) {
 			
 			// TODO needs to be tested
 			

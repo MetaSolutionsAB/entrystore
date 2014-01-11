@@ -39,7 +39,8 @@ import org.openrdf.model.Statement;
  * Depending on the EntryType it also maintains references to a metadata and a resource object.
  * If the EntryType is Reference there might be a cached metadata object as well.
  * 
- * @author matthias
+ * @author Matthias Palmér
+ * @author Hannes Ebner
  */
 public interface Entry {
 	
@@ -253,12 +254,12 @@ public interface Entry {
 	/**
 	 * @return the {@link EntryType}
 	 */
-	EntryType getLocationType();
+	EntryType getEntryType();
 
 	/**
 	 * Sets the {@link EntryType}.
 	 */
-	void setLocationType(EntryType entryType);
+	void setEntryType(EntryType entryType);
 
 	String getFilename();
 	
