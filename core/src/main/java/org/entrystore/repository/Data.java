@@ -45,7 +45,7 @@ public interface Data extends Resource {
 	/**
 	 * @return an InputStream or null if there are no data yet.
 	 */
-	OutputStream getData();
+	InputStream getData();
 
 	/**
 	 * @return a File or null if there are no data yet.

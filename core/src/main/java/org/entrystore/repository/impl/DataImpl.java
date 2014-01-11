@@ -17,6 +17,7 @@
 package org.entrystore.repository.impl;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -72,10 +73,10 @@ public class DataImpl extends ResourceImpl implements Data {
 		return file;
 	}
 
-	public OutputStream getData() {
+	public InputStream getData() {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 		try {
-			return new FileOutputStream(getFile());
+			return new FileInputStream(getFile());
 		} catch (FileNotFoundException e) {
 			log.error(e.getMessage());
 			return null;
