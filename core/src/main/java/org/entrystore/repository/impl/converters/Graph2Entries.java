@@ -73,9 +73,9 @@ public class Graph2Entries {
 	 * @param graph
 	 * @return a collection of the merged entries (updated or created), the referenced entries are not included in the collection.
 	 */
-	public Collection<Entry> merge(Graph graph, String resourceId) {
+	public Set<Entry> merge(Graph graph, String resourceId) {
 		log.info("About to update/create entries in context "+this.context.getEntry().getId()+".");
-		Collection<Entry> entries = new HashSet<Entry>();
+		Set<Entry> entries = new HashSet<Entry>();
 		
 		HashMap<String, Resource> newResources = new HashMap<String, Resource>();
 		HashMap<String, Resource> oldResources = new HashMap<String, Resource>();

@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -116,7 +117,7 @@ public class Pipeline {
 		return null;
 	}
 
-	public boolean run(InputStream data, String mimetype) {
+	public Set<Entry> run(InputStream data, String mimetype) throws TransformException {
 		//Get the data
 		Transform first = tsteps.get(0);
 		Graph graph = first.transform(data, mimetype);
@@ -125,9 +126,7 @@ public class Pipeline {
 		}
 
 		Graph2Entries g2e = new Graph2Entries(this.entry.getContext());
-		g2e.merge(graph, toEntry);
-
-		return true;
+		return g2e.merge(graph, toEntry);
 	}
 
 	private static synchronized void loadTransforms() {

@@ -24,10 +24,13 @@ import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.transforms.Pipeline;
+import org.entrystore.transforms.TransformException;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
+import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
@@ -37,6 +40,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 
 /**
@@ -135,13 +139,34 @@ public class ExecutionResource extends BaseResource {
 				return;
 			}
 
-			new Pipeline(pipelineEntry).run(data.getData(), sourceMimeType);
+			Set<Entry> processedEntries = null;
+			try {
+				processedEntries = new Pipeline(pipelineEntry).run(data.getData(), sourceMimeType);
+			} catch (TransformException te) {
+				log.error(te.getMessage());
+				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+				return;
+			}
+
+			if (processedEntries != null && processedEntries.size() > 0) {
+				JSONObject result = new JSONObject();
+				JSONArray processedEntriesArr = new JSONArray();
+				for (Entry e : processedEntries) {
+					processedEntriesArr.put(e.getEntryURI().toString());
+				}
+				try {
+					result.put("result", processedEntriesArr);
+				} catch (JSONException e) {
+					log.error(e.getMessage());
+				}
+
+				getResponse().setEntity(new JsonRepresentation(result));
+				getResponse().setStatus(Status.SUCCESS_CREATED);
+			}
 
 			// TODO support execution status for async executions; perhaps the thread executioner can be
 			// shared between listeners and pipelines? this would allow to set a reasonable maximum of
 			// concurrent threads per EntryStore instance
-
-			// TODO return list of created entries in response object
 
 		} catch(AuthorizationException e) {
 			log.error("unauthorizedPOST");

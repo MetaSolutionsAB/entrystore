@@ -66,7 +66,7 @@ public abstract class Transform implements Comparable<Transform> {
 		this.prio = prio;
 	}
 
-	public abstract Graph transform(InputStream data, String mimetype);
+	public abstract Graph transform(InputStream data, String mimetype) throws TransformException;
 
 	public Graph transform(Graph graph) {
 		return graph;
