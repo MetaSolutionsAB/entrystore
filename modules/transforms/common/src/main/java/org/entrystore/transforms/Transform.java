@@ -68,7 +68,7 @@ public abstract class Transform implements Comparable<Transform> {
 
 	public abstract Graph transform(InputStream data, String mimetype) throws TransformException;
 
-	public Graph transform(Graph graph) {
+	public Graph transform(Graph graph) throws TransformException {
 		return graph;
 	}
 
