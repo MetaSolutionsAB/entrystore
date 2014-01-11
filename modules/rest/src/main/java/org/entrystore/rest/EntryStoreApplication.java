@@ -275,6 +275,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/relation/{entry-id}", RelationResource.class);
 		router.attach("/{context-id}/quota", QuotaResource.class);
 		router.attach("/{context-id}/lookup", LookupResource.class);
+		router.attach("/{context-id}/execute", ExecutionResource.class);
 
 		router.attachDefault(DefaultResource.class);
 
