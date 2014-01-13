@@ -226,7 +226,7 @@ public class SolrSupport {
 
 		// types
 		doc.setField("resourceType", entry.getResourceType().name());
-		doc.setField("locationType", entry.getEntryType().name());
+		doc.setField("entryType", entry.getEntryType().name());
 		doc.setField("representationType", entry.getRepresentationType().name());
 
 		// creator
