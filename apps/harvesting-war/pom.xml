@@ -3,39 +3,25 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
-	<!-- ================= EntryStore Harvesting Target Webapp ================= -->
-    <modelVersion>4.0.0</modelVersion>
-    <parent>
-       <groupId>org.entrystore</groupId>
-       <artifactId>entrystore-apps</artifactId>
-       <version>4.1-SNAPSHOT</version>
-    </parent>
-    <groupId>org.entrystore</groupId>
-    <artifactId>entrystore-harvesting-target</artifactId>
-    <packaging>war</packaging>
-    <version>4.1-SNAPSHOT</version>
-    <name>EntryStore Harvesting Target WebApp</name>
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>org.entrystore</groupId>
+		<artifactId>entrystore-apps</artifactId>
+		<version>4.1-SNAPSHOT</version>
+	</parent>
+	<groupId>org.entrystore</groupId>
+	<artifactId>entrystore-harvesting-target</artifactId>
+	<packaging>war</packaging>
+	<version>4.1-SNAPSHOT</version>
+	<name>EntryStore Harvesting Target WebApp</name>
 	
-	<!-- ================= Properties ================= -->
-	<properties>
-      <clover.licenseLocation>${basedir}/../../src/resources/clover.license</clover.licenseLocation>
-    </properties>
-	
-	<!-- ================= SCM ================= -->
-	<scm>
-       <connection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/apps/oe-war</connection>
-       <developerConnection>scm:svn:http://project.iml.umu.se/svn/scam/scam/trunk/apps/oe-war</developerConnection>
-       <url>http://project.iml.umu.se/projects/scam/browser/trunk/apps/oe-war</url>
-    </scm>
-    
-    <!-- ================= Build ================= -->
 	<build>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-            </resource>
-        </resources>
-        <testResources>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+			</resource>
+		</resources>
+		<testResources>
 			<testResource>
 				<directory>src/test/resources</directory>
 				<includes>
@@ -44,43 +30,31 @@
 				</includes>
 			</testResource>
 		</testResources> 
-    </build>
+	</build>
     
-    <!-- ================= Reporting ================= -->
-    <reporting>
-     	  <!-- Needed in order to generate the report properly -->
-        <outputDirectory>
-            ${basedir}/../../target/site/scam-apps/${project.artifactId}
-        </outputDirectory>
-	</reporting>
-    
-    <!-- ================= Dependencies ================= -->
-    <dependencies>
-    	<dependency>
-		   <groupId>javax.servlet</groupId>
-           <artifactId>servlet-api</artifactId>
-           <version>2.5</version>
-           <scope>provided</scope>
-        </dependency>
-    
-    	<dependency>
-            <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-core</artifactId>
-            <version>${pom.version}</version>
-            <exclusions>
+	<dependencies>
+		<dependency>
+			<groupId>javax.servlet</groupId>
+			<artifactId>servlet-api</artifactId>
+			<version>2.5</version>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-core</artifactId>
+			<version>${pom.version}</version>
+			<exclusions>
 				<exclusion>
 					<groupId>javax.xml.bind</groupId>
 					<artifactId>jaxb-impl</artifactId>
 				</exclusion>
 			</exclusions>
-        </dependency>
-    
-        <!-- 	REST Module -->
-        <dependency>
-        	<groupId>org.entrystore</groupId>
-    		<artifactId>entrystore-rest-module</artifactId>
-        	<version>${pom.version}</version>
-        	<exclusions>
+		</dependency>
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-rest-module</artifactId>
+			<version>${pom.version}</version>
+			<exclusions>
 				<exclusion>
 					<groupId>org.entrystore</groupId>
 					<artifactId>entrystore-core</artifactId>
@@ -90,37 +64,35 @@
 					<artifactId>jaxb-impl</artifactId>
 				</exclusion>
 			</exclusions>
-        </dependency>
-
-        <!-- 	OAI-PMH Module -->
-        <dependency>
-        	<groupId>org.entrystore</groupId>
-			 <artifactId>entrystore-oai-pmh-target-module</artifactId>
-        	<version>${pom.version}</version>
-        	<exclusions>
+		</dependency>
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-harvesting-oaipmh-target</artifactId>
+			<version>${pom.version}</version>
+			<exclusions>
 				<exclusion>
 					<groupId>org.entrystore</groupId>
 					<artifactId>entrystore-core</artifactId>
 				</exclusion>
 			</exclusions>
-        </dependency>
+		</dependency>
 
-         <!-- 	SQI Module -->
-         <!--	
-        <dependency>
-        	<groupId>org.entrystore</groupId>
+		<!-- SQI Module -->
+		<!--	
+		<dependency>
+			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-sqi-webservice-module</artifactId>
-        	<version>${pom.version}</version>
-        	<exclusions>
+			<version>${pom.version}</version>
+			<exclusions>
 				<exclusion>
 					<groupId>org.entrystore</groupId>
 					<artifactId>entrystore-core</artifactId>
 				</exclusion>
 			</exclusions>
-        </dependency>
-        -->
+		</dependency>
+		-->
         
-      	<!-- try scope provided, remove this if problem (CXF uses Sun's JAXB implementation) -->
+		<!-- try scope provided, remove this if problem (CXF uses Sun's JAXB implementation) -->
 		<dependency>
 			<groupId>javax.xml.bind</groupId>
 			<artifactId>jaxb-api</artifactId>
@@ -133,6 +105,6 @@
 		    <artifactId>xercesImpl</artifactId>
 		    <version>2.9.1</version>
 		</dependency>  
-    </dependencies>
+	</dependencies>
 	
 </project>
