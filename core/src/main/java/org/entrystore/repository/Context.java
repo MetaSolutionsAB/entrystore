@@ -65,14 +65,15 @@ public interface Context extends Resource{
 	/**
 	 * 
 	 * @param entryId, optional value to use for id for the new entry.
-	 * @param buiType - None if file and String if text
+	 * @param resType - None if file and String if text
 	 * @param resourceURI - URI to the resourceURI
 	 * @param metadataURI - URI to the metadataURIURI
-	 * @param listURI - URI to the listURI, probably _comments resource URI.
+	 * @param sourceEntryURI
+	 * @param commentType
 	 * @return A new comment entry
 	 * @throws Exception 
 	 */
-	Entry createComment(String entryId, ResourceType buiType, URI resourceURI,
+	Entry createComment(String entryId, ResourceType resType, URI resourceURI,
 			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception; 
 	
 	/**
@@ -114,7 +115,7 @@ public interface Context extends Resource{
 	//void move(URI entryUri, URI fromListURI, URI toListURI);
 	
 	/**
-	 * @param metaMetadataURI the URI of the resource's metametadata to remove.
+	 * @param entryURI the URI of the resource's metametadata to remove.
 	 */
 	void remove(URI entryURI);
 	
