@@ -158,7 +158,7 @@ public class ResourceResource extends BaseResource {
 
 			/*
 			 * Resource: 
-			 * BuiltinTypes: List, String and None.
+			 * ResourceTypes: List, String and None.
 			 * RepresentationType: InformationResource, NamesResource and Unknown. 
 			 */
 			Representation result = null;
