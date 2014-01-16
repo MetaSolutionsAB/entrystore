@@ -300,7 +300,7 @@ public class ContextResource extends BaseResource {
 					setCachedMetadataGraph(entry);
 					setEntryGraph(entry);
 					if (parameters.containsKey("resourceType")) {
-						ResourceType bt = getBuiltinType(parameters.get("resourceType"));
+						ResourceType bt = getResourceType(parameters.get("resourceType"));
 						entry.setResourceType(bt);
 					}
 					if (parameters.containsKey("listURI")) {
@@ -354,7 +354,7 @@ public class ContextResource extends BaseResource {
 					setCachedMetadataGraph(entry);
 					setEntryGraph(entry);
 					if (parameters.containsKey("resourceType")) {
-						ResourceType bt = getBuiltinType(parameters.get("resourceType"));
+						ResourceType bt = getResourceType(parameters.get("resourceType"));
 						entry.setResourceType(bt);
 					}
 					if (parameters.containsKey("listURI")) {
@@ -385,7 +385,7 @@ public class ContextResource extends BaseResource {
 	}
 	
 	
-	private ResourceType getBuiltinType(String bt) {
+	private ResourceType getResourceType(String bt) {
 		if (bt == null || "".equals(bt)) {
 			return ResourceType.None;
 		}
@@ -413,6 +413,9 @@ public class ContextResource extends BaseResource {
 		if (bt.equalsIgnoreCase("graph")) {
 			return ResourceType.Graph;
 		}
+		if (bt.equalsIgnoreCase("pipeline")) {
+			return ResourceType.Pipeline;
+		}
 		return ResourceType.None;
 	}
 
@@ -431,7 +434,7 @@ public class ContextResource extends BaseResource {
 			}
 		}
 
-		ResourceType bt = getBuiltinType(parameters.get("resourceType"));
+		ResourceType bt = getResourceType(parameters.get("resourceType"));
 		entry = context.createResource(parameters.get("id"), bt, null, listURI);
 		try {
 			if (setResource(entry, bt)) {
@@ -581,7 +584,7 @@ public class ContextResource extends BaseResource {
 			setLocalMetadataGraph(entry);
 			setEntryGraph(entry);
 			if (parameters.containsKey("resourceType")) {
-				ResourceType bt = getBuiltinType(parameters.get("resourceType"));
+				ResourceType bt = getResourceType(parameters.get("resourceType"));
 				entry.setResourceType(bt);
 			}
 			if (parameters.containsKey("listURI")) {
