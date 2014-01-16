@@ -1,0 +1,27 @@
+EntryStore
+Copyright 2007-2014 MetaSolutions AB
+-------------------------------------------------------------------------------
+
+Source code contributions
+-------------------------
+
+This product includes software developed by MetaSolutions AB
+(http://www.metasolutions.se/).
+
+Third party libraries
+---------------------
+
+This product includes software developed by The Apache Software Foundation
+(http://www.apache.org/). License: http://www.apache.org/licenses/LICENSE-2.0
+
+This software includes software developed by Aduna
+(http://www.aduna-software.com/).
+
+This product includes software developed by the Restlet project
+and Restlet S.A.S.(http://www.restlet.org).
+
+This product includes software developed by the JUnit project
+(http://www.junit.org/). License: http://junit.sourceforge.net/cpl-v10.html
+
+Parts of this product use software developed by JSON.org 
+(http://www.json.org/). License: http://www.json.org/license.html
