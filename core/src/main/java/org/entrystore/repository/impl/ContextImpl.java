@@ -517,6 +517,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			newEntry.setResource(new StringResource(newEntry, newEntry.getSesameResourceURI())); 
 			break; 
 		case Graph:
+		case Pipeline:
 			newEntry.setResource(new RDFResource(newEntry, newEntry.getSesameResourceURI()));
 			break;
 		default:

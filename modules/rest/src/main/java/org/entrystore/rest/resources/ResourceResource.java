@@ -45,15 +45,15 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
+import org.entrystore.repository.EntryType;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.QuotaException;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.impl.ListImpl;
 import org.entrystore.repository.impl.RDFResource;
@@ -158,7 +158,7 @@ public class ResourceResource extends BaseResource {
 
 			/*
 			 * Resource: 
-			 * BuiltinTypes: List, String and None.
+			 * ResourceTypes: List, String and None.
 			 * RepresentationType: InformationResource, NamesResource and Unknown. 
 			 */
 			Representation result = null;
@@ -799,7 +799,7 @@ public class ResourceResource extends BaseResource {
 
 			log.error("Can not find the resource.");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource + " Builtin type: " + entry.getResourceType());
+			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource + " ResourceType: " + entry.getResourceType());
 		}
 
 		log.info("No resource available.");
