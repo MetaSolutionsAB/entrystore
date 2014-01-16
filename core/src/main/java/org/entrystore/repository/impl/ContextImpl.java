@@ -53,6 +53,7 @@ import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.repository.impl.converters.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;
@@ -86,9 +87,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 	public static final org.openrdf.model.URI DCModified;
 	public static final org.openrdf.model.URI DCTermsModified;
 
-	public static final String DCbase = "http://purl.org/dc/elements/1.1/";
-	public static final String DCTermsbase = "http://purl.org/dc/terms/";
-
 	private static final DateFormat DATE_PARSER = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
 	
 	private Object quotaMutex = new Object();
@@ -97,9 +95,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	static {
 		ValueFactory vf = ValueFactoryImpl.getInstance();
-
-		DCModified = vf.createURI(DCbase + "modified");
-		DCTermsModified = vf.createURI(DCTermsbase + "modified");
+		DCModified = vf.createURI(NS.dc, "modified");
+		DCTermsModified = vf.createURI(NS.dcterms, "modified");
 	}
 
 	protected ContextImpl(EntryImpl entry, String uri, SoftCache cache) {
