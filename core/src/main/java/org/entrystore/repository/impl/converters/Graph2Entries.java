@@ -64,8 +64,8 @@ public class Graph2Entries {
 	/**
 	 * Detects and adds a set of entries from the graph via the anonymous closure algorithm starting from resources
 	 * indicated with either of the two following properties that both indicate which entryId to use:<ul>
-	 * <li>http://ns.entrystore.com/entry/mergeResourceId or the</li>
-	 * <li>http://ns.entrystore.com/entry/referenceResourceId</li>
+	 * <li>http://entrystore.org/terms/mergeResourceId or the</li>
+	 * <li>http://entrystore.org/terms/referenceResourceId</li>
 	 * </ul>
 	 * The mergeResourceId indicates that the corresponding entry should be merged or created if it does not exist.
 	 * The referenceResourceId only indicates that the relevant resource should be referenced.
