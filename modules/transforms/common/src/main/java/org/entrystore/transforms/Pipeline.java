@@ -69,7 +69,7 @@ public class Pipeline {
 
 	private Entry entry;
 
-	private String toEntry;
+	private String toEntry = "";
 
 	private List<Transform> tsteps = new ArrayList<Transform>();
 
