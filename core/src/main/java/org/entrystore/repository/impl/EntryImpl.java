@@ -396,6 +396,8 @@ public class EntryImpl implements Entry {
 			return ResourceType.User;
 		} else if (bt.equals(RepositoryProperties.Group)) {
 			return ResourceType.Group;
+		} else if (bt.equals(RepositoryProperties.Pipeline)) {
+			return ResourceType.Pipeline;
 		} else if (bt.equals(RepositoryProperties.String)) {
 			return ResourceType.String;
 		} else if (bt.equals(RepositoryProperties.Graph)) {
@@ -1052,6 +1054,9 @@ public class EntryImpl implements Entry {
 		case Group:
 			rc.add(resURI, RDF.TYPE, RepositoryProperties.Group, entryURI);
 			break;
+		case Pipeline:
+			rc.add(resURI, RDF.TYPE, RepositoryProperties.Pipeline, entryURI);
+			break;
 		case String:
 			rc.add(resURI, RDF.TYPE, RepositoryProperties.String, entryURI); 
 			break; 
@@ -1064,7 +1069,7 @@ public class EntryImpl implements Entry {
 
 	public void setRepresentationType(RepresentationType representType) {
 		checkAdministerRights();
-		if (this.repType != representType && this.locType == EntryType.Local && this.resourceType != ResourceType.None) {
+		if (this.repType != representType && this.locType == EntryType.Local && (this.resourceType != ResourceType.None && this.resourceType != ResourceType.Pipeline)) {
 			throw new org.entrystore.repository.RepositoryException("Cannot change the representationtype of a local and / or builtin resource");
 		}
 		try {

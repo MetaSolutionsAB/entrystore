@@ -194,43 +194,43 @@ public class SearchResource extends BaseResource {
 				
 				// filter for EntryType
 				Set<EntryType> entryType = null;
-				if (parameters.containsKey("locationtype")) {
+				if (parameters.containsKey("entrytype")) {
 					entryType = new HashSet<EntryType>();
-					StringTokenizer tok = new StringTokenizer(parameters.get("locationtype"), ",");
+					StringTokenizer tok = new StringTokenizer(parameters.get("entrytype"), ",");
 					while (tok.hasMoreTokens()) {
-						String locationTypeToken = tok.nextToken();
-						if ("Reference".equalsIgnoreCase(locationTypeToken)) {
+						String entryTypeToken = tok.nextToken();
+						if ("Reference".equalsIgnoreCase(entryTypeToken)) {
 							entryType.add(EntryType.Reference);
-						} else if ("LinkReference".equalsIgnoreCase(locationTypeToken)) {
+						} else if ("LinkReference".equalsIgnoreCase(entryTypeToken)) {
 							entryType.add(EntryType.LinkReference);
-						} else if ("Link".equalsIgnoreCase(locationTypeToken)) {
+						} else if ("Link".equalsIgnoreCase(entryTypeToken)) {
 							entryType.add(EntryType.Link);
-						} else if ("Local".equalsIgnoreCase(locationTypeToken)) {
+						} else if ("Local".equalsIgnoreCase(entryTypeToken)) {
 							entryType.add(EntryType.Local);
 						}
 					}
 				}
 				Set<ResourceType> resourceType = null;
-				if(parameters.containsKey("builtintype")){
+				if(parameters.containsKey("resourcetype")){
 					resourceType = new HashSet<ResourceType>();
-					StringTokenizer tokenizer = new StringTokenizer(parameters.get("builtintype"),",");
+					StringTokenizer tokenizer = new StringTokenizer(parameters.get("resourcetype"),",");
 					while (tokenizer.hasMoreTokens()){
-						String builtinTypeToken = tokenizer.nextToken();
-						if("context".equalsIgnoreCase(builtinTypeToken)){
+						String resourceTypeToken = tokenizer.nextToken();
+						if("context".equalsIgnoreCase(resourceTypeToken)){
 							resourceType.add(ResourceType.Context);
-						}else if("group".equalsIgnoreCase(builtinTypeToken)){
+						}else if("group".equalsIgnoreCase(resourceTypeToken)){
 							resourceType.add(ResourceType.Group);
-						}else if("user".equalsIgnoreCase(builtinTypeToken)){
+						}else if("user".equalsIgnoreCase(resourceTypeToken)){
 							resourceType.add(ResourceType.User);
-						}else if("list".equalsIgnoreCase(builtinTypeToken)){
+						}else if("list".equalsIgnoreCase(resourceTypeToken)){
 							resourceType.add(ResourceType.List);
-						}else if("resultList".equalsIgnoreCase(builtinTypeToken)){
+						}else if("resultList".equalsIgnoreCase(resourceTypeToken)){
 							resourceType.add(ResourceType.ResultList);
-						}else if("string".equalsIgnoreCase(builtinTypeToken)){
+						}else if("string".equalsIgnoreCase(resourceTypeToken)){
 							resourceType.add(ResourceType.String);
-						}else if("none".equalsIgnoreCase(builtinTypeToken)){
+						}else if("none".equalsIgnoreCase(resourceTypeToken)){
 							resourceType.add(ResourceType.None);
-						}else if("graph".equalsIgnoreCase(builtinTypeToken)){
+						}else if("graph".equalsIgnoreCase(resourceTypeToken)){
 							resourceType.add(ResourceType.Graph);
 						}
 					}
@@ -349,7 +349,7 @@ public class SearchResource extends BaseResource {
 						}
 						Date afterContextFilter = new Date();
 						timeDiff = afterContextFilter.getTime() - after.getTime();
-						log.info("Context filtering took " + timeDiff + " ms (only location type)");
+						log.info("Context filtering took " + timeDiff + " ms (only entry type)");
 					} else if (resourceType != null) {
 						entries = new ArrayList<Entry>();
 						for (Entry entry : searchResult) {

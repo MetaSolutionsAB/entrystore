@@ -177,10 +177,10 @@ public class ContextResource extends BaseResource {
 			Entry entry = null; // A variable to store the new entry in.
 
 			// Local
-			if (!parameters.containsKey("locationType") || parameters.get("locationType").equalsIgnoreCase("local")) {
+			if (!parameters.containsKey("entrytype") || parameters.get("entrytype").equalsIgnoreCase("local")) {
 				entry = createLocalEntry(entry); 
 			} else {
-				String lT = parameters.get("locationType"); 
+				String lT = parameters.get("entrytype"); 
 				// Link
 				if (lT.equalsIgnoreCase("link") && parameters.containsKey("resource")) {
 					entry = createLinkEntry(entry); 
@@ -198,7 +198,7 @@ public class ContextResource extends BaseResource {
 			}
 			
 			if (entry != null) {
-				RepresentationType rt = getRepresentationType(parameters.get("informationResource"));
+				RepresentationType rt = getRepresentationType(parameters.get("informationresource"));
 				entry.setRepresentationType(rt);
 
 				
@@ -278,7 +278,7 @@ public class ContextResource extends BaseResource {
 	private Entry createLinkReferenceEntry(Entry entry) {
 		try {
 			if (parameters.get("resource") != null
-					&& "linkreference".equalsIgnoreCase(parameters.get("locationType"))) {
+					&& "linkreference".equalsIgnoreCase(parameters.get("entrytype"))) {
 				URI resourceURI = null;
 				URI metadataURI = null;
 				try {
@@ -289,8 +289,8 @@ public class ContextResource extends BaseResource {
 					return null;
 				}
 				
-				if (parameters.containsKey("listURI")) {
-					entry = context.createLinkReference(parameters.get("id"), resourceURI, metadataURI, new URI(((String) parameters.get("listURI"))));
+				if (parameters.containsKey("list")) {
+					entry = context.createLinkReference(parameters.get("id"), resourceURI, metadataURI, new URI(((String) parameters.get("list"))));
 				} else { 
 					entry = context.createLinkReference(parameters.get("id"), resourceURI, metadataURI, null);
 				}
@@ -299,13 +299,13 @@ public class ContextResource extends BaseResource {
 					setLocalMetadataGraph(entry);
 					setCachedMetadataGraph(entry);
 					setEntryGraph(entry);
-					if (parameters.containsKey("resourceType")) {
-						ResourceType bt = getResourceType(parameters.get("resourceType"));
+					if (parameters.containsKey("resourcetype")) {
+						ResourceType bt = getResourceType(parameters.get("resourcetype"));
 						entry.setResourceType(bt);
 					}
-					if (parameters.containsKey("listURI")) {
+					if (parameters.containsKey("list")) {
 						try {
-							URI listURI = new URI((parameters.get("listURI")));
+							URI listURI = new URI((parameters.get("list")));
 							((ContextImpl) context).copyACL(listURI, entry);
 						} catch (URISyntaxException e) {
 							log.warn(e.getMessage());
@@ -331,7 +331,7 @@ public class ContextResource extends BaseResource {
 		try {
 			if ((parameters.get("resource") != null) &&
 					(parameters.get("cached-external-metadata") != null) &&
-					("reference".equalsIgnoreCase(parameters.get("locationType")))) {
+					("reference".equalsIgnoreCase(parameters.get("entrytype")))) {
 				URI resourceURI = null;
 				URI metadataURI = null;
 				try {
@@ -342,24 +342,24 @@ public class ContextResource extends BaseResource {
 					return null;
 				}
 
-				if (parameters.containsKey("listURI")) {
-					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, new URI(((String) parameters.get("listURI"))));
+				if (parameters.containsKey("list")) {
+					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, new URI(((String) parameters.get("list"))));
 				} else {
 					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, null);
 				}
-				RepresentationType rt = getRepresentationType(parameters.get("informationResource"));
+				RepresentationType rt = getRepresentationType(parameters.get("informationresource"));
 				entry.setRepresentationType(rt);
 
 				if (entry != null) {
 					setCachedMetadataGraph(entry);
 					setEntryGraph(entry);
-					if (parameters.containsKey("resourceType")) {
-						ResourceType bt = getResourceType(parameters.get("resourceType"));
+					if (parameters.containsKey("resourcetype")) {
+						ResourceType bt = getResourceType(parameters.get("resourcetype"));
 						entry.setResourceType(bt);
 					}
-					if (parameters.containsKey("listURI")) {
+					if (parameters.containsKey("list")) {
 						try {
-							URI listURI = new URI((parameters.get("listURI")));
+							URI listURI = new URI((parameters.get("list")));
 							((ContextImpl) context).copyACL(listURI, entry);
 						} catch (URISyntaxException e) {
 							log.warn(e.getMessage());
@@ -426,15 +426,15 @@ public class ContextResource extends BaseResource {
 	 */
 	private Entry createLocalEntry(Entry entry) {	
 		URI listURI = null;
-		if (parameters.containsKey("listURI")) {
+		if (parameters.containsKey("list")) {
 			try {
-				listURI = new URI((parameters.get("listURI")));
+				listURI = new URI((parameters.get("list")));
 			} catch (URISyntaxException e) {
 				log.warn(e.getMessage());
 			}
 		}
 
-		ResourceType bt = getResourceType(parameters.get("resourceType"));
+		ResourceType bt = getResourceType(parameters.get("resourcetype"));
 		entry = context.createResource(parameters.get("id"), bt, null, listURI);
 		try {
 			if (setResource(entry, bt)) {
@@ -574,8 +574,8 @@ public class ContextResource extends BaseResource {
 			return null;
 		}
 
-		if(parameters.containsKey("listURI")) {
-			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("listURI")));
+		if(parameters.containsKey("list")) {
+			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("list")));
 		} else {
 			entry = context.createLink(parameters.get("id"), resourceURI, null);
 		}
@@ -583,13 +583,13 @@ public class ContextResource extends BaseResource {
 		if (entry != null) {
 			setLocalMetadataGraph(entry);
 			setEntryGraph(entry);
-			if (parameters.containsKey("resourceType")) {
-				ResourceType bt = getResourceType(parameters.get("resourceType"));
+			if (parameters.containsKey("resourcetype")) {
+				ResourceType bt = getResourceType(parameters.get("resourcetype"));
 				entry.setResourceType(bt);
 			}
-			if (parameters.containsKey("listURI")) {
+			if (parameters.containsKey("list")) {
 				try {
-					URI listURI = new URI((parameters.get("listURI")));
+					URI listURI = new URI((parameters.get("list")));
 					((ContextImpl) context).copyACL(listURI, entry);
 				} catch (URISyntaxException e) {
 				}

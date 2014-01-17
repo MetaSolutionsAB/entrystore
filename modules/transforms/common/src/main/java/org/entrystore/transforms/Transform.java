@@ -47,20 +47,20 @@ public abstract class Transform implements Comparable<Transform> {
 			}
 		}
 
-		Iterator<Statement> args = graph.match(null, Pipeline.transformArgument, null);
+		Iterator<Statement> args = graph.match(resource, Pipeline.transformArgument, null);
 		while (args.hasNext()) {
 			Statement s = args.next();
 			if (s.getObject() instanceof BNode) {
 				String keyStr = null;
 				String valueStr = null;
 				Iterator<Statement> argKeyIt = graph.match((BNode) s.getObject(), Pipeline.transformArgumentKey, null);
-				if (args.hasNext()) {
-					Statement argKey = args.next();
+				if (argKeyIt.hasNext()) {
+					Value argKey = argKeyIt.next().getObject();
 					if (argKey instanceof Literal) {
 						keyStr = ((Literal) argKey).stringValue();
 						Iterator<Statement> argValueIt = graph.match((BNode) s.getObject(), Pipeline.transformArgumentValue, null);
-						if (args.hasNext()) {
-							Statement argValue = args.next();
+						if (argValueIt.hasNext()) {
+							Value argValue = argValueIt.next().getObject();
 							if (argValue instanceof Literal) {
 								valueStr = ((Literal) argValue).stringValue();
 							}

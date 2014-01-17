@@ -88,7 +88,17 @@
 			<artifactId>entrystore-transforms-common</artifactId>
 			<version>${pom.version}</version>
 		</dependency>
-
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-transforms-tabular</artifactId>
+			<version>${pom.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-transforms-pcaxis</artifactId>
+			<version>${pom.version}</version>
+		</dependency>
+		
 		<dependency>
    			<groupId>org.restlet.jee</groupId>
    			<artifactId>org.restlet</artifactId>

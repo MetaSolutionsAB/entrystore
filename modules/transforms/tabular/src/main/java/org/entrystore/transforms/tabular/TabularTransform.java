@@ -47,6 +47,9 @@ import java.io.Reader;
 import java.io.StringReader;
 
 /**
+ * Supports transforming from csv or xls files to RDF via a Tarql string.
+ * Two parameters are supported, tarqlstring and sheetnr.
+ * 
  * @author Matthias Palmér
  * @author Hannes Ebner
  */
@@ -63,7 +66,11 @@ public class TabularTransform extends Transform {
 				table = new CSVToValues(reader, false).read();
 			} else {
 				//TODO extract sheetNr from args..
+				String sheetNrStr = getArguments().get("sheetnr");
 				int sheetNr = 0;
+				if (sheetNrStr != null) {
+					sheetNr = Integer.parseInt(sheetNrStr);
+				}
 				table = new XLSToValues(data, false, sheetNr).read();
 			}
 

@@ -88,8 +88,12 @@ public class Pipeline {
 		Iterator<Statement> toEntryStmts = md.match(null, pipelineToEntry, null);
 		if (toEntryStmts.hasNext()) {
 			toEntry = toEntryStmts.next().getObject().stringValue();
+			if (toEntry.startsWith("http")) {
+				Entry toEntryEntry = this.entry.getContext().getByEntryURI(java.net.URI.create(toEntry));
+				toEntry = toEntryEntry.getId();
+			}
 		}
-
+		
 		Iterator<Statement> stmts = md.match(null, transform, null);
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();

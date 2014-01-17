@@ -53,6 +53,7 @@ public class RegularContext extends ContextImpl{
 		case Graph:  //TODO: Check if OK!!!
 		case String:
 		case None:
+		case Pipeline:
 			return super.createResource(entryId, buiType, repType, listURI);			
 		default:
 			throw new RepositoryException("Regular context only support Lists, ResultLists and None as BuiltinTypes");

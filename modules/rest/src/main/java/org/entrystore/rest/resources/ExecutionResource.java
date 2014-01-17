@@ -86,14 +86,14 @@ public class ExecutionResource extends BaseResource {
 
 		String pipeline;
 		String source;
-		String destination;
-		boolean async = false;
+//		String destination;
+//		boolean async = false;
 
 		try {
 			pipeline = request.getString("pipeline"); // Pipeline Entry URI
 			source = request.getString("source"); // Data source Entry URI
-			destination = request.getString("destination"); // Destination Entry URI
-			async = "async".equalsIgnoreCase(request.getString("async")); // sync is default
+//			destination = request.getString("destination"); // Destination Entry URI
+//			async = "async".equalsIgnoreCase(request.getString("async")); // sync is default
 		} catch (JSONException e) {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNPROCESSABLE_ENTITY);
 			return;
