@@ -39,6 +39,7 @@ import java.util.Vector;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+import com.github.jsonldjava.impl.SesameJSONLDWriter;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
@@ -73,6 +74,13 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.rio.RDFFormat;
+import org.openrdf.rio.n3.N3Writer;
+import org.openrdf.rio.ntriples.NTriplesWriter;
+import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
+import org.openrdf.rio.trig.TriGWriter;
+import org.openrdf.rio.trix.TriXWriter;
+import org.openrdf.rio.turtle.TurtleWriter;
 import org.restlet.Request;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
@@ -110,8 +118,19 @@ public class ResourceResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(ResourceResource.class);
 
+	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+
 	@Override
 	public void doInit() {
+		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
+		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
+		supportedMediaTypes.add(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
+
 		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
 
@@ -153,6 +172,46 @@ public class ResourceResource extends BaseResource {
 				} catch (IllegalArgumentException e) {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					return new JsonRepresentation(JSONErrorMessages.syndicationFormat); 
+				}
+			}
+
+			// ResourceType.Graph
+			if (ResourceType.Graph.equals(entry.getResourceType())) {
+				MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+				if (preferredMediaType == null) {
+					preferredMediaType = MediaType.APPLICATION_RDF_XML;
+				}
+				RDFResource graphResource = (RDFResource) entry.getResource();
+				Graph graph = graphResource.getGraph();
+				if (graph != null) {
+					String serializedGraph = null;
+					if (preferredMediaType.equals(MediaType.APPLICATION_JSON)) {
+						serializedGraph = RDFJSON.graphToRdfJson(graph);
+					} else if (preferredMediaType.equals(MediaType.APPLICATION_RDF_XML)) {
+						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
+					} else if (preferredMediaType.equals(MediaType.ALL)) {
+						preferredMediaType = MediaType.APPLICATION_RDF_XML;
+						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
+					} else if (preferredMediaType.equals(MediaType.TEXT_RDF_N3)) {
+						serializedGraph = ConverterUtil.serializeGraph(graph, N3Writer.class);
+					} else if (preferredMediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
+						serializedGraph = ConverterUtil.serializeGraph(graph, TurtleWriter.class);
+					} else if (preferredMediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
+						serializedGraph = ConverterUtil.serializeGraph(graph, TriXWriter.class);
+					} else if (preferredMediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
+						serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
+					} else if (preferredMediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
+						serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
+					} else if (preferredMediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
+						serializedGraph = ConverterUtil.serializeGraph(graph, SesameJSONLDWriter.class);
+					} else {
+						getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
+						return new JsonRepresentation(JSONErrorMessages.errorUnknownFormat);
+					}
+					if (serializedGraph != null) {
+						getResponse().setStatus(Status.SUCCESS_OK);
+						return new StringRepresentation(serializedGraph, preferredMediaType);
+					}
 				}
 			}
 
