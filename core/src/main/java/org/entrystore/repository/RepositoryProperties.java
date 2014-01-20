@@ -167,6 +167,7 @@ public class RepositoryProperties {
 		Pipeline = vf.createURI(NSbase + "Pipeline");
 		None = vf.createURI(NSbase + "None");
 		String = vf.createURI(NSbase + "String");
+		Graph = vf.createURI(NSbase + "Graph");
 		
 		secret = vf.createURI(NSbase + "secret");
 		saltedHashedSecret = vf.createURI(NSbase + "saltedHashedSecret");
@@ -176,7 +177,6 @@ public class RepositoryProperties {
 		
 		originallyCreatedIn = vf.createURI(NSbase + "originallyCreatedIn");
 		
-		Graph = vf.createURI("http://www.w3.org/2004/03/trix/rdfg-1/Graph");
 
 		Created = vf.createURI(NSDCTERMS + "created");
 		Modified = vf.createURI(NSDCTERMS + "modified");
