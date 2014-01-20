@@ -16,7 +16,9 @@
 
 package org.entrystore.repository.impl.converters;
 
+import java.text.DateFormat;
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -28,6 +30,7 @@ import org.entrystore.repository.Context;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.impl.ContextImpl;
 import org.entrystore.repository.impl.RDFResource;
 import org.entrystore.repository.util.URISplit;
 import org.openrdf.model.BNode;
@@ -70,10 +73,15 @@ public class Graph2Entries {
 	 * The mergeResourceId indicates that the corresponding entry should be merged or created if it does not exist.
 	 * The referenceResourceId only indicates that the relevant resource should be referenced.
 	 * 
-	 * @param graph
+	 * @param graph the RDF to merge
+	 * @param destinationEntryId an entryId who's resource (resourcetype Graph) the graph should be stored in, 
+	 * if the id does not yet correspond to an existing entry it will be created. An empty string indicates that 
+	 * a new entry should be created, null indicates that the graph should end up in multiple entries as 
+	 * indicated in the graph via the mergeResourceId properties on blank nodes.
+	 * @param destinationListURI a list where the destinationEntryId will be created if a new entry is to be created.
 	 * @return a collection of the merged entries (updated or created), the referenced entries are not included in the collection.
 	 */
-	public Set<Entry> merge(Graph graph, String resourceId) {
+	public Set<Entry> merge(Graph graph, String destinationEntryId, java.net.URI destinationListURI) {
 		log.info("About to update/create entries in context "+this.context.getEntry().getId()+".");
 		Set<Entry> entries = new HashSet<Entry>();
 		
@@ -96,10 +104,10 @@ public class Graph2Entries {
 		}
 
 		
-		if (resourceId != null) {
+		if (destinationEntryId != null) {
 			java.net.URI uri = URISplit.fabricateURI(
 					context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
-					context.getEntry().getId(), RepositoryProperties.DATA_PATH, resourceId);
+					context.getEntry().getId(), RepositoryProperties.DATA_PATH, destinationEntryId);
 			Resource newRe = vf.createURI(uri.toString());
 
 			stmts = graph.match(null, mergeResourceId, null);
@@ -107,16 +115,30 @@ public class Graph2Entries {
 				Statement statement = (Statement) stmts.next();
 				translate.put(statement.getSubject(), newRe);
 			}
-
-			Entry entry = this.context.get(resourceId); //Try to fetch existing entry.
-			if (entry == null) {
-				entry = this.context.createResource(resourceId, ResourceType.Graph, RepresentationType.InformationResource, null);
+			
+			Entry entry;
+			boolean entryCreated = false;
+			if ("".equals(destinationEntryId)) {
+				entry = this.context.createResource(null, ResourceType.Graph, RepresentationType.InformationResource, destinationListURI);
+				entryCreated = true;
+				((ContextImpl) this.context).setMetadata(entry, "RDF Graph created at "+new Date().toString(), null);
+			} else {
+				entry = this.context.get(destinationEntryId); //Try to fetch existing entry.
+				if (entry == null) {
+					entry = this.context.createResource(destinationEntryId, ResourceType.Graph, RepresentationType.InformationResource, destinationListURI);
+					entryCreated = true;
+				}				
 			}
 			Graph resg = this.translate(graph, translate);
 			((RDFResource) entry.getResource()).setGraph(resg);
 
 			Graph subg = this.extract(resg, newRe, new HashSet<Resource>(), new HashMap<Resource, Resource>());
-			entry.getLocalMetadata().setGraph(subg);
+			if (!subg.isEmpty()) {
+				entry.getLocalMetadata().setGraph(subg);
+			} else if (entryCreated) {
+				((ContextImpl) this.context).setMetadata(entry, "RDF Graph created at "+new Date().toString(), null);				
+			}
+			
 			entries.add(entry);
 			return entries;
 		}

@@ -94,7 +94,7 @@ public class MergeResource extends BaseResource {
 				
 				if (deserializedGraph != null) {
 					Graph2Entries g2e = new Graph2Entries(this.context);
-					g2e.merge(deserializedGraph, this.parameters.get("resourceId"));
+					g2e.merge(deserializedGraph, this.parameters.get("resourceId"), null);
 					getResponse().setStatus(Status.SUCCESS_OK);
 					return;
 				}

@@ -124,7 +124,12 @@ public class ExecutionResource extends BaseResource {
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				return;
 			}
-
+			Set<URI> lists = sourceEntry.getReferringListsInSameContext();
+			URI listURI = null;
+			if (lists.size() == 1) {
+				listURI = lists.iterator().next();
+			}
+			
 			// TODO add support for non-local resources
 
 			String sourceMimeType = sourceEntry.getMimetype();
@@ -141,7 +146,7 @@ public class ExecutionResource extends BaseResource {
 
 			Set<Entry> processedEntries = null;
 			try {
-				processedEntries = new Pipeline(pipelineEntry).run(data.getData(), sourceMimeType);
+				processedEntries = new Pipeline(pipelineEntry).run(data.getData(), sourceMimeType, listURI);
 			} catch (TransformException te) {
 				log.error(te.getMessage());
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);

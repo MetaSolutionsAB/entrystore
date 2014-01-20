@@ -54,7 +54,8 @@ public class Pipeline {
 	public static final URI transformArgumentKey;
 	public static final URI transformArgumentValue;
 
-	public static final URI pipelineToEntry;
+	public static final URI transformDestination;
+	public static final URI transformDetectDestination;
 
 	static {
 		ValueFactory vf = ValueFactoryImpl.getInstance();
@@ -64,13 +65,15 @@ public class Pipeline {
 		transformArgument = vf.createURI(NS.entrystore, "transformArgument");
 		transformArgumentKey = vf.createURI(NS.entrystore, "transformArgumentKey");
 		transformArgumentValue = vf.createURI(NS.entrystore, "transformArgumentValue");
-		pipelineToEntry = vf.createURI(NS.entrystore, "pipelineToEntry");
+		transformDestination = vf.createURI(NS.entrystore, "transformDestination");
+		transformDetectDestination = vf.createURI(NS.entrystore, "transformDetectDestination");		
 	}
 
 	private Entry entry;
 
-	private String toEntry = "";
-
+	private String destination = "";
+	private boolean detectDestination = false;
+	
 	private List<Transform> tsteps = new ArrayList<Transform>();
 
 	private static Map<String, Class<?>> type2Class = null;
@@ -85,15 +88,20 @@ public class Pipeline {
 	private void detectTransforms() {
 		Graph md = this.entry.getMetadataGraph();
 
-		Iterator<Statement> toEntryStmts = md.match(null, pipelineToEntry, null);
+		Iterator<Statement> toEntryStmts = md.match(null, transformDestination, null);
 		if (toEntryStmts.hasNext()) {
-			toEntry = toEntryStmts.next().getObject().stringValue();
-			if (toEntry.startsWith("http")) {
-				Entry toEntryEntry = this.entry.getContext().getByEntryURI(java.net.URI.create(toEntry));
-				toEntry = toEntryEntry.getId();
+			destination = toEntryStmts.next().getObject().stringValue();
+			if (destination.startsWith("http")) {
+				Entry toEntryEntry = this.entry.getContext().getByEntryURI(java.net.URI.create(destination));
+				destination = toEntryEntry.getId();
 			}
 		}
-		
+
+		Iterator<Statement> detectStmts = md.match(null, transformDetectDestination, null);
+		if (detectStmts.hasNext()) {
+			detectDestination = detectStmts.next().getObject().stringValue().contains("true");
+		}
+
 		Iterator<Statement> stmts = md.match(null, transform, null);
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
@@ -141,7 +149,7 @@ public class Pipeline {
 		return null;
 	}
 
-	public Set<Entry> run(InputStream data, String mimetype) throws TransformException {
+	public Set<Entry> run(InputStream data, String mimetype, java.net.URI listURI) throws TransformException {
 		//Get the data
 		Transform first = tsteps.get(0);
 		Graph graph = first.transform(data, mimetype);
@@ -150,7 +158,11 @@ public class Pipeline {
 		}
 
 		Graph2Entries g2e = new Graph2Entries(this.entry.getContext());
-		return g2e.merge(graph, toEntry);
+		if (detectDestination) {
+			return g2e.merge(graph, null, null);			
+		} else {
+			return g2e.merge(graph, destination, listURI);			
+		}
 	}
 
 	private static synchronized void loadTransforms() {
