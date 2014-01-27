@@ -147,7 +147,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	
 	/**
 	 * Returns a User object representing a user.
-	 * @param the URI to the user.
+	 * @param userUri The URI to the user.
 	 * @return the User object
 	 */
 	public User getUser(URI userUri) {
@@ -161,7 +161,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 	/**
 	 * Returns a Group object representing a group of users.
-	 * @param the URI to the group.
+	 * @param groupUri URI to the group.
 	 * @return the Group object
 	 */
 	public Group getGroup(URI groupUri) {
