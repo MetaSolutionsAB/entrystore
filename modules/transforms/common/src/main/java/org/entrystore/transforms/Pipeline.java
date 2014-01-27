@@ -153,7 +153,7 @@ public class Pipeline {
 		//Get the data
 		Transform first = tsteps.get(0);
 		Graph graph = first.transform(data, mimetype);
-		for (int idx = 0; idx < tsteps.size(); idx++) {
+		for (int idx = 1; idx < tsteps.size(); idx++) {
 			graph = tsteps.get(idx).transform(graph);
 		}
 

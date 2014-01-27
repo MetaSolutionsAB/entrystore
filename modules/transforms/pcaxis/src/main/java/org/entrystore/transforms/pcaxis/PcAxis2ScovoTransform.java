@@ -41,6 +41,9 @@ public class PcAxis2ScovoTransform extends Transform {
 
 	public Graph transform(InputStream data, String mimetype) {
 		String baseURI = getArguments().get("baseuri");
+		if (!baseURI.endsWith("/") || !baseURI.endsWith("#")) {
+			baseURI = baseURI+"/";
+		}
 		String datasetName = getArguments().get("dataset");
 
 		if (baseURI == null || datasetName == null) {
