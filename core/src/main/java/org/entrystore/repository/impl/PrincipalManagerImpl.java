@@ -600,7 +600,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 	
 	/**
-	 * @param externID
+	 * @param externalID
 	 *            An E-Mail address
 	 * @return A user that can be mapped to the external E-Mail address (that
 	 *         e.g. originates from an OpenID service)
