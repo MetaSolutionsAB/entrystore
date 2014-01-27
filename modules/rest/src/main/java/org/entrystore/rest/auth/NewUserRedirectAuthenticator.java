@@ -33,10 +33,18 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 	@Override
 	public void handleUser(org.restlet.security.User user) {
 		super.handleUser(user);
-		if (this.user == null && user.getEmail() != null) {
-			PrincipalManager pm = rm.getPrincipalManager();
-			ContextManager cm = rm.getContextManager();
 
+		String email = user.getEmail();
+		if (email == null) {
+			log.warn("Unable to perform OpenID login, no user email set");
+			return;
+		}
+
+		User u = pm.getUser(pm.getAuthenticatedUserURI());
+
+		// Create a new user if we don't have one yet
+		if (u == null || pm.getGuestUser().getURI().equals(u.getURI())) {
+			ContextManager cm = rm.getContextManager();
 			try {
 				// We need Admin-rights to create user and context
 				pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
@@ -45,7 +53,7 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 				Entry entry = rm.getPrincipalManager().createResource(null, ResourceType.User, null, null);
 				pm.setPrincipalName(entry.getResourceURI(), user.getEmail());
 				setFoafMetadata(entry, user);
-				User u = (User) entry.getResource();
+				u = (User) entry.getResource();
 				u.setExternalID(user.getEmail());
 				log.info("Created user " + u.getURI() + ", mapped to OpenID E-Mail " + u.getExternalID());
 
@@ -58,11 +66,12 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 				// Set home context of user
 				u.setHomeContext((org.entrystore.repository.Context) homeContext.getResource());
 				log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
-
-				// We set the user, this will be used later by super.authenticated()
-				this.user = u;
 			} finally {
-				pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+				if (u != null) {
+					pm.setAuthenticatedUserURI(u.getURI());
+				} else {
+					pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+				}
 			}
 		}
 	}
