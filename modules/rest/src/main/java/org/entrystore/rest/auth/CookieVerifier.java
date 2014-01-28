@@ -77,7 +77,7 @@ public class CookieVerifier implements Verifier {
 				return RESULT_VALID;
 			}
 			
-			return RESULT_INVALID;
+			return RESULT_VALID;
 		} finally {
 			pm.setAuthenticatedUserURI(userURI);
 		}
