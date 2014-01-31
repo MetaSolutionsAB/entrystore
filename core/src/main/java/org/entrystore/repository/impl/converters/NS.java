@@ -44,8 +44,6 @@ public class NS {
 	@Deprecated
 	public static String sc = "http://scam.sf.net/schema#";
 
-	public static String rem3 = "http://entrystore.org/terms/rem3/";
-
 	public static String entrystore = "http://entrystore.org/terms/";
 
 	public static String xsd = "http://www.w3.org/2001/XMLSchema#";
