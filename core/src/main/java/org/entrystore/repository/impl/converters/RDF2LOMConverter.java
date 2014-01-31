@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.Set;
 
 import org.entrystore.repository.Converter;
+import org.entrystore.repository.util.NS;
 import org.ieee.ltsc.datatype.impl.EntityImpl;
 import org.ieee.ltsc.datatype.impl.LangStringImpl.StringImpl;
 import org.ieee.ltsc.lom.LOM;

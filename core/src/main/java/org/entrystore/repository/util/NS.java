@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository.impl.converters;
+package org.entrystore.repository.util;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -18,7 +18,7 @@ package org.entrystore.transforms;
 
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.impl.converters.Graph2Entries;
-import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.util.NS;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;
 import org.openrdf.model.Statement;
@@ -31,7 +31,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;

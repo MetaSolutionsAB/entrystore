@@ -35,7 +35,7 @@ import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.impl.ContextImpl;
 import org.entrystore.repository.impl.RDFResource;
 import org.entrystore.repository.impl.StringResource;
-import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.util.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;

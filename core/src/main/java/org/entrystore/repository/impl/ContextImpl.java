@@ -53,7 +53,7 @@ import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
-import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.util.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;

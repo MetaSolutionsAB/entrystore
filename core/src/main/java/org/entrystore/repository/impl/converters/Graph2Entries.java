@@ -16,7 +16,6 @@
 
 package org.entrystore.repository.impl.converters;
 
-import java.text.DateFormat;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
@@ -32,6 +31,7 @@ import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.impl.ContextImpl;
 import org.entrystore.repository.impl.RDFResource;
+import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.URISplit;
 import org.openrdf.model.BNode;
 import org.openrdf.model.Graph;

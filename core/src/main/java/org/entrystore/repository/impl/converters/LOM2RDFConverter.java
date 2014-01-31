@@ -21,6 +21,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 
 import org.entrystore.repository.Converter;
+import org.entrystore.repository.util.NS;
 import org.ieee.ltsc.datatype.impl.EntityImpl;
 import org.ieee.ltsc.lom.LOM;
 import org.ieee.ltsc.lom.LOMUtil;

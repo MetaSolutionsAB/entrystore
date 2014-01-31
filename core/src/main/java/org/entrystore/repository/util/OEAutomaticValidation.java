@@ -31,7 +31,6 @@ import org.entrystore.repository.Entry;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.impl.converters.NS;
 import org.openrdf.model.BNode;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;

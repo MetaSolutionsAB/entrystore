@@ -17,9 +17,6 @@
 package org.entrystore.repository.impl.converters;
 
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
@@ -39,9 +36,8 @@ import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
 import javax.xml.bind.Unmarshaller;
 
+import org.entrystore.repository.util.NS;
 import org.ieee.ltsc.lom.LOM;
-import org.ieee.ltsc.lom.LOMUtil;
-import org.ieee.ltsc.lom.LOM.Technical.Location;
 import org.ieee.ltsc.lom.impl.LOMImpl;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
@@ -56,8 +52,6 @@ import org.openrdf.rio.RDFParseException;
 import org.openrdf.rio.RDFParser;
 import org.openrdf.rio.RDFWriter;
 import org.openrdf.rio.helpers.StatementCollector;
-import org.openrdf.rio.trig.TriGWriter;
-import org.openrdf.rio.turtle.TurtleWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Node;

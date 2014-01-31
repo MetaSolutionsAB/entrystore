@@ -29,7 +29,6 @@ import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.Resource;
-import org.entrystore.repository.impl.converters.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;

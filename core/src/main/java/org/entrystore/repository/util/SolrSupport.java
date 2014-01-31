@@ -32,7 +32,6 @@ import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.LocalMetadataWrapper;
-import org.entrystore.repository.impl.converters.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;

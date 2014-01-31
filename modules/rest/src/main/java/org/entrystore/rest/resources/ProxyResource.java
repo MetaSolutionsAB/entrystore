@@ -40,7 +40,7 @@ import javax.xml.transform.stream.StreamSource;
 
 import org.apache.commons.lang.StringEscapeUtils;
 import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.RDFJSON;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;

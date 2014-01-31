@@ -36,7 +36,7 @@ import org.entrystore.repository.User;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.util.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
