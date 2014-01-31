@@ -152,8 +152,8 @@ public class DataCorrection {
 			org.openrdf.model.URI resourceURI = vf.createURI(entry.getResourceURI().toString());
 			org.openrdf.model.URI metadataURI = vf.createURI(entry.getLocalMetadata().getURI().toString());
 			
-			Statement resourceRights = vf.createStatement(resourceURI, createURI(NS.sc, "write"), resourceURI);
-			Statement metadataRights = vf.createStatement(metadataURI, createURI(NS.sc, "write"), resourceURI);
+			Statement resourceRights = vf.createStatement(resourceURI, createURI(NS.entrystore, "write"), resourceURI);
+			Statement metadataRights = vf.createStatement(metadataURI, createURI(NS.entrystore, "write"), resourceURI);
 			
 			if (!metadata.match(resourceRights.getSubject(), resourceRights.getPredicate(), resourceRights.getObject()).hasNext()) {
 				metadata.add(resourceRights);

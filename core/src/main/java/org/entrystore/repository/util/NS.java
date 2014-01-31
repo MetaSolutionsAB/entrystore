@@ -41,8 +41,8 @@ public class NS {
 
 	public static String rdfs = "http://www.w3.org/2000/01/rdf-schema#";
 
-	@Deprecated
-	public static String sc = "http://scam.sf.net/schema#";
+	//@Deprecated
+	//public static String sc = "http://scam.sf.net/schema#";
 
 	public static String entrystore = "http://entrystore.org/terms/";
 
@@ -51,22 +51,17 @@ public class NS {
 	public static String vcard = "http://www.w3.org/2001/vcard-rdf/3.0#";
 
 	/**
-	 * @return A map with all namespaces. Key is name and Value is namespace.
+	 * @return A map with all relevant namespaces. Key is name and Value is namespace.
 	 */
 	public static Map<String, String> getMap() {
 		HashMap<String, String> map = new HashMap<String, String>();
 		map.put("dc", NS.dc);
 		map.put("dcterms", NS.dcterms);
 		map.put("foaf", NS.foaf);
-		map.put("lom", NS.lom);
-		map.put("lomvoc", NS.lomvoc);
-		map.put("lrevoc", NS.lrevoc);
-		map.put("oe", NS.oe);
 		map.put("rdf", NS.rdf);
 		map.put("rdfs", NS.rdfs);
-		map.put("sc", NS.sc);
 		map.put("xsd", NS.xsd);
-		map.put("vcard", NS.vcard);
+		map.put("es", NS.entrystore);
 		return map;
 	}
 	

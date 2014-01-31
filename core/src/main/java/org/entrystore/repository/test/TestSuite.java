@@ -43,7 +43,7 @@ import org.openrdf.model.impl.ValueFactoryImpl;
 public class TestSuite {
 
 	public static final String NSDCTERMS = "http://purl.org/dc/terms/";
-	public static final String NSbase = "http://scam.sf.net/schema#";
+	public static final String NSbase = "http://entrystore.org/terms/";
 	public static final org.openrdf.model.URI dc_title;
 	public static final org.openrdf.model.URI dc_description;
 	public static final org.openrdf.model.URI dc_subject;

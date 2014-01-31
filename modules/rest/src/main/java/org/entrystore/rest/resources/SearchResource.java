@@ -252,10 +252,10 @@ public class SearchResource extends BaseResource {
 
 				if (readyForValidation) {
 					entryQuery = new String(
-						"PREFIX sc:<http://scam.sf.net/schema#> \n" +
+						"PREFIX es:<http://entrystore.org/terms/> \n" +
 						"SELECT ?g \n" +
 						"WHERE { GRAPH ?g { \n" +
-						" ?x sc:status \"annotated\" \n" +
+						" ?x es:status \"annotated\" \n" +
 						"} }");
 				}
 				
@@ -681,14 +681,14 @@ public class SearchResource extends BaseResource {
 	private List<Entry> competenceSearch(HashMap<String, String> queryHashMap){
 		ContextManager cm = getCM();
 		String startOfQuery = 
-			"PREFIX sc:      <http://scam.sf.net/schema#> \n" +
+			"PREFIX es:      <http://entrystore.org/terms/> \n" +
 			"SELECT ?g WHERE{" +
 			" GRAPH ?g {" +
-			"?entries sc:competenceClassification ?CCLass . \n" ;
+			"?entries es:competenceClassification ?CCLass . \n" ;
 		String endOfQuery = "}\n}";
 		String ExactQuery = startOfQuery + createCompetenceUnion(queryHashMap, true)+endOfQuery;
 		String FuzzyQuery = startOfQuery+ createCompetenceUnion(queryHashMap, false)+endOfQuery;
-		/*String mdQuery = "PREFIX sc:      <http://scam.sf.net/schema#> " +
+		/*String mdQuery = "PREFIX sc:      <http://entrystore.org/terms/> " +
 				"SELECT ?entries ?CCLass " +
 				"WHERE { " +
 				"?entries sc:competenceClassification ?CCLass . " +
@@ -719,9 +719,9 @@ public class SearchResource extends BaseResource {
 			Graph compGraph = getCompetenceGraph();
 			if(compGraph != null) {
 				//Properties used for locating the required competence
-				org.openrdf.model.URI reqProp = compGraph.getValueFactory().createURI("http://scam.sf.net/schema#requiresCompetence");
-				org.openrdf.model.URI compDefProp = compGraph.getValueFactory().createURI("http://scam.sf.net/schema#competencyDefinition");
-				org.openrdf.model.URI compLevelProp = compGraph.getValueFactory().createURI("http://scam.sf.net/schema#competenceLevel");
+				org.openrdf.model.URI reqProp = compGraph.getValueFactory().createURI("http://entrystore.org/terms/requiresCompetence");
+				org.openrdf.model.URI compDefProp = compGraph.getValueFactory().createURI("http://entrystore.org/terms/competencyDefinition");
+				org.openrdf.model.URI compLevelProp = compGraph.getValueFactory().createURI("http://entrystore.org/terms/competenceLevel");
 				//Going through all the entries matched so far
 				for (Entry currEntry : ranking.keySet()) {
 					Graph mdGraph = currEntry.getMetadataGraph();
@@ -783,7 +783,7 @@ public class SearchResource extends BaseResource {
 		Entry compEntry = null;
 		for (Iterator<Statement> iter = relations.iterator(); iter.hasNext();) {
 			Statement stat = iter.next();
-			if (stat.getPredicate().toString().equals("http://scam.sf.net/schema#aboutPerson")){
+			if (stat.getPredicate().toString().equals("http://entrystore.org/terms/aboutPerson")){
 				String relEntryString = stat.getSubject().toString();
 				try{
 					compEntry = getCM().getEntry(new URI(relEntryString));

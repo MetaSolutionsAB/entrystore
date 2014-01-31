@@ -53,7 +53,7 @@ public class RepositoryProperties {
 		}
 	}
 		
-	public static final String NSbase = "http://scam.sf.net/schema#";
+	public static final String NSbase = "http://entrystore.org/terms/";
 	
 	// Used in the metadata.
 	public static final String NSDC = "http://purl.org/dc/elements/1.1/";
