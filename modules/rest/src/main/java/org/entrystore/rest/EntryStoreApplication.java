@@ -233,6 +233,12 @@ public class EntryStoreApplication extends Application {
 		router.attach("/auth/basic", UserResource.class);
 		router.attach("/auth/logout", LogoutResource.class);
 
+		// signup
+		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP, "off"))) {
+			router.attach("/auth/signup", SignupResource.class);
+		}
+
+		// OpenID
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"))) {
 			if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_MYOPENID, "off"))) {
 				router.attach("/auth/openid/myopenid", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_MYOPENID, false));

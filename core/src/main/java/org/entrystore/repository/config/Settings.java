@@ -91,6 +91,7 @@ public class Settings {
 	public static String SMTP_USERNAME = "entrystore.smtp.username";
 	public static String SMTP_PASSWORD = "entrystore.smtp.password";
 
+	public static String SIGNUP = "entrystore.signup";
 	public static String SIGNUP_FROM_EMAIL = "entrystore.signup.email.from";
 	public static String SIGNUP_SUBJECT = "entrystore.signup.email.subject";
 	public static String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.signup.email.template";
