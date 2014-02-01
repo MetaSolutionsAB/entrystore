@@ -1,11 +1,12 @@
 package org.entrystore.rest.auth;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 public class TokenCache {
 	
-	private static Map<String, UserInfo> tokenCache = new HashMap<String, UserInfo>();
+	private static Map<String, UserInfo> tokenCache = Collections.synchronizedMap(new HashMap<String, UserInfo>());
 
 	public static void addToken(String token, UserInfo userInfo) {
 		tokenCache.put(token, userInfo);
