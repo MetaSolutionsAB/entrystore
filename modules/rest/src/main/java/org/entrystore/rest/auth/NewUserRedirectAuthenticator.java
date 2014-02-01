@@ -51,7 +51,7 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 				// Create user and set alias, metadata and e-mail
 				Entry entry = rm.getPrincipalManager().createResource(null, ResourceType.User, null, null);
 				pm.setPrincipalName(entry.getResourceURI(), user.getEmail());
-				setFoafMetadata(entry, user);
+				Signup.getInstance().setFoafMetadata(entry, user);
 				u = (User) entry.getResource();
 				u.setExternalID(user.getEmail());
 				log.info("Created user " + u.getURI() + ", mapped to OpenID E-Mail " + u.getExternalID());
@@ -73,35 +73,6 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 				}
 			}
 		}
-	}
-	
-	private void setFoafMetadata(Entry entry, org.restlet.security.User userInfo) {
-		Graph graph = entry.getLocalMetadata().getGraph();
-		ValueFactory vf = graph.getValueFactory();
-		org.openrdf.model.URI resourceURI = vf.createURI(entry.getResourceURI().toString());
-		String fullname = null;
-		if (userInfo.getFirstName() != null) {
-			fullname = userInfo.getFirstName();
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "givenName"), vf.createLiteral(userInfo.getFirstName())));
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "firstName"), vf.createLiteral(userInfo.getFirstName())));
-		}
-		if (userInfo.getLastName() != null) {
-			if (fullname != null) {
-				fullname = fullname + " " + userInfo.getLastName();
-			} else {
-				fullname = userInfo.getLastName();
-			}
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "familyName"), vf.createLiteral(userInfo.getLastName())));
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "lastName"), vf.createLiteral(userInfo.getLastName())));
-		}
-		if (fullname != null) {
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "name"), vf.createLiteral(fullname)));
-		}
-		if (userInfo.getEmail() != null) {
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "mbox"), vf.createURI("mailto:", userInfo.getEmail())));
-		}
-		
-		entry.getLocalMetadata().setGraph(graph);
 	}
 
 }
