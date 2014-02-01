@@ -16,14 +16,16 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.config.Config;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.User;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.security.AuthorizationException;
-import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.repository.security.Password;
+import org.entrystore.rest.auth.ConfirmationInfo;
+import org.entrystore.rest.auth.Signup;
 import org.restlet.data.Form;
-import org.restlet.data.MediaType;
 import org.restlet.data.Status;
-import org.restlet.ext.openid.RedirectAuthenticator;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
@@ -32,24 +34,10 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.mail.Message;
-import javax.mail.MessagingException;
-import javax.mail.PasswordAuthentication;
-import javax.mail.Session;
-import javax.mail.Transport;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMessage;
-import java.io.File;
-import java.io.IOException;
-import java.io.StringReader;
 import java.io.UnsupportedEncodingException;
+import java.net.URI;
 import java.net.URLDecoder;
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.security.Security;
-import java.util.Properties;
+import java.util.Date;
 
 
 /**
@@ -68,15 +56,65 @@ public class SignupResource extends BaseResource {
 			return null;
 		}
 
-		// TODO lookup confirmation-hash in Map
+		String token = parameters.get("confirm");
+		ConfirmationInfo ci = Signup.getInstance().getTokenCache().get(token);
+		if (ci == null) {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Confirmation token not found");
+			return null;
+		}
+		Signup.getInstance().getTokenCache().remove(token);
 
-		// TODO iterate through Map and clean from values older than 24 hours (make this configurable in properties file)
+		PrincipalManager pm = getPM();
+		URI authUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
-		// TODO redirect to urlFailure or create user and redirect to urlSuccess
+			Entry userEntry = pm.getPrincipalEntry(ci.email);
+			if ((userEntry != null && ResourceType.User.equals(userEntry.getResourceType())) ||
+					pm.getUserByExternalID(ci.email) != null) {
+				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT, "User with submitted email address already exists");
+				return null;
+			}
+
+			// Create user
+			Entry entry = pm.createResource(null, ResourceType.User, null, null);
+			if (entry == null) {
+				try {
+					if (ci.urlFailure != null) {
+						getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, "UTF-8"));
+					} else {
+						getResponse().setStatus(Status.SERVER_ERROR_INTERNAL, "Unable to create user");
+					}
+					return null;
+				} catch (UnsupportedEncodingException e) {
+					log.warn("Unable to decode URL: " + e.getMessage());
+				}
+			}
+
+			// Set alias, metadata and password
+			pm.setPrincipalName(entry.getResourceURI(), ci.email);
+			Signup.getInstance().setFoafMetadata(entry, new org.restlet.security.User((String) null, (String) null, ci.firstName, ci.lastName, ci.email));
+			User u = (User) entry.getResource();
+			u.setSecret(ci.password);
+			log.info("Created user " + u.getURI());
+
+			// Create context and set ACL and alias
+			Entry homeContext = getCM().createResource(null, ResourceType.Context, null, null);
+			homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
+			getCM().setContextAlias(homeContext.getEntryURI(), ci.email);
+			log.info("Created context " + homeContext.getResourceURI());
+
+			// Set home context of user
+			u.setHomeContext((org.entrystore.repository.Context) homeContext.getResource());
+			log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
+		} finally {
+			pm.setAuthenticatedUserURI(authUser);
+		}
 
 		try {
-			// FIXME
-			getResponse().redirectTemporary(URLDecoder.decode(parameters.get("redirectOnSuccess"), "UTF-8"));
+			if (ci.urlSuccess != null) {
+				getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, "UTF-8"));
+			}
 			return null;
 		} catch (UnsupportedEncodingException e) {
 			log.warn("Unable to decode URL: " + e.getMessage());
@@ -89,12 +127,13 @@ public class SignupResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		Form form = new Form(getRequest().getEntity());
-
 		String firstName = form.getFirstValue("firstname", true);
 		String lastName = form.getFirstValue("lastname", true);
 		String email = form.getFirstValue("email", true);
 		String password = form.getFirstValue("password", true);
 		String reCaptcha = form.getFirstValue("recaptcha", true);
+		String urlFailure = form.getFirstValue("urlfailure", true);
+		String urlSuccess = form.getFirstValue("urlsuccess", true);
 
 		if (firstName == null || lastName == null || email == null || password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "One or more parameters are missing");
@@ -103,105 +142,29 @@ public class SignupResource extends BaseResource {
 
 		if (getRM().getConfiguration().getBoolean(Settings.SIGNUP_RECAPTCHA, false)) {
 			if (reCaptcha == null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "One or more parameters are missing");
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "reCaptcha information missing");
 				return;
 			}
 
 			// TODO check reCaptcha, return bad request if wrong
 		}
 
-		// TODO create confirmation ID (SHA-hash) and add to HashMap
-		// (key: hash, value: e-mail, date, urlSuccess, urlFailure)
+		ConfirmationInfo ci = new ConfirmationInfo();
+		ci.firstName = firstName;
+		ci.lastName = lastName;
+		ci.email = email;
+		ci.password = password;
+		ci.urlFailure = urlFailure;
+		ci.urlSuccess = urlSuccess;
+		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
 
-		sendRequestForConfirmation(email, "confToken"); // FIXME
+		String token = Password.getRandomBase64(128);
+		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
+		Signup signup = Signup.getInstance();
+		signup.getTokenCache().put(token, ci);
+		signup.sendRequestForConfirmation(getRM().getConfiguration(), email, confirmationLink);
 
-		getResponse().setEntity(new StringRepresentation("HTML HERE"));
-	}
-
-	private boolean sendRequestForConfirmation(String recipient, String confirmationToken) {
-		String domain = getRM().getRepositoryURL().getHost();
-		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + confirmationToken;
-
-		Config config = getRM().getConfiguration();
-		String host = config.getString(Settings.SMTP_HOST);
-		int port = config.getInt(Settings.SMTP_PORT, 25);
-		boolean ssl = config.getBoolean(Settings.SMTP_SSL, false);
-		final String username = config.getString(Settings.SMTP_USERNAME);
-		final String password = config.getString(Settings.SMTP_PASSWORD);
-		String from = config.getString(config.getString(Settings.SIGNUP_FROM_EMAIL), "signup@" + domain);
-		String subject = config.getString(Settings.SIGNUP_SUBJECT, "Confirm your e-mail address to complete signup at " + domain);
-		String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
-
-		if (host == null) {
-			log.error("No SMTP host configured");
-			return false;
-		}
-
-		Session session = null;
-		Properties props = new Properties();
-		props.put("mail.smtp.host", host);
-		props.put("mail.smtp.port", port);
-
-		// SSL/TLS-related settings
-		if (ssl) {
-			props.put("mail.smtp.ssl.enable", "true");
-			props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
-			props.put("mail.smtp.socketFactory.fallback", "false");
-		}
-
-		// other options, to be made configurable at some later point
-		props.put("mail.smtp.starttls.enable", "true");
-		props.put("mail.smtp.starttls.required", "false"); // default false
-		props.put("mail.smtp.ssl.checkserveridentity", "true"); // default false
-		props.put("mail.smtp.connectiontimeout", "30000"); // default infinite
-		props.put("mail.smtp.timeout", "30000"); // default infinite
-		props.put("mail.smtp.writetimeout", "30000"); // default infinite
-
-		// Security.addProvider(new com.sun.net.ssl.internal.ssl.Provider()); // why?
-
-		// Authentication
-		if (username != null && password != null) {
-			props.put("mail.smtp.auth", "true");
-			session = Session.getDefaultInstance(props, new javax.mail.Authenticator() {
-				protected PasswordAuthentication getPasswordAuthentication() {
-					return new PasswordAuthentication(username, password);
-				}
-			});
-		} else {
-			session = Session.getDefaultInstance(props);
-		}
-
-		try {
-			MimeMessage message = new MimeMessage(session);
-			message.setFrom(new InternetAddress(from));
-			message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(recipient));
-			message.setSubject(subject);
-
-			String templateHTML = readFile(templatePath, Charset.defaultCharset());
-			if (templateHTML != null) {
-				message.setText(templateHTML, "utf-8", "html");
-			} else {
-				message.setText("To confirm your e-mail address and complete the signup procedure please visit <a href=\"" + confirmationLink + "\">this URL</a>", "utf-8", "html");
-			}
-
-			Transport.send(message);
-		} catch (MessagingException e) {
-			log.error(e.getMessage());
-			return false;
-		}
-
-		return true;
-	}
-
-	static String readFile(String path, Charset encoding) {
-		byte[] encoded = new byte[0];
-		try {
-			encoded = Files.readAllBytes(Paths.get(path));
-		} catch (IOException e) {
-			log.error(e.getMessage());
-			return null;
-		}
-		return encoding.decode(ByteBuffer.wrap(encoded)).toString();
+		getResponse().setEntity(new StringRepresentation("HTML HERE")); // FIXME
 	}
 
 }
