@@ -39,10 +39,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Properties;
 
 /**
@@ -61,7 +57,7 @@ public class Signup {
 		final String username = config.getString(Settings.SMTP_USERNAME);
 		final String password = config.getString(Settings.SMTP_PASSWORD);
 		String from = config.getString(Settings.SIGNUP_FROM_EMAIL, "signup@" + domain);
-		String subject = config.getString(Settings.SIGNUP_SUBJECT, "Confirm your e-mail address to complete signup at " + domain);
+		String subject = config.getString(Settings.SIGNUP_SUBJECT, "Confirm your email address to complete sign-up");
 		String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
 
 		if (host == null) {
@@ -119,9 +115,9 @@ public class Signup {
 				templateHTML = readFile(templatePath, Charset.defaultCharset());
 			}
 			if (templateHTML != null) {
-				message.setText(templateHTML, "utf-8", "html");
+				message.setText(templateHTML.replaceAll("__CONFIRMATION_LINK__", confirmationLink), "utf-8", "html");
 			} else {
-				message.setText("To confirm your e-mail address and complete the signup procedure please visit <a href=\"" + confirmationLink + "\">this URL</a>", "utf-8", "html");
+				message.setText("To confirm your e-mail address and complete the sign-up procedure please visit <a href=\"" + confirmationLink + "\">this URL</a>", "utf-8", "html");
 			}
 
 			Transport.send(message);
