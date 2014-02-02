@@ -32,6 +32,7 @@ import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -55,7 +56,7 @@ public class Signup {
 		String domain = URI.create(confirmationLink).getHost();
 		String host = config.getString(Settings.SMTP_HOST);
 		int port = config.getInt(Settings.SMTP_PORT, 25);
-		boolean ssl = config.getBoolean(Settings.SMTP_SSL, false);
+		boolean ssl = "on".equalsIgnoreCase(config.getString(Settings.SMTP_SSL, "off"));
 		final String username = config.getString(Settings.SMTP_USERNAME);
 		final String password = config.getString(Settings.SMTP_PASSWORD);
 		String from = config.getString(config.getString(Settings.SIGNUP_FROM_EMAIL), "signup@" + domain);
@@ -75,7 +76,7 @@ public class Signup {
 		// SSL/TLS-related settings
 		if (ssl) {
 			props.put("mail.smtp.ssl.enable", "true");
-			props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+			// FIXME props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
 			props.put("mail.smtp.socketFactory.fallback", "false");
 		}
 
@@ -107,7 +108,10 @@ public class Signup {
 			message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(recipient));
 			message.setSubject(subject);
 
-			String templateHTML = readFile(templatePath, Charset.defaultCharset());
+			String templateHTML = null;
+			if (templatePath != null) {
+				templateHTML = readFile(templatePath, Charset.defaultCharset());
+			}
 			if (templateHTML != null) {
 				message.setText(templateHTML, "utf-8", "html");
 			} else {
@@ -153,6 +157,9 @@ public class Signup {
 	}
 
 	private static String readFile(String path, Charset encoding) {
+		if (path == null || !new File(path).exists()) {
+			return null;
+		}
 		byte[] encoded = new byte[0];
 		try {
 			encoded = Files.readAllBytes(Paths.get(path));

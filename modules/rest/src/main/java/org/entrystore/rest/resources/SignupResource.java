@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.resources;
 
+import org.apache.commons.lang.RandomStringUtils;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.ResourceType;
@@ -39,7 +40,9 @@ import org.slf4j.LoggerFactory;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.util.Date;
+import java.util.UUID;
 
 
 /**
@@ -75,7 +78,7 @@ public class SignupResource extends BaseResource {
 			Entry userEntry = pm.getPrincipalEntry(ci.email);
 			if ((userEntry != null && ResourceType.User.equals(userEntry.getResourceType())) ||
 					pm.getUserByExternalID(ci.email) != null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT, "User with submitted email address already exists");
+				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT, "User with submitted email address exists already");
 				return null;
 			}
 
@@ -96,7 +99,7 @@ public class SignupResource extends BaseResource {
 
 			// Set alias, metadata and password
 			pm.setPrincipalName(entry.getResourceURI(), ci.email);
-			Signup.setFoafMetadata(entry, new org.restlet.security.User((String) null, (String) null, ci.firstName, ci.lastName, ci.email));
+			Signup.setFoafMetadata(entry, new org.restlet.security.User("", "", ci.firstName, ci.lastName, ci.email));
 			User u = (User) entry.getResource();
 			u.setSecret(ci.password);
 			log.info("Created user " + u.getURI());
@@ -118,7 +121,7 @@ public class SignupResource extends BaseResource {
 			if (ci.urlSuccess != null) {
 				getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, "UTF-8"));
 			}
-			return null;
+			return new StringRepresentation("Signup successful");
 		} catch (UnsupportedEncodingException e) {
 			log.warn("Unable to decode URL: " + e.getMessage());
 		}
@@ -143,11 +146,15 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
-		if (getRM().getConfiguration().getBoolean(Settings.SIGNUP_RECAPTCHA, false)) {
+		log.info("Received signup request for " + email);
+
+		if ("on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.SIGNUP_RECAPTCHA, "off"))) {
 			if (reCaptcha == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "reCaptcha information missing");
 				return;
 			}
+
+			log.info("Checking reCaptcha for " + email);
 
 			// TODO check reCaptcha, return bad request if wrong
 		}
@@ -161,12 +168,20 @@ public class SignupResource extends BaseResource {
 		ci.urlSuccess = urlSuccess;
 		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
 
-		String token = Password.getRandomBase64(128);
+		String token = RandomStringUtils.randomAlphanumeric(16);
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
 		SignupTokenCache.getInstance().addToken(token, ci);
-		Signup.sendRequestForConfirmation(getRM().getConfiguration(), email, confirmationLink);
+		log.info("Generated signup token " + token + " for " + email);
 
-		getResponse().setEntity(new StringRepresentation("HTML HERE")); // FIXME
+		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), email, confirmationLink);
+		if (sendSuccessful) {
+			log.info("Successfully sent confirmation request to " + email);
+		} else {
+			log.info("Failed to send confirmation request to " + email);
+		}
+
+		getResponse().setStatus(Status.SUCCESS_OK);
+		getResponse().setEntity(new StringRepresentation("A confirmation message has been sent to the provided e-mail address."));
 	}
 
 }
