@@ -51,7 +51,7 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 				// Create user and set alias, metadata and e-mail
 				Entry entry = rm.getPrincipalManager().createResource(null, ResourceType.User, null, null);
 				pm.setPrincipalName(entry.getResourceURI(), user.getEmail());
-				Signup.getInstance().setFoafMetadata(entry, user);
+				Signup.setFoafMetadata(entry, user);
 				u = (User) entry.getResource();
 				u.setExternalID(user.getEmail());
 				log.info("Created user " + u.getURI() + ", mapped to OpenID E-Mail " + u.getExternalID());

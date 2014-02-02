@@ -4,24 +4,29 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-public class TokenCache {
-	
-	private static Map<String, UserInfo> tokenCache = Collections.synchronizedMap(new HashMap<String, UserInfo>());
+public abstract class TokenCache<K, V> {
 
-	public static void addToken(String token, UserInfo userInfo) {
-		tokenCache.put(token, userInfo);
+	protected Map<K, V> tokenCache = Collections.synchronizedMap(new HashMap<K, V>());
+
+	public void addToken(K token, V value) {
+		tokenCache.put(token, value);
 	}
-	
-	public static UserInfo getUserInfo(String token) {
+
+	public V getTokenValue(K token) {
+		cleanup();
 		return tokenCache.get(token);
 	}
-	
-	public static void removeToken(String token) {
+
+	public void removeToken(K token) {
+		cleanup();
 		tokenCache.remove(token);
 	}
-	
-	public static boolean hasToken(String token) {
+
+	public boolean hasToken(K token) {
+		cleanup();
 		return tokenCache.containsKey(token);
 	}
+
+	abstract void cleanup();
 
 }

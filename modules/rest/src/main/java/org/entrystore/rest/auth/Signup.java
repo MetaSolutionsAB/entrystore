@@ -17,7 +17,6 @@
 package org.entrystore.rest.auth;
 
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.NS;
@@ -52,35 +51,7 @@ public class Signup {
 
 	private static Logger log = LoggerFactory.getLogger(Signup.class);
 
-	private static Signup instance;
-
-	private Map<String, ConfirmationInfo> tokenCache;
-
-	private Signup() {
-		tokenCache = Collections.synchronizedMap(new HashMap<String, ConfirmationInfo>());
-	}
-
-	public synchronized static Signup getInstance() {
-		if (instance == null) {
-			instance = new Signup();
-		}
-		return instance;
-	}
-
-	public Map<String, ConfirmationInfo> getTokenCache() {
-		cleanup();
-		return tokenCache;
-	}
-
-	private synchronized void cleanup() {
-		for (Map.Entry<String, ConfirmationInfo> e : tokenCache.entrySet()) {
-			if (e.getValue().expirationDate.before(new Date())) {
-				tokenCache.remove(e.getKey());
-			}
-		}
-	}
-
-	public boolean sendRequestForConfirmation(Config config, String recipient, String confirmationLink) {
+	public static boolean sendRequestForConfirmation(Config config, String recipient, String confirmationLink) {
 		String domain = URI.create(confirmationLink).getHost();
 		String host = config.getString(Settings.SMTP_HOST);
 		int port = config.getInt(Settings.SMTP_PORT, 25);
@@ -152,7 +123,7 @@ public class Signup {
 		return true;
 	}
 
-	public void setFoafMetadata(Entry entry, org.restlet.security.User userInfo) {
+	public static void setFoafMetadata(Entry entry, org.restlet.security.User userInfo) {
 		Graph graph = entry.getLocalMetadata().getGraph();
 		ValueFactory vf = graph.getValueFactory();
 		org.openrdf.model.URI resourceURI = vf.createURI(entry.getResourceURI().toString());
@@ -181,7 +152,7 @@ public class Signup {
 		entry.getLocalMetadata().setGraph(graph);
 	}
 
-	private String readFile(String path, Charset encoding) {
+	private static String readFile(String path, Charset encoding) {
 		byte[] encoded = new byte[0];
 		try {
 			encoded = Files.readAllBytes(Paths.get(path));

@@ -17,6 +17,7 @@
 package org.entrystore.rest.resources;
 
 import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.TokenCache;
 import org.restlet.data.Status;
 import org.restlet.ext.openid.RedirectAuthenticator;
@@ -42,7 +43,7 @@ public class LogoutResource extends BaseResource {
 		// authentication attempts
 		String[] tokens = getRequest().getCookies().getValuesArray("auth_token");
 		for (String t : tokens) {
-			TokenCache.removeToken(t);
+			LoginTokenCache.getInstance().removeToken(t);
 		}
 		
 		// remove all auth_token cookies

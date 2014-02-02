@@ -22,8 +22,10 @@ import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
-import org.entrystore.rest.auth.ConfirmationInfo;
+import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.Signup;
+import org.entrystore.rest.auth.SignupTokenCache;
+import org.entrystore.rest.auth.TokenCache;
 import org.restlet.data.Form;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
@@ -57,12 +59,13 @@ public class SignupResource extends BaseResource {
 		}
 
 		String token = parameters.get("confirm");
-		ConfirmationInfo ci = Signup.getInstance().getTokenCache().get(token);
+		TokenCache tc = SignupTokenCache.getInstance();
+		SignupInfo ci = SignupTokenCache.getInstance().getTokenValue(token);
 		if (ci == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Confirmation token not found");
 			return null;
 		}
-		Signup.getInstance().getTokenCache().remove(token);
+		tc.removeToken(token);
 
 		PrincipalManager pm = getPM();
 		URI authUser = pm.getAuthenticatedUserURI();
@@ -93,7 +96,7 @@ public class SignupResource extends BaseResource {
 
 			// Set alias, metadata and password
 			pm.setPrincipalName(entry.getResourceURI(), ci.email);
-			Signup.getInstance().setFoafMetadata(entry, new org.restlet.security.User((String) null, (String) null, ci.firstName, ci.lastName, ci.email));
+			Signup.setFoafMetadata(entry, new org.restlet.security.User((String) null, (String) null, ci.firstName, ci.lastName, ci.email));
 			User u = (User) entry.getResource();
 			u.setSecret(ci.password);
 			log.info("Created user " + u.getURI());
@@ -149,7 +152,7 @@ public class SignupResource extends BaseResource {
 			// TODO check reCaptcha, return bad request if wrong
 		}
 
-		ConfirmationInfo ci = new ConfirmationInfo();
+		SignupInfo ci = new SignupInfo();
 		ci.firstName = firstName;
 		ci.lastName = lastName;
 		ci.email = email;
@@ -160,9 +163,8 @@ public class SignupResource extends BaseResource {
 
 		String token = Password.getRandomBase64(128);
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
-		Signup signup = Signup.getInstance();
-		signup.getTokenCache().put(token, ci);
-		signup.sendRequestForConfirmation(getRM().getConfiguration(), email, confirmationLink);
+		SignupTokenCache.getInstance().addToken(token, ci);
+		Signup.sendRequestForConfirmation(getRM().getConfiguration(), email, confirmationLink);
 
 		getResponse().setEntity(new StringRepresentation("HTML HERE")); // FIXME
 	}

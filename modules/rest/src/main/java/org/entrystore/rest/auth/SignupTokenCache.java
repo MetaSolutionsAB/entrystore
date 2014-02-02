@@ -16,17 +16,33 @@
 
 package org.entrystore.rest.auth;
 
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
-* @author Hannes Ebner
-*/
-public class ConfirmationInfo {
-	public String firstName;
-	public String lastName;
-	public String email;
-	public String password;
-	public Date expirationDate;
-	public String urlSuccess;
-	public String urlFailure;
+ * @author Hannes Ebner
+ */
+public class SignupTokenCache extends TokenCache<String, SignupInfo> {
+
+	private static SignupTokenCache instance;
+
+	private SignupTokenCache() {}
+
+	public synchronized static SignupTokenCache getInstance() {
+		if (instance == null) {
+			instance = new SignupTokenCache();
+		}
+		return instance;
+	}
+
+	public synchronized void cleanup() {
+		for (Map.Entry<String, SignupInfo> e : tokenCache.entrySet()) {
+			if (e.getValue().expirationDate.before(new Date())) {
+				tokenCache.remove(e.getKey());
+			}
+		}
+	}
+
 }
