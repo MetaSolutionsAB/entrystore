@@ -35,6 +35,8 @@ import org.entrystore.rest.auth.SignupTokenCache;
 import org.entrystore.rest.auth.TokenCache;
 import org.restlet.data.ClientInfo;
 import org.restlet.data.Form;
+import org.restlet.data.Language;
+import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
@@ -64,15 +66,14 @@ public class SignupResource extends BaseResource {
 	@Get
 	public Representation represent() throws ResourceException {
 		if (!parameters.containsKey("confirm")) {
-			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-			return null;
+			return new StringRepresentation(constructHtmlForm(), MediaType.TEXT_HTML, Language.ENGLISH);
 		}
 
 		String token = parameters.get("confirm");
 		TokenCache tc = SignupTokenCache.getInstance();
 		SignupInfo ci = SignupTokenCache.getInstance().getTokenValue(token);
 		if (ci == null) {
-			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Confirmation token not found");
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Invalid confirmation token");
 			return null;
 		}
 		tc.removeToken(token);
@@ -154,6 +155,16 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
+		if (firstName.trim().length() < 2 || lastName.trim().length() < 2) {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Invalid name");
+			return;
+		}
+
+		if (password.trim().length() < 8) {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Password too short");
+			return;
+		}
+
 		if (!EmailValidator.getInstance().isValid(email)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Invalid e-mail address " + email);
 			return;
@@ -175,6 +186,8 @@ public class SignupResource extends BaseResource {
 			ReCaptchaImpl captcha = new ReCaptchaImpl();
 			captcha.setPrivateKey(config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY));
 			ReCaptchaResponse reCaptchaResponse = captcha.checkAnswer(remoteAddr, rcChallenge, rcResponse);
+
+			// FIXME can we set a timeout here?
 
 			if (reCaptchaResponse.isValid()) {
 				log.info("Valid reCaptcha for " + email);
@@ -208,6 +221,34 @@ public class SignupResource extends BaseResource {
 
 		getResponse().setStatus(Status.SUCCESS_OK);
 		getResponse().setEntity(new StringRepresentation("A confirmation message has been sent"));
+	}
+
+	private String constructHtmlForm() {
+		Config config = getRM().getConfiguration();
+		String privateKey = config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY);
+		String publicKey = config.getString(Settings.SIGNUP_RECAPTCHA_PUBLIC_KEY);
+
+		if (privateKey == null || publicKey == null) {
+			return "reCaptcha keys must be configured";
+		}
+		ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
+
+		StringBuilder sb = new StringBuilder();
+		sb.append("<html>");
+		sb.append("<head><title>EntryStore signup</title></head>");
+		sb.append("<body>");
+		sb.append("<form action=\"\" method=\"post\">");
+		sb.append("First name<br/><input type=\"text\" name=\"firstname\"><br/>");
+		sb.append("Last name<br/><input type=\"text\" name=\"lastname\"><br/>");
+		sb.append("E-Mail address<br/><input type=\"text\" name=\"email\"><br/>");
+		sb.append("Password<br/><input type=\"text\" name=\"password\"><br/>");
+		sb.append(c.createRecaptchaHtml(null, null));
+		sb.append("<input type=\"submit\" value=\"Submit\" />");
+		sb.append("</form>");
+		sb.append("</body>");
+		sb.append("</html>");
+
+		return sb.toString();
 	}
 
 }
