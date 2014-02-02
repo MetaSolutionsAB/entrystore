@@ -87,7 +87,7 @@ public class Settings {
 
 	public static String SMTP_HOST = "entrystore.smtp.host";
 	public static String SMTP_PORT = "entrystore.smtp.port";
-	public static String SMTP_SSL = "entrystore.smtp.ssl";
+	public static String SMTP_SECURITY = "entrystore.smtp.security";
 	public static String SMTP_USERNAME = "entrystore.smtp.username";
 	public static String SMTP_PASSWORD = "entrystore.smtp.password";
 

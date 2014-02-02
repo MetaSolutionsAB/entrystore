@@ -56,7 +56,8 @@ public class Signup {
 		String domain = URI.create(confirmationLink).getHost();
 		String host = config.getString(Settings.SMTP_HOST);
 		int port = config.getInt(Settings.SMTP_PORT, 25);
-		boolean ssl = "on".equalsIgnoreCase(config.getString(Settings.SMTP_SSL, "off"));
+		boolean ssl = "ssl".equalsIgnoreCase(config.getString(Settings.SMTP_SECURITY));
+		boolean starttls = "starttls".equalsIgnoreCase(config.getString(Settings.SMTP_SECURITY));
 		final String username = config.getString(Settings.SMTP_USERNAME);
 		final String password = config.getString(Settings.SMTP_PASSWORD);
 		String from = config.getString(Settings.SIGNUP_FROM_EMAIL, "signup@" + domain);
@@ -75,19 +76,25 @@ public class Signup {
 
 		// SSL/TLS-related settings
 		if (ssl) {
+			log.info("SSL enabled");
 			props.put("mail.smtp.ssl.enable", "true");
+			props.put("mail.smtp.socketFactory.port", port);
+			props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
 			props.put("mail.smtp.socketFactory.fallback", "false");
+		}
+		if (starttls) {
+			log.info("StartTLS enabled");
+			props.put("mail.smtp.starttls.enable", "true");
+			props.put("mail.smtp.starttls.required", "true");
 		}
 
 		// other options, to be made configurable at some later point
-		props.put("mail.smtp.starttls.enable", "true");
-		props.put("mail.smtp.starttls.required", "false"); // default false
 		props.put("mail.smtp.ssl.checkserveridentity", "true"); // default false
 		props.put("mail.smtp.connectiontimeout", "30000"); // default infinite
 		props.put("mail.smtp.timeout", "30000"); // default infinite
 		props.put("mail.smtp.writetimeout", "30000"); // default infinite
 
-		// Security.addProvider(new com.sun.net.ssl.internal.ssl.Provider()); // why?
+		props.put("mail.debug", "true");
 
 		// Authentication
 		if (username != null && password != null) {

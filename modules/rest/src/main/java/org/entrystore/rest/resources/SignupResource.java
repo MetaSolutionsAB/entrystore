@@ -175,7 +175,7 @@ public class SignupResource extends BaseResource {
 
 		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), email, confirmationLink);
 		if (sendSuccessful) {
-			log.info("Successfully sent confirmation request to " + email);
+			log.info("Sent confirmation request to " + email);
 		} else {
 			log.info("Failed to send confirmation request to " + email);
 		}
