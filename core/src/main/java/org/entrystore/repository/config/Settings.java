@@ -96,6 +96,7 @@ public class Settings {
 	public static String SIGNUP_SUBJECT = "entrystore.signup.email.subject";
 	public static String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.signup.email.template";
 	public static String SIGNUP_RECAPTCHA = "entrystore.signup.recaptcha";
+	public static String SIGNUP_RECAPTCHA_PRIVATE_KEY = "entrystore.signup.recaptcha.private-key";
 	
 	private Settings() {
 	}

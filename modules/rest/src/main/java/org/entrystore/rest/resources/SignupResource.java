@@ -16,18 +16,24 @@
 
 package org.entrystore.rest.resources;
 
+import net.tanesha.recaptcha.ReCaptcha;
+import net.tanesha.recaptcha.ReCaptchaFactory;
+import net.tanesha.recaptcha.ReCaptchaImpl;
+import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.validator.routines.EmailValidator;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.User;
+import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupTokenCache;
 import org.entrystore.rest.auth.TokenCache;
+import org.restlet.data.ClientInfo;
 import org.restlet.data.Form;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
@@ -138,7 +144,8 @@ public class SignupResource extends BaseResource {
 		String lastName = form.getFirstValue("lastname", true);
 		String email = form.getFirstValue("email", true);
 		String password = form.getFirstValue("password", true);
-		String reCaptcha = form.getFirstValue("recaptcha", true);
+		String rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
+		String rcResponse = form.getFirstValue("recaptcha_response_field", true);
 		String urlFailure = form.getFirstValue("urlfailure", true);
 		String urlSuccess = form.getFirstValue("urlsuccess", true);
 
@@ -152,17 +159,30 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
+		Config config = getRM().getConfiguration();
+
 		log.info("Received signup request for " + email);
 
-		if ("on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.SIGNUP_RECAPTCHA, "off"))) {
-			if (reCaptcha == null) {
+		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP_RECAPTCHA, "off"))
+				&& config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY) != null) {
+			if (rcChallenge == null || rcResponse == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "reCaptcha information missing");
 				return;
 			}
-
 			log.info("Checking reCaptcha for " + email);
 
-			// TODO check reCaptcha, return bad request if wrong
+			String remoteAddr = getRequest().getClientInfo().getUpstreamAddress();
+			ReCaptchaImpl captcha = new ReCaptchaImpl();
+			captcha.setPrivateKey(config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY));
+			ReCaptchaResponse reCaptchaResponse = captcha.checkAnswer(remoteAddr, rcChallenge, rcResponse);
+
+			if (reCaptchaResponse.isValid()) {
+				log.info("Valid reCaptcha for " + email);
+			} else {
+				log.info("Invalid reCaptcha for " + email);
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Invalid reCaptcha");
+				return;
+			}
 		}
 
 		SignupInfo ci = new SignupInfo();

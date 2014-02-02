@@ -105,7 +105,7 @@ public class EntryStoreApplication extends Application {
 	public EntryStoreApplication(Context parentContext) {
 		super(parentContext);
 		getContext().getAttributes().put(KEY, this);
-		
+
 		/*
 		 * should fix the hangs in Acrobat Reader that occur sometimes when
 		 * Acrobat tries to fetch parts of files
