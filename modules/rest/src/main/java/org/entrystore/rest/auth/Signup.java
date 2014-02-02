@@ -59,7 +59,7 @@ public class Signup {
 		boolean ssl = "on".equalsIgnoreCase(config.getString(Settings.SMTP_SSL, "off"));
 		final String username = config.getString(Settings.SMTP_USERNAME);
 		final String password = config.getString(Settings.SMTP_PASSWORD);
-		String from = config.getString(config.getString(Settings.SIGNUP_FROM_EMAIL), "signup@" + domain);
+		String from = config.getString(Settings.SIGNUP_FROM_EMAIL, "signup@" + domain);
 		String subject = config.getString(Settings.SIGNUP_SUBJECT, "Confirm your e-mail address to complete signup at " + domain);
 		String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
 
@@ -76,7 +76,6 @@ public class Signup {
 		// SSL/TLS-related settings
 		if (ssl) {
 			props.put("mail.smtp.ssl.enable", "true");
-			// FIXME props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
 			props.put("mail.smtp.socketFactory.fallback", "false");
 		}
 
