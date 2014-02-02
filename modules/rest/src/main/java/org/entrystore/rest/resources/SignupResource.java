@@ -187,8 +187,6 @@ public class SignupResource extends BaseResource {
 			captcha.setPrivateKey(config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY));
 			ReCaptchaResponse reCaptchaResponse = captcha.checkAnswer(remoteAddr, rcChallenge, rcResponse);
 
-			// FIXME can we set a timeout here?
-
 			if (reCaptchaResponse.isValid()) {
 				log.info("Valid reCaptcha for " + email);
 			} else {
