@@ -117,7 +117,15 @@ public class Signup {
 			if (templateHTML != null) {
 				message.setText(templateHTML.replaceAll("__CONFIRMATION_LINK__", confirmationLink), "utf-8", "html");
 			} else {
-				message.setText("To confirm your e-mail address and complete the sign-up procedure please visit <a href=\"" + confirmationLink + "\">this URL</a>", "utf-8", "html");
+				StringBuilder sb = new StringBuilder();
+				sb.append("<html><body style=\"width:500px;font-family:verdana;font-size:10pt;\">");
+				sb.append("<div><br/>");
+				sb.append("<h3>Email address confirmation necessary</h3>");
+				sb.append("<p>To complete the sign-up process, you need to confirm that you own the email address you used to set up an account by following <a href=\"__CONFIRMATION_LINK__\">this link</a>.</p>");
+				sb.append("<p>The link is valid for 24 hours.</p><br/>");
+				sb.append("<div style=\"border-top:1px solid #e5e5e5;\"><p><small>&copy; 2014 <a href=\"http://metasolutions.se\" style=\"text-decoration:none;\">MetaSolutions AB</a></small></p></div>");
+				sb.append("</div></body></html>");
+				message.setText(sb.toString().replaceAll("__CONFIRMATION_LINK__", confirmationLink), "utf-8", "html");
 			}
 
 			Transport.send(message);

@@ -62,7 +62,8 @@ public class SignupResource extends BaseResource {
 	@Get
 	public Representation represent() throws ResourceException {
 		if (!parameters.containsKey("confirm")) {
-			return new StringRepresentation(constructHtmlForm(), MediaType.TEXT_HTML, Language.ENGLISH);
+			boolean reCaptcha = "on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.SIGNUP_RECAPTCHA, "off"));
+			return new StringRepresentation(constructHtmlForm(reCaptcha), MediaType.TEXT_HTML, Language.ENGLISH);
 		}
 
 		String token = parameters.get("confirm");
@@ -217,15 +218,19 @@ public class SignupResource extends BaseResource {
 		getResponse().setEntity(new StringRepresentation("A confirmation message was sent to " + email));
 	}
 
-	private String constructHtmlForm() {
+	private String constructHtmlForm(boolean reCaptcha) {
 		Config config = getRM().getConfiguration();
-		String privateKey = config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY);
-		String publicKey = config.getString(Settings.SIGNUP_RECAPTCHA_PUBLIC_KEY);
 
-		if (privateKey == null || publicKey == null) {
-			return "reCaptcha keys must be configured";
+		String reCaptchaHtml = null;
+		if (reCaptcha) {
+			String privateKey = config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY);
+			String publicKey = config.getString(Settings.SIGNUP_RECAPTCHA_PUBLIC_KEY);
+			if (privateKey == null || publicKey == null) {
+				return "reCaptcha keys must be configured";
+			}
+			ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
+			reCaptchaHtml = c.createRecaptchaHtml(null, null);
 		}
-		ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
 
 		StringBuilder sb = new StringBuilder();
 		sb.append("<html>");
@@ -238,8 +243,11 @@ public class SignupResource extends BaseResource {
 		sb.append("First name<br/><input type=\"text\" name=\"firstname\"><br/>");
 		sb.append("Last name<br/><input type=\"text\" name=\"lastname\"><br/>");
 		sb.append("E-Mail address<br/><input type=\"text\" name=\"email\"><br/>");
-		sb.append("Password<br/><input type=\"password\" name=\"password\"><br/><br/>");
-		sb.append(c.createRecaptchaHtml(null, null));
+		sb.append("Password<br/><input type=\"password\" name=\"password\"><br/>");
+		if (reCaptcha) {
+			sb.append("<br/>");
+			sb.append(reCaptchaHtml);
+		}
 		sb.append("<br/><input type=\"submit\" value=\"Sign-up\" />");
 		sb.append("</form>");
 		sb.append("</div></body>");
