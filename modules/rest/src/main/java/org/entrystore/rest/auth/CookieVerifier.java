@@ -57,18 +57,16 @@ public class CookieVerifier implements Verifier {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			
 			Cookie authTokenCookie = request.getCookies().getFirst("auth_token");
+			TokenCache<String, UserInfo> tc = LoginTokenCache.getInstance();
 			if (authTokenCookie != null) {
 				String authToken = authTokenCookie.getValue();
-				if (TokenCache.hasToken(authToken)) {
-					UserInfo ui = TokenCache.getUserInfo(authToken);
-					if (ui.getLoginExpiration().getTime() > (new Date().getTime())) {
-						String userName = ui.getUserName();
-						Entry userEntry = pm.getPrincipalEntry(userName);
-						userURI = userEntry.getResourceURI();
-					} else {
-						cleanCookies("auth_token", request, response);
-						TokenCache.removeToken(authToken);
-					}
+				UserInfo ui = tc.getTokenValue(authToken);
+				if (ui != null) {
+					String userName = ui.getUserName();
+					Entry userEntry = pm.getPrincipalEntry(userName);
+					userURI = userEntry.getResourceURI();
+				} else {
+					cleanCookies("auth_token", request, response);
 				}
 			}
 

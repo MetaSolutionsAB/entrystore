@@ -84,6 +84,20 @@ public class Settings {
 	public static String REPOSITORY_PUBLIC_INDEXES = "entrystore.repository.public.indexes";
 	public static String REPOSITORY_PUBLIC_TYPE = "entrystore.repository.public.type";
 	public static String REPOSITORY_PUBLIC_REBUILD_ON_STARTUP = "entrystore.repository.public.rebuild-on-startup";
+
+	public static String SMTP_HOST = "entrystore.smtp.host";
+	public static String SMTP_PORT = "entrystore.smtp.port";
+	public static String SMTP_SECURITY = "entrystore.smtp.security";
+	public static String SMTP_USERNAME = "entrystore.smtp.username";
+	public static String SMTP_PASSWORD = "entrystore.smtp.password";
+
+	public static String SIGNUP = "entrystore.signup";
+	public static String SIGNUP_FROM_EMAIL = "entrystore.signup.email.from";
+	public static String SIGNUP_SUBJECT = "entrystore.signup.email.subject";
+	public static String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.signup.email.template";
+	public static String SIGNUP_RECAPTCHA = "entrystore.signup.recaptcha";
+	public static String SIGNUP_RECAPTCHA_PRIVATE_KEY = "entrystore.signup.recaptcha.private-key";
+	public static String SIGNUP_RECAPTCHA_PUBLIC_KEY = "entrystore.signup.recaptcha.public-key";
 	
 	private Settings() {
 	}

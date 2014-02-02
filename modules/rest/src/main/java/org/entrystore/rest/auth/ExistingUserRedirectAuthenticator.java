@@ -77,7 +77,7 @@ public class ExistingUserRedirectAuthenticator extends RedirectAuthenticator {
 		String token = Password.getRandomBase64(128);
 		Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
 
-		TokenCache.addToken(token, new UserInfo(u.getName(), loginExpiration));
+		LoginTokenCache.getInstance().addToken(token, new UserInfo(u.getName(), loginExpiration));
 		CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 		tokenCookieSetting.setMaxAge(maxAge);
 		tokenCookieSetting.setPath(rm.getRepositoryURL().getPath());

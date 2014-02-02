@@ -105,7 +105,7 @@ public class EntryStoreApplication extends Application {
 	public EntryStoreApplication(Context parentContext) {
 		super(parentContext);
 		getContext().getAttributes().put(KEY, this);
-		
+
 		/*
 		 * should fix the hangs in Acrobat Reader that occur sometimes when
 		 * Acrobat tries to fetch parts of files
@@ -233,6 +233,12 @@ public class EntryStoreApplication extends Application {
 		router.attach("/auth/basic", UserResource.class);
 		router.attach("/auth/logout", LogoutResource.class);
 
+		// signup
+		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP, "off"))) {
+			router.attach("/auth/signup", SignupResource.class);
+		}
+
+		// OpenID
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"))) {
 			if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_MYOPENID, "off"))) {
 				router.attach("/auth/openid/myopenid", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_MYOPENID, false));

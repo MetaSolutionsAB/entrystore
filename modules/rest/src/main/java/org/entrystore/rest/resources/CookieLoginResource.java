@@ -20,6 +20,7 @@ import java.util.Date;
 
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.BasicVerifier;
+import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.TokenCache;
 import org.entrystore.rest.auth.UserInfo;
 import org.restlet.data.CookieSetting;
@@ -66,7 +67,7 @@ public class CookieLoginResource extends BaseResource {
 			
 			String token = Password.getRandomBase64(128);
 			Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
-			TokenCache.addToken(token, new UserInfo(userName, loginExpiration));
+			LoginTokenCache.getInstance().addToken(token, new UserInfo(userName, loginExpiration));
 			
 			CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 			tokenCookieSetting.setMaxAge(maxAge);
