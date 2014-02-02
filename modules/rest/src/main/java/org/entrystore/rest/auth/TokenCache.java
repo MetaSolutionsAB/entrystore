@@ -4,6 +4,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * @author Hannes Ebner
+ */
 public abstract class TokenCache<K, V> {
 
 	protected Map<K, V> tokenCache = Collections.synchronizedMap(new HashMap<K, V>());
