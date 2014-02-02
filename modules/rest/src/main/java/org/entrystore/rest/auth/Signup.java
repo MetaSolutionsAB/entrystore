@@ -94,7 +94,7 @@ public class Signup {
 		props.put("mail.smtp.timeout", "30000"); // default infinite
 		props.put("mail.smtp.writetimeout", "30000"); // default infinite
 
-		props.put("mail.debug", "true");
+		//props.put("mail.debug", "true");
 
 		// Authentication
 		if (username != null && password != null) {

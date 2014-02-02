@@ -17,6 +17,7 @@
 package org.entrystore.rest.resources;
 
 import org.apache.commons.lang.RandomStringUtils;
+import org.apache.commons.validator.routines.EmailValidator;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.ResourceType;
@@ -146,6 +147,11 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
+		if (!EmailValidator.getInstance().isValid(email)) {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Invalid e-mail address " + email);
+			return;
+		}
+
 		log.info("Received signup request for " + email);
 
 		if ("on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.SIGNUP_RECAPTCHA, "off"))) {
@@ -181,7 +187,7 @@ public class SignupResource extends BaseResource {
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);
-		getResponse().setEntity(new StringRepresentation("A confirmation message has been sent to the provided e-mail address."));
+		getResponse().setEntity(new StringRepresentation("A confirmation message has been sent"));
 	}
 
 }
