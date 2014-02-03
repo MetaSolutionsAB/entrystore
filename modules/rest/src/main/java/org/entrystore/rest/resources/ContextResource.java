@@ -24,12 +24,12 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Set;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.List;
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.impl.ContextImpl;
@@ -142,10 +142,10 @@ public class ContextResource extends BaseResource {
 	 * These URL:s can be requested from a Web browser etc. This method will 
 	 * execute these requests and deliver a response.
 	 * <ul>
-	 * <li>POST {base-uri}/{portfolio-id}?locationType=local&resourceType={resourceType}[&listURI={uri}]</li>
-	 * <li>POST {base-uri}/{portfolio-id}?locationType=link&resource={resource-uri}[&listURI={listURI}]</li>
-	 * <li>POST {base-uri}/{portfolio-id}?locationType=reference&resource={resource-uri}&metadata={metadata-uri}[&listURI={uri}]</li>
-	 * <li>POST {base-uri}/{portfolio-id}?locationType=linkreference&resource={resource-uri}&metadata={metadata-uri}[&listURI={uri}]</li>
+	 * <li>POST {base-uri}/{portfolio-id}?entryType=local&resourcetype={resourcetype}[&listURI={uri}]</li>
+	 * <li>POST {base-uri}/{portfolio-id}?entryType=link&resource={resource-uri}[&list={listURI}]</li>
+	 * <li>POST {base-uri}/{portfolio-id}?entryType=reference&resource={resource-uri}&metadata={metadata-uri}[&listURI={uri}]</li>
+	 * <li>POST {base-uri}/{portfolio-id}?entryType=linkreference&resource={resource-uri}&metadata={metadata-uri}[&listURI={uri}]</li>
 	 * </ul>
 	 * Explanation:
 	 * <ul>
@@ -198,8 +198,8 @@ public class ContextResource extends BaseResource {
 			}
 			
 			if (entry != null) {
-				RepresentationType rt = getRepresentationType(parameters.get("informationresource"));
-				entry.setRepresentationType(rt);
+				ResourceType rt = getResourceType(parameters.get("informationresource"));
+				entry.setResourceType(rt);
 
 				
 				String template = parameters.get("template");
@@ -299,9 +299,9 @@ public class ContextResource extends BaseResource {
 					setLocalMetadataGraph(entry);
 					setCachedMetadataGraph(entry);
 					setEntryGraph(entry);
-					if (parameters.containsKey("resourcetype")) {
-						ResourceType bt = getResourceType(parameters.get("resourcetype"));
-						entry.setResourceType(bt);
+					if (parameters.containsKey("graphtype")) {
+						GraphType gt = getGraphType(parameters.get("graphtype"));
+						entry.setGraphType(gt);
 					}
 					if (parameters.containsKey("list")) {
 						try {
@@ -347,15 +347,15 @@ public class ContextResource extends BaseResource {
 				} else {
 					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, null);
 				}
-				RepresentationType rt = getRepresentationType(parameters.get("informationresource"));
-				entry.setRepresentationType(rt);
+				ResourceType rt = getResourceType(parameters.get("informationresource"));
+				entry.setResourceType(rt);
 
 				if (entry != null) {
 					setCachedMetadataGraph(entry);
 					setEntryGraph(entry);
-					if (parameters.containsKey("resourcetype")) {
-						ResourceType bt = getResourceType(parameters.get("resourcetype"));
-						entry.setResourceType(bt);
+					if (parameters.containsKey("graphtype")) {
+						GraphType bt = getGraphType(parameters.get("graphtype"));
+						entry.setGraphType(bt);
 					}
 					if (parameters.containsKey("list")) {
 						try {
@@ -376,47 +376,47 @@ public class ContextResource extends BaseResource {
 		return null; 
 	}
 
-	private RepresentationType getRepresentationType(String rt) {
+	private ResourceType getResourceType(String rt) {
 		if (rt == null || !rt.equals("false")) {
-			return RepresentationType.InformationResource;
+			return ResourceType.InformationResource;
 		} else {
-			return RepresentationType.NamedResource;
+			return ResourceType.NamedResource;
 		}
 	}
 	
 	
-	private ResourceType getResourceType(String bt) {
-		if (bt == null || "".equals(bt)) {
-			return ResourceType.None;
+	private GraphType getGraphType(String gt) {
+		if (gt == null || "".equals(gt)) {
+			return GraphType.None;
 		}
-		if (bt.equalsIgnoreCase("list")) {
-			return ResourceType.List;
+		if (gt.equalsIgnoreCase("list")) {
+			return GraphType.List;
 		}
-		if (bt.equalsIgnoreCase("resultlist")) {
-			return ResourceType.ResultList;
+		if (gt.equalsIgnoreCase("resultlist")) {
+			return GraphType.ResultList;
 		}
-		if (bt.equalsIgnoreCase("context")) {
-			return ResourceType.Context;
+		if (gt.equalsIgnoreCase("context")) {
+			return GraphType.Context;
 		}		
-		if (bt.equalsIgnoreCase("user")) {
-			return ResourceType.User;
+		if (gt.equalsIgnoreCase("user")) {
+			return GraphType.User;
 		}
-		if (bt.equalsIgnoreCase("group")) {
-			return ResourceType.Group;
+		if (gt.equalsIgnoreCase("group")) {
+			return GraphType.Group;
 		}
-		if (bt.equalsIgnoreCase("systemcontext")) {
-			return ResourceType.SystemContext;
+		if (gt.equalsIgnoreCase("systemcontext")) {
+			return GraphType.SystemContext;
 		}
-		if (bt.equalsIgnoreCase("string")) {
-			return ResourceType.String;
+		if (gt.equalsIgnoreCase("string")) {
+			return GraphType.String;
 		}
-		if (bt.equalsIgnoreCase("graph")) {
-			return ResourceType.Graph;
+		if (gt.equalsIgnoreCase("graph")) {
+			return GraphType.Graph;
 		}
-		if (bt.equalsIgnoreCase("pipeline")) {
-			return ResourceType.Pipeline;
+		if (gt.equalsIgnoreCase("pipeline")) {
+			return GraphType.Pipeline;
 		}
-		return ResourceType.None;
+		return GraphType.None;
 	}
 
 	/**
@@ -434,7 +434,7 @@ public class ContextResource extends BaseResource {
 			}
 		}
 
-		ResourceType bt = getResourceType(parameters.get("resourcetype"));
+		GraphType bt = getGraphType(parameters.get("graphtype"));
 		entry = context.createResource(parameters.get("id"), bt, null, listURI);
 		try {
 			if (setResource(entry, bt)) {
@@ -459,7 +459,7 @@ public class ContextResource extends BaseResource {
 	 * @return the entry with the resource.
 	 * @throws JSONException 
 	 */
-	private boolean setResource(Entry entry, ResourceType bt) throws JSONException {
+	private boolean setResource(Entry entry, GraphType bt) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
 		if (requestText != null) {
 			jsonObj = new JSONObject(requestText);
@@ -585,9 +585,9 @@ public class ContextResource extends BaseResource {
 		if (entry != null) {
 			setLocalMetadataGraph(entry);
 			setEntryGraph(entry);
-			if (parameters.containsKey("resourcetype")) {
-				ResourceType bt = getResourceType(parameters.get("resourcetype"));
-				entry.setResourceType(bt);
+			if (parameters.containsKey("graphtype")) {
+				GraphType gt = getGraphType(parameters.get("graphtype"));
+				entry.setGraphType(gt);
 			}
 			if (parameters.containsKey("list")) {
 				try {

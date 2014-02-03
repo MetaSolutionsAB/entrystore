@@ -30,7 +30,7 @@ import java.util.Vector;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.List;
@@ -38,7 +38,7 @@ import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.QuotaException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.Resource;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.security.AuthorizationException;
@@ -170,7 +170,7 @@ public class ListImpl extends RDFResource implements List {
 		
 		EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(nEntry);
 		if (singleParentForListsRequirement 
-				&& childEntry.getResourceType() == ResourceType.List
+				&& childEntry.getGraphType() == GraphType.List
 				&& childEntry.getReferringListsInSameContext().size() > 0) {
 			throw new org.entrystore.repository.RepositoryException("The entry "+nEntry+" cannot be added since it is a list which already have another parent, try moving it instead");			
 		}
@@ -235,7 +235,7 @@ public class ListImpl extends RDFResource implements List {
 		}
 		if (fromListEntry != null) {
 			if (fromListEntry.getContext() != e.getContext() 
-					|| fromListEntry.getResourceType() != ResourceType.List
+					|| fromListEntry.getGraphType() != GraphType.List
 					|| !((List) fromListEntry.getResource()).getChildren().contains(entry)) {
 				throw new org.entrystore.repository.RepositoryException("Entry ("+entry+") is not a child of list ("+fromList+"), hence it cannot be moved from it.");
 			}
@@ -266,12 +266,12 @@ public class ListImpl extends RDFResource implements List {
 		} else {
 			//TODO change this.
 			int nrOfRefLists = e.getReferringListsInSameContext().size();
-			ResourceType bt = e.getResourceType();
-			if (bt == ResourceType.SystemContext || bt == ResourceType.Context || bt == ResourceType.User || bt == ResourceType.Group) {
+			GraphType bt = e.getGraphType();
+			if (bt == GraphType.SystemContext || bt == GraphType.Context || bt == GraphType.User || bt == GraphType.Group) {
 				throw new org.entrystore.repository.RepositoryException("Cannot move SystemContexts, Contexts, Users or Groups.");
 			}
 			EntryImpl newEntry = null;
-			if (bt == ResourceType.List) {
+			if (bt == GraphType.List) {
 				try {
 					newEntry = this.copyEntryHere(e);
 					((List) e.getResource()).removeTree();
@@ -287,8 +287,8 @@ public class ListImpl extends RDFResource implements List {
 			Context c = this.entry.getContext();
 			switch(e.getEntryType()) {
 			case Local:
-				newEntry = (EntryImpl) c.createResource(null, e.getResourceType(), e.getRepresentationType(), getURI());
-				if (e.getResourceType() == ResourceType.None && e.getRepresentationType() == RepresentationType.InformationResource) {
+				newEntry = (EntryImpl) c.createResource(null, e.getGraphType(), e.getResourceType(), getURI());
+				if (e.getGraphType() == GraphType.None && e.getResourceType() == ResourceType.InformationResource) {
 					// FIXME if a QuotaException is thrown here we have already lost the original entry, this should be fixed 				
 					((DataImpl) newEntry.getResource()).useData(((DataImpl) e.getResource()).getDataFile());
 				}
@@ -320,16 +320,16 @@ public class ListImpl extends RDFResource implements List {
 	private EntryImpl _copyEntryHere(EntryImpl entryToCopy, boolean first) throws QuotaException, IOException {
 		EntryImpl newEntry = null;
 		try {
-		ResourceType bt = entryToCopy.getResourceType();
-		if (bt == ResourceType.User || bt == ResourceType.Context || bt == ResourceType.Group || bt == ResourceType.SystemContext) {
+		GraphType bt = entryToCopy.getGraphType();
+		if (bt == GraphType.User || bt == GraphType.Context || bt == GraphType.Group || bt == GraphType.SystemContext) {
 			return null;
 		}
 		
 		Context c = this.entry.getContext();
 		switch(entryToCopy.getEntryType()) {
 		case Local:
-			newEntry = (EntryImpl) c.createResource(null, entryToCopy.getResourceType(), entryToCopy.getRepresentationType(), getURI());
-			if (entryToCopy.getResourceType() == ResourceType.None && entryToCopy.getRepresentationType() == RepresentationType.InformationResource) {
+			newEntry = (EntryImpl) c.createResource(null, entryToCopy.getGraphType(), entryToCopy.getResourceType(), getURI());
+			if (entryToCopy.getGraphType() == GraphType.None && entryToCopy.getResourceType() == ResourceType.InformationResource) {
 				// FIXME if a QuotaException is thrown here we have already lost the original entry, this should be fixed 				
 				((DataImpl) newEntry.getResource()).useData(((DataImpl) entryToCopy.getResource()).getDataFile());
 			}
@@ -345,7 +345,7 @@ public class ListImpl extends RDFResource implements List {
 			break;
 		}
 		copyGraphs(entryToCopy, newEntry);
-		if (bt == ResourceType.List) {
+		if (bt == GraphType.List) {
 			ListImpl newList = (ListImpl) newEntry.getResource();
 			List oldList = (List) entryToCopy.getResource();
 			java.util.List<URI> children = oldList.getChildren();
@@ -356,7 +356,7 @@ public class ListImpl extends RDFResource implements List {
 			}
 		}
 		} catch (Exception e) {
-			if (first && newEntry != null && newEntry.getResourceType() == ResourceType.List) {
+			if (first && newEntry != null && newEntry.getGraphType() == GraphType.List) {
 				((List) newEntry.getResource()).removeTree();
 			}
 			throw new org.entrystore.repository.RepositoryException("Failed to copy entry ("+entryToCopy.getEntryURI()+"):"+e.getMessage());
@@ -456,7 +456,7 @@ public class ListImpl extends RDFResource implements List {
 		for (URI uri : toAdd) {
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
 			if (singleParentForListsRequirement 
-					&& childEntry.getResourceType() == ResourceType.List
+					&& childEntry.getGraphType() == GraphType.List
 					&& !childEntry.getReferringListsInSameContext().isEmpty()) {
 				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child "+uri+" is a list which already have a parent.");
 			}
@@ -674,7 +674,7 @@ public class ListImpl extends RDFResource implements List {
 		for (URI uri : tchildren) {
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
 			if (childEntry != null) {
-				if (ResourceType.List.equals(childEntry.getResourceType()) && EntryType.Local.equals(childEntry.getEntryType())) {
+				if (GraphType.List.equals(childEntry.getGraphType()) && EntryType.Local.equals(childEntry.getEntryType())) {
 					((List) childEntry.getResource()).removeTree();
 				} else if (childEntry.getReferringListsInSameContext().size() == 0) {
 					c.remove(uri);
@@ -700,7 +700,7 @@ public class ListImpl extends RDFResource implements List {
 				for (AccessProperty ap : AccessProperty.values()) {
 					childEntry.setAllowedPrincipalsFor(ap, entry.getAllowedPrincipalsFor(ap));
 				}
-				if (ResourceType.List.equals(childEntry.getResourceType()) && EntryType.Local.equals(childEntry.getEntryType())) {
+				if (GraphType.List.equals(childEntry.getGraphType()) && EntryType.Local.equals(childEntry.getEntryType())) {
 					Resource childResource = childEntry.getResource();
 					if (childResource instanceof List) {
 						((List) childEntry.getResource()).applyACLtoChildren(recursive);

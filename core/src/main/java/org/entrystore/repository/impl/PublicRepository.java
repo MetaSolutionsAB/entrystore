@@ -4,7 +4,7 @@ import java.io.File;
 import java.util.Set;
 
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -131,7 +131,7 @@ public class PublicRepository {
 			// resource
 			Graph resGraph = null;
 			URI resNG = null;
-			if (ResourceType.Graph.equals(e.getResourceType()) && EntryType.Local.equals(e.getEntryType())) {
+			if (GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
 				resGraph = (Graph) e.getResource();
 				resNG = vf.createURI(e.getResourceURI().toString());
 			}
@@ -181,7 +181,7 @@ public class PublicRepository {
 		
 		// If entry is ResourceType.Context we update all its
 		// entries, just in case the ACL has changed
-		if (ResourceType.Context.equals(e.getResourceType()) && EntryType.Local.equals(e.getEntryType())) {
+		if (GraphType.Context.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
 			
 			// TODO needs to be tested
 			

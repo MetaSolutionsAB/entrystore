@@ -20,7 +20,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.PrincipalManager;
@@ -122,7 +122,7 @@ public class GroupImpl extends ListImpl implements Group {
 			java.net.URI entryURI = memberUriIterator.next();
 			try {
 				Entry userEntry = entry.getContext().getByEntryURI(entryURI);
-				if(userEntry.getResourceType() == ResourceType.User) {
+				if(userEntry.getGraphType() == GraphType.User) {
 					userList.add((User) userEntry.getResource());
 				}
 				else {

@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
@@ -180,7 +180,7 @@ public class StatisticsResource extends BaseResource {
 			
 			for (URI uri : entries) {
 				Entry entry = context.getByEntryURI(uri);
-				if (entry == null || !ResourceType.None.equals(entry.getResourceType()) || EntryUtil.isDeleted(entry)) {
+				if (entry == null || !GraphType.None.equals(entry.getGraphType()) || EntryUtil.isDeleted(entry)) {
 					continue;
 				}
 				
@@ -284,7 +284,7 @@ public class StatisticsResource extends BaseResource {
 			
 			for (URI uri : entries) {
 				Entry entry = context.getByEntryURI(uri);
-				if (entry == null || !ResourceType.None.equals(entry.getResourceType()) || EntryUtil.isDeleted(entry)) {
+				if (entry == null || !GraphType.None.equals(entry.getGraphType()) || EntryUtil.isDeleted(entry)) {
 					continue;
 				}
 				
@@ -423,7 +423,7 @@ public class StatisticsResource extends BaseResource {
 			
 			for (URI uri : entries) {
 				Entry entry = context.getByEntryURI(uri);
-				if (entry == null || !ResourceType.None.equals(entry.getResourceType()) || EntryUtil.isDeleted(entry)) {
+				if (entry == null || !GraphType.None.equals(entry.getGraphType()) || EntryUtil.isDeleted(entry)) {
 					continue;
 				}
 				

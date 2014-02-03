@@ -24,7 +24,7 @@ import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactory;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.security.AuthorizationException;
 import org.json.JSONException;
@@ -130,7 +130,7 @@ public class HarvesterResource extends BaseResource {
 					Entry entry = null; 
 					while (iter.hasNext()) {
 						entry = iter.next();
-						if (entry.getResourceType() == ResourceType.Context) {
+						if (entry.getGraphType() == GraphType.Context) {
 							break; 
 						} else {
 							entry = null; 

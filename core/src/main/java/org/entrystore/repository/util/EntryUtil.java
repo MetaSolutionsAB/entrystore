@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.Resource;
@@ -62,7 +62,7 @@ public class EntryUtil {
 	 *            Determines which ResourceType should always have higher priority
 	 *            than entries with a different one.
 	 */
-	public static void sortAfterModificationDate(List<Entry> entries, final boolean ascending, final ResourceType prioritizedResourceType) {
+	public static void sortAfterModificationDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
 		Collections.sort(entries, new Comparator<Entry>() {
 
 			public int compare(Entry e1, Entry e2) {
@@ -92,7 +92,7 @@ public class EntryUtil {
 	 *            Determines which ResourceType should always have higher priority
 	 *            than entries with a different one.
 	 */
-	public static void sortAfterCreationDate(List<Entry> entries, final boolean ascending, final ResourceType prioritizedResourceType) {
+	public static void sortAfterCreationDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
 		Collections.sort(entries, new Comparator<Entry>() {
 
 			public int compare(Entry e1, Entry e2) {
@@ -124,15 +124,15 @@ public class EntryUtil {
 	 *            Determines which ResourceType should always have higher priority
 	 *            than entries with a different one.
 	 */
-	public static void sortAfterFileSize(List<Entry> entries, final boolean ascending, final ResourceType prioritizedResourceType) {
+	public static void sortAfterFileSize(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
 		Collections.sort(entries, new Comparator<Entry>() {
 
 			public int compare(Entry e1, Entry e2) {
 				int result = 0;
 				if (e1 != null && e2 != null) {
-					ResourceType e1BT = e1.getResourceType();
-					ResourceType e2BT = e2.getResourceType();
-					if (ResourceType.None.equals(e1BT) && ResourceType.None.equals(e2BT)) {
+					GraphType e1BT = e1.getGraphType();
+					GraphType e2BT = e2.getGraphType();
+					if (GraphType.None.equals(e1BT) && GraphType.None.equals(e2BT)) {
 						long size1 = e1.getFileSize();
 						long size2 = e2.getFileSize();
 						if (size1 < size2) {
@@ -142,7 +142,7 @@ public class EntryUtil {
 						} else if (size1 > size2) {
 							result = 1;
 						}
-					} else if (ResourceType.List.equals(e1BT) && ResourceType.List.equals(e2BT)) {
+					} else if (GraphType.List.equals(e1BT) && GraphType.List.equals(e2BT)) {
 						Resource e1Res = e1.getResource();
 						Resource e2Res = e2.getResource();
 						if (e1Res == null) {
@@ -195,7 +195,7 @@ public class EntryUtil {
 	 *            Determines which ResourceType should always have higher priority
 	 *            than entries with a different one.
 	 */
-	public static void sortAfterTitle(List<Entry> entries, final String language, final boolean ascending, final ResourceType prioritizedResourceType) {
+	public static void sortAfterTitle(List<Entry> entries, final String language, final boolean ascending, final GraphType prioritizedResourceType) {
 		Collections.sort(entries, new Comparator<Entry>() {
 
 			public int compare(Entry e1, Entry e2) {
@@ -234,7 +234,7 @@ public class EntryUtil {
 	 *            Determines whether the entries with the prioritized
 	 *            ResourceType should come first or last in the list.
 	 */
-	public static void prioritizeBuiltinType(List<Entry> entries, final ResourceType resourceType, final boolean top) {
+	public static void prioritizeBuiltinType(List<Entry> entries, final GraphType resourceType, final boolean top) {
 		if (entries == null || resourceType == null) {
 			return;
 		}
@@ -244,8 +244,8 @@ public class EntryUtil {
 			public int compare(Entry e1, Entry e2) {
 				int result = 0;
 				if (e1 != null && e2 != null) {
-					ResourceType e1BT = e1.getResourceType();
-					ResourceType e2BT = e2.getResourceType();
+					GraphType e1BT = e1.getGraphType();
+					GraphType e2BT = e2.getGraphType();
 					if (resourceType.equals(e1BT) && !resourceType.equals(e2BT)) {
 						result = -1;
 					} else if (!resourceType.equals(e1BT) && resourceType.equals(e2BT)) {

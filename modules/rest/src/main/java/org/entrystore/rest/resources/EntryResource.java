@@ -28,7 +28,7 @@ import java.util.Set;
 
 import com.github.jsonldjava.impl.SesameJSONLDParser;
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.Metadata;
@@ -183,7 +183,7 @@ public class EntryResource extends BaseResource {
 	public void removeRepresentations() {
 		try {
 			if (entry != null && context != null) {
-				if (ResourceType.List.equals(entry.getResourceType()) && parameters.containsKey("recursive")) {
+				if (GraphType.List.equals(entry.getGraphType()) && parameters.containsKey("recursive")) {
 					org.entrystore.repository.List l = (org.entrystore.repository.List) entry.getResource();
 					if (l != null) {
 						l.removeTree();
@@ -291,8 +291,8 @@ public class EntryResource extends BaseResource {
 			 * Entry id
 			 */
 			jdilObj.put("entryId", entry.getId());
-			ResourceType bt = entry.getResourceType();
-			if ((bt == ResourceType.Context || bt == ResourceType.SystemContext) && EntryType.Local.equals(entry.getEntryType())) {
+			GraphType bt = entry.getGraphType();
+			if ((bt == GraphType.Context || bt == GraphType.SystemContext) && EntryType.Local.equals(entry.getEntryType())) {
 				jdilObj.put("alias", getCM().getContextAlias(entry.getResourceURI()));
 				if (entry.getRepositoryManager().hasQuotas()) {
 					JSONObject quotaObj = new JSONObject();
@@ -387,7 +387,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 *  String
 				 */
-				if(entry.getResourceType() == ResourceType.String) {
+				if(entry.getGraphType() == GraphType.String) {
 					StringResource stringResource = (StringResource)entry.getResource(); 
 					Graph graph = stringResource.getGraph(); 
 					Iterator<Statement> iter = graph.iterator(); 
@@ -410,7 +410,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 * List
 				 */
-				if (entry.getResourceType() == ResourceType.List) {
+				if (entry.getGraphType() == GraphType.List) {
 
 					int limit = 0;
 					int offset = 0;
@@ -469,9 +469,9 @@ public class EntryResource extends BaseResource {
 							if ("desc".equalsIgnoreCase(parameters.get("order"))) {
 								asc = false;
 							}
-							ResourceType prioritizedResourceType = null;
+							GraphType prioritizedResourceType = null;
 							if (parameters.containsKey("prio")) {
-								prioritizedResourceType = ResourceType.valueOf(parameters.get("prio"));
+								prioritizedResourceType = GraphType.valueOf(parameters.get("prio"));
 							}
 							String sortType = parameters.get("sort");
 							if ("title".equalsIgnoreCase(sortType)) {
@@ -503,11 +503,11 @@ public class EntryResource extends BaseResource {
 							String uri = childEntry.getEntryURI().toString();
 							String entryId = uri.substring(uri.lastIndexOf('/') + 1);
 							childJSON.put("entryId", entryId);
-							ResourceType btChild = childEntry.getResourceType();
+							GraphType btChild = childEntry.getGraphType();
 							EntryType locChild = childEntry.getEntryType();
-							if ((btChild == ResourceType.Context || btChild == ResourceType.SystemContext) && EntryType.Local.equals(locChild)) {
+							if ((btChild == GraphType.Context || btChild == GraphType.SystemContext) && EntryType.Local.equals(locChild)) {
 								childJSON.put("alias", getCM().getContextAlias(childEntry.getResourceURI()));
-							} else if (btChild == ResourceType.List) {
+							} else if (btChild == GraphType.List) {
 								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
 									org.entrystore.repository.Resource childRes = childEntry.getResource();
 									if (childRes != null && childRes instanceof org.entrystore.repository.List) {
@@ -521,9 +521,9 @@ public class EntryResource extends BaseResource {
 								} else {
 									log.warn("Not calculating list size of " + entryId + " because of potential performance problems");
 								}
-							} else if (btChild == ResourceType.User && locChild == EntryType.Local) {
+							} else if (btChild == GraphType.User && locChild == EntryType.Local) {
 								childJSON.put("name", ((User) childEntry.getResource()).getName());
-							} else if (btChild == ResourceType.Group && locChild == EntryType.Local) {
+							} else if (btChild == GraphType.Group && locChild == EntryType.Local) {
 								childJSON.put("name", ((Group) childEntry.getResource()).getName());								
 							}
 							
@@ -597,7 +597,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 * User
 				 */
-				if (entry.getResourceType() == ResourceType.User) {
+				if (entry.getGraphType() == GraphType.User) {
 					try {
 						User user = (User) entry.getResource();
 						resourceObj.put("name", user.getName());
@@ -622,7 +622,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 * Group
 				 */
-				if (entry.getResourceType() == ResourceType.Group) {
+				if (entry.getGraphType() == GraphType.Group) {
 					try {
 						Group group = (Group) entry.getResource();
 						resourceObj.put("name", group.getName());
@@ -737,7 +737,7 @@ public class EntryResource extends BaseResource {
 		if (deserializedGraph != null) {
 			entry.setGraph(deserializedGraph);
 			if (parameters.containsKey("applyACLtoChildren") &&
-					ResourceType.List.equals(entry.getResourceType()) &&
+					GraphType.List.equals(entry.getGraphType()) &&
 					EntryType.Local.equals(entry.getEntryType())) {
 				((org.entrystore.repository.List) entry.getResource()).applyACLtoChildren(true);
 			}

@@ -57,10 +57,10 @@ public interface Context extends Resource{
 	 * should be created freely in the context.
 	 * @return a {@link Entry} containing the resource, it's metadata, 
 	 * and it's metametadata. Which exact subclass of resource used depends on the 
-	 * {@link ResourceType}.
-	 * @see {@link ResourceType}.
+	 * {@link GraphType}.
+	 * @see {@link GraphType}.
 	 */
-	Entry createResource(String entryId, ResourceType buiType, RepresentationType repType, URI listURI); // files, folders, persons
+	Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI); // files, folders, persons
 	
 	/**
 	 * 
@@ -73,7 +73,7 @@ public interface Context extends Resource{
 	 * @return A new comment entry
 	 * @throws Exception 
 	 */
-	Entry createComment(String entryId, ResourceType resType, URI resourceURI,
+	Entry createComment(String entryId, GraphType resType, URI resourceURI,
 			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception; 
 	
 	/**

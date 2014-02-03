@@ -17,13 +17,13 @@
 package org.entrystore.repository;
 
 /**
- * Entries with a set ResourceType get special treatment in EntryStore.
+ * Entries with a set GraphType get special treatment in EntryStore.
  * 
  * @author Matthias Palmér
  * @author Hannes Ebner
  * @author Eric Johansson
  */
-public enum ResourceType {
+public enum GraphType {
 
 	/**
 	 * Special container resource which keeps track of a set of entries 

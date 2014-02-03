@@ -23,7 +23,7 @@ import java.util.ArrayList;
 
 import java.util.HashSet;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -31,7 +31,7 @@ import org.entrystore.repository.Group;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
@@ -70,14 +70,14 @@ public class TestSuite {
 
 	private static void createTeacher(PrincipalManager pm, ContextManager cm, Group group, String name, String password, String email,
 			ArrayList<Group> studentGroups) {
-		Entry entry = pm.createResource(null, ResourceType.User, null, null);
+		Entry entry = pm.createResource(null, GraphType.User, null, null);
 		pm.setPrincipalName(entry.getResourceURI(), name);
 		setMetadata(entry, name, "teacher", null, null, "teacher");
 		User u = (User) entry.getResource();
 		u.setSecret(password);
 		u.setName(email); 
 		group.addMember(u); 
-		Entry userHomeContextE = cm.createResource(null, ResourceType.Context, null, null);
+		Entry userHomeContextE = cm.createResource(null, GraphType.Context, null, null);
 		userHomeContextE.addAllowedPrincipalsFor(AccessProperty.Administer, u.getURI()); 
 		
 		userHomeContextE.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getGuestUser().getEntry().getEntryURI());
@@ -90,7 +90,7 @@ public class TestSuite {
 		for(Group g : studentGroups) {
 			
 			Entry linkRefEntry = c.createLinkReference(null, g.getURI(), g.getEntry().getLocalMetadata().getURI(), c.get("_top").getResourceURI());
-			linkRefEntry.setResourceType(ResourceType.List);
+			linkRefEntry.setGraphType(GraphType.List);
 			setMetadata(linkRefEntry, g.getName(), null, null, "text/html", null);
 		}
 
@@ -144,7 +144,7 @@ public class TestSuite {
 		URI currentUserURI = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		
-		Entry teacherGroupE = pm.createResource(null, ResourceType.Group, null, null);
+		Entry teacherGroupE = pm.createResource(null, GraphType.Group, null, null);
 		pm.setPrincipalName(teacherGroupE.getResourceURI(), "Teacher Group");
 		setMetadata(teacherGroupE, "Teacher Group", "Teachers of the course", null, null, null);
 		Group teacherGroup = (Group) teacherGroupE.getResource();
@@ -200,7 +200,7 @@ public class TestSuite {
 	}
 
 	private static Group createStudentGroup(PrincipalManager pm, String groupName, Group teacherGroup) {
-		Entry groupE = pm.createResource(null, ResourceType.Group, null, null);
+		Entry groupE = pm.createResource(null, GraphType.Group, null, null);
 		pm.setPrincipalName(groupE.getResourceURI(), groupName);
 		setMetadata(groupE, groupName, groupName, null, null, null);
 		groupE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, teacherGroup.getURI());
@@ -210,7 +210,7 @@ public class TestSuite {
 
 	private static void createStudent(PrincipalManager pm, ContextManager cm, String name, String email, Group group, String password, Group teacherGroup) {
 
-		Entry userEntry = pm.createResource(null, ResourceType.User, null, null);
+		Entry userEntry = pm.createResource(null, GraphType.User, null, null);
 		setStudentMetadata(userEntry, "Student "+ name, "student", name, email); 
 		pm.setPrincipalName(userEntry.getResourceURI(), name);
 	
@@ -224,7 +224,7 @@ public class TestSuite {
 		group.addMember(u); 
 		
 
-		Entry contextEntry = cm.createResource(null, ResourceType.Context, null, null);
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
 		contextEntry.addAllowedPrincipalsFor(AccessProperty.Administer, u.getURI());
 		contextEntry.addAllowedPrincipalsFor(AccessProperty.Administer, teacherGroup.getURI());
 		
@@ -233,13 +233,13 @@ public class TestSuite {
 		org.entrystore.repository.Context contextResource = (org.entrystore.repository.Context) contextEntry.getResource();
 
 		Entry top = contextResource.get("_top"); 
-		Entry folderEntry1 = contextResource.createResource(null, ResourceType.List, null, top.getResourceURI());
+		Entry folderEntry1 = contextResource.createResource(null, GraphType.List, null, top.getResourceURI());
 		setStudentMetadata(folderEntry1, "Arbetsportfolio", null, null, null); 
 
-		Entry folderEntry2 = contextResource.createResource(null, ResourceType.List, null, top.getResourceURI());
+		Entry folderEntry2 = contextResource.createResource(null, GraphType.List, null, top.getResourceURI());
 		setStudentMetadata(folderEntry2, "Redovisningsportfolio", null, null, null); 
 
-		Entry folderEntry3 = contextResource.createResource(null, ResourceType.List, null, top.getResourceURI());
+		Entry folderEntry3 = contextResource.createResource(null, GraphType.List, null, top.getResourceURI());
 		setStudentMetadata(folderEntry3, "Utv\u00e4rderingsportfolio", null, null, null); 
 
 		cm.setContextAlias(contextEntry.getEntryURI(), name);
@@ -353,7 +353,7 @@ public class TestSuite {
 
 		try {
 			//Donald Duck user
-			Entry donaldE = pm.createResource(null, ResourceType.User, null, null);
+			Entry donaldE = pm.createResource(null, GraphType.User, null, null);
 			pm.setPrincipalName(donaldE.getResourceURI(), "Donald");
 			//donaldE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			setMetadata(donaldE, "Donald Duck", "I am easily provoked and have an occasionally explosive temper, so thread carefully around me.", null, null, null);
@@ -361,7 +361,7 @@ public class TestSuite {
 			donald.setSecret("donalddonald");
 
 			//Daisy Duck user
-			Entry daisyE = pm.createResource(null, ResourceType.User, null, null);
+			Entry daisyE = pm.createResource(null, GraphType.User, null, null);
 			pm.setPrincipalName(daisyE.getResourceURI(), "Daisy");
 			setMetadata(daisyE, "Daisy Duck", "I am Donald's girlfriend, but I am far more sophisticated!", null, null, null);
 			//daisyE.addAllowedPrinccontextipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
@@ -369,7 +369,7 @@ public class TestSuite {
 			daisy.setSecret("daisydaisy");
 
 			//Mickey Mouse user
-			Entry mickeyE = pm.createResource(null, ResourceType.User, null, null);
+			Entry mickeyE = pm.createResource(null, GraphType.User, null, null);
 			pm.setPrincipalName(mickeyE.getResourceURI(), "Mickey");
 			setMetadata(mickeyE, "Mickey Mouse", "I am older than I look although I still speek in a famously shy, falsetto voice.", null, null, null);		
 			//mickeyE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
@@ -377,7 +377,7 @@ public class TestSuite {
 			mickey.setSecret("mickeymickey");
 
 			//Friends of Mickey group
-			Entry friendsOfMickeyE = pm.createResource(null, ResourceType.Group, null, null);
+			Entry friendsOfMickeyE = pm.createResource(null, GraphType.Group, null, null);
 			pm.setPrincipalName(friendsOfMickeyE.getResourceURI(), "friendsOfMickey");
 			setMetadata(friendsOfMickeyE, "Old friends of Mickey", null, null, null, null);
 			friendsOfMickeyE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
@@ -386,7 +386,7 @@ public class TestSuite {
 			friendsOfMickey.addMember(mickey);
 
 			//The duck context.
-			Entry duckE = cm.createResource(null, ResourceType.Context, null, null);
+			Entry duckE = cm.createResource(null, GraphType.Context, null, null);
 			setMetadata(duckE, "Donald and Daisy Duck's place", "Scrooge has a vault, we have this.", null, null, null);
 			duckE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			Context duck = (Context) duckE.getResource();
@@ -398,7 +398,7 @@ public class TestSuite {
 			donald.setHomeContext(duck);
 
 			//The mouse context.
-			Entry mouseE = cm.createResource(null, ResourceType.Context, null, null);
+			Entry mouseE = cm.createResource(null, GraphType.Context, null, null);
 			setMetadata(mouseE, "Mickey Mouse's place", "Mickey's creephole with old cheese and other goodies.", null, null, null);
 			mouseE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			Context mouse = (Context) mouseE.getResource();
@@ -411,10 +411,10 @@ public class TestSuite {
 			//Add mickey and originals group as contacts in duck context (as references).
 			Entry contactsEntry = duck.get("_contacts");
 			Entry mickeyRefE = duck.createReference(null, mickey.getURI(), mickeyE.getLocalMetadataURI(), contactsEntry.getResourceURI());
-			mickeyRefE.setResourceType(ResourceType.User);
+			mickeyRefE.setGraphType(GraphType.User);
 			//			mickeyRefE.getCachedExternalMetadata().setGraph(mickeyE.getLocalMetadata().getGraph());
 			Entry friendsRefE = duck.createReference(null, friendsOfMickey.getURI(), friendsOfMickeyE.getLocalMetadataURI(), contactsEntry.getResourceURI());
-			friendsRefE.setResourceType(ResourceType.Group);
+			friendsRefE.setGraphType(GraphType.Group);
 			//			friendsRefE.getCachedExternalMetadata().setGraph(friendsOfMickeyE.getLocalMetadata().getGraph());
 
 
@@ -438,8 +438,8 @@ public class TestSuite {
 			Context mouse = cm.getContext("mouse");
 
 			//Test resources, using lists.
-			duck.createResource(null, ResourceType.List, null, null);
-			mouse.createResource(null, ResourceType.List, null, null);
+			duck.createResource(null, GraphType.List, null, null);
+			mouse.createResource(null, GraphType.List, null, null);
 		} finally {
 			pm.setAuthenticatedUserURI(currentUserURI);
 		}
@@ -486,17 +486,17 @@ public class TestSuite {
 			//A LinkReference to the mickeys context ("mouse"). 
 			//The referenced metadata is explicitly cached and additional local metadata is provided.
 			Entry linkRefEntry = duck.createLinkReference(null, topMouseEntry.getResourceURI(), topMouseEntry.getLocalMetadataURI(), topEntry.getResourceURI());
-			linkRefEntry.setResourceType(ResourceType.List);
+			linkRefEntry.setGraphType(GraphType.List);
 			//			linkRefEntry.getCachedExternalMetadata().setGraph(topMouseEntry.getLocalMetadata().getGraph());
 			setMetadata(linkRefEntry, "Our old friend Mickeys place", "Useful shortcut, sorry Daisy, you are not allowed in here.", null, "text/html", null);
 
 			//A plain reference to mickeys user (no local metadata).
 			//TODO move this to the special system entry friends list when it is introduced.
 			Entry linkEntry = duck.createReference(null, Mickey.getURI(), Mickey.getEntry().getLocalMetadataURI(), topEntry.getResourceURI());
-			linkEntry.setResourceType(ResourceType.User);
+			linkEntry.setGraphType(GraphType.User);
 			//			linkEntry.getCachedExternalMetadata().setGraph(Mickey.getEntry().getLocalMetadata().getGraph());
 
-			Entry subListEntry = duck.createResource(null, ResourceType.List, null, topEntry.getResourceURI()); // list (folder) 1.
+			Entry subListEntry = duck.createResource(null, GraphType.List, null, topEntry.getResourceURI()); // list (folder) 1.
 			setMetadata(subListEntry, "Material", "Mixed material.", null, null, null);
 
 			//A link to the wikipedia page on the nephews.
@@ -508,12 +508,12 @@ public class TestSuite {
 			setMetadata(familyTree, "Family tree", "The duck family from Dingus to Donald, Daisy is not in there yet...", null, null, null);
 
 			//A picture of the fourth nephew that sometimes appears.
-			Entry phooey = duck.createResource(null, ResourceType.None, RepresentationType.NamedResource, topEntry.getResourceURI());
+			Entry phooey = duck.createResource(null, GraphType.None, ResourceType.NamedResource, topEntry.getResourceURI());
 			setMetadata(phooey, "Phooey Duck", "A mysterius fourth nephew, a freak of nature. Drawn by accident?", null, null, null);
 
 			//A picture of the fourth nephew that sometimes appears.
 			//TODO upload jpeg as well.
-			Entry image = duck.createResource(null, ResourceType.None, RepresentationType.InformationResource, topEntry.getResourceURI());
+			Entry image = duck.createResource(null, GraphType.None, ResourceType.InformationResource, topEntry.getResourceURI());
 			setMetadata(image, "An image", "A image, remains to be uploaded.", null, "image/jpeg", null);
 
 

@@ -21,12 +21,12 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
@@ -67,44 +67,44 @@ public class RDFLoadTest {
 
 		//ContextManager correct types.
 		assertTrue(cm.getEntry().getEntryType() == EntryType.Local);
-		assertTrue(cm.getEntry().getResourceType() == ResourceType.SystemContext);
-		assertTrue(cm.getEntry().getRepresentationType() == RepresentationType.InformationResource);
+		assertTrue(cm.getEntry().getGraphType() == GraphType.SystemContext);
+		assertTrue(cm.getEntry().getResourceType() == ResourceType.InformationResource);
 
 		//Duck context
 		assertTrue(duck.getEntry().getEntryType() == EntryType.Local);
-		assertTrue(duck.getEntry().getResourceType() == ResourceType.Context);
-		assertTrue(duck.getEntry().getRepresentationType() == RepresentationType.InformationResource);
+		assertTrue(duck.getEntry().getGraphType() == GraphType.Context);
+		assertTrue(duck.getEntry().getResourceType() == ResourceType.InformationResource);
 
 		//Top list
 		Entry entry = duck.get("_top");
 		assertTrue(entry.getEntryType() == EntryType.Local);
-		assertTrue(entry.getResourceType() == ResourceType.List);
-		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
+		assertTrue(entry.getGraphType() == GraphType.List);
+		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
 		
 		//LinkReference to Mickeys top list.
 		entry = duck.get("3");
 		assertTrue("Locationtype should be LinkReference, it is now: "+entry.getEntryType(),
 				entry.getEntryType() == EntryType.LinkReference);
-		assertTrue(entry.getResourceType() == ResourceType.List);
-		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
+		assertTrue(entry.getGraphType() == GraphType.List);
+		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
 
 		//Reference to the principal Mickey
 		entry = duck.get("4");
 		assertTrue(entry.getEntryType() == EntryType.Reference);
-		assertTrue(entry.getResourceType() == ResourceType.User);
-		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
+		assertTrue(entry.getGraphType() == GraphType.User);
+		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
 
 		//Link to wikipedia
 		entry = duck.get("6");
 		assertTrue(entry.getEntryType() == EntryType.Link);
-		assertTrue(entry.getResourceType() == ResourceType.None);
-		assertTrue(entry.getRepresentationType() == RepresentationType.InformationResource);
+		assertTrue(entry.getGraphType() == GraphType.None);
+		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
 
 		//Phooey, a abstract resource
 		entry = duck.get("8");
 		assertTrue(entry.getEntryType() == EntryType.Local);
-		assertTrue(entry.getResourceType() == ResourceType.None);
-		assertTrue(entry.getRepresentationType() == RepresentationType.NamedResource);
+		assertTrue(entry.getGraphType() == GraphType.None);
+		assertTrue(entry.getResourceType() == ResourceType.NamedResource);
 	}
 	
 	@Test

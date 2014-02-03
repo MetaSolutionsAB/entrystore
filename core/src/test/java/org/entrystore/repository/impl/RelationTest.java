@@ -21,7 +21,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.net.URI;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -67,8 +67,8 @@ public class RelationTest {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
-		Entry parentList1 = duck.createResource(null, ResourceType.List, null, null);
-		Entry parentList2 = duck.createResource(null, ResourceType.List, null, null);
+		Entry parentList1 = duck.createResource(null, GraphType.List, null, null);
+		Entry parentList2 = duck.createResource(null, GraphType.List, null, null);
 		Entry childLink = duck.createLink(null, URI.create("http://slashdot.org"), null);
 		assertTrue(childLink.getRelations().size() == 0);
 		((List) parentList1.getResource()).addChild(childLink.getEntryURI());
@@ -92,8 +92,8 @@ public class RelationTest {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
-		EntryImpl list1 = (EntryImpl) duck.createResource(null, ResourceType.List, null, null);
-		EntryImpl list2 = (EntryImpl) duck.createResource(null, ResourceType.List, null, null);
+		EntryImpl list1 = (EntryImpl) duck.createResource(null, GraphType.List, null, null);
+		EntryImpl list2 = (EntryImpl) duck.createResource(null, GraphType.List, null, null);
 		EntryImpl link = (EntryImpl) duck.createLink(null, URI.create("http://slashdot.org"), null);
 		Metadata md = list1.getLocalMetadata();
 		Graph g = md.getGraph();
