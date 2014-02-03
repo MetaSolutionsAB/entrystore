@@ -57,6 +57,7 @@ public class Signup {
 		final String username = config.getString(Settings.SMTP_USERNAME);
 		final String password = config.getString(Settings.SMTP_PASSWORD);
 		String from = config.getString(Settings.SIGNUP_FROM_EMAIL, "signup@" + domain);
+		String bcc = config.getString(Settings.SIGNUP_BCC_EMAIL);
 		String subject = config.getString(Settings.SIGNUP_SUBJECT, "Confirm your email address to complete sign-up");
 		String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
 
@@ -107,7 +108,10 @@ public class Signup {
 		try {
 			MimeMessage message = new MimeMessage(session);
 			message.setFrom(new InternetAddress(from));
-			message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(recipient));
+			if (bcc != null) {
+				message.addRecipients(Message.RecipientType.BCC, InternetAddress.parse(bcc));
+			}
+			message.addRecipients(Message.RecipientType.TO, InternetAddress.parse(recipient));
 			message.setSubject(subject);
 
 			String templateHTML = null;

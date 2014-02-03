@@ -93,6 +93,7 @@ public class Settings {
 
 	public static String SIGNUP = "entrystore.signup";
 	public static String SIGNUP_FROM_EMAIL = "entrystore.signup.email.from";
+	public static String SIGNUP_BCC_EMAIL = "entrystore.signup.email.bcc";
 	public static String SIGNUP_SUBJECT = "entrystore.signup.email.subject";
 	public static String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.signup.email.template";
 	public static String SIGNUP_RECAPTCHA = "entrystore.signup.recaptcha";
