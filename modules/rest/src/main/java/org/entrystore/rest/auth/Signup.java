@@ -118,25 +118,22 @@ public class Signup {
 			if (templatePath != null) {
 				templateHTML = readFile(templatePath, Charset.defaultCharset());
 			}
-			if (templateHTML != null) {
-				message.setText(templateHTML.replaceAll("__CONFIRMATION_LINK__", confirmationLink), "utf-8", "html");
-			} else {
+			if (templateHTML == null) {
 				StringBuilder sb = new StringBuilder();
-				sb.append("<html><body style=\"font-family:verdana;font-size:10pt;\">");
-				sb.append("<div><br/>");
+				sb.append("<html><body style=\"font-family:verdana;font-size:10pt;\"><div><br/>");
 				sb.append("<h3>Email address confirmation necessary</h3>");
 				sb.append("<p>You signed up with the following information:</p>");
-				sb.append("<p>Name: ").append(recipientName).append("<br/>");
-				sb.append("Email: ").append(recipientEmail).append("</p>");
+				sb.append("<p>Name: __NAME__<br/>Email: __EMAIL__</p>");
 				sb.append("<p>To complete the sign-up process, you need to follow <a href=\"__CONFIRMATION_LINK__\">this link</a> to confirm<br/>that you own the email address you used to set up an account.</p>");
 				sb.append("<p>The link is valid for 24 hours.</p><br/>");
 				sb.append("<div style=\"border-top:1px solid #e5e5e5;\"><p><small>&copy; 2014 <a href=\"http://metasolutions.se\" style=\"text-decoration:none;\">MetaSolutions AB</a></small></p></div>");
 				sb.append("</div></body></html>");
-				String messageText = sb.toString().replaceAll("__CONFIRMATION_LINK__", confirmationLink);
-				messageText = messageText.replaceAll("__NAME__", recipientName);
-				messageText = messageText.replaceAll("__EMAIL__", recipientEmail);
-				message.setText(messageText, "utf-8", "html");
+				templateHTML = sb.toString();
 			}
+			String messageText = templateHTML.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
+			messageText = messageText.replaceAll("__NAME__", recipientName);
+			messageText = messageText.replaceAll("__EMAIL__", recipientEmail);
+			message.setText(messageText, "utf-8", "html");
 
 			Transport.send(message);
 		} catch (MessagingException e) {
