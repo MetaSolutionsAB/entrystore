@@ -213,7 +213,7 @@ public class SignupResource extends BaseResource {
 		SignupTokenCache.getInstance().addToken(token, ci);
 		log.info("Generated sign-up token " + token + " for " + email);
 
-		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), email, confirmationLink);
+		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), firstName + " " + lastName, email, confirmationLink);
 		if (sendSuccessful) {
 			log.info("Sent confirmation request to " + email);
 		} else {

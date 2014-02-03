@@ -48,7 +48,7 @@ public class Signup {
 
 	private static Logger log = LoggerFactory.getLogger(Signup.class);
 
-	public static boolean sendRequestForConfirmation(Config config, String recipient, String confirmationLink) {
+	public static boolean sendRequestForConfirmation(Config config, String recipientName, String recipientEmail, String confirmationLink) {
 		String domain = URI.create(confirmationLink).getHost();
 		String host = config.getString(Settings.SMTP_HOST);
 		int port = config.getInt(Settings.SMTP_PORT, 25);
@@ -111,7 +111,7 @@ public class Signup {
 			if (bcc != null) {
 				message.addRecipients(Message.RecipientType.BCC, InternetAddress.parse(bcc));
 			}
-			message.addRecipients(Message.RecipientType.TO, InternetAddress.parse(recipient));
+			message.addRecipients(Message.RecipientType.TO, InternetAddress.parse(recipientEmail));
 			message.setSubject(subject);
 
 			String templateHTML = null;
@@ -122,14 +122,20 @@ public class Signup {
 				message.setText(templateHTML.replaceAll("__CONFIRMATION_LINK__", confirmationLink), "utf-8", "html");
 			} else {
 				StringBuilder sb = new StringBuilder();
-				sb.append("<html><body style=\"width:500px;font-family:verdana;font-size:10pt;\">");
+				sb.append("<html><body style=\"font-family:verdana;font-size:10pt;\">");
 				sb.append("<div><br/>");
 				sb.append("<h3>Email address confirmation necessary</h3>");
-				sb.append("<p>To complete the sign-up process, you need to confirm that you own the email address you used to set up an account by following <a href=\"__CONFIRMATION_LINK__\">this link</a>.</p>");
+				sb.append("<p>You signed up with the following information:</p>");
+				sb.append("<p>Name: ").append(recipientName).append("<br/>");
+				sb.append("Email: ").append(recipientEmail).append("</p>");
+				sb.append("<p>To complete the sign-up process, you need to follow <a href=\"__CONFIRMATION_LINK__\">this link</a> to confirm<br/>that you own the email address you used to set up an account.</p>");
 				sb.append("<p>The link is valid for 24 hours.</p><br/>");
 				sb.append("<div style=\"border-top:1px solid #e5e5e5;\"><p><small>&copy; 2014 <a href=\"http://metasolutions.se\" style=\"text-decoration:none;\">MetaSolutions AB</a></small></p></div>");
 				sb.append("</div></body></html>");
-				message.setText(sb.toString().replaceAll("__CONFIRMATION_LINK__", confirmationLink), "utf-8", "html");
+				String messageText = sb.toString().replaceAll("__CONFIRMATION_LINK__", confirmationLink);
+				messageText = messageText.replaceAll("__NAME__", recipientName);
+				messageText = messageText.replaceAll("__EMAIL__", recipientEmail);
+				message.setText(messageText, "utf-8", "html");
 			}
 
 			Transport.send(message);
