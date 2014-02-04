@@ -22,9 +22,10 @@
 		<solr.version>4.3.1</solr.version>
 		<sesame.version>2.7.10</sesame.version>
 		<slf4j.version>1.7.5</slf4j.version>
-        <site.url>http://entrystore.org</site.url>
-        <distribution.snapshot.url>http://entrystore.org</distribution.snapshot.url>
-        <distribution.url>http://entrystore.org</distribution.url>
+		<site.url>http://entrystore.org</site.url>
+		<distribution.snapshot.url>http://entrystore.org</distribution.snapshot.url>
+		<distribution.url>http://entrystore.org</distribution.url>
+		<license.licenseName>apache_v2</license.licenseName>
 	</properties>
 		
 	<!-- ================= Developers ================= -->
@@ -101,8 +102,8 @@
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-compiler-plugin</artifactId>
 					<configuration>
-						<source>1.6</source>
-						<target>1.6</target>
+						<source>1.7</source>
+						<target>1.7</target>
 					</configuration>
 				</plugin>
 				<plugin>
@@ -122,52 +123,6 @@
 								<goal>jar</goal>
 							</goals>
 						</execution>
-					</executions>
-				</plugin>
-				<plugin>
-					<inherited>false</inherited>
-					<groupId>com.mycila.maven-license-plugin</groupId>
-					<artifactId>maven-license-plugin</artifactId>
-					<version>1.5.1</version>
-					<configuration>
-						<header>${basedir}/LICENSE_header.txt</header>
-						<failIfMissing>true</failIfMissing>
-						<aggregate>true</aggregate>
-						<properties>
-							<owner>MetaSolutions AB</owner>
-							<year>${project.inceptionYear}</year>
-							<email>info@metasolutions.se</email>-->
-						</properties>
-						<includes>
-							<include>**/src/**</include>
-							<include>**/test/**</include>
-							<include>**/*.java</include>
-						</includes>
-						<excludes>
-							<exclude>LICENSE_header.txt</exclude>
-							<exclude>LICENSE.txt</exclude>
-							<exclude>**/src/test/resources/**</exclude>
-							<exclude>**/src/test/data/**</exclude>
-							<exclude>**/*.txt</exclude>
-							<exclude>**/*.xml</exclude>
-							<exclude>**/*.properties</exclude>
-							<exclude>**/*.licen*</exclude>
-							<exclude>**/*.xsd</exclude>
-							<exclude>**/*.wsdl</exclude>
-							<exclude>**/*.html</exclude>
-                	                                <exclude>**/*.svg</exclude>
-                        	                        <exclude>**/*.odt</exclude>
-						</excludes>
-					</configuration>
-					<executions>
-						<!-- Do not automatically check licenses in every build
-						<execution>
-							<id>check-headers</id>
-							<phase>verify</phase>
-							<goals>
-								<goal>check</goal>
-							</goals>
-						</execution>-->
 					</executions>
 				</plugin>
 			</plugins>
@@ -211,6 +166,13 @@
 		</repository>
 	</repositories>
 	<pluginRepositories>
+		<pluginRepository>
+			<id>Maven</id>
+			<url>http://repo1.maven.org/maven2</url>
+			<releases> 
+				<enabled>true</enabled>
+			</releases>
+		</pluginRepository>
 		<pluginRepository>
 			<id>central</id>
 			<url>http://develix.iml.umu.se:8085/artifactory/plugins-releases</url>
@@ -273,18 +235,18 @@
 			<artifactId>slf4j-log4j12</artifactId>
 			<version>${slf4j.version}</version>
 		</dependency>
-        <dependency>
-            <groupId>org.codehaus.cargo</groupId>
-            <artifactId>cargo-core-uberjar</artifactId>
-            <version>0.9</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.codehaus.cargo</groupId>
-            <artifactId>cargo-ant</artifactId>
-            <version>0.9</version>
-            <scope>test</scope>
-        </dependency>
+		<dependency>
+			<groupId>org.codehaus.cargo</groupId>
+			<artifactId>cargo-core-uberjar</artifactId>
+			<version>0.9</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.codehaus.cargo</groupId>
+			<artifactId>cargo-ant</artifactId>
+			<version>0.9</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 	
 	<dependencyManagement>
@@ -294,11 +256,11 @@
 				<artifactId>httpclient</artifactId>
 				<version>4.2.6</version>
 			</dependency>
-            <dependency>
-                <groupId>org.apache.httpcomponents</groupId>
-                <artifactId>httpcore</artifactId>
-                <version>4.2.5</version>
-            </dependency>
+			<dependency>
+				<groupId>org.apache.httpcomponents</groupId>
+				<artifactId>httpcore</artifactId>
+				<version>4.2.5</version>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
