@@ -12,6 +12,23 @@ entrystore.auth.openid.google=on
 entrystore.auth.openid.yahoo=off
 entrystore.auth.openid.myopenid=off
 
+<!-- SMTP settings, required for e.g. sign-up -->
+entrystore.smtp.host=smtp.host.tld
+entrystore.smtp.port=587
+entrystore.smtp.ssl=starttls|ssl|off
+entrystore.smtp.username=smtp-user
+entrystore.smtp.password=smtp-password
+
+<!-- User-initiated sign-up (default: off) -->
+entrystore.signup=off
+entrystore.signup.email.from=signup@yourdomain.tld
+entrystore.signup.email.bcc=info+signup@youdomain.tld
+entrystore.signup.email.subject=E-Mail confirmation needed
+entrystore.signup.email.template=/path/to/template.html
+entrystore.signup.recaptcha=off
+entrystore.signup.recaptcha.public-key=your-public-recaptcha-key
+entrystore.signup.recaptcha.private-key=your-private-recaptcha-key
+
 <!-- Solr -->
 entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
