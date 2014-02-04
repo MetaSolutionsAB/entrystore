@@ -16,6 +16,29 @@
 
 package org.entrystore.harvesting.oaipmh.target.catalog;
 
+import ORG.oclc.oai.server.catalog.AbstractCatalog;
+import ORG.oclc.oai.server.verb.BadResumptionTokenException;
+import ORG.oclc.oai.server.verb.CannotDisseminateFormatException;
+import ORG.oclc.oai.server.verb.IdDoesNotExistException;
+import ORG.oclc.oai.server.verb.NoMetadataFormatsException;
+import ORG.oclc.oai.server.verb.NoRecordsMatchException;
+import ORG.oclc.oai.server.verb.NoSetHierarchyException;
+import ORG.oclc.oai.server.verb.OAIInternalServerError;
+import org.entrystore.repository.Context;
+import org.entrystore.repository.ContextManager;
+import org.entrystore.repository.Entry;
+import org.entrystore.repository.GraphType;
+import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.config.Config;
+import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.DeletedEntryInfo;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.repository.security.AuthorizationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -36,30 +59,6 @@ import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.TimeZone;
 import java.util.Vector;
-
-import org.entrystore.repository.ResourceType;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.config.Config;
-import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.DeletedEntryInfo;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
-import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.security.AuthorizationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import ORG.oclc.oai.server.catalog.AbstractCatalog;
-import ORG.oclc.oai.server.verb.BadResumptionTokenException;
-import ORG.oclc.oai.server.verb.CannotDisseminateFormatException;
-import ORG.oclc.oai.server.verb.IdDoesNotExistException;
-import ORG.oclc.oai.server.verb.NoMetadataFormatsException;
-import ORG.oclc.oai.server.verb.NoRecordsMatchException;
-import ORG.oclc.oai.server.verb.NoSetHierarchyException;
-import ORG.oclc.oai.server.verb.OAIInternalServerError;
 
 
 /**
@@ -341,7 +340,7 @@ public class SCAMOAICatalog extends AbstractCatalog {
 	 * 
 	 * @return a Map object containing "sets" Iterator object (contains
 	 *         <setSpec/> XML Strings) as well as an optional resumptionMap Map.
-	 * @exception OAIBadRequestException
+	 * @exception NoSetHierarchyException, OAIInternalServerError
 	 *                signals an HTTP status code 400 problem
 	 */
 	public Map listSets() throws NoSetHierarchyException, OAIInternalServerError {
@@ -391,7 +390,7 @@ public class SCAMOAICatalog extends AbstractCatalog {
 						log.warn("No entry found for " + contextURI);
 						continue;
 					}
-					if (contextEntry.getResourceType().equals(ResourceType.Context)) {
+					if (contextEntry.getGraphType().equals(GraphType.Context)) {
 						URI resourceURI = contextEntry.getResourceURI();
 						String contextAlias = cm.getContextAlias(resourceURI);
 						if (contextAlias == null) {
@@ -692,7 +691,7 @@ public class SCAMOAICatalog extends AbstractCatalog {
 							}
 						}
 
-						if (inDateRangeFrom && inDateRangeUntil && entry.getResourceType().equals(ResourceType.None)) {
+						if (inDateRangeFrom && inDateRangeUntil && entry.getGraphType().equals(GraphType.None)) {
 							entries.add(entry);
 						}
 					} catch (AuthorizationException ae) {
@@ -1052,7 +1051,7 @@ public class SCAMOAICatalog extends AbstractCatalog {
 							}
 						}
 
-						if (inDateRange && entry.getResourceType().equals(ResourceType.None)) {
+						if (inDateRange && GraphType.None.equals(entry.getGraphType())) {
 							entries.add(entry);
 						}
 					} catch (AuthorizationException ae) {

@@ -23,8 +23,8 @@ import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.validator.routines.EmailValidator;
 import org.entrystore.repository.Entry;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
@@ -81,14 +81,14 @@ public class SignupResource extends BaseResource {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
 			Entry userEntry = pm.getPrincipalEntry(ci.email);
-			if ((userEntry != null && ResourceType.User.equals(userEntry.getResourceType())) ||
+			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
 					pm.getUserByExternalID(ci.email) != null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 				return htmlRepresentation("User with submitted email address exists already.");
 			}
 
 			// Create user
-			Entry entry = pm.createResource(null, ResourceType.User, null, null);
+			Entry entry = pm.createResource(null, GraphType.User, null, null);
 			if (entry == null) {
 				try {
 					if (ci.urlFailure != null) {
@@ -110,7 +110,7 @@ public class SignupResource extends BaseResource {
 			log.info("Created user " + u.getURI());
 
 			// Create context and set ACL and alias
-			Entry homeContext = getCM().createResource(null, ResourceType.Context, null, null);
+			Entry homeContext = getCM().createResource(null, GraphType.Context, null, null);
 			homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
 			getCM().setContextAlias(homeContext.getEntryURI(), ci.email);
 			log.info("Created context " + homeContext.getResourceURI());

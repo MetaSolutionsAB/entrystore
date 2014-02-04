@@ -16,38 +16,26 @@
 
 package org.entrystore.harvesting.oaipmh.target.crosswalk;
 
-import java.io.File;
-import java.io.StringWriter;
-import java.text.ParseException;
-import java.util.GregorianCalendar;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Properties;
-import java.util.Set;
-
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Marshaller;
-
+import ORG.oclc.oai.server.crosswalk.Crosswalk;
+import ORG.oclc.oai.server.verb.CannotDisseminateFormatException;
 import net.sf.ehcache.Cache;
 import net.sf.ehcache.CacheManager;
 import net.sf.ehcache.Element;
 import net.sf.ehcache.store.MemoryStoreEvictionPolicy;
-
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.impl.converters.LRE;
-import org.entrystore.repository.util.NS;
 import org.entrystore.repository.impl.converters.OERDF2LOMConverter;
 import org.entrystore.repository.impl.converters.RDF2LOMConverter;
 import org.entrystore.repository.util.EntryUtil;
+import org.entrystore.repository.util.NS;
 import org.ieee.ltsc.datatype.impl.EntityImpl;
 import org.ieee.ltsc.lom.LOM;
-import org.ieee.ltsc.lom.LOMUtil;
 import org.ieee.ltsc.lom.LOM.Technical.Format;
+import org.ieee.ltsc.lom.LOMUtil;
 import org.ieee.ltsc.lom.impl.LOMImpl;
 import org.ieee.ltsc.lom.impl.LOMImpl.MetaMetadata.Contribute;
 import org.ietf.mimedir.vcard.VCard;
@@ -61,8 +49,17 @@ import org.openrdf.model.impl.URIImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import ORG.oclc.oai.server.crosswalk.Crosswalk;
-import ORG.oclc.oai.server.verb.CannotDisseminateFormatException;
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.JAXBException;
+import javax.xml.bind.Marshaller;
+import java.io.File;
+import java.io.StringWriter;
+import java.text.ParseException;
+import java.util.GregorianCalendar;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Properties;
+import java.util.Set;
 
 /**
  * Converts SCAM Entry and its metadata graphs to oai_lom.
@@ -258,7 +255,7 @@ public class Crosswalk2OaiLom extends Crosswalk {
 		if (entry.getFileSize() > -1) {
 			size = entry.getFileSize();
 		} else if (entry.getFileSize() == -1) {
-			if (entry.getRepresentationType().equals(RepresentationType.InformationResource) && (entry.getResource() != null)) {
+			if (entry.getResourceType().equals(ResourceType.InformationResource) && (entry.getResource() != null)) {
 				if (entry.getResource() instanceof Data) {
 					File dataFile = ((Data) entry.getResource()).getDataFile();
 					if (dataFile != null) {
