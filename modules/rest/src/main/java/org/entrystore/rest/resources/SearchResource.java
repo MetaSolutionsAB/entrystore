@@ -36,7 +36,7 @@ import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.common.SolrException;
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
@@ -210,28 +210,28 @@ public class SearchResource extends BaseResource {
 						}
 					}
 				}
-				Set<ResourceType> resourceType = null;
+				Set<GraphType> resourceType = null;
 				if(parameters.containsKey("resourcetype")){
-					resourceType = new HashSet<ResourceType>();
+					resourceType = new HashSet<GraphType>();
 					StringTokenizer tokenizer = new StringTokenizer(parameters.get("resourcetype"),",");
 					while (tokenizer.hasMoreTokens()){
 						String resourceTypeToken = tokenizer.nextToken();
 						if("context".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(ResourceType.Context);
+							resourceType.add(GraphType.Context);
 						}else if("group".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(ResourceType.Group);
+							resourceType.add(GraphType.Group);
 						}else if("user".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(ResourceType.User);
+							resourceType.add(GraphType.User);
 						}else if("list".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(ResourceType.List);
+							resourceType.add(GraphType.List);
 						}else if("resultList".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(ResourceType.ResultList);
+							resourceType.add(GraphType.ResultList);
 						}else if("string".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(ResourceType.String);
+							resourceType.add(GraphType.String);
 						}else if("none".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(ResourceType.None);
+							resourceType.add(GraphType.None);
 						}else if("graph".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(ResourceType.Graph);
+							resourceType.add(GraphType.Graph);
 						}
 					}
 				}
@@ -260,7 +260,7 @@ public class SearchResource extends BaseResource {
 				}
 				
 				String userQueryAddition = "";
-				if(resourceType != null && resourceType.contains(ResourceType.User)){
+				if(resourceType != null && resourceType.contains(GraphType.User)){
 					userQueryAddition += " UNION {?x foaf:name ?y} UNION {?x foaf:surname ?y} UNION {?x foaf:firstname ?y} ";
 				}
 				
@@ -313,7 +313,7 @@ public class SearchResource extends BaseResource {
 						preds.add(new URIImpl(NS.dc + "description"));
 						preds.add(new URIImpl(NS.dcterms + "title"));
 						preds.add(RDF.VALUE);
-						if (resourceType != null && resourceType.contains(ResourceType.User)) {
+						if (resourceType != null && resourceType.contains(GraphType.User)) {
 							preds.add(new URIImpl(NS.foaf + "name"));
 							preds.add(new URIImpl(NS.foaf + "surname"));
 							preds.add(new URIImpl(NS.foaf + "firstname"));
@@ -333,7 +333,7 @@ public class SearchResource extends BaseResource {
 					if (entryType != null && resourceType != null){
 						entries = new ArrayList<Entry>();
 						for(Entry entry : searchResult){
-							if(entryType.contains(entry.getEntryType()) && resourceType.contains(entry.getResourceType())){
+							if(entryType.contains(entry.getEntryType()) && resourceType.contains(entry.getGraphType())){
 								entries.add(entry);
 							}
 						}
@@ -353,7 +353,7 @@ public class SearchResource extends BaseResource {
 					} else if (resourceType != null) {
 						entries = new ArrayList<Entry>();
 						for (Entry entry : searchResult) {
-							if (resourceType.contains(entry.getResourceType())) {
+							if (resourceType.contains(entry.getGraphType())) {
 								entries.add(entry);
 							}
 						}
@@ -547,13 +547,13 @@ public class SearchResource extends BaseResource {
 							JSONObject childJSON = new JSONObject(); 
 							childJSON.put("entryId", e.getId());
 							childJSON.put("contextId", e.getContext().getEntry().getId());
-							ResourceType btChild = e.getResourceType();
+							GraphType btChild = e.getGraphType();
 							EntryType locChild = e.getEntryType();
-							if (btChild == ResourceType.Context || btChild == ResourceType.SystemContext) {
+							if (btChild == GraphType.Context || btChild == GraphType.SystemContext) {
 								childJSON.put("alias", getCM().getContextAlias(e.getResourceURI()));
-							} else if (btChild == ResourceType.User && locChild == EntryType.Local) {
+							} else if (btChild == GraphType.User && locChild == EntryType.Local) {
 								childJSON.put("name", ((User) e.getResource()).getName());
-							} else if (btChild == ResourceType.Group && locChild == EntryType.Local) {
+							} else if (btChild == GraphType.Group && locChild == EntryType.Local) {
 								childJSON.put("name", ((Group) e.getResource()).getName());								
 							}
 							PrincipalManager PM = this.getPM();

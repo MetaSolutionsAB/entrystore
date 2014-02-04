@@ -53,8 +53,8 @@ import org.entrystore.repository.Group;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.QuotaException;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.impl.ListImpl;
 import org.entrystore.repository.impl.RDFResource;
@@ -176,7 +176,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			// ResourceType.Graph
-			if (ResourceType.Graph.equals(entry.getResourceType())) {
+			if (GraphType.Graph.equals(entry.getGraphType())) {
 				MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
 				if (preferredMediaType == null) {
 					preferredMediaType = MediaType.APPLICATION_RDF_XML;
@@ -272,11 +272,11 @@ public class ResourceResource extends BaseResource {
 				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
 					storeRepresentation(r);
 				}
-			} else if (entry.getResourceType().equals(ResourceType.List) &&
+			} else if (entry.getGraphType().equals(GraphType.List) &&
 					parameters.containsKey("import") &&
 					MediaType.APPLICATION_ZIP.equals(getRequestEntity().getMediaType())) {
 				getResponse().setStatus(importFromZIP(getRequestEntity()));
-			} else if (entry.getResourceType().equals(ResourceType.List) &&
+			} else if (entry.getGraphType().equals(GraphType.List) &&
 					parameters.containsKey("moveEntry") &&
 					parameters.containsKey("fromList")) {
 				// POST 3/resource/45?moveEntry=2/entry/34&fromList=2/resource/67
@@ -359,7 +359,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * List
 		 */
-		if (entry.getResourceType() == ResourceType.List) {
+		if (entry.getGraphType() == GraphType.List) {
 			ListImpl l = (ListImpl) entry.getResource();
 			if (parameters.containsKey("recursive")) {
 				l.removeTree();
@@ -371,8 +371,8 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * None
 		 */
-		if (entry.getResourceType() == ResourceType.None ) {
-			if(entry.getRepresentationType() == RepresentationType.InformationResource) {
+		if (entry.getGraphType() == GraphType.None ) {
+			if(entry.getResourceType() == ResourceType.InformationResource) {
 				Data data = (Data)entry.getResource(); 
 				if (data.delete() == false) {
 					log.error("Unknown kind"); 
@@ -384,7 +384,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * String
 		 */
-		if (ResourceType.String.equals(entry.getResourceType())) {
+		if (GraphType.String.equals(entry.getGraphType())) {
 			StringResource strRes = (StringResource) entry.getResource(); // FIXME ?!
 			GraphImpl g = new GraphImpl(); 
 			entry.setGraph(g); 
@@ -395,8 +395,8 @@ public class ResourceResource extends BaseResource {
 	protected boolean isFile(Entry entry) {
 		if (entry != null) {
 			return EntryType.Local.equals(entry.getEntryType()) &&
-				ResourceType.None.equals(entry.getResourceType()) &&
-				RepresentationType.InformationResource.equals(entry.getRepresentationType());
+				GraphType.None.equals(entry.getGraphType()) &&
+				ResourceType.InformationResource.equals(entry.getResourceType());
 		} else {
 			return false;
 		}
@@ -508,13 +508,13 @@ public class ResourceResource extends BaseResource {
 	
 	public Set<Entry> getListChildrenRecursively(Entry listEntry) {
 		Set<Entry> result = new HashSet<Entry>();
-		if (ResourceType.List.equals(listEntry.getResourceType()) && EntryType.Local.equals(listEntry.getEntryType())) {
+		if (GraphType.List.equals(listEntry.getGraphType()) && EntryType.Local.equals(listEntry.getEntryType())) {
 			org.entrystore.repository.List l = (org.entrystore.repository.List) listEntry.getResource();
 			List<URI> c = l.getChildren();
 			for (URI uri : c) {
 				Entry e = getRM().getContextManager().getEntry(uri);
 				if (e != null) {
-					if (ResourceType.List.equals(e.getResourceType())) {
+					if (GraphType.List.equals(e.getGraphType())) {
 						result.addAll(getListChildrenRecursively(e));
 					} else {
 						result.add(e);
@@ -544,15 +544,15 @@ public class ResourceResource extends BaseResource {
 		SyndFeed feed = new SyndFeedImpl();
 		feed.setFeedType(type);
 
-		ResourceType bt = entry.getResourceType();
-		if (!ResourceType.Context.equals(bt) && !ResourceType.List.equals(bt)) {
+		GraphType bt = entry.getGraphType();
+		if (!GraphType.Context.equals(bt) && !GraphType.List.equals(bt)) {
 			return null;
 		}
 
 		String solrQueryValue;
 		String alias;
 
-		if (ResourceType.Context.equals(bt)) {
+		if (GraphType.Context.equals(bt)) {
 			alias = getCM().getContextAlias(entry.getResourceURI());
 			solrQueryValue = "context:";
 		} else {
@@ -657,7 +657,7 @@ public class ResourceResource extends BaseResource {
 		if (EntryType.Link.equals(entry.getEntryType()) ||
 				EntryType.LinkReference.equals(entry.getEntryType()) ||
 				EntryType.Reference.equals(entry.getEntryType())) {
-			if (ResourceType.None.equals(entry.getResourceType())) {
+			if (GraphType.None.equals(entry.getGraphType())) {
 				getResponse().setLocationRef(new Reference(entry.getResourceURI().toString()));
 				getResponse().setStatus(Status.REDIRECTION_SEE_OTHER);
 				return null;
@@ -667,7 +667,7 @@ public class ResourceResource extends BaseResource {
 			JSONArray array = new JSONArray(); 
 
 			/*** List ***/
-			if (entry.getResourceType() == ResourceType.List) {
+			if (entry.getGraphType() == GraphType.List) {
 				org.entrystore.repository.List l = (org.entrystore.repository.List) entry.getResource(); 
 				List<URI> uris = l.getChildren();
 				Set<String> IDs = new HashSet<String>();
@@ -692,9 +692,9 @@ public class ResourceResource extends BaseResource {
 					if ("desc".equalsIgnoreCase(parameters.get("order"))) {
 						asc = false;
 					}
-					ResourceType prioritizedResourceType = null;
+					GraphType prioritizedResourceType = null;
 					if (parameters.containsKey("prio")) {
-						prioritizedResourceType = ResourceType.valueOf(parameters.get("prio"));
+						prioritizedResourceType = GraphType.valueOf(parameters.get("prio"));
 					}
 					String sortType = parameters.get("sort");
 					if ("title".equalsIgnoreCase(sortType)) {
@@ -728,7 +728,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** String ***/
-			if(entry.getResourceType() == ResourceType.String) {
+			if(entry.getGraphType() == GraphType.String) {
 				StringResource stringResource = (StringResource)entry.getResource(); 
 				Graph graph = stringResource.getGraph(); 
 				if (graph == null) {
@@ -738,7 +738,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Graph ***/
-			if (ResourceType.Graph.equals(entry.getResourceType())) {
+			if (GraphType.Graph.equals(entry.getGraphType())) {
 				RDFResource graphResource = (RDFResource) entry.getResource(); 
 				Graph graph = graphResource.getGraph();
 				if (graph == null) {
@@ -749,7 +749,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Context ***/
-			if(entry.getResourceType() == ResourceType.Context || entry.getResourceType() == ResourceType.SystemContext) {
+			if(entry.getGraphType() == GraphType.Context || entry.getGraphType() == GraphType.SystemContext) {
 				org.entrystore.repository.Context c = (org.entrystore.repository.Context) entry.getResource(); 
 				Set<URI> uris = c.getEntries(); 
 				for(URI u: uris) {
@@ -760,10 +760,10 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** None ***/
-			if(entry.getResourceType() == ResourceType.None) {
+			if(entry.getGraphType() == GraphType.None) {
 
 				// Local data
-				if(entry.getRepresentationType() == RepresentationType.InformationResource) {
+				if(entry.getResourceType() == ResourceType.InformationResource) {
 					File file = ((Data)entry.getResource()).getDataFile(); 
 					if  (file != null) {
 						String medTyp = entry.getMimetype();
@@ -789,17 +789,17 @@ public class ResourceResource extends BaseResource {
 				}
 
 				// DOES NOT HAVE ANY RESOURCE
-				if(entry.getRepresentationType() == RepresentationType.NamedResource) {
+				if(entry.getResourceType() == ResourceType.NamedResource) {
 				}
 
 				// NOT USED YET
-				if(entry.getRepresentationType() == RepresentationType.Unknown) {	
+				if(entry.getResourceType() == ResourceType.Unknown) {	
 				}
 
 			}
 
 			/*** User ***/
-			if(entry.getResourceType() == ResourceType.User) {
+			if(entry.getGraphType() == GraphType.User) {
 				JSONObject jsonUserObj = new JSONObject();  
 				User user = (User) entry.getResource(); 
 				try {
@@ -824,7 +824,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Group ***/
-			if(entry.getResourceType() == ResourceType.Group) {
+			if(entry.getGraphType() == GraphType.Group) {
 				JSONObject jsonGroupObj = new JSONObject(); 
 				Group group = (Group) entry.getResource(); 
 				JSONArray userArray = new JSONArray(); 
@@ -858,7 +858,7 @@ public class ResourceResource extends BaseResource {
 
 			log.error("Can not find the resource.");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource + " ResourceType: " + entry.getResourceType());
+			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource + " ResourceType: " + entry.getGraphType());
 		}
 
 		log.info("No resource available.");
@@ -875,7 +875,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * List and Group
 		 */
-		if (entry.getResourceType() == ResourceType.List || entry.getResourceType() == ResourceType.Group) {
+		if (entry.getGraphType() == GraphType.List || entry.getGraphType() == GraphType.Group) {
 			JSONObject entityJSON = null; 
 			try {
 				entityJSON = new JSONObject(getRequest().getEntity().getText());
@@ -896,7 +896,7 @@ public class ResourceResource extends BaseResource {
 					}
 				}
 				
-				if (entry.getResourceType() == ResourceType.List) {
+				if (entry.getGraphType() == GraphType.List) {
 					org.entrystore.repository.List resourceList = (org.entrystore.repository.List) entry.getResource();
 					resourceList.setChildren(newResource);
 				} else {
@@ -923,7 +923,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * Data
 		 */
-		if (entry.getResourceType() == ResourceType.None){
+		if (entry.getGraphType() == GraphType.None){
 			boolean textarea = this.parameters.keySet().contains("textarea");
 			String error = null;
 
@@ -1009,7 +1009,7 @@ public class ResourceResource extends BaseResource {
 
 		/*** String  ***/
 		// {"@id":"http://localhost:8080/scam/1/resource/11","sc:body":{"@language":"english","@value":"<h1>Title<\/h1>"}}
-		if(entry.getResourceType() == ResourceType.String) {
+		if(entry.getGraphType() == GraphType.String) {
 			JSONObject entityJSON = null; 
 			try {
 				entityJSON = new JSONObject(getRequest().getEntity().getText());
@@ -1033,7 +1033,7 @@ public class ResourceResource extends BaseResource {
 		}
 		
 		/*** Graph ***/
-		if (ResourceType.Graph.equals(entry.getResourceType())) {
+		if (GraphType.Graph.equals(entry.getGraphType())) {
 			RDFResource graphResource = (RDFResource) entry.getResource(); 
 			if (graphResource != null) {
 				Graph graph = null;
@@ -1059,7 +1059,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** User ***/
-		if (entry.getResourceType() == ResourceType.User) {
+		if (entry.getGraphType() == GraphType.User) {
 			JSONObject entityJSON = null; 
 			try {
 				entityJSON = new JSONObject(getRequest().getEntity().getText());

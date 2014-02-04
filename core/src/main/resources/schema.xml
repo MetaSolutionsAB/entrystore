@@ -210,9 +210,9 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="validated" type="boolean" indexed="true"/>
 		<field name="created" type="date" indexed="true"/>
         <field name="modified" type="date" indexed="true"/>
-		<field name="resourceType" type="string" indexed="true"/>
+		<field name="graphType" type="string" indexed="true"/>
         <field name="entryType" type="string" indexed="true"/>
-        <field name="representationType" type="string" indexed="true"/>
+        <field name="resourceType" type="string" indexed="true"/>
         
         <field name="admin" type="string" indexed="true" multiValued="true"/>
         <field name="metadata.r" type="string" indexed="true" multiValued="true"/>

@@ -17,80 +17,41 @@
 package org.entrystore.repository;
 
 /**
- * Entries with a set ResourceType get special treatment in EntryStore.
+ * A Resource is anything that can be identified by a URI whereas an <i>information resource</i>
+ * is a resource whose <i>essential characteristics</i> can be conveyed in a <i>message</i>.
  * 
- * @author Matthias Palmér
- * @author Hannes Ebner
- * @author Eric Johansson
+ * Examples are documents, images, videos etc. of various sorts which have representations, 
+ * e.g. HTML, ODF, jpeg, mpeg etc. which can transferred in a message body which is the 
+ * result of for instance an HTTP GET.
+ * See discussion in <a href="http://www.w3.org/TR/webarch/#id-resources">W3C web architecture section 2.2</a>.
+ *
+ * If the HTTP protocol is used, see the
+ * <a href="http://lists.w3.org/Archives/Public/www-tag/2005Jun/0039.html">reccomendation</a> from the
+ * W3C Technical Architecture Group. For further inspiration see the discussion in 
+ * <a href="http://www.dfki.uni-kl.de/~sauermann/2006/11/cooluris/">Cool URIs for the Semantic Web</a>.
+ * 
+ * @author matthias
  */
 public enum ResourceType {
+	/**
+	 * The resource has a representation, in the repository or elsewhere.
+	 */
+	InformationResource,
 
 	/**
-	 * Special container resource which keeps track of a set of entries 
-	 * (resources with corresponding meta- and metametadata) that should be 
-	 * managed together, at a minimum it provides default ownership of the entries.
-	 * In portfolio applications a Context corresponds to a single portfolio.
-	 *
-	 * @see org.entrystore.repository.Context
+	 * The resource is an information resource but requires a resolvable step, 
+	 *  e.g. through a lookup procedure that might be protocol specific such as urn:path or doi.
 	 */
-	Context,
-
-	/**
-	 * A context that has a special meaning in the current context, 
-	 * examples include {@link ContextManager} and {@link PrincipalManager}.
-	 *
-	 * @see org.entrystore.repository.Context
-	 */
-	SystemContext,
-
-	/**
-	 * A user or group used in access control lists for managing access to 
-	 * various entries.
-	 *
-	 * @see org.entrystore.repository.User
-	 */
-	User,
-
-	/**
-	 * A user or group used in access control lists for managing access to 
-	 * various entries.
-	 *
-	 * @see org.entrystore.repository.Group
-	 */
-	Group,
+	ResolvableInformationResource,
 	
 	/**
-	 * A ordered list of entry.
-	 *
-	 * @see org.entrystore.repository.List
+	 * The representation type of the resource is unknown. 
 	 */
-	List,
+	Unknown,
 	
 	/**
-	 * A list that is dynamically generated.
-	 *
-	 * @see org.entrystore.repository.List
+	 * The resource is not an information resource, the resource can be refferred to in communication but
+	 * not transferred in a message. 
 	 */
-	ResultList,
-
-	/**
-	 * A string, that should be used when you want to save a text string 
-	 */
-	String,
-	
-	/**
-	 * A named graph
-	 */
-	Graph,
-
-	/**
-	 * A pipeline for data transformations
-	 */
-	Pipeline,
-	
-	/**
-	 * All other resource that have no specific treatment in the repository.
-	 */
-	None
-	
+	NamedResource
 }

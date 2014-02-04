@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -172,13 +172,13 @@ public class OEAutomaticValidation {
 			contexts.add(context);
 			List<Entry> entries = getEntries(contexts);
 			Entry list = cm.getByEntryURI(listEntryURI);
-			if (!ResourceType.List.equals(list.getResourceType())) {
+			if (!GraphType.List.equals(list.getGraphType())) {
 				log.error("List parameter is not a list, interrupting");
 				return;
 			}
 			org.entrystore.repository.List l = (org.entrystore.repository.List) list.getResource();
 			for (Entry entry : entries) {
-				if (EntryType.Reference.equals(entry.getEntryType()) && ResourceType.None.equals(entry.getResourceType())) {
+				if (EntryType.Reference.equals(entry.getEntryType()) && GraphType.None.equals(entry.getGraphType())) {
 					validateMetadataOfEntry(entry);
 					l.addChild(entry.getEntryURI());
 				}

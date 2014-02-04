@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -61,12 +61,12 @@ public class ContextManagerTest {
 
 	@Test
 	public void searchControll() throws Exception {
-		Entry entry = cm.createResource(null, ResourceType.Context, null, null);
+		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		Context context = (Context) entry.getResource();
 		
 		
 
-		Entry listEntry = context.createResource(null, ResourceType.List, null, null);
+		Entry listEntry = context.createResource(null, GraphType.List, null, null);
 		Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
 		Entry refEntry = context.createReference(null, URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
 
@@ -139,7 +139,7 @@ public class ContextManagerTest {
 		int nrOfContexts = cm.getResources().size();
 
 		//Add success?
-		Entry entry = cm.createResource(null, ResourceType.Context, null, null);
+		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		URI contextMMdURI = entry.getEntryURI();
 		assertTrue(cm.getResources().size() == nrOfContexts+1);
 		Entry entryRequested = cm.getByEntryURI(contextMMdURI);
@@ -163,7 +163,7 @@ public class ContextManagerTest {
 		int nrOfAliases = cm.getContextAliases().size();
 
 		//Create a new context, and set it's alias to "newcontext"
-		Entry entry = cm.createResource(null, ResourceType.Context, null, null);
+		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		cm.setContextAlias(entry.getResource().getURI(), "newcontext");
 		assertTrue(cm.getContextAliases().size() == nrOfAliases +1);
 
@@ -182,12 +182,12 @@ public class ContextManagerTest {
 
 	@Test
 	public void entryAccess() {
-		Entry entry = cm.createResource(null, ResourceType.Context, null, null);
+		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		Context context = (Context) entry.getResource();
-		Entry listEntry = context.createResource(null, ResourceType.List, null, null);
+		Entry listEntry = context.createResource(null, GraphType.List, null, null);
 		Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
 		Entry refEntry = context.createReference(null, URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
-		Entry dataEntry = context.createResource(null, ResourceType.None, null, null);
+		Entry dataEntry = context.createResource(null, GraphType.None, null, null);
 		
 		
 		//Check retrieval via resources URI.

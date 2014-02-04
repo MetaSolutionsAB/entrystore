@@ -1,6 +1,6 @@
 package org.entrystore.rest.auth;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
@@ -49,7 +49,7 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 				pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
 				// Create user and set alias, metadata and e-mail
-				Entry entry = rm.getPrincipalManager().createResource(null, ResourceType.User, null, null);
+				Entry entry = rm.getPrincipalManager().createResource(null, GraphType.User, null, null);
 				pm.setPrincipalName(entry.getResourceURI(), user.getEmail());
 				Signup.setFoafMetadata(entry, user);
 				u = (User) entry.getResource();
@@ -57,7 +57,7 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 				log.info("Created user " + u.getURI() + ", mapped to OpenID E-Mail " + u.getExternalID());
 
 				// Create context and set ACL and alias
-				Entry homeContext = cm.createResource(null, ResourceType.Context, null, null);
+				Entry homeContext = cm.createResource(null, GraphType.Context, null, null);
 				homeContext.addAllowedPrincipalsFor(AccessProperty.Administer, u.getURI());
 				cm.setContextAlias(homeContext.getEntryURI(), user.getEmail());
 				log.info("Created context " + homeContext.getResourceURI());

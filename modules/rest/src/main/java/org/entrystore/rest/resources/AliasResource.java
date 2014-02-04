@@ -16,7 +16,7 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.User;
 import org.json.JSONException;
@@ -53,12 +53,12 @@ public class AliasResource extends BaseResource {
 		if (this.context != null && this.entryId == null) {
 			alias = getCM().getContextAlias(context.getURI()); 
 		} else if (this.context != null && this.entry != null) {
-			ResourceType bt = entry.getResourceType();
-			if (ResourceType.Group.equals(bt)) {
+			GraphType bt = entry.getGraphType();
+			if (GraphType.Group.equals(bt)) {
 				name = ((Group) entry.getResource()).getName();
-			} else if (ResourceType.User.equals(bt)) {
+			} else if (GraphType.User.equals(bt)) {
 				name = ((User) entry.getResource()).getName();
-			} else if (ResourceType.Context.equals(bt)) {
+			} else if (GraphType.Context.equals(bt)) {
 				org.entrystore.repository.Context c = getCM().getContext(entryId);
 				alias = getCM().getContextAlias(c.getURI());
 			}
@@ -99,12 +99,12 @@ public class AliasResource extends BaseResource {
 			if (this.context != null && this.entryId == null) {
 				success = getCM().setContextAlias(context.getURI(), alias); 
 			} else if (this.context != null && this.entry != null) {
-				ResourceType bt = entry.getResourceType();
-				if (ResourceType.Group.equals(bt) && name != null) {
+				GraphType bt = entry.getGraphType();
+				if (GraphType.Group.equals(bt) && name != null) {
 					success = ((Group) entry.getResource()).setName(name);
-				} else if (ResourceType.User.equals(bt) && name != null) {
+				} else if (GraphType.User.equals(bt) && name != null) {
 					success = ((User) entry.getResource()).setName(name);
-				} else if (ResourceType.Context.equals(bt) && alias != null) {
+				} else if (GraphType.Context.equals(bt) && alias != null) {
 					org.entrystore.repository.Context c = getCM().getContext(entryId);
 					success = getCM().setContextAlias(c.getURI(), alias);
 				}

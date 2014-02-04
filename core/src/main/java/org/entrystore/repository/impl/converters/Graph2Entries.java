@@ -24,11 +24,11 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.impl.ContextImpl;
 import org.entrystore.repository.impl.RDFResource;
 import org.entrystore.repository.util.NS;
@@ -119,13 +119,13 @@ public class Graph2Entries {
 			Entry entry;
 			boolean entryCreated = false;
 			if ("".equals(destinationEntryId)) {
-				entry = this.context.createResource(null, ResourceType.Graph, RepresentationType.InformationResource, destinationListURI);
+				entry = this.context.createResource(null, GraphType.Graph, ResourceType.InformationResource, destinationListURI);
 				entryCreated = true;
 				((ContextImpl) this.context).setMetadata(entry, "RDF Graph created at "+new Date().toString(), null);
 			} else {
 				entry = this.context.get(destinationEntryId); //Try to fetch existing entry.
 				if (entry == null) {
-					entry = this.context.createResource(destinationEntryId, ResourceType.Graph, RepresentationType.InformationResource, destinationListURI);
+					entry = this.context.createResource(destinationEntryId, GraphType.Graph, ResourceType.InformationResource, destinationListURI);
 					entryCreated = true;
 				}				
 			}
@@ -166,7 +166,7 @@ public class Graph2Entries {
 			Graph subg = this.extract(graph, oldResources.get(entryId), ignore, translate);
 			Entry entry = this.context.get(entryId); //Try to fetch existing entry.
 			if (entry == null) {  //If none exist, create it.
-				entry = this.context.createResource(entryId, ResourceType.None, RepresentationType.NamedResource, null);
+				entry = this.context.createResource(entryId, GraphType.None, ResourceType.NamedResource, null);
 				newResCounter++;
 			} else {
 				updResCounter++;

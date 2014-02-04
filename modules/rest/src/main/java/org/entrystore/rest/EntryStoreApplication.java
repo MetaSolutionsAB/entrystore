@@ -31,7 +31,7 @@ import javax.servlet.ServletContext;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Converter;
 import org.entrystore.repository.Entry;
@@ -412,7 +412,7 @@ public class EntryStoreApplication extends Application {
 					continue;
 				}
 
-				if (entry != null && entry.getResourceType() == ResourceType.Context) {
+				if (entry != null && entry.getGraphType() == GraphType.Context) {
 					OAIHarvesterFactory fac = new OAIHarvesterFactory();
 					if(fac.isOAIHarvester(entry)) {
 						try {

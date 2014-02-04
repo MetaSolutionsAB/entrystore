@@ -19,7 +19,7 @@ package org.entrystore.repository.impl;
 
 import java.io.IOException;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -47,7 +47,7 @@ public class SCAM2ImportTest {
 	  rm.setCheckForAuthorization(false);
 	  cm = rm.getContextManager();
 	  //A new Context
-	  Entry entry = cm.createResource(null, ResourceType.Context, null, null);
+	  Entry entry = cm.createResource(null, GraphType.Context, null, null);
 	  context = (Context) entry.getResource();
   }  
   

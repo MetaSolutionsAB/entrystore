@@ -222,34 +222,34 @@ public interface Entry {
 	Date getModifiedDate();
 	
 	/**
-	 * @return the RepresentationType of the resource.
-	 */
-	RepresentationType getRepresentationType();
-
-	/**
-	 * If the {@link ResourceType} is {@link ResourceType#None} any value on
-	 * {@link RepresentationType} is allowed, otherwise only
-	 * {@link RepresentationType#True} is allowed.
-	 * 
-	 * @param ir the new information resource status 
-	 */
-	void setRepresentationType(RepresentationType ir);
-
-	/**
-	 * @return the {@link ResourceType} of the resource, independent of wether
-	 * it is managed by the repository, a link or a reference.
+	 * @return the ResourceType of the resource.
 	 */
 	ResourceType getResourceType();
+
+	/**
+	 * If the {@link GraphType} is {@link GraphType#None} any value on
+	 * {@link ResourceType} is allowed, otherwise only
+	 * {@link ResourceType#True} is allowed.
+	 * 
+	 * @param rt the new ResourceType
+	 */
+	void setResourceType(ResourceType rt);
+
+	/**
+	 * @return the {@link GraphType} of the resource, independent of whether
+	 * it is managed by the repository, a link or a reference.
+	 */
+	GraphType getGraphType();
 	
 	/**
-	 * Changing the builtin type is only allowed for links and references and 
+	 * Changing the GraphType is only allowed for links and references and 
 	 * should only be done to better reflect the true nature of the remote 
-	 * resource. The change should preferrably be done as a result of some 
+	 * resource. The change should preferably be done as a result of some 
 	 * automatic detection scheme rather than letting end users manually configure it.
 	 * 
-	 * @param bt the new builtin type.
+	 * @param gt the new GraphType.
 	 */
-	void setResourceType(ResourceType bt);
+	void setGraphType(GraphType gt);
 	
 	/**
 	 * @return the {@link EntryType}

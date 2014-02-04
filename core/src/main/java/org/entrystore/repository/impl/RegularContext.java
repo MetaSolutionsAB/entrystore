@@ -21,10 +21,10 @@ import java.net.URI;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 
 
 /**
@@ -45,8 +45,8 @@ public class RegularContext extends ContextImpl{
 	}
 
 	@Override
-	public Entry createResource(String entryId, ResourceType buiType,
-			RepresentationType repType, URI listURI) {
+	public Entry createResource(String entryId, GraphType buiType,
+			ResourceType repType, URI listURI) {
 		switch (buiType) {
 		case List:
 		case ResultList:
@@ -66,7 +66,7 @@ public class RegularContext extends ContextImpl{
 
 		Entry comments = get("_comments");
 		if(comments == null) {
-			comments = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_comments");
+			comments = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_comments");
 			setMetadata(comments, "Comments folder", null);
 			log.info("Successfully added the comments list");
 		} 
@@ -74,7 +74,7 @@ public class RegularContext extends ContextImpl{
 
 		entry = get("_top");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_top");
+			entry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_top");
 			setMetadata(entry, "Top folder", null);
 			log.info("Successfully added the top list");
 		}
@@ -82,7 +82,7 @@ public class RegularContext extends ContextImpl{
 
 		entry = get("_contacts");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_contacts");
+			entry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_contacts");
 			setMetadata(entry, "Contacts", "A list of all your contacts.");
 			log.info("Successfully added the contact list");
 		}
@@ -90,7 +90,7 @@ public class RegularContext extends ContextImpl{
 
 		entry = get("_featured");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_featured");
+			entry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_featured");
 			setMetadata(entry, "Featured", "A list of featured content divided into sublists.");
 			log.info("Successfully added the featured list");
 		}
@@ -98,7 +98,7 @@ public class RegularContext extends ContextImpl{
 
 		entry = get("_feeds");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_feeds");
+			entry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_feeds");
 			setMetadata(entry, "Feeds", "A list of feeds.");
 			log.info("Successfully added the feeds list");
 		}
@@ -122,7 +122,7 @@ public class RegularContext extends ContextImpl{
 */
 		entry = get("_trash");
 		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_trash");
+			entry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_trash");
 			setMetadata(entry, "Garbage bin", null);
 			log.info("Successfully added the trash list");
 		}

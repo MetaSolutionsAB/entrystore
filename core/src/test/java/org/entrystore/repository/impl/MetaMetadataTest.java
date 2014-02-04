@@ -21,14 +21,14 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.net.URI;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.EntryType;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
@@ -67,9 +67,9 @@ public class MetaMetadataTest {
 		rm.setCheckForAuthorization(false);
 		cm = rm.getContextManager();
 		// A new Context
-		Entry entry = cm.createResource(null, ResourceType.Context, null, null);
+		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		context = (Context) entry.getResource();
-		listEntry = context.createResource(null, ResourceType.List, null, null);
+		listEntry = context.createResource(null, GraphType.List, null, null);
 		linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
 		refEntry = context
 				.createReference(null, URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
@@ -80,20 +80,20 @@ public class MetaMetadataTest {
 	public void builtinType() {
 		// Checking that builtintype cannot be changed for local resources
 		try {
-			listEntry.setResourceType(ResourceType.None);
+			listEntry.setGraphType(GraphType.None);
 			assertTrue("Succesfully (and erronously) changed the builtintype" + " of a local resource!", false);
 		} catch (RepositoryException re) {
 		}
 
 		// Checking that builtintype CAN be changed for links.
-		assertTrue(linkEntry.getResourceType() == ResourceType.None);
-		linkEntry.setResourceType(ResourceType.List);
-		assertTrue(linkEntry.getResourceType() == ResourceType.List);
+		assertTrue(linkEntry.getGraphType() == GraphType.None);
+		linkEntry.setGraphType(GraphType.List);
+		assertTrue(linkEntry.getGraphType() == GraphType.List);
 
 		// Checking that builtintype CAN be changed for references.
-		assertTrue(refEntry.getResourceType() == ResourceType.None);
-		refEntry.setResourceType(ResourceType.List);
-		assertTrue(refEntry.getResourceType() == ResourceType.List);
+		assertTrue(refEntry.getGraphType() == GraphType.None);
+		refEntry.setGraphType(GraphType.List);
+		assertTrue(refEntry.getGraphType() == GraphType.List);
 	}
 
 	@Test
@@ -105,22 +105,22 @@ public class MetaMetadataTest {
 
 	@Test
 	public void representationType() {
-		assertTrue(listEntry.getRepresentationType() == RepresentationType.InformationResource);
+		assertTrue(listEntry.getResourceType() == ResourceType.InformationResource);
 		// Checking that representationtype cannot be changed for local
 		// resources
 		try {
-			listEntry.setRepresentationType(RepresentationType.NamedResource);
+			listEntry.setResourceType(ResourceType.NamedResource);
 			assertTrue("Succesfully (and erronously) changed the representationtype" + " of a local resource!", false);
 		} catch (RepositoryException re) {
 		}
 
-		assertTrue(linkEntry.getRepresentationType() == RepresentationType.InformationResource);
-		linkEntry.setRepresentationType(RepresentationType.NamedResource);
-		assertTrue(linkEntry.getRepresentationType() == RepresentationType.NamedResource);
+		assertTrue(linkEntry.getResourceType() == ResourceType.InformationResource);
+		linkEntry.setResourceType(ResourceType.NamedResource);
+		assertTrue(linkEntry.getResourceType() == ResourceType.NamedResource);
 
-		assertTrue(refEntry.getRepresentationType() == RepresentationType.InformationResource);
-		refEntry.setRepresentationType(RepresentationType.Unknown);
-		assertTrue(refEntry.getRepresentationType() == RepresentationType.Unknown);
+		assertTrue(refEntry.getResourceType() == ResourceType.InformationResource);
+		refEntry.setResourceType(ResourceType.Unknown);
+		assertTrue(refEntry.getResourceType() == ResourceType.Unknown);
 	}
 
 	@Test

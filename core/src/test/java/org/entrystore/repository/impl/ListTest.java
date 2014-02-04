@@ -22,7 +22,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -65,7 +65,7 @@ public class ListTest {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
-		Entry list = duck.createResource(null, ResourceType.List, null, null);
+		Entry list = duck.createResource(null, GraphType.List, null, null);
 		Entry child = duck.createLink(null, URI.create("http://slashdot.org/"), null);
 		((List) list.getResource()).addChild(child.getEntryURI()); //Ok first time
 		((List) list.getResource()).addChild(child.getEntryURI()); //Should fail second time.
@@ -76,7 +76,7 @@ public class ListTest {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
-		Entry list = duck.createResource(null, ResourceType.List, null, null);
+		Entry list = duck.createResource(null, GraphType.List, null, null);
 		Entry child = duck.createLink(null, URI.create("http://slashdot.org/"), null);
 		java.util.List<URI> children = new ArrayList<URI>();
 		children.add(child.getEntryURI());
@@ -89,9 +89,9 @@ public class ListTest {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
-		Entry parentList1 = duck.createResource(null, ResourceType.List, null, null);
-		Entry parentList2 = duck.createResource(null, ResourceType.List, null, null);
-		Entry childList = duck.createResource(null, ResourceType.List, null, null);
+		Entry parentList1 = duck.createResource(null, GraphType.List, null, null);
+		Entry parentList2 = duck.createResource(null, GraphType.List, null, null);
+		Entry childList = duck.createResource(null, GraphType.List, null, null);
 		((List) parentList1.getResource()).addChild(childList.getEntryURI()); //Adding list to parent list, should be ok.
 		((List) parentList2.getResource()).addChild(childList.getEntryURI()); //Adding list to second parent list, should fail.
 	}
@@ -101,9 +101,9 @@ public class ListTest {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
-		Entry parentList1 = duck.createResource(null, ResourceType.List, null, null);
-		Entry parentList2 = duck.createResource(null, ResourceType.List, null, null);
-		Entry childList = duck.createResource(null, ResourceType.List, null, null);
+		Entry parentList1 = duck.createResource(null, GraphType.List, null, null);
+		Entry parentList2 = duck.createResource(null, GraphType.List, null, null);
+		Entry childList = duck.createResource(null, GraphType.List, null, null);
 		((List) parentList1.getResource()).addChild(childList.getEntryURI()); //Adding list to parent list, should be ok.
 		java.util.List<URI> children = new ArrayList<URI>();
 		children.add(childList.getEntryURI());
@@ -114,8 +114,8 @@ public class ListTest {
 	public void moveEntryBetweenLists() throws IOException, QuotaException {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
-		Entry listE1 = duck.createResource(null, ResourceType.List, null, null); // since owner
-		Entry listE2 = duck.createResource(null, ResourceType.List, null, null); // since owner
+		Entry listE1 = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry listE2 = duck.createResource(null, GraphType.List, null, null); // since owner
 		Entry linkEntry = duck.createLink(null, URI.create("http://slashdot.org/"), listE1.getResourceURI());
 
 		((List) listE2.getResource()).moveEntryHere(linkEntry.getEntryURI(), listE1.getEntryURI(), false);
@@ -129,10 +129,10 @@ public class ListTest {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
 		Context mouse = cm.getContext("mouse");
-		Entry listE1 = duck.createResource(null, ResourceType.List, null, null); // since owner
+		Entry listE1 = duck.createResource(null, GraphType.List, null, null); // since owner
 		Entry linkEntry = duck.createLink(null, URI.create("http://slashdot.org/"), listE1.getResourceURI());
 
-		Entry listE2 = mouse.createResource(null, ResourceType.List, null, null); // since owner
+		Entry listE2 = mouse.createResource(null, GraphType.List, null, null); // since owner
 		Entry newEntry = ((List) listE2.getResource()).moveEntryHere(linkEntry.getEntryURI(), listE1.getEntryURI(), false);
 		assertTrue(duck.getByEntryURI(linkEntry.getEntryURI()) == null);
 		assertTrue(newEntry.getContext() == mouse);
@@ -143,9 +143,9 @@ public class ListTest {
 	public void ownerRemoveTree() {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
-		Entry listE1 = duck.createResource(null, ResourceType.List, null, null); // since owner
-		Entry listE2 = duck.createResource(null, ResourceType.List, null, listE1.getResourceURI()); // since owner
-		Entry listE3 = duck.createResource(null, ResourceType.List, null, null); // since owner
+		Entry listE1 = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry listE2 = duck.createResource(null, GraphType.List, null, listE1.getResourceURI()); // since owner
+		Entry listE3 = duck.createResource(null, GraphType.List, null, null); // since owner
 		Entry linkEntry = duck.createLink(null, URI.create("http://slashdot.org/"), listE1.getResourceURI());
 		Entry linkEntry2 = duck.createLink(null, URI.create("http://digg.com/"), listE2.getResourceURI());
 		Entry linkEntry3 = duck.createLink(null, URI.create("http://reddit.com/"), listE3.getResourceURI());

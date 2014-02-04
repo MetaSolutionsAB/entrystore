@@ -20,8 +20,8 @@ import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.EntryType;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
-import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.TransformException;
@@ -135,9 +135,9 @@ public class ExecutionResource extends BaseResource {
 			String sourceMimeType = sourceEntry.getMimetype();
 			Data data = (Data) sourceEntry.getResource();
 
-			if (!ResourceType.Pipeline.equals(pipelineEntry.getResourceType()) ||
+			if (!GraphType.Pipeline.equals(pipelineEntry.getGraphType()) ||
 					!EntryType.Local.equals(sourceEntry.getEntryType()) ||
-					!RepresentationType.InformationResource.equals(sourceEntry.getRepresentationType()) ||
+					!ResourceType.InformationResource.equals(sourceEntry.getResourceType()) ||
 					sourceMimeType == null ||
 					data == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);

@@ -40,7 +40,7 @@ import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
@@ -50,7 +50,7 @@ import org.entrystore.repository.QuotaException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.User;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.util.NS;
@@ -394,7 +394,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		return result;
 	}
 
-	synchronized protected EntryImpl createNewMinimalItem(URI resourceURI, URI metadataURI, EntryType lType, ResourceType bType, RepresentationType rType, String entryId) {
+	synchronized protected EntryImpl createNewMinimalItem(URI resourceURI, URI metadataURI, EntryType lType, GraphType bType, ResourceType rType, String entryId) {
 		try {
 			//Factory and connection.
 			RepositoryConnection rc = entry.repository.getConnection();
@@ -439,8 +439,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 				if (resourceURI != null) {
 					resURI = vf.createURI(resourceURI.toString());
 				} else {
-					if (bType == ResourceType.Context ||
-							bType == ResourceType.SystemContext) {
+					if (bType == GraphType.Context ||
+							bType == GraphType.SystemContext) {
 						resURI = vf.createURI(URISplit.fabricateContextURI(base, identity).toString());					
 					} else {
 						resURI = vf.createURI(URISplit.fabricateURI(base, this.id, RepositoryProperties.getResourcePath(bType), identity).toString());
@@ -469,7 +469,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					rc.remove(counters, this.resourceURI);
 					rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(counter), this.resourceURI);
 
-					if (bType != ResourceType.SystemContext) {
+					if (bType != GraphType.SystemContext) {
 						this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
 					}
 					rc.commit();
@@ -497,7 +497,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			return;
 		}
 
-		switch (newEntry.getResourceType()) {
+		switch (newEntry.getGraphType()) {
 		case None:
 			if (newEntry.getEntryType() == EntryType.Local) {
 				//TODO check Representationtype as well.
@@ -527,7 +527,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (listURI != null) {
 			URI listEntryURI = new URISplit(listURI, this.entry.getRepositoryManager().getRepositoryURL()).getMetaMetadataURI();
 			Entry listItem = getByEntryURI(listEntryURI);
-			if (listItem.getResourceType() == ResourceType.List &&
+			if (listItem.getGraphType() == GraphType.List &&
 					listItem.getEntryType() == EntryType.Local) {
 				return (ListImpl) listItem.getResource();
 			}
@@ -571,7 +571,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		ListImpl list = getList(listURI);
 		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, EntryType.LinkReference, ResourceType.None, null, entryId);
+			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, EntryType.LinkReference, GraphType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 				copyACL(list, entry);
@@ -587,7 +587,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		ListImpl list = getList(listURI);
 		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, EntryType.Reference, ResourceType.None, null, entryId);
+			EntryImpl entry = createNewMinimalItem(resourceURI, metadataURI, EntryType.Reference, GraphType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 				copyACL(list, entry);
@@ -603,7 +603,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		ListImpl list = getList(listURI);
 		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		synchronized (this.entry.repository) {
-			EntryImpl entry = createNewMinimalItem(resourceURI, null, EntryType.Link, ResourceType.None, null, entryId);
+			EntryImpl entry = createNewMinimalItem(resourceURI, null, EntryType.Link, GraphType.None, null, entryId);
 			if (list != null) {
 				list.addChild(entry.getEntryURI());
 				copyACL(list, entry);
@@ -616,10 +616,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	public Entry createResource(String entryId, ResourceType buiType, RepresentationType repType, URI listURI) {
+	public Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI) {
 		ListImpl list = null;
 		boolean isOwner;
-		if(buiType == ResourceType.String) {
+		if(buiType == GraphType.String) {
 			// the user that has logged in must have a home context, inorder to make a string comment. 
 			URI userURI = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI(); 
 			Entry userEntry = entry.getRepositoryManager().getPrincipalManager().getByEntryURI(userURI); 
@@ -649,14 +649,14 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 			}
 			
-			if (ResourceType.Context.equals(buiType)) {
+			if (GraphType.Context.equals(buiType)) {
 				((Context) entry.getResource()).initializeSystemEntries();
-			} else if (ResourceType.User.equals(buiType) || ResourceType.Group.equals(buiType)) {
+			} else if (GraphType.User.equals(buiType) || GraphType.Group.equals(buiType)) {
 				entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, entry.getResourceURI());
 				entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, entry.getResourceURI());
 				entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, ((PrincipalManager) this).getGuestUser().getURI());
 				entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getGuestUser().getURI());
-				if (ResourceType.Group.equals(buiType)) {
+				if (GraphType.Group.equals(buiType)) {
 					entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, ((PrincipalManager) this).getAuthenticatedUserURI());
 					entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, ((PrincipalManager) this).getAuthenticatedUserURI());
 				}
@@ -669,7 +669,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (toEntry instanceof EntryImpl) {
 			EntryImpl entry = (EntryImpl) toEntry;
 			Set<URI> adminPrincipals = fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.Administer);
-			if (toEntry.getResourceType() != ResourceType.List || toEntry.getEntryType() != EntryType.Local) {
+			if (toEntry.getGraphType() != GraphType.List || toEntry.getEntryType() != EntryType.Local) {
 				PrincipalManager pm = toEntry.getRepositoryManager().getPrincipalManager();
 				try {
 					pm.checkAuthenticatedUserAuthorized(fromList.getEntry(), AccessProperty.Administer);
@@ -743,7 +743,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					initResource(newEntry);
 				}
 				cache.put(newEntry);
-				if (ResourceType.Context.equals(newEntry.getResourceType()) &&
+				if (GraphType.Context.equals(newEntry.getGraphType()) &&
 						EntryType.Local.equals(newEntry.getEntryType())) {
 					org.entrystore.repository.Resource resource = newEntry.getResource(); 
 					if (resource != null) {
@@ -844,7 +844,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			checkAccess(removeEntry, AccessProperty.WriteResource);
 
 
-			if(removeEntry.resourceType == ResourceType.String) {
+			if(removeEntry.resourceType == GraphType.String) {
 				// removes the relation from the source entry. 
 				removeEntry.getLocalMetadata().setGraph(new GraphImpl()); 
 			}
@@ -1184,7 +1184,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	public void initializeSystemEntries() {
 		systemEntriesEntry = (EntryImpl) get("_systemEntries");
 		if(systemEntriesEntry == null) {
-			systemEntriesEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_systemEntries");
+			systemEntriesEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_systemEntries");
 			setMetadata(systemEntriesEntry, "System entries", null);
 			log.info("Successfully added the systemEntries list");
 		}
@@ -1198,7 +1198,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 		Entry latest = get("_latest");
 		if (latest == null) {
-			latest = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_latest");
+			latest = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_latest");
 			setMetadata(latest, "Latest entries", null);
 			log.info("Successfully added the latest list");
 
@@ -1209,7 +1209,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			public List<URI> getChildren() {
 
 				List<URI> entryURIs = new ArrayList<URI>(); 
-				if (this.getEntry().getResourceType() == ResourceType.List) {
+				if (this.getEntry().getGraphType() == GraphType.List) {
 					Iterator<URI> entryIterator = getEntries().iterator();
 					ArrayList<Entry> entries = new ArrayList<Entry>(); 
 
@@ -1218,9 +1218,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 						URI u = entryIterator.next();
 						Entry localEntry = getByEntryURI(u); 
 						if (localEntry != null) {
-							if (ResourceType.Context.equals(localEntry.getResourceType())
-									|| ResourceType.None.equals(localEntry.getResourceType())
-									|| ResourceType.List.equals(localEntry.getResourceType())) {
+							if (GraphType.Context.equals(localEntry.getGraphType())
+									|| GraphType.None.equals(localEntry.getGraphType())
+									|| GraphType.List.equals(localEntry.getGraphType())) {
 //								try {
 //									Integer.parseInt(localEntry.getId());
 									entries.add(localEntry); 
@@ -1264,7 +1264,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 		unlistedEntriesEntry = (EntryImpl) get("_unlisted");
 		if (unlistedEntriesEntry == null) {
-			unlistedEntriesEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_unlisted");
+			unlistedEntriesEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_unlisted");
 			setMetadata(unlistedEntriesEntry, "Unlisted entries", null);
 			log.info("Successfully added the _unlisted list");
 		}
@@ -1280,7 +1280,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							log.warn("Entry is null for URI: " + uri);
 							continue;
 						}
-						if (childEntry.getResourceType().equals(ResourceType.None) || childEntry.getResourceType().equals(ResourceType.List)) {
+						if (childEntry.getGraphType().equals(GraphType.None) || childEntry.getGraphType().equals(GraphType.List)) {
 							if (!systemEntries.contains(uri) &&
 									!systemEntriesEntry.getEntryURI().equals(uri) &&
 									childEntry.getReferringListsInSameContext().isEmpty()) {
@@ -1334,7 +1334,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		return DATE_PARSER.format(new Date()).toString(); 
 	}
 
-	public Entry createComment(String entryId, ResourceType buiType, URI resourceURI,
+	public Entry createComment(String entryId, GraphType buiType, URI resourceURI,
 			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception {
 
 
@@ -1363,7 +1363,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					null, 
 					EntryType.Local,
 					buiType, 
-					RepresentationType.InformationResource, 
+					ResourceType.InformationResource, 
 					entryId);
 
 		}
