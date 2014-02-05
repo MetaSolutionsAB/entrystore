@@ -1,60 +1,69 @@
-<!-- Basic configuration -->
+## Data folder
 entrystore.data.folder=/srv/entrystore/files/
-entrystore.backup.folder=/srv/entrystore/backup/
-entrystore.backup.scheduler=off
 
-<!-- Base URI how it is seen from external clients -->
+## Base URI how it is seen from external clients
 entrystore.baseurl.folder=http://entrystore.org/store/
 
-<!-- Authentication via OpenID (default: off) -->
-entrystore.auth.openid=on
-entrystore.auth.openid.google=on
-entrystore.auth.openid.yahoo=off
-entrystore.auth.openid.myopenid=off
+## Backup
+# entrystore.backup.scheduler=on|off (default: off)
+# entrystore.backup.folder=/srv/entrystore/backup/
+# entrystore.backup.timeregexp=time regular expression as for cron jobs
+# entrystore.backup.gzip=on|off (default: off)
+# entrystore.backup.maintenance=on|off (default: off)
+# entrystore.backup.maintenance.upper-limit=maximum amount of stored backups
+# entrystore.backup.maintenance.lower-limit=minimum amount of stored backups
+# entrystore.backup.maintenance.expires-after-days=maximum days a backup is kept
 
-<!-- Solr -->
+## OpenID
+# entrystore.auth.openid=on|off (default: off)
+# entrystore.auth.openid.google=on
+# entrystore.auth.openid.yahoo=off
+# entrystore.auth.openid.myopenid=off
+
+## Solr
 entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
 entrystore.solr.url=/srv/entrystore/files/solr/
 entrystore.solr.extract-fulltext=off
 
-<!-- OAI-PMH harvester (not to confuse with the OAI-PMH target which is an own WebApp -->
-entrystore.harvester.oai=on
-entrystore.harvester.oai.multithreaded=off
+## OAI-PMH harvester (not to confuse with the OAI-PMH target which is an own WebApp
+# entrystore.harvester.oai=on|off (default: off)
+# entrystore.harvester.oai.multithreaded=off
 
-<!-- Cache for metadata instances produced by the harvesting target -->
-entrystore.repository.cache=off
-entrystore.repository.cache.path=/srv/entrystore/files/cache/
+## Cache for metadata instances produced by the harvesting target
+# entrystore.repository.cache=on|off (default: off)
+# entrystore.repository.cache.path=/srv/entrystore/files/cache/
 
-<!-- entrystore.auth.adminpw=newtempadminpw -->
+## Temporary override of the admin-password
+# entrystore.auth.adminpw=newtempadminpw
 
-<!-- Quota defaults -->
-entrystore.data.quota=off
-entrystore.data.quota.default=100k
+## Quota defaults
+# entrystore.data.quota=on|off (default: off)
+# entrystore.data.quota.default=100k
 
-<!-- SPARQL endpoint with public metadata in all contexts -->
-entrystore.repository.public=off
-entrystore.repository.public.type=native
-entrystore.repository.public.path=file:///srv/entrystore/store/public/
-entrystore.repository.public.indexes=cspo,spoc,posc
+## SPARQL endpoint with public metadata in all contexts
+# entrystore.repository.public=on|off (default: off)
+# entrystore.repository.public.type=native
+# entrystore.repository.public.path=file:///srv/entrystore/store/public/
+# entrystore.repository.public.indexes=cspo,spoc,posc
 
-<!-- Run metadata correction methods                   -->
-<!-- Only for development and/or migration purposes    -->
-entrystore.repository.store.correct-metadata=false
-
-<!-- Repository store: memory | native | http | sparql -->
+## Repository store: memory | native | http | sparql
 entrystore.repository.store.type=native
-<!-- If store type is native these properties must be specified -->
-<!-- If store type is memory a path can be specified for persisting the repository -->
+## If store type is native these properties must be specified
+## If store type is memory a path can be specified for persisting the repository
 entrystore.repository.store.path=file:///srv/entrystore/store/
 entrystore.repository.store.indexes=cspo,posc
-<!-- if type=http: entrystore.repository.store.url=URL of Sesame HTTP repository -->
-<!-- if type=sparql: entrystore.repository.store.endpoint-query=Query URL of SPARQL repository -->
-<!-- if type=sparql: entrystore.repository.store.endpoint-update=Update URL of SPARQL repository -->
+## if type=http: entrystore.repository.store.url=URL of Sesame HTTP repository
+## if type=sparql: entrystore.repository.store.endpoint-query=Query URL of SPARQL repository
+## if type=sparql: entrystore.repository.store.endpoint-update=Update URL of SPARQL repository
 
-<!-- By default all references are rewritten. This is necessary to makes -->
-<!-- installations work where the internal references are different from -->
-<!-- the external ones (this happens when reverse proxying is used). This -->
-<!-- option can be used to deactivate this feature, e.g. if EntryStore is -->
-<!-- to be started via EntryStoreApplication.main() -->
+## By default all references are rewritten. This is necessary to makes
+## installations work where the internal references are different from
+## the external ones (this happens when reverse proxying is used). This
+## option can be used to deactivate this feature, e.g. if EntryStore is
+## to be started via EntryStoreApplication.main()
 entrystore.repository.rewrite-basereference=true
+
+## Run metadata correction methods
+## Only for development and/or migration purposes
+# entrystore.repository.store.correct-metadata=true|false (default: false)
