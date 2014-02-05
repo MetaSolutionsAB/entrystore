@@ -66,7 +66,7 @@ public class BackupScheduler {
 		if (upperLimit == -1 || lowerLimit == -1 || expiresAfterDays == -1) {
 			this.maintenance = false;
 		}
-		
+
 		this.backupEntryURI = entryURI;
 		log.info("Created backup scheduler");
 	}
