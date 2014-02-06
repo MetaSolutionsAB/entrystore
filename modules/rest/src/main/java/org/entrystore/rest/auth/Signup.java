@@ -124,7 +124,10 @@ public class Signup {
 				sb.append("<h3>Email address confirmation necessary</h3>");
 				sb.append("<p>You signed up with the following information:</p>");
 				sb.append("<p>Name: __NAME__<br/>Email: __EMAIL__</p>");
-				sb.append("<p>To complete the sign-up process, you need to follow <a href=\"__CONFIRMATION_LINK__\">this link</a> to confirm<br/>that you own the email address you used to set up an account.</p>");
+				sb.append("<p>To complete the sign-up process, you need to follow <a href=\"__CONFIRMATION_LINK__\">this link</a> ");
+				sb.append("or copy/paste<br/>the URL below into a web browser to confirm that you own the email address<br/>you ");
+				sb.append("used to set up an account.</p>");
+				sb.append("<p><pre>__CONFIRMATION_LINK__</pre></p>");
 				sb.append("<p>The link is valid for 24 hours.</p><br/>");
 				sb.append("<div style=\"border-top:1px solid #e5e5e5;\"><p><small>&copy; 2014 <a href=\"http://metasolutions.se\" style=\"text-decoration:none;\">MetaSolutions AB</a></small></p></div>");
 				sb.append("</div></body></html>");
