@@ -64,6 +64,12 @@
 		</site>
 	</distributionManagement>
 
+	<scm>
+		<connection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</connection>
+		<developerConnection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</developerConnection>
+		<url>https://bitbucket.org/metasolutions/entrystore.git</url>
+	</scm>
+
 	<!-- ================= Modules ================= -->
 	<modules>
 		<module>core</module>
