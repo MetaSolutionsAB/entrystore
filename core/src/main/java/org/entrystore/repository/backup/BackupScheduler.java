@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -66,7 +66,7 @@ public class BackupScheduler {
 		if (upperLimit == -1 || lowerLimit == -1 || expiresAfterDays == -1) {
 			this.maintenance = false;
 		}
-		
+
 		this.backupEntryURI = entryURI;
 		log.info("Created backup scheduler");
 	}

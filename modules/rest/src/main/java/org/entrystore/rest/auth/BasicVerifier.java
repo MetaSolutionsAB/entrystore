@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.User;
@@ -58,7 +58,7 @@ public class BasicVerifier implements Verifier {
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			Entry userEntry = pm.getPrincipalEntry(identifier);
-			if (userEntry != null && ResourceType.User.equals(userEntry.getResourceType())) {
+			if (userEntry != null && GraphType.User.equals(userEntry.getGraphType())) {
 				User user = ((User) userEntry.getResource());
 				if (user.getSaltedHashedSecret() != null) {
 					return user.getSaltedHashedSecret();

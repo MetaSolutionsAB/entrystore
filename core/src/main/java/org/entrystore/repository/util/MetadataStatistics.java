@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -150,7 +150,7 @@ public class MetadataStatistics {
 		}
 		log.info("Entry found: " + entry.getEntryURI());
 		
-		if (!entry.getResourceType().equals(ResourceType.None)) {
+		if (!entry.getGraphType().equals(GraphType.None)) {
 			log.info("Found ResourceType. Skipping.");
 			return null;
 		}

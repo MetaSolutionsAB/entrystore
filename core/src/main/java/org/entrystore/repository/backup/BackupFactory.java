@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,11 @@
 package org.entrystore.repository.backup;
 
 
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collection;
-
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryProperties;
+import org.entrystore.repository.config.Config;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.URISplit;
 import org.openrdf.model.Graph;
@@ -31,6 +29,10 @@ import org.openrdf.model.Statement;
 import org.openrdf.model.ValueFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collection;
 
 
 /**
@@ -91,6 +93,7 @@ public class BackupFactory {
 		Entry backupEntry = rm.getContextManager().getEntry(getBackupEntryURI()); 
 
 		if (isBackupEntry(backupEntry)) {
+			log.info("Loading backup configuration from repository");
 			for (Statement s : backupEntry.getGraph()) {
 				if (s.getPredicate().toString().equals(RepositoryProperties.NSbase + "timeRegularExpression")) {
 					timeRegExp = s.getObject().stringValue();
@@ -107,8 +110,25 @@ public class BackupFactory {
 				}
 			}
 		} else {
-			return null;
+			log.info("Loading backup configuration from properties");
+			Config config = rm.getConfiguration();
+			timeRegExp = config.getString(Settings.BACKUP_TIMEREGEXP);
+			if (timeRegExp == null) {
+				return null;
+			}
+			gzip = "on".equalsIgnoreCase(config.getString(Settings.BACKUP_GZIP, "off"));
+			maintenance = "on".equalsIgnoreCase(config.getString(Settings.BACKUP_MAINTENANCE, "off"));
+			upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
+			lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
+			expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
 		}
+
+		log.info("Time regular expression: " + timeRegExp);
+		log.info("GZIP: " + gzip);
+		log.info("Maintenance: " + maintenance);
+		log.info("Maintenance upper limit: " + upperLimit);
+		log.info("Maintenance lower limit: " + lowerLimit);
+		log.info("Maintenance expires after days: " + expiresAfterDays);
 
 		return new BackupScheduler(getBackupEntryURI(), rm, timeRegExp, gzip, maintenance, upperLimit, lowerLimit, expiresAfterDays);
 	}

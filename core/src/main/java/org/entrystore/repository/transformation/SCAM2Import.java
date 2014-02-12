@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,13 +26,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.QuotaException;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.impl.EntryImpl;
 import org.openrdf.model.BNode;
 import org.openrdf.model.Graph;
@@ -159,7 +159,7 @@ public class SCAM2Import {
 					list.addChild(entryChild.getEntryURI());
 				} catch(RepositoryException re) {
 				}
-				if (entryChild.getResourceType() == ResourceType.List) {
+				if (entryChild.getGraphType() == GraphType.List) {
 					recurseFix(graph, child, (org.entrystore.repository.List) entryChild.getResource());
 				}
 			} else {
@@ -196,7 +196,7 @@ public class SCAM2Import {
 	void handleFolder(Graph graph, URI parent, URI folder) {
 		Graph closure = getAnonymousClosure(graph, folder);
 		java.net.URI parentList = parent == null ? null : uri2Entry.get(parent).getResourceURI();
-		Entry folderEntry = context.createResource(null, ResourceType.List, RepresentationType.InformationResource, parentList);
+		Entry folderEntry = context.createResource(null, GraphType.List, ResourceType.InformationResource, parentList);
 		handleItem((EntryImpl) folderEntry, closure, parent, folder);
 	}
 
@@ -208,7 +208,7 @@ public class SCAM2Import {
 		if(isURL(closure, leaf)) {
 			leafEntry = context.createLink(null, java.net.URI.create(leaf.stringValue()), parentList);
 		} else if (isFile(closure, leaf)) {
-			leafEntry = context.createResource(null, ResourceType.None, RepresentationType.InformationResource, parentList);
+			leafEntry = context.createResource(null, GraphType.None, ResourceType.InformationResource, parentList);
 			setFile((Data) leafEntry.getResource(), closure, leaf);
 		} else {
 			log.warn("Entry, \""+leaf.stringValue()+"\", is neither URL or uploaded file.");

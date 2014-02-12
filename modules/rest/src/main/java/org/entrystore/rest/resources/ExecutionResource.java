@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.EntryType;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
-import org.entrystore.repository.RepresentationType;
 import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.TransformException;
@@ -86,14 +86,14 @@ public class ExecutionResource extends BaseResource {
 
 		String pipeline;
 		String source;
-		String destination;
-		boolean async = false;
+//		String destination;
+//		boolean async = false;
 
 		try {
 			pipeline = request.getString("pipeline"); // Pipeline Entry URI
 			source = request.getString("source"); // Data source Entry URI
-			destination = request.getString("destination"); // Destination Entry URI
-			async = "async".equalsIgnoreCase(request.getString("async")); // sync is default
+//			destination = request.getString("destination"); // Destination Entry URI
+//			async = "async".equalsIgnoreCase(request.getString("async")); // sync is default
 		} catch (JSONException e) {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNPROCESSABLE_ENTITY);
 			return;
@@ -124,15 +124,20 @@ public class ExecutionResource extends BaseResource {
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				return;
 			}
-
+			Set<URI> lists = sourceEntry.getReferringListsInSameContext();
+			URI listURI = null;
+			if (lists.size() == 1) {
+				listURI = lists.iterator().next();
+			}
+			
 			// TODO add support for non-local resources
 
 			String sourceMimeType = sourceEntry.getMimetype();
 			Data data = (Data) sourceEntry.getResource();
 
-			if (!ResourceType.Pipeline.equals(pipelineEntry.getResourceType()) ||
+			if (!GraphType.Pipeline.equals(pipelineEntry.getGraphType()) ||
 					!EntryType.Local.equals(sourceEntry.getEntryType()) ||
-					!RepresentationType.InformationResource.equals(sourceEntry.getRepresentationType()) ||
+					!ResourceType.InformationResource.equals(sourceEntry.getResourceType()) ||
 					sourceMimeType == null ||
 					data == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
@@ -141,7 +146,7 @@ public class ExecutionResource extends BaseResource {
 
 			Set<Entry> processedEntries = null;
 			try {
-				processedEntries = new Pipeline(pipelineEntry).run(data.getData(), sourceMimeType);
+				processedEntries = new Pipeline(pipelineEntry).run(data.getData(), sourceMimeType, listURI);
 			} catch (TransformException te) {
 				log.error(te.getMessage());
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);

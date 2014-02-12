@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import org.openrdf.repository.RepositoryConnection;
  * structure which is known by the repository, a data-structure 
  * is maintained in the repository and accessed via specific methods.
  * This is the case for all {@link EntryType#Local} {@link EntryType}s
- * with a {@link ResourceType}s that is not {@link ResourceType#None}.
+ * with a {@link GraphType}s that is not {@link GraphType#None}.
  * Examples include {@link List}, {@link Context}, {@link ContextManager}, {@link User}, 
  * {@link Group} and {@link PrincipalManager}.
  * 

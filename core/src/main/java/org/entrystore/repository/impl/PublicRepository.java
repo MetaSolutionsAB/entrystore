@@ -1,10 +1,26 @@
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.repository.impl;
 
 import java.io.File;
 import java.util.Set;
 
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
@@ -131,7 +147,7 @@ public class PublicRepository {
 			// resource
 			Graph resGraph = null;
 			URI resNG = null;
-			if (ResourceType.Graph.equals(e.getResourceType()) && EntryType.Local.equals(e.getEntryType())) {
+			if (GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
 				resGraph = (Graph) e.getResource();
 				resNG = vf.createURI(e.getResourceURI().toString());
 			}
@@ -181,7 +197,7 @@ public class PublicRepository {
 		
 		// If entry is ResourceType.Context we update all its
 		// entries, just in case the ACL has changed
-		if (ResourceType.Context.equals(e.getResourceType()) && EntryType.Local.equals(e.getEntryType())) {
+		if (GraphType.Context.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
 			
 			// TODO needs to be tested
 			

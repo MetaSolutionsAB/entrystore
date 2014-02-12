@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,6 @@
  * limitations under the License.
  */
 
-/*  $Id: $
-*
-*  Copyright (c) 2008, IML Lab group at UMU (Umeå University)
-*  Licensed under the GNU LGPL. For full terms see the file COPYRIGHT.
-*/
 package org.entrystore.rest.util;
 
 import org.json.JSONException;

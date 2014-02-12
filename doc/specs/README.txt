@@ -28,7 +28,7 @@ with:
   
 ## RMQ ##
 - for the script to work, you have to have a meta info part in the ontology. Something like:
-    <owl:Ontology rdf:about="http://scam.sf.net/schema#">
+    <owl:Ontology rdf:about="http://entrystore.org/terms/">
       <dcterms:title xml:lang="en">ReM3 Model</dcterms:title>
       <owl:versionInfo>version 0.1</owl:versionInfo>
       <dcterms:description xml:lang="en">ReM2 Model used for the EntryStore

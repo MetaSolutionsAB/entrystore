@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -94,7 +94,7 @@ public class MergeResource extends BaseResource {
 				
 				if (deserializedGraph != null) {
 					Graph2Entries g2e = new Graph2Entries(this.context);
-					g2e.merge(deserializedGraph, this.parameters.get("resourceId"));
+					g2e.merge(deserializedGraph, this.parameters.get("resourceId"), null);
 					getResponse().setStatus(Status.SUCCESS_OK);
 					return;
 				}

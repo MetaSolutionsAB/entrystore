@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,7 @@
 
 package org.entrystore.rest.resources;
 
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.List;
-
-import com.github.jsonldjava.impl.SesameJSONLDWriter;
+import com.github.jsonldjava.sesame.SesameJSONLDWriter;
 import org.entrystore.repository.EntryType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.impl.converters.ConverterUtil;
@@ -43,6 +39,10 @@ import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 
 /**

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,12 +23,12 @@ import java.util.Iterator;
 import java.util.Set;
 
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.Data;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.List;
-import org.entrystore.repository.RepresentationType;
+import org.entrystore.repository.ResourceType;
 import org.entrystore.repository.util.FileOperations;
 import org.openrdf.model.Statement;
 import org.openrdf.model.URI;
@@ -105,13 +105,13 @@ public class ZipExport {
 	
 	protected boolean isFile(Entry entry) {
 		return entry.getEntryType() == EntryType.Local
-				&& entry.getResourceType() == ResourceType.None
-				&& entry.getRepresentationType() == RepresentationType.InformationResource;
+				&& entry.getGraphType() == GraphType.None
+				&& entry.getResourceType() == ResourceType.InformationResource;
 	}
 
 	protected boolean isLocalDir(Entry entry) {
 		return entry.getEntryType() == EntryType.Local
-				&& entry.getResourceType() == ResourceType.List;
+				&& entry.getGraphType() == GraphType.List;
 	}
 
 	protected String getLabel(Entry entry) {

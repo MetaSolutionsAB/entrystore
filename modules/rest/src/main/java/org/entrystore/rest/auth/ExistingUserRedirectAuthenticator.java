@@ -1,7 +1,24 @@
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.auth;
 
 import java.util.Date;
 
+import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.User;
 import org.entrystore.repository.security.Password;
@@ -28,41 +45,41 @@ public class ExistingUserRedirectAuthenticator extends RedirectAuthenticator {
 	private static Logger log = LoggerFactory.getLogger(ExistingUserRedirectAuthenticator.class);
 	
 	RepositoryManager rm;
-	
-	User user;
+
+	PrincipalManager pm;
 
 	public ExistingUserRedirectAuthenticator(Context context, Verifier verifier, Restlet forbiddenResource, RepositoryManager rm) {
 		super(context, verifier, forbiddenResource);
 		this.rm = rm;
+		this.pm = rm.getPrincipalManager();
 	}
 
 	public ExistingUserRedirectAuthenticator(Context context, Verifier verifier, String identifierCookie, String origRefCookie,
 			Restlet forbiddenResource, RepositoryManager rm) {
 		super(context, verifier, identifierCookie, origRefCookie, forbiddenResource);
 		this.rm = rm;
+		this.pm = rm.getPrincipalManager();
 	}
 	
 	@Override
 	protected void handleUser(org.restlet.security.User user) {
 		String email = user.getEmail();
 		if (email == null) {
-			this.user = null;
 			log.warn("Unable to perform OpenID login, no user email set");
 			return;
 		}
 		
 		User u = rm.getPrincipalManager().getUserByExternalID(email);
 		if (u != null) {
-			this.user = u;
-			log.info("Found matching user " + u.getURI() + " for OpenID E-Mail " + email);
-		} else {
-			this.user = null;
+			log.info("Found match for OpenID E-Mail " + email + ", setting authenticated user to " + u.getURI());
+			rm.getPrincipalManager().setAuthenticatedUserURI(u.getURI());
 		}
 	}
 	
 	@Override
 	protected int authenticated(Request request, Response response) {
-		if (this.user == null) {
+		User u = pm.getUser(pm.getAuthenticatedUserURI());
+		if (u == null || pm.getGuestUser().getURI().equals(u.getURI())) {
 			CookieVerifier.cleanCookies("auth_token", request, response);
 			CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_IDENTIFIER_COOKIE, request, response);
 			CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, request, response);
@@ -71,19 +88,16 @@ public class ExistingUserRedirectAuthenticator extends RedirectAuthenticator {
 		}
 		
 		CookieVerifier.cleanCookies("auth_token", request, response);
-		
+
 		int maxAge = 7 * 24 * 3600;
 		String token = Password.getRandomBase64(128);
 		Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
-		
-		TokenCache.addToken(token, new UserInfo(user.getName(), loginExpiration));
+
+		LoginTokenCache.getInstance().addToken(token, new UserInfo(u.getName(), loginExpiration));
 		CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 		tokenCookieSetting.setMaxAge(maxAge);
 		tokenCookieSetting.setPath(rm.getRepositoryURL().getPath());
 		response.getCookieSettings().add(tokenCookieSetting);
-		
-		log.info("Setting authenticated user to " + user.getURI());
-		rm.getPrincipalManager().setAuthenticatedUserURI(user.getURI());
 
 		return CONTINUE;
 	}

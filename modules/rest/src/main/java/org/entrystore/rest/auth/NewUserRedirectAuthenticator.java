@@ -1,13 +1,28 @@
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.auth;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.User;
-import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.util.NS;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.restlet.Context;
@@ -33,24 +48,32 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 	@Override
 	public void handleUser(org.restlet.security.User user) {
 		super.handleUser(user);
-		if (this.user == null && user.getEmail() != null) {
-			PrincipalManager pm = rm.getPrincipalManager();
-			ContextManager cm = rm.getContextManager();
 
+		String email = user.getEmail();
+		if (email == null) {
+			log.warn("Unable to perform OpenID login, no user email set");
+			return;
+		}
+
+		User u = pm.getUser(pm.getAuthenticatedUserURI());
+
+		// Create a new user if we don't have one yet
+		if (u == null || pm.getGuestUser().getURI().equals(u.getURI())) {
+			ContextManager cm = rm.getContextManager();
 			try {
 				// We need Admin-rights to create user and context
 				pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
 				// Create user and set alias, metadata and e-mail
-				Entry entry = rm.getPrincipalManager().createResource(null, ResourceType.User, null, null);
+				Entry entry = rm.getPrincipalManager().createResource(null, GraphType.User, null, null);
 				pm.setPrincipalName(entry.getResourceURI(), user.getEmail());
-				setFoafMetadata(entry, user);
-				User u = (User) entry.getResource();
+				Signup.setFoafMetadata(entry, user);
+				u = (User) entry.getResource();
 				u.setExternalID(user.getEmail());
 				log.info("Created user " + u.getURI() + ", mapped to OpenID E-Mail " + u.getExternalID());
 
 				// Create context and set ACL and alias
-				Entry homeContext = cm.createResource(null, ResourceType.Context, null, null);
+				Entry homeContext = cm.createResource(null, GraphType.Context, null, null);
 				homeContext.addAllowedPrincipalsFor(AccessProperty.Administer, u.getURI());
 				cm.setContextAlias(homeContext.getEntryURI(), user.getEmail());
 				log.info("Created context " + homeContext.getResourceURI());
@@ -58,42 +81,14 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 				// Set home context of user
 				u.setHomeContext((org.entrystore.repository.Context) homeContext.getResource());
 				log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
-
-				// We set the user, this will be used later by super.authenticated()
-				this.user = u;
 			} finally {
-				pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+				if (u != null) {
+					pm.setAuthenticatedUserURI(u.getURI());
+				} else {
+					pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+				}
 			}
 		}
-	}
-	
-	private void setFoafMetadata(Entry entry, org.restlet.security.User userInfo) {
-		Graph graph = entry.getLocalMetadata().getGraph();
-		ValueFactory vf = graph.getValueFactory();
-		org.openrdf.model.URI resourceURI = vf.createURI(entry.getResourceURI().toString());
-		String fullname = null;
-		if (userInfo.getFirstName() != null) {
-			fullname = userInfo.getFirstName();
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "givenName"), vf.createLiteral(userInfo.getFirstName())));
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "firstName"), vf.createLiteral(userInfo.getFirstName())));
-		}
-		if (userInfo.getLastName() != null) {
-			if (fullname != null) {
-				fullname = fullname + " " + userInfo.getLastName();
-			} else {
-				fullname = userInfo.getLastName();
-			}
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "familyName"), vf.createLiteral(userInfo.getLastName())));
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "lastName"), vf.createLiteral(userInfo.getLastName())));
-		}
-		if (fullname != null) {
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "name"), vf.createLiteral(fullname)));
-		}
-		if (userInfo.getEmail() != null) {
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "mbox"), vf.createURI("mailto:", userInfo.getEmail())));
-		}
-		
-		entry.getLocalMetadata().setGraph(graph);
 	}
 
 }

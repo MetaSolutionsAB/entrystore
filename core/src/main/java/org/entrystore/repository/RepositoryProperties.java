@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ public class RepositoryProperties {
 	public static final String MD_PATH_STUB = "metadata_stub";
 	public static final String RELATION = "relations";
 
-	public static String getResourcePath(ResourceType bt) {
+	public static String getResourcePath(GraphType bt) {
 		switch (bt) {
 		case List:
 		case ResultList:
@@ -53,7 +53,7 @@ public class RepositoryProperties {
 		}
 	}
 		
-	public static final String NSbase = "http://scam.sf.net/schema#";
+	public static final String NSbase = "http://entrystore.org/terms/";
 	
 	// Used in the metadata.
 	public static final String NSDC = "http://purl.org/dc/elements/1.1/";
@@ -96,6 +96,7 @@ public class RepositoryProperties {
 	public static final URI ResultList;
 	public static final URI User;
 	public static final URI Group;
+	public static final URI Pipeline;
 	public static final URI None;	
 	public static final URI String;	
 
@@ -163,8 +164,10 @@ public class RepositoryProperties {
 		ResultList = vf.createURI(NSbase + "ResultList");
 		User = vf.createURI(NSbase + "User");
 		Group = vf.createURI(NSbase + "Group");
+		Pipeline = vf.createURI(NSbase + "Pipeline");
 		None = vf.createURI(NSbase + "None");
 		String = vf.createURI(NSbase + "String");
+		Graph = vf.createURI(NSbase + "Graph");
 		
 		secret = vf.createURI(NSbase + "secret");
 		saltedHashedSecret = vf.createURI(NSbase + "saltedHashedSecret");
@@ -174,7 +177,6 @@ public class RepositoryProperties {
 		
 		originallyCreatedIn = vf.createURI(NSbase + "originallyCreatedIn");
 		
-		Graph = vf.createURI("http://www.w3.org/2004/03/trix/rdfg-1/Graph");
 
 		Created = vf.createURI(NSDCTERMS + "created");
 		Modified = vf.createURI(NSDCTERMS + "modified");

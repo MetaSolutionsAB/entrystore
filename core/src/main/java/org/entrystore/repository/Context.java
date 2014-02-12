@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,22 +57,23 @@ public interface Context extends Resource{
 	 * should be created freely in the context.
 	 * @return a {@link Entry} containing the resource, it's metadata, 
 	 * and it's metametadata. Which exact subclass of resource used depends on the 
-	 * {@link ResourceType}.
-	 * @see {@link ResourceType}.
+	 * {@link GraphType}.
+	 * @see {@link GraphType}.
 	 */
-	Entry createResource(String entryId, ResourceType buiType, RepresentationType repType, URI listURI); // files, folders, persons
+	Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI); // files, folders, persons
 	
 	/**
 	 * 
 	 * @param entryId, optional value to use for id for the new entry.
-	 * @param buiType - None if file and String if text
+	 * @param resType - None if file and String if text
 	 * @param resourceURI - URI to the resourceURI
 	 * @param metadataURI - URI to the metadataURIURI
-	 * @param listURI - URI to the listURI, probably _comments resource URI.
+	 * @param sourceEntryURI
+	 * @param commentType
 	 * @return A new comment entry
 	 * @throws Exception 
 	 */
-	Entry createComment(String entryId, ResourceType buiType, URI resourceURI,
+	Entry createComment(String entryId, GraphType resType, URI resourceURI,
 			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception; 
 	
 	/**
@@ -114,7 +115,7 @@ public interface Context extends Resource{
 	//void move(URI entryUri, URI fromListURI, URI toListURI);
 	
 	/**
-	 * @param metaMetadataURI the URI of the resource's metametadata to remove.
+	 * @param entryURI the URI of the resource's metametadata to remove.
 	 */
 	void remove(URI entryURI);
 	

@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.Set;
 
 import org.entrystore.repository.Converter;
+import org.entrystore.repository.util.NS;
 import org.ieee.ltsc.datatype.impl.EntityImpl;
 import org.ieee.ltsc.datatype.impl.LangStringImpl.StringImpl;
 import org.ieee.ltsc.lom.LOM;

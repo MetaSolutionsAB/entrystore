@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import java.io.OutputStream;
  * Data resources contains digital information, e.g. a file, that is managed
  * within the repository. For a resource to be a data resource the
  * {@link EntryType} must be {@link EntryType#Local} and the
- * {@link ResourceType} must be {@link ResourceType#None}.
+ * {@link GraphType} must be {@link GraphType#None}.
  * 
  * @author matthias
  */

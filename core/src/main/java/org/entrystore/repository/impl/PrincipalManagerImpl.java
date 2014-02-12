@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import java.util.Set;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.PrincipalManager;
@@ -82,8 +82,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		Entry principalEntry = getEntryByName(name);
 		if (principalEntry == null) {
 			return null;
-		} else if (principalEntry.getResourceType() == ResourceType.User ||
-						principalEntry.getResourceType() == ResourceType.Group) {
+		} else if (principalEntry.getGraphType() == GraphType.User ||
+						principalEntry.getGraphType() == GraphType.Group) {
 			return principalEntry;
 		}
 		throw new org.entrystore.repository.RepositoryException("Found entry for the name is not a principal...\n" +
@@ -95,8 +95,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		Entry principalEntry = getByEntryURI(us.getMetaMetadataURI());
 		if (principalEntry == null) {
 			throw new org.entrystore.repository.RepositoryException("Cannot find an entry for the specified URI");
-		} else if (principalEntry.getResourceType() == ResourceType.User ||
-					principalEntry.getResourceType() == ResourceType.Group) {
+		} else if (principalEntry.getGraphType() == GraphType.User ||
+					principalEntry.getGraphType() == GraphType.Group) {
 			return setEntryName(us.getMetaMetadataURI(), newName);
 		}
 		throw new org.entrystore.repository.RepositoryException("Given URI does not refer to a Principal.");			
@@ -115,7 +115,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			URI nextURI = entryIterator.next();
 
 			Entry nextEntry = getByEntryURI(nextURI);
-			if(nextEntry.getResourceType() == ResourceType.User) {
+			if(nextEntry.getGraphType() == GraphType.User) {
 				userUris.add(nextEntry.getResourceURI());
 			}
 		}
@@ -136,7 +136,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			URI nextURI = entryIterator.next();
 			
 			Entry nextEntry = getByEntryURI(nextURI);
-			if(nextEntry.getResourceType() == ResourceType.User) {
+			if(nextEntry.getGraphType() == GraphType.User) {
 				userUris.add((User) nextEntry.getResource());
 			}
 		}
@@ -147,12 +147,12 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	
 	/**
 	 * Returns a User object representing a user.
-	 * @param the URI to the user.
+	 * @param userUri The URI to the user.
 	 * @return the User object
 	 */
 	public User getUser(URI userUri) {
 		for(Entry user: getByResourceURI(userUri)) {
-			if (user.getResourceType() == ResourceType.User) {
+			if (user.getGraphType() == GraphType.User) {
 				return (User) user.getResource();
 			}
 		}
@@ -161,12 +161,12 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 	/**
 	 * Returns a Group object representing a group of users.
-	 * @param the URI to the group.
+	 * @param groupUri URI to the group.
 	 * @return the Group object
 	 */
 	public Group getGroup(URI groupUri) {
 		for(Entry user: getByResourceURI(groupUri)) {
-			if (user.getResourceType() == ResourceType.Group) {
+			if (user.getGraphType() == GraphType.Group) {
 				return (Group) user.getResource();
 			}
 		}
@@ -182,7 +182,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			URI nextURI = entryIterator.next();
 
 			Entry nextGroup = getByEntryURI(nextURI);
-			if(nextGroup.getResourceType() == ResourceType.Group) {
+			if(nextGroup.getGraphType() == GraphType.Group) {
 				groupUris.add(nextGroup.getResourceURI());
 			}
 		}
@@ -199,7 +199,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			while(entryIterator.hasNext()) {
 				URI nextURI = entryIterator.next();
 				Entry nextEntry = getByEntryURI(nextURI); 
-				if(nextEntry.getResourceType() == ResourceType.Group) {
+				if(nextEntry.getGraphType() == GraphType.Group) {
 					Group nextGroup = (Group) nextEntry.getResource();
 					if(nextGroup != null) {
 						if(nextGroup.isMember(user)) {
@@ -221,7 +221,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		while(entryIterator.hasNext()) {
 			URI nextURI = entryIterator.next();
 			Entry e = getByEntryURI(nextURI); 
-			if(e.getResourceType() == ResourceType.Group) {
+			if(e.getGraphType() == GraphType.Group) {
 				groupUris.add(nextURI);
 			}
 		}
@@ -469,7 +469,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if (newEntry.getEntryType() != EntryType.Local) {
 			return;
 		}
-		switch (newEntry.getResourceType()) {
+		switch (newEntry.getGraphType()) {
 		case User:
 			newEntry.setResource(new UserImpl(newEntry, newEntry.getSesameResourceURI(), cache));
 			break;
@@ -491,7 +491,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		
 		top = get("_top");
 		if(top == null) {
-			top = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_top");
+			top = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_top");
 			setMetadata(top, "Top folder", null);
 			log.info("Successfully added the top list");
 		}
@@ -502,7 +502,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if(guestUserEntry != null) {
 			guestUser = (User) guestUserEntry.getResource();
 		} else {
-			guestUserEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.User, null, "_guest");
+			guestUserEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.User, null, "_guest");
 			setMetadata(guestUserEntry, "Guest user", "All non logged in users will automatically appear as this user.");
 			guestUser = (User) guestUserEntry.getResource();
 			guestUser.setName("guest");
@@ -516,7 +516,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if(adminUserEntry != null) {
 			adminUser = (User) adminUserEntry.getResource();
 		} else {
-			adminUserEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.User, null, "_admin");
+			adminUserEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.User, null, "_admin");
 			setMetadata(adminUserEntry, "Admin user", "Default super user, has all rights.");
 			adminUser = (User) adminUserEntry.getResource();
 			adminUser.setName("admin");
@@ -530,7 +530,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if(adminGroupEntry != null) {
 			adminGroup = (Group) adminGroupEntry.getResource();
 		} else {
-			adminGroupEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.Group, null, "_admins");
+			adminGroupEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.Group, null, "_admins");
 			setMetadata(adminGroupEntry, "Admin group", "All members of this group have super user rights.");
 			adminGroup = (Group) adminGroupEntry.getResource();
 			adminGroup.setName("admins");
@@ -541,7 +541,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 		userGroupEntry = get("_users");
 		if(userGroupEntry == null) {
-			userGroupEntry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.Group, null, "_users");
+			userGroupEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.Group, null, "_users");
 			setMetadata(userGroupEntry, "Users group", "All regular users are part of this group.");
 			setPrincipalName(userGroupEntry.getResourceURI(), "users");
 			userGroupEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, guestUser.getURI());
@@ -571,7 +571,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		
 		allPrincipals = (EntryImpl) get("_all");
 		if(allPrincipals == null) {
-			allPrincipals = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_all");
+			allPrincipals = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_all");
 			setMetadata(allPrincipals, "all principals", "This is a list of all principals in the PrincipalManager.");
 			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, this.getGuestUser().getURI());
 			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadResource, this.getGuestUser().getURI());
@@ -588,8 +588,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 					URI nextURI = entryIterator.next();
 					
 					Entry nextEntry = getByEntryURI(nextURI);
-					ResourceType bt = nextEntry.getResourceType();
-					if(bt == ResourceType.User || bt == ResourceType.Group) {
+					GraphType bt = nextEntry.getGraphType();
+					if(bt == GraphType.User || bt == GraphType.Group) {
 						principalUris.add(nextEntry.getEntryURI());
 					}
 				}
@@ -600,7 +600,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 	
 	/**
-	 * @param externID
+	 * @param externalID
 	 *            An E-Mail address
 	 * @return A user that can be mapped to the external E-Mail address (that
 	 *         e.g. originates from an OpenID service)

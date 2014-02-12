@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.PrincipalManager;
@@ -36,7 +36,7 @@ import org.entrystore.repository.User;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.impl.converters.NS;
+import org.entrystore.repository.util.NS;
 import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
@@ -180,7 +180,7 @@ public class StatisticsResource extends BaseResource {
 			
 			for (URI uri : entries) {
 				Entry entry = context.getByEntryURI(uri);
-				if (entry == null || !ResourceType.None.equals(entry.getResourceType()) || EntryUtil.isDeleted(entry)) {
+				if (entry == null || !GraphType.None.equals(entry.getGraphType()) || EntryUtil.isDeleted(entry)) {
 					continue;
 				}
 				
@@ -284,7 +284,7 @@ public class StatisticsResource extends BaseResource {
 			
 			for (URI uri : entries) {
 				Entry entry = context.getByEntryURI(uri);
-				if (entry == null || !ResourceType.None.equals(entry.getResourceType()) || EntryUtil.isDeleted(entry)) {
+				if (entry == null || !GraphType.None.equals(entry.getGraphType()) || EntryUtil.isDeleted(entry)) {
 					continue;
 				}
 				
@@ -423,7 +423,7 @@ public class StatisticsResource extends BaseResource {
 			
 			for (URI uri : entries) {
 				Entry entry = context.getByEntryURI(uri);
-				if (entry == null || !ResourceType.None.equals(entry.getResourceType()) || EntryUtil.isDeleted(entry)) {
+				if (entry == null || !GraphType.None.equals(entry.getGraphType()) || EntryUtil.isDeleted(entry)) {
 					continue;
 				}
 				

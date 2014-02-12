@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,18 +57,16 @@ public class CookieVerifier implements Verifier {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			
 			Cookie authTokenCookie = request.getCookies().getFirst("auth_token");
+			TokenCache<String, UserInfo> tc = LoginTokenCache.getInstance();
 			if (authTokenCookie != null) {
 				String authToken = authTokenCookie.getValue();
-				if (TokenCache.hasToken(authToken)) {
-					UserInfo ui = TokenCache.getUserInfo(authToken);
-					if (ui.getLoginExpiration().getTime() > (new Date().getTime())) {
-						String userName = ui.getUserName();
-						Entry userEntry = pm.getPrincipalEntry(userName);
-						userURI = userEntry.getResourceURI();
-					} else {
-						cleanCookies("auth_token", request, response);
-						TokenCache.removeToken(authToken);
-					}
+				UserInfo ui = tc.getTokenValue(authToken);
+				if (ui != null) {
+					String userName = ui.getUserName();
+					Entry userEntry = pm.getPrincipalEntry(userName);
+					userURI = userEntry.getResourceURI();
+				} else {
+					cleanCookies("auth_token", request, response);
 				}
 			}
 
@@ -77,7 +75,7 @@ public class CookieVerifier implements Verifier {
 				return RESULT_VALID;
 			}
 			
-			return RESULT_INVALID;
+			return RESULT_VALID;
 		} finally {
 			pm.setAuthenticatedUserURI(userURI);
 		}

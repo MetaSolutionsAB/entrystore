@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactory;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.security.AuthorizationException;
 import org.json.JSONException;
@@ -130,7 +130,7 @@ public class HarvesterResource extends BaseResource {
 					Entry entry = null; 
 					while (iter.hasNext()) {
 						entry = iter.next();
-						if (entry.getResourceType() == ResourceType.Context) {
+						if (entry.getGraphType() == GraphType.Context) {
 							break; 
 						} else {
 							entry = null; 

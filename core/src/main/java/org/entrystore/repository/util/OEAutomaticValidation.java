@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2007-2010
+/*
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,14 +24,13 @@ import java.util.List;
 import java.util.Set;
 
 import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Entry;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.impl.converters.NS;
 import org.openrdf.model.BNode;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
@@ -173,13 +172,13 @@ public class OEAutomaticValidation {
 			contexts.add(context);
 			List<Entry> entries = getEntries(contexts);
 			Entry list = cm.getByEntryURI(listEntryURI);
-			if (!ResourceType.List.equals(list.getResourceType())) {
+			if (!GraphType.List.equals(list.getGraphType())) {
 				log.error("List parameter is not a list, interrupting");
 				return;
 			}
 			org.entrystore.repository.List l = (org.entrystore.repository.List) list.getResource();
 			for (Entry entry : entries) {
-				if (EntryType.Reference.equals(entry.getEntryType()) && ResourceType.None.equals(entry.getResourceType())) {
+				if (EntryType.Reference.equals(entry.getEntryType()) && GraphType.None.equals(entry.getGraphType())) {
 					validateMetadataOfEntry(entry);
 					l.addChild(entry.getEntryURI());
 				}

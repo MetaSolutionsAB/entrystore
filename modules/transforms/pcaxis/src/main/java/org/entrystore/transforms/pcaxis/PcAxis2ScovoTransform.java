@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014
+ * Copyright (c) 2007-2014 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,6 +41,9 @@ public class PcAxis2ScovoTransform extends Transform {
 
 	public Graph transform(InputStream data, String mimetype) {
 		String baseURI = getArguments().get("baseuri");
+		if (!baseURI.endsWith("/") || !baseURI.endsWith("#")) {
+			baseURI = baseURI+"/";
+		}
 		String datasetName = getArguments().get("dataset");
 
 		if (baseURI == null || datasetName == null) {
