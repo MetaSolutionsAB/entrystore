@@ -25,6 +25,8 @@ import org.openrdf.model.URI;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.impl.StatementImpl;
+import org.openrdf.model.vocabulary.RDF;
+import org.openrdf.model.vocabulary.XMLSchema;
 
 
 public class StringResource extends RDFResource{
@@ -35,42 +37,25 @@ public class StringResource extends RDFResource{
 
 	public StringResource(EntryImpl entry, URI resourceURI, String str) {
 		super(entry, resourceURI);
-		setString(str, null); 
+		setString(str); 
 	}
 
-	public void setString(String text, String language) {
+	public void setString(String text) {
 		Graph g = getGraph();
-		ValueFactory vf = g.getValueFactory(); 
-		g.clear(); 
-		if(language==null) {
-
-			g.add(
-					new StatementImpl(
-							entry.getSesameResourceURI(), 
-							RepositoryProperties.body,
-							vf.createLiteral(text))
-			); 
-		} else {
-			g.add(
-					new StatementImpl(
-							entry.getSesameResourceURI(), 
-							RepositoryProperties.body,
-							vf.createLiteral(text, language))
-			); 
-		}
-
+		ValueFactory vf = this.entry.repository.getValueFactory(); 
+		g.clear();
+		g.add(new StatementImpl(
+				this.entry.getSesameResourceURI(), 
+				RDF.VALUE,
+				vf.createLiteral(text, XMLSchema.STRING))); 
 		this.setGraph(g); 
 	}
 
 	public String getString() {
-		Iterator<Statement> stringElements = this.getGraph().match(null, RepositoryProperties.body, null);
+		Iterator<Statement> stringElements = this.getGraph().match(this.entry.getSesameResourceURI(), RDF.VALUE, null);
 		while(stringElements.hasNext()) {
 			return stringElements.next().getObject().toString(); 
 		}
 		return null;  
-
 	}
-
-
-
 }

@@ -537,15 +537,9 @@ public class ContextResource extends BaseResource {
 			}
 			break;
 		case String:
-			StringResource stringRes = (StringResource) entry.getResource();
-			if (jsonObj.has("sc:body")){
-				
-				JSONObject resObj = jsonObj.getJSONObject("sc:body"); 
-				if (resObj.has("@value") && resObj.has("@language")) {
-					stringRes.setString(resObj.getString("@value"), resObj.getString("@language")); 
-				} else if (resObj.has("resource") && jsonObj.has("@value")) {
-					stringRes.setString(resObj.getString("@value"), null); 
-				}
+			if (jsonObj.has("resource")) { 
+				StringResource stringRes = (StringResource) entry.getResource();
+				stringRes.setString(jsonObj.getString("resource")); 
 			}
 			break;
 		case Graph:
