@@ -16,25 +16,13 @@
 
 package org.entrystore.rest;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Set;
-
-import javax.activation.MimeType;
-import javax.naming.InitialContext;
-import javax.naming.NamingException;
-import javax.servlet.ServletContext;
-
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
-import org.entrystore.repository.GraphType;
 import org.entrystore.repository.ContextManager;
 import org.entrystore.repository.Converter;
 import org.entrystore.repository.Entry;
+import org.entrystore.repository.GraphType;
 import org.entrystore.repository.PrincipalManager;
 import org.entrystore.repository.backup.BackupFactory;
 import org.entrystore.repository.backup.BackupScheduler;
@@ -63,19 +51,26 @@ import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.Restlet;
 import org.restlet.data.ChallengeScheme;
-import org.restlet.data.MediaType;
 import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.ext.openid.AttributeExchange;
 import org.restlet.ext.openid.OpenIdVerifier;
 import org.restlet.ext.openid.RedirectAuthenticator;
-import org.restlet.representation.FileRepresentation;
 import org.restlet.routing.Filter;
 import org.restlet.routing.Router;
 import org.restlet.security.Authenticator;
 import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+import javax.servlet.ServletContext;
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Set;
 
 /**
  * Main class to start EntryStore as a Restlet Application.
@@ -187,11 +182,12 @@ public class EntryStoreApplication extends Application {
 			startHarvesters();
 		
 			// Load and start backup scheduler
-			String backupStatus = rm.getConfiguration().getString(Settings.BACKUP_SCHEDULER, "off");
-			if ("off".equals(backupStatus.trim())) {
-				log.warn("Backup is disabled in configuration");
-			} else {
+			boolean backup = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.BACKUP_SCHEDULER, "off"));
+			if (backup) {
+				log.info("Starting backup scheduler");
 				startBackupScheduler();
+			} else {
+				log.warn("Backup is disabled in configuration");
 			}
 
 			boolean correct = config.getBoolean("entrystore.repository.store.correct-metadata", false);

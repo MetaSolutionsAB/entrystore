@@ -7,7 +7,7 @@
 	<modelVersion>4.0.0</modelVersion>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-parent</artifactId>
-	<version>4.1-SNAPSHOT</version>
+	<version>4.2-SNAPSHOT</version>
 	<packaging>pom</packaging>
 	<name>EntryStore</name>
 	<url>http://entrystore.org</url>
@@ -63,6 +63,12 @@
 			<url>${site.url}</url>
 		</site>
 	</distributionManagement>
+
+	<scm>
+		<connection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</connection>
+		<developerConnection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</developerConnection>
+		<url>https://bitbucket.org/metasolutions/entrystore.git</url>
+	</scm>
 
 	<!-- ================= Modules ================= -->
 	<modules>

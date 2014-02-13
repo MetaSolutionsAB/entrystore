@@ -33,12 +33,13 @@ public class Settings {
 	
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
+	public static String BACKUP_TIMEREGEXP = "entrystore.backup.timeregexp";
+	public static String BACKUP_GZIP = "entrystore.backup.gzip";
 	
 	public static String BACKUP_MAINTENANCE = "entrystore.backup.maintenance";						 
-	public static String BACKUP_MAINTENANCE_UPPER_BOUND = "entrystore.backup.maintenance.bound.upper";
-	public static String BACKUP_MAINTENANCE_LOWER_BOUND = "entrystore.backup.maintenance.bound.lower";
+	public static String BACKUP_MAINTENANCE_UPPER_LIMIT = "entrystore.backup.maintenance.upper-limit";
+	public static String BACKUP_MAINTENANCE_LOWER_LIMIT = "entrystore.backup.maintenance.lower-limit";
 	public static String BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS = "entrystore.backup.maintenance.expires-after-days";
-	public static String BACKUP_MAINTENANCE_TIMEREGEXP = "entrystore.backup.maintenance.timeregexp";
 	
 	public static String DATA_FOLDER = "entrystore.data.folder";
 	public static String DATA_QUOTA = "entrystore.data.quota";

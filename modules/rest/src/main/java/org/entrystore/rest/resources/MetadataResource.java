@@ -16,13 +16,8 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-
-import com.github.jsonldjava.impl.SesameJSONLDParser;
-import com.github.jsonldjava.impl.SesameJSONLDWriter;
+import com.github.jsonldjava.sesame.SesameJSONLDParser;
+import com.github.jsonldjava.sesame.SesameJSONLDWriter;
 import org.entrystore.repository.EntryType;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.impl.converters.ConverterUtil;
@@ -57,6 +52,11 @@ import org.restlet.resource.Post;
 import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
 
 
 /**

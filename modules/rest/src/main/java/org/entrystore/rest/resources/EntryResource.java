@@ -16,26 +16,16 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.IOException;
-import java.io.StringWriter;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-
-import com.github.jsonldjava.impl.SesameJSONLDParser;
+import com.github.jsonldjava.sesame.SesameJSONLDParser;
+import org.entrystore.repository.Entry;
 import org.entrystore.repository.EntryType;
 import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Entry;
 import org.entrystore.repository.Group;
 import org.entrystore.repository.Metadata;
 import org.entrystore.repository.PrincipalManager;
+import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.User;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.StringResource;
@@ -79,6 +69,16 @@ import org.restlet.resource.Post;
 import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.StringWriter;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 
 
 /**
