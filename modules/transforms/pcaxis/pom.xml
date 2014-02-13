@@ -19,12 +19,12 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-transforms-common</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 		</dependency>
 	        <dependency>
-        	    <groupId>com.mysema.stat</groupId>
-	            <artifactId>stat</artifactId>
-        	    <version>0.5.2</version>
+			<groupId>com.mysema.stat</groupId>
+			<artifactId>stat</artifactId>
+			<version>0.5.2</version>
 	        </dependency>
 	</dependencies>
 </project>

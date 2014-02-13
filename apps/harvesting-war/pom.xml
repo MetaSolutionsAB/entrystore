@@ -42,7 +42,7 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-core</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 			<exclusions>
 				<exclusion>
 					<groupId>javax.xml.bind</groupId>
@@ -53,7 +53,7 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-rest-module</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 			<exclusions>
 				<exclusion>
 					<groupId>org.entrystore</groupId>
@@ -68,7 +68,7 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-harvesting-oaipmh-target</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 			<exclusions>
 				<exclusion>
 					<groupId>org.entrystore</groupId>
@@ -82,7 +82,7 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-sqi-webservice-module</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 			<exclusions>
 				<exclusion>
 					<groupId>org.entrystore</groupId>

@@ -76,7 +76,7 @@
          	<!-- classifiers used with Maven Assembly Plugin to 
 	            specify subset of above artifact needed -->
          	<classifier>jaxws</classifier>
-         	<version>${pom.version}</version>
+         	<version>${project.version}</version>
       	</dependency>
 	
 		<dependency>
