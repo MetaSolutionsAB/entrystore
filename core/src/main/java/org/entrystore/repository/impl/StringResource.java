@@ -54,7 +54,7 @@ public class StringResource extends RDFResource{
 	public String getString() {
 		Iterator<Statement> stringElements = this.getGraph().match(this.entry.getSesameResourceURI(), RDF.VALUE, null);
 		while(stringElements.hasNext()) {
-			return stringElements.next().getObject().toString(); 
+			return stringElements.next().getObject().stringValue(); 
 		}
 		return null;  
 	}

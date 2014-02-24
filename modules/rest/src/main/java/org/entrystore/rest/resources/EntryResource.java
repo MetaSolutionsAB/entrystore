@@ -28,6 +28,7 @@ import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.User;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.RDFResource;
 import org.entrystore.repository.impl.StringResource;
 import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.repository.security.AuthorizationException;
@@ -382,31 +383,24 @@ public class EntryResource extends BaseResource {
 			/*
 			 * Resource
 			 */
-			JSONObject resourceObj = new JSONObject();
+			JSONObject resourceObj = null;
 			if (entry.getEntryType() == EntryType.Local) {
 				/*
 				 *  String
 				 */
 				if(entry.getGraphType() == GraphType.String) {
-					StringResource stringResource = (StringResource)entry.getResource(); 
-					Graph graph = stringResource.getGraph(); 
-					Iterator<Statement> iter = graph.iterator(); 
-					while(iter.hasNext()) {
-						Statement s = iter.next(); 
-						Value value = s.getObject();
-						Literal lit = (Literal) value;
-						String language = lit.getLanguage();
-						org.openrdf.model.URI datatype = lit.getDatatype();
-						JSONObject object = new JSONObject();
-						object.accumulate("@value", value.stringValue());
-						if (language != null) {
-							object.accumulate("@language", language);
-						} else if (datatype != null) {
-							object.accumulate("@datatype", datatype.stringValue());					
-						}
-						resourceObj.accumulate(s.getPredicate().stringValue(), object);
-					}
+					StringResource stringResource = (StringResource) entry.getResource(); 
+					jdilObj.put("resource", stringResource.getString());
 				}
+
+				/*
+				 *  Graph
+				 */
+				if(entry.getGraphType() == GraphType.Graph) {
+					RDFResource rdfResource = (RDFResource) entry.getResource(); 
+					jdilObj.put("resource", new JSONObject(RDFJSON.graphToRdfJson(rdfResource.getGraph())));
+				}
+				
 				/*
 				 * List
 				 */
@@ -577,6 +571,7 @@ public class EntryResource extends BaseResource {
 							childrenArray.put(childJSON);
 						}
 
+						resourceObj = new JSONObject();
 						resourceObj.put("children", childrenArray);
 						resourceObj.put("size", childrenURIs.size());
 						resourceObj.put("limit", limit);
@@ -599,6 +594,7 @@ public class EntryResource extends BaseResource {
 				 */
 				if (entry.getGraphType() == GraphType.User) {
 					try {
+						resourceObj = new JSONObject();
 						User user = (User) entry.getResource();
 						resourceObj.put("name", user.getName());
 
@@ -624,6 +620,7 @@ public class EntryResource extends BaseResource {
 				 */
 				if (entry.getGraphType() == GraphType.Group) {
 					try {
+						resourceObj = new JSONObject();
 						Group group = (Group) entry.getResource();
 						resourceObj.put("name", group.getName());
 						JSONArray userArray = new JSONArray();
@@ -669,7 +666,9 @@ public class EntryResource extends BaseResource {
 
 				// TODO other types, for example Context, SystemContext, PrincipalManager, etc
 				
-				jdilObj.accumulate("resource", resourceObj);
+				if (resourceObj != null) {
+					jdilObj.accumulate("resource", resourceObj);
+				}
 			}
 			return jdilObj;
 	}
