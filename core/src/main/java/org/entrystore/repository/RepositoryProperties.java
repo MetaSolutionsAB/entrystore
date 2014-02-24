@@ -55,17 +55,16 @@ public class RepositoryProperties {
 		
 	public static final String NSbase = "http://entrystore.org/terms/";
 	
-	// Used in the metadata.
+	// Old DC namespace.
 	public static final String NSDC = "http://purl.org/dc/elements/1.1/";
-	// Used in metadata and entry information.
+	// Update DC terms namespace.
 	public static final String NSDCTERMS = "http://purl.org/dc/terms/";
-	//	Used in metadata,entry information and resources.
-	public static final String NSRDF = (RDF.TYPE).toString();
+	// RDF namespace.
+	public static final String NSRDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 	
 	public static final URI counter;
 	public static final URI mdHasEntry;
 	public static final URI resHasEntry;
-	public static final URI body;
 
 	public static final URI resource;
 	public static final URI metadata;
@@ -132,7 +131,6 @@ public class RepositoryProperties {
 	
 	static {
 		ValueFactory vf = ValueFactoryImpl.getInstance();
-		body = vf.createURI(NSbase + "body");
 		counter = vf.createURI(NSbase + "counter");
 		mdHasEntry = vf.createURI(NSbase + "mdHasMMd");
 		resHasEntry = vf.createURI(NSbase + "resHasMMd");

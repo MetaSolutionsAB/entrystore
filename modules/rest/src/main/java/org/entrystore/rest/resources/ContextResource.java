@@ -437,7 +437,7 @@ public class ContextResource extends BaseResource {
 		GraphType bt = getGraphType(parameters.get("graphtype"));
 		entry = context.createResource(parameters.get("id"), bt, null, listURI);
 		try {
-			if (setResource(entry, bt)) {
+			if (setResource(entry)) {
 				setLocalMetadataGraph(entry);
 				setEntryGraph(entry);
 				if (listURI != null) {
@@ -456,20 +456,23 @@ public class ContextResource extends BaseResource {
 	/**
 	 * Sets resource to an entry.
 	 * @param entry a reference to a entry
-	 * @return the entry with the resource.
+	 * @return false if there is a resource provided but it cannot be interpreted.
 	 * @throws JSONException 
 	 */
-	private boolean setResource(Entry entry, GraphType bt) throws JSONException {
+	private boolean setResource(Entry entry) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
 		if (requestText != null) {
 			jsonObj = new JSONObject(requestText);
 		}
 
-		if (jsonObj.has("resource")) {
-			jsonObj = jsonObj.getJSONObject("resource");
+		//If there is no resource there is nothing to do yet.
+		if (!jsonObj.has("resource")) {
+			return true;
 		}
-		switch (bt) {
+
+		switch (entry.getGraphType()) {
 		case User:
+			jsonObj = jsonObj.getJSONObject("resource");
 			User user = (User) entry.getResource();
 			
 			if (jsonObj.has("name")) {
@@ -501,29 +504,28 @@ public class ContextResource extends BaseResource {
 			}
 			break;
 		case Group:
+			jsonObj = jsonObj.getJSONObject("resource");
 			Group group = (Group) entry.getResource();
 			if (jsonObj.has("name")) {
 				group.setName(jsonObj.getString("name"));
 			}
 			break;
 		case List:
-			if (jsonObj.has("resource")) {
-				List list = (List)entry.getResource();
-				JSONObject res = (JSONObject) jsonObj.get("resource"); 
-				if(res != null) {
-					JSONArray childrenArray = (JSONArray) res.get("children");
-					if (childrenArray != null) {
-						for(int i = 0; i < childrenArray.length(); i++) {
-							Entry child = context.get(childrenArray.getString(i));
-							if(child != null) {
-								list.addChild(child.getEntryURI());
-							}
-						}
-					}
+			JSONArray childrenArray = (JSONArray) jsonObj.get("resource");
+			List list = (List)entry.getResource();
+			if(childrenArray != null) {
+				if (childrenArray != null) {
+					for(int i = 0; i < childrenArray.length(); i++) {
+						Entry child = context.get(childrenArray.getString(i));
+						if(child != null) {
+							list.addChild(child.getEntryURI());
+						}		
+					}		
 				}
 			}
 			break;
 		case Context:
+			jsonObj = jsonObj.getJSONObject("resource");
 			org.entrystore.repository.Context cont = (org.entrystore.repository.Context) entry.getResource();
 			if (jsonObj.has("alias")) {
 				getCM().setContextAlias(cont.getURI(), jsonObj.getString("alias"));
@@ -538,22 +540,12 @@ public class ContextResource extends BaseResource {
 			break;
 		case String:
 			StringResource stringRes = (StringResource) entry.getResource();
-			if (jsonObj.has("sc:body")){
-				
-				JSONObject resObj = jsonObj.getJSONObject("sc:body"); 
-				if (resObj.has("@value") && resObj.has("@language")) {
-					stringRes.setString(resObj.getString("@value"), resObj.getString("@language")); 
-				} else if (resObj.has("resource") && jsonObj.has("@value")) {
-					stringRes.setString(resObj.getString("@value"), null); 
-				}
-			}
+			stringRes.setString(jsonObj.getString("resource")); 
 			break;
 		case Graph:
-			if (jsonObj.has("resource")) { 
-				RDFResource RDFRes = (RDFResource) entry.getResource();
-				Graph g = RDFJSON.rdfJsonToGraph((JSONObject) jsonObj.get("resource"));
-				RDFRes.setGraph(g);
-			}
+			RDFResource RDFRes = (RDFResource) entry.getResource();
+			Graph g = RDFJSON.rdfJsonToGraph((JSONObject) jsonObj.get("resource"));
+			RDFRes.setGraph(g);
 			break;
 		case None:
 			break;

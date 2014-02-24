@@ -729,11 +729,7 @@ public class ResourceResource extends BaseResource {
 			/*** String ***/
 			if(entry.getGraphType() == GraphType.String) {
 				StringResource stringResource = (StringResource)entry.getResource(); 
-				Graph graph = stringResource.getGraph(); 
-				if (graph == null) {
-					return new JsonRepresentation("{\"error\":\"The string value has not been set yet.\"}"); 
-				}
-				return new JsonRepresentation(RDFJSON.graphToRdfJson(graph));  
+				return new StringRepresentation(stringResource.getString());
 			}
 
 			/*** Graph ***/
@@ -1007,24 +1003,10 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** String  ***/
-		// {"@id":"http://localhost:8080/scam/1/resource/11","sc:body":{"@language":"english","@value":"<h1>Title<\/h1>"}}
 		if(entry.getGraphType() == GraphType.String) {
-			JSONObject entityJSON = null; 
 			try {
-				entityJSON = new JSONObject(getRequest().getEntity().getText());
-				if(entityJSON.has("sc:body")) {
-					JSONObject contentObj = (JSONObject)entityJSON.get("sc:body"); 
-					StringResource stringResource = (StringResource)entry.getResource(); 
-
-					if(contentObj.has("@value") && contentObj.has("@language")) {
-						stringResource.setString(contentObj.getString("@value"), contentObj.getString("@language")); 
-					} else if (contentObj.has("@value")) {
-						stringResource.setString(contentObj.getString("@value"), null); 
-					} 
-				}
-			} catch (JSONException e) {
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				getResponse().setEntity(new JsonRepresentation("{\"error\":\"Problem with input.\"}"));
+				StringResource stringResource = (StringResource)entry.getResource(); 
+				stringResource.setString(getRequest().getEntity().getText());
 			} catch (IOException e) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"Problem with input.\"}"));
