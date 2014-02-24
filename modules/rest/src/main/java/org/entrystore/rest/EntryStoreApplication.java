@@ -344,9 +344,9 @@ public class EntryStoreApplication extends Application {
 		component.getClients().add(Protocol.HTTP);
 		component.getClients().add(Protocol.HTTPS);
 		Context childContext = component.getContext().createChildContext();
-		EntryStoreApplication scamApp = new EntryStoreApplication(childContext);
-		childContext.getAttributes().put(KEY, scamApp);
-		component.getDefaultHost().attach(scamApp);
+		EntryStoreApplication esApp = new EntryStoreApplication(childContext);
+		childContext.getAttributes().put(KEY, esApp);
+		component.getDefaultHost().attach(esApp);
 
 		try {
 			component.start();
