@@ -608,10 +608,12 @@ public class ContextResource extends BaseResource {
 
 		try {
 			JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
-			JSONObject obj =(JSONObject) mdObj.get("metadata");
-			Graph graph = null;
-			if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
-				entry.getLocalMetadata().setGraph(graph);
+			if (mdObj.has("metadata")) {
+				JSONObject obj =(JSONObject) mdObj.get("metadata");
+				Graph graph = null;
+				if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
+					entry.getLocalMetadata().setGraph(graph);
+				}
 			}
 		} catch (JSONException e) {
 			log.error(e.getMessage());
@@ -631,10 +633,12 @@ public class ContextResource extends BaseResource {
 				EntryType.LinkReference.equals(entry.getEntryType())) {
 			try {
 				JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
-				JSONObject obj = (JSONObject) mdObj.get("cached-external-metadata");
-				Graph graph = null;
-				if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
-					entry.getCachedExternalMetadata().setGraph(graph);
+				if (mdObj.has("cached-external-metadata")) {
+					JSONObject obj = (JSONObject) mdObj.get("cached-external-metadata");
+					Graph graph = null;
+					if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
+						entry.getCachedExternalMetadata().setGraph(graph);
+					}
 				}
 			} catch (JSONException e) {
 				log.error(e.getMessage());
