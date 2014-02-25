@@ -95,7 +95,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	long defaultQuota = Quota.VALUE_UNLIMITED;
 	
-	ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
+	//ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
 	
 	private Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = new EnumMap<RepositoryEvent, Set<RepositoryListener>>(RepositoryEvent.class);
 	
@@ -376,7 +376,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 				if (repositoryListeners != null) {
 					log.info("Shutting down repository listeners and executor");
-					listenerExecutor.shutdown();
+					//listenerExecutor.shutdown();
 					repositoryListeners.clear();
 				}
 				if (softCache != null) {
@@ -483,17 +483,22 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	public void fireRepositoryEvent(RepositoryEventObject eventObject) {
+		// because of concurrency problems the events are fired synchronously,
+		// not sure whether this event has a negative impact on performance.
+		// async-code is commented out.
 		synchronized (repositoryListeners) {
 			if (repositoryListeners.containsKey(eventObject.getEvent())) {
 				for (RepositoryListener repositoryListener : repositoryListeners.get(eventObject.getEvent())) {
-					repositoryListener.setRepositoryEventObject(eventObject);
-					listenerExecutor.execute(repositoryListener);
+					//repositoryListener.setRepositoryEventObject(eventObject);
+					//listenerExecutor.execute(repositoryListener);
+					repositoryListener.repositoryUpdated(eventObject);
 				}
 			}
 			if (repositoryListeners.containsKey(RepositoryEvent.All)) {
 				for (RepositoryListener repositoryListener : repositoryListeners.get(RepositoryEvent.All)) {
-					repositoryListener.setRepositoryEventObject(eventObject);
-					listenerExecutor.execute(repositoryListener);
+					//repositoryListener.setRepositoryEventObject(eventObject);
+					//listenerExecutor.execute(repositoryListener);
+					repositoryListener.repositoryUpdated(eventObject);
 				}
 			}
 		}
@@ -522,9 +527,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 	}
 	
-	public ThreadPoolExecutor getListenerExecutor() {
-		return listenerExecutor;
-	}
+//	public ThreadPoolExecutor getListenerExecutor() {
+//		return listenerExecutor;
+//	}
 	
 	private void initSolr() {
 		log.info("Manually setting property \"javax.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");
