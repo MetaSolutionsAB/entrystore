@@ -434,7 +434,7 @@ public class EntryImpl implements Entry {
 	}
 
 	public java.net.URI getResourceURI() {
-		return java.net.URI.create(getSesameResourceURI().stringValue());
+		return java.net.URI.create(resURI.stringValue());
 	}
 
 	public java.net.URI getLocalMetadataURI() {
@@ -537,7 +537,7 @@ public class EntryImpl implements Entry {
 			try {
 				rc.close();
 			} catch (RepositoryException e) {
-				e.printStackTrace();
+				log.error(e.getMessage());
 			} 
 		}
 	}
