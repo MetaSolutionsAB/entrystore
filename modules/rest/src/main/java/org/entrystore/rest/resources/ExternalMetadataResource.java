@@ -16,136 +16,29 @@
 
 package org.entrystore.rest.resources;
 
-import com.github.jsonldjava.sesame.SesameJSONLDWriter;
 import org.entrystore.repository.EntryType;
 import org.entrystore.repository.Metadata;
-import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.security.AuthorizationException;
-import org.entrystore.rest.util.JSONErrorMessages;
-import org.entrystore.rest.util.RDFJSON;
-import org.openrdf.model.Graph;
-import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.n3.N3Writer;
-import org.openrdf.rio.ntriples.NTriplesWriter;
-import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
-import org.openrdf.rio.trig.TriGWriter;
-import org.openrdf.rio.trix.TriXWriter;
-import org.openrdf.rio.turtle.TurtleWriter;
-import org.restlet.data.MediaType;
-import org.restlet.data.Status;
-import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.representation.Representation;
-import org.restlet.representation.StringRepresentation;
-import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.List;
-
 
 /**
- * Handles cached external metadata.
+ * Access to cached external metadata.
  * 
  * @author Hannes Ebner
  */
-public class ExternalMetadataResource extends BaseResource {
+public class ExternalMetadataResource extends AbstractMetadataResource {
 
 	static Logger log = LoggerFactory.getLogger(ExternalMetadataResource.class);
-	
-	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
-	@Override
-	public void doInit() {
-		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
-		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
-		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
-		supportedMediaTypes.add(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType("application/lom+xml"));
-	}
-
-	/**
-	 * GET
-	 * 
-	 * From the REST API:
-	 * 
-	 * <pre>
-	 * GET {baseURI}/{portfolio-id}/cached-external-metadata/{entry-id}
-	 * </pre>
-	 * 
-	 * @return The Representation as JSON
-	 */
-	@Get
-	public Representation represent() {
-		try {
-			if (entry == null) {
-				log.error("Cannot find an entry with that id.");
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
-			}
-
-			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
-			if (preferredMediaType == null) {
-				preferredMediaType = MediaType.APPLICATION_RDF_XML;
-			}
-			return getCachedExternalMetadata((format != null) ? format : preferredMediaType);
-		} catch (AuthorizationException e) {
-			log.error("unauthorizedGET");
-			return unauthorizedGET();
-		}
-	}
-
-	private Representation getCachedExternalMetadata(MediaType mediaType) {		
-		EntryType locType = entry.getEntryType();
-		if (EntryType.Reference.equals(locType) || EntryType.LinkReference.equals(locType)) {
-			Metadata extMetadata = entry.getCachedExternalMetadata();
-			if (extMetadata != null) {
-				Graph graph = extMetadata.getGraph();
-				if (graph != null) {
-					String serializedGraph = null;
-					if (mediaType.equals(MediaType.APPLICATION_JSON)) {
-						serializedGraph = RDFJSON.graphToRdfJson(graph);
-					} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-					} else if (mediaType.equals(MediaType.ALL)) {
-						mediaType = MediaType.APPLICATION_RDF_XML;
-						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-					} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, N3Writer.class);
-					} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, TurtleWriter.class);
-					} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, TriXWriter.class);
-					} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
-					} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
-					} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, SesameJSONLDWriter.class);
-					} else if (mediaType.getName().equals("application/lom+xml")) {
-						URI resURI = entry.getResourceURI();
-						if (resURI != null) {
-							serializedGraph = ConverterUtil.convertGraphToLOM(graph, graph.getValueFactory().createURI(resURI.toString()));
-						}
-					} else {
-						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-					}
-
-					if (serializedGraph != null) {
-						return new StringRepresentation(serializedGraph, mediaType);
-					}
-				}
+	protected Metadata getMetadata() {
+		if (entry != null) {
+			EntryType et = entry.getEntryType();
+			if (EntryType.Reference.equals(et) || EntryType.LinkReference.equals(et)) {
+				return entry.getCachedExternalMetadata();
 			}
 		}
-
-		log.error("Can not find the cached external metadata.");
-		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-		return new JsonRepresentation(JSONErrorMessages.errorCantFindCachedMetadata);
+		return null;
 	}
 
 }
