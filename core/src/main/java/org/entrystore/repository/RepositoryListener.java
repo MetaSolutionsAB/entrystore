@@ -48,7 +48,7 @@ public abstract class RepositoryListener implements Runnable, EventListener {
 	public void run() {
 		if (eventObject != null) {
 			repositoryUpdated(eventObject);
-			eventObject = null;
+			setRepositoryEventObject(null);
 		} else {
 			log.warn("Listener dispatched without event");
 		}
