@@ -27,9 +27,9 @@ import org.slf4j.LoggerFactory;
  * 
  * @author Hannes Ebner
  */
-public class MetadataResource extends AbstractMetadataResource {
+public class LocalMetadataResource extends AbstractMetadataResource {
 
-	static Logger log = LoggerFactory.getLogger(MetadataResource.class);
+	static Logger log = LoggerFactory.getLogger(LocalMetadataResource.class);
 
 	@Override
 	protected Metadata getMetadata() {
