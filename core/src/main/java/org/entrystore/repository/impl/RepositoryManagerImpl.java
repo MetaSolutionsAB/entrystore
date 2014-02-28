@@ -25,6 +25,7 @@ import org.apache.solr.core.CoreContainer;
 import org.entrystore.repository.*;
 import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.*;
 import org.entrystore.repository.util.InterceptingRDFInserter.StatementModifier;
 import org.openrdf.model.*;
@@ -551,13 +552,23 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			try {
 				System.setProperty("solr.solr.home", solrURL);
 				log.info("solr.solr.home set to " + solrURL);
-				// URL solrConfig = ConverterUtil.findResource("solrconfig.xml");
-				// solrServer = new EmbeddedSolrServer(CoreContainer.createAndLoad(solrURL, new File(solrConfig.getPath())), "");
+				URL solrConfig = ConverterUtil.findResource("solrconfig.xml");
+
+				/* pre-Solr 4.4.0
 				CoreContainer.Initializer initializer = new CoreContainer.Initializer();
 				CoreContainer coreContainer = initializer.initialize();
 				solrServer = new EmbeddedSolrServer(coreContainer, "");
+				 */
+
+				// the following should be run with a custom Solr-config
+				//CoreContainer.createAndLoad(solrURL, new File(solrConfig.getPath()));
+
+				// we create a container with the default configuration
+				CoreContainer coreContainer = new CoreContainer(solrURL);
+				coreContainer.load();
+				solrServer = new EmbeddedSolrServer(coreContainer, "");
 			} catch (Exception e) {
-				log.error(e.getMessage());
+				log.error("Failed to initialize Solr: " + e.getMessage());
 			}
 		}
 		if (solrServer != null) {
