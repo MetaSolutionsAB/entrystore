@@ -36,6 +36,7 @@ import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.client.solrj.response.UpdateResponse;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
+import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.entrystore.repository.Context;
 import org.entrystore.repository.ContextManager;
@@ -423,7 +424,7 @@ public class SolrSupport {
 		}
 	}
 
-	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, SolrServer solrServer, int offset, int limit) {
+	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, SolrServer solrServer, int offset, int limit) throws SolrException {
 		if (offset > -1) {
 			query.setStart(offset);
 		}
@@ -455,7 +456,7 @@ public class SolrSupport {
 		return hits;
 	}
 
-	public QueryResult sendQuery(SolrQuery query) {
+	public QueryResult sendQuery(SolrQuery query) throws SolrException {
 		Set<URI> entries = new LinkedHashSet<URI>();
 		Set<Entry> result = new LinkedHashSet<Entry>();
 		long hits = -1;
