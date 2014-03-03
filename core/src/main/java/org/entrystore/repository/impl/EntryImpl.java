@@ -262,6 +262,9 @@ public class EntryImpl implements Entry {
 	}
 
 	private boolean loadFromStatements(List<Statement> existingStatements) throws RepositoryException {
+		// FIXME add synchronized (this) in here and also relevant get-methods to avoid object
+		// with null-value in case somebody runs GET while loadFromStatements is still active
+
 		if (existingStatements.isEmpty()) {
 			return false;
 		}
@@ -362,7 +365,7 @@ public class EntryImpl implements Entry {
 //						log.info("*****************************"); 
 			//TODO check that neccessary things where found among the statements.
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw e;
 		} finally {
 			rc.close();
