@@ -44,10 +44,12 @@ public class StringResource extends RDFResource{
 		Graph g = getGraph();
 		ValueFactory vf = this.entry.repository.getValueFactory(); 
 		g.clear();
-		g.add(new StatementImpl(
-				this.entry.getSesameResourceURI(), 
-				RDF.VALUE,
-				vf.createLiteral(text, XMLSchema.STRING))); 
+		if (text != null && !text.equals("")) {
+			g.add(new StatementImpl(
+					this.entry.getSesameResourceURI(), 
+					RDF.VALUE,
+					vf.createLiteral(text, XMLSchema.STRING)));
+		}
 		this.setGraph(g); 
 	}
 
