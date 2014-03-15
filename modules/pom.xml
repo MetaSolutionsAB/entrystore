@@ -25,7 +25,12 @@
 	<dependencies>
 		<dependency>
 			<groupId>org.entrystore</groupId>
-			<artifactId>entrystore-core</artifactId>
+			<artifactId>entrystore-core-api</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-core-impl</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 	</dependencies>
