@@ -16,8 +16,8 @@
 
 package org.entrystore.rest.auth;
 
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.config.Config;
+import org.entrystore.Entry;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.NS;
 import org.openrdf.model.Graph;

@@ -32,10 +32,10 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-import org.entrystore.repository.User;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.User;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.rio.RDFFormat;

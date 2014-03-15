@@ -18,8 +18,8 @@ package org.entrystore.rest.resources;
 
 import java.net.URI;
 
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.PrincipalManager;
+import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.Util;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -56,10 +56,10 @@ public class SolrResource extends BaseResource {
 			if (parameters.containsKey("cmd")) {
 				String command = parameters.get("cmd");
 				if ("reindex".equals(command)) {
-					if (getRM().getSolrSupport() != null) {
+					if (getRM().getIndex() != null) {
 						Runnable reindexThread = new Runnable() {
 							public void run() {
-								getRM().getSolrSupport().reindexLiterals();
+								getRM().getIndex().reindexLiterals();
 							}
 						};
 						new Thread(reindexThread).start();

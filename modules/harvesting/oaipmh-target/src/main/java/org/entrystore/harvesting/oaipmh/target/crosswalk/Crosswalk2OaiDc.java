@@ -22,7 +22,7 @@ import java.util.Iterator;
 import java.util.Properties;
 
 import org.apache.commons.lang.StringEscapeUtils;
-import org.entrystore.repository.Entry;
+import org.entrystore.Entry;
 import org.entrystore.repository.util.NS;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;

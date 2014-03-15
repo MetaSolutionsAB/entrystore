@@ -16,8 +16,8 @@
 
 package org.entrystore.transforms;
 
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.impl.converters.Graph2Entries;
+import org.entrystore.Entry;
+import org.entrystore.impl.converters.Graph2Entries;
 import org.entrystore.repository.util.NS;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;

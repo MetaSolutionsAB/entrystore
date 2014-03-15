@@ -23,7 +23,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvesting.oaipmh.jobs.ListRecordsJob;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;

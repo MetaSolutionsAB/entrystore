@@ -28,7 +28,7 @@ import javax.xml.xpath.XPathFactory;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.Context;
+import org.entrystore.Context;
 import org.quartz.UnableToInterruptJobException;
 import org.w3c.dom.Element;
 import org.xml.sax.SAXException;

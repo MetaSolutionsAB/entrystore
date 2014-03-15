@@ -23,7 +23,8 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
 import org.openrdf.model.URI;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.query.MalformedQueryException;
@@ -155,7 +156,7 @@ public class SparqlResource extends BaseResource {
 		}
 	}
 	
-	private boolean runSparqlQuery(String queryString, org.entrystore.repository.Context context, TupleQueryResultHandler resultHandler) throws RepositoryException, MalformedQueryException, QueryEvaluationException, TupleQueryResultHandlerException {
+	private boolean runSparqlQuery(String queryString, Context context, TupleQueryResultHandler resultHandler) throws RepositoryException, MalformedQueryException, QueryEvaluationException, TupleQueryResultHandlerException {
 		RepositoryConnection rc = null;
 		try {
 			rc = this.getRM().getPublicRepository().getConnection();

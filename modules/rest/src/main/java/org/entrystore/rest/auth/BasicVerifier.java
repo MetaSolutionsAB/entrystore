@@ -21,10 +21,10 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.User;
+import org.entrystore.GraphType;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.util.Util;
 import org.restlet.Request;

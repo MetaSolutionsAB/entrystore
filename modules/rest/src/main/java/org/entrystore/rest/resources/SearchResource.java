@@ -35,21 +35,22 @@ import java.util.StringTokenizer;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.common.SolrException;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.Metadata;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.User;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.Group;
+import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.User;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.NS;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.QueryResult;
+import org.entrystore.repository.util.SolrIndex;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -464,7 +465,7 @@ public class SearchResource extends BaseResource {
 				entries = subfieldSearch(subfields);
 				results = entries.size();
 			} else if ("solr".equalsIgnoreCase(type)) {
-				if (getRM().getSolrSupport() == null) {
+				if (getRM().getIndex() == null) {
 					getResponse().setStatus(Status.SERVER_ERROR_SERVICE_UNAVAILABLE, "Solr search deactivated");
 					return new JsonRepresentation("{\"error\":\"Solr search is deactivated\"}");
 				}
@@ -509,7 +510,7 @@ public class SearchResource extends BaseResource {
 				}
 				
 				try {
-					QueryResult qResult = getRM().getSolrSupport().sendQuery(q);
+					QueryResult qResult = ((SolrIndex) getRM().getIndex()).sendQuery(q);
 					entries = new LinkedList<Entry>(qResult.getEntries());
 					results = qResult.getHits();
 				} catch (SolrException se) {

@@ -17,21 +17,23 @@
 package org.entrystore.rest.resources;
 
 import com.github.jsonldjava.sesame.SesameJSONLDParser;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.Metadata;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
-import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.User;
-import org.entrystore.repository.config.Config;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.Resource;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Group;
+import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.User;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.RDFResource;
-import org.entrystore.repository.impl.StringResource;
-import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.impl.RDFResource;
+import org.entrystore.impl.StringResource;
+import org.entrystore.impl.converters.ConverterUtil;
+import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
@@ -40,9 +42,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
 import org.openrdf.rio.Rio;
@@ -77,7 +76,6 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -185,7 +183,7 @@ public class EntryResource extends BaseResource {
 		try {
 			if (entry != null && context != null) {
 				if (GraphType.List.equals(entry.getGraphType()) && parameters.containsKey("recursive")) {
-					org.entrystore.repository.List l = (org.entrystore.repository.List) entry.getResource();
+					org.entrystore.List l = (org.entrystore.List) entry.getResource();
 					if (l != null) {
 						l.removeTree();
 					} else {
@@ -297,7 +295,7 @@ public class EntryResource extends BaseResource {
 				jdilObj.put("alias", getCM().getContextAlias(entry.getResourceURI()));
 				if (entry.getRepositoryManager().hasQuotas()) {
 					JSONObject quotaObj = new JSONObject();
-					org.entrystore.repository.Context c = getCM().getContext(this.entryId);
+					Context c = getCM().getContext(this.entryId);
 					if (c != null) {
 						quotaObj.put("quota", c.getQuota());
 						quotaObj.put("fillLevel", c.getQuotaFillLevel());
@@ -434,8 +432,8 @@ public class EntryResource extends BaseResource {
 					try {
 						// List<JSONObject> childrenObjects = new ArrayList<JSONObject>();
 						JSONArray childrenArray = new JSONArray();
-						org.entrystore.repository.Resource res = entry.getResource();
-						org.entrystore.repository.List parent = (org.entrystore.repository.List) res;
+						Resource res = entry.getResource();
+						org.entrystore.List parent = (org.entrystore.List) res;
 
 						int maxPos = offset + limit;
 						if (limit == 0) {
@@ -503,9 +501,9 @@ public class EntryResource extends BaseResource {
 								childJSON.put("alias", getCM().getContextAlias(childEntry.getResourceURI()));
 							} else if (btChild == GraphType.List) {
 								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
-									org.entrystore.repository.Resource childRes = childEntry.getResource();
-									if (childRes != null && childRes instanceof org.entrystore.repository.List) {
-										org.entrystore.repository.List childList = (org.entrystore.repository.List) childRes;
+									Resource childRes = childEntry.getResource();
+									if (childRes != null && childRes instanceof org.entrystore.List) {
+										org.entrystore.List childList = (org.entrystore.List) childRes;
 										try {
 											childJSON.put("size", childList.getChildren().size());
 										} catch (AuthorizationException ae) {}
@@ -600,7 +598,7 @@ public class EntryResource extends BaseResource {
 
 						// resourceObj.put("password", user.getSecret());
 
-						org.entrystore.repository.Context homeContext = user.getHomeContext();
+						Context homeContext = user.getHomeContext();
 						if (homeContext != null) {
 							resourceObj.put("homecontext", homeContext.getEntry().getId());
 						}
@@ -738,7 +736,7 @@ public class EntryResource extends BaseResource {
 			if (parameters.containsKey("applyACLtoChildren") &&
 					GraphType.List.equals(entry.getGraphType()) &&
 					EntryType.Local.equals(entry.getEntryType())) {
-				((org.entrystore.repository.List) entry.getResource()).applyACLtoChildren(true);
+				((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			getResponse().setStatus(Status.SUCCESS_OK);
 			return;
