@@ -41,7 +41,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.entrystore</groupId>
-			<artifactId>entrystore-core</artifactId>
+			<artifactId>entrystore-core-impl</artifactId>
 			<version>${project.version}</version>
 			<exclusions>
 				<exclusion>
