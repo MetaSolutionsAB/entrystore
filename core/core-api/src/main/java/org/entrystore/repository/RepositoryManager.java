@@ -14,8 +14,12 @@
  * limitations under the License.
  */
 
-package org.entrystore;
+package org.entrystore.repository;
 
+import org.entrystore.config.Config;
+import org.entrystore.ContextManager;
+import org.entrystore.Index;
+import org.entrystore.PrincipalManager;
 import org.openrdf.model.ValueFactory;
 
 import java.net.URL;
@@ -35,13 +39,13 @@ import java.net.URL;
  */
 public interface RepositoryManager {
 	/**
-	 * @return the {@link PrincipalManager} which is the center of managing
+	 * @return the {@link org.entrystore.PrincipalManager} which is the center of managing
 	 * all users, groups, and access control.
 	 */
 	PrincipalManager getPrincipalManager();
 	
 	/**
-	 * @return the {@link ContextManager} which is the center for managing
+	 * @return the {@link org.entrystore.ContextManager} which is the center for managing
 	 * all non-system Contexts.
 	 */
 	ContextManager getContextManager();

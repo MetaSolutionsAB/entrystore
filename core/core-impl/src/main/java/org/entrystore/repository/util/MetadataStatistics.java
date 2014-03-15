@@ -32,7 +32,7 @@ import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.RepositoryManager;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.impl.converters.OERDF2LOMConverter;
 import org.ieee.ltsc.lom.impl.LOMImpl;
 import org.openrdf.model.Graph;

@@ -34,7 +34,7 @@ import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
-import org.entrystore.RepositoryException;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.Group;

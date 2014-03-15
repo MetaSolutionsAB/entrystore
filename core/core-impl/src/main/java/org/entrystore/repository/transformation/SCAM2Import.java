@@ -31,7 +31,7 @@ import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.QuotaException;
-import org.entrystore.RepositoryException;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.impl.EntryImpl;
 import org.openrdf.model.BNode;

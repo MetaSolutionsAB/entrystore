@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore;
+package org.entrystore.repository;
 
 import java.util.EventListener;
 

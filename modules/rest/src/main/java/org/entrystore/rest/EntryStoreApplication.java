@@ -26,7 +26,7 @@ import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.repository.backup.BackupFactory;
 import org.entrystore.repository.backup.BackupScheduler;
-import org.entrystore.Config;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.RepositoryManagerImpl;

@@ -19,7 +19,7 @@ package org.entrystore.rest.auth;
 import java.util.Date;
 
 import org.entrystore.PrincipalManager;
-import org.entrystore.RepositoryManager;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.User;
 import org.entrystore.repository.security.Password;
 import org.restlet.Context;

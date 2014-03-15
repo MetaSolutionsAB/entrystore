@@ -50,7 +50,7 @@ public class RDFResource extends ResourceImpl {
 			return result;
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		} finally {
 			try {
 				rc.close();
@@ -74,14 +74,14 @@ public class RDFResource extends ResourceImpl {
 				} catch (Exception e) {
 					rc.rollback();
 					e.printStackTrace();
-					throw new org.entrystore.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 				} finally {
 					rc.close();
 				}
 			} 
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
 	

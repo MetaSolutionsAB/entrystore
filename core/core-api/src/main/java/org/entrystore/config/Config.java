@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore;
+package org.entrystore.config;
 
 import java.awt.Color;
 import java.beans.PropertyChangeListener;

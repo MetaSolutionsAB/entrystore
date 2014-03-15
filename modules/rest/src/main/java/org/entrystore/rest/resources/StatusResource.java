@@ -19,7 +19,7 @@ package org.entrystore.rest.resources;
 import java.net.URI;
 
 import org.entrystore.PrincipalManager;
-import org.entrystore.Config;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.entrystore.AuthorizationException;

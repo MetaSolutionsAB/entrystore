@@ -28,7 +28,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.User;
-import org.entrystore.Config;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.RDFResource;
 import org.entrystore.repository.impl.StringResource;

@@ -24,8 +24,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 
-import org.entrystore.Config;
-import org.entrystore.Configurations;
+import org.entrystore.config.Config;
+import org.entrystore.config.Configurations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

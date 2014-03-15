@@ -26,7 +26,7 @@ import org.entrystore.Entry;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.ContextManager;
 import org.entrystore.PrincipalManager;
-import org.entrystore.RepositoryManager;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.entrystore.rest.EntryStoreApplication;

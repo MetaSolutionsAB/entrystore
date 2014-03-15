@@ -55,7 +55,7 @@ import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.RepositoryManager;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.ResourceType;
 import org.entrystore.Resource;
@@ -346,7 +346,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		if (srcScamBaseURI == null || srcContextEntryURI == null || srcContextResourceURI == null || srcContainedUsers == null) {
 			String msg = "Property file of import ZIP did not contain all necessary properties, aborting import"; 
 			log.error(msg);
-			throw new org.entrystore.RepositoryException(msg);
+			throw new org.entrystore.repository.RepositoryException(msg);
 		}
 		
 		log.info("scamBaseURI: " + srcScamBaseURI);
@@ -824,7 +824,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		if (us.getURIType() == URIType.Resource) {
 			return getName(us.getMetaMetadataURI());
 		}
-		throw new org.entrystore.RepositoryException("Given URI is not an existing contextURI.");
+		throw new org.entrystore.repository.RepositoryException("Given URI is not an existing contextURI.");
 	}
 
 	public URI getContextURI(String contextAlias) {
@@ -835,7 +835,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						contextEntry.getGraphType() == GraphType.SystemContext) {
 			return contextEntry.getResourceURI();
 		}
-		throw new org.entrystore.RepositoryException("Found entry for the alias is not a context...\n" +
+		throw new org.entrystore.repository.RepositoryException("Found entry for the alias is not a context...\n" +
 				"this is either a programming error or someone have been tampering with the RDF directly.");
 	}
 
@@ -847,12 +847,12 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		URISplit us = new URISplit(contextURI, this.entry.getRepositoryManager().getRepositoryURL());
 		Entry contextEntry = getByEntryURI(us.getMetaMetadataURI());
 		if (contextEntry == null) {
-			throw new org.entrystore.RepositoryException("Cannot find an entry for the specified URI");
+			throw new org.entrystore.repository.RepositoryException("Cannot find an entry for the specified URI");
 		} else if (contextEntry.getGraphType() == GraphType.Context ||
 				contextEntry.getGraphType() == GraphType.SystemContext) {
 			return setEntryName(us.getMetaMetadataURI(), newAlias);
 		}
-		throw new org.entrystore.RepositoryException("Given URI does not refer to a Context.");
+		throw new org.entrystore.repository.RepositoryException("Given URI does not refer to a Context.");
 	}
 
 	/**
@@ -950,7 +950,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 		} catch (RepositoryException e) {
 			log.error("Repository error", e);
-			throw new org.entrystore.RepositoryException("Repository error", e);
+			throw new org.entrystore.repository.RepositoryException("Repository error", e);
 		}
 		return entries;
 	}

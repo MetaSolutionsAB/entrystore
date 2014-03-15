@@ -26,7 +26,7 @@ import org.entrystore.harvester.factory.HarvesterFactory;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.oaipmh.harvester.OAIHarvester;
 import org.entrystore.Entry;
-import org.entrystore.RepositoryException;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.RepositoryManagerImpl;

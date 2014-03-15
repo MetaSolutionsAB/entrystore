@@ -37,7 +37,7 @@ import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.Config;
+import org.entrystore.config.Config;
 
 /**
  * Wrapper around Java's Properties.
@@ -58,8 +58,8 @@ import org.entrystore.Config;
  * 
  * @author Hannes Ebner
  * @version $Id$
- * @see org.entrystore.Configurations
- * @see org.entrystore.Config
+ * @see org.entrystore.config.Configurations
+ * @see org.entrystore.config.Config
  */
 public class PropertiesConfiguration implements Config {
 	

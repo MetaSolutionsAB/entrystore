@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-package org.entrystore;
+package org.entrystore.repository;
 
 import java.util.EventObject;
 
+import org.entrystore.Entry;
 import org.openrdf.model.Graph;
 
 /**

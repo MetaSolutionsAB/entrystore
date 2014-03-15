@@ -27,7 +27,7 @@ import java.util.Set;
  * ownership according to the access control in it's {@link Entry}.
  *
  * All the methods may throw {@link AuthorizationException} if the user has insufficient
- * rights. If something else goes wrong in a method a {@link RepositoryException} is 
+ * rights. If something else goes wrong in a method a {@link org.entrystore.repository.RepositoryException} is
  * thrown instead.
  * 
  * @author matthias

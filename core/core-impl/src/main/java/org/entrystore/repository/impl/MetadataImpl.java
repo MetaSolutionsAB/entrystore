@@ -24,8 +24,8 @@ import javax.xml.datatype.DatatypeConfigurationException;
 
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
-import org.entrystore.RepositoryEvent;
-import org.entrystore.RepositoryEventObject;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;
@@ -77,7 +77,7 @@ public class MetadataImpl implements Metadata {
 			return result;
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		} finally {
 			try {
 				rc.close();
@@ -123,14 +123,14 @@ public class MetadataImpl implements Metadata {
 				} catch (Exception e) {
 					rc.rollback();
 					e.printStackTrace();
-					throw new org.entrystore.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
 	public void removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {

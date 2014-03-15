@@ -27,11 +27,11 @@ import org.entrystore.Entry;
 import org.entrystore.Index;
 import org.entrystore.PrincipalManager;
 import org.entrystore.Quota;
-import org.entrystore.RepositoryEvent;
-import org.entrystore.RepositoryEventObject;
-import org.entrystore.RepositoryListener;
-import org.entrystore.RepositoryManager;
-import org.entrystore.Config;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.RepositoryListener;
+import org.entrystore.repository.RepositoryManager;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.*;
@@ -471,7 +471,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 	
 	/**
-	 * @see org.entrystore.RepositoryManager#getCacheManager()
+	 * @see org.entrystore.repository.RepositoryManager#getCacheManager()
 	 */
 	public CacheManager getCacheManager() {
 		return cacheManager;

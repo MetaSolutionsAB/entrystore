@@ -23,7 +23,7 @@ import org.apache.commons.logging.LogFactory;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.Entry;
-import org.entrystore.RepositoryException;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.ResourceType;
 
 

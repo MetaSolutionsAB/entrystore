@@ -24,7 +24,7 @@ import net.sf.ehcache.Element;
 import net.sf.ehcache.store.MemoryStoreEvictionPolicy;
 import org.entrystore.Data;
 import org.entrystore.Entry;
-import org.entrystore.RepositoryManager;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.repository.impl.RepositoryManagerImpl;

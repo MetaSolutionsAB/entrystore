@@ -34,7 +34,7 @@ import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.Config;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.NS;

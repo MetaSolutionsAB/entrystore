@@ -36,8 +36,8 @@ import org.entrystore.Entry;
 import org.entrystore.List;
 import org.entrystore.PrincipalManager;
 import org.entrystore.QuotaException;
-import org.entrystore.RepositoryEvent;
-import org.entrystore.RepositoryEventObject;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.ResourceType;
 import org.entrystore.Resource;
 import org.entrystore.PrincipalManager.AccessProperty;
@@ -172,14 +172,14 @@ public class ListImpl extends RDFResource implements List {
 		if (singleParentForListsRequirement 
 				&& childEntry.getGraphType() == GraphType.List
 				&& childEntry.getReferringListsInSameContext().size() > 0) {
-			throw new org.entrystore.RepositoryException("The entry "+nEntry+" cannot be added since it is a list which already have another parent, try moving it instead");
+			throw new org.entrystore.repository.RepositoryException("The entry "+nEntry+" cannot be added since it is a list which already have another parent, try moving it instead");
 		}
 		if (children == null) {
 			loadChildren();
 		}
 		if (orderedSetRequirement) {
 			if (children.contains(nEntry)) {
-				throw new org.entrystore.RepositoryException("The entry "+nEntry+" is already a child in this list.");
+				throw new org.entrystore.repository.RepositoryException("The entry "+nEntry+" is already a child in this list.");
 			}
 		}
 		try {
@@ -226,18 +226,18 @@ public class ListImpl extends RDFResource implements List {
 		EntryImpl e = ((EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(entry));
 
 		if (e == null) {
-			throw new org.entrystore.RepositoryException("Cannot find entry: "+entry+" and it cannot be moved.");
+			throw new org.entrystore.repository.RepositoryException("Cannot find entry: "+entry+" and it cannot be moved.");
 		}
 
 		EntryImpl fromListEntry = ((EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(fromList));
 		if (fromListEntry == null && removeFromAllLists == false) {
-			throw new org.entrystore.RepositoryException("Cannot find list: "+fromList+" and hence cannot move an entry from it.");
+			throw new org.entrystore.repository.RepositoryException("Cannot find list: "+fromList+" and hence cannot move an entry from it.");
 		}
 		if (fromListEntry != null) {
 			if (fromListEntry.getContext() != e.getContext() 
 					|| fromListEntry.getGraphType() != GraphType.List
 					|| !((List) fromListEntry.getResource()).getChildren().contains(entry)) {
-				throw new org.entrystore.RepositoryException("Entry ("+entry+") is not a child of list ("+fromList+"), hence it cannot be moved from it.");
+				throw new org.entrystore.repository.RepositoryException("Entry ("+entry+") is not a child of list ("+fromList+"), hence it cannot be moved from it.");
 			}
 			pm.checkAuthenticatedUserAuthorized(fromListEntry, AccessProperty.WriteResource);
 		} else {
@@ -268,18 +268,18 @@ public class ListImpl extends RDFResource implements List {
 			int nrOfRefLists = e.getReferringListsInSameContext().size();
 			GraphType bt = e.getGraphType();
 			if (bt == GraphType.SystemContext || bt == GraphType.Context || bt == GraphType.User || bt == GraphType.Group) {
-				throw new org.entrystore.RepositoryException("Cannot move SystemContexts, Contexts, Users or Groups.");
+				throw new org.entrystore.repository.RepositoryException("Cannot move SystemContexts, Contexts, Users or Groups.");
 			}
 			EntryImpl newEntry = null;
 			if (bt == GraphType.List) {
 				try {
 					newEntry = this.copyEntryHere(e);
 					((List) e.getResource()).removeTree();
-				} catch (org.entrystore.RepositoryException re) {
+				} catch (org.entrystore.repository.RepositoryException re) {
 					if (newEntry != null) {
-						throw new org.entrystore.RepositoryException("Succedded in copying folder structure (leaving it there), but failed to remove the old structure (remove manually): "+re.getMessage());
+						throw new org.entrystore.repository.RepositoryException("Succedded in copying folder structure (leaving it there), but failed to remove the old structure (remove manually): "+re.getMessage());
 					} else {
-						throw new org.entrystore.RepositoryException("Failed copying the folder structure, nothing is changed: "+re.getMessage());
+						throw new org.entrystore.repository.RepositoryException("Failed copying the folder structure, nothing is changed: "+re.getMessage());
 					}
 				}
 				return newEntry;
@@ -359,7 +359,7 @@ public class ListImpl extends RDFResource implements List {
 			if (first && newEntry != null && newEntry.getGraphType() == GraphType.List) {
 				((List) newEntry.getResource()).removeTree();
 			}
-			throw new org.entrystore.RepositoryException("Failed to copy entry ("+entryToCopy.getEntryURI()+"):"+e.getMessage());
+			throw new org.entrystore.repository.RepositoryException("Failed to copy entry ("+entryToCopy.getEntryURI()+"):"+e.getMessage());
 		}
 		
 		return newEntry;
@@ -458,17 +458,17 @@ public class ListImpl extends RDFResource implements List {
 			if (singleParentForListsRequirement 
 					&& childEntry.getGraphType() == GraphType.List
 					&& !childEntry.getReferringListsInSameContext().isEmpty()) {
-				throw new org.entrystore.RepositoryException("Cannot set the list since the child "+uri+" is a list which already have a parent.");
+				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child "+uri+" is a list which already have a parent.");
 			}
 			if (childEntry == null) {
-				throw new org.entrystore.RepositoryException("Cannot set the list since the child "+uri+" does not exist.");
+				throw new org.entrystore.repository.RepositoryException("Cannot set the list since the child "+uri+" does not exist.");
 			}
 		}
 		
 		if (orderedSetRequirement) {
 			HashSet<URI> set = new HashSet<URI>(newChildren);
 			if (set.size() < newChildren.size()) {
-				throw new org.entrystore.RepositoryException("Cannot set the list since some of its children occur multiple times.");
+				throw new org.entrystore.repository.RepositoryException("Cannot set the list since some of its children occur multiple times.");
 			}
 		}
 
@@ -479,7 +479,7 @@ public class ListImpl extends RDFResource implements List {
 				continue;
 			}
 			if (!canRemove(true, childEntry, isOwnerOfContext)) {
-				throw new org.entrystore.RepositoryException("Cannot set the list since you do not have the rights to remove the child "+uri+" from the list.");
+				throw new org.entrystore.repository.RepositoryException("Cannot set the list since you do not have the rights to remove the child "+uri+" from the list.");
 			}
 		}
 		
@@ -527,7 +527,7 @@ public class ListImpl extends RDFResource implements List {
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 					}
 					children = oldChildrenList;
-					throw new org.entrystore.RepositoryException("Cannot set the list since: "+e.getMessage());
+					throw new org.entrystore.repository.RepositoryException("Cannot set the list since: "+e.getMessage());
 				} finally {
 					rc.close();
 				}

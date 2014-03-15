@@ -21,6 +21,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Set;
 
+import org.entrystore.repository.RepositoryManager;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
 

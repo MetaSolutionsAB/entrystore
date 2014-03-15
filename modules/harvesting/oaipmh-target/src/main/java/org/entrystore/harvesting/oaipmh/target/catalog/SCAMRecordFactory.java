@@ -27,7 +27,7 @@ import java.util.TimeZone;
 
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.RepositoryManager;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.DeletedEntryInfo;

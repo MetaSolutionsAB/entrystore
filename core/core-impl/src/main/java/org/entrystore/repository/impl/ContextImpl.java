@@ -48,8 +48,8 @@ import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.Quota;
 import org.entrystore.QuotaException;
-import org.entrystore.RepositoryEvent;
-import org.entrystore.RepositoryEventObject;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
@@ -179,14 +179,14 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} catch (Exception e) {
 					rc.rollback();
 					e.printStackTrace();
-					throw new org.entrystore.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.RepositoryException("Failed to connect to Repository", e);
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 		}
 		
 		this.res2entry = null;
@@ -265,7 +265,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.RepositoryException("Failed to connect to Repository", e);
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 		}
 	}
 
@@ -483,13 +483,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 					if (newEntry != null) {
 						newEntry.refreshFromRepository(rc);
 					}
-					throw new org.entrystore.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 				}
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			throw new org.entrystore.RepositoryException("Failed to connect to Repository", e);
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 		}
 	}
 
@@ -721,7 +721,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			result = getByMMdURIDirect(entryURI, rc);
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.RepositoryException("Failed to connect to Repository", e);
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 		} finally {
 			rc.close();
 		}
@@ -762,7 +762,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			throw ae;
 		} catch (Exception e) {
 			e.printStackTrace();
-			throw new org.entrystore.RepositoryException("Error in connection to repository", e);
+			throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 		}
 		return newEntry;
 	}
@@ -868,7 +868,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							if (value != null && value instanceof URI) {
 								listItem = getByMMdURIDirect((URI) value, rc);
 							} else {
-								throw new org.entrystore.RepositoryException("Strange, a referring list is used twice in the same context,\n" +
+								throw new org.entrystore.repository.RepositoryException("Strange, a referring list is used twice in the same context,\n" +
 								"this is not allowed for local builtin resources");
 							}
 						}
@@ -879,10 +879,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} catch (Exception e) {
 					log.error(e.getMessage(), e);
 					if (incomplete) {
-						throw new org.entrystore.RepositoryException("Error in removing the item from lists, " +
+						throw new org.entrystore.repository.RepositoryException("Error in removing the item from lists, " +
 								"unfortunately now only removed from some of the lists. Hence, the item will not be removed completely.", e);
 					} else {
-						throw new org.entrystore.RepositoryException("Error in removing the item from lists.\n" +
+						throw new org.entrystore.repository.RepositoryException("Error in removing the item from lists.\n" +
 								"Hence, the item will not be removed completely.", e);
 					}
 				}
@@ -897,12 +897,12 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} catch (Exception e) {
 					rc.rollback();
 					log.error(e.getMessage(), e);
-					throw new org.entrystore.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 				}
 
 			} catch (RepositoryException e) {
 				log.error(e.getMessage(), e);
-				throw new org.entrystore.RepositoryException("Failed to connect to Repository", e);
+				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 			} finally {
 				try {
 					rc.close();

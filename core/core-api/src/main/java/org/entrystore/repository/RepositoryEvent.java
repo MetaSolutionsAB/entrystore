@@ -14,26 +14,21 @@
  * limitations under the License.
  */
 
-package org.entrystore;
+package org.entrystore.repository;
 
-public class RepositoryException extends RuntimeException {
-	
-	private RepositoryError error = RepositoryError.UNKNOWN;
+/**
+ * @author Hannes Ebner
+ */
+public enum RepositoryEvent {
 
-	public RepositoryException(String message) {
-		super(message);
-	}
-
-	public RepositoryException(String message, Exception e) {
-		super(message, e);
-	}
-	
-	public RepositoryException(RepositoryError error) {
-		this.error = error;
-	}
-	
-	public RepositoryError getError() {
-		return this.error;
-	}
+	All,
+	EntryCreated,
+	EntryUpdated, // TODO event firing only implemented for EntryImpl.setGraph()
+	EntryDeleted,
+	MetadataUpdated,
+	ExternalMetadataUpdated,
+	ExtractedMetadataUpdated, // TODO event firing not implemented yet
+	ResourceUpdated, // TODO partially implemented for ListImpl, fully implemented for DataImpl
+	ResourceDeleted // TODO partially implemented for ListImpl, fully implemented for DataImpl
 
 }

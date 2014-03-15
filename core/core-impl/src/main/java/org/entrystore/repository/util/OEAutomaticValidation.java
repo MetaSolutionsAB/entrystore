@@ -30,7 +30,7 @@ import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
-import org.entrystore.RepositoryManager;
+import org.entrystore.repository.RepositoryManager;
 import org.openrdf.model.BNode;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;

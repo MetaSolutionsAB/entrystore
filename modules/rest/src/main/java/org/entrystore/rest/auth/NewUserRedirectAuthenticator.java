@@ -20,7 +20,7 @@ import org.entrystore.GraphType;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.RepositoryManager;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.User;
 import org.restlet.Context;
 import org.restlet.Restlet;

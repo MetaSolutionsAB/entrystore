@@ -29,7 +29,7 @@ import org.entrystore.List;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.Config;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;

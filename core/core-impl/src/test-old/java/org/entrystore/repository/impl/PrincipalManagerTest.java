@@ -32,7 +32,7 @@ import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.ResourceType;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.Config;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.AuthorizationException;
