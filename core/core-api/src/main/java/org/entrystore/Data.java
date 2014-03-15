@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 
 /**
  * Data resources contains digital information, e.g. a file, that is managed

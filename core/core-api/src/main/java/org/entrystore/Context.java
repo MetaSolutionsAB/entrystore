@@ -14,15 +14,12 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
 import java.net.URI;
 import java.util.Date;
 import java.util.Map;
 import java.util.Set;
-
-import org.entrystore.repository.impl.DeletedEntryInfo;
-import org.entrystore.repository.security.AuthorizationException;
 
 
 /**

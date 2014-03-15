@@ -27,12 +27,12 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.RepositoryManager;
+import org.entrystore.GraphType;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
+import org.entrystore.RepositoryManager;
 import org.entrystore.repository.impl.converters.OERDF2LOMConverter;
 import org.ieee.ltsc.lom.impl.LOMImpl;
 import org.openrdf.model.Graph;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
 /**
  * EntryType specifies which parts of an {@link Entry}, more specifically the

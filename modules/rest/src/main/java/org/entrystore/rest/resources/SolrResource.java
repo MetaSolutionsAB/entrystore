@@ -18,8 +18,8 @@ package org.entrystore.rest.resources;
 
 import java.net.URI;
 
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.PrincipalManager;
+import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.Util;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;

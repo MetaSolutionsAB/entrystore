@@ -16,7 +16,7 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.Quota;
+import org.entrystore.Quota;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Status;

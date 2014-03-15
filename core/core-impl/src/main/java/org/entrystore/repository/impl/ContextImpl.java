@@ -39,22 +39,23 @@ import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.Data;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.Quota;
-import org.entrystore.repository.QuotaException;
-import org.entrystore.repository.RepositoryEvent;
-import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.DeletedEntryInfo;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Context;
+import org.entrystore.Data;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
+import org.entrystore.Quota;
+import org.entrystore.QuotaException;
+import org.entrystore.RepositoryEvent;
+import org.entrystore.RepositoryEventObject;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.ResourceType;
-import org.entrystore.repository.User;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.ResourceType;
+import org.entrystore.User;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.util.NS;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.repository.util.URISplit;
@@ -178,14 +179,14 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} catch (Exception e) {
 					rc.rollback();
 					e.printStackTrace();
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.RepositoryException("Error in connection to repository", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository", e);
 		}
 		
 		this.res2entry = null;
@@ -264,7 +265,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository", e);
 		}
 	}
 
@@ -482,13 +483,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 					if (newEntry != null) {
 						newEntry.refreshFromRepository(rc);
 					}
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.RepositoryException("Error in connection to repository", e);
 				}
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository", e);
 		}
 	}
 
@@ -665,7 +666,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	public void copyACL(org.entrystore.repository.List fromList, Entry toEntry) {
+	public void copyACL(org.entrystore.List fromList, Entry toEntry) {
 		if (toEntry instanceof EntryImpl) {
 			EntryImpl entry = (EntryImpl) toEntry;
 			Set<URI> adminPrincipals = fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.Administer);
@@ -720,7 +721,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			result = getByMMdURIDirect(entryURI, rc);
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository", e);
 		} finally {
 			rc.close();
 		}
@@ -745,7 +746,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				cache.put(newEntry);
 				if (GraphType.Context.equals(newEntry.getGraphType()) &&
 						EntryType.Local.equals(newEntry.getEntryType())) {
-					org.entrystore.repository.Resource resource = newEntry.getResource(); 
+					org.entrystore.Resource resource = newEntry.getResource();
 					if (resource != null) {
 						((Context) resource).initializeSystemEntries();
 					} else {
@@ -761,7 +762,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			throw ae;
 		} catch (Exception e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+			throw new org.entrystore.RepositoryException("Error in connection to repository", e);
 		}
 		return newEntry;
 	}
@@ -867,7 +868,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							if (value != null && value instanceof URI) {
 								listItem = getByMMdURIDirect((URI) value, rc);
 							} else {
-								throw new org.entrystore.repository.RepositoryException("Strange, a referring list is used twice in the same context,\n" +
+								throw new org.entrystore.RepositoryException("Strange, a referring list is used twice in the same context,\n" +
 								"this is not allowed for local builtin resources");
 							}
 						}
@@ -878,10 +879,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} catch (Exception e) {
 					log.error(e.getMessage(), e);
 					if (incomplete) {
-						throw new org.entrystore.repository.RepositoryException("Error in removing the item from lists, " +
+						throw new org.entrystore.RepositoryException("Error in removing the item from lists, " +
 								"unfortunately now only removed from some of the lists. Hence, the item will not be removed completely.", e);
 					} else {
-						throw new org.entrystore.repository.RepositoryException("Error in removing the item from lists.\n" +
+						throw new org.entrystore.RepositoryException("Error in removing the item from lists.\n" +
 								"Hence, the item will not be removed completely.", e);
 					}
 				}
@@ -896,12 +897,12 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} catch (Exception e) {
 					rc.rollback();
 					log.error(e.getMessage(), e);
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.RepositoryException("Error in connection to repository", e);
 				}
 
 			} catch (RepositoryException e) {
 				log.error(e.getMessage(), e);
-				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+				throw new org.entrystore.RepositoryException("Failed to connect to Repository", e);
 			} finally {
 				try {
 					rc.close();
@@ -931,7 +932,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 	
 	/**
-	 * @see org.entrystore.repository.Context#hasDefaultQuota()
+	 * @see org.entrystore.Context#hasDefaultQuota()
 	 */
 	public boolean hasDefaultQuota() {
 		RepositoryConnection rc = null;
@@ -953,7 +954,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 * @see org.entrystore.repository.Context#getQuota()
+	 * @see org.entrystore.Context#getQuota()
 	 */
 	public long getQuota() {
 		if (this.quota == Quota.VALUE_UNCACHED) {
@@ -988,7 +989,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 * @see org.entrystore.repository.Context#setQuota(long)
+	 * @see org.entrystore.Context#setQuota(long)
 	 */
 	public void setQuota(long quotaInBytes) {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
@@ -1029,7 +1030,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 	
 	/**
-	 * @see org.entrystore.repository.Context#removeQuota()
+	 * @see org.entrystore.Context#removeQuota()
 	 */
 	public void removeQuota() {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
@@ -1062,7 +1063,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 	
 	/**
-	 * @see org.entrystore.repository.Context#getQuotaFillLevel()
+	 * @see org.entrystore.Context#getQuotaFillLevel()
 	 */
 	public long getQuotaFillLevel() {
 		long queriedQuotaFillLevel = Quota.VALUE_UNKNOWN;
@@ -1123,7 +1124,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 	
 	/**
-	 * @see org.entrystore.repository.Context#increaseQuotaFillLevel(long)
+	 * @see org.entrystore.Context#increaseQuotaFillLevel(long)
 	 */
 	public void increaseQuotaFillLevel(long bytes) throws QuotaException {
 		long quota = getQuota();
@@ -1138,7 +1139,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 	
 	/**
-	 * @see org.entrystore.repository.Context#decreaseQuotaFillLevel(long)
+	 * @see org.entrystore.Context#decreaseQuotaFillLevel(long)
 	 */
 	public void decreaseQuotaFillLevel(long bytes) {
 		synchronized (quotaMutex) {

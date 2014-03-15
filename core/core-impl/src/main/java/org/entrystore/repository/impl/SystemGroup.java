@@ -21,9 +21,9 @@ import java.net.URI;
 import java.util.List;
 import java.util.Vector;
 
-import org.entrystore.repository.Group;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.User;
+import org.entrystore.Group;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
 
 
 public class SystemGroup extends SystemList implements Group{

@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
 import java.net.URI;
 import java.util.Set;
 import java.util.List;
-
-import org.entrystore.repository.security.AuthorizationException;
 
 public interface PrincipalManager extends Context {
 

@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
 import java.net.URI;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
 
-import org.entrystore.repository.PrincipalManager.AccessProperty;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
 
@@ -151,12 +150,12 @@ public interface Entry {
 	Set<URI> getReferringListsInSameContext();
 	
 	/**
-	 * @param prop corresponds to which {@link AccessProperty} to 
+	 * @param prop corresponds to which {@link org.entrystore.PrincipalManager.AccessProperty} to
 	 * find allowed principals for.
 	 * @return a set of principals that are allowed according to the 
-	 * {@link AccessProperty} prop.
+	 * {@link org.entrystore.PrincipalManager.AccessProperty} prop.
 	 */
-	Set<URI> getAllowedPrincipalsFor(AccessProperty prop);
+	Set<URI> getAllowedPrincipalsFor(PrincipalManager.AccessProperty prop);
 	
 	/**
 	 * @return true if any access control is expressed on this entry explicitly.
@@ -164,25 +163,25 @@ public interface Entry {
 	boolean hasAllowedPrincipals();
 	
 	/**
-	 * @param prop corresponds to which {@link AccessProperty} to allow for.
+	 * @param prop corresponds to which {@link org.entrystore.PrincipalManager.AccessProperty} to allow for.
 	 * @param principals a set of principals that are allowed according to the 
-	 * {@link AccessProperty} prop.
+	 * {@link org.entrystore.PrincipalManager.AccessProperty} prop.
 	 */
-	void setAllowedPrincipalsFor(AccessProperty prop, Set<URI> principals);
+	void setAllowedPrincipalsFor(PrincipalManager.AccessProperty prop, Set<URI> principals);
 	
 	/**
-	 * @param prop corresponds to which {@link AccessProperty} to allow for.
+	 * @param prop corresponds to which {@link org.entrystore.PrincipalManager.AccessProperty} to allow for.
 	 * @param principal a URI of principal that are to be allowed according to the 
-	 * {@link AccessProperty} prop.
+	 * {@link org.entrystore.PrincipalManager.AccessProperty} prop.
 	 */
-	void addAllowedPrincipalsFor(AccessProperty prop, URI principal);
+	void addAllowedPrincipalsFor(PrincipalManager.AccessProperty prop, URI principal);
 
 	/**
-	 * @param prop corresponds to which {@link AccessProperty} allowed for.
+	 * @param prop corresponds to which {@link org.entrystore.PrincipalManager.AccessProperty} allowed for.
 	 * @param principal a URI of principal that are not to be allowed according to the 
-	 * {@link AccessProperty} prop.
+	 * {@link org.entrystore.PrincipalManager.AccessProperty} prop.
 	 */
-	boolean removeAllowedPrincipalsFor(AccessProperty prop, URI principal);
+	boolean removeAllowedPrincipalsFor(PrincipalManager.AccessProperty prop, URI principal);
 
 	/**
 	 * @return {@link Context} object, never null.

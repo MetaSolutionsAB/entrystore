@@ -22,10 +22,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.entrystore.Entry;
 import org.entrystore.harvester.Harvester;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.RepositoryManager;
+import org.entrystore.ContextManager;
+import org.entrystore.PrincipalManager;
+import org.entrystore.RepositoryManager;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.entrystore.rest.EntryStoreApplication;
@@ -60,9 +61,9 @@ public abstract class BaseResource extends ServerResource {
 	
 	protected String entryId;
 	
-	protected org.entrystore.repository.Context context;
+	protected org.entrystore.Context context;
 	
-	protected org.entrystore.repository.Entry entry;
+	protected Entry entry;
 	
 	private static Logger log = LoggerFactory.getLogger(BaseResource.class);
 	

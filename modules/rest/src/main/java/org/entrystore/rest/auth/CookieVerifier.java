@@ -17,10 +17,9 @@
 package org.entrystore.rest.auth;
 
 import java.net.URI;
-import java.util.Date;
 
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Cookie;

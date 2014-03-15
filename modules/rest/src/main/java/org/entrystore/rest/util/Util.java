@@ -19,7 +19,7 @@ package org.entrystore.rest.util;
 import java.util.Date;
 import java.util.HashMap;
 
-import org.entrystore.repository.Entry;
+import org.entrystore.Entry;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.Request;

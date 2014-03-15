@@ -31,21 +31,23 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
-import org.entrystore.repository.Data;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.Metadata;
-import org.entrystore.repository.QuotaException;
+import org.entrystore.Context;
+import org.entrystore.Data;
+import org.entrystore.Entry;
+import org.entrystore.RepositoryException;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Group;
+import org.entrystore.Metadata;
+import org.entrystore.QuotaException;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.ResourceType;
-import org.entrystore.repository.User;
+import org.entrystore.ResourceType;
+import org.entrystore.User;
 import org.entrystore.repository.impl.ListImpl;
 import org.entrystore.repository.impl.RDFResource;
 import org.entrystore.repository.impl.StringResource;
 import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.util.JSONErrorMessages;
@@ -508,7 +510,7 @@ public class ResourceResource extends BaseResource {
 	public Set<Entry> getListChildrenRecursively(Entry listEntry) {
 		Set<Entry> result = new HashSet<Entry>();
 		if (GraphType.List.equals(listEntry.getGraphType()) && EntryType.Local.equals(listEntry.getEntryType())) {
-			org.entrystore.repository.List l = (org.entrystore.repository.List) listEntry.getResource();
+			org.entrystore.List l = (org.entrystore.List) listEntry.getResource();
 			List<URI> c = l.getChildren();
 			for (URI uri : c) {
 				Entry e = getRM().getContextManager().getEntry(uri);
@@ -667,7 +669,7 @@ public class ResourceResource extends BaseResource {
 
 			/*** List ***/
 			if (entry.getGraphType() == GraphType.List) {
-				org.entrystore.repository.List l = (org.entrystore.repository.List) entry.getResource(); 
+				org.entrystore.List l = (org.entrystore.List) entry.getResource();
 				List<URI> uris = l.getChildren();
 				Set<String> IDs = new HashSet<String>();
 				for (URI u: uris) {
@@ -745,7 +747,7 @@ public class ResourceResource extends BaseResource {
 
 			/*** Context ***/
 			if(entry.getGraphType() == GraphType.Context || entry.getGraphType() == GraphType.SystemContext) {
-				org.entrystore.repository.Context c = (org.entrystore.repository.Context) entry.getResource(); 
+				Context c = (Context) entry.getResource();
 				Set<URI> uris = c.getEntries(); 
 				for(URI u: uris) {
 					String entryId = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/')+1);
@@ -802,7 +804,7 @@ public class ResourceResource extends BaseResource {
 
 					//jsonUserObj.put("password", user.getSecret());
 
-					org.entrystore.repository.Context homeContext = user.getHomeContext();
+					Context homeContext = user.getHomeContext();
 					if (homeContext != null) {
 						jsonUserObj.put("homecontext", homeContext.getEntry().getId());
 					}
@@ -892,10 +894,10 @@ public class ResourceResource extends BaseResource {
 				}
 				
 				if (entry.getGraphType() == GraphType.List) {
-					org.entrystore.repository.List resourceList = (org.entrystore.repository.List) entry.getResource();
+					org.entrystore.List resourceList = (org.entrystore.List) entry.getResource();
 					resourceList.setChildren(newResource);
 				} else {
-					org.entrystore.repository.Group resourceGroup = (org.entrystore.repository.Group) entry.getResource();
+					Group resourceGroup = (Group) entry.getResource();
 					resourceGroup.setChildren(newResource); 
 				}
 				getResponse().setStatus(Status.SUCCESS_OK);
@@ -907,7 +909,7 @@ public class ResourceResource extends BaseResource {
 				log.error("IOException: " + e.getMessage()); 
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"IOException\"}"));
-			} catch (org.entrystore.repository.RepositoryException re) {
+			} catch (RepositoryException re) {
 				log.warn(re.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorChildExistsInList));
@@ -1076,8 +1078,8 @@ public class ResourceResource extends BaseResource {
 					String homeContext = entityJSON.getString("homecontext");
 					Entry entryHomeContext = getCM().get(homeContext);
 					if (entryHomeContext != null) {
-						if (!(entryHomeContext.getResource() instanceof org.entrystore.repository.Context)
-								|| !resourceUser.setHomeContext((org.entrystore.repository.Context) entryHomeContext.getResource())) {
+						if (!(entryHomeContext.getResource() instanceof Context)
+								|| !resourceUser.setHomeContext((Context) entryHomeContext.getResource())) {
 							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 							getResponse().setEntity(new JsonRepresentation("{\"error\":\"Given homecontext is not a context.\"}"));
 							return;						

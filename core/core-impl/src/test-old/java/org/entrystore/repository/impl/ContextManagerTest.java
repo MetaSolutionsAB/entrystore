@@ -24,10 +24,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.CommonQueries;
@@ -224,7 +224,7 @@ public class ContextManagerTest {
 	@Test
 	public void systemEntriesListCheck() {
 		Entry seEntry = cm.get("_systemEntries");
-		org.entrystore.repository.List listOfSEEntries = (org.entrystore.repository.List) seEntry.getResource();
+		org.entrystore.List listOfSEEntries = (org.entrystore.List) seEntry.getResource();
 		int nrOfSE = listOfSEEntries.getChildren().size();
 		int nrOfSC = rm.getSystemContextAliases().size();
 		assertTrue(nrOfSE == nrOfSC+4); //All #SystemEntries = #SystemContext + the special _all,  _top, and _backup systemEntries

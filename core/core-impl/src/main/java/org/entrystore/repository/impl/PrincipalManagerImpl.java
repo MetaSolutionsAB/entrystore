@@ -25,14 +25,14 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.PrincipalManager;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Entry;
+import org.entrystore.Group;
+import org.entrystore.PrincipalManager;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.User;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.User;
+import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.repository.util.URISplit.URIType;
 import org.openrdf.model.Resource;
@@ -75,7 +75,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if (us.getURIType() == URIType.Resource) {
 			return getName(us.getMetaMetadataURI());
 		}
-		throw new org.entrystore.repository.RepositoryException("Given URI is not an existing resourceURI of a Principal.");			
+		throw new org.entrystore.RepositoryException("Given URI is not an existing resourceURI of a Principal.");
 	}
 
 	public Entry getPrincipalEntry(String name) {
@@ -86,7 +86,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 						principalEntry.getGraphType() == GraphType.Group) {
 			return principalEntry;
 		}
-		throw new org.entrystore.repository.RepositoryException("Found entry for the name is not a principal...\n" +
+		throw new org.entrystore.RepositoryException("Found entry for the name is not a principal...\n" +
 				"this is either a programming error or someone have been tampering with the RDF directly.");
 	}
 
@@ -94,12 +94,12 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		URISplit us = new URISplit(principal, this.entry.getRepositoryManager().getRepositoryURL());
 		Entry principalEntry = getByEntryURI(us.getMetaMetadataURI());
 		if (principalEntry == null) {
-			throw new org.entrystore.repository.RepositoryException("Cannot find an entry for the specified URI");
+			throw new org.entrystore.RepositoryException("Cannot find an entry for the specified URI");
 		} else if (principalEntry.getGraphType() == GraphType.User ||
 					principalEntry.getGraphType() == GraphType.Group) {
 			return setEntryName(us.getMetaMetadataURI(), newName);
 		}
-		throw new org.entrystore.repository.RepositoryException("Given URI does not refer to a Principal.");			
+		throw new org.entrystore.RepositoryException("Given URI does not refer to a Principal.");
 	}
 	
 	/**
@@ -604,7 +604,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 *            An E-Mail address
 	 * @return A user that can be mapped to the external E-Mail address (that
 	 *         e.g. originates from an OpenID service)
-	 * @see org.entrystore.repository.PrincipalManager#getUserByExternalID(java.lang.String)
+	 * @see org.entrystore.PrincipalManager#getUserByExternalID(java.lang.String)
 	 */
 	public User getUserByExternalID(String externalID) {
 		RepositoryConnection rc = null;

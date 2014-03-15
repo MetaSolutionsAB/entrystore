@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository.impl;
+package org.entrystore;
 
 import java.net.URI;
 import java.util.Date;

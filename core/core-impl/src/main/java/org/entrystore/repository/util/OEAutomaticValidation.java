@@ -23,14 +23,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.Metadata;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.RepositoryManager;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
+import org.entrystore.RepositoryManager;
 import org.openrdf.model.BNode;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
@@ -176,7 +176,7 @@ public class OEAutomaticValidation {
 				log.error("List parameter is not a list, interrupting");
 				return;
 			}
-			org.entrystore.repository.List l = (org.entrystore.repository.List) list.getResource();
+			org.entrystore.List l = (org.entrystore.List) list.getResource();
 			for (Entry entry : entries) {
 				if (EntryType.Reference.equals(entry.getEntryType()) && GraphType.None.equals(entry.getGraphType())) {
 					validateMetadataOfEntry(entry);

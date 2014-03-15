@@ -36,12 +36,12 @@ import javax.xml.xpath.XPathFactory;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.Metadata;
-import org.entrystore.repository.PrincipalManager;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.entrystore.repository.impl.converters.ConverterManagerImpl;

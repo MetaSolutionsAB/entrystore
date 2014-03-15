@@ -19,8 +19,8 @@ package org.entrystore.repository.impl;
 
 import java.net.URI;
 
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.Resource;
+import org.entrystore.Entry;
+import org.entrystore.Resource;
 import org.openrdf.repository.RepositoryConnection;
 
 

@@ -25,11 +25,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.Entry;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.Resource;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.Resource;
+import org.entrystore.AuthorizationException;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;
@@ -152,8 +152,8 @@ public class EntryUtil {
 							log.warn("No resource found for List: " + e2.getEntryURI());
 							return 0;
 						}
-						org.entrystore.repository.List e1List = (org.entrystore.repository.List) e1Res;
-						org.entrystore.repository.List e2List = (org.entrystore.repository.List) e2Res;
+						org.entrystore.List e1List = (org.entrystore.List) e1Res;
+						org.entrystore.List e2List = (org.entrystore.List) e2Res;
 						int size1 = e1List.getChildren().size();
 						int size2 = e2List.getChildren().size();
 						if (size1 < size2) {

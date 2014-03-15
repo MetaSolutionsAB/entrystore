@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
 /**
  * A Resource is anything that can be identified by a URI whereas an <i>information resource</i>

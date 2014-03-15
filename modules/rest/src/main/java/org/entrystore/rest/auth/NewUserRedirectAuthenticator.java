@@ -16,15 +16,12 @@
 
 package org.entrystore.rest.auth;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
-import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.User;
-import org.entrystore.repository.util.NS;
-import org.openrdf.model.Graph;
-import org.openrdf.model.ValueFactory;
+import org.entrystore.GraphType;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.RepositoryManager;
+import org.entrystore.User;
 import org.restlet.Context;
 import org.restlet.Restlet;
 import org.restlet.security.Verifier;
@@ -79,7 +76,7 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 				log.info("Created context " + homeContext.getResourceURI());
 
 				// Set home context of user
-				u.setHomeContext((org.entrystore.repository.Context) homeContext.getResource());
+				u.setHomeContext((org.entrystore.Context) homeContext.getResource());
 				log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
 			} finally {
 				if (u != null) {

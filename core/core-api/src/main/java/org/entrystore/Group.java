@@ -14,26 +14,17 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
-public class RepositoryException extends RuntimeException {
-	
-	private RepositoryError error = RepositoryError.UNKNOWN;
+import java.net.URI;
 
-	public RepositoryException(String message) {
-		super(message);
-	}
-
-	public RepositoryException(String message, Exception e) {
-		super(message, e);
-	}
-	
-	public RepositoryException(RepositoryError error) {
-		this.error = error;
-	}
-	
-	public RepositoryError getError() {
-		return this.error;
-	}
-
+public interface Group extends Resource {
+	boolean setChildren(java.util.List<URI> children);
+	public String 							getName();
+	public boolean 							setName(String name);
+	public void 							addMember(User user);
+	public boolean 							removeMember(User user);
+	public boolean 							isMember(User user);
+	public java.util.List < User > 			members();
+	public java.util.List < java.net.URI > 	memberUris();
 }

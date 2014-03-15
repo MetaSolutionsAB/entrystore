@@ -18,8 +18,8 @@ package org.entrystore.repository.impl;
 
 import java.net.URI;
 
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.Metadata;
+import org.entrystore.Entry;
+import org.entrystore.Metadata;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.slf4j.Logger;

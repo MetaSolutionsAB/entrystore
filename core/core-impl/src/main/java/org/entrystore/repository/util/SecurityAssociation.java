@@ -27,7 +27,7 @@ import java.util.ArrayList;
 
 import javax.security.auth.Subject;
 
-import org.entrystore.repository.User;
+import org.entrystore.User;
 
 
 /**

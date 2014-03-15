@@ -19,10 +19,10 @@ package org.entrystore.repository.impl;
 
 import java.io.IOException;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.junit.Before;

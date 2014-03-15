@@ -24,10 +24,10 @@ import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;
 import org.openrdf.model.ValueFactory;
@@ -82,7 +82,7 @@ public class EntryNamesContext extends ContextImpl {
 		Entry forEntry = getByEntryURI(entryURI);
 		if (forEntry == null) {
 			//Entry must exist to allow Name to be set.
-			throw new org.entrystore.repository.RepositoryException("Unable to set name for non-existing entry");
+			throw new org.entrystore.RepositoryException("Unable to set name for non-existing entry");
 		}
 		
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
@@ -126,14 +126,14 @@ public class EntryNamesContext extends ContextImpl {
 				} catch (Exception e) {
 					rc.rollback();
 					e.printStackTrace();
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					throw new org.entrystore.RepositoryException("Error in connection to repository", e);
 				} finally {
 					log.info("Successfully set the name " + newName + " for entry with URI: " + entryURI);
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
-			throw new org.entrystore.repository.RepositoryException("Cannot connect to repository", e);
+			throw new org.entrystore.RepositoryException("Cannot connect to repository", e);
 		}
 	}
 
@@ -156,7 +156,7 @@ public class EntryNamesContext extends ContextImpl {
 							entryURI2Name.put(entryURI, name);
 						} catch (Exception e) {
 							log.error(e.getMessage());
-							throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+							throw new org.entrystore.RepositoryException("Error in connection to repository", e);
 						}
 					}
 				} finally {
@@ -165,7 +165,7 @@ public class EntryNamesContext extends ContextImpl {
 			}
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
-			throw new org.entrystore.repository.RepositoryException("Cannot connect to repository", e);
+			throw new org.entrystore.RepositoryException("Cannot connect to repository", e);
 		}
 	}
 	

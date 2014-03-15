@@ -18,11 +18,11 @@ package org.entrystore.rest.resources;
 
 import java.net.URI;
 
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.config.Config;
+import org.entrystore.PrincipalManager;
+import org.entrystore.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.MediaType;

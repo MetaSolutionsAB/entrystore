@@ -16,8 +16,8 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.Metadata;
+import org.entrystore.EntryType;
+import org.entrystore.Metadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

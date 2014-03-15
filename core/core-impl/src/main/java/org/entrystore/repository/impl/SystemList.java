@@ -19,7 +19,7 @@ package org.entrystore.repository.impl;
 
 import java.net.URI;
 
-import org.entrystore.repository.Entry;
+import org.entrystore.Entry;
 import org.openrdf.repository.RepositoryConnection;
 
 

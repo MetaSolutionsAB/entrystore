@@ -20,14 +20,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.entrystore.repository.Context;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.RepositoryManager;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
+import org.entrystore.RepositoryException;
+import org.entrystore.RepositoryManager;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.User;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.User;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.test.TestSuite;
@@ -326,7 +326,7 @@ public class UserImpl extends RDFResource implements User {
 	/**
 	 * @return An E-Mail address that can be mapped to an external authentication service, e.g. OpenID.
 	 * 
-	 * @see org.entrystore.repository.User#getExternalID()
+	 * @see org.entrystore.User#getExternalID()
 	 */
 	public String getExternalID() {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
@@ -359,7 +359,7 @@ public class UserImpl extends RDFResource implements User {
 	/**
 	 * @param eid External ID, expects an E-Mail address.
 	 * 
-	 * @see org.entrystore.repository.User#setExternalID(java.lang.String)
+	 * @see org.entrystore.User#setExternalID(java.lang.String)
 	 */
 	public boolean setExternalID(String eid) {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);

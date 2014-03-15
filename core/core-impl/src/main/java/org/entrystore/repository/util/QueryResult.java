@@ -18,7 +18,7 @@ package org.entrystore.repository.util;
 
 import java.util.Set;
 
-import org.entrystore.repository.Entry;
+import org.entrystore.Entry;
 
 
 public class QueryResult {

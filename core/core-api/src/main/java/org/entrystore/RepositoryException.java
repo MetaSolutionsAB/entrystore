@@ -14,14 +14,26 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
-public interface Quota {
+public class RepositoryException extends RuntimeException {
 	
-	int VALUE_UNLIMITED = -1;
+	private RepositoryError error = RepositoryError.UNKNOWN;
+
+	public RepositoryException(String message) {
+		super(message);
+	}
+
+	public RepositoryException(String message, Exception e) {
+		super(message, e);
+	}
 	
-	int VALUE_UNKNOWN = -2;
+	public RepositoryException(RepositoryError error) {
+		this.error = error;
+	}
 	
-	int VALUE_UNCACHED = -3;
+	public RepositoryError getError() {
+		return this.error;
+	}
 
 }

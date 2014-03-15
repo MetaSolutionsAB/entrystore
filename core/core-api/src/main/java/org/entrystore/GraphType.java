@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
 /**
  * Entries with a set GraphType get special treatment in EntryStore.
@@ -31,7 +31,7 @@ public enum GraphType {
 	 * managed together, at a minimum it provides default ownership of the entries.
 	 * In portfolio applications a Context corresponds to a single portfolio.
 	 *
-	 * @see org.entrystore.repository.Context
+	 * @see org.entrystore.Context
 	 */
 	Context,
 
@@ -39,7 +39,7 @@ public enum GraphType {
 	 * A context that has a special meaning in the current context, 
 	 * examples include {@link ContextManager} and {@link PrincipalManager}.
 	 *
-	 * @see org.entrystore.repository.Context
+	 * @see org.entrystore.Context
 	 */
 	SystemContext,
 
@@ -47,7 +47,7 @@ public enum GraphType {
 	 * A user or group used in access control lists for managing access to 
 	 * various entries.
 	 *
-	 * @see org.entrystore.repository.User
+	 * @see org.entrystore.User
 	 */
 	User,
 
@@ -55,21 +55,21 @@ public enum GraphType {
 	 * A user or group used in access control lists for managing access to 
 	 * various entries.
 	 *
-	 * @see org.entrystore.repository.Group
+	 * @see org.entrystore.Group
 	 */
 	Group,
 	
 	/**
 	 * A ordered list of entry.
 	 *
-	 * @see org.entrystore.repository.List
+	 * @see org.entrystore.List
 	 */
 	List,
 	
 	/**
 	 * A list that is dynamically generated.
 	 *
-	 * @see org.entrystore.repository.List
+	 * @see org.entrystore.List
 	 */
 	ResultList,
 

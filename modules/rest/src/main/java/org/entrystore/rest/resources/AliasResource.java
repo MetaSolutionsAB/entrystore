@@ -16,9 +16,10 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.User;
+import org.entrystore.Context;
+import org.entrystore.GraphType;
+import org.entrystore.Group;
+import org.entrystore.User;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Status;
@@ -59,7 +60,7 @@ public class AliasResource extends BaseResource {
 			} else if (GraphType.User.equals(bt)) {
 				name = ((User) entry.getResource()).getName();
 			} else if (GraphType.Context.equals(bt)) {
-				org.entrystore.repository.Context c = getCM().getContext(entryId);
+				Context c = getCM().getContext(entryId);
 				alias = getCM().getContextAlias(c.getURI());
 			}
 		}
@@ -105,7 +106,7 @@ public class AliasResource extends BaseResource {
 				} else if (GraphType.User.equals(bt) && name != null) {
 					success = ((User) entry.getResource()).setName(name);
 				} else if (GraphType.Context.equals(bt) && alias != null) {
-					org.entrystore.repository.Context c = getCM().getContext(entryId);
+					Context c = getCM().getContext(entryId);
 					success = getCM().setContextAlias(c.getURI(), alias);
 				}
 			} else {

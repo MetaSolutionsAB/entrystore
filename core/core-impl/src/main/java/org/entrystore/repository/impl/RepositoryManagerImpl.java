@@ -22,12 +22,18 @@ import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.core.CoreContainer;
-import org.entrystore.repository.*;
-import org.entrystore.repository.config.Config;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
+import org.entrystore.Quota;
+import org.entrystore.RepositoryEvent;
+import org.entrystore.RepositoryEventObject;
+import org.entrystore.RepositoryListener;
+import org.entrystore.RepositoryManager;
+import org.entrystore.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.*;
-import org.entrystore.repository.util.InterceptingRDFInserter.StatementModifier;
 import org.openrdf.model.*;
 import org.openrdf.model.Resource;
 import org.openrdf.repository.Repository;
@@ -38,7 +44,6 @@ import org.openrdf.repository.http.HTTPRepository;
 import org.openrdf.repository.sail.SailRepository;
 import org.openrdf.repository.sparql.SPARQLRepository;
 import org.openrdf.rio.*;
-import org.openrdf.rio.trig.TriGParser;
 import org.openrdf.rio.trig.TriGWriterFactory;
 import org.openrdf.sail.memory.MemoryStore;
 import org.openrdf.sail.nativerdf.NativeStore;
@@ -50,13 +55,9 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 
@@ -469,7 +470,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 	
 	/**
-	 * @see org.entrystore.repository.RepositoryManager#getCacheManager()
+	 * @see org.entrystore.RepositoryManager#getCacheManager()
 	 */
 	public CacheManager getCacheManager() {
 		return cacheManager;

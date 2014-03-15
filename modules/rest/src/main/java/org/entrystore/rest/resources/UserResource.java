@@ -16,8 +16,9 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.User;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.User;
+import org.entrystore.AuthorizationException;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.ext.json.JsonRepresentation;
@@ -50,7 +51,7 @@ public class UserResource extends BaseResource {
 				result.put("id", currentUser.getEntry().getId());
 
 				if (!guest) {
-					org.entrystore.repository.Context homeContext = currentUser.getHomeContext();
+					Context homeContext = currentUser.getHomeContext();
 					if (homeContext != null) {
 						result.put("homecontext", homeContext.getEntry().getId());
 					}

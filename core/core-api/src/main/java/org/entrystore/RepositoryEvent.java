@@ -14,34 +14,21 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
+/**
+ * @author Hannes Ebner
+ */
+public enum RepositoryEvent {
 
-public class QuotaException extends Exception {
-	
-	public static final int QUOTA_EXCEEDED = 1;
-	
-	public static final int QUOTA_ERROR_UNKNOWN = 2;
-	
-	private int reason; 
-	
-	public QuotaException(int reason) {
-		this.reason = reason;
-	}
-	
-	public int getReason() {
-		return this.reason;
-	}
-	
-	public String getMessage() {
-		switch (reason) {
-		case QUOTA_EXCEEDED:
-			return "Quota exceeded";
-
-		case QUOTA_ERROR_UNKNOWN:
-		default:
-			return "Unknown error";
-		}
-	}
+	All,
+	EntryCreated,
+	EntryUpdated, // TODO event firing only implemented for EntryImpl.setGraph()
+	EntryDeleted,
+	MetadataUpdated,
+	ExternalMetadataUpdated,
+	ExtractedMetadataUpdated, // TODO event firing not implemented yet
+	ResourceUpdated, // TODO partially implemented for ListImpl, fully implemented for DataImpl
+	ResourceDeleted // TODO partially implemented for ListImpl, fully implemented for DataImpl
 
 }

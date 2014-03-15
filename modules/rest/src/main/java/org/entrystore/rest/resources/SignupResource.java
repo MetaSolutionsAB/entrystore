@@ -22,11 +22,12 @@ import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.validator.routines.EmailValidator;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.User;
-import org.entrystore.repository.config.Config;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
+import org.entrystore.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
@@ -116,7 +117,7 @@ public class SignupResource extends BaseResource {
 			log.info("Created context " + homeContext.getResourceURI());
 
 			// Set home context of user
-			u.setHomeContext((org.entrystore.repository.Context) homeContext.getResource());
+			u.setHomeContext((Context) homeContext.getResource());
 			log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
 		} finally {
 			pm.setAuthenticatedUserURI(authUser);

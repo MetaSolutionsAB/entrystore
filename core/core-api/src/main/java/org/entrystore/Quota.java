@@ -14,8 +14,14 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
-public interface CommonContext extends Context {
-	//Add methods for creating Folders and more.
+public interface Quota {
+	
+	int VALUE_UNLIMITED = -1;
+	
+	int VALUE_UNKNOWN = -2;
+	
+	int VALUE_UNCACHED = -3;
+
 }

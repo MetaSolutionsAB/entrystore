@@ -17,10 +17,9 @@
 
 package org.entrystore.repository.impl;
 
-import java.net.URL;
 import java.util.StringTokenizer;
 
-import org.entrystore.repository.RepositoryManager;
+import org.entrystore.RepositoryManager;
 import org.entrystore.repository.RepositoryProperties;
 import org.openrdf.model.URI;
 import org.openrdf.model.ValueFactory;

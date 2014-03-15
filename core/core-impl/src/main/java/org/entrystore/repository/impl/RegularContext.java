@@ -20,11 +20,11 @@ import java.net.URI;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Entry;
+import org.entrystore.RepositoryException;
+import org.entrystore.ResourceType;
 
 
 /**

@@ -19,7 +19,7 @@ package org.entrystore.repository.impl.converters;
 import java.net.URI;
 import java.util.HashMap;
 
-import org.entrystore.repository.Converter;
+import org.entrystore.Converter;
 
 
 /**

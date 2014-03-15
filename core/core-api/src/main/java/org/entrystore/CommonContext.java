@@ -14,18 +14,8 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
-import java.net.URI;
-
-public interface Converter {
-	
-	/**
-	 * @param from
-	 * @param resourceURI
-	 * @param metadataURI Optional, may be null.
-	 * @return
-	 */
-	Object convert(Object from, URI resourceURI, URI metadataURI);
-	 
+public interface CommonContext extends Context {
+	//Add methods for creating Folders and more.
 }

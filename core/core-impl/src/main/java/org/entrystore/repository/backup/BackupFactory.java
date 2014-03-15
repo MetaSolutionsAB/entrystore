@@ -17,10 +17,10 @@
 package org.entrystore.repository.backup;
 
 
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.RepositoryException;
+import org.entrystore.Entry;
+import org.entrystore.RepositoryException;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.config.Config;
+import org.entrystore.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.URISplit;

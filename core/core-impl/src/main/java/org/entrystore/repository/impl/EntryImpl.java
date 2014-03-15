@@ -30,21 +30,21 @@ import javax.xml.datatype.XMLGregorianCalendar;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.Metadata;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.RepositoryEvent;
-import org.entrystore.repository.RepositoryEventObject;
-import org.entrystore.repository.RepositoryManager;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.Group;
+import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
+import org.entrystore.RepositoryEvent;
+import org.entrystore.RepositoryEventObject;
+import org.entrystore.RepositoryManager;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.ResourceType;
-import org.entrystore.repository.Resource;
-import org.entrystore.repository.User;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.ResourceType;
+import org.entrystore.Resource;
+import org.entrystore.User;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.util.URISplit;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
@@ -140,13 +140,13 @@ public class EntryImpl implements Entry {
 				return false;
 			} catch (Exception e) {
 				e.printStackTrace();
-				throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+				throw new org.entrystore.RepositoryException("Error in repository connection.", e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
 
@@ -535,7 +535,7 @@ public class EntryImpl implements Entry {
 			return graph;
 		} catch (RepositoryException e) {
 			log.error(e.getMessage(), e);
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		} finally {
 			try {
 				rc.close();
@@ -596,14 +596,14 @@ public class EntryImpl implements Entry {
 					rc.rollback();
 					locType = oldLT;
 					log.error(e.getMessage());
-					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+					throw new org.entrystore.RepositoryException("Error in repository connection.", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
 
@@ -873,7 +873,7 @@ public class EntryImpl implements Entry {
 			return set;
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		} finally {
 			try {
 				rc.close();
@@ -933,14 +933,14 @@ public class EntryImpl implements Entry {
 				} catch (Exception e) {
 					rc.rollback();
 					e.printStackTrace();
-					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+					throw new org.entrystore.RepositoryException("Error in repository connection.", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
 			log.error(e.getMessage(), e);
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}
 		return false;
 	}
@@ -996,7 +996,7 @@ public class EntryImpl implements Entry {
 	public void setGraphType(GraphType bt) {
 		checkAdministerRights();
 		if (this.resourceType != bt && this.locType == EntryType.Local) {
-			throw new org.entrystore.repository.RepositoryException("Cannot change the builtin type of a local resource");
+			throw new org.entrystore.RepositoryException("Cannot change the builtin type of a local resource");
 		}
 		try {
 			synchronized (this.repository) {
@@ -1009,14 +1009,14 @@ public class EntryImpl implements Entry {
 				} catch (Exception e) {
 					rc.rollback();
 					e.printStackTrace();
-					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+					throw new org.entrystore.RepositoryException("Error in repository connection.", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}
 
 	}
@@ -1026,7 +1026,7 @@ public class EntryImpl implements Entry {
 	 * the transaction is rolled back, than the cached built-in type will be wrong, 
 	 * call {@link #refreshFromRepository(RepositoryConnection)} to correct this.
 	 * 
-	 * @param bt the new {@link org.entrystore.repository.GraphType}
+	 * @param bt the new {@link org.entrystore.GraphType}
 	 * @param rc a RepositoryConnection 
 	 * @throws RepositoryException
 	 * @throws DatatypeConfigurationException
@@ -1073,7 +1073,7 @@ public class EntryImpl implements Entry {
 	public void setResourceType(ResourceType representType) {
 		checkAdministerRights();
 		if (this.repType != representType && this.locType == EntryType.Local && (this.resourceType != GraphType.None && this.resourceType != GraphType.Pipeline)) {
-			throw new org.entrystore.repository.RepositoryException("Cannot change the representationtype of a local and / or builtin resource");
+			throw new org.entrystore.RepositoryException("Cannot change the representationtype of a local and / or builtin resource");
 		}
 		try {
 			synchronized (this.repository) {
@@ -1086,14 +1086,14 @@ public class EntryImpl implements Entry {
 				} catch (Exception e) {
 					rc.rollback();
 					e.printStackTrace();
-					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+					throw new org.entrystore.RepositoryException("Error in repository connection.", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
 			log.error(e.getMessage(), e);
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}		
 	}
 
@@ -1190,14 +1190,14 @@ public class EntryImpl implements Entry {
 					loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
 					rc.close();
 					e.printStackTrace();
-					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+					throw new org.entrystore.RepositoryException("Error in repository connection.", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}		
 	}
 
@@ -1345,14 +1345,14 @@ public class EntryImpl implements Entry {
 					// Reset to previous saved values, just in case we saved the types above halfway through.
 					loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
 					e.printStackTrace();
-					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+					throw new org.entrystore.RepositoryException("Error in repository connection.", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}		
 	}
 
@@ -1567,13 +1567,13 @@ public class EntryImpl implements Entry {
 			} catch (Exception e) {
 				rc.rollback();
 				e.printStackTrace();
-				throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+				throw new org.entrystore.RepositoryException("Error in repository connection.", e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}		
 	}
 	
@@ -1598,13 +1598,13 @@ public class EntryImpl implements Entry {
 			} catch (org.openrdf.repository.RepositoryException e) {
 				rc.close();
 				e.printStackTrace();
-				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+				throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
 
@@ -1627,13 +1627,13 @@ public class EntryImpl implements Entry {
 			} catch (org.openrdf.repository.RepositoryException e) {
 				rc.close();
 				e.printStackTrace();
-				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+				throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
 
@@ -1682,13 +1682,13 @@ public class EntryImpl implements Entry {
 			} catch (Exception e) {
 				rc.rollback();
 				e.printStackTrace();
-				throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+				throw new org.entrystore.RepositoryException("Error in repository connection.", e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		}		
 	}
 	
@@ -1701,7 +1701,7 @@ public class EntryImpl implements Entry {
 				this.relations = rr.asList();
 			} catch (RepositoryException e) {
 				e.printStackTrace();
-				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+				throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				try {
 					rc.close();
@@ -1727,7 +1727,7 @@ public class EntryImpl implements Entry {
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		} 
 	}
 	
@@ -1745,7 +1745,7 @@ public class EntryImpl implements Entry {
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			throw new org.entrystore.RepositoryException("Failed to connect to Repository.", e);
 		} 
 	}
 	

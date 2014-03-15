@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
 import java.net.URL;
 
 import net.sf.ehcache.CacheManager;
 
-import org.entrystore.repository.config.Config;
 import org.entrystore.repository.util.SolrSupport;
 import org.openrdf.model.ValueFactory;
 

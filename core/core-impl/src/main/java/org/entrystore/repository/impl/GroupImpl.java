@@ -20,11 +20,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.User;
+import org.entrystore.GraphType;
+import org.entrystore.Entry;
+import org.entrystore.Group;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
 import org.openrdf.model.URI;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

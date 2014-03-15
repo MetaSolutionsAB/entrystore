@@ -18,10 +18,10 @@ package org.entrystore.rest.resources;
 
 import com.github.jsonldjava.sesame.SesameJSONLDParser;
 import com.github.jsonldjava.sesame.SesameJSONLDWriter;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.Metadata;
+import org.entrystore.EntryType;
+import org.entrystore.Metadata;
 import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;

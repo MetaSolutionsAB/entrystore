@@ -26,13 +26,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.Data;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.QuotaException;
-import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.GraphType;
+import org.entrystore.Context;
+import org.entrystore.Data;
+import org.entrystore.Entry;
+import org.entrystore.QuotaException;
+import org.entrystore.RepositoryException;
+import org.entrystore.ResourceType;
 import org.entrystore.repository.impl.EntryImpl;
 import org.openrdf.model.BNode;
 import org.openrdf.model.Graph;
@@ -136,8 +136,8 @@ public class SCAM2Import {
 			recurse(graph, null, first);
 			Entry top = context.get("_top");
 			Entry firstEntry = uri2Entry.get(first);
-			((org.entrystore.repository.List) top.getResource()).addChild(firstEntry.getEntryURI());
-			recurseFix(graph, first, (org.entrystore.repository.List) firstEntry.getResource());
+			((org.entrystore.List) top.getResource()).addChild(firstEntry.getEntryURI());
+			recurseFix(graph, first, (org.entrystore.List) firstEntry.getResource());
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 		} catch (RDFHandlerException e) {
@@ -151,7 +151,7 @@ public class SCAM2Import {
 		}
 	}
 
-	void recurseFix(Graph graph, URI folder, org.entrystore.repository.List list) {
+	void recurseFix(Graph graph, URI folder, org.entrystore.List list) {
 		for (URI child : getChildren(graph, folder)) {
 			Entry entryChild = uri2Entry.get(child);
 			if (entryChild != null) {
@@ -160,7 +160,7 @@ public class SCAM2Import {
 				} catch(RepositoryException re) {
 				}
 				if (entryChild.getGraphType() == GraphType.List) {
-					recurseFix(graph, child, (org.entrystore.repository.List) entryChild.getResource());
+					recurseFix(graph, child, (org.entrystore.List) entryChild.getResource());
 				}
 			} else {
 				URI refChild = getContent(graph, child);

@@ -14,17 +14,18 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore;
 
 import java.net.URI;
 
-public interface Group extends Resource {
-	boolean setChildren(java.util.List<URI> children);
-	public String 							getName();
-	public boolean 							setName(String name);
-	public void 							addMember(User user);
-	public boolean 							removeMember(User user);
-	public boolean 							isMember(User user);
-	public java.util.List < User > 			members();
-	public java.util.List < java.net.URI > 	memberUris();
+public interface Converter {
+	
+	/**
+	 * @param from
+	 * @param resourceURI
+	 * @param metadataURI Optional, may be null.
+	 * @return
+	 */
+	Object convert(Object from, URI resourceURI, URI metadataURI);
+	 
 }

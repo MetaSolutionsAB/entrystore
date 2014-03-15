@@ -19,7 +19,7 @@ package org.entrystore.harvester.factory;
 import java.net.URI;
 
 import org.entrystore.harvester.Harvester;
-import org.entrystore.repository.Entry;
+import org.entrystore.Entry;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 
 

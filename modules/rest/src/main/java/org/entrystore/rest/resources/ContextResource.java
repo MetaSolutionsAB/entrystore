@@ -24,19 +24,20 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Set;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.List;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
-import org.entrystore.repository.User;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.Context;
+import org.entrystore.GraphType;
+import org.entrystore.Entry;
+import org.entrystore.Group;
+import org.entrystore.List;
+import org.entrystore.EntryType;
+import org.entrystore.ResourceType;
+import org.entrystore.User;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.impl.ContextImpl;
 import org.entrystore.repository.impl.RDFResource;
 import org.entrystore.repository.impl.StringResource;
 import org.entrystore.repository.util.NS;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
@@ -485,7 +486,7 @@ public class ContextResource extends BaseResource {
 			if (jsonObj.has("homecontext")) {
 				Entry homeContextEntry = getCM().get(jsonObj.getString("homecontext"));
 				if (homeContextEntry != null) {
-					user.setHomeContext((org.entrystore.repository.Context) homeContextEntry.getResource());
+					user.setHomeContext((Context) homeContextEntry.getResource());
 				}
 			}
 			if (jsonObj.has("password")) {
@@ -526,7 +527,7 @@ public class ContextResource extends BaseResource {
 			break;
 		case Context:
 			jsonObj = jsonObj.getJSONObject("resource");
-			org.entrystore.repository.Context cont = (org.entrystore.repository.Context) entry.getResource();
+			Context cont = (Context) entry.getResource();
 			if (jsonObj.has("alias")) {
 				getCM().setContextAlias(cont.getURI(), jsonObj.getString("alias"));
 			}

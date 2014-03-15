@@ -24,11 +24,11 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.Context;
+import org.entrystore.Entry;
 import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.ResourceType;
+import org.entrystore.ResourceType;
 import org.entrystore.repository.impl.ContextImpl;
 import org.entrystore.repository.impl.RDFResource;
 import org.entrystore.repository.util.NS;

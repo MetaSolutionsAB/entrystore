@@ -15,14 +15,9 @@
  */
 
 
-package org.entrystore.repository.security;
+package org.entrystore;
 
-import java.util.Iterator;
-
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.User;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
-import org.openrdf.model.Statement;
+import org.entrystore.PrincipalManager.AccessProperty;
 
 
 public class AuthorizationException extends RuntimeException {

@@ -23,17 +23,17 @@ import java.util.ArrayList;
 
 import java.util.HashSet;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.ResourceType;
-import org.entrystore.repository.User;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
+import org.entrystore.GraphType;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.Group;
+import org.entrystore.PrincipalManager;
+import org.entrystore.RepositoryException;
+import org.entrystore.RepositoryManager;
+import org.entrystore.ResourceType;
+import org.entrystore.User;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
@@ -230,7 +230,7 @@ public class TestSuite {
 		
 		setStudentMetadata(contextEntry, name + "s portfolio", "Student portfolio", null,null);
 
-		org.entrystore.repository.Context contextResource = (org.entrystore.repository.Context) contextEntry.getResource();
+		Context contextResource = (Context) contextEntry.getResource();
 
 		Entry top = contextResource.get("_top"); 
 		Entry folderEntry1 = contextResource.createResource(null, GraphType.List, null, top.getResourceURI());
