@@ -16,12 +16,9 @@
 
 package org.entrystore;
 
-import java.net.URL;
-
-import net.sf.ehcache.CacheManager;
-
-import org.entrystore.repository.util.SolrSupport;
 import org.openrdf.model.ValueFactory;
+
+import java.net.URL;
 
 
 
@@ -82,11 +79,6 @@ public interface RepositoryManager {
 
 	Config getConfiguration();
 	
-	/**
-	 * @return A CacheManager instance. May be null if the disk cache is deactivated.
-	 */
-	CacheManager getCacheManager();
-	
 	boolean hasQuotas();
 	
 	long getDefaultQuota();
@@ -97,7 +89,7 @@ public interface RepositoryManager {
 	
 	void fireRepositoryEvent(RepositoryEventObject eventObject);
 	
-	SolrSupport getSolrSupport();
+	Index getIndex();
 	
 	ValueFactory getValueFactory();
 	

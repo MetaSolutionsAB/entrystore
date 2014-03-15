@@ -50,6 +50,7 @@ import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.QueryResult;
+import org.entrystore.repository.util.SolrIndex;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -464,7 +465,7 @@ public class SearchResource extends BaseResource {
 				entries = subfieldSearch(subfields);
 				results = entries.size();
 			} else if ("solr".equalsIgnoreCase(type)) {
-				if (getRM().getSolrSupport() == null) {
+				if (getRM().getIndex() == null) {
 					getResponse().setStatus(Status.SERVER_ERROR_SERVICE_UNAVAILABLE, "Solr search deactivated");
 					return new JsonRepresentation("{\"error\":\"Solr search is deactivated\"}");
 				}
@@ -509,7 +510,7 @@ public class SearchResource extends BaseResource {
 				}
 				
 				try {
-					QueryResult qResult = getRM().getSolrSupport().sendQuery(q);
+					QueryResult qResult = ((SolrIndex) getRM().getIndex()).sendQuery(q);
 					entries = new LinkedList<Entry>(qResult.getEntries());
 					results = qResult.getHits();
 				} catch (SolrException se) {

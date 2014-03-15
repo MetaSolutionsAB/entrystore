@@ -27,6 +27,7 @@ import org.entrystore.Entry;
 import org.entrystore.RepositoryManager;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
+import org.entrystore.repository.impl.RepositoryManagerImpl;
 import org.entrystore.repository.impl.converters.LRE;
 import org.entrystore.repository.impl.converters.OERDF2LOMConverter;
 import org.entrystore.repository.impl.converters.RDF2LOMConverter;
@@ -88,7 +89,7 @@ public class Crosswalk2OaiLom extends Crosswalk {
 	}
 	
 	private void initCache(RepositoryManager rm) {
-		CacheManager cacheMan = rm.getCacheManager();
+		CacheManager cacheMan = ((RepositoryManagerImpl) rm).getCacheManager();
 		if (cacheMan != null) {
 			if (!cacheMan.cacheExists("lomxml")) {
 				cacheMan.addCache(new Cache("lomxml", 1000, MemoryStoreEvictionPolicy.LRU, true, null, true, 0, 0, true, 1800, null));

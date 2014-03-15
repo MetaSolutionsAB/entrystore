@@ -43,6 +43,7 @@ import org.entrystore.ContextManager;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
+import org.entrystore.Index;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.RepositoryManager;
@@ -62,9 +63,9 @@ import org.slf4j.LoggerFactory;
 /**
  * @author Hannes Ebner
  */
-public class SolrSupport {
+public class SolrIndex implements Index {
 
-	private static Logger log = LoggerFactory.getLogger(SolrSupport.class);
+	private static Logger log = LoggerFactory.getLogger(SolrIndex.class);
 
 	private static int BATCH_SIZE = 1000;
 
@@ -119,7 +120,7 @@ public class SolrSupport {
 
 	}
 
-	public SolrSupport(RepositoryManager rm, SolrServer solrServer) {
+	public SolrIndex(RepositoryManager rm, SolrServer solrServer) {
 		this.rm = rm;
 		this.solrServer = solrServer;
 		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(
@@ -394,7 +395,7 @@ public class SolrSupport {
 		return doc;
 	}
 
-	public void postEntry(Entry entry, SolrServer solrServer) {
+	public void postEntry(Entry entry) {
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
@@ -406,7 +407,7 @@ public class SolrSupport {
 		}
 	}
 
-	public void removeEntry(Entry entry, SolrServer solrServer) {
+	public void removeEntry(Entry entry) {
 		UpdateRequest req = new UpdateRequest();
 		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
 		String escapedURI = StringUtils.replace(entry.getEntryURI().toString(), ":", "\\:");

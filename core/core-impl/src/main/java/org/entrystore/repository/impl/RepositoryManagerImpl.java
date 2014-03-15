@@ -24,6 +24,7 @@ import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.core.CoreContainer;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.Index;
 import org.entrystore.PrincipalManager;
 import org.entrystore.Quota;
 import org.entrystore.RepositoryEvent;
@@ -105,7 +106,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	CoreContainer solrCoreContainer;
 	
-	SolrSupport solrSupport;
+	SolrIndex solrIndex;
 	
 	PublicRepository publicRepository;
 	
@@ -388,9 +389,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					log.info("Shutting down EHCache manager");
 					cacheManager.shutdown();
 				}
-				if (solrSupport != null) {
+				if (solrIndex != null) {
 					log.info("Shutting down Solr support");
-					solrSupport.shutdown();
+					solrIndex.shutdown();
 				}
 				if (solrCoreContainer != null) {
 					log.info("Shutting down Solr core container");
@@ -573,9 +574,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		}
 		if (solrServer != null) {
-			solrSupport = new SolrSupport(this, solrServer);
+			solrIndex = new SolrIndex(this, solrServer);
 			if (reindex) {
-				solrSupport.reindexLiterals();
+				solrIndex.reindexLiterals();
 			}
 		} else {
 			log.error("Unable to initialize Solr, check settings in scam.properties");
@@ -588,7 +589,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				@Override
 				public void repositoryUpdated(RepositoryEventObject eventObject) {
 					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
-						solrSupport.postEntry((Entry) eventObject.getSource(), solrServer);
+						solrIndex.postEntry((Entry) eventObject.getSource());
 					}
 				}
 			};
@@ -602,7 +603,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				@Override
 				public void repositoryUpdated(RepositoryEventObject eventObject) {
 					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
-						solrSupport.removeEntry((Entry) eventObject.getSource(), solrServer);
+						solrIndex.removeEntry((Entry) eventObject.getSource());
 					}
 				}
 			};
@@ -610,8 +611,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 	}
 	
-	public SolrSupport getSolrSupport() {
-		return this.solrSupport;
+	public Index getIndex() {
+		return this.solrIndex;
 	}
 	
 	private void registerPublicRepositoryListeners() {

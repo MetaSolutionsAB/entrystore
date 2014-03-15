@@ -50,6 +50,7 @@ import org.entrystore.repository.impl.converters.ConverterUtil;
 import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
+import org.entrystore.repository.util.SolrIndex;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;
@@ -160,7 +161,7 @@ public class ResourceResource extends BaseResource {
 			 */
 			if (parameters.containsKey("syndication")) {
 				try {
-					if (getRM().getSolrSupport() == null) {
+					if (getRM().getIndex() == null) {
 						getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
 						return new JsonRepresentation("{\"error\":\"Feeds are not supported by this installation\"}");
 					}
@@ -529,7 +530,7 @@ public class ResourceResource extends BaseResource {
 	}
 	
 	public StringRepresentation getSyndicationSolr(Entry entry, String type) {
-		if (getRM().getSolrSupport() == null) {
+		if (getRM().getIndex() == null) {
 			return null;
 		}
 		
@@ -572,7 +573,7 @@ public class ResourceResource extends BaseResource {
 		solrQuery.setSortField("modified", ORDER.desc);
 
 		List<SyndEntry> syndEntries = new ArrayList<SyndEntry>();
-		Set<Entry> searchEntries = getRM().getSolrSupport().sendQuery(solrQuery).getEntries();
+		Set<Entry> searchEntries = ((SolrIndex) getRM().getIndex()).sendQuery(solrQuery).getEntries();
 		List<Entry> recursiveEntries = new LinkedList<Entry>();
 		for (Entry e : searchEntries) {
 			recursiveEntries.addAll(getListChildrenRecursively(e));

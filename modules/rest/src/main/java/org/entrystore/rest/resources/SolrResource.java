@@ -56,10 +56,10 @@ public class SolrResource extends BaseResource {
 			if (parameters.containsKey("cmd")) {
 				String command = parameters.get("cmd");
 				if ("reindex".equals(command)) {
-					if (getRM().getSolrSupport() != null) {
+					if (getRM().getIndex() != null) {
 						Runnable reindexThread = new Runnable() {
 							public void run() {
-								getRM().getSolrSupport().reindexLiterals();
+								getRM().getIndex().reindexLiterals();
 							}
 						};
 						new Thread(reindexThread).start();
