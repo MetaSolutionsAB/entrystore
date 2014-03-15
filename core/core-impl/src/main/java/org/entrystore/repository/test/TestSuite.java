@@ -34,7 +34,7 @@ import org.entrystore.repository.RepositoryManager;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.ValueFactoryImpl;

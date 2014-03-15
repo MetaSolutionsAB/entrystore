@@ -20,7 +20,7 @@ import com.github.jsonldjava.sesame.SesameJSONLDParser;
 import com.github.jsonldjava.sesame.SesameJSONLDWriter;
 import org.entrystore.EntryType;
 import org.entrystore.Metadata;
-import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;

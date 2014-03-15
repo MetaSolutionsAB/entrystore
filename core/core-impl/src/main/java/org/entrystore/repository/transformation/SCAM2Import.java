@@ -33,7 +33,7 @@ import org.entrystore.Entry;
 import org.entrystore.QuotaException;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.ResourceType;
-import org.entrystore.repository.impl.EntryImpl;
+import org.entrystore.impl.EntryImpl;
 import org.openrdf.model.BNode;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;

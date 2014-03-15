@@ -20,7 +20,7 @@ import java.net.URI;
 
 import org.entrystore.harvester.Harvester;
 import org.entrystore.Entry;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryManagerImpl;
 
 
 public interface HarvesterFactory {

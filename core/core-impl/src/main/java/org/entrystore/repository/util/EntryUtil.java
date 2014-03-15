@@ -27,7 +27,7 @@ import java.util.Set;
 
 import org.entrystore.GraphType;
 import org.entrystore.Entry;
-import org.entrystore.repository.RepositoryProperties;
+import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.Resource;
 import org.entrystore.AuthorizationException;
 import org.openrdf.model.Graph;

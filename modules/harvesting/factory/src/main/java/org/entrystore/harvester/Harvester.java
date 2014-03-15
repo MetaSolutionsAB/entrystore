@@ -18,7 +18,7 @@ package org.entrystore.harvester;
 
 import java.net.URI;
 
-import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryManagerImpl;
 
 
 

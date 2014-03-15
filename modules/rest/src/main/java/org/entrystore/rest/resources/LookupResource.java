@@ -26,7 +26,7 @@ import java.util.Set;
 
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
-import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;

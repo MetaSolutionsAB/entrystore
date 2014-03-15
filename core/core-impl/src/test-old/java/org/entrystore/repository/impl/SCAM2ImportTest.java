@@ -15,7 +15,7 @@
  */
 
 
-package org.entrystore.repository.impl;
+package org.entrystore.impl;
 
 import java.io.IOException;
 

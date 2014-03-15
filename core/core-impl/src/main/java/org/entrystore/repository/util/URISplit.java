@@ -21,7 +21,7 @@ import java.net.URI;
 import java.net.URL;
 import java.util.StringTokenizer;
 
-import org.entrystore.repository.RepositoryProperties;
+import org.entrystore.impl.RepositoryProperties;
 
 public class URISplit{
 

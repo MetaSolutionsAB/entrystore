@@ -39,7 +39,7 @@ import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.User;
-import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.impl.converters.ConverterUtil;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Resource;

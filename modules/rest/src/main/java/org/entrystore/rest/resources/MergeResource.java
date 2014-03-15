@@ -19,8 +19,8 @@ package org.entrystore.rest.resources;
 import java.io.IOException;
 
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.impl.converters.Graph2Entries;
+import org.entrystore.impl.converters.ConverterUtil;
+import org.entrystore.impl.converters.Graph2Entries;
 import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.RDFJSON;
 import org.openrdf.model.Graph;

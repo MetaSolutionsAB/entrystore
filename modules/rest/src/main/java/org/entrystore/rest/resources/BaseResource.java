@@ -28,7 +28,7 @@ import org.entrystore.ContextManager;
 import org.entrystore.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.backup.BackupScheduler;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.Util;

@@ -36,7 +36,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
@@ -576,7 +576,7 @@ public class StatisticsResource extends BaseResource {
 				org.openrdf.model.URI pred = s.getPredicate();
 				if("http://scam.sf.net/schema#aboutPerson".equals(pred.toString())){
 					java.net.URI resourceURI = java.net.URI.create(s.getSubject().toString());
-					String contextId = org.entrystore.repository.impl.Util.getContextIdFromURI(this.getRM(), resourceURI);
+					String contextId = org.entrystore.impl.Util.getContextIdFromURI(this.getRM(), resourceURI);
 					Context context = cm.getContext(contextId);
 					Set<Entry> competenceEntries = context.getByResourceURI(resourceURI);
 					Entry competenceEntry = competenceEntries.iterator().next(); //Should only be one!

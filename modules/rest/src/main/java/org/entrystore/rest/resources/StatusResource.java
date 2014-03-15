@@ -21,7 +21,7 @@ import java.net.URI;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.AuthorizationException;
 import org.json.JSONException;
 import org.json.JSONObject;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository.impl;
+package org.entrystore.impl;
 
 import static org.junit.Assert.assertTrue;
 
@@ -29,7 +29,6 @@ import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.RepositoryProperties;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.backup.BackupFactory;
 import org.entrystore.repository.backup.BackupScheduler;

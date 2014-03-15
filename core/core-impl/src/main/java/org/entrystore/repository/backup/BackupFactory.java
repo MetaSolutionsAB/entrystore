@@ -19,10 +19,10 @@ package org.entrystore.repository.backup;
 
 import org.entrystore.Entry;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.RepositoryProperties;
+import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.URISplit;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
