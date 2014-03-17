@@ -18,7 +18,7 @@ package org.entrystore.repository;
 
 import org.entrystore.config.Config;
 import org.entrystore.ContextManager;
-import org.entrystore.Index;
+import org.entrystore.SearchIndex;
 import org.entrystore.PrincipalManager;
 import org.openrdf.model.ValueFactory;
 
@@ -93,7 +93,7 @@ public interface RepositoryManager {
 	
 	void fireRepositoryEvent(RepositoryEventObject eventObject);
 	
-	Index getIndex();
+	SearchIndex getIndex();
 	
 	ValueFactory getValueFactory();
 	

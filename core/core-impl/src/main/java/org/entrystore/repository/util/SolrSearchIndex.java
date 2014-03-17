@@ -43,7 +43,7 @@ import org.entrystore.ContextManager;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
-import org.entrystore.Index;
+import org.entrystore.SearchIndex;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.RepositoryManager;
@@ -63,9 +63,9 @@ import org.slf4j.LoggerFactory;
 /**
  * @author Hannes Ebner
  */
-public class SolrIndex implements Index {
+public class SolrSearchIndex implements SearchIndex {
 
-	private static Logger log = LoggerFactory.getLogger(SolrIndex.class);
+	private static Logger log = LoggerFactory.getLogger(SolrSearchIndex.class);
 
 	private static int BATCH_SIZE = 1000;
 
@@ -120,7 +120,7 @@ public class SolrIndex implements Index {
 
 	}
 
-	public SolrIndex(RepositoryManager rm, SolrServer solrServer) {
+	public SolrSearchIndex(RepositoryManager rm, SolrServer solrServer) {
 		this.rm = rm;
 		this.solrServer = solrServer;
 		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(

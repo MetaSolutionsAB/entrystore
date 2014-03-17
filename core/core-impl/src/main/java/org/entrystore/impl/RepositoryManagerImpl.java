@@ -24,7 +24,7 @@ import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.core.CoreContainer;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
-import org.entrystore.Index;
+import org.entrystore.SearchIndex;
 import org.entrystore.PrincipalManager;
 import org.entrystore.Quota;
 import org.entrystore.repository.RepositoryEvent;
@@ -106,7 +106,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	CoreContainer solrCoreContainer;
 	
-	SolrIndex solrIndex;
+	SolrSearchIndex solrIndex;
 	
 	PublicRepository publicRepository;
 	
@@ -574,7 +574,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		}
 		if (solrServer != null) {
-			solrIndex = new SolrIndex(this, solrServer);
+			solrIndex = new SolrSearchIndex(this, solrServer);
 			if (reindex) {
 				solrIndex.reindexLiterals();
 			}
@@ -611,7 +611,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 	}
 	
-	public Index getIndex() {
+	public SearchIndex getIndex() {
 		return this.solrIndex;
 	}
 	

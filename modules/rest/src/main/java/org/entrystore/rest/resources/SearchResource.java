@@ -50,7 +50,7 @@ import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.QueryResult;
-import org.entrystore.repository.util.SolrIndex;
+import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -510,7 +510,7 @@ public class SearchResource extends BaseResource {
 				}
 				
 				try {
-					QueryResult qResult = ((SolrIndex) getRM().getIndex()).sendQuery(q);
+					QueryResult qResult = ((SolrSearchIndex) getRM().getIndex()).sendQuery(q);
 					entries = new LinkedList<Entry>(qResult.getEntries());
 					results = qResult.getHits();
 				} catch (SolrException se) {

@@ -23,7 +23,7 @@ package org.entrystore;
  *
  * @author Hannes Ebner
  */
-public interface Index {
+public interface SearchIndex {
 
 	public void shutdown();
 
