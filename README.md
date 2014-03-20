@@ -12,7 +12,7 @@ The documentation can be found in the [project wiki](https://bitbucket.org/metas
 
 ## Commercial support
 
-The company [MetaSolutions AB](http://www.metasolutions.se) provides professional support and services around [EntryScape](http://www.entryscape.com), [EntryStore](http://www.entrystore.org) and [RForms](https://bitbucket.org/metasolutions/rforms).
+The company [MetaSolutions AB](http://www.metasolutions.se) provides professional support and services around [EntryScape](http://www.entryscape.com), [EntryStore](http://www.entrystore.org) and [RDForms](https://rdforms.org).
 
 ## Contributing organizations
 
