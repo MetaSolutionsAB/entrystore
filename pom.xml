@@ -22,6 +22,7 @@
 		<solr.version>4.7.0</solr.version>
 		<sesame.version>2.7.10</sesame.version>
 		<slf4j.version>1.7.5</slf4j.version>
+		<servlet.version>3.0.1</servlet.version>
 		<site.url>http://entrystore.org</site.url>
 		<distribution.snapshot.url>http://entrystore.org</distribution.snapshot.url>
 		<distribution.url>http://entrystore.org</distribution.url>

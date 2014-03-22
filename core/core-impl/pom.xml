@@ -218,6 +218,12 @@
 			<artifactId>solr-core</artifactId>
 			<groupId>org.apache.solr</groupId>
 			<version>${solr.version}</version>
+                        <exclusions>
+                                <exclusion>
+                                        <groupId>org.eclipse.jetty.orbit</groupId>
+                                        <artifactId>javax.servlet</artifactId>
+                                </exclusion>
+                        </exclusions>
 		</dependency>
 		
 		<!--

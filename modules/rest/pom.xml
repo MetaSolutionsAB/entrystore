@@ -156,8 +156,8 @@
 		</dependency>	  
 		<dependency>
 			<groupId>javax.servlet</groupId>
-			<artifactId>servlet-api</artifactId>
-			<version>2.5</version>
+			<artifactId>javax.servlet-api</artifactId>
+			<version>${servlet.version}</version>
 			<!-- should not be deployed to the web container (hence the scope is 'provided')-->
 			<scope>provided</scope>
 		</dependency>
@@ -182,9 +182,9 @@
 			<version>1.2</version>
 			<exclusions>
    				<exclusion>
-     			<groupId>xml-apis</groupId>
-     				<artifactId>xml-apis</artifactId>
-   			</exclusion>
+					<groupId>xml-apis</groupId>
+     					<artifactId>xml-apis</artifactId>
+   				</exclusion>
 			</exclusions>
 		</dependency>
 		<dependency>
