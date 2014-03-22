@@ -10,10 +10,10 @@
 		<version>4.2-SNAPSHOT</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
-	<artifactId>entrystore-rest-module</artifactId>
+	<artifactId>entrystore-rest</artifactId>
 	<packaging>war</packaging>
 	<version>4.2-SNAPSHOT</version>
-	<name>EntryStore REST module</name>
+	<name>EntryStore REST</name>
 	
 	<build>
 		<resources>
