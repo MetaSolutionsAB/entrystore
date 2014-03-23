@@ -52,7 +52,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.entrystore</groupId>
-			<artifactId>entrystore-rest-module</artifactId>
+			<artifactId>entrystore-rest</artifactId>
 			<version>${project.version}</version>
 			<exclusions>
 				<exclusion>
