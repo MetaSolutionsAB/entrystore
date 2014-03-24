@@ -29,17 +29,20 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.Util;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
+import org.restlet.data.Form;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
+import org.restlet.resource.Options;
 import org.restlet.resource.ServerResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,6 +91,45 @@ public abstract class BaseResource extends ServerResource {
 				this.format = new MediaType(format);
 			}
 		}
+	}
+
+	/**
+	 * Sends a response with CORS headers according to the configuration.
+	 */
+	@Options
+	public Representation preflightCORS() {
+		if ("off".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.CORS, "off"))) {
+			setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
+			return null;
+		}
+
+		getResponse().setEntity(new EmptyRepresentation());
+		Form headers = (Form) getResponse().getAttributes().get("org.restlet.http.headers");
+
+		if (headers.contains("Origin")) {
+			/*
+			Expect the following resquest headers:
+
+			Origin: http://sub.domain.com
+			Access-Control-Request-Method: PUT
+			Access-Control-Request-Headers: X-Custom-Header
+
+			Should answer (if Origin is allowed according to config) with:
+
+			Access-Control-Allow-Origin: http://sub.domain.com
+			Access-Control-Allow-Methods: GET, POST, PUT, DELETE
+			Access-Control-Allow-Headers: X-Custom-Header (echo of request)
+			Access-Control-Allow-Credentials: true
+			Access-Control-Max-Age: 10800 (time to cache permissions in seconds)
+
+			If the server wants to deny the CORS request, it can just return a generic response (like HTTP 200),
+			without any CORS header. The server may want to deny the request if the HTTP method or headers
+			requested in the preflight are not valid. Since there are no CORS-specific headers in the response,
+			the browser assumes the request is invalid, and doesn’t make the actual request.
+			*/
+		}
+
+		return getResponse().getEntity();
 	}
 
 	/**
