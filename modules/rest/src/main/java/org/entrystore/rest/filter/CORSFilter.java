@@ -16,18 +16,14 @@
 
 package org.entrystore.rest.filter;
 
-import org.entrystore.rest.util.Util;
+import org.entrystore.rest.util.CORSUtil;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Form;
-import org.restlet.data.MediaType;
 import org.restlet.data.Method;
 import org.restlet.routing.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.util.HashMap;
 
 
 /**
@@ -39,22 +35,32 @@ import java.util.HashMap;
 public class CORSFilter extends Filter {
 	
 	static private Logger log = LoggerFactory.getLogger(CORSFilter.class);
-	
+
+	private CORSUtil cors;
+
+	public CORSFilter(CORSUtil cors) {
+		this.cors = cors;
+	}
+
 	@Override
 	protected void afterHandle(Request request, Response response) {
 		if (request != null && response != null) {
+			if (request.getMethod().equals(Method.OPTIONS)) {
+				// OPTIONS is handled in BaseResource, so we don't touch it here
+				return;
+			}
 			Form reqHeaders = (Form) request.getAttributes().get("org.restlet.http.headers");
 			if (reqHeaders.contains("Origin")) {
 				String origin = reqHeaders.getFirstValue("Origin", true);
-				// TODO compare to list of allowed origins from configuration
-				// if it does not match, do nothing
-				// if it matches:
+				if (!cors.isValidOrigin(origin)) {
+					return;
+				}
 				Form respHeaders = (Form) response.getAttributes().get("org.restlet.http.headers");
 				respHeaders.add("Access-Control-Allow-Origin", origin);
 				respHeaders.add("Access-Control-Allow-Credentials", "true");
-				// TODO check configuration whether any response headers should be added
-				// if yes:
-				respHeaders.add("Access-Control-Expose-Headers", "list-of-headers-from-configuration");
+				if (cors.getExposeHeaders() != null) {
+					respHeaders.add("Access-Control-Expose-Headers", cors.getExposeHeaders());
+				}
 			}
 		}
 	}
