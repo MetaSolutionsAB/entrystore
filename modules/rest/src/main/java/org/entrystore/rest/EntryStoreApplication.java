@@ -41,6 +41,7 @@ import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.ExistingUserRedirectAuthenticator;
 import org.entrystore.rest.auth.NewUserRedirectAuthenticator;
 import org.entrystore.rest.auth.SimpleAuthenticator;
+import org.entrystore.rest.filter.CORSFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
 import org.entrystore.rest.resources.*;
@@ -290,7 +291,14 @@ public class EntryStoreApplication extends Application {
 		cookieAuth.setNext(basicAuth);
 		basicAuth.setNext(jsCallback);
 		jsCallback.setNext(modLockOut);
-		modLockOut.setNext(router);
+
+		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
+			CORSFilter corsFilter = new CORSFilter();
+			modLockOut.setNext(corsFilter);
+			corsFilter.setNext(router);
+		} else {
+			modLockOut.setNext(router);
+		}
 
 		if (config.getBoolean(Settings.REPOSITORY_REWRITE_BASEREFERENCE, true)) {
 			// The following Filter resolves a problem that occurs with reverse
