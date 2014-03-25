@@ -21,7 +21,10 @@ import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Form;
 import org.restlet.data.Method;
+import org.restlet.engine.header.Header;
+import org.restlet.engine.header.HeaderUtils;
 import org.restlet.routing.Filter;
+import org.restlet.util.Series;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,21 +48,27 @@ public class CORSFilter extends Filter {
 	@Override
 	protected void afterHandle(Request request, Response response) {
 		if (request != null && response != null) {
-			if (request.getMethod().equals(Method.OPTIONS)) {
-				// OPTIONS is handled in BaseResource, so we don't touch it here
-				return;
-			}
-			Form reqHeaders = (Form) request.getAttributes().get("org.restlet.http.headers");
-			if (reqHeaders.contains("Origin")) {
+			// we only support GET, PUT, POST, DELETE and HEAD
+			// OPTIONS for CORS preflight requests is handled in BaseResource
+			Method m = request.getMethod();
+			if (Method.GET.equals(m) || Method.PUT.equals(m) ||	Method.POST.equals(m) || Method.DELETE.equals(m) ||	Method.HEAD.equals(m)) {
+				Series reqHeaders = (Series) request.getAttributes().get("org.restlet.http.headers");
 				String origin = reqHeaders.getFirstValue("Origin", true);
-				if (!cors.isValidOrigin(origin)) {
-					return;
-				}
-				Form respHeaders = (Form) response.getAttributes().get("org.restlet.http.headers");
-				respHeaders.add("Access-Control-Allow-Origin", origin);
-				respHeaders.add("Access-Control-Allow-Credentials", "true");
-				if (cors.getExposeHeaders() != null) {
-					respHeaders.add("Access-Control-Expose-Headers", cors.getExposeHeaders());
+				if (origin != null) {
+					if (!cors.isValidOrigin(origin)) {
+						log.info("Received CORS request with disallowed origin");
+						return;
+					}
+					Series<Header> respHeaders = new Series<>(Header.class);
+					respHeaders.add("Access-Control-Allow-Origin", origin);
+					respHeaders.add("Access-Control-Allow-Credentials", "true");
+					if (cors.getAllowedHeaders() != null) {
+						respHeaders.add("Access-Control-Expose-Headers", cors.getAllowedHeaders());
+					}
+					if (cors.getMaxAge() > -1) {
+						respHeaders.add("Access-Control-Max-Age", Integer.toString(cors.getMaxAge()));
+					}
+					HeaderUtils.copyExtensionHeaders(respHeaders, response);
 				}
 			}
 		}
