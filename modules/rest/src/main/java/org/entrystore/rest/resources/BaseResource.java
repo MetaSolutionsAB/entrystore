@@ -17,32 +17,39 @@
 package org.entrystore.rest.resources;
 
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import org.entrystore.Entry;
-import org.entrystore.harvester.Harvester;
 import org.entrystore.ContextManager;
+import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
+import org.entrystore.harvester.Harvester;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.backup.BackupScheduler;
-import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.EntryStoreApplication;
+import org.entrystore.rest.util.CORSUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.Util;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
+import org.restlet.data.Form;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
+import org.restlet.engine.header.Header;
+import org.restlet.engine.header.HeaderUtils;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
+import org.restlet.resource.Options;
 import org.restlet.resource.ServerResource;
+import org.restlet.util.Series;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  *<p> Base resource class that supports common behaviours or attributes shared by
@@ -88,6 +95,42 @@ public abstract class BaseResource extends ServerResource {
 				this.format = new MediaType(format);
 			}
 		}
+	}
+
+	/**
+	 * Sends a response with CORS headers according to the configuration.
+	 */
+	@Options
+	public Representation preflightCORS() {
+		if ("off".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.CORS, "off"))) {
+			log.info("Received CORS preflight request but CORS support is disabled");
+			setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
+			return null;
+		}
+		getResponse().setEntity(new EmptyRepresentation());
+		Series reqHeaders = (Series) getRequest().getAttributes().get("org.restlet.http.headers");
+		String origin = reqHeaders.getFirstValue("Origin", true);
+		if (origin != null) {
+			CORSUtil cors = CORSUtil.getInstance(getRM().getConfiguration());
+			if (!cors.isValidOrigin(origin)) {
+				log.info("Received CORS preflight request with disallowed origin");
+				//setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
+				return new EmptyRepresentation();
+			}
+
+			Series<Header> respHeaders = new Series<>(Header.class);
+			respHeaders.add("Access-Control-Allow-Origin", origin);
+			respHeaders.add("Access-Control-Allow-Methods", "HEAD, GET, PUT, POST, DELETE, OPTIONS");
+			respHeaders.add("Access-Control-Allow-Credentials", "true");
+			if (cors.getAllowedHeaders() != null) {
+				respHeaders.add("Access-Control-Allow-Headers", cors.getAllowedHeaders());
+			}
+			if (cors.getMaxAge() > -1) {
+				respHeaders.add("Access-Control-Max-Age", Integer.toString(cors.getMaxAge()));
+			}
+			HeaderUtils.copyExtensionHeaders(respHeaders, getResponse());
+		}
+		return getResponse().getEntity();
 	}
 
 	/**

@@ -16,24 +16,24 @@
 
 package org.entrystore.rest;
 
-import org.entrystore.harvester.Harvester;
-import org.entrystore.harvester.factory.HarvesterFactoryException;
-import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 import org.entrystore.ContextManager;
 import org.entrystore.Converter;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
-import org.entrystore.repository.backup.BackupFactory;
-import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.config.Config;
-import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.config.Settings;
+import org.entrystore.harvester.Harvester;
+import org.entrystore.harvester.factory.HarvesterFactoryException;
+import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.converters.ConverterManagerImpl;
 import org.entrystore.impl.converters.LOM2RDFConverter;
 import org.entrystore.impl.converters.OAI_DC2RDFGraphConverter;
 import org.entrystore.impl.converters.RDF2LOMConverter;
+import org.entrystore.repository.backup.BackupFactory;
+import org.entrystore.repository.backup.BackupScheduler;
+import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.repository.util.DataCorrection;
 import org.entrystore.rest.auth.BasicVerifier;
@@ -41,9 +41,11 @@ import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.ExistingUserRedirectAuthenticator;
 import org.entrystore.rest.auth.NewUserRedirectAuthenticator;
 import org.entrystore.rest.auth.SimpleAuthenticator;
+import org.entrystore.rest.filter.CORSFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
 import org.entrystore.rest.resources.*;
+import org.entrystore.rest.util.CORSUtil;
 import org.restlet.Application;
 import org.restlet.Component;
 import org.restlet.Context;
@@ -290,7 +292,15 @@ public class EntryStoreApplication extends Application {
 		cookieAuth.setNext(basicAuth);
 		basicAuth.setNext(jsCallback);
 		jsCallback.setNext(modLockOut);
-		modLockOut.setNext(router);
+
+		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
+			log.info("Enabling CORS");
+			CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
+			modLockOut.setNext(corsFilter);
+			corsFilter.setNext(router);
+		} else {
+			modLockOut.setNext(router);
+		}
 
 		if (config.getBoolean(Settings.REPOSITORY_REWRITE_BASEREFERENCE, true)) {
 			// The following Filter resolves a problem that occurs with reverse
