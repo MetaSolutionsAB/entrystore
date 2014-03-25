@@ -294,6 +294,7 @@ public class EntryStoreApplication extends Application {
 		jsCallback.setNext(modLockOut);
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
+			log.info("Enabling CORS");
 			CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
 			modLockOut.setNext(corsFilter);
 			corsFilter.setNext(router);
