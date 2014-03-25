@@ -24,6 +24,12 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.backup.maintenance.lower-limit=minimum amount of stored backups
 # entrystore.backup.maintenance.expires-after-days=maximum days a backup is kept
 
+## Cross-origin resource sharing (CORS)
+# entrystore.cors=on|off (default: off)
+# entrystore.cors.origins=*.domain1.com,domain2.*
+# entrystore.cors.headers=X-Custom-Header
+# entrystore.cors.max-age=7200
+
 ## SMTP settings, required for e.g. sign-up
 # entrystore.smtp.host=smtp.host.tld
 # entrystore.smtp.port=587
