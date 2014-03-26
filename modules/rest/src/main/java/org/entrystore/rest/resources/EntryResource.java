@@ -17,23 +17,23 @@
 package org.entrystore.rest.resources;
 
 import com.github.jsonldjava.sesame.SesameJSONLDParser;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
-import org.entrystore.Resource;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.Resource;
 import org.entrystore.User;
 import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.impl.RDFResource;
+import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.impl.converters.ConverterUtil;
-import org.entrystore.AuthorizationException;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
@@ -83,9 +83,8 @@ import java.util.Set;
 /**
  * Handles entries.
  * 
- * @author Eric Johansson (eric.johansson@educ.umu.se)
+ * @author Eric Johansson
  * @author Hannes Ebner
- * @see BaseResource
  */
 public class EntryResource extends BaseResource {
 
