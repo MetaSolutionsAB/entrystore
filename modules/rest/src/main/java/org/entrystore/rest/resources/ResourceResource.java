@@ -31,23 +31,23 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
-import org.entrystore.repository.RepositoryException;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.Metadata;
 import org.entrystore.QuotaException;
-import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.impl.ListImpl;
 import org.entrystore.impl.RDFResource;
+import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.impl.converters.ConverterUtil;
-import org.entrystore.AuthorizationException;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
@@ -874,11 +874,8 @@ public class ResourceResource extends BaseResource {
 		 * List and Group
 		 */
 		if (entry.getGraphType() == GraphType.List || entry.getGraphType() == GraphType.Group) {
-			JSONObject entityJSON = null; 
 			try {
-				entityJSON = new JSONObject(getRequest().getEntity().getText());
-				JSONArray childrenJSONArray = (JSONArray) entityJSON.get("resource");
-
+				JSONArray childrenJSONArray = new JSONArray(getRequest().getEntity().getText());
 				ArrayList<URI> newResource = new ArrayList<URI>(); 
 
 				// Add new entries to the list. 

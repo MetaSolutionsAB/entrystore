@@ -271,8 +271,8 @@ public class EntryResource extends BaseResource {
 			JSONObject jobj = this.getEntryAsJSONObject();
 			if (jobj != null)
 				return new JsonRepresentation(jobj.toString(2));
-		} catch (JSONException e) {	
-		}		
+		} catch (JSONException e) {
+		}
 		log.error("Can not find the entry. getEntry()");
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
@@ -703,10 +703,9 @@ public class EntryResource extends BaseResource {
 		Graph deserializedGraph = null;
 		if (mediaType.equals(MediaType.APPLICATION_JSON)) {
 			try {
-				JSONObject jsonObj = new JSONObject(graphString);
-				JSONObject infoObj = null;
-				if ((infoObj = jsonObj.getJSONObject("info")) != null) {
-					deserializedGraph = RDFJSON.rdfJsonToGraph(infoObj);
+				JSONObject rdfJSON = new JSONObject(graphString);
+				if (rdfJSON != null) {
+					deserializedGraph = RDFJSON.rdfJsonToGraph(rdfJSON);
 				}
 			} catch (JSONException jsone) {
 				log.error(jsone.getMessage());
