@@ -34,8 +34,6 @@ import java.net.URI;
 public class EntryStoreApplicationStandalone extends Application {
 
 	public static void main(String[] args) {
-		Logger.getRootLogger().setLevel(Level.WARN);
-
 		if (args.length < 1 || args.length > 2) {
 			out("EntryStore REST standalone");
 			out("http://entrystore.org");
