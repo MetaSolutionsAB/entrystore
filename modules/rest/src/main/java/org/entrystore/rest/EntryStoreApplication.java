@@ -97,10 +97,17 @@ public class EntryStoreApplication extends Application {
 
 	private ArrayList<Harvester> harvesters = new ArrayList<Harvester>();
 	
-	private BackupScheduler backupScheduler; 
+	private BackupScheduler backupScheduler;
+
+	URI configURI;
 
 	public EntryStoreApplication(Context parentContext) {
+		this(null, parentContext);
+	}
+
+	public EntryStoreApplication(URI configPath, Context parentContext) {
 		super(parentContext);
+		this.configURI = configPath;
 		getContext().getAttributes().put(KEY, this);
 
 		/*
@@ -128,23 +135,24 @@ public class EntryStoreApplication extends Application {
 			harvesters = (ArrayList) getContext().getAttributes().get("Harvesters");
 			backupScheduler = (BackupScheduler) getContext().getAttributes().get("BackupScheduler");
 		} else {
-			javax.naming.Context env = null;
-			URI manualConfigURI = null;
-			try {
-				env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
-				if (env != null && env.lookup("entrystore.config") != null) {
-					manualConfigURI = new File((String) env.lookup("entrystore.config")).toURI();
+			if (configURI == null) {
+				javax.naming.Context env = null;
+				try {
+					env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
+					if (env != null && env.lookup("entrystore.config") != null) {
+						configURI = new File((String) env.lookup("entrystore.config")).toURI();
+					}
+				} catch (NamingException e) {
+					log.warn(e.getMessage());
 				}
-			} catch (NamingException e) {
-				log.warn(e.getMessage());
 			}
 			
 			// Initialize EntryStore
 			ConfigurationManager confManager = null;
 			try {
-				if (manualConfigURI != null) {
-					log.info("Manually configured config location at " + manualConfigURI);
-					confManager = new ConfigurationManager(manualConfigURI);
+				if (configURI != null) {
+					log.info("Manually configured config location at " + configURI);
+					confManager = new ConfigurationManager(configURI);
 				} else {
 					log.info("No config location specified, looking within the classpath");
 					confManager = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
@@ -342,27 +350,6 @@ public class EntryStoreApplication extends Application {
 		redirAuth.setOptional(true);
 		redirAuth.setNext(OpenIdResource.class);
 		return redirAuth;
-	}
-
-	/**
-	 * This method exists for running stand-alone without a container.
-	 */
-	public static void main(String[] args) {
-		Component component = new Component();
-		component.getServers().add(Protocol.HTTP, 8181);
-		component.getClients().add(Protocol.FILE);
-		component.getClients().add(Protocol.HTTP);
-		component.getClients().add(Protocol.HTTPS);
-		Context childContext = component.getContext().createChildContext();
-		EntryStoreApplication esApp = new EntryStoreApplication(childContext);
-		childContext.getAttributes().put(KEY, esApp);
-		component.getDefaultHost().attach(esApp);
-
-		try {
-			component.start();
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
 	}
 
 	public ContextManager getCM() {

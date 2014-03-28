@@ -109,8 +109,10 @@ public class ConfigurationManager {
 
 	public static URI getConfigurationURI(String fileName) {
 		URL resURL = Thread.currentThread().getContextClassLoader().getResource(fileName); 
-		try { 
-			return resURL.toURI(); 
+		try {
+			if (resURL != null) {
+				return resURL.toURI();
+			}
 		} catch (URISyntaxException e) { 
 			log.error(e.getMessage()); 
 		}
