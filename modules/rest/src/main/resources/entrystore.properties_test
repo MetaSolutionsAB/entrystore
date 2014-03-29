@@ -6,3 +6,7 @@ entrystore.solr.reindex-on-startup=off
 entrystore.solr.url=/tmp/entrystore-test-solr/
 
 entrystore.repository.store.type=memory
+
+entrystore.cors=on
+entrystore.cors.origins=*
+entrystore.cors.max-age=3600
