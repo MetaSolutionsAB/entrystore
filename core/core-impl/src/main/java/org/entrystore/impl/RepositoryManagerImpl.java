@@ -258,7 +258,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				e.printStackTrace();
 			}
 
-			this.intitialize();
+			this.initialize();
 			
 			String baseURI = config.getString(Settings.BASE_URL);
 			if (instances.containsKey(baseURI) || instances.containsValue(this)) {
@@ -294,7 +294,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	/**
 	 * Init all System Contexts
 	 */
-	private void intitialize() {
+	private void initialize() {
 		this.contextManager = new ContextManagerImpl(this, repository);
 		this.contextManager.initializeSystemEntries();
 	}
@@ -469,10 +469,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	public SoftCache getSoftCache() {
 		return softCache;
 	}
-	
-	/**
-	 * @see org.entrystore.repository.RepositoryManager#getCacheManager()
-	 */
+
 	public CacheManager getCacheManager() {
 		return cacheManager;
 	}
@@ -540,10 +537,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		boolean reindex = "on".equalsIgnoreCase(config.getString(Settings.SOLR_REINDEX_ON_STARTUP, "off"));
 		String solrURL = config.getString(Settings.SOLR_URL);
-		if (solrURL.startsWith("http://")) {
-			log.info("Using HTTP Solr server");
-			solrServer = new HttpSolrServer(solrURL);
-			((HttpSolrServer) solrServer).setAllowCompression(true);
+		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
+			log.info("Using HTTP Solr server at " + solrURL);
+			HttpSolrServer httpSolrServer = new HttpSolrServer(solrURL);
+			httpSolrServer.setAllowCompression(true);
+			httpSolrServer.setFollowRedirects(true);
+			httpSolrServer.setMaxRetries(1);
+			httpSolrServer.setConnectionTimeout(5000); // 5 seconds
+			solrServer = httpSolrServer;
 		} else {
 			log.info("Using embedded Solr server");
 			File solrDir = new File(solrURL);
