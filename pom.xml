@@ -144,10 +144,10 @@
 		</repository>
 	</repositories>
 	<pluginRepositories>
-		<repository>
+		<pluginRepository>
 			<id>EntryStore</id>
 			<url>http://maven.entrystore.org</url>
-		</repository>
+		</pluginRepository>
 		<pluginRepository>
 			<id>Maven</id>
 			<url>http://repo1.maven.org/maven2</url>
