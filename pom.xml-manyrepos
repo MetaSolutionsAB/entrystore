@@ -139,18 +139,67 @@
 	<!-- ================= Repositories ================= -->
 	<repositories>
 		<repository>
-			<id>EntryStore</id>
-			<url>http://maven.entrystore.org</url>
+			<id>OpenRDF</id>
+			<url>http://repo.aduna-software.org/maven2/releases</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+		</repository>
+		<repository>  
+			<id>Restlet</id>  
+			<url>http://maven.restlet.org</url>  
+		</repository>
+		<repository>
+			<id>Maven</id>
+			<url>http://repo1.maven.org/maven2</url>
+			<releases> 
+				<enabled>true</enabled>
+			</releases>
+		</repository>
+		<repository>
+			<id>IML</id>
+			<url>http://develix.iml.umu.se:8085/artifactory/repo</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
+		<repository>
+			<id>thirdparty-uploads</id>
+			<name>JBoss Thirdparty Uploads</name>
+			<url>https://repository.jboss.org/nexus/content/repositories/thirdparty-uploads</url>
 		</repository>
 	</repositories>
 	<pluginRepositories>
-		<repository>
-			<id>EntryStore</id>
-			<url>http://maven.entrystore.org</url>
-		</repository>
 		<pluginRepository>
 			<id>Maven</id>
 			<url>http://repo1.maven.org/maven2</url>
+			<releases> 
+				<enabled>true</enabled>
+			</releases>
+		</pluginRepository>
+		<pluginRepository>
+			<id>central</id>
+			<url>http://develix.iml.umu.se:8085/artifactory/plugins-releases</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</pluginRepository>
+		<pluginRepository>
+			<id>snapshots</id>
+			<url>http://develix.iml.umu.se:8085/artifactory/plugins-snapshots</url>
+			<releases>
+				<enabled>false</enabled>
+			</releases>
+		</pluginRepository>
+		<pluginRepository>
+			<id>atlassian-m2-repository</id>
+			<url>http://develix.iml.umu.se:8085/artifactory/atlassian-m2-repository</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
 		</pluginRepository>
 	</pluginRepositories>
 	
