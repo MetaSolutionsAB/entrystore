@@ -264,13 +264,13 @@ public class SignupResource extends BaseResource {
 				sb.append("<br/>\n");
 				sb.append("Sign-up with: ");
 				if (google) {
-					sb.append("<a href=\"openid/google\">Google</a>\n");
+					sb.append("<a href=\"openid/google/signup\">Google</a>\n");
 				}
 				if (yahoo) {
 					if (google) {
 						sb.append(" | ");
 					}
-					sb.append("<a href=\"openid/google\">Yahoo!</a>\n");
+					sb.append("<a href=\"openid/yahoo/signup\">Yahoo!</a>\n");
 				}
 			}
 		}
