@@ -41,7 +41,7 @@ public class JSCallbackFilter extends Filter {
 	@Override
 	protected void afterHandle(Request request, Response response) {
 		if (request != null && response != null && Method.GET.equals(request.getMethod()) &&
-				response.getEntity() != null && MediaType.APPLICATION_JSON.equals(response.getEntity().getMediaType())) {
+				response.getEntity() != null && isJSON(response.getEntity().getMediaType())) {
 			HashMap<String, String> parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
 			if (parameters.containsKey("callback")) {
 				String callback = parameters.get("callback");
@@ -59,6 +59,16 @@ public class JSCallbackFilter extends Filter {
 				}
 			}
 		}
+	}
+
+	private boolean isJSON(MediaType mediaType) {
+		String mime = mediaType.toString();
+		if ("application/json".equals(mime) ||
+				"application/ld+json".equals(mime) ||
+				"application/rdf+json".equals(mime)) {
+			return true;
+		}
+		return false;
 	}
 	
 }
