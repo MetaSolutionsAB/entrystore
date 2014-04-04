@@ -86,7 +86,7 @@ public class LoginResource extends BaseResource {
 					if (google) {
 						sb.append(" | ");
 					}
-					sb.append("<a href=\"openid/google\">Yahoo!</a>\n");
+					sb.append("<a href=\"openid/yahoo\">Yahoo!</a>\n");
 				}
 			}
 		}
