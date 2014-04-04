@@ -237,6 +237,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/auth/user", UserResource.class);
 		router.attach("/auth/cookie", CookieLoginResource.class);
 		router.attach("/auth/basic", UserResource.class);
+		router.attach("/auth/login", LoginResource.class);
 		router.attach("/auth/logout", LogoutResource.class);
 
 		// signup
