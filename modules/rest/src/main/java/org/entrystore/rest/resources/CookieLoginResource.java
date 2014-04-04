@@ -23,6 +23,7 @@ import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.TokenCache;
 import org.entrystore.rest.auth.UserInfo;
+import org.entrystore.rest.util.SimpleHTML;
 import org.restlet.data.CookieSetting;
 import org.restlet.data.Form;
 import org.restlet.data.Status;
@@ -73,10 +74,11 @@ public class CookieLoginResource extends BaseResource {
 			tokenCookieSetting.setMaxAge(maxAge);
 			tokenCookieSetting.setPath(getRM().getRepositoryURL().getPath());
 	        getResponse().getCookieSettings().add(tokenCookieSetting);
-	        
 	        getResponse().setStatus(Status.SUCCESS_OK);
+			getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
 		} else {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+			getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 		}
 	}
 
