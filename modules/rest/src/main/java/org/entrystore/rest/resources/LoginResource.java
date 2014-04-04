@@ -64,8 +64,6 @@ public class LoginResource extends BaseResource {
 	@Get
 	public Representation represent() throws ResourceException {
 		Config config = getRM().getConfiguration();
-		boolean openid = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"));
-
 		SimpleHTML html = new SimpleHTML("Login");
 		StringBuilder sb = new StringBuilder();
 		sb.append(html.header());
@@ -74,6 +72,7 @@ public class LoginResource extends BaseResource {
 		sb.append("Password<br/><input type=\"password\" name=\"auth_password\"><br/>\n");
 		sb.append("<br/>\n<input type=\"submit\" value=\"Login\" />\n");
 		sb.append("</form>\n");
+		boolean openid = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"));
 		if (openid) {
 			boolean google = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_GOOGLE, "off"));
 			boolean yahoo = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_YAHOO, "off"));

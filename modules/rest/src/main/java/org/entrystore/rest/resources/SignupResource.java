@@ -256,6 +256,24 @@ public class SignupResource extends BaseResource {
 		}
 		sb.append("<br/>\n<input type=\"submit\" value=\"Sign-up\" />\n");
 		sb.append("</form>\n");
+		boolean openid = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"));
+		if (openid) {
+			boolean google = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_GOOGLE, "off"));
+			boolean yahoo = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_YAHOO, "off"));
+			if (google || yahoo) {
+				sb.append("<br/>\n");
+				sb.append("Sign-up with: ");
+				if (google) {
+					sb.append("<a href=\"openid/google\">Google</a>\n");
+				}
+				if (yahoo) {
+					if (google) {
+						sb.append(" | ");
+					}
+					sb.append("<a href=\"openid/google\">Yahoo!</a>\n");
+				}
+			}
+		}
 		sb.append(html.footer());
 		return sb.toString();
 	}
