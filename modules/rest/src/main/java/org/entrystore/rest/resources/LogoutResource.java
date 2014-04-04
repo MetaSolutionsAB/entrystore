@@ -18,14 +18,16 @@ package org.entrystore.rest.resources;
 
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.auth.TokenCache;
 import org.entrystore.rest.util.SimpleHTML;
+import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.openid.RedirectAuthenticator;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Arrays;
 
 /**
  * This resource removes cookies and performs other actions necessary for
@@ -55,7 +57,11 @@ public class LogoutResource extends BaseResource {
 		CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, getRequest(), getResponse());
 		
 		getResponse().setStatus(Status.SUCCESS_OK);
-		return new SimpleHTML("Logout").representation("Logout successful.");
+		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
+		if (html) {
+			return new SimpleHTML("Logout").representation("Logout successful.");
+		}
+		return null;
 	}
 
 }
