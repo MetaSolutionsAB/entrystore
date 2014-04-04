@@ -19,6 +19,7 @@ package org.entrystore.rest.resources;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.TokenCache;
+import org.entrystore.rest.util.SimpleHTML;
 import org.restlet.data.Status;
 import org.restlet.ext.openid.RedirectAuthenticator;
 import org.restlet.representation.Representation;
@@ -54,7 +55,7 @@ public class LogoutResource extends BaseResource {
 		CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, getRequest(), getResponse());
 		
 		getResponse().setStatus(Status.SUCCESS_OK);
-		return null;
+		return new SimpleHTML("Logout").representation("Logout successful.");
 	}
 
 }
