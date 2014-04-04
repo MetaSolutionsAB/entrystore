@@ -30,9 +30,15 @@ import org.restlet.representation.StringRepresentation;
  */
 public class SimpleHTML {
 
-	public String wrapInHtml(String title, String simpleContent) {
+	private String title;
+
+	public SimpleHTML(String title) {
+		this.title = title;
+	}
+
+	public String wrapInHtml(String simpleContent) {
 		StringBuilder sb = new StringBuilder();
-		sb.append(header(title));
+		sb.append(header());
 		sb.append("<div>");
 		sb.append(simpleContent);
 		sb.append("</div>");
@@ -40,7 +46,7 @@ public class SimpleHTML {
 		return sb.toString();
 	}
 
-	public String header(String title) {
+	public String header() {
 		StringBuilder sb = new StringBuilder();
 		sb.append("<html>\n");
 		sb.append("<head>\n<title>");
@@ -61,8 +67,8 @@ public class SimpleHTML {
 		return sb.toString();
 	}
 
-	public Representation htmlRepresentation(String title, String simpleContent) {
-		return new StringRepresentation(wrapInHtml(title, simpleContent), MediaType.TEXT_HTML, Language.ENGLISH);
+	public Representation representation(String simpleContent) {
+		return new StringRepresentation(wrapInHtml(simpleContent), MediaType.TEXT_HTML, Language.ENGLISH);
 	}
 
 }

@@ -66,9 +66,9 @@ public class LoginResource extends BaseResource {
 		Config config = getRM().getConfiguration();
 		boolean openid = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"));
 
-		SimpleHTML html = new SimpleHTML();
+		SimpleHTML html = new SimpleHTML("Login");
 		StringBuilder sb = new StringBuilder();
-		sb.append(html.header("Login"));
+		sb.append(html.header());
 		sb.append("<form action=\"cookie\" method=\"post\">\n");
 		sb.append("Username<br/><input type=\"text\" name=\"auth_username\"><br/>\n");
 		sb.append("Password<br/><input type=\"password\" name=\"auth_password\"><br/>\n");
