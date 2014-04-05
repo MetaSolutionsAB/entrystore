@@ -16,9 +16,6 @@
 
 package org.entrystore.rest.filter;
 
-import java.io.IOException;
-import java.util.HashMap;
-
 import org.entrystore.rest.util.Util;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -27,6 +24,9 @@ import org.restlet.data.Method;
 import org.restlet.routing.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.HashMap;
 
 
 /**
