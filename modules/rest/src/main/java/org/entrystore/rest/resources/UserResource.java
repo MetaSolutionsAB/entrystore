@@ -49,6 +49,7 @@ public class UserResource extends BaseResource {
 			try {
 				result.put("user", currentUser.getName());
 				result.put("id", currentUser.getEntry().getId());
+				result.put("uri", currentUser.getEntry().getEntryURI());
 
 				if (!guest) {
 					Context homeContext = currentUser.getHomeContext();
