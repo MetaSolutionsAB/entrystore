@@ -22,9 +22,7 @@ import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.validator.routines.EmailValidator;
-import org.entrystore.Context;
 import org.entrystore.Entry;
-import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
@@ -37,6 +35,7 @@ import org.restlet.data.Form;
 import org.restlet.data.Language;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
@@ -50,17 +49,16 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.util.Date;
 
-
 /**
- * Resource to handle manual sign-ups.
- * 
+ * Supports resetting a user's password. Based on SignupResource.
+ *
  * @author Hannes Ebner
  */
-public class SignupResource extends BaseResource {
-	
-	private static Logger log = LoggerFactory.getLogger(SignupResource.class);
+public class PasswordResetResource extends BaseResource {
 
-	protected SimpleHTML html = new SimpleHTML("Sign-up");
+	private static Logger log = LoggerFactory.getLogger(PasswordResetResource.class);
+
+	private SimpleHTML html = new SimpleHTML("Password reset");
 
 	@Get
 	public Representation represent() throws ResourceException {
@@ -84,65 +82,48 @@ public class SignupResource extends BaseResource {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
 			Entry userEntry = pm.getPrincipalEntry(ci.email);
-			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
-					pm.getUserByExternalID(ci.email) != null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
-				return html.representation("User with submitted email address exists already.");
+			User u = null;
+			if (userEntry != null) {
+				u = (User) userEntry.getResource();
+			} else {
+				u = pm.getUserByExternalID(ci.email);
 			}
-
-			// Create user
-			Entry entry = pm.createResource(null, GraphType.User, null, null);
-			if (entry == null) {
-				try {
-					if (ci.urlFailure != null) {
+			if (u == null) {
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+				if (ci.urlFailure != null) {
+					try {
 						getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, "UTF-8"));
-					} else {
-						getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+					} catch (UnsupportedEncodingException use) {
+						log.warn("Unable to decode URL: " + use.getMessage());
 					}
-					return html.representation("Unable to create user.");
-				} catch (UnsupportedEncodingException e) {
-					log.warn("Unable to decode URL: " + e.getMessage());
+					return new EmptyRepresentation();
+				} else {
+					return html.representation("User with provided email address does not exist.");
 				}
 			}
 
-			// Set alias, metadata and password
-			pm.setPrincipalName(entry.getResourceURI(), ci.email);
-			Signup.setFoafMetadata(entry, new org.restlet.security.User("", "", ci.firstName, ci.lastName, ci.email));
-			User u = (User) entry.getResource();
+			// Reset password
 			u.setSecret(ci.password);
-			log.info("Created user " + u.getURI());
-
-			// Create context and set ACL and alias
-			Entry homeContext = getCM().createResource(null, GraphType.Context, null, null);
-			homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
-			getCM().setContextAlias(homeContext.getEntryURI(), ci.email);
-			log.info("Created context " + homeContext.getResourceURI());
-
-			// Set home context of user
-			u.setHomeContext((Context) homeContext.getResource());
-			log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
+			log.info("Reset password for user " + u.getURI());
 		} finally {
 			pm.setAuthenticatedUserURI(authUser);
 		}
 
-		try {
-			if (ci.urlSuccess != null) {
+		if (ci.urlSuccess != null) {
+			try {
 				getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, "UTF-8"));
+			} catch (UnsupportedEncodingException e) {
+				log.warn("Unable to decode URL: " + e.getMessage());
 			}
-			return html.representation("Sign-up successful.");
-		} catch (UnsupportedEncodingException e) {
-			log.warn("Unable to decode URL: " + e.getMessage());
+			return new EmptyRepresentation();
+		} else {
+			return html.representation("Password reset was successful.");
 		}
-
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		return html.representation("User sign-up failed.");
 	}
 
 	@Post
 	public void acceptRepresentation(Representation r) {
 		Form form = new Form(getRequest().getEntity());
-		String firstName = form.getFirstValue("firstname", true);
-		String lastName = form.getFirstValue("lastname", true);
 		String email = form.getFirstValue("email", true);
 		String password = form.getFirstValue("password", true);
 		String rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
@@ -150,15 +131,9 @@ public class SignupResource extends BaseResource {
 		String urlFailure = form.getFirstValue("urlfailure", true);
 		String urlSuccess = form.getFirstValue("urlsuccess", true);
 
-		if (firstName == null || lastName == null || email == null || password == null) {
+		if (email == null || password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("One or more parameters are missing."));
-			return;
-		}
-
-		if (firstName.trim().length() < 2 || lastName.trim().length() < 2) {
-			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(html.representation("Invalid name."));
 			return;
 		}
 
@@ -176,7 +151,7 @@ public class SignupResource extends BaseResource {
 
 		Config config = getRM().getConfiguration();
 
-		log.info("Received sign-up request for " + email);
+		log.info("Received password reset request for " + email);
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP_RECAPTCHA, "off"))
 				&& config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY) != null) {
@@ -203,8 +178,6 @@ public class SignupResource extends BaseResource {
 		}
 
 		SignupInfo ci = new SignupInfo();
-		ci.firstName = firstName;
-		ci.lastName = lastName;
 		ci.email = email;
 		ci.password = password;
 		ci.urlFailure = urlFailure;
@@ -212,11 +185,11 @@ public class SignupResource extends BaseResource {
 		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
 
 		String token = RandomStringUtils.randomAlphanumeric(16);
-		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
+		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
 		SignupTokenCache.getInstance().addToken(token, ci);
-		log.info("Generated sign-up token " + token + " for " + email);
+		log.info("Generated password reset token " + token + " for " + email);
 
-		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), firstName + " " + lastName, email, confirmationLink, false);
+		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), null, email, confirmationLink, true);
 		if (sendSuccessful) {
 			log.info("Sent confirmation request to " + email);
 		} else {
@@ -244,35 +217,15 @@ public class SignupResource extends BaseResource {
 		StringBuilder sb = new StringBuilder();
 		sb.append(html.header());
 		sb.append("<form action=\"\" method=\"post\">\n");
-		sb.append("First name<br/><input type=\"text\" name=\"firstname\"><br/>\n");
-		sb.append("Last name<br/><input type=\"text\" name=\"lastname\"><br/>\n");
 		sb.append("E-Mail address<br/><input type=\"text\" name=\"email\"><br/>\n");
-		sb.append("Password<br/><input type=\"password\" name=\"password\"><br/>\n");
+		sb.append("New password<br/><input type=\"password\" name=\"password\"><br/>\n");
 		if (reCaptcha) {
 			sb.append("<br/>\n");
 			sb.append(reCaptchaHtml);
 			sb.append("\n");
 		}
-		sb.append("<br/>\n<input type=\"submit\" value=\"Sign-up\" />\n");
+		sb.append("<br/>\n<input type=\"submit\" value=\"Reset password\" />\n");
 		sb.append("</form>\n");
-		boolean openid = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"));
-		if (openid) {
-			boolean google = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_GOOGLE, "off"));
-			boolean yahoo = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_YAHOO, "off"));
-			if (google || yahoo) {
-				sb.append("<br/>\n");
-				sb.append("Sign-up with: ");
-				if (google) {
-					sb.append("<a href=\"openid/google/signup\">Google</a>\n");
-				}
-				if (yahoo) {
-					if (google) {
-						sb.append(" | ");
-					}
-					sb.append("<a href=\"openid/yahoo/signup\">Yahoo!</a>\n");
-				}
-			}
-		}
 		sb.append(html.footer());
 		return sb.toString();
 	}
