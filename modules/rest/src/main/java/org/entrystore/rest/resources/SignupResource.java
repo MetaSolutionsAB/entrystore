@@ -32,7 +32,6 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
-import org.entrystore.rest.auth.TokenCache;
 import org.entrystore.rest.util.SimpleHTML;
 import org.restlet.data.Form;
 import org.restlet.data.Language;
@@ -61,7 +60,7 @@ public class SignupResource extends BaseResource {
 	
 	private static Logger log = LoggerFactory.getLogger(SignupResource.class);
 
-	private SimpleHTML html = new SimpleHTML("Sign-up");
+	protected SimpleHTML html = new SimpleHTML("Sign-up");
 
 	@Get
 	public Representation represent() throws ResourceException {
@@ -71,8 +70,8 @@ public class SignupResource extends BaseResource {
 		}
 
 		String token = parameters.get("confirm");
-		TokenCache tc = SignupTokenCache.getInstance();
-		SignupInfo ci = SignupTokenCache.getInstance().getTokenValue(token);
+		SignupTokenCache tc = SignupTokenCache.getInstance();
+		SignupInfo ci = tc.getTokenValue(token);
 		if (ci == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return html.representation("Invalid confirmation token.");
@@ -217,7 +216,7 @@ public class SignupResource extends BaseResource {
 		SignupTokenCache.getInstance().addToken(token, ci);
 		log.info("Generated sign-up token " + token + " for " + email);
 
-		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), firstName + " " + lastName, email, confirmationLink);
+		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), firstName + " " + lastName, email, confirmationLink, false);
 		if (sendSuccessful) {
 			log.info("Sent confirmation request to " + email);
 		} else {
