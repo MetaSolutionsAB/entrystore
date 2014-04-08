@@ -92,15 +92,19 @@ public class Settings {
 	public static String SMTP_USERNAME = "entrystore.smtp.username";
 	public static String SMTP_PASSWORD = "entrystore.smtp.password";
 
-	public static String SIGNUP = "entrystore.signup";
-	public static String SIGNUP_FROM_EMAIL = "entrystore.signup.email.from";
-	public static String SIGNUP_BCC_EMAIL = "entrystore.signup.email.bcc";
-	public static String SIGNUP_SUBJECT = "entrystore.signup.email.subject";
-	public static String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.signup.email.template";
-	public static String SIGNUP_RECAPTCHA = "entrystore.signup.recaptcha";
-	public static String SIGNUP_RECAPTCHA_PRIVATE_KEY = "entrystore.signup.recaptcha.private-key";
-	public static String SIGNUP_RECAPTCHA_PUBLIC_KEY = "entrystore.signup.recaptcha.public-key";
-	public static String SIGNUP_PASSWORD_RESET = "entrystore.signup.password-reset";
+	public static String AUTH_FROM_EMAIL = "entrystore.auth.email.from";
+	public static String AUTH_BCC_EMAIL = "entrystore.auth.email.bcc";
+	public static String AUTH_RECAPTCHA = "entrystore.auth.recaptcha";
+	public static String AUTH_RECAPTCHA_PRIVATE_KEY = "entrystore.auth.recaptcha.private-key";
+	public static String AUTH_RECAPTCHA_PUBLIC_KEY = "entrystore.auth.recaptcha.public-key";
+
+	public static String SIGNUP = "entrystore.auth.signup";
+	public static String SIGNUP_SUBJECT = "entrystore.auth.signup.email.subject";
+	public static String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.signup.email.template";
+
+	public static String PASSWORD_RESET = "entrystore.auth.password-reset";
+	public static String PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-reset.email.template";
+	public static String PASSWORD_RESET_SUBJECT = "entrystore.auth.password-reset.email.subject";
 
 	public static String CORS = "entrystore.cors";
 	public static String CORS_ORIGINS = "entrystore.cors.origins";

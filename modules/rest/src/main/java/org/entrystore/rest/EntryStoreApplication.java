@@ -244,7 +244,7 @@ public class EntryStoreApplication extends Application {
 		}
 
 		// password reset
-		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP_PASSWORD_RESET, "off"))) {
+		if ("on".equalsIgnoreCase(config.getString(Settings.PASSWORD_RESET, "off"))) {
 			router.attach("/auth/pwreset", PasswordResetResource.class);
 		}
 

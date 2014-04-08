@@ -65,7 +65,7 @@ public class SignupResource extends BaseResource {
 	@Get
 	public Representation represent() throws ResourceException {
 		if (!parameters.containsKey("confirm")) {
-			boolean reCaptcha = "on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.SIGNUP_RECAPTCHA, "off"));
+			boolean reCaptcha = "on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.AUTH_RECAPTCHA, "off"));
 			return new StringRepresentation(constructHtmlForm(reCaptcha), MediaType.TEXT_HTML, Language.ENGLISH);
 		}
 
@@ -178,8 +178,8 @@ public class SignupResource extends BaseResource {
 
 		log.info("Received sign-up request for " + email);
 
-		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP_RECAPTCHA, "off"))
-				&& config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY) != null) {
+		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
+				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
 			if (rcChallenge == null || rcResponse == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(html.representation("reCaptcha information missing"));
@@ -189,7 +189,7 @@ public class SignupResource extends BaseResource {
 
 			String remoteAddr = getRequest().getClientInfo().getUpstreamAddress();
 			ReCaptchaImpl captcha = new ReCaptchaImpl();
-			captcha.setPrivateKey(config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY));
+			captcha.setPrivateKey(config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
 			ReCaptchaResponse reCaptchaResponse = captcha.checkAnswer(remoteAddr, rcChallenge, rcResponse);
 
 			if (reCaptchaResponse.isValid()) {
@@ -232,8 +232,8 @@ public class SignupResource extends BaseResource {
 
 		String reCaptchaHtml = null;
 		if (reCaptcha) {
-			String privateKey = config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY);
-			String publicKey = config.getString(Settings.SIGNUP_RECAPTCHA_PUBLIC_KEY);
+			String privateKey = config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
+			String publicKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
 			if (privateKey == null || publicKey == null) {
 				return "reCaptcha keys must be configured";
 			}

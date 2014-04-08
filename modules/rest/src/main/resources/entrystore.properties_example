@@ -37,15 +37,22 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.smtp.username=smtp-user
 # entrystore.smtp.password=smtp-password
 
+## Generic settings for user-initiated sign-up and password reset
+# entrystore.auth.email.from=signup@yourdomain.tld
+# entrystore.auth.email.bcc=info+signup@youdomain.tld
+# entrystore.auth.recaptcha=on (default: off)
+# entrystore.auth.recaptcha.public-key=your-public-recaptcha-key
+# entrystore.auth.recaptcha.private-key=your-private-recaptcha-key
+
 ## User-initiated sign-up (default: off)
-# entrystore.signup=off
-# entrystore.signup.email.from=signup@yourdomain.tld
-# entrystore.signup.email.bcc=info+signup@youdomain.tld
-# entrystore.signup.email.subject=E-Mail confirmation needed
-# entrystore.signup.email.template=/path/to/template.html
-# entrystore.signup.recaptcha=off
-# entrystore.signup.recaptcha.public-key=your-public-recaptcha-key
-# entrystore.signup.recaptcha.private-key=your-private-recaptcha-key
+# entrystore.auth.signup=off
+# entrystore.auth.signup.email.subject=User sign-up request
+# entrystore.auth.signup.email.template=/path/to/template.html
+
+## User-initiated password reset (default: off)
+# entrystore.auth.password-reset=off
+# entrystore.auth.password-reset.email.subject=Password reset request
+# entrystore.auth.password-reset.email.template=/path/to/template.html
 
 ## OpenID
 # entrystore.auth.openid=on|off (default: off)

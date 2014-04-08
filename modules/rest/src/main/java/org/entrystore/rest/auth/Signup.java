@@ -56,8 +56,8 @@ public class Signup {
 		boolean starttls = "starttls".equalsIgnoreCase(config.getString(Settings.SMTP_SECURITY));
 		final String username = config.getString(Settings.SMTP_USERNAME);
 		final String password = config.getString(Settings.SMTP_PASSWORD);
-		String from = config.getString(Settings.SIGNUP_FROM_EMAIL, "support@" + domain);
-		String bcc = config.getString(Settings.SIGNUP_BCC_EMAIL);
+		String from = config.getString(Settings.AUTH_FROM_EMAIL, "support@" + domain);
+		String bcc = config.getString(Settings.AUTH_BCC_EMAIL);
 		String subject = config.getString(Settings.SIGNUP_SUBJECT, "Confirm your email address");
 		String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
 
