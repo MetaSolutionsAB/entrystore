@@ -58,8 +58,20 @@ public class Signup {
 		final String password = config.getString(Settings.SMTP_PASSWORD);
 		String from = config.getString(Settings.AUTH_FROM_EMAIL, "support@" + domain);
 		String bcc = config.getString(Settings.AUTH_BCC_EMAIL);
-		String subject = config.getString(Settings.SIGNUP_SUBJECT, "Confirm your email address");
-		String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+
+		String subject = null;
+		if (resetPassword) {
+			subject = config.getString(Settings.PASSWORD_RESET_SUBJECT, "Password reset request");
+		} else {
+			subject = config.getString(Settings.SIGNUP_SUBJECT, "User sign-up request");
+		}
+
+		String templatePath = null;
+		if (resetPassword) {
+			templatePath = config.getString(Settings.PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+		} else {
+			templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+		}
 
 		if (host == null) {
 			log.error("No SMTP host configured");
