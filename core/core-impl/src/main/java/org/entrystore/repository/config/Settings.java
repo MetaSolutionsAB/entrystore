@@ -100,6 +100,7 @@ public class Settings {
 	public static String SIGNUP_RECAPTCHA = "entrystore.signup.recaptcha";
 	public static String SIGNUP_RECAPTCHA_PRIVATE_KEY = "entrystore.signup.recaptcha.private-key";
 	public static String SIGNUP_RECAPTCHA_PUBLIC_KEY = "entrystore.signup.recaptcha.public-key";
+	public static String SIGNUP_PASSWORD_RESET = "entrystore.signup.password-reset";
 
 	public static String CORS = "entrystore.cors";
 	public static String CORS_ORIGINS = "entrystore.cors.origins";
