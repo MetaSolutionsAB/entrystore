@@ -56,7 +56,9 @@ public class CORSFilter extends Filter {
 				String origin = reqHeaders.getFirstValue("Origin", true);
 				if (origin != null) {
 					if (!cors.isValidOrigin(origin)) {
-						log.info("Received CORS request with disallowed origin");
+						// logging this only on debug-level because some browsers send an
+						// Origin-header even on same-origin PUT/POST/DELETE (Chrome e.g.)
+						log.debug("Received CORS request with disallowed origin");
 						return;
 					}
 					Series<Header> respHeaders = new Series<>(Header.class);
