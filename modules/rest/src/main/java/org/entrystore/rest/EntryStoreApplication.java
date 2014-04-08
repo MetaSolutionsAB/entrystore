@@ -47,13 +47,11 @@ import org.entrystore.rest.filter.ModificationLockOutFilter;
 import org.entrystore.rest.resources.*;
 import org.entrystore.rest.util.CORSUtil;
 import org.restlet.Application;
-import org.restlet.Component;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.Restlet;
 import org.restlet.data.ChallengeScheme;
-import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.ext.openid.AttributeExchange;
 import org.restlet.ext.openid.OpenIdVerifier;
@@ -243,6 +241,11 @@ public class EntryStoreApplication extends Application {
 		// signup
 		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP, "off"))) {
 			router.attach("/auth/signup", SignupResource.class);
+		}
+
+		// password reset
+		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP_PASSWORD_RESET, "off"))) {
+			router.attach("/auth/pwreset", PasswordResetResource.class);
 		}
 
 		// OpenID
