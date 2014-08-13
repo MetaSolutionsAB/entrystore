@@ -1,4 +1,4 @@
-# Welcome to the EntryStore code repository
+# EntryStore code repository
 
 EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3). ReM3 is an information model for keeping track of resources and their metadata and provides a unique approach to information management. It allows web pages, physical objects, abstract concepts, events, etc. to be described by established metadata standards and to be managed in a single system.
 
@@ -8,7 +8,7 @@ EntryStore is the new name for the SCAM (Standardized Contextualized Access to M
 
 ## Documentation
 
-The documentation can be found in the [project wiki](https://bitbucket.org/metasolutions/entrystore/wiki/).
+The documentation can be found at the [EntryStore web page](https://entrystore.org).
 
 ## Commercial support
 
