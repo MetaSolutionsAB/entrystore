@@ -8,7 +8,7 @@ EntryStore is the new name for the SCAM (Standardized Contextualized Access to M
 
 ## Documentation
 
-The documentation can be found at the [EntryStore web page](https://entrystore.org).
+The documentation can be found at the [EntryStore web page](http://entrystore.org).
 
 ## Commercial support
 
