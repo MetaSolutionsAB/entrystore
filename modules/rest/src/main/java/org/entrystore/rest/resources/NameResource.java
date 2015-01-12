@@ -39,9 +39,9 @@ import java.io.IOException;
  *
  * @author Hannes Ebner
  */
-public class AliasResource extends BaseResource {
+public class NameResource extends BaseResource {
 	
-	static Logger log = LoggerFactory.getLogger(AliasResource.class);
+	static Logger log = LoggerFactory.getLogger(NameResource.class);
 
 	@Get
 	public Representation represent() {
