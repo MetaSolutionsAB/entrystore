@@ -67,9 +67,9 @@ public class OAIHarvester extends Harvester {
 
 	/**
 	 * Updates only one entry
-	 * @param entryURI
+	 * @param identifier
 	 */
-	public void run(String indentifier) {
+	public void run(String identifier) {
 		log.warn("OAIHarvester.run(String identifier) is not implemented");
 //		ContextManager cm = getRM().getContextManager();	
 //		URI contextURI = getOwnerContextURI(); 

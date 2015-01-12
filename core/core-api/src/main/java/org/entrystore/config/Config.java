@@ -70,7 +70,7 @@ public interface Config {
 	 * @param configURL
 	 *            URL of the location. Right now only local locations are
 	 *            supported.
-	 * @throws ConfigurationException
+	 * @throws java.io.IOException
 	 */
 	void save(URL configURL) throws IOException;
 
@@ -80,7 +80,7 @@ public interface Config {
 	 * @param configURL
 	 *            URL of the location. Right now only local locations are
 	 *            supported.
-	 * @throws ConfigurationException
+	 * @throws java.io.IOException
 	 */
 	void load(URL configURL) throws IOException;
 	

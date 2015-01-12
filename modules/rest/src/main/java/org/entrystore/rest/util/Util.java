@@ -32,7 +32,6 @@ import org.slf4j.LoggerFactory;
  * A Util class for the REST module
  * 
  * @author Hannes Ebner
- * @author Eric Johansson (eric.johansson@educ.umu.se)
  */
 public class Util {
 	
