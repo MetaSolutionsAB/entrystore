@@ -818,7 +818,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		return date;
 	}
 
-	public String getContextAlias(URI contextURI) {
+	public String getName(URI contextURI) {
 		URISplit us = new URISplit(contextURI, this.entry.getRepositoryManager().getRepositoryURL());
 		if (us.getURIType() == URIType.Resource) {
 			return getName(us.getMetaMetadataURI());
@@ -838,11 +838,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				"this is either a programming error or someone have been tampering with the RDF directly.");
 	}
 
-	public Set<String> getContextAliases() {
+	public Set<String> getNames() {
 		return getEntryNames();
 	}
 
-	public boolean setContextAlias(URI contextURI, String newAlias) {
+	public boolean setName(URI contextURI, String newAlias) {
 		URISplit us = new URISplit(contextURI, this.entry.getRepositoryManager().getRepositoryURL());
 		Entry contextEntry = getByEntryURI(us.getMetaMetadataURI());
 		if (contextEntry == null) {
@@ -1376,8 +1376,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 //			repMan.setSystemContext(scon.getId(), scon);			
 			Context sc = (Context) scon.getResource();
-			if (this.getContextAlias(scon.getResourceURI()) == null) {
-				this.setContextAlias(scon.getResourceURI(), id);			
+			if (this.getName(scon.getResourceURI()) == null) {
+				this.setName(scon.getResourceURI(), id);
 			}
 
 			if (sc != this) {

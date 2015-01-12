@@ -84,7 +84,7 @@ public class TestSuite {
 		userHomeContextE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getEntry().getEntryURI());
 
 		Context c = (Context)userHomeContextE.getResource();
-		cm.setContextAlias(userHomeContextE.getEntryURI(), name); 
+		cm.setName(userHomeContextE.getEntryURI(), name);
 		u.setHomeContext(c); 
 		
 		for(Group g : studentGroups) {
@@ -242,7 +242,7 @@ public class TestSuite {
 		Entry folderEntry3 = contextResource.createResource(null, GraphType.List, null, top.getResourceURI());
 		setStudentMetadata(folderEntry3, "Utv\u00e4rderingsportfolio", null, null, null); 
 
-		cm.setContextAlias(contextEntry.getEntryURI(), name);
+		cm.setName(contextEntry.getEntryURI(), name);
 		u.setHomeContext(contextResource); 
 			
 		// TODO: cut from RegisterResource.java, is it correct?   
@@ -390,7 +390,7 @@ public class TestSuite {
 			setMetadata(duckE, "Donald and Daisy Duck's place", "Scrooge has a vault, we have this.", null, null, null);
 			duckE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			Context duck = (Context) duckE.getResource();
-			cm.setContextAlias(duckE.getResource().getURI(), "duck");
+			cm.setName(duckE.getResource().getURI(), "duck");
 			duckE.addAllowedPrincipalsFor(AccessProperty.Administer, donald.getURI());
 			duckE.addAllowedPrincipalsFor(AccessProperty.Administer, daisy.getURI());
 			duckE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
@@ -402,7 +402,7 @@ public class TestSuite {
 			setMetadata(mouseE, "Mickey Mouse's place", "Mickey's creephole with old cheese and other goodies.", null, null, null);
 			mouseE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			Context mouse = (Context) mouseE.getResource();
-			cm.setContextAlias(mouseE.getResource().getURI(), "mouse");
+			cm.setName(mouseE.getResource().getURI(), "mouse");
 			mouseE.addAllowedPrincipalsFor(AccessProperty.Administer, mickey.getURI());
 			mouseE.addAllowedPrincipalsFor(AccessProperty.ReadResource, friendsOfMickey.getURI());
 			mouseE.addAllowedPrincipalsFor(AccessProperty.WriteResource, friendsOfMickey.getURI());

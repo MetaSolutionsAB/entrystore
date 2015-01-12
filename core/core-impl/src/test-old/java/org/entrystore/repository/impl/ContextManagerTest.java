@@ -160,12 +160,12 @@ public class ContextManagerTest {
 	public void manageContextAliases() {
 		assertTrue(cm.getContextURI("newcontext") == null);
 
-		int nrOfAliases = cm.getContextAliases().size();
+		int nrOfAliases = cm.getNames().size();
 
 		//Create a new context, and set it's alias to "newcontext"
 		Entry entry = cm.createResource(null, GraphType.Context, null, null);
-		cm.setContextAlias(entry.getResource().getURI(), "newcontext");
-		assertTrue(cm.getContextAliases().size() == nrOfAliases +1);
+		cm.setName(entry.getResource().getURI(), "newcontext");
+		assertTrue(cm.getNames().size() == nrOfAliases +1);
 
 		//Request the context via it's alias
 		URI cURI = cm.getContextURI("newcontext");
@@ -173,10 +173,10 @@ public class ContextManagerTest {
 		assertTrue(entry.getResource().getURI().equals(cURI));
 
 		//Change the alias and make sure the old alias is removed and that the new works.
-		cm.setContextAlias(entry.getResource().getURI(), "oldcontext");
+		cm.setName(entry.getResource().getURI(), "oldcontext");
 		assertTrue( cm.getContextURI("newcontext") == null);
 		assertTrue( cm.getContextURI("oldcontext") != null);
-		assertTrue(cm.getContextAliases().size() == nrOfAliases +1);
+		assertTrue(cm.getNames().size() == nrOfAliases +1);
 	}
 
 

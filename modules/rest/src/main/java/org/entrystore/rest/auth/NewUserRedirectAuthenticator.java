@@ -72,7 +72,7 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 				// Create context and set ACL and alias
 				Entry homeContext = cm.createResource(null, GraphType.Context, null, null);
 				homeContext.addAllowedPrincipalsFor(AccessProperty.Administer, u.getURI());
-				cm.setContextAlias(homeContext.getEntryURI(), user.getEmail());
+				cm.setName(homeContext.getEntryURI(), user.getEmail());
 				log.info("Created context " + homeContext.getResourceURI());
 
 				// Set home context of user

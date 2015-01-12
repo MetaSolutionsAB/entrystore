@@ -229,7 +229,7 @@ public class SCAMOAICatalog extends AbstractCatalog {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
-			Set<String> aliases = cm.getContextAliases();
+			Set<String> aliases = cm.getNames();
 			for (String contextAlias : aliases) {
 				URI contextURI = cm.getContextURI(contextAlias);
 				contexts.add(contextURI);
@@ -392,7 +392,7 @@ public class SCAMOAICatalog extends AbstractCatalog {
 					}
 					if (contextEntry.getGraphType().equals(GraphType.Context)) {
 						URI resourceURI = contextEntry.getResourceURI();
-						String contextAlias = cm.getContextAlias(resourceURI);
+						String contextAlias = cm.getName(resourceURI);
 						if (contextAlias == null) {
 							contextAlias = "";
 						}

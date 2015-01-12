@@ -54,7 +54,7 @@ public class NameResource extends BaseResource {
 				name = ((User) entry.getResource()).getName();
 			} else if (GraphType.Context.equals(bt)) {
 				Context c = getCM().getContext(entryId);
-				name = getCM().getContextAlias(c.getURI());
+				name = getCM().getName(c.getURI());
 			}
 		}
 
@@ -98,7 +98,7 @@ public class NameResource extends BaseResource {
 			success = ((User) entry.getResource()).setName(name);
 		} else if (GraphType.Context.equals(bt)) {
 			Context c = getCM().getContext(entryId);
-			success = getCM().setContextAlias(c.getURI(), name);
+			success = getCM().setName(c.getURI(), name);
 		}
 
 		if (!success) {

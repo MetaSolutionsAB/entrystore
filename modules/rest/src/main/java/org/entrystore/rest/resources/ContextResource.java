@@ -529,7 +529,7 @@ public class ContextResource extends BaseResource {
 			jsonObj = jsonObj.getJSONObject("resource");
 			Context cont = (Context) entry.getResource();
 			if (jsonObj.has("alias")) {
-				getCM().setContextAlias(cont.getURI(), jsonObj.getString("alias"));
+				getCM().setName(cont.getURI(), jsonObj.getString("alias"));
 			}
 			if (jsonObj.has("quota")) {
 				try {

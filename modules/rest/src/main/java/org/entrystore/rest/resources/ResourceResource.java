@@ -555,7 +555,7 @@ public class ResourceResource extends BaseResource {
 		String alias;
 
 		if (GraphType.Context.equals(bt)) {
-			alias = getCM().getContextAlias(entry.getResourceURI());
+			alias = getCM().getName(entry.getResourceURI());
 			solrQueryValue = "context:";
 		} else {
 			alias = EntryUtil.getTitle(entry, "en");

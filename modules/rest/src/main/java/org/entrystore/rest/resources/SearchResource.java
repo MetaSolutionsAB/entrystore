@@ -551,7 +551,7 @@ public class SearchResource extends BaseResource {
 							GraphType btChild = e.getGraphType();
 							EntryType locChild = e.getEntryType();
 							if (btChild == GraphType.Context || btChild == GraphType.SystemContext) {
-								childJSON.put("alias", getCM().getContextAlias(e.getResourceURI()));
+								childJSON.put("alias", getCM().getName(e.getResourceURI()));
 							} else if (btChild == GraphType.User && locChild == EntryType.Local) {
 								childJSON.put("name", ((User) e.getResource()).getName());
 							} else if (btChild == GraphType.Group && locChild == EntryType.Local) {

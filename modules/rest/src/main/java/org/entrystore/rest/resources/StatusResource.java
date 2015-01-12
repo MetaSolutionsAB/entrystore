@@ -81,7 +81,7 @@ public class StatusResource extends BaseResource  {
 					if (parameters.containsKey("includeStats")) {
 						try {
 							pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-							result.put("portfolioCount", getRM().getContextManager().getContextAliases().size());
+							result.put("portfolioCount", getRM().getContextManager().getNames().size());
 							result.put("groupCount", pm.getGroupUris().size());
 							result.put("userCount", pm.getUsersAsUris().size());
 							if (pm.getAdminUser().getURI().equals(currentUser) || pm.getAdminGroup().isMember(pm.getUser(currentUser))) {

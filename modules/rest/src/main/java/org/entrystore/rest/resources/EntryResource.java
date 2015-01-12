@@ -291,7 +291,7 @@ public class EntryResource extends BaseResource {
 			jdilObj.put("entryId", entry.getId());
 			GraphType bt = entry.getGraphType();
 			if ((bt == GraphType.Context || bt == GraphType.SystemContext) && EntryType.Local.equals(entry.getEntryType())) {
-				jdilObj.put("alias", getCM().getContextAlias(entry.getResourceURI()));
+				jdilObj.put("alias", getCM().getName(entry.getResourceURI()));
 				if (entry.getRepositoryManager().hasQuotas()) {
 					JSONObject quotaObj = new JSONObject();
 					Context c = getCM().getContext(this.entryId);
@@ -497,7 +497,7 @@ public class EntryResource extends BaseResource {
 							GraphType btChild = childEntry.getGraphType();
 							EntryType locChild = childEntry.getEntryType();
 							if ((btChild == GraphType.Context || btChild == GraphType.SystemContext) && EntryType.Local.equals(locChild)) {
-								childJSON.put("alias", getCM().getContextAlias(childEntry.getResourceURI()));
+								childJSON.put("alias", getCM().getName(childEntry.getResourceURI()));
 							} else if (btChild == GraphType.List) {
 								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
 									Resource childRes = childEntry.getResource();

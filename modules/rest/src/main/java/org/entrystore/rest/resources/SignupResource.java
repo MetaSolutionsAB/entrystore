@@ -115,7 +115,7 @@ public class SignupResource extends BaseResource {
 			// Create context and set ACL and alias
 			Entry homeContext = getCM().createResource(null, GraphType.Context, null, null);
 			homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
-			getCM().setContextAlias(homeContext.getEntryURI(), ci.email);
+			getCM().setName(homeContext.getEntryURI(), ci.email);
 			log.info("Created context " + homeContext.getResourceURI());
 
 			// Set home context of user

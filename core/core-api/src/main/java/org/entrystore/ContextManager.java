@@ -44,10 +44,10 @@ public interface ContextManager extends Context{
 	//***********************************************************************//
 	// Alias management and access to contexts via alias.                    //
 	//***********************************************************************//
-	String getContextAlias(URI contexturi);
+	String getName(URI contexturi);
 	URI getContextURI(String contextAlias);
-	boolean setContextAlias(URI contexturi, String newAlias);
-	Set<String> getContextAliases();
+	boolean setName(URI contexturi, String newAlias);
+	Set<String> getNames();
 
 	//***********************************************************************//
 	// Access to contexts via id, see also get(entryId) and getBtMMdUri(uri) //
@@ -68,12 +68,9 @@ public interface ContextManager extends Context{
 	/**
 	 * Finds the unique owner entry for a repository URI (i.e. has the same base as the
 	 * repositorys base URL). If the URI is a
-	 * <nl><li>a MetaMetadata URI - the corresponding entry is returned.</li>
-	 * <li>a Metadata URI - the corresponding entry is returned, to access 
-	 * potential references to this metadata use the {@link #getItems(URI)}.</li>
-	 * <li>a Resource URI - the corresponding owner entry is returned,
-	 * to access potential references or links to this resource use 
-	 * {@link #getItems(URI)}.</li></nl>
+	 * <nl><li>a MetaMetadata URI - the corresponding entry is returned</li>
+	 * <li>a Metadata URI - the corresponding entry is returned</li>
+	 * <li>a Resource URI - the corresponding owner entry is returned</li></nl>
 	 * 
 	 * @param repositoryURI is a repository URI, it can point to the metametadata, 
 	 * the metadata, or to the resource itself.
@@ -83,7 +80,6 @@ public interface ContextManager extends Context{
 	 * will be {@link EntryType#Local} (guaranteed to be unique).
 	 * @throws RepositoryException if something goes wrong, e.g. connection problems 
 	 * with the underlying storage or plainly that no item was found for the given URI.
-	 * @see #getItems(URI)
 	 */
 	Entry getEntry(URI repositoryURI);
 	

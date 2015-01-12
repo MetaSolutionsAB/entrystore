@@ -106,7 +106,7 @@ public class DataCorrection {
 	
 	private Set<URI> getContexts() {
 		Set<URI> contexts = new HashSet<URI>();
-		Set<String> aliases = cm.getContextAliases();
+		Set<String> aliases = cm.getNames();
 		for (String contextAlias : aliases) {
 			URI contextURI = cm.getContextURI(contextAlias);
 			contexts.add(contextURI);
