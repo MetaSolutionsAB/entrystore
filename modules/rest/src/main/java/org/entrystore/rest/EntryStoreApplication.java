@@ -282,12 +282,11 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/merge", MergeResource.class);
 		router.attach("/{context-id}/statistics/{stat-type}", StatisticsResource.class);
 		router.attach("/{context-id}/entry/{entry-id}", EntryResource.class);
+		router.attach("/{context-id}/entry/{entry-id}/alias", AliasResource.class);
 		router.attach("/{context-id}/resource/{entry-id}", ResourceResource.class);
 		router.attach("/{context-id}/metadata/{entry-id}", LocalMetadataResource.class);
 		router.attach("/{context-id}/cached-external-metadata/{entry-id}", ExternalMetadataResource.class);
 		router.attach("/{context-id}/harvester", HarvesterResource.class);
-		router.attach("/{context-id}/alias", AliasResource.class);
-		router.attach("/{context-id}/alias/{entry-id}", AliasResource.class);
 		router.attach("/{context-id}/relation/{entry-id}", RelationResource.class);
 		router.attach("/{context-id}/quota", QuotaResource.class);
 		router.attach("/{context-id}/lookup", LookupResource.class);
