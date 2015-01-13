@@ -1039,22 +1039,20 @@ public class ResourceResource extends BaseResource {
 			if (graphResource != null) {
 				Graph graph = null;
 				try {
-					graph = RDFJSON.rdfJsonToGraph(getRequest().getEntity().getText());
+					graph = AbstractMetadataResource.deserializeGraph(getRequest().getEntity().getText(), mediaType);
 				} catch (IOException ioe) {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					getResponse().setEntity(new JsonRepresentation("{\"error\":\"Unable to read request entity\"}"));
-					log.error("Unable to read request entity");
 				}
 				if (graph != null) {
 					graphResource.setGraph(graph);
 				} else {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-					getResponse().setEntity(new JsonRepresentation("{\"error\":\"Unable to convert RDF/JSON to Graph\"}"));
 				}
 			} else {
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"No RDF resource found for this entry\"}"));
-				log.error("No RDF resource found for this entry with ResourceType Graph");
+				log.error("No RDF resource found for entry with ResourceType Graph");
 			}
 		}
 
