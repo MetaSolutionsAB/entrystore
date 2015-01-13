@@ -17,53 +17,22 @@
 
 package org.entrystore.impl;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.lang.reflect.Constructor;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.TimeZone;
-
 import org.apache.commons.io.FileUtils;
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
-import org.entrystore.repository.RepositoryManager;
-import org.entrystore.ResourceType;
-import org.entrystore.Resource;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.Resource;
+import org.entrystore.ResourceType;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.util.NS;
-import org.entrystore.AuthorizationException;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.util.FileOperations;
+import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.repository.util.URISplit.URIType;
 import org.openrdf.model.Literal;
@@ -91,6 +60,23 @@ import org.openrdf.rio.trig.TriGParser;
 import org.openrdf.rio.trig.TriGWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.lang.reflect.Constructor;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
 
 
 /**
@@ -821,7 +807,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	public String getName(URI contextURI) {
 		URISplit us = new URISplit(contextURI, this.entry.getRepositoryManager().getRepositoryURL());
 		if (us.getURIType() == URIType.Resource) {
-			return getName(us.getMetaMetadataURI());
+			return super.getName(us.getMetaMetadataURI());
 		}
 		throw new org.entrystore.repository.RepositoryException("Given URI is not an existing contextURI.");
 	}
