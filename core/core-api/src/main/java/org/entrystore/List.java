@@ -16,6 +16,8 @@
 
 package org.entrystore;
 
+import org.openrdf.model.Graph;
+
 import java.io.IOException;
 import java.net.URI;
 
@@ -59,7 +61,7 @@ public interface List extends Resource {
 	 * 
 	 * @param entry to move can be an entire folder tree.
 	 * @param fromList a list where from the entry will be removed.
-	 * @param removeFromAllLists if true the entry(or entries in case of a folder tree) 
+	 * @param removeAll if true the entry(or entries in case of a folder tree)
 	 * will be removed from all lists in the originating context, not only fromList.
 	 * @throws IOException 
 	 * @throws QuotaException 
@@ -118,5 +120,19 @@ public interface List extends Resource {
 	 *            only the ACL of the first level of children is changed.
 	 */
 	void applyACLtoChildren(boolean recursive);
+
+	/**
+	 * Returns the raw RDF-graph of the list.
+	 *
+	 * @return An RDF-graph.
+	 */
+	Graph getGraph();
+
+	/**
+	 * Sets list members using a raw RDF-graph.
+	 *
+	 * @param graph RDF-graph containing statements with list members.
+	 */
+	void setGraph(Graph graph);
 	
 }

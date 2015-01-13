@@ -48,6 +48,7 @@ import org.openrdf.model.Statement;
 import org.openrdf.model.Value;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.vocabulary.RDF;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
@@ -55,7 +56,9 @@ import org.openrdf.repository.RepositoryResult;
 
 
 public class ListImpl extends RDFResource implements List {
+
 	Vector<URI> children;
+
 	Log log = LogFactory.getLog(ListImpl.class);
 	
 	public ListImpl(EntryImpl entry, String uri) {
@@ -66,55 +69,72 @@ public class ListImpl extends RDFResource implements List {
 		super(entry, uri);
 	}
 
-	public void loadChildren() {
+	public synchronized Graph getGraph() {
+		RepositoryConnection rc = null;
+		Graph result = null;
 		try {
-			synchronized (this.entry.repository) {
-				if (children != null) {
-					return;
-				}
-				children = new Vector<URI>();
-				
-				RepositoryConnection rc = entry.repository.getConnection();
-				try {
-					RepositoryResult<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI);
-					while (statements.hasNext()) {
-						Statement statement = statements.next();
-						org.openrdf.model.URI predicate = statement.getPredicate();
-						if (!predicate.toString().startsWith(RDF.NAMESPACE.toString() + "_")) {
-							continue;
-						}
-						
-						try {
-//							children.add(URI.create(statement.getObject().stringValue())); 
-							String value = predicate.toString().substring(RDF.NAMESPACE.length());
-							int index = Integer.parseInt(value.substring(value.lastIndexOf("_")+1));
-//							children.ensureCapacity(index);
-							
-							if (index > children.size()) {
-								children.setSize(index); 
-							}
-							
-							children.set(index-1, URI.create(statement.getObject().stringValue()));
-						} catch (IndexOutOfBoundsException iobe) {
-							log.error("loadChildren() " + iobe.getClass().getSimpleName() + ": " + iobe.getMessage());
-						} catch (NumberFormatException nfe) {
-							log.error("loadChildren() " + nfe.getClass().getSimpleName() + ": " + nfe.getMessage());
-							log.error("Causing statement: " + statement);
-						}
-					}
-					children.trimToSize();
-				} catch (Exception e) {
-					log.error(e.getMessage());
-				} finally {
-					rc.close();
-				}
-			}
+			rc = entry.repository.getConnection();
+			RepositoryResult<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI);
+			result = new LinkedHashModel(statements.asList());
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
-		}		
+		} finally {
+			try {
+				if (rc != null) {
+					rc.close();
+				}
+			} catch (RepositoryException e) {
+				log.error(e.getMessage());
+			}
+		}
+		return result;
 	}
 
-	private void saveChildren() {
+	public synchronized void setGraph(Graph graph) {
+		if (graph == null) {
+			throw new IllegalArgumentException("Graph must not be null");
+		}
+		children = loadChildren(graph);
+		saveChildren();
+	}
+
+	private Vector loadChildren(Graph graph) {
+		if (graph == null) {
+			throw new IllegalArgumentException("Graph must not be null");
+		}
+
+		Vector<URI> result = new Vector<URI>();
+		for (Statement statement : graph) {
+			org.openrdf.model.URI predicate = statement.getPredicate();
+			if (!predicate.toString().startsWith(RDF.NAMESPACE.toString() + "_")) {
+				continue;
+			}
+
+			try {
+				String value = predicate.toString().substring(RDF.NAMESPACE.length());
+				int index = Integer.parseInt(value.substring(value.lastIndexOf("_")+1));
+				if (index > children.size()) {
+					children.setSize(index);
+				}
+				children.set(index-1, URI.create(statement.getObject().stringValue()));
+			} catch (IndexOutOfBoundsException iobe) {
+				log.error(iobe.getMessage());
+			} catch (NumberFormatException nfe) {
+				log.error(nfe.getMessage());
+				log.error(statement);
+			}
+		}
+		children.trimToSize();
+		return result;
+	}
+
+	private synchronized void loadChildren() {
+		if (children == null) {
+			children = loadChildren(getGraph());
+		}
+	}
+
+	private synchronized void saveChildren() {
 		if (children == null) {
 			return;
 		}
@@ -142,8 +162,8 @@ public class ListImpl extends RDFResource implements List {
 		rc.clear(this.resourceURI);
 		if (children.size() > 0) {
 			rc.add(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
-			for (int i = 0; i < children.size();i++) {						
-				org.openrdf.model.URI li = vf.createURI(RDF.NAMESPACE+"_"+Integer.toString(i+1));
+			for (int i = 0; i < children.size(); i++) {
+				org.openrdf.model.URI li = vf.createURI(RDF.NAMESPACE+"_" + Integer.toString(i + 1));
 				org.openrdf.model.URI child = vf.createURI(children.get(i).toString());
 				rc.add(this.resourceURI, li, child, this.resourceURI);
 			}
@@ -217,8 +237,6 @@ public class ListImpl extends RDFResource implements List {
 			log.error(e.getMessage(), e);
 		}	
 	}
-	
-	
 	
 	public Entry moveEntryHere(URI entry, URI fromList, boolean removeFromAllLists) throws QuotaException, IOException {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
