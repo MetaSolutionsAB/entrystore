@@ -17,31 +17,21 @@
 
 package org.entrystore.impl;
 
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Set;
-import java.util.Vector;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
 import org.entrystore.List;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.QuotaException;
+import org.entrystore.Resource;
+import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
-import org.entrystore.ResourceType;
-import org.entrystore.Resource;
-import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.AuthorizationException;
 import org.entrystore.repository.security.DisallowedException;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
@@ -53,6 +43,16 @@ import org.openrdf.model.vocabulary.RDF;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
+
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.Vector;
 
 
 public class ListImpl extends RDFResource implements List {
@@ -113,18 +113,17 @@ public class ListImpl extends RDFResource implements List {
 			try {
 				String value = predicate.toString().substring(RDF.NAMESPACE.length());
 				int index = Integer.parseInt(value.substring(value.lastIndexOf("_")+1));
-				if (index > children.size()) {
-					children.setSize(index);
+				if (index > result.size()) {
+					result.setSize(index);
 				}
-				children.set(index-1, URI.create(statement.getObject().stringValue()));
+				result.set(index - 1, URI.create(statement.getObject().stringValue()));
 			} catch (IndexOutOfBoundsException iobe) {
 				log.error(iobe.getMessage());
 			} catch (NumberFormatException nfe) {
-				log.error(nfe.getMessage());
-				log.error(statement);
+				log.error(nfe.getMessage() + "; affected statement: " + statement);
 			}
 		}
-		children.trimToSize();
+		result.trimToSize();
 		return result;
 	}
 
