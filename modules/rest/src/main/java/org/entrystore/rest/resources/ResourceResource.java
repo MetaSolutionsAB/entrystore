@@ -177,17 +177,26 @@ public class ResourceResource extends BaseResource {
 				}
 			}
 
-			// ResourceType.Graph
-			if (GraphType.Graph.equals(entry.getGraphType())) {
+			// Graph and List
+			if (GraphType.Graph.equals(entry.getGraphType()) || GraphType.List.equals(entry.getGraphType())) {
+				boolean list = GraphType.List.equals(entry.getGraphType());
 				MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
 				if (preferredMediaType == null) {
 					preferredMediaType = MediaType.APPLICATION_RDF_XML;
 				}
-				RDFResource graphResource = (RDFResource) entry.getResource();
-				Graph graph = graphResource.getGraph();
+				Graph graph = null;
+				if (list) {
+					graph = ((org.entrystore.List) entry.getResource()).getGraph();
+				} else {
+					graph = ((RDFResource) entry.getResource()).getGraph();
+				}
+
 				if (graph != null) {
 					String serializedGraph = null;
 					if (preferredMediaType.equals(MediaType.APPLICATION_JSON)) {
+						if (list) {
+							return getListRepresentation();
+						}
 						serializedGraph = RDFJSON.graphToRdfJson(graph);
 					} else if (preferredMediaType.equals(MediaType.APPLICATION_RDF_XML)) {
 						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
@@ -239,7 +248,6 @@ public class ResourceResource extends BaseResource {
 			}
 			return result;
 		} catch(AuthorizationException e) {
-			log.error("unauthorizedGET");
 			return unauthorizedGET();
 		}
 	}
@@ -247,7 +255,6 @@ public class ResourceResource extends BaseResource {
 	@Put
 	public void storeRepresentation(Representation r) {
 		if (entry == null) {
-			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			return;
 		}
@@ -262,7 +269,6 @@ public class ResourceResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		if (entry == null) {
-			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			return;
 		}
@@ -650,6 +656,67 @@ public class ResourceResource extends BaseResource {
 		}
 	}
 
+	private Representation getListRepresentation() {
+		JSONArray array = new JSONArray();
+		org.entrystore.List l = (org.entrystore.List) entry.getResource();
+		List<URI> uris = l.getChildren();
+		Set<String> IDs = new HashSet<String>();
+		for (URI u : uris) {
+			String id = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/') + 1);
+			IDs.add(id);
+		}
+
+		if (parameters.containsKey("sort") && (IDs.size() < 501)) {
+			List<Entry> childrenEntries = new ArrayList<Entry>();
+			for (String id : IDs) {
+				Entry childEntry = this.context.get(id);
+				if (childEntry != null) {
+					childrenEntries.add(childEntry);
+				} else {
+					log.warn("Child entry " + id + " in context " + context.getURI() + " does not exist, but is referenced by a list.");
+				}
+			}
+
+			Date before = new Date();
+			boolean asc = true;
+			if ("desc".equalsIgnoreCase(parameters.get("order"))) {
+				asc = false;
+			}
+			GraphType prioritizedResourceType = null;
+			if (parameters.containsKey("prio")) {
+				prioritizedResourceType = GraphType.valueOf(parameters.get("prio"));
+			}
+			String sortType = parameters.get("sort");
+			if ("title".equalsIgnoreCase(sortType)) {
+				String lang = parameters.get("lang");
+				EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedResourceType);
+			} else if ("modified".equalsIgnoreCase(sortType)) {
+				EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedResourceType);
+			} else if ("created".equalsIgnoreCase(sortType)) {
+				EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedResourceType);
+			} else if ("size".equalsIgnoreCase(sortType)) {
+				EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedResourceType);
+			}
+			long sortDuration = new Date().getTime() - before.getTime();
+			log.debug("List entry sorting took " + sortDuration + " ms");
+
+			for (Entry childEntry : childrenEntries) {
+				URI childURI = childEntry.getEntryURI();
+				String id = (childURI.toASCIIString()).substring((childURI.toASCIIString()).lastIndexOf('/') + 1);
+				array.put(id);
+			}
+		} else {
+			if (IDs.size() > 500) {
+				log.warn("No sorting performed because of list size bigger than 500 children");
+			}
+			for (String id : IDs) {
+				array.put(id);
+			}
+		}
+
+		return new JsonRepresentation(array.toString());
+	}
+
 	/**
 	 * Gets the resource's JSON representation
 	 * 
@@ -666,71 +733,8 @@ public class ResourceResource extends BaseResource {
 			}
 		} else if (EntryType.Local.equals(entry.getEntryType())) {
 
-			JSONArray array = new JSONArray(); 
-
-			/*** List ***/
-			if (entry.getGraphType() == GraphType.List) {
-				org.entrystore.List l = (org.entrystore.List) entry.getResource();
-				List<URI> uris = l.getChildren();
-				Set<String> IDs = new HashSet<String>();
-				for (URI u: uris) {
-					String id = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/')+1);
-					IDs.add(id);
-				}
-				
-				if (parameters.containsKey("sort") && (IDs.size() < 501)) {
-					List<Entry> childrenEntries = new ArrayList<Entry>();
-					for (String id : IDs) {
-						Entry childEntry = this.context.get(id);
-						if (childEntry != null) {
-							childrenEntries.add(childEntry);
-						} else {
-							log.warn("Child entry " + id + " in context " + context.getURI() + " does not exist, but is referenced by a list.");
-						}
-					}
-					
-					Date before = new Date();
-					boolean asc = true;
-					if ("desc".equalsIgnoreCase(parameters.get("order"))) {
-						asc = false;
-					}
-					GraphType prioritizedResourceType = null;
-					if (parameters.containsKey("prio")) {
-						prioritizedResourceType = GraphType.valueOf(parameters.get("prio"));
-					}
-					String sortType = parameters.get("sort");
-					if ("title".equalsIgnoreCase(sortType)) {
-						String lang = parameters.get("lang");
-						EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedResourceType);
-					} else if ("modified".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedResourceType);
-					} else if ("created".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedResourceType);
-					} else if ("size".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedResourceType);
-					}
-					long sortDuration = new Date().getTime() - before.getTime();
-					log.debug("List entry sorting took " + sortDuration + " ms");
-					
-					for (Entry childEntry : childrenEntries) {
-						URI childURI = childEntry.getEntryURI();
-						String id = (childURI.toASCIIString()).substring((childURI.toASCIIString()).lastIndexOf('/')+1);
-						array.put(id);
-					}
-				} else {
-					if (IDs.size() > 500) {
-						log.warn("No sorting performed because of list size bigger than 500 children");
-					}
-					for (String id : IDs) {
-						array.put(id);
-					}
-				}
-				
-				return new JsonRepresentation(array.toString());
-			}
-
 			/*** String ***/
-			if(entry.getGraphType() == GraphType.String) {
+			if (entry.getGraphType() == GraphType.String) {
 				StringResource stringResource = (StringResource)entry.getResource(); 
 				return new StringRepresentation(stringResource.getString());
 			}
@@ -748,6 +752,7 @@ public class ResourceResource extends BaseResource {
 
 			/*** Context ***/
 			if(entry.getGraphType() == GraphType.Context || entry.getGraphType() == GraphType.SystemContext) {
+				JSONArray array = new JSONArray();
 				Context c = (Context) entry.getResource();
 				Set<URI> uris = c.getEntries(); 
 				for(URI u: uris) {
@@ -854,15 +859,13 @@ public class ResourceResource extends BaseResource {
 			}
 
 
-			log.error("Can not find the resource.");
+			log.error("Cannot find the resource");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource + " ResourceType: " + entry.getGraphType());
 		}
 
-		log.info("No resource available.");
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		return new JsonRepresentation("{\"error\":\"No resource available for "+entry.getEntryType()+" entries \"}");
-
 	}
 
 
