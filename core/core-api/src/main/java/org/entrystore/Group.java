@@ -20,11 +20,18 @@ import java.net.URI;
 
 public interface Group extends Resource {
 	boolean setChildren(java.util.List<URI> children);
-	public String 							getName();
-	public boolean 							setName(String name);
-	public void 							addMember(User user);
-	public boolean 							removeMember(User user);
-	public boolean 							isMember(User user);
-	public java.util.List < User > 			members();
-	public java.util.List < java.net.URI > 	memberUris();
+
+	public String getName();
+
+	public boolean setName(String name);
+
+	public void addMember(User user);
+
+	public boolean removeMember(User user);
+
+	public boolean isMember(User user);
+
+	public java.util.List<User> members();
+
+	public java.util.List<java.net.URI> memberUris();
 }

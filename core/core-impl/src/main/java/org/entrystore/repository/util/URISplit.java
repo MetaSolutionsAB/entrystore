@@ -23,7 +23,7 @@ import java.util.StringTokenizer;
 
 import org.entrystore.impl.RepositoryProperties;
 
-public class URISplit{
+public class URISplit {
 
 	public enum URIType {
 		Resource,
@@ -46,7 +46,7 @@ public class URISplit{
 	public URISplit(java.net.URI anyURI, URL baseURL) {
 		this(anyURI.toString(), baseURL);
 	}
-	
+
 	public URISplit(String anyURIStr, URL baseURL) {
 		base = baseURL.toString();
 		if (anyURIStr.startsWith(base)) {
@@ -73,15 +73,15 @@ public class URISplit{
 			ut = URIType.Unknown;
 		}
 	}
-	
+
 	public URI getMetaMetadataURI() {
-		return fabricateURI(base, contextId, RepositoryProperties.ENTRY_PATH,id);
+		return fabricateURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
 	}
 
 	public URI getMetadataURI() {
 		return fabricateURI(base, contextId, RepositoryProperties.MD_PATH, id);
 	}
-	
+
 	public URI getResourceURI() {
 		if (isContext) {
 			return fabricateContextURI(base, id);
@@ -89,17 +89,17 @@ public class URISplit{
 			return fabricateURI(base, contextId, RepositoryProperties.DATA_PATH, id);
 		}
 	}
-	
+
 	public String getContextID() {
 		return contextId;
 	}
 
 	public URI getContextMetaMetadataURI() {
-		return fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);		
+		return fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);
 	}
 
 	public URI getContextMetadataURI() {
-		return fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId);		
+		return fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId);
 	}
 
 	public URI getContextURI() {
@@ -109,16 +109,16 @@ public class URISplit{
 	public URIType getURIType() {
 		return ut;
 	}
-	
+
 	public String getID() {
 		return id;
 	}
-		
+
 	public static URI fabricateURI(String base, String contextId, String path, String entryId) {
-		return URI.create(base + contextId + "/" + path + "/" + entryId);		
+		return URI.create(base + contextId + "/" + path + "/" + entryId);
 	}
 
 	public static URI fabricateContextURI(String base, String contextId) {
-		return URI.create(base + contextId);		
+		return URI.create(base + contextId);
 	}
 }
