@@ -104,13 +104,13 @@ public class ListImpl extends RDFResource implements List {
 					}
 					children.trimToSize();
 				} catch (Exception e) {
-					e.printStackTrace();
+					log.error(e.getMessage());
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		}		
 	}
 
@@ -127,12 +127,12 @@ public class ListImpl extends RDFResource implements List {
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 			} catch (Exception e) {
 				rc.rollback();
-				e.printStackTrace();
+				log.error(e.getMessage());
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		}
 	}
 
@@ -208,7 +208,7 @@ public class ListImpl extends RDFResource implements List {
 				} catch (Exception e) {
 					((EntryImpl) this.entry.getContext().getByEntryURI(nEntry)).refreshFromRepository(rc);
 					rc.rollback();
-					e.printStackTrace();
+					log.error(e.getMessage());
 				} finally {
 					rc.close();
 				}
@@ -514,7 +514,7 @@ public class ListImpl extends RDFResource implements List {
 					rc.commit();
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 				} catch (Exception e) {
-					e.printStackTrace();
+					log.error(e.getMessage());
 					rc.rollback();
 					for (URI uri : toAdd) {
 						EntryImpl childEntry = ((EntryImpl) this.entry.getContext().getByEntryURI(uri));
@@ -615,7 +615,7 @@ public class ListImpl extends RDFResource implements List {
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					} catch (Exception e) {
-						e.printStackTrace();
+						log.error(e.getMessage());
 						rc.rollback();
 						childEntry.refreshFromRepository(rc);
 						return false;
@@ -623,7 +623,7 @@ public class ListImpl extends RDFResource implements List {
 						rc.close();
 					}
 				} catch (RepositoryException e) {
-					e.printStackTrace();
+					log.error(e.getMessage());
 				}
 				return true;
 			}
