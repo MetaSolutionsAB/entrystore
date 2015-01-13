@@ -24,7 +24,7 @@ public class MetadataUtil {
 	/**
 	 * Filters all invalid XML characters out of the string.
 	 * 
-	 * @param Input
+	 * @param s
 	 *            string to be filtered.
 	 * @return A valid XML string.
 	 */

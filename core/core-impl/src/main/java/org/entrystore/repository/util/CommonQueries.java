@@ -24,7 +24,7 @@ import org.openrdf.repository.RepositoryException;
 
 public class CommonQueries {
 	/**
-	 * Creates a SPARQL quary to the IOA-PHM target to the method listIdentifiers()
+	 * Creates a SPARQL query to the OAI-PHM target to the method listIdentifiers()
 	 *
 	 * Formats on the dates must be YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ
 	 * <pre>
