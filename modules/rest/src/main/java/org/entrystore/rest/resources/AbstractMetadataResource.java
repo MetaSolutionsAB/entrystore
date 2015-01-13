@@ -18,10 +18,10 @@ package org.entrystore.rest.resources;
 
 import com.github.jsonldjava.sesame.SesameJSONLDParser;
 import com.github.jsonldjava.sesame.SesameJSONLDWriter;
+import org.entrystore.AuthorizationException;
 import org.entrystore.EntryType;
 import org.entrystore.Metadata;
 import org.entrystore.impl.converters.ConverterUtil;
-import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;
@@ -258,29 +258,12 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		
 		if (metadata != null && graphString != null) {
 			Graph deserializedGraph = null;
-			if (mediaType.equals(MediaType.APPLICATION_JSON)) {
-				deserializedGraph = RDFJSON.rdfJsonToGraph(graphString);
-			} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
-				deserializedGraph = ConverterUtil.deserializeGraph(graphString, new RDFXMLParser());
-			} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
-				deserializedGraph = ConverterUtil.deserializeGraph(graphString, new N3ParserFactory().getParser());
-			} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-				deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TurtleParser());
-			} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-				deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriXParser());
-			} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-				deserializedGraph = ConverterUtil.deserializeGraph(graphString, new NTriplesParser());
-			} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-				deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriGParser());
-			} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-				deserializedGraph = ConverterUtil.deserializeGraph(graphString, new SesameJSONLDParser());
-			} else if (mediaType.getName().equals("application/lom+xml")) {
+			if (mediaType.getName().equals("application/lom+xml")) {
 				deserializedGraph = ConverterUtil.convertLOMtoGraph(graphString, entry.getResourceURI());
 			} else {
-				getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-				return;
+				deserializedGraph = deserializeGraph(graphString, mediaType);
 			}
-			
+
 			if (deserializedGraph != null) {
 				getResponse().setStatus(Status.SUCCESS_OK);
 				metadata.setGraph(deserializedGraph);
@@ -295,5 +278,27 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @return the relevant metadata graph. May be null.
 	 */
 	protected abstract Metadata getMetadata();
+
+	protected static Graph deserializeGraph(String graphString, MediaType mediaType) {
+		Graph deserializedGraph = null;
+		if (mediaType.equals(MediaType.APPLICATION_JSON)) {
+			deserializedGraph = RDFJSON.rdfJsonToGraph(graphString);
+		} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new RDFXMLParser());
+		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new N3ParserFactory().getParser());
+		} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TurtleParser());
+		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriXParser());
+		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new NTriplesParser());
+		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriGParser());
+		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
+			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new SesameJSONLDParser());
+		}
+		return deserializedGraph;
+	}
 
 }
