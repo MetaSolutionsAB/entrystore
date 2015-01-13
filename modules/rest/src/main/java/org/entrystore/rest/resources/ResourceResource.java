@@ -259,8 +259,13 @@ public class ResourceResource extends BaseResource {
 			return;
 		}
 
+		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+		if (preferredMediaType == null) {
+			preferredMediaType = MediaType.APPLICATION_RDF_XML;
+		}
+
 		try {
-			modifyResource();
+			modifyResource(preferredMediaType);
 		} catch(AuthorizationException e) {
 			unauthorizedPUT();
 		}
@@ -872,50 +877,62 @@ public class ResourceResource extends BaseResource {
 	/**
 	 * Set a resource to an entry.
 	 */
-	private void modifyResource() throws AuthorizationException {
+	private void modifyResource(MediaType mediaType) throws AuthorizationException {
 		/*
 		 * List and Group
 		 */
-		if (entry.getGraphType() == GraphType.List || entry.getGraphType() == GraphType.Group) {
+		if (GraphType.List.equals(entry.getGraphType()) || GraphType.Group.equals(entry.getGraphType())) {
+			String requestBody = null;
 			try {
-				JSONArray childrenJSONArray = new JSONArray(getRequest().getEntity().getText());
-				ArrayList<URI> newResource = new ArrayList<URI>(); 
-
-				// Add new entries to the list. 
-				for(int i = 0; i < childrenJSONArray.length(); i++) {
-					String childId = childrenJSONArray.get(i).toString();
-					Entry childEntry = context.get(childId);
-					if(childEntry == null) {
-						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
-						log.error("Cannot update list, since one of the children does not exist.");
-						return;
-					} else {
-						newResource.add(childEntry.getEntryURI());
-					}
-				}
-				
-				if (entry.getGraphType() == GraphType.List) {
-					org.entrystore.List resourceList = (org.entrystore.List) entry.getResource();
-					resourceList.setChildren(newResource);
-				} else {
-					Group resourceGroup = (Group) entry.getResource();
-					resourceGroup.setChildren(newResource); 
-				}
-				getResponse().setStatus(Status.SUCCESS_OK);
-			} catch (JSONException e) {
-				log.error("Wrong JSON syntax: " + e.getMessage()); 
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
+				requestBody = getRequest().getEntity().getText();
 			} catch (IOException e) {
-				log.error("IOException: " + e.getMessage()); 
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
-				getResponse().setEntity(new JsonRepresentation("{\"error\":\"IOException\"}"));
-			} catch (RepositoryException re) {
-				log.warn(re.getMessage());
-				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorChildExistsInList));
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return;
 			}
-			return; // success!
+			if (MediaType.APPLICATION_JSON.equals(mediaType)) {
+				try {
+					JSONArray childrenJSONArray = new JSONArray(requestBody);
+					ArrayList<URI> newResource = new ArrayList<URI>();
+
+					// Add new entries to the list.
+					for (int i = 0; i < childrenJSONArray.length(); i++) {
+						String childId = childrenJSONArray.get(i).toString();
+						Entry childEntry = context.get(childId);
+						if (childEntry == null) {
+							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+							log.error("Cannot update list, since one of the children does not exist.");
+							return;
+						} else {
+							newResource.add(childEntry.getEntryURI());
+						}
+					}
+
+					if (entry.getGraphType() == GraphType.List) {
+						org.entrystore.List resourceList = (org.entrystore.List) entry.getResource();
+						resourceList.setChildren(newResource);
+					} else {
+						Group resourceGroup = (Group) entry.getResource();
+						resourceGroup.setChildren(newResource);
+					}
+					getResponse().setStatus(Status.SUCCESS_OK);
+				} catch (JSONException e) {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
+				} catch (RepositoryException re) {
+					log.warn(re.getMessage());
+					getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
+					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorChildExistsInList));
+				}
+				return; // success!
+			} else {
+				Graph graph = AbstractMetadataResource.deserializeGraph(requestBody, mediaType);
+				if (graph != null && GraphType.List.equals(entry.getGraphType())) {
+					((org.entrystore.List) entry.getResource()).setGraph(graph);
+				} else {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				}
+				// TODO add support for groups here
+			}
 		}
 
 		/*
@@ -1033,7 +1050,6 @@ public class ResourceResource extends BaseResource {
 				} else {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					getResponse().setEntity(new JsonRepresentation("{\"error\":\"Unable to convert RDF/JSON to Graph\"}"));
-					log.error("Unable to convert RDF/JSON to Sesame Graph");
 				}
 			} else {
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
