@@ -19,9 +19,9 @@ package org.entrystore.rest.resources;
 import java.io.IOException;
 
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.impl.converters.Graph2Entries;
 import org.entrystore.AuthorizationException;
+import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.RDFJSON;
 import org.openrdf.model.Graph;
 import org.openrdf.rio.RDFFormat;
@@ -71,31 +71,15 @@ public class MergeResource extends BaseResource {
 			
 			if (graphString != null) {
 				MediaType mediaType = (format != null) ? format : getRequestEntity().getMediaType();
-
-				Graph deserializedGraph = null;
-				if (mediaType.equals(MediaType.APPLICATION_JSON)) {
-					deserializedGraph = RDFJSON.rdfJsonToGraph(graphString);
-				} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new RDFXMLParser());
-				} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new N3ParserFactory().getParser());
-				} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TurtleParser());
-				} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriXParser());
-				} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new NTriplesParser());
-				} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriGParser());
-				} else {
-					getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-					return;
-				}
+				Graph deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
 				
 				if (deserializedGraph != null) {
 					Graph2Entries g2e = new Graph2Entries(this.context);
 					g2e.merge(deserializedGraph, this.parameters.get("resourceId"), null);
 					getResponse().setStatus(Status.SUCCESS_OK);
+					return;
+				} else {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					return;
 				}
 			}			

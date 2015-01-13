@@ -32,9 +32,9 @@ import org.entrystore.config.Config;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
+import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;
@@ -61,6 +61,7 @@ import org.openrdf.rio.turtle.TurtleWriter;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Delete;
@@ -205,27 +206,8 @@ public class EntryResource extends BaseResource {
 			return getEntryInHTML();
 		} else if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 			return getEntryInJSON();
-		} else if (MediaType.APPLICATION_RDF_XML.equals(mediaType)) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-		} else if (MediaType.TEXT_RDF_N3.equals(mediaType)) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, N3Writer.class);
-		} else if (RDFFormat.TURTLE.getDefaultMIMEType().equals(mediaType.getName())) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, TurtleWriter.class);
-		} else if (RDFFormat.TRIX.getDefaultMIMEType().equals(mediaType.getName())) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, TriXWriter.class);
-		} else if (RDFFormat.NTRIPLES.getDefaultMIMEType().equals(mediaType.getName())) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
-		} else if (RDFFormat.TRIG.getDefaultMIMEType().equals(mediaType.getName())) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
-		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(mediaType.getName())) {
-			StringWriter writer = new StringWriter();
-			org.openrdf.rio.RDFWriter rdfWriter = Rio.createWriter(RDFFormat.JSONLD, writer);
-			rdfWriter.getWriterConfig().set(JSONLDSettings.JSONLD_MODE, JSONLDMode.COMPACT);
-			ConverterUtil.serializeGraph(graph, rdfWriter);
-			serializedGraph = writer.toString();
 		} else {
-			mediaType = MediaType.APPLICATION_RDF_XML;
-			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
+			serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
 		}
 
 		if (serializedGraph != null) {
@@ -233,7 +215,8 @@ public class EntryResource extends BaseResource {
 			return new StringRepresentation(serializedGraph, mediaType);
 		}
 
-		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
+		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		return new EmptyRepresentation();
 	}
 
 	private Representation getEntryInHTML() {
@@ -712,19 +695,11 @@ public class EntryResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
-		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new N3ParserFactory().getParser());
-		} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TurtleParser());
-		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriXParser());
-		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new NTriplesParser());
-		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriGParser());
-		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new SesameJSONLDParser());
 		} else {
+			deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
+		}
+
+		if (deserializedGraph == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
 			return;
 		}

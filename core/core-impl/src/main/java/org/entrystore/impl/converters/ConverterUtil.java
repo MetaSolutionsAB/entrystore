@@ -165,68 +165,6 @@ public class ConverterUtil {
 			log.error(e.getMessage());
 		}
 	}
-	
-	/**
-	 * @param graph
-	 *            The Graph to be serialized.
-	 * @param writer
-	 *            One of the following: N3Writer, NTriplesWriter,
-	 *            RDFXMLPrettyWriter, RDFXMLWriter, TriGWriter, TriXWriter,
-	 *            TurtleWriter
-	 * @return A String representation of the serialized Graph.
-	 */
-	public static String serializeGraph(Graph graph, Class<? extends RDFWriter> writer) {
-		if (graph == null || writer == null) {
-			throw new IllegalArgumentException("Parameters must not be null");
-		}
-		
-		StringWriter stringWriter = new StringWriter();
-		RDFWriter rdfWriter = null;
-		try {
-			Constructor<? extends RDFWriter> constructor = writer.getConstructor(Writer.class);
-			rdfWriter = (RDFWriter) constructor.newInstance(stringWriter);
-		} catch (Exception e) {
-			log.error(e.getMessage());
-		}
-		
-		if (rdfWriter == null) {
-			return null;
-		}
-		
-		try {	
-			Map<String, String> namespaces = NS.getMap();
-			for (String nsName : namespaces.keySet()) {
-				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
-			}
-			rdfWriter.startRDF();
-			for (Statement statement : graph) {
-				rdfWriter.handleStatement(statement);	
-			}
-			rdfWriter.endRDF();
-		} catch (RDFHandlerException rdfe) {
-			log.error(rdfe.getMessage());
-		}
-		return stringWriter.toString();
-	}
-
-	public static void serializeGraph(Graph graph, RDFWriter rdfWriter) {
-		if (graph == null || rdfWriter == null) {
-			throw new IllegalArgumentException("Parameters must not be null");
-		}
-		try {
-			Map<String, String> namespaces = NS.getMap();
-			for (String nsName : namespaces.keySet()) {
-				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
-			}
-			rdfWriter.startRDF();
-			for (Statement statement : graph) {
-				rdfWriter.handleStatement(statement);
-			}
-			rdfWriter.endRDF();
-		} catch (RDFHandlerException rdfe) {
-			log.error(rdfe.getMessage());
-		}
-	}
 
 	public static boolean isValidated(Graph graph, URI resURI) {
 		if (graph == null || resURI == null) {
@@ -294,36 +232,7 @@ public class ConverterUtil {
 		
 		return result;
 	}
-	
-	/**
-	 * @param serializedGraph
-	 *            The Graph to be deserialized.
-	 * @param parser
-	 *            Instance of the following: N3Parser, NTriplesParser,
-	 *            RDFXMLParser, TriGParser, TriXParser, TurtleParser
-	 * @return A String representation of the serialized Graph.
-	 */
-	public static Graph deserializeGraph(String serializedGraph, RDFParser parser) {
-		if (serializedGraph == null || parser == null) {
-			throw new IllegalArgumentException("Parameters must not be null");
-		}
-		
-		StringReader reader = new StringReader(serializedGraph);
-		StatementCollector collector = new StatementCollector();
-		try {
-			parser.setRDFHandler(collector);
-			parser.parse(reader, "");
-		} catch (RDFHandlerException rdfe) {
-			log.error(rdfe.getMessage());
-		} catch (RDFParseException rdfpe) {
-			log.error(rdfpe.getMessage());
-		} catch (IOException ioe) {
-			log.error(ioe.getMessage());
-		}
-		
-		return new GraphImpl(collector.getStatements());
-	}
-	
+
 	public static String convertGraphToLOM(Graph graph, org.openrdf.model.URI resourceURI) {
 		prepareLOMProcessing();
 		RDF2LOMConverter converter = new OERDF2LOMConverter();

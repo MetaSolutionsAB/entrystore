@@ -51,6 +51,7 @@ import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;
@@ -198,30 +199,16 @@ public class ResourceResource extends BaseResource {
 							return getListRepresentation();
 						}
 						serializedGraph = RDFJSON.graphToRdfJson(graph);
-					} else if (preferredMediaType.equals(MediaType.APPLICATION_RDF_XML)) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-					} else if (preferredMediaType.equals(MediaType.ALL)) {
-						preferredMediaType = MediaType.APPLICATION_RDF_XML;
-						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-					} else if (preferredMediaType.equals(MediaType.TEXT_RDF_N3)) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, N3Writer.class);
-					} else if (preferredMediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, TurtleWriter.class);
-					} else if (preferredMediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, TriXWriter.class);
-					} else if (preferredMediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
-					} else if (preferredMediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
-					} else if (preferredMediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, SesameJSONLDWriter.class);
 					} else {
-						getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-						return new JsonRepresentation(JSONErrorMessages.errorUnknownFormat);
+						serializedGraph = GraphUtil.serializeGraph(graph, preferredMediaType);
 					}
+
 					if (serializedGraph != null) {
 						getResponse().setStatus(Status.SUCCESS_OK);
 						return new StringRepresentation(serializedGraph, preferredMediaType);
+					} else {
+						getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
+						return new JsonRepresentation(JSONErrorMessages.errorUnknownFormat);
 					}
 				}
 			}
@@ -925,7 +912,7 @@ public class ResourceResource extends BaseResource {
 				}
 				return; // success!
 			} else {
-				Graph graph = AbstractMetadataResource.deserializeGraph(requestBody, mediaType);
+				Graph graph = GraphUtil.deserializeGraph(requestBody, mediaType);
 				if (graph != null && GraphType.List.equals(entry.getGraphType())) {
 					((org.entrystore.List) entry.getResource()).setGraph(graph);
 				} else {
@@ -1039,7 +1026,7 @@ public class ResourceResource extends BaseResource {
 			if (graphResource != null) {
 				Graph graph = null;
 				try {
-					graph = AbstractMetadataResource.deserializeGraph(getRequest().getEntity().getText(), mediaType);
+					graph = GraphUtil.deserializeGraph(getRequest().getEntity().getText(), mediaType);
 				} catch (IOException ioe) {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					getResponse().setEntity(new JsonRepresentation("{\"error\":\"Unable to read request entity\"}"));

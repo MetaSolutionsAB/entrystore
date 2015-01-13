@@ -16,30 +16,16 @@
 
 package org.entrystore.rest.resources;
 
-import com.github.jsonldjava.sesame.SesameJSONLDParser;
-import com.github.jsonldjava.sesame.SesameJSONLDWriter;
 import org.entrystore.AuthorizationException;
 import org.entrystore.EntryType;
 import org.entrystore.Metadata;
 import org.entrystore.impl.converters.ConverterUtil;
+import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
-import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.n3.N3ParserFactory;
-import org.openrdf.rio.n3.N3Writer;
-import org.openrdf.rio.ntriples.NTriplesParser;
-import org.openrdf.rio.ntriples.NTriplesWriter;
-import org.openrdf.rio.rdfxml.RDFXMLParser;
-import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
-import org.openrdf.rio.trig.TriGParser;
-import org.openrdf.rio.trig.TriGWriter;
-import org.openrdf.rio.trix.TriXParser;
-import org.openrdf.rio.trix.TriXWriter;
-import org.openrdf.rio.turtle.TurtleParser;
-import org.openrdf.rio.turtle.TurtleWriter;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -206,30 +192,10 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			Graph graph = metadata.getGraph();
 			if (graph != null) {
 				String serializedGraph = null;
-				if (mediaType.equals(MediaType.APPLICATION_JSON)) {
-					serializedGraph = RDFJSON.graphToRdfJson(graph);
-				} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
-					serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-				} else if (mediaType.equals(MediaType.ALL)) {
-					mediaType = MediaType.APPLICATION_RDF_XML;
-					serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-				} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
-					serializedGraph = ConverterUtil.serializeGraph(graph, N3Writer.class);
-				} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-					serializedGraph = ConverterUtil.serializeGraph(graph, TurtleWriter.class);
-				} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-					serializedGraph = ConverterUtil.serializeGraph(graph, TriXWriter.class);
-				} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-					serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
-				} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-					serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
-				} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-					serializedGraph = ConverterUtil.serializeGraph(graph, SesameJSONLDWriter.class);
-				} else if (mediaType.getName().equals("application/lom+xml")) {
+				if (mediaType.getName().equals("application/lom+xml")) {
 					serializedGraph = ConverterUtil.convertGraphToLOM(graph, graph.getValueFactory().createURI(entry.getResourceURI().toString()));
 				} else {
-					getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-					return new JsonRepresentation(JSONErrorMessages.errorUnknownFormat);
+					serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
 				}
 
 				if (serializedGraph != null) {
@@ -239,8 +205,8 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			}
 		}
 
-		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-		return new JsonRepresentation(JSONErrorMessages.errorCantFindMetadata);
+		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		return new EmptyRepresentation();
 	}
 
 	/**
@@ -261,7 +227,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			if (mediaType.getName().equals("application/lom+xml")) {
 				deserializedGraph = ConverterUtil.convertLOMtoGraph(graphString, entry.getResourceURI());
 			} else {
-				deserializedGraph = deserializeGraph(graphString, mediaType);
+				deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
 			}
 
 			if (deserializedGraph != null) {
@@ -278,27 +244,5 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @return the relevant metadata graph. May be null.
 	 */
 	protected abstract Metadata getMetadata();
-
-	protected static Graph deserializeGraph(String graphString, MediaType mediaType) {
-		Graph deserializedGraph = null;
-		if (mediaType.equals(MediaType.APPLICATION_JSON)) {
-			deserializedGraph = RDFJSON.rdfJsonToGraph(graphString);
-		} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new RDFXMLParser());
-		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new N3ParserFactory().getParser());
-		} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TurtleParser());
-		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriXParser());
-		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new NTriplesParser());
-		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriGParser());
-		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new SesameJSONLDParser());
-		}
-		return deserializedGraph;
-	}
 
 }
