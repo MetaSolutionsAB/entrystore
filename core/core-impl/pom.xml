@@ -39,7 +39,7 @@
                         <version>${project.version}</version>
                 </dependency>
                 <dependency>
-			<!-- needed by both entrystore-rest and solr -->
+			<!-- needed by solrj -->
                         <groupId>javax.servlet</groupId>
                         <artifactId>javax.servlet-api</artifactId>
                         <version>${servlet.version}</version>
