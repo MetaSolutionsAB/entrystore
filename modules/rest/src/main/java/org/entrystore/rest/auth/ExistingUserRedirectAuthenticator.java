@@ -62,7 +62,7 @@ public class ExistingUserRedirectAuthenticator extends RedirectAuthenticator {
 	}
 	
 	@Override
-	protected void handleUser(org.restlet.security.User user) {
+	protected void handleUser(org.restlet.security.User user, boolean cached) {
 		String email = user.getEmail();
 		if (email == null) {
 			log.warn("Unable to perform OpenID login, no user email set");

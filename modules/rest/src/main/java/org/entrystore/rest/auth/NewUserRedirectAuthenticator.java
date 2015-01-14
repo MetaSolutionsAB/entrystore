@@ -43,8 +43,8 @@ public class NewUserRedirectAuthenticator extends ExistingUserRedirectAuthentica
 	}
 	
 	@Override
-	public void handleUser(org.restlet.security.User user) {
-		super.handleUser(user);
+	public void handleUser(org.restlet.security.User user, boolean cached) {
+		super.handleUser(user, cached);
 
 		String email = user.getEmail();
 		if (email == null) {

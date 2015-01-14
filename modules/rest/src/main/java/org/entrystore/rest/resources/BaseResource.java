@@ -32,10 +32,9 @@ import org.entrystore.rest.util.Util;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.data.Form;
+import org.restlet.data.Header;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
-import org.restlet.engine.header.Header;
 import org.restlet.engine.header.HeaderUtils;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
@@ -118,15 +117,15 @@ public abstract class BaseResource extends ServerResource {
 				return new EmptyRepresentation();
 			}
 
-			Series<Header> respHeaders = new Series<>(Header.class);
-			respHeaders.add("Access-Control-Allow-Origin", origin);
-			respHeaders.add("Access-Control-Allow-Methods", "HEAD, GET, PUT, POST, DELETE, OPTIONS");
-			respHeaders.add("Access-Control-Allow-Credentials", "true");
+			Series<Header> respHeaders = new Series<Header>(Header.class);
+			respHeaders.set("Access-Control-Allow-Origin", origin);
+			respHeaders.set("Access-Control-Allow-Methods", "HEAD, GET, PUT, POST, DELETE, OPTIONS");
+			respHeaders.set("Access-Control-Allow-Credentials", "true");
 			if (cors.getAllowedHeaders() != null) {
-				respHeaders.add("Access-Control-Allow-Headers", cors.getAllowedHeaders());
+				respHeaders.set("Access-Control-Allow-Headers", cors.getAllowedHeaders());
 			}
 			if (cors.getMaxAge() > -1) {
-				respHeaders.add("Access-Control-Max-Age", Integer.toString(cors.getMaxAge()));
+				respHeaders.set("Access-Control-Max-Age", Integer.toString(cors.getMaxAge()));
 			}
 			HeaderUtils.copyExtensionHeaders(respHeaders, getResponse());
 		}

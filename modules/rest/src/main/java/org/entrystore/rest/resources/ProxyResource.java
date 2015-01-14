@@ -224,10 +224,11 @@ public class ProxyResource extends BaseResource {
 
 		if (client == null) {
 			client = new Client(Protocol.HTTP);
-			client.setConnectTimeout(10000);
 			client.setContext(new Context());
 	        client.getContext().getParameters().add("connectTimeout", "10000");
 	        client.getContext().getParameters().add("readTimeout", "10000");
+			client.getContext().getParameters().set("socketTimeout", "10000");
+			client.getContext().getParameters().set("socketConnectTimeoutMs", "10000");
 	        log.info("Initialized HTTP client for proxy request");
 		}
 
