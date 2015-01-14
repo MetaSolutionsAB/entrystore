@@ -150,13 +150,6 @@
    			<version>4.1.1</version>
 		</dependency>	  
 		<dependency>
-			<groupId>javax.servlet</groupId>
-			<artifactId>javax.servlet-api</artifactId>
-			<version>${servlet.version}</version>
-			<!-- should not be deployed to the web container (hence the scope is 'provided')-->
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
 			<groupId>org.json</groupId>
 			<artifactId>json</artifactId>
 			<version>20131018</version>

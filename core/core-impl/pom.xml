@@ -38,6 +38,14 @@
                         <artifactId>entrystore-core-api</artifactId>
                         <version>${project.version}</version>
                 </dependency>
+                <dependency>
+			<!-- needed by both entrystore-rest and solr -->
+                        <groupId>javax.servlet</groupId>
+                        <artifactId>javax.servlet-api</artifactId>
+                        <version>${servlet.version}</version>
+                        <!-- should not be deployed to the web container (hence the scope is 'provided')-->
+                        <scope>provided</scope>
+                </dependency>
 		<dependency>
 			<groupId>org.openrdf.sesame</groupId>
 			<artifactId>sesame-runtime</artifactId>
