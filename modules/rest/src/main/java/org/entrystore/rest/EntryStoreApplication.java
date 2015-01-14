@@ -179,11 +179,10 @@ public class EntryStoreApplication extends Application {
 
 			String storeType = config.getString(Settings.STORE_TYPE, null); 
 			if (storeType == null || storeType.equals("memory")) {
-				// Create contexts, entries and harvesters
+				// Create contexts, entries, etc for testing purposes
 				TestSuite.initDisneySuite(rm);
 				TestSuite.addEntriesInDisneySuite(rm);
-				TestSuite.HarvesterTestSuite(rm, pm, cm);
-				TestSuite.initCourseSuite(rm); 
+				// TestSuite.initCourseSuite(rm);
 			}
 
 			// Load and start harvesters

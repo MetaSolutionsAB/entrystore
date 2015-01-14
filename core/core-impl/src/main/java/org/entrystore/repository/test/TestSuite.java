@@ -611,101 +611,10 @@ public class TestSuite {
 		URI currentUserURI = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
-			//			// Harvester 1
-			//			Entry entryHarvesterDC = cm.createResource(ResourceType.Context, null, null);
-			//			se.kmr.scam.repository.Context contextHarvesterDC = (se.kmr.scam.repository.Context) entryHarvesterDC.getResource();
-			//			Entry entryDC = contextHarvesterDC.createResource(ResourceType.List, null, null); // folder
-			//			
-			//			Graph graph = entryHarvesterDC.getGraph(); 
-			//			ValueFactory vf = graph.getValueFactory(); 
-			//			org.openrdf.model.URI root = vf.createURI(entryHarvesterDC.getEntryURI().toString());
-			//
-			//			org.openrdf.model.URI harvesterRootDC = vf.createURI(RepositoryProperties.NSbase +"OAIHarvester");
-			//			graph.add(root, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase + "harvester") , harvesterRootDC);
-			//			graph.add(harvesterRootDC, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"harvestTimeRegExp"), vf.createLiteral("0 0/2 * * * ?"));
-			//			graph.add(harvesterRootDC, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"target"), vf.createLiteral("http://barrel.ih.otaru-uc.ac.jp/dspace-oai/request"));
-			//			graph.add(harvesterRootDC, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"metadataType"), vf.createLiteral("oai_dc"));
-			//			entryHarvesterDC.setGraph(graph);
-			//
-			//			// Harvester 2
-			//			Entry entryHarvesterLOM = cm.createResource(ResourceType.Context, null, null);
-			//			se.kmr.scam.repository.Context contextHarvesterLOM = (se.kmr.scam.repository.Context) entryHarvesterLOM.getResource();
-			//			Entry entryLOM = contextHarvesterLOM.createResource(ResourceType.List, null, null); // folder
-			//
-			//			graph = entryHarvesterLOM.getGraph(); 
-			//			vf = graph.getValueFactory(); 
-			//			root = vf.createURI(entryHarvesterLOM.getEntryURI().toString());
-			//			org.openrdf.model.URI harvesterRootLOM = vf.createURI(RepositoryProperties.NSbase +"OAIHarvester");
-			//			graph.add(root, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase + "harvester") , harvesterRootLOM);
-			//			graph.add(harvesterRootLOM, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"harvestTimeRegExp"), vf.createLiteral("0 0/3 * * * ?"));
-			//			graph.add(harvesterRootLOM, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"target"), vf.createLiteral("http://spindeln.iml.umu.se:9090/ls/OAIHandler"));
-			//			graph.add(harvesterRootLOM, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"metadataType"), vf.createLiteral("oai_lom"));
-			//			entryHarvesterLOM.setGraph(graph);
 
-			// Harvester Intute
-			//			Entry entryHarvesterDCIntute = cm.createResource(ResourceType.Context, null, null);
-			//			se.kmr.scam.repository.Context contextHarvesterDCIntute = (se.kmr.scam.repository.Context) entryHarvesterDCIntute.getResource();
-			//			Entry entryDCIntute = contextHarvesterDCIntute.createResource(ResourceType.List, null, null); // folder
-			//			
-			//			Graph graph = entryHarvesterDCIntute.getGraph(); 
-			//			ValueFactory vf = graph.getValueFactory(); 
-			//			org.openrdf.model.URI root = vf.createURI(entryHarvesterDCIntute.getEntryURI().toString());
-			//
-			//			org.openrdf.model.URI harvesterRootDCIntute = vf.createURI(RepositoryProperties.NSbase +"OAIHarvester");
-			//			graph.add(root, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase + "harvester") , harvesterRootDCIntute);
-			//			graph.add(harvesterRootDCIntute, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"harvestTimeRegExp"), vf.createLiteral("16 46 * * * ?"));
-			//			graph.add(harvesterRootDCIntute, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"target"), vf.createLiteral("http://www.intute.ac.uk/intoai/oai2.php"));
-			//			graph.add(harvesterRootDCIntute, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"metadataType"), vf.createLiteral("rdn_dc"));
-			//			graph.add(harvesterRootDCIntute, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"set"), vf.createLiteral("organic.edunet"));
-			//			entryHarvesterDCIntute.setGraph(graph);
-
-			// Harvester FAO
-			//			Entry entryHarvesterFAO = cm.createResource(ResourceType.Context, null, null);
-			//			se.kmr.scam.repository.Context contextHarvesterFAO = (se.kmr.scam.repository.Context) entryHarvesterFAO.getResource();
-			//			Entry entryFAO = contextHarvesterFAO.createResource(ResourceType.List, null, null); // folder
-			//			
-			//			Graph graph = entryHarvesterFAO.getGraph(); 
-			//			ValueFactory vf = graph.getValueFactory(); 
-			//			org.openrdf.model.URI root = vf.createURI(entryHarvesterFAO.getEntryURI().toString());
-			//
-			//			org.openrdf.model.URI harvesterRootFAO = vf.createURI(RepositoryProperties.NSbase +"FAOHarvester");
-			//			graph.add(root, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase + "harvester") , harvesterRootFAO);
-			//			graph.add(harvesterRootFAO, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"harvestTimeRegExp"), vf.createLiteral("22 24 * * * ?"));
-			//			graph.add(harvesterRootFAO, new org.openrdf.model.impl.URIImpl(RepositoryProperties.NSbase +"metadataType"), vf.createLiteral("fao_xml"));
-			//			entryHarvesterFAO.setGraph(graph);
 		} finally {
 			pm.setAuthenticatedUserURI(currentUserURI);
 		}
 	}
-
-//	public static void RDF2LOMConverterTestSuite(RepositoryManagerImpl rm, PrincipalManager pm, ContextManager cm) {
-//		Entry entry = cm.getByEntryURI(URI.create("http://localhost:8080/scam/6/entry/12"));
-//		//Entry entry = cm.getByEntryURI(URI.create("http://localhost:8080/scam/_contexts/entry/1"));
-//		Graph mdGraph = entry.getLocalMetadata().getGraph();
-//
-//		for (Statement statement : mdGraph) {
-//			System.out.println(statement);
-//		}
-//
-//		System.out.println("Entry URI: " + entry.getEntryURI());
-//
-//		LOMImpl lom = new LOMImpl();
-//		ValueFactory vf = mdGraph.getValueFactory();
-//		String resURIStr = entry.getResourceURI().toString();
-//		//String resURIStr = "http://localhost:8080/scam/6/resource/12";
-//		System.out.println("Resource URI: " + resURIStr);
-//		org.openrdf.model.URI resURI = vf.createURI(resURIStr);
-//		org.openrdf.model.URI mdURI = vf.createURI(entry.getLocalMetadataURI().toString());
-//		new RDF2LOMConverter(true).convertAll(mdGraph, lom, resURI, mdURI);
-//		JAXBContext jaxbContext;
-//		try {
-//			jaxbContext = JAXBContext.newInstance("org.ieee.ltsc.lom.jaxb.lomxml");
-//			final Marshaller marshaller = jaxbContext.createMarshaller();
-//			marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, new Boolean(true));
-//			marshaller.marshal(lom, System.out);
-//		} catch (JAXBException e) {
-//			e.printStackTrace();
-//		}
-//	}
 
 }
