@@ -55,13 +55,13 @@ public class ContextManagerTest {
 			e.printStackTrace();
 		}
 		confMan.getConfiguration().setProperty(Settings.STORE_TYPE, "memory");
-		rm = new RepositoryManagerImpl("http://my.confolio.org/", confMan.getConfiguration());
+		rm = new RepositoryManagerImpl("http://localhost:8181/", confMan.getConfiguration());
 		cm = rm.getContextManager();
 		rm.setCheckForAuthorization(false);
 	}
 
 	@Test
-	public void searchControll() throws Exception {
+	public void searchControl() throws Exception {
 		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		Context context = (Context) entry.getResource();
 

@@ -55,7 +55,7 @@ public class ListTest {
 		}
 		Config config = confMan.getConfiguration();
 		config.setProperty(Settings.STORE_TYPE, "memory");
-		rm = new RepositoryManagerImpl("http://my.confolio.org/", config);
+		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
 		pm = rm.getPrincipalManager();
 		cm = rm.getContextManager();
 		TestSuite.initDisneySuite(rm);

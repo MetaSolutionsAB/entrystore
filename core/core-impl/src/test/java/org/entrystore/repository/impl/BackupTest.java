@@ -70,7 +70,7 @@ public class BackupTest {
 		}
 		Config config = confMan.getConfiguration();
 		config.setProperty(Settings.STORE_TYPE, "memory");
-		rm = new RepositoryManagerImpl("http://my.confolio.org/", config);
+		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
 		rm.setCheckForAuthorization(false);
 		cm = rm.getContextManager();
 		pm = rm.getPrincipalManager();
