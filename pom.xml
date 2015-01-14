@@ -18,7 +18,7 @@
 	
 	<!-- ================= Default Properties ================= -->
 	<properties>
-		<restlet.version>2.1.7</restlet.version>
+		<restlet.version>2.3.0</restlet.version>
 		<solr.version>4.7.2</solr.version>
 		<sesame.version>2.7.14</sesame.version>
 		<slf4j.version>1.7.5</slf4j.version>
@@ -142,40 +142,19 @@
 			<id>EntryStore</id>
 			<url>http://maven.entrystore.org</url>
 		</repository>
+		<repository>
+			<id>Restlet</id>
+			<name>Restlet Framework repository</name>
+			<url>http://maven.restlet.com</url>
+		</repository>
 		<!--
 		// 3rd party repos below //
-		<repository>
-			<id>OpenRDF</id>
-			<url>http://repo.aduna-software.org/maven2/releases</url>
-			<releases>
-				<enabled>true</enabled>
-			</releases>
-		</repository>
-		<repository>  
-			<id>Restlet</id>  
-			<url>http://maven.restlet.org</url>  
-		</repository>
 		<repository>
 			<id>Maven</id>
 			<url>http://repo1.maven.org/maven2</url>
 			<releases> 
 				<enabled>true</enabled>
 			</releases>
-		</repository>
-		<repository>
-			<id>IML</id>
-			<url>http://develix.iml.umu.se:8085/artifactory/repo</url>
-			<releases>
-				<enabled>true</enabled>
-			</releases>
-			<snapshots>
-				<enabled>true</enabled>
-			</snapshots>
-		</repository>
-		<repository>
-			<id>thirdparty-uploads</id>
-			<name>JBoss Thirdparty Uploads</name>
-			<url>https://repository.jboss.org/nexus/content/repositories/thirdparty-uploads</url>
 		</repository>
 		// 3rd party repos above //
 		-->
@@ -193,27 +172,6 @@
 			<releases> 
 				<enabled>true</enabled>
 			</releases>
-		</pluginRepository>
-		<pluginRepository>
-			<id>central</id>
-			<url>http://develix.iml.umu.se:8085/artifactory/plugins-releases</url>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
-		</pluginRepository>
-		<pluginRepository>
-			<id>snapshots</id>
-			<url>http://develix.iml.umu.se:8085/artifactory/plugins-snapshots</url>
-			<releases>
-				<enabled>false</enabled>
-			</releases>
-		</pluginRepository>
-		<pluginRepository>
-			<id>atlassian-m2-repository</id>
-			<url>http://develix.iml.umu.se:8085/artifactory/atlassian-m2-repository</url>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
 		</pluginRepository>
 		// 3rd party repos above //
 		-->
