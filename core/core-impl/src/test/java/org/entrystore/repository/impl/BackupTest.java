@@ -14,25 +14,21 @@
  * limitations under the License.
  */
 
-package org.entrystore.impl;
+package org.entrystore.repository.impl;
 
-import static org.junit.Assert.assertTrue;
-
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
-import org.entrystore.repository.RepositoryException;
 import org.entrystore.ResourceType;
+import org.entrystore.config.Config;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.backup.BackupFactory;
 import org.entrystore.repository.backup.BackupScheduler;
-import org.entrystore.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.junit.Before;
@@ -40,6 +36,12 @@ import org.junit.Test;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.vocabulary.RDF;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+
+import static org.junit.Assert.assertTrue;
 
 public class BackupTest {
 	private RepositoryManagerImpl rm;
@@ -81,20 +83,20 @@ public class BackupTest {
 				.createReference(null, URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
 		refLinkEntry = context.createLinkReference(null, URI.create("http://vk.se/"), URI.create("http://vk.se/md1"), null);
 		resourceEntry = context.createResource(null, GraphType.None, ResourceType.InformationResource, null);
-		File pomFile = new File("pom.xml"); 
-		resourceEntry.setFilename(pomFile.getName()); 
-		resourceEntry.setMimetype("text/xml"); 
-		
-		startBackupScheduler(); 
+		File pomFile = new File("pom.xml");
+		resourceEntry.setFilename(pomFile.getName());
+		resourceEntry.setMimetype("text/xml");
+
+		startBackupScheduler();
 //		BackupMaintenanceScheduler bms = new BackupMaintenanceScheduler(rm); 
 //		bms.run(); 
 //		//bms.setUpperLimit(10);
 		try {
-			Thread.sleep(1000*240);
+			Thread.sleep(1000 * 240);
 		} catch (InterruptedException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-		} 
+		}
 	}
 
 	private void startBackupScheduler() {
@@ -102,7 +104,7 @@ public class BackupTest {
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			BackupFactory bf = new BackupFactory(rm);
-			BackupScheduler bs = bf.createBackupScheduler("0/5 * * * * ?" , true, false, -1, -1, -1);
+			BackupScheduler bs = bf.createBackupScheduler("0/5 * * * * ?", true, false, -1, -1, -1);
 			bs.run();
 			if (bs != null) {
 				bs.run();
@@ -111,7 +113,7 @@ public class BackupTest {
 			pm.setAuthenticatedUserURI(userURI);
 		}
 	}
-	
+
 	@Test
 	public void builtinType() {
 		// Checking that builtintype cannot be changed for local resources
@@ -164,11 +166,11 @@ public class BackupTest {
 		assertTrue(listEntry.getCreationDate() != null);
 		assertTrue(listEntry.getModifiedDate() != null);
 		listEntry.getLocalMetadata().setGraph(listEntry.getLocalMetadata().getGraph()); // pretend
-																						// to
-																						// change
-																						// the
-																						// metadata
-																						// graph.
+		// to
+		// change
+		// the
+		// metadata
+		// graph.
 		assertTrue(listEntry.getModifiedDate() != null);
 	}
 

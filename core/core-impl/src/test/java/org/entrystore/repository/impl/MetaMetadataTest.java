@@ -14,21 +14,18 @@
  * limitations under the License.
  */
 
-package org.entrystore.impl;
+package org.entrystore.repository.impl;
 
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.net.URI;
-
-import org.entrystore.GraphType;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
-import org.entrystore.repository.RepositoryException;
+import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
 import org.entrystore.config.Config;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.junit.Before;
@@ -36,6 +33,11 @@ import org.junit.Test;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.vocabulary.RDF;
+
+import java.io.IOException;
+import java.net.URI;
+
+import static org.junit.Assert.assertTrue;
 
 public class MetaMetadataTest {
 	private RepositoryManagerImpl rm;
@@ -127,11 +129,11 @@ public class MetaMetadataTest {
 		assertTrue(listEntry.getCreationDate() != null);
 		assertTrue(listEntry.getModifiedDate() != null);
 		listEntry.getLocalMetadata().setGraph(listEntry.getLocalMetadata().getGraph()); // pretend
-																						// to
-																						// change
-																						// the
-																						// metadata
-																						// graph.
+		// to
+		// change
+		// the
+		// metadata
+		// graph.
 		assertTrue(listEntry.getModifiedDate() != null);
 	}
 
@@ -181,7 +183,7 @@ public class MetaMetadataTest {
 		Graph mmdGraph2 = listEntry.getGraph();
 		assertTrue(mmdGraph.size() == mmdGraph2.size());
 	}
-	
+
 	@Test
 	public void refLocalEntry() {
 		Entry ref = context.createReference(null, linkEntry.getResourceURI(), linkEntry.getLocalMetadataURI(), null);

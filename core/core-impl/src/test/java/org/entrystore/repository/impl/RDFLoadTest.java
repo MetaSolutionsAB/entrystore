@@ -14,25 +14,27 @@
  * limitations under the License.
  */
 
-package org.entrystore.impl;
+package org.entrystore.repository.impl;
 
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.ResourceType;
 import org.entrystore.config.Config;
+import org.entrystore.impl.ContextImpl;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.IOException;
+
+import static org.junit.Assert.assertTrue;
 
 /**
  */
@@ -49,7 +51,7 @@ public class RDFLoadTest {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		Config config = confMan.getConfiguration(); 
+		Config config = confMan.getConfiguration();
 		config.setProperty(Settings.STORE_TYPE, "memory");
 		rm = new RepositoryManagerImpl("http://my.confolio.org/", config);
 		pm = rm.getPrincipalManager();
@@ -80,10 +82,10 @@ public class RDFLoadTest {
 		assertTrue(entry.getEntryType() == EntryType.Local);
 		assertTrue(entry.getGraphType() == GraphType.List);
 		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
-		
+
 		//LinkReference to Mickeys top list.
 		entry = duck.get("3");
-		assertTrue("Locationtype should be LinkReference, it is now: "+entry.getEntryType(),
+		assertTrue("Locationtype should be LinkReference, it is now: " + entry.getEntryType(),
 				entry.getEntryType() == EntryType.LinkReference);
 		assertTrue(entry.getGraphType() == GraphType.List);
 		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
@@ -106,7 +108,7 @@ public class RDFLoadTest {
 		assertTrue(entry.getGraphType() == GraphType.None);
 		assertTrue(entry.getResourceType() == ResourceType.NamedResource);
 	}
-	
+
 	@Test
 	public void userChecks() {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());

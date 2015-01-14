@@ -14,32 +14,33 @@
  * limitations under the License.
  */
 
-package org.entrystore.impl;
+package org.entrystore.repository.impl;
 
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.Group;
+import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.ResourceType;
+import org.entrystore.config.Config;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.DisallowedException;
+import org.entrystore.repository.test.TestSuite;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.IOException;
 import java.net.URI;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.entrystore.GraphType;
-import org.entrystore.Context;
-import org.entrystore.ContextManager;
-import org.entrystore.Entry;
-import org.entrystore.Group;
-import org.entrystore.PrincipalManager;
-import org.entrystore.ResourceType;
-import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.config.Settings;
-import org.entrystore.AuthorizationException;
-import org.entrystore.repository.security.DisallowedException;
-import org.entrystore.repository.test.TestSuite;
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  */
@@ -67,7 +68,7 @@ public class PrincipalManagerTest {
 		TestSuite.addEntriesInDisneySuite(rm);
 	}
 
-	
+
 	@Test
 	public void contextAccessCheck() {
 
@@ -80,7 +81,7 @@ public class PrincipalManagerTest {
 		assertTrue(rights.contains(AccessProperty.WriteResource)); //Because in friendsOfMickeygroup
 		assertTrue(rights.size() == 2); //ReadResource is implicit when WriteResouce is set.
 	}
-	
+
 	@Test
 	public void listAccessCheck() {
 
@@ -89,24 +90,23 @@ public class PrincipalManagerTest {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
 		Context mouse = cm.getContext("mouse");
 		Entry listEntry = mouse.createResource(null, GraphType.List, ResourceType.InformationResource, null);
-		Entry daisy = pm.getPrincipalEntry("Daisy");		
+		Entry daisy = pm.getPrincipalEntry("Daisy");
 		listEntry.addAllowedPrincipalsFor(AccessProperty.WriteResource, daisy.getResourceURI());
 
 		//Now change to the Daisy user and try to create a resource in the newly created list.
 		pm.setAuthenticatedUserURI(daisy.getResourceURI());
 		mouse.createLink(null, URI.create("http://www.daisy.org"), listEntry.getResourceURI());
-		
+
 		try {
 			mouse.createLink(null, URI.create("http://www.daisy2.org"), null);
 			fail("Daisy should not have access to create a link in mouse context where she has no rights.");
 		} catch (AuthorizationException ae) {
-			
-		}
-		
-	}
-	
 
-	
+		}
+
+	}
+
+
 	@Test
 	public void ownerCheck() {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Daisy").getResourceURI());
@@ -122,7 +122,7 @@ public class PrincipalManagerTest {
 		assertTrue(duck.get("1") != null); // since guest access is allowed on duck
 	}
 
-	@Test (expected=AuthorizationException.class)
+	@Test(expected = AuthorizationException.class)
 	public void guestNoAccessCheck() {
 		// Guest, check public access to duck and none to mouse.
 		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
@@ -145,13 +145,13 @@ public class PrincipalManagerTest {
 	public void administratorAccessToEntry() {
 		Context mouse = cm.getContext("mouse");
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Mickey").getResourceURI());
-		
+
 		//	Mickey is owner of mouse context, and should be allowed to change it's ACL.
 		mouse.getEntry().addAllowedPrincipalsFor(AccessProperty.ReadResource,
 				pm.getPrincipalEntry("Daisy").getResourceURI());
 	}
 
-	@Test (expected=AuthorizationException.class)
+	@Test(expected = AuthorizationException.class)
 	public void noAdministratorAccessToEntry() {
 		Context mouse = cm.getContext("mouse");
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
@@ -173,7 +173,7 @@ public class PrincipalManagerTest {
 		}
 	}
 
-	
+
 	@Test
 	public void usersCheck() {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());

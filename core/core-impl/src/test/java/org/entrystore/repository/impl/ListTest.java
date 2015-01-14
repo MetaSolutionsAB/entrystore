@@ -14,28 +14,29 @@
  * limitations under the License.
  */
 
-package org.entrystore.impl;
+package org.entrystore.repository.impl;
 
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-
-import org.entrystore.GraphType;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.List;
 import org.entrystore.PrincipalManager;
 import org.entrystore.QuotaException;
-import org.entrystore.repository.RepositoryException;
 import org.entrystore.config.Config;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+
+import static org.junit.Assert.assertTrue;
 
 /**
  */
