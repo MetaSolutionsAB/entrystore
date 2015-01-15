@@ -29,6 +29,8 @@ import org.junit.Before;
 import java.io.IOException;
 
 /**
+ * Manages EntryStore instance(s) as preparation for the tests in entrystore-core-impl.
+ *
  * @author Hannes Ebner
  */
 public abstract class AbstractCoreTest {
