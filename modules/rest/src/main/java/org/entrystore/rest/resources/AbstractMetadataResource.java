@@ -69,6 +69,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType("application/lom+xml"));
+		supportedMediaTypes.add(new MediaType("application/rdf+json"));
 
 		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}

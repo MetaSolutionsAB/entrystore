@@ -150,7 +150,7 @@ public class GraphUtil {
 
 	public static Graph deserializeGraph(String graphString, MediaType mediaType) {
 		Graph deserializedGraph = null;
-		if (mediaType.equals(MediaType.APPLICATION_JSON)) {
+		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
 			deserializedGraph = RDFJSON.rdfJsonToGraph(graphString);
 		} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
 			deserializedGraph = deserializeGraph(graphString, new RDFXMLParser());
@@ -172,7 +172,7 @@ public class GraphUtil {
 
 	public static String serializeGraph(Graph graph, MediaType mediaType) {
 		String serializedGraph = null;
-		if (mediaType.equals(MediaType.APPLICATION_JSON)) {
+		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
 			serializedGraph = RDFJSON.graphToRdfJson(graph);
 		} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
 			serializedGraph = serializeGraph(graph, RDFXMLPrettyWriter.class);
