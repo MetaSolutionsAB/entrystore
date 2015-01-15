@@ -29,7 +29,7 @@
   "info": {
     "version": "4.2",
     "title": "EntryStore",
-    "description": "This is a EntryStore REST API. You can find out more about EntryStore at <a href=\"http://entrystore.org\">http://entrystore.org</a>.",
+    "description": "This is the structured documentation of the EntryStore API. You can find out more about EntryStore (including a more verbose documentation of the API) at <a href=\"http://entrystore.org\">http://entrystore.org</a>.",
     "contact": {
       "name": "MetaSolutions AB",
       "url": "http://metasolutions.se",
