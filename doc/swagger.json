@@ -98,14 +98,15 @@
           {
             "name": "cmd",
             "in": "query",
-            "description": "Rebuilds the index",
+            "description": "Specifies the command to be invoked",
             "required": true,
-            "type": "string"
+            "type": "string",
+            "enum": ["reindex"]
           }
         ],
         "responses": {
           "202": {
-            "description": "Reindexing started"
+            "description": "Command is accepted and being processed"
           },
           "400": {
             "description": "Invalid parameters"
@@ -114,7 +115,7 @@
             "description": "Insufficient rights for requested information"
           },
           "404": {
-            "description": "Solr instance not found, i.e., it is not used"
+            "description": "This EntryStore instance is not configured with Solr"
           }
         }
       }
