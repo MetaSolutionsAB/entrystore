@@ -1,0 +1,153 @@
+{
+  "apiVersion": "4.2.0",
+  "swagger": "2.0",
+  "schemes": [
+    "http",
+    "https"
+  ],
+  "consumes": [
+    "application/json",
+    "application/rdf+xml",
+    "application/ld+json",
+    "application/rdf+json",
+    "application/trix",
+    "application/x-trig",
+    "text/n3",
+    "text/turtle",
+    "text/n-triples"
+  ],
+  "produces": [
+    "application/json",
+    "application/rdf+xml",
+    "application/ld+json",
+    "application/rdf+json",
+    "application/trix",
+    "application/x-trig",
+    "text/n3",
+    "text/turtle",
+    "text/n-triples"
+  ],
+  "info": {
+    "version": "4.2",
+    "title": "EntryStore",
+    "description": "This is a EntryStore REST API. You can find out more about EntryStore at <a href=\"http://entrystore.org\">http://entrystore.org</a>.",
+    "contact": {
+      "name": "MetaSolutions AB",
+      "url": "http://metasolutions.se",
+      "email": "info@metasolutions.se"
+    },
+    "license": {
+      "name": "Apache 2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+    }
+  },
+  "externalDocs": {
+    "description": "EntryStore official documentation site",
+    "url": "http://entrystore.org"
+  },
+  "definitions": {
+  },
+  "parameters": {
+  },
+  "responses": {
+  },
+  "security": {
+  },
+  "paths": {
+    "/management/backup": {
+    },
+    "/management/status": {
+      "get": {
+        "summary": "Returns status and settings of the repository",
+        "description": "Multiple status values can be provided with comma seperated strings",
+        "operationId": "status",
+        "produces": [
+          "plain/text",
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "extended",
+            "in": "query",
+            "description": "Authenticated users get access to the extended information in JSON",
+            "required": false
+          },
+          {
+            "name": "includeStats",
+            "in": "query",
+            "description": "Includes statistical information, requires paramater \"extended\"",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful operation"
+          },
+          "403": {
+            "description": "Insufficient rights for requested information"
+          }
+        }
+      }
+    },
+    "/management/solr": {
+    },
+    "/search": {
+    },
+    "/sparql": {
+    },
+    "/proxy": {
+    },
+    "/auth/user": {
+    },
+    "/auth/cookie": {
+    },
+    "/auth/basic": {
+    },
+    "/auth/login": {
+    },
+    "/auth/logout": {
+    },
+    "/auth/signup": {
+    },
+    "/auth/pwreset": {
+    },
+    "/auth/openid/google": {
+    },
+    "/auth/openid/google/signup": {
+    },
+    "/auth/openid/yahoo": {
+    },
+    "/auth/openid/yahoo/signup": {
+    },
+    "/{context-id}": {
+    },
+    "/{context-id}/sparql": {
+    },
+    "/{context-id}/export": {
+    },
+    "/{context-id}/import": {
+    },
+    "/{context-id}/merge": {
+    },
+    "/{context-id}/entry/{entry-id}": {
+    },
+    "/{context-id}/entry/{entry-id}/name": {
+    },
+    "/{context-id}/resource/{entry-id}": {
+    },
+    "/{context-id}/metadata/{entry-id}": {
+    },
+    "/{context-id}/cached-external-metadata/{entry-id}": {
+    },
+    "/{context-id}/harvester": {
+    },
+    "/{context-id}/relation/{entry-id}": {
+    },
+    "/{context-id}/quota": {
+    },
+    "/{context-id}/lookup": {
+    },
+    "/{context-id}/execute": {
+    }
+  }
+}
