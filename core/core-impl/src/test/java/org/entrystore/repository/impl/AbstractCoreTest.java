@@ -21,6 +21,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
 import org.junit.After;
@@ -43,14 +44,14 @@ public abstract class AbstractCoreTest {
 
 	@Before
 	public void setup() {
-		ConfigurationManager confMan = null;
-		try {
-			confMan = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		Config config = confMan.getConfiguration();
+		Config config = new PropertiesConfiguration("EntryStore Configuration");
 		config.setProperty(Settings.STORE_TYPE, "memory");
+		config.setProperty(Settings.BASE_URL, "http://localhost:8181/");
+		config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
+		config.setProperty(Settings.SOLR, "off");
+		//config.setProperty(Settings.SOLR_REINDEX_ON_STARTUP, "off");
+		//config.setProperty(Settings.SOLR_URL, "/tmp/entrystore-test-solr/");
+
 		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
 		pm = rm.getPrincipalManager();
 		cm = rm.getContextManager();
