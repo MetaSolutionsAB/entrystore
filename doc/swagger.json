@@ -55,6 +55,7 @@
     },
     "/management/status": {
       "get": {
+        "tags": ["management"],
         "summary": "Returns status and settings of the repository",
         "operationId": "managementStatus",
         "produces": [
@@ -89,6 +90,7 @@
     },
     "/management/solr": {
       "get": {
+        "tags": ["management"],
         "summary": "Manages the Solr index",
         "operationId": "managementSolr",
         "produces": [],
