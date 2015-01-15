@@ -315,8 +315,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 			rc.add(delDateStmnt, this.resourceURI);
 		}
 		URI deletedBy = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI();
-		Statement delByStmnt = vf.createStatement(entryURI, RepositoryProperties.DeletedBy, vf.createURI(deletedBy.toString()), this.resourceURI);
-		rc.add(delByStmnt, this.resourceURI);
+		if (deletedBy != null) {
+			Statement delByStmnt = vf.createStatement(entryURI, RepositoryProperties.DeletedBy, vf.createURI(deletedBy.toString()), this.resourceURI);
+			rc.add(delByStmnt, this.resourceURI);
+		}
 	}
 	
 	public Map<URI, DeletedEntryInfo> getDeletedEntries() {
@@ -734,7 +736,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		EntryImpl newEntry = null;
 		try {
 			URISplit split = new URISplit(entryURI, this.entry.getRepositoryManager().getRepositoryURL());
-			if (!split.getContextID().equals(this.id)) {
+			if (split == null || !this.id.equals(split.getContextID())) {
 				return null;
 			}
 			newEntry = new EntryImpl(split.getID(), this, this.entry.repositoryManager, this.entry.getRepository());

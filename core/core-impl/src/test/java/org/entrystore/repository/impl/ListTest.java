@@ -17,19 +17,11 @@
 package org.entrystore.repository.impl;
 
 import org.entrystore.Context;
-import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.List;
-import org.entrystore.PrincipalManager;
 import org.entrystore.QuotaException;
-import org.entrystore.config.Config;
-import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.test.TestSuite;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -40,26 +32,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  */
-public class ListTest {
-	private RepositoryManagerImpl rm;
-	private ContextManager cm;
-	private PrincipalManager pm;
-
-	@Before
-	public void setup() {
-		ConfigurationManager confMan = null;
-		try {
-			confMan = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		Config config = confMan.getConfiguration();
-		config.setProperty(Settings.STORE_TYPE, "memory");
-		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
-		pm = rm.getPrincipalManager();
-		cm = rm.getContextManager();
-		TestSuite.initDisneySuite(rm);
-	}
+public class ListTest extends AbstractCoreTest {
 
 	@Test (expected=RepositoryException.class)
 	public void singleOccurenceOfChild() {
@@ -134,9 +107,9 @@ public class ListTest {
 		Entry linkEntry = duck.createLink(null, URI.create("http://slashdot.org/"), listE1.getResourceURI());
 
 		Entry listE2 = mouse.createResource(null, GraphType.List, null, null); // since owner
-		Entry newEntry = ((List) listE2.getResource()).moveEntryHere(linkEntry.getEntryURI(), listE1.getEntryURI(), false);
+		Entry newEntry = ((List) listE2.getResource()).moveEntryHere(linkEntry.getEntryURI(), listE1.getEntryURI(), true);
 		assertTrue(duck.getByEntryURI(linkEntry.getEntryURI()) == null);
-		assertTrue(newEntry.getContext() == mouse);
+		assertTrue(newEntry.getContext().equals(mouse));
 		assertTrue(((List) listE2.getResource()).getChildren().size() == 1);
 	}
 	
@@ -158,4 +131,5 @@ public class ListTest {
 		assertTrue(duck.getByEntryURI(listE3.getEntryURI()) != null);
 		assertTrue(duck.getByEntryURI(linkEntry3.getEntryURI()) != null);
 	}
+
 }

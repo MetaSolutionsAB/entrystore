@@ -17,44 +17,29 @@
 
 package org.entrystore.repository.impl;
 
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Set;
-
-import org.entrystore.GraphType;
 import org.entrystore.Context;
-import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.List;
-import org.entrystore.config.Config;
-import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.config.Settings;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
-public class ContextTest {
-	private RepositoryManagerImpl rm;
-	private ContextManager cm;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Set;
+
+import static org.junit.Assert.assertTrue;
+
+public class ContextTest extends AbstractCoreTest {
+
 	private Context context;
 
 	@Before
 	public void setup() {
-		ConfigurationManager confMan = null;
-		try {
-			confMan = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		Config config = confMan.getConfiguration();
-		config.setProperty(Settings.STORE_TYPE, "memory");
-		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
+		super.setup();
 		rm.setCheckForAuthorization(false);
-		cm = rm.getContextManager();
+
 		// A new Context
 		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		context = (Context) entry.getResource();
@@ -159,4 +144,5 @@ public class ContextTest {
 		assertTrue(context.getByEntryURI(lmmdURI) == null);
 		assertTrue(context.getByEntryURI(sublistEntry2.getEntryURI()) != null);
 	}
+
 }

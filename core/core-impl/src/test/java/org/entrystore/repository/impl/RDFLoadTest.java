@@ -17,46 +17,24 @@
 package org.entrystore.repository.impl;
 
 import org.entrystore.Context;
-import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
-import org.entrystore.PrincipalManager;
 import org.entrystore.ResourceType;
-import org.entrystore.config.Config;
 import org.entrystore.impl.ContextImpl;
-import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.io.IOException;
 
 import static org.junit.Assert.assertTrue;
 
 /**
  */
-public class RDFLoadTest {
-	private RepositoryManagerImpl rm;
-	private ContextManager cm;
-	private PrincipalManager pm;
+public class RDFLoadTest extends AbstractCoreTest {
 
 	@Before
 	public void setup() {
-		ConfigurationManager confMan = null;
-		try {
-			confMan = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		Config config = confMan.getConfiguration();
-		config.setProperty(Settings.STORE_TYPE, "memory");
-		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
-		pm = rm.getPrincipalManager();
-		cm = rm.getContextManager();
-		TestSuite.initDisneySuite(rm);
+		super.setup();
 		TestSuite.addEntriesInDisneySuite(rm);
 		((ContextImpl) cm).getCache().clear();
 	}
@@ -114,4 +92,5 @@ public class RDFLoadTest {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		assertTrue(pm.getGroupUris().size() == 3);
 	}
+
 }

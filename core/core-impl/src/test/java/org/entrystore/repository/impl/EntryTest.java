@@ -17,20 +17,12 @@
 package org.entrystore.repository.impl;
 
 import org.entrystore.Context;
-import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
-import org.entrystore.PrincipalManager;
 import org.entrystore.ResourceType;
-import org.entrystore.config.Config;
-import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.backup.BackupFactory;
-import org.entrystore.repository.backup.BackupScheduler;
-import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.config.Settings;
 import org.junit.Before;
 import org.junit.Test;
 import org.openrdf.model.Graph;
@@ -38,15 +30,11 @@ import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.vocabulary.RDF;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.URI;
 
 import static org.junit.Assert.assertTrue;
 
-public class BackupTest {
-	private RepositoryManagerImpl rm;
-
-	private ContextManager cm;
+public class EntryTest extends AbstractCoreTest {
 
 	private Context context;
 
@@ -57,61 +45,25 @@ public class BackupTest {
 	private Entry refEntry;
 
 	private Entry refLinkEntry;
+
 	private Entry resourceEntry;
-	private PrincipalManager pm;
 
 	@Before
 	public void setup() {
-		ConfigurationManager confMan = null;
-		try {
-			confMan = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		Config config = confMan.getConfiguration();
-		config.setProperty(Settings.STORE_TYPE, "memory");
-		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
+		super.setup();
 		rm.setCheckForAuthorization(false);
-		cm = rm.getContextManager();
-		pm = rm.getPrincipalManager();
+
 		// A new Context
 		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		context = (Context) entry.getResource();
 		listEntry = context.createResource(null, GraphType.List, null, null);
 		linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
-		refEntry = context
-				.createReference(null, URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
+		refEntry = context.createReference(null, URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
 		refLinkEntry = context.createLinkReference(null, URI.create("http://vk.se/"), URI.create("http://vk.se/md1"), null);
 		resourceEntry = context.createResource(null, GraphType.None, ResourceType.InformationResource, null);
 		File pomFile = new File("pom.xml");
 		resourceEntry.setFilename(pomFile.getName());
 		resourceEntry.setMimetype("text/xml");
-
-		startBackupScheduler();
-//		BackupMaintenanceScheduler bms = new BackupMaintenanceScheduler(rm); 
-//		bms.run(); 
-//		//bms.setUpperLimit(10);
-		try {
-			Thread.sleep(1000 * 240);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-	}
-
-	private void startBackupScheduler() {
-		URI userURI = pm.getAuthenticatedUserURI();
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			BackupFactory bf = new BackupFactory(rm);
-			BackupScheduler bs = bf.createBackupScheduler("0/5 * * * * ?", true, false, -1, -1, -1);
-			bs.run();
-			if (bs != null) {
-				bs.run();
-			}
-		} finally {
-			pm.setAuthenticatedUserURI(userURI);
-		}
 	}
 
 	@Test
@@ -119,7 +71,7 @@ public class BackupTest {
 		// Checking that builtintype cannot be changed for local resources
 		try {
 			listEntry.setGraphType(GraphType.None);
-			assertTrue("Succesfully (and erronously) changed the builtintype" + " of a local resource!", false);
+			assertTrue("Successfully (and erroneously) changed the builtin type" + " of a local resource!", false);
 		} catch (RepositoryException re) {
 		}
 
@@ -220,4 +172,11 @@ public class BackupTest {
 		Graph mmdGraph2 = listEntry.getGraph();
 		assertTrue(mmdGraph.size() == mmdGraph2.size());
 	}
+
+	@Test
+	public void refLocalEntry() {
+		Entry ref = context.createReference(null, linkEntry.getResourceURI(), linkEntry.getLocalMetadataURI(), null);
+		assertTrue(ref.getCachedExternalMetadata().getGraph().size() == linkEntry.getLocalMetadata().getGraph().size());
+	}
+
 }

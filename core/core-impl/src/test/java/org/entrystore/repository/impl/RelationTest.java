@@ -17,52 +17,22 @@
 package org.entrystore.repository.impl;
 
 import org.entrystore.Context;
-import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.List;
 import org.entrystore.Metadata;
-import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.config.Config;
 import org.entrystore.impl.EntryImpl;
-import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.test.TestSuite;
-import org.junit.Before;
 import org.junit.Test;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.vocabulary.RDFS;
 
-import java.io.IOException;
 import java.net.URI;
 
 import static org.junit.Assert.assertTrue;
 
-/**
- */
-public class RelationTest {
-	private RepositoryManagerImpl rm;
-	private ContextManager cm;
-	private PrincipalManager pm;
-
-	@Before
-	public void setup() {
-		ConfigurationManager confMan = null;
-		try {
-			confMan = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		Config config = confMan.getConfiguration();
-		config.setProperty(Settings.STORE_TYPE, "memory");
-		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
-		pm = rm.getPrincipalManager();
-		cm = rm.getContextManager();
-		TestSuite.initDisneySuite(rm);
-	}
+public class RelationTest extends AbstractCoreTest {
 
 	@Test
 	public void listReferents() {

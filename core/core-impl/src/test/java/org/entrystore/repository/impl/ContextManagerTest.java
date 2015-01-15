@@ -17,12 +17,9 @@
 package org.entrystore.repository.impl;
 
 import org.entrystore.Context;
-import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
 import org.entrystore.GraphType;
-import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.CommonQueries;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -32,7 +29,6 @@ import org.openrdf.model.ValueFactory;
 import org.openrdf.query.MalformedQueryException;
 import org.openrdf.repository.RepositoryException;
 
-import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,26 +38,17 @@ import static org.junit.Assert.assertTrue;
 
 /**
  */
-public class ContextManagerTest {
-	private RepositoryManagerImpl rm;
-	private ContextManager cm;
+public class ContextManagerTest extends AbstractCoreTest {
 
 	@Before
 	public void setup() {
-		ConfigurationManager confMan = null;
-		try {
-			confMan = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		confMan.getConfiguration().setProperty(Settings.STORE_TYPE, "memory");
-		rm = new RepositoryManagerImpl("http://localhost:8181/", confMan.getConfiguration());
-		cm = rm.getContextManager();
+		super.setup();
 		rm.setCheckForAuthorization(false);
 	}
 
+	@Ignore("FIXME - does not do any sensible testing now")
 	@Test
-	public void searchControl() throws Exception {
+	public void sparqlSearch() throws Exception {
 		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		Context context = (Context) entry.getResource();
 
@@ -107,9 +94,10 @@ public class ContextManagerTest {
 		Context c = cm.getContext("1");
 		Entry en = c.get("2");
 
-
-		Graph g = en.getLocalMetadata().getGraph();
-		g = en.getGraph();
+		if (!EntryType.Reference.equals(en.getEntryType())) {
+			Graph g = en.getLocalMetadata().getGraph();
+			// g = en.getGraph();
+		}
 
 
 		String mdQuery = new String("PREFIX dc:<http://purl.org/dc/terms/> " +
@@ -129,6 +117,12 @@ public class ContextManagerTest {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+	}
+
+	@Ignore("Needs to be implemented")
+	@Test
+	public void solrSearch() {
+
 	}
 
 	@Test
@@ -218,20 +212,13 @@ public class ContextManagerTest {
 
 	}
 
-	@Ignore
 	@Test
 	public void systemEntriesListCheck() {
 		Entry seEntry = cm.get("_systemEntries");
 		org.entrystore.List listOfSEEntries = (org.entrystore.List) seEntry.getResource();
 		int nrOfSE = listOfSEEntries.getChildren().size();
 		int nrOfSC = rm.getSystemContextAliases().size();
-		assertTrue(nrOfSE == nrOfSC + 4); //All #SystemEntries = #SystemContext + the special _all,  _top, and _backup systemEntries
+		assertTrue(nrOfSE == nrOfSC + 5); //All #SystemEntries = #SystemContext + the special _all,  _top, and _backup systemEntries
 	}
 
-	public static void main(String args[]) {
-//		org.junit.runner.JUnitCore.main("se.kmr.scam.repository.impl.ContextManagerTest");
-		ContextManagerTest cmt = new ContextManagerTest();
-		cmt.setup();
-		cmt.createAndRemoveContext();
-	}
 }
