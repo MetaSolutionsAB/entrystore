@@ -1,5 +1,4 @@
 {
-  "apiVersion": "4.2.0",
   "swagger": "2.0",
   "schemes": [
     "http",
@@ -51,16 +50,13 @@
   },
   "responses": {
   },
-  "security": {
-  },
   "paths": {
     "/management/backup": {
     },
     "/management/status": {
       "get": {
         "summary": "Returns status and settings of the repository",
-        "description": "Multiple status values can be provided with comma seperated strings",
-        "operationId": "status",
+        "operationId": "managementStatus",
         "produces": [
           "plain/text",
           "application/json"
@@ -70,13 +66,15 @@
             "name": "extended",
             "in": "query",
             "description": "Authenticated users get access to the extended information in JSON",
-            "required": false
+            "required": false,
+            "type": "string"
           },
           {
             "name": "includeStats",
             "in": "query",
             "description": "Includes statistical information, requires paramater \"extended\"",
-            "required": false
+            "required": false,
+            "type": "string"
           }
         ],
         "responses": {
@@ -90,6 +88,20 @@
       }
     },
     "/management/solr": {
+      "get": {
+        "summary": "Manages the Solr index",
+        "operationdId": "managementSolr",
+        "produces": [],
+        "parameters": [
+          {
+            "name": "cmd",
+            "in": "query",
+            "description": "Rebuilds the index",
+            "required": true,
+            "type": "string"
+          }
+        ]
+      }
     },
     "/search": {
     },
