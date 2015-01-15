@@ -56,7 +56,7 @@
     "/management/status": {
       "get": {
         "tags": ["management"],
-        "summary": "Returns status and settings of the repository",
+        "summary": "Repository status",
         "operationId": "managementStatus",
         "produces": [
           "plain/text",
