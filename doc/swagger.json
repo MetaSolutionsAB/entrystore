@@ -90,7 +90,7 @@
     "/management/solr": {
       "get": {
         "summary": "Manages the Solr index",
-        "operationdId": "managementSolr",
+        "operationId": "managementSolr",
         "produces": [],
         "parameters": [
           {
@@ -100,7 +100,21 @@
             "required": true,
             "type": "string"
           }
-        ]
+        ],
+        "responses": {
+          "202": {
+            "description": "Reindexing started"
+          },
+          "400": {
+            "description": "Invalid parameters"
+          },
+          "403": {
+            "description": "Insufficient rights for requested information"
+          },
+          "404": {
+            "description": "Solr instance not found, i.e., it is not used"
+          }
+        }
       }
     },
     "/search": {
