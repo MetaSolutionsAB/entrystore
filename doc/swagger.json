@@ -187,6 +187,41 @@
     "/sparql": {
     },
     "/proxy": {
+      "get": {
+        "tags": ["proxy"],
+        "summary": "Proxies requests to external hosts",
+        "operationId": "proxy",
+        "produces": [
+          "*"
+        ],
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "description": "The URL to be fetched, redirects are followed",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "fromFormat",
+            "in": "query",
+            "description": "Source format to be converted to RDF, see Knowledge Base for a list of supported formats",
+            "required": false,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid request, no URL provided or unable to fetch remote resource"
+          },
+          "403": {
+            "description": "Forbidden, i.e., user not logged in"
+          }
+        }
+      }
     },
     "/auth/user": {
     },
@@ -195,8 +230,33 @@
     "/auth/basic": {
     },
     "/auth/login": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Returns a basic HTML-form for login",
+        "description": "It is recommended to use any of the other login-resources. Performs a cookie-based login and should only be used for testing purposes, does not really belong to the API.",
+        "operationId": "loginHTML",
+        "produces": ["text/html"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful"
+          }
+        }
+      }
     },
     "/auth/logout": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Performs a logout of the currently logged in user",
+        "operationId": "logout",
+        "produces": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "User successfully logged out"
+          }
+        }
+      }
     },
     "/auth/signup": {
     },
