@@ -68,14 +68,16 @@
             "in": "query",
             "description": "Authenticated users get access to the extended information in JSON",
             "required": false,
-            "type": "boolean"
+            "type": "boolean",
+            "enum": [true]
           },
           {
             "name": "includeStats",
             "in": "query",
             "description": "Includes statistical information, requires paramater \"extended\"",
             "required": false,
-            "type": "boolean"
+            "type": "boolean",
+            "enum": [true]
           }
         ],
         "responses": {
