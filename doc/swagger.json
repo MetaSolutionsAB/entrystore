@@ -68,16 +68,14 @@
             "in": "query",
             "description": "Authenticated users get access to the extended information in JSON",
             "required": false,
-            "type": "boolean",
-            "enum": ["true"]
+            "type": "boolean"
           },
           {
             "name": "includeStats",
             "in": "query",
             "description": "Includes statistical information, requires paramater \"extended\"",
             "required": false,
-            "type": "boolean",
-            "enum": ["true"]
+            "type": "boolean"
           }
         ],
         "responses": {
@@ -123,6 +121,68 @@
       }
     },
     "/search": {
+      "get": {
+        "tags": ["search"],
+        "summary": "Searches the repository and returns entries",
+        "operationId": "search",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "description": "Specifies which search backend to use",
+            "required": true,
+            "type": "string",
+            "enum": ["solr"]
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "description": "A Solr-query string, see the Knowledge Base at entrystore.org for detailed information about available parameters",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Solr-style sorting",
+            "required": false,
+            "type": "string",
+            "default": "score+desc,modified+desc"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum amount of returned entries",
+            "required": false,
+            "type": "integer",
+            "default": "50",
+            "minimum": "1",
+            "maximum": "100"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Offset (number of items, not page) to be used for pagination",
+            "required": false,
+            "type": "integer",
+            "default": 0
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid query, e.g. too short or invalid parameters"
+          },
+          "500": {
+            "description": "Server error"
+          }
+        }
+      }
     },
     "/sparql": {
     },
