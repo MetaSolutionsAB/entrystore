@@ -16,30 +16,15 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URI;
-import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.Set;
-
+import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.impl.converters.ConverterUtil;
-import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.GraphUtil;
-import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.n3.N3Writer;
-import org.openrdf.rio.ntriples.NTriplesWriter;
-import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
-import org.openrdf.rio.trig.TriGWriter;
-import org.openrdf.rio.trix.TriXWriter;
-import org.openrdf.rio.turtle.TurtleWriter;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.EmptyRepresentation;
@@ -49,10 +34,17 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Set;
+
 
 /**
- * Performs a lookup based on the resource URI and returns either metadata or
- * the resource.
+ * Performs a lookup based on the resource URI and returns metadata about the resource.
  * 
  * @author Hannes Ebner
  */
