@@ -16,27 +16,19 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.IOException;
-
+import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.converters.Graph2Entries;
-import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.GraphUtil;
-import org.entrystore.rest.util.RDFJSON;
 import org.openrdf.model.Graph;
-import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.n3.N3ParserFactory;
-import org.openrdf.rio.ntriples.NTriplesParser;
-import org.openrdf.rio.rdfxml.RDFXMLParser;
-import org.openrdf.rio.trig.TriGParser;
-import org.openrdf.rio.trix.TriXParser;
-import org.openrdf.rio.turtle.TurtleParser;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
 
 
 /**
@@ -58,7 +50,7 @@ public class MergeResource extends BaseResource {
 			}
 			
 			if (context == null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				return;
 			}
 			
