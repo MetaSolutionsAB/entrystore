@@ -129,6 +129,7 @@ public class SignupResource extends BaseResource {
 			if (ci.urlSuccess != null) {
 				getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, "UTF-8"));
 			}
+			getResponse().setStatus(Status.SUCCESS_CREATED);
 			return html.representation("Sign-up successful.");
 		} catch (UnsupportedEncodingException e) {
 			log.warn("Unable to decode URL: " + e.getMessage());
