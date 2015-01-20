@@ -16,13 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.List;
-
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.openrdf.model.URI;
@@ -50,9 +43,16 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.List;
+
 
 /**
- * Provides a SPARQL interface to SCAM contexts.
+ * Provides a SPARQL interface to contexts.
  * 
  * @author Hannes Ebner
  */
