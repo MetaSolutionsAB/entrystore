@@ -16,28 +16,20 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.Set;
-
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
-import org.entrystore.GraphType;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.List;
-import org.entrystore.EntryType;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
-import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
-import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
@@ -59,6 +51,14 @@ import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.Set;
 
 
 /**
@@ -159,7 +159,7 @@ public class ContextResource extends BaseResource {
 		try {
 			if (context == null) {
 				log.info("The given context id doesn't exist."); 
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				getResponse().setEntity(JSONErrorMessages.errorWrongContextIDmsg, MediaType.APPLICATION_JSON);
 			}
 
