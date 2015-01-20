@@ -16,17 +16,13 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.IOException;
-import java.util.Iterator;
-import java.util.Set;
-
+import org.entrystore.AuthorizationException;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactory;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
-import org.entrystore.GraphType;
-import org.entrystore.Entry;
-import org.entrystore.AuthorizationException;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Status;
@@ -39,6 +35,10 @@ import org.restlet.resource.Put;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.Set;
 
 
 public class HarvesterResource extends BaseResource {
@@ -59,12 +59,13 @@ public class HarvesterResource extends BaseResource {
 		try {
 			JSONObject jsonObj = new JSONObject(); 
 			if (harvester == null) {
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				return new JsonRepresentation("No harvester found"); 
 			} else {
 				try {
 					getInformation(jsonObj);
 				} catch (JSONException e) {
-					log.error(e.getMessage()); 
+					log.error(e.getMessage());
 				}
 			}
 
