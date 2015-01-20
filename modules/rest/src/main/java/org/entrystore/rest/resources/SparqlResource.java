@@ -91,6 +91,9 @@ public class SparqlResource extends BaseResource {
 				} catch (UnsupportedEncodingException uee) {
 					log.error(uee.getMessage());
 				}
+			} else {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return null;
 			}
 			
 			Representation result = getSparqlResponse(format, queryString); 
@@ -108,6 +111,11 @@ public class SparqlResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		try {
+			if (this.getRM().getPublicRepository() == null) {
+				getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
+				return;
+			}
+
 			Form form = new Form(getRequest().getEntity());
 			String format = form.getFirstValue("output", true, "json");;
 			if (format.equals("json")) {
