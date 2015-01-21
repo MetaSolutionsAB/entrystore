@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import com.github.jsonldjava.sesame.SesameJSONLDParser;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -44,20 +43,6 @@ import org.json.JSONObject;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.Rio;
-import org.openrdf.rio.helpers.JSONLDMode;
-import org.openrdf.rio.helpers.JSONLDSettings;
-import org.openrdf.rio.n3.N3ParserFactory;
-import org.openrdf.rio.n3.N3Writer;
-import org.openrdf.rio.ntriples.NTriplesParser;
-import org.openrdf.rio.ntriples.NTriplesWriter;
-import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
-import org.openrdf.rio.trig.TriGParser;
-import org.openrdf.rio.trig.TriGWriter;
-import org.openrdf.rio.trix.TriXParser;
-import org.openrdf.rio.trix.TriXWriter;
-import org.openrdf.rio.turtle.TurtleParser;
-import org.openrdf.rio.turtle.TurtleWriter;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -72,7 +57,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.StringWriter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
@@ -193,6 +177,8 @@ public class EntryResource extends BaseResource {
 					context.remove(entry.getEntryURI());
 				}
 				//getResponse().setEntity(new JsonRepresentation("{\"OK\":\"200\"}"));
+			} else {
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			}
 		} catch (AuthorizationException e) {
 			unauthorizedDELETE();
@@ -274,7 +260,7 @@ public class EntryResource extends BaseResource {
 			jdilObj.put("entryId", entry.getId());
 			GraphType bt = entry.getGraphType();
 			if ((bt == GraphType.Context || bt == GraphType.SystemContext) && EntryType.Local.equals(entry.getEntryType())) {
-				jdilObj.put("alias", getCM().getName(entry.getResourceURI()));
+				jdilObj.put("name", getCM().getName(entry.getResourceURI()));
 				if (entry.getRepositoryManager().hasQuotas()) {
 					JSONObject quotaObj = new JSONObject();
 					Context c = getCM().getContext(this.entryId);
@@ -480,7 +466,7 @@ public class EntryResource extends BaseResource {
 							GraphType btChild = childEntry.getGraphType();
 							EntryType locChild = childEntry.getEntryType();
 							if ((btChild == GraphType.Context || btChild == GraphType.SystemContext) && EntryType.Local.equals(locChild)) {
-								childJSON.put("alias", getCM().getName(childEntry.getResourceURI()));
+								childJSON.put("name", getCM().getName(childEntry.getResourceURI()));
 							} else if (btChild == GraphType.List) {
 								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
 									Resource childRes = childEntry.getResource();
