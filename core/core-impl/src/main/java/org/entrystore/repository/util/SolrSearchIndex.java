@@ -464,6 +464,7 @@ public class SolrSearchIndex implements SearchIndex {
 		int limit = query.getRows();
 		int offset = query.getStart();
 		query.setIncludeScore(true);
+		query.setRequestHandler("dismax");
 		int resultFillIteration = 0;
 		do {
 			if (resultFillIteration++ > 0) {
