@@ -16,20 +16,17 @@
 
 package org.entrystore.impl;
 
-import java.io.File;
-import java.util.Set;
-
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
-import org.entrystore.repository.RepositoryManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.config.Config;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.AuthorizationException;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;
 import org.openrdf.model.URI;
@@ -43,6 +40,9 @@ import org.openrdf.sail.memory.MemoryStore;
 import org.openrdf.sail.nativerdf.NativeStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.util.Set;
 
 
 /**
@@ -119,6 +119,9 @@ public class PublicRepository {
 	}
 
 	public void addEntry(Entry e) {
+		if (isAdministrative(e)) {
+			return;
+		}
 		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 		try {
 			ValueFactory vf = repository.getValueFactory();
@@ -156,7 +159,7 @@ public class PublicRepository {
 				RepositoryConnection rc = null;
 				try {
 					rc = repository.getConnection();
-					rc.setAutoCommit(false);
+					rc.begin();
 					if (entryGraph != null) {
 						rc.add(entryGraph, entryNG, contextURI);
 					}
@@ -242,7 +245,7 @@ public class PublicRepository {
 				RepositoryConnection rc = null;
 				try {
 					rc = repository.getConnection();
-					rc.setAutoCommit(false);
+					rc.begin();
 					if (extMdNG != null) {
 						rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
 					} else {
@@ -265,11 +268,11 @@ public class PublicRepository {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
 	}
-	
+
 	public void rebuildRepository() {
 		synchronized (repository) {
 			if (rebuilding) {
-				log.warn("The public repository is already being rebuilt: ignoring additional rebuilding request");
+				log.warn("The public repository is already being rebuilt: ignoring additional rebuilding requests");
 				return;
 			} else {
 				rebuilding = true;
@@ -277,10 +280,12 @@ public class PublicRepository {
 		}
 
 		log.info("Rebuilding public repository");
-		
+
 		try {
 			RepositoryConnection rc = repository.getConnection();
+			rc.begin();
 			rc.clear();
+			rc.commit();
 			rc.close();
 
 			ContextManager cm = rm.getContextManager();
@@ -317,6 +322,17 @@ public class PublicRepository {
 		}
 	}
 	
+	private boolean isAdministrative(Entry e) {
+		EntryType et = e.getEntryType();
+		if (GraphType.Graph.equals(et) ||
+				GraphType.String.equals(et) ||
+				GraphType.None.equals(et) ||
+				GraphType.List.equals(et)) {
+			return false;
+		}
+		return true;
+	}
+
 	private boolean isPublic(Entry e) {
 		boolean result = false;
 		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
@@ -328,7 +344,7 @@ public class PublicRepository {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		return result;
 	}
-	
+
 	public long getTripleCount() {
 		long amountTriples = 0;
 		RepositoryConnection rc = null;
