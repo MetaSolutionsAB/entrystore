@@ -40,6 +40,7 @@ import org.restlet.data.Form;
 import org.restlet.data.Language;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
@@ -100,6 +101,7 @@ public class SignupResource extends BaseResource {
 				try {
 					if (ci.urlFailure != null) {
 						getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, "UTF-8"));
+						return new EmptyRepresentation();
 					} else {
 						getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 					}
@@ -132,6 +134,7 @@ public class SignupResource extends BaseResource {
 		try {
 			if (ci.urlSuccess != null) {
 				getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, "UTF-8"));
+				return new EmptyRepresentation();
 			}
 			getResponse().setStatus(Status.SUCCESS_CREATED);
 			return html.representation("Sign-up successful.");

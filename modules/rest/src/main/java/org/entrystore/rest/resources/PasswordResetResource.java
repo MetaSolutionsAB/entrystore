@@ -95,6 +95,7 @@ public class PasswordResetResource extends BaseResource {
 				if (ci.urlFailure != null) {
 					try {
 						getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, "UTF-8"));
+						return new EmptyRepresentation();
 					} catch (UnsupportedEncodingException use) {
 						log.warn("Unable to decode URL: " + use.getMessage());
 					}
@@ -114,6 +115,7 @@ public class PasswordResetResource extends BaseResource {
 		if (ci.urlSuccess != null) {
 			try {
 				getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, "UTF-8"));
+				return new EmptyRepresentation();
 			} catch (UnsupportedEncodingException e) {
 				log.warn("Unable to decode URL: " + e.getMessage());
 			}
