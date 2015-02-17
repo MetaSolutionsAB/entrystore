@@ -226,14 +226,16 @@ public class PasswordResetResource extends BaseResource {
 
 		String token = RandomStringUtils.randomAlphanumeric(16);
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
-		SignupTokenCache.getInstance().addToken(token, ci);
 		log.info("Generated password reset token " + token + " for " + ci.email);
 
 		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), null, ci.email, confirmationLink, true);
 		if (sendSuccessful) {
+			SignupTokenCache.getInstance().addToken(token, ci);
 			log.info("Sent confirmation request to " + ci.email);
 		} else {
 			log.info("Failed to send confirmation request to " + ci.email);
+			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+			return;
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);

@@ -260,14 +260,16 @@ public class SignupResource extends BaseResource {
 
 		String token = RandomStringUtils.randomAlphanumeric(16);
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
-		SignupTokenCache.getInstance().addToken(token, ci);
 		log.info("Generated sign-up token " + token + " for " + ci.email);
 
 		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), ci.firstName + " " + ci.lastName, ci.email, confirmationLink, false);
 		if (sendSuccessful) {
+			SignupTokenCache.getInstance().addToken(token, ci);
 			log.info("Sent confirmation request to " + ci.email);
 		} else {
 			log.info("Failed to send confirmation request to " + ci.email);
+			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+			return;
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);
