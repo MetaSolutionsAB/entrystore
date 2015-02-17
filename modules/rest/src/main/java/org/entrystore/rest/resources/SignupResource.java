@@ -32,6 +32,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
+import org.entrystore.rest.util.RecaptchaVerifier;
 import org.entrystore.rest.util.SimpleHTML;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -148,6 +149,7 @@ public class SignupResource extends BaseResource {
 		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
 		String rcChallenge = null;
 		String rcResponse = null;
+		String rcResponseV2 = null;
 
 		if (MediaType.APPLICATION_JSON.equals(r.getMediaType())) {
 			try {
@@ -170,6 +172,9 @@ public class SignupResource extends BaseResource {
 				if (siJson.has("recaptcha_response_field")) {
 					rcResponse = siJson.getString("recaptcha_response_field");
 				}
+				if (siJson.has("g-recaptcha-response")) {
+					rcResponseV2 = siJson.getString("g-recaptcha-response");
+				}
 				if (siJson.has("urlfailure")) {
 					ci.urlFailure = siJson.getString("urlfailure");
 				}
@@ -188,6 +193,7 @@ public class SignupResource extends BaseResource {
 			ci.password = form.getFirstValue("password", true);
 			rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
 			rcResponse = form.getFirstValue("recaptcha_response_field", true);
+			rcResponseV2 = form.getFirstValue("g-recaptcha-response", true);
 			ci.urlFailure = form.getFirstValue("urlfailure", true);
 			ci.urlSuccess = form.getFirstValue("urlsuccess", true);
 		}
@@ -222,7 +228,7 @@ public class SignupResource extends BaseResource {
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
-			if (rcChallenge == null || rcResponse == null) {
+			if ((rcChallenge == null || rcResponse == null) && rcResponseV2 == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(html.representation("reCaptcha information missing"));
 				return;
@@ -230,11 +236,19 @@ public class SignupResource extends BaseResource {
 			log.info("Checking reCaptcha for " + ci.email);
 
 			String remoteAddr = getRequest().getClientInfo().getUpstreamAddress();
-			ReCaptchaImpl captcha = new ReCaptchaImpl();
-			captcha.setPrivateKey(config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
-			ReCaptchaResponse reCaptchaResponse = captcha.checkAnswer(remoteAddr, rcChallenge, rcResponse);
+			boolean reCaptchaIsValid = false;
 
-			if (reCaptchaResponse.isValid()) {
+			if (rcResponseV2 != null) {
+				RecaptchaVerifier rcVerifier = new RecaptchaVerifier(config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
+				reCaptchaIsValid = rcVerifier.verify(rcResponseV2, remoteAddr);
+			} else {
+				ReCaptchaImpl captcha = new ReCaptchaImpl();
+				captcha.setPrivateKey(config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
+				ReCaptchaResponse reCaptchaResponse = captcha.checkAnswer(remoteAddr, rcChallenge, rcResponse);
+				reCaptchaIsValid = reCaptchaResponse.isValid();
+			}
+
+			if (reCaptchaIsValid) {
 				log.info("Valid reCaptcha for " + ci.email);
 			} else {
 				log.info("Invalid reCaptcha for " + ci.email);
