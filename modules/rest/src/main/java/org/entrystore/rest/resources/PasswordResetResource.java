@@ -31,6 +31,7 @@ import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
 import org.entrystore.rest.util.SimpleHTML;
+import org.json.JSONObject;
 import org.restlet.data.Form;
 import org.restlet.data.Language;
 import org.restlet.data.MediaType;
@@ -123,35 +124,67 @@ public class PasswordResetResource extends BaseResource {
 
 	@Post
 	public void acceptRepresentation(Representation r) {
-		Form form = new Form(getRequest().getEntity());
-		String email = form.getFirstValue("email", true);
-		String password = form.getFirstValue("password", true);
-		String rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
-		String rcResponse = form.getFirstValue("recaptcha_response_field", true);
-		String urlFailure = form.getFirstValue("urlfailure", true);
-		String urlSuccess = form.getFirstValue("urlsuccess", true);
+		SignupInfo ci = new SignupInfo();
+		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
+		String rcChallenge = null;
+		String rcResponse = null;
 
-		if (email == null || password == null) {
+		if (MediaType.APPLICATION_JSON.equals(r.getMediaType())) {
+			try {
+				JSONObject siJson = new JSONObject(r.getText());
+				if (siJson.has("email")) {
+					ci.email = siJson.getString("email");
+				}
+				if (siJson.has("password")) {
+					ci.password = siJson.getString("password");
+				}
+				if (siJson.has("recaptcha_challenge_field")) {
+					rcChallenge = siJson.getString("recaptcha_challenge_field");
+				}
+				if (siJson.has("recaptcha_response_field")) {
+					rcResponse = siJson.getString("recaptcha_response_field");
+				}
+				if (siJson.has("urlfailure")) {
+					ci.urlFailure = siJson.getString("urlfailure");
+				}
+				if (siJson.has("urlsuccess")) {
+					ci.urlSuccess = siJson.getString("urlsuccess");
+				}
+			} catch (Exception e) {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return;
+			}
+		} else {
+			Form form = new Form(getRequest().getEntity());
+			ci.email = form.getFirstValue("email", true);
+			ci.password = form.getFirstValue("password", true);
+			rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
+			rcResponse = form.getFirstValue("recaptcha_response_field", true);
+			ci.urlFailure = form.getFirstValue("urlfailure", true);
+			ci.urlSuccess = form.getFirstValue("urlsuccess", true);
+		}
+
+		if (ci.email == null || ci.password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("One or more parameters are missing."));
 			return;
 		}
 
-		if (password.trim().length() < 8) {
+		if (ci.password.trim().length() < 8) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("The password has to consist of at least 8 characters."));
 			return;
 		}
 
-		if (!EmailValidator.getInstance().isValid(email)) {
+		if (!EmailValidator.getInstance().isValid(ci.email)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(html.representation("Invalid email address: " + email));
+			getResponse().setEntity(html.representation("Invalid email address: " + ci.email));
 			return;
 		}
 
 		Config config = getRM().getConfiguration();
 
-		log.info("Received password reset request for " + email);
+		log.info("Received password reset request for " + ci.email);
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
@@ -160,7 +193,7 @@ public class PasswordResetResource extends BaseResource {
 				getResponse().setEntity(html.representation("reCaptcha information missing"));
 				return;
 			}
-			log.info("Checking reCaptcha for " + email);
+			log.info("Checking reCaptcha for " + ci.email);
 
 			String remoteAddr = getRequest().getClientInfo().getUpstreamAddress();
 			ReCaptchaImpl captcha = new ReCaptchaImpl();
@@ -168,36 +201,29 @@ public class PasswordResetResource extends BaseResource {
 			ReCaptchaResponse reCaptchaResponse = captcha.checkAnswer(remoteAddr, rcChallenge, rcResponse);
 
 			if (reCaptchaResponse.isValid()) {
-				log.info("Valid reCaptcha for " + email);
+				log.info("Valid reCaptcha for " + ci.email);
 			} else {
-				log.info("Invalid reCaptcha for " + email);
+				log.info("Invalid reCaptcha for " + ci.email);
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(html.representation("Invalid reCaptcha received."));
 				return;
 			}
 		}
 
-		SignupInfo ci = new SignupInfo();
-		ci.email = email;
-		ci.password = password;
-		ci.urlFailure = urlFailure;
-		ci.urlSuccess = urlSuccess;
-		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
-
 		String token = RandomStringUtils.randomAlphanumeric(16);
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
 		SignupTokenCache.getInstance().addToken(token, ci);
-		log.info("Generated password reset token " + token + " for " + email);
+		log.info("Generated password reset token " + token + " for " + ci.email);
 
-		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), null, email, confirmationLink, true);
+		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), null, ci.email, confirmationLink, true);
 		if (sendSuccessful) {
-			log.info("Sent confirmation request to " + email);
+			log.info("Sent confirmation request to " + ci.email);
 		} else {
-			log.info("Failed to send confirmation request to " + email);
+			log.info("Failed to send confirmation request to " + ci.email);
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);
-		getResponse().setEntity(html.representation("A confirmation message was sent to " + email));
+		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.email));
 	}
 
 	private String constructHtmlForm(boolean reCaptcha) {
