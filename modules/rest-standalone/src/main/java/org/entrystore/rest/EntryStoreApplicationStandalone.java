@@ -36,7 +36,7 @@ public class EntryStoreApplicationStandalone extends Application {
 
 	public static void main(String[] args) {
 		if (args.length < 1 || args.length > 3) {
-			out("EntryStore REST standalone");
+			out("EntryStore standalone");
 			out("http://entrystore.org");
 			out("");
 			out("Usage: entrystore /path/to/entrystore.properties [listening port] [log level]");
@@ -57,6 +57,10 @@ public class EntryStoreApplicationStandalone extends Application {
 			} catch (NumberFormatException nfe) {
 				out("Invalid listening port, must be an integer");
 			}
+		}
+
+		if (args.length == 3) {
+			configureLogging(args[2]);
 		}
 
 		Component component = new Component();
@@ -80,7 +84,7 @@ public class EntryStoreApplicationStandalone extends Application {
 		System.out.println(s);
 	}
 
-	private void configureLogging(String logLevel) {
+	private static void configureLogging(String logLevel) {
 		BasicConfigurator.configure();
 		Level l = Level.INFO;
 		if (logLevel != null) {
