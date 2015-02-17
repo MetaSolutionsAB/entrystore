@@ -16,6 +16,7 @@
 
 package org.entrystore.rest;
 
+import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.restlet.Application;
@@ -34,13 +35,14 @@ import java.net.URI;
 public class EntryStoreApplicationStandalone extends Application {
 
 	public static void main(String[] args) {
-		if (args.length < 1 || args.length > 2) {
+		if (args.length < 1 || args.length > 3) {
 			out("EntryStore REST standalone");
 			out("http://entrystore.org");
 			out("");
-			out("Usage: entrystore /path/to/entrystore.properties [listening port]");
+			out("Usage: entrystore /path/to/entrystore.properties [listening port] [log level]");
 			out("");
 			out("Default listening port is 8181.");
+			out("Log level may be one of: ALL, DEBUG, INFO, WARN, ERROR, FATAL, OFF, TRACE");
 			out("");
 			System.exit(0);
 		}
@@ -49,7 +51,7 @@ public class EntryStoreApplicationStandalone extends Application {
 		URI config = new File(configStr).toURI();
 
 		int port = 8181;
-		if (args.length == 2) {
+		if (args.length >= 2) {
 			try {
 				port = Integer.valueOf(args[1]);
 			} catch (NumberFormatException nfe) {
@@ -76,6 +78,16 @@ public class EntryStoreApplicationStandalone extends Application {
 
 	private static void out(String s) {
 		System.out.println(s);
+	}
+
+	private void configureLogging(String logLevel) {
+		BasicConfigurator.configure();
+		Level l = Level.INFO;
+		if (logLevel != null) {
+			l = Level.toLevel(logLevel, Level.INFO);
+		}
+		Logger.getRootLogger().setLevel(l);
+		out("Log level set to " + l);
 	}
 
 }
