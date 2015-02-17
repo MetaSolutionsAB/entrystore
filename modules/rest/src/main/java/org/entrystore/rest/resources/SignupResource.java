@@ -172,8 +172,8 @@ public class SignupResource extends BaseResource {
 				if (siJson.has("recaptcha_response_field")) {
 					rcResponse = siJson.getString("recaptcha_response_field");
 				}
-				if (siJson.has("g-recaptcha-response")) {
-					rcResponseV2 = siJson.getString("g-recaptcha-response");
+				if (siJson.has("grecaptcharesponse")) {
+					rcResponseV2 = siJson.getString("grecaptcharesponse");
 				}
 				if (siJson.has("urlfailure")) {
 					ci.urlFailure = siJson.getString("urlfailure");
