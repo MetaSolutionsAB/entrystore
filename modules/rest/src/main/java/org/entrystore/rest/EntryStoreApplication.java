@@ -46,6 +46,7 @@ import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
 import org.entrystore.rest.resources.*;
 import org.entrystore.rest.util.CORSUtil;
+import org.entrystore.rest.util.HttpUtil;
 import org.restlet.Application;
 import org.restlet.Context;
 import org.restlet.Request;
@@ -69,7 +70,9 @@ import javax.servlet.ServletContext;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Set;
 
 /**
@@ -96,6 +99,8 @@ public class EntryStoreApplication extends Application {
 	private ArrayList<Harvester> harvesters = new ArrayList<Harvester>();
 	
 	private BackupScheduler backupScheduler;
+
+	private static String VERSION = null;
 
 	URI configURI;
 
@@ -425,7 +430,23 @@ public class EntryStoreApplication extends Application {
 			getPM().setAuthenticatedUserURI(realURI);
 		}
 	}
-	
+
+	public static String getVersion() {
+		if (VERSION == null) {
+			URI versionFile = ConfigurationManager.getConfigurationURI("VERSION.txt");
+			try {
+				log.debug("Reading version number from " + versionFile);
+				VERSION = HttpUtil.readFirstLine(versionFile.toURL());
+			} catch (IOException e) {
+				log.error(e.getMessage());
+			}
+			if (VERSION == null) {
+				VERSION = new SimpleDateFormat("yyyyMMdd").format(new Date());
+			}
+		}
+		return VERSION;
+	}
+
 	@Override
 	public synchronized void stop() throws Exception {
 		log.info("Shutting down");
