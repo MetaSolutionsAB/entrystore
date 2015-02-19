@@ -150,7 +150,9 @@ public class MetadataImpl implements Metadata {
 					URI entryURI = URI.create(statement.getObject().stringValue()); 
 
 					EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(entryURI); 
-					sourceEntry.removeRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
+					if (sourceEntry != null) {
+					    sourceEntry.removeRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
+					}
 				}
 			}
 		}
