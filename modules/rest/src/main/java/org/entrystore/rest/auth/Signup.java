@@ -188,7 +188,6 @@ public class Signup {
 		if (userInfo.getFirstName() != null) {
 			fullname = userInfo.getFirstName();
 			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "givenName"), vf.createLiteral(userInfo.getFirstName())));
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "firstName"), vf.createLiteral(userInfo.getFirstName())));
 		}
 		if (userInfo.getLastName() != null) {
 			if (fullname != null) {
@@ -197,7 +196,6 @@ public class Signup {
 				fullname = userInfo.getLastName();
 			}
 			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "familyName"), vf.createLiteral(userInfo.getLastName())));
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "lastName"), vf.createLiteral(userInfo.getLastName())));
 		}
 		if (fullname != null) {
 			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "name"), vf.createLiteral(fullname)));
