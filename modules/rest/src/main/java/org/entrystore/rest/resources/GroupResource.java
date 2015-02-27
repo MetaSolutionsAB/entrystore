@@ -84,13 +84,41 @@ public class GroupResource extends BaseResource {
 		try {
 			JSONObject req = new JSONObject(r.getText());
 
+			// TODO if current user is guest -> deny request
 
+			// TODO save the current user uri
 
+			// TODO become admin
+
+			// TODO read parameters group name and context name
+
+			// TODO create group principal
+
+			// TODO make creating user to admin of group
+
+			// TODO make creating user a member of the group
+
+			// TODO create context
+
+			// TODO make creating user to admin of context
+
+			// TODO group gets write access on context resource
+
+			/* TODO set group's home context to newly created context
+					- this perhaps requires the introduction of Group.setHomeContext() (see User class)
+					- Statement s(<group entry URI>) p(<http://entrystore.org/terms/homeContext>) o(<context resource URI>) is set in groups entry information
+			 */
+
+			// TODO set names for group and context
+
+			// TODO send request response with status 201 that contains location header with URI of new group
 
 		} catch (IOException ioe) {
 			log.error(ioe.getMessage());
 		} catch (JSONException jsone) {
 			log.error(jsone.getMessage());
+		} finally {
+			// TODO reset logged in user
 		}
 	}
 }
