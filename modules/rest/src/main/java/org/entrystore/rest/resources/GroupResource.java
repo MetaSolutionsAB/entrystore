@@ -111,6 +111,8 @@ public class GroupResource extends BaseResource {
 
 			// TODO set names for group and context
 
+			// TODO make sure that creator is set to the calling user (and not admin)
+
 			// TODO send request response with status 201 that contains location header with URI of new group
 
 		} catch (IOException ioe) {
