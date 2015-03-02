@@ -21,12 +21,13 @@ import java.net.URI;
 import java.util.List;
 import java.util.Vector;
 
+import org.entrystore.Context;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 
 
-public class SystemGroup extends SystemList implements Group{
+public class SystemGroup extends SystemList implements Group {
 	
 	public SystemGroup(EntryImpl entry, String uri) {
 		super(entry, uri);
@@ -61,6 +62,14 @@ public class SystemGroup extends SystemList implements Group{
 	}
 
 	public boolean setName(String name) {
+		throw new UnsupportedOperationException();
+	}
+
+	public Context getHomeContext() {
+		throw new UnsupportedOperationException();
+	}
+
+	public boolean setHomeContext(Context context) {
 		throw new UnsupportedOperationException();
 	}
 
