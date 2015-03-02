@@ -215,10 +215,15 @@ public class UserImpl extends RDFResource implements User {
 			
 			try {
 				rc = this.entry.repository.getConnection();
-				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI).asList();
-				if (!matches.isEmpty()) {
-					this.homeContext = java.net.URI.create(matches.get(0).getObject().stringValue());
-				}
+                List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, entry.getSesameEntryURI()).asList();
+                if (!matches.isEmpty()) {
+                    this.homeContext = java.net.URI.create(matches.get(0).getObject().stringValue());
+                } else { //TODO else case is backwards compatible code, remove in future.
+                    matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, resourceURI).asList();
+                    if (!matches.isEmpty()) {
+                        this.homeContext = java.net.URI.create(matches.get(0).getObject().stringValue());
+                    }
+                }
 				
 			} catch (org.openrdf.repository.RepositoryException e) {
 				log.error(e.getMessage(), e);
@@ -249,8 +254,11 @@ public class UserImpl extends RDFResource implements User {
 			rc.setAutoCommit(false);
 			try {
 				synchronized (this) {
-					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI), resourceURI);
-					rc.add(resourceURI,RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), resourceURI);
+					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI), entry.getSesameEntryURI());
+                    //TODO Remove the following line in future as it corresponds to backward compatability where homecontext where saved in resource graph instead of entry graph.
+                    rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI), resourceURI);
+
+                    rc.add(resourceURI,RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
 					rc.commit();
 				}
 				return true;

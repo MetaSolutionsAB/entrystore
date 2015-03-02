@@ -78,7 +78,7 @@ public class GroupImpl extends ListImpl implements Group {
 			RepositoryConnection rc = null;
 			try {
 				rc = this.entry.repository.getConnection();
-				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, resourceURI).asList();
+				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI()).asList();
 				if (!matches.isEmpty()) {
 					this.homeContext = java.net.URI.create(matches.get(0).getObject().stringValue());
 				}
@@ -111,8 +111,8 @@ public class GroupImpl extends ListImpl implements Group {
 			rc.begin();
 			try {
 				synchronized (this) {
-					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI), resourceURI);
-					rc.add(resourceURI,RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), resourceURI);
+					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, entry.getSesameEntryURI()), entry.getSesameEntryURI());
+					rc.add(resourceURI,RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
 					rc.commit();
 				}
 				return true;
