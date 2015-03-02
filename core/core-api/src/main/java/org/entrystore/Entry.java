@@ -210,6 +210,15 @@ public interface Entry {
 	 * @return Returns the creator as a user URI.
 	 */
 	URI getCreator();
+
+	/**
+	 * Sets the creator of the entry.
+	 *
+	 * Can only be used by the administrator of the entry.
+	 *
+	 * @param userURI The URI of the user to be set as creator.
+	 */
+	void setCreator(URI userURI);
 	
 	/**
 	 * @return Returns the contributors as a set of URIs.
