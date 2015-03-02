@@ -485,6 +485,36 @@ public class EntryImpl implements Entry {
 		}
 		return null;
 	}
+
+	public void setCreator(java.net.URI userURI) {
+		if (userURI == null) {
+			throw new IllegalArgumentException("User URI must not be null");
+		}
+		checkAdministerRights();
+		try {
+			synchronized (this.repository) {
+				RepositoryConnection rc = this.repository.getConnection();
+				rc.begin();
+				try {
+					URI creatorURI = rc.getValueFactory().createURI(userURI.toString());
+					rc.remove(rc.getStatements(entryURI, RepositoryProperties.Creator, null, false, entryURI), entryURI);
+					rc.add(entryURI, RepositoryProperties.Creator, creatorURI, entryURI);
+					registerEntryModified(rc, this.repository.getValueFactory());
+					rc.commit();
+					this.creator = creatorURI;
+				} catch (Exception e) {
+					rc.rollback();
+					log.error(e.getMessage());
+					throw new org.entrystore.repository.RepositoryException("Error in repository connection", e);
+				} finally {
+					rc.close();
+				}
+			}
+		} catch (RepositoryException e) {
+			log.error(e.getMessage());
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);
+		}
+	}
 	
 	public Set<java.net.URI> getContributors() {
 		Set<java.net.URI> result = new HashSet<java.net.URI>();

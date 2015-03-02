@@ -296,6 +296,11 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/lookup", LookupResource.class);
 		router.attach("/{context-id}/execute", ExecutionResource.class);
 
+		// principals scope
+		if ("on".equalsIgnoreCase(config.getString(Settings.NONADMIN_GROUPCONTEXT_CREATION, "off"))) {
+			router.attach("/_principals/groups", GroupResource.class);
+		}
+
 		router.attachDefault(DefaultResource.class);
 
 		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(pm), pm);

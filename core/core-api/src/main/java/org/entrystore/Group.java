@@ -19,11 +19,16 @@ package org.entrystore;
 import java.net.URI;
 
 public interface Group extends Resource {
+
 	boolean setChildren(java.util.List<URI> children);
 
 	public String getName();
 
 	public boolean setName(String name);
+
+	Context getHomeContext();
+
+	boolean setHomeContext(Context context);
 
 	public void addMember(User user);
 
@@ -34,4 +39,5 @@ public interface Group extends Resource {
 	public java.util.List<User> members();
 
 	public java.util.List<java.net.URI> memberUris();
+
 }
