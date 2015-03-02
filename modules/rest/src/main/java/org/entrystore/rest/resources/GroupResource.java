@@ -16,13 +16,16 @@
 
 package org.entrystore.rest.resources;
 
+import com.google.common.collect.Sets;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
+import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.List;
+import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
@@ -58,6 +61,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Set;
 
 
@@ -81,46 +85,73 @@ public class GroupResource extends BaseResource {
 	 */
 	@Post
 	public void acceptRepresentation(Representation r) throws ResourceException {
+		URI requestingUser = getPM().getAuthenticatedUserURI();
+
 		try {
-			JSONObject req = new JSONObject(r.getText());
+			// guests are prohibited from using this resource
+			if (requestingUser == null || getPM().getGuestUser().getURI().equals(requestingUser)) {
+				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+				return;
+			}
 
-			// TODO if current user is guest -> deny request
+			String name = null;
+			// read name, to be used for group and context
+			if (parameters.containsKey("name")) {
+				name = parameters.get("name").trim();
+			}
 
-			// TODO save the current user uri
+			if (name == null || name.length() == 0) {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return;
+			}
 
-			// TODO become admin
+			// we need admin-rights to create groups and contexts
+			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
 
-			// TODO read parameters group name and context name
+			// check whether context or group with desired name already exists
+			// and abort execution of request if necessary
+			if (getPM().getPrincipalEntry(name) != null || getCM().getContextURI(name) !=  null) {
+				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
+				return;
+			}
 
-			// TODO create group principal
+			// create entry for new group
+			Entry newGroupEntry = getCM().getContext("_principals").createResource(null, GraphType.Group, null, null);
+			// make the requesting user admin for group
+			newGroupEntry.setAllowedPrincipalsFor(AccessProperty.Administer, Sets.newHashSet(requestingUser));
+			// change creator from admin to requesting user
+			newGroupEntry.setCreator(requestingUser);
 
-			// TODO make creating user to admin of group
+			Group newGroup = (Group) newGroupEntry.getResource();
+			// make requesting user a group member
+			newGroup.addMember(getPM().getUser(requestingUser));
+			// set name of the group
+			newGroup.setName(name);
 
-			// TODO make creating user a member of the group
+			// create entry for new context
+			Entry newContextEntry = getCM().getContext("_contexts").createResource(null, GraphType.Context, null, null);
+			// make the requesting user admin for context
+			newContextEntry.setAllowedPrincipalsFor(AccessProperty.Administer, Sets.newHashSet(requestingUser));
+			// new group gets write access for context
+			newContextEntry.setAllowedPrincipalsFor(AccessProperty.WriteResource, Sets.newHashSet(newGroupEntry.getEntryURI()));
+			// change creator from admin to requesting user
+			newContextEntry.setCreator(requestingUser);
 
-			// TODO create context
+			Context newContext = (Context) newContextEntry.getResource();
+			// set name of the new context
+			getCM().setName(newContextEntry.getEntryURI(), name);
 
-			// TODO make creating user to admin of context
+			// set the group's home context to the newly created context
+			newGroup.setHomeContext(newContext);
 
-			// TODO group gets write access on context resource
+			// return HTTP 201 with the newly created group as Location-header
+			getResponse().setStatus(Status.SUCCESS_CREATED);
+			getResponse().setLocationRef(newGroupEntry.getEntryURI().toString());
 
-			/* TODO set group's home context to newly created context
-					- this perhaps requires the introduction of Group.setHomeContext() (see User class)
-					- Statement s(<group entry URI>) p(<http://entrystore.org/terms/homeContext>) o(<context resource URI>) is set in groups entry information
-			 */
-
-			// TODO set names for group and context
-
-			// TODO make sure that creator is set to the calling user (and not admin)
-
-			// TODO send request response with status 201 that contains location header with URI of new group
-
-		} catch (IOException ioe) {
-			log.error(ioe.getMessage());
-		} catch (JSONException jsone) {
-			log.error(jsone.getMessage());
+			return;
 		} finally {
-			// TODO reset logged in user
+			getPM().setAuthenticatedUserURI(requestingUser);
 		}
 	}
+
 }
