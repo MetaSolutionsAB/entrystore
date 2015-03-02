@@ -43,12 +43,15 @@ import org.json.JSONObject;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
+import org.restlet.Request;
+import org.restlet.Response;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
+import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
@@ -91,6 +94,22 @@ public class EntryResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 
 		Util.handleIfUnmodifiedSince(entry, getRequest());
+	}
+
+	@Override
+	public Representation head(Variant v) {
+		try {
+			Representation repr = new EmptyRepresentation();
+			if (entry == null) {
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+			} else {
+				getResponse().setStatus(Status.SUCCESS_OK);
+				repr.setModificationDate(entry.getModifiedDate());
+			}
+			return repr;
+		} catch (AuthorizationException e) {
+			return unauthorizedHEAD();
+		}
 	}
 
 	/**

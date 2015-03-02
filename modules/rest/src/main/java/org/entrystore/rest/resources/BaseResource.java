@@ -165,6 +165,12 @@ public abstract class BaseResource extends ServerResource {
 		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getBackupScheduler();
 	}
 
+	public Representation unauthorizedHEAD() {
+		log.info("Unauthorized HEAD");
+		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+		return new EmptyRepresentation();
+	}
+
 	public Representation unauthorizedGET() {
 		log.info("Unauthorized GET");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
