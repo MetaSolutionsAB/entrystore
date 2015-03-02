@@ -10,3 +10,5 @@ entrystore.repository.store.type=memory
 entrystore.cors=on
 entrystore.cors.origins=*
 entrystore.cors.max-age=3600
+
+entrystore.nonadmin.group-context-creation=on
