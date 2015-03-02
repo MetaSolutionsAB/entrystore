@@ -20,12 +20,17 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
 
+import org.entrystore.Context;
 import org.entrystore.GraphType;
 import org.entrystore.Entry;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.repository.RepositoryException;
+import org.openrdf.model.Statement;
 import org.openrdf.model.URI;
+import org.openrdf.repository.RepositoryConnection;
+import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +44,8 @@ public class GroupImpl extends ListImpl implements Group {
 	
 	/** Logger */
 	static Logger log = LoggerFactory.getLogger(UserImpl.class);
+
+	private java.net.URI homeContext;
 	
 	/**
 	 * Creates a new group with the specified URI
@@ -60,16 +67,72 @@ public class GroupImpl extends ListImpl implements Group {
 	/**
 	 * Tries to sets the users name.
 	 * @param newName the requested name
-	 * @param pm The PrincipalManager that contains this principal
 	 * @return true if the name was approved, false otherwise
 	 */
 	public boolean setName(String newName) {
 		return ((PrincipalManager) this.entry.getContext()).setPrincipalName(this.getURI(), newName);
 	}
 
+	public Context getHomeContext() {
+		if (this.homeContext == null) {
+			RepositoryConnection rc = null;
+			try {
+				rc = this.entry.repository.getConnection();
+				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, resourceURI).asList();
+				if (!matches.isEmpty()) {
+					this.homeContext = java.net.URI.create(matches.get(0).getObject().stringValue());
+				}
+			} catch (org.openrdf.repository.RepositoryException e) {
+				log.error(e.getMessage(), e);
+				throw new RepositoryException("Failed to connect to repository", e);
+			} finally {
+				try {
+					rc.close();
+				} catch (org.openrdf.repository.RepositoryException e) {
+					log.error(e.getMessage(), e);
+				}
+			}
+		}
+
+		if (this.homeContext != null) {
+			Entry eContext = this.entry.getRepositoryManager().getContextManager().getByEntryURI(this.homeContext);
+			if (eContext != null) {
+				return (Context) eContext.getResource();
+			}
+		}
+
+		return null;
+	}
+
+	public boolean setHomeContext(Context context) {
+		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.WriteResource);
+		try {
+			RepositoryConnection rc = this.entry.repository.getConnection();
+			rc.begin();
+			try {
+				synchronized (this) {
+					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI), resourceURI);
+					rc.add(resourceURI,RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), resourceURI);
+					rc.commit();
+				}
+				return true;
+			} catch (Exception e) {
+				log.error(e.getMessage(), e);
+				rc.rollback();
+			} finally {
+				rc.close();
+				this.homeContext = context.getEntry().getEntryURI();
+			}
+		} catch (org.openrdf.repository.RepositoryException e) {
+			log.error(e.getMessage(), e);
+			throw new RepositoryException("Failed to connect to repository", e);
+		}
+		return false;
+	}
+
 	/**
 	 * Adds a user to the group through adding its URI to the groups list of URIs.
-	 * @param The user to add to the group
+	 * @param user The user to add to the group
 	 */
 	public void addMember(User user) {
 		addChild(user.getEntry().getEntryURI());
@@ -77,7 +140,7 @@ public class GroupImpl extends ListImpl implements Group {
 
 	/**
 	 * Removes a user from the group.
-	 * @param The user to remove
+	 * @param user The user to remove
 	 * @return true if the removing was successful, false otherwise
 	 */
 	public boolean removeMember(User user) {
@@ -146,10 +209,5 @@ public class GroupImpl extends ListImpl implements Group {
 		return new Vector<java.net.URI>(getChildren()); 
 
 	}
-	
-		
-
-	
-	
 
 }
