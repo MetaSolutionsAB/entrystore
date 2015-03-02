@@ -97,6 +97,11 @@ public class EntryResource extends BaseResource {
 	}
 
 	@Override
+	public Representation head() {
+		return head(null);
+	}
+
+	@Override
 	public Representation head(Variant v) {
 		try {
 			Representation repr = new EmptyRepresentation();
