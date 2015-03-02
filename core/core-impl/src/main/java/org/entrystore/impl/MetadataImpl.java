@@ -184,8 +184,10 @@ public class MetadataImpl implements Metadata {
 					&& subj.stringValue().startsWith(base)) {
 					URI entryURI = URI.create(statement.getObject().stringValue()); 
 
-					EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(entryURI); 
-					sourceEntry.addRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
+					EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(entryURI);
+                    if (sourceEntry != null) {
+                        sourceEntry.addRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
+                    }
 				}
 			}
 		}
