@@ -81,7 +81,7 @@ public class GroupResource extends BaseResource {
 	/**
 	 * Creates a group with linked context.
 	 *
-	 * @param
+	 * @param r Request body
 	 */
 	@Post
 	public void acceptRepresentation(Representation r) throws ResourceException {
@@ -95,14 +95,15 @@ public class GroupResource extends BaseResource {
 			}
 
 			String name = null;
+			boolean setName = false;
 			// read name, to be used for group and context
 			if (parameters.containsKey("name")) {
-				name = parameters.get("name").trim();
-			}
-
-			if (name == null || name.length() == 0) {
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				return;
+				try {
+					name = URLDecoder.decode(parameters.get("name"), "UTF-8").trim();
+					setName = name.length() > 0;
+				} catch (UnsupportedEncodingException e) {
+					log.debug(e.getMessage());
+				}
 			}
 
 			// we need admin-rights to create groups and contexts
@@ -110,7 +111,7 @@ public class GroupResource extends BaseResource {
 
 			// check whether context or group with desired name already exists
 			// and abort execution of request if necessary
-			if (getPM().getPrincipalEntry(name) != null || getCM().getContextURI(name) !=  null) {
+			if (setName && getPM().getPrincipalEntry(name) != null || getCM().getContextURI(name) != null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 				return;
 			}
@@ -125,8 +126,11 @@ public class GroupResource extends BaseResource {
 			Group newGroup = (Group) newGroupEntry.getResource();
 			// make requesting user a group member
 			newGroup.addMember(getPM().getUser(requestingUser));
-			// set name of the group
-			newGroup.setName(name);
+
+			if (setName) {
+				// set name of the group
+				newGroup.setName(name);
+			}
 
 			// create entry for new context
 			Entry newContextEntry = getCM().getContext("_contexts").createResource(null, GraphType.Context, null, null);
@@ -138,8 +142,11 @@ public class GroupResource extends BaseResource {
 			newContextEntry.setCreator(requestingUser);
 
 			Context newContext = (Context) newContextEntry.getResource();
-			// set name of the new context
-			getCM().setName(newContextEntry.getEntryURI(), name);
+
+			if (setName) {
+				// set name of the new context
+				getCM().setName(newContextEntry.getEntryURI(), name);
+			}
 
 			// set the group's home context to the newly created context
 			newGroup.setHomeContext(newContext);
