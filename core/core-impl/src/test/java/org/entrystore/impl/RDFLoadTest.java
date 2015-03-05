@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository.impl;
+package org.entrystore.impl;
 
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
-import org.entrystore.impl.ContextImpl;
 import org.entrystore.repository.test.TestSuite;
 import org.junit.Before;
 import org.junit.Test;
@@ -33,8 +32,8 @@ import static org.junit.Assert.assertTrue;
 public class RDFLoadTest extends AbstractCoreTest {
 
 	@Before
-	public void setup() {
-		super.setup();
+	public void setUp() {
+		super.setUp();
 		TestSuite.addEntriesInDisneySuite(rm);
 		((ContextImpl) cm).getCache().clear();
 	}

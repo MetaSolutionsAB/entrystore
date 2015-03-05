@@ -214,10 +214,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 		}
 	}
-	
-	/**
-	 * @see org.entrystore.ContextManager#exportContext(org.entrystore.Entry, java.io.File, java.util.Set, boolean)
-	 */
+
 	public void exportContext(Entry contextEntry, File destFile, Set<URI> users, boolean metadataOnly, Class<? extends RDFWriter> writer) throws RepositoryException {
 		String contextResourceURI = contextEntry.getResourceURI().toString();
 		if (!contextResourceURI.endsWith("/")) {
@@ -1017,7 +1014,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	 * 		?entryURI dc:created ?y
 	 * }
 	 * </pre> 
-	 * @param list a list with URI:s to contexts, if null all contexts will be returned. 
+	 * @param contextList a list with URI:s to contexts, if null all contexts will be returned.
 	 * Remember to take the context URI. Should be null if you want to search in all contexts.
 	 * <pre>
 	 * Example: 
@@ -1269,8 +1266,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	/**
 	 * intersection for all entries
 	 * @param intersectionEntries
-	 * @param entries
-	 * @param mdEntries
 	 * @param contextList
 	 * @return
 	 */

@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository.impl;
+package org.entrystore.impl;
 
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
-import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryException;
 import org.junit.Before;
 import org.junit.Test;
@@ -34,7 +33,7 @@ import java.net.URI;
 
 import static org.junit.Assert.assertTrue;
 
-public class EntryTest extends AbstractCoreTest {
+public class EntryImplTest extends AbstractCoreTest {
 
 	private Context context;
 
@@ -49,8 +48,8 @@ public class EntryTest extends AbstractCoreTest {
 	private Entry resourceEntry;
 
 	@Before
-	public void setup() {
-		super.setup();
+	public void setUp() {
+		super.setUp();
 		rm.setCheckForAuthorization(false);
 
 		// A new Context

@@ -15,7 +15,7 @@
  */
 
 
-package org.entrystore.repository.impl;
+package org.entrystore.impl;
 
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -31,13 +31,13 @@ import java.util.Set;
 
 import static org.junit.Assert.assertTrue;
 
-public class ContextTest extends AbstractCoreTest {
+public class ContextImplTest extends AbstractCoreTest {
 
 	private Context context;
 
 	@Before
-	public void setup() {
-		super.setup();
+	public void setUp() {
+		super.setUp();
 		rm.setCheckForAuthorization(false);
 
 		// A new Context

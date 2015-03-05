@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository.impl;
+package org.entrystore.impl;
 
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -32,7 +32,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  */
-public class ListTest extends AbstractCoreTest {
+public class ListImplTest extends AbstractCoreTest {
 
 	@Test (expected=RepositoryException.class)
 	public void singleOccurenceOfChild() {

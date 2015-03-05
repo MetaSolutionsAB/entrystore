@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository.impl;
+package org.entrystore.impl;
 
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -22,7 +22,6 @@ import org.entrystore.GraphType;
 import org.entrystore.List;
 import org.entrystore.Metadata;
 import org.entrystore.User;
-import org.entrystore.impl.EntryImpl;
 import org.junit.Test;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;

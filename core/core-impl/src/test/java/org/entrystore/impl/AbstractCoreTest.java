@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository.impl;
+package org.entrystore.impl;
 
 import org.entrystore.ContextManager;
 import org.entrystore.PrincipalManager;
@@ -43,7 +43,7 @@ public abstract class AbstractCoreTest {
 	PrincipalManager pm;
 
 	@Before
-	public void setup() {
+	public void setUp() {
 		Config config = new PropertiesConfiguration("EntryStore Configuration");
 		config.setProperty(Settings.STORE_TYPE, "memory");
 		config.setProperty(Settings.BASE_URL, "http://localhost:8181/");
@@ -59,7 +59,7 @@ public abstract class AbstractCoreTest {
 	}
 
 	@After
-	public void shutdown() {
+	public void tearDown() {
 		rm.shutdown();
 		rm = null;
 	}

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository.impl;
+package org.entrystore.impl;
 
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -38,11 +38,11 @@ import static org.junit.Assert.assertTrue;
 
 /**
  */
-public class ContextManagerTest extends AbstractCoreTest {
+public class ContextManagerImplTest extends AbstractCoreTest {
 
 	@Before
-	public void setup() {
-		super.setup();
+	public void setUp() {
+		super.setUp();
 		rm.setCheckForAuthorization(false);
 	}
 

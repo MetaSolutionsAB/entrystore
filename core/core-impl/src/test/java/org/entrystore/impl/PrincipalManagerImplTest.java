@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository.impl;
+package org.entrystore.impl;
 
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
@@ -37,11 +37,11 @@ import static org.junit.Assert.fail;
 
 /**
  */
-public class PrincipalManagerTest extends AbstractCoreTest {
+public class PrincipalManagerImplTest extends AbstractCoreTest {
 
 	@Before
-	public void setup() {
-		super.setup();
+	public void setUp() {
+		super.setUp();
 		TestSuite.addEntriesInDisneySuite(rm);
 	}
 
