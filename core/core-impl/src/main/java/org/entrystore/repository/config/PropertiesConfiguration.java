@@ -199,31 +199,19 @@ public class PropertiesConfiguration implements Config {
 
 	/* Generic */
 
-	/**
-	 * @see se.kth.cid.config.Config#clear()
-	 */
 	public void clear() {
 		config.clear();
 		setModified(true);
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#isEmpty()
-	 */
 	public boolean isEmpty() {
 		return config.isEmpty();
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#isModified()
-	 */
 	public boolean isModified() {
 		return modified;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#load(java.net.URL)
-	 */
 	public void load(URL configURL) throws IOException {
 		try {
 			String escapedURL = configURL.toString().replaceAll(" ", "%20");
@@ -237,9 +225,6 @@ public class PropertiesConfiguration implements Config {
 		}
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#save(java.net.URL)
-	 */
 	public void save(URL configURL) throws IOException {
 		try {
 			String escapedURL = configURL.toString().replaceAll(" ", "%20");
@@ -256,39 +241,24 @@ public class PropertiesConfiguration implements Config {
 	
 	/* Property Change Listeners */
 	
-	/**
-	 * @see se.kth.cid.config.Config#addPropertyChangeListener(java.beans.PropertyChangeListener)
-	 */
 	public void addPropertyChangeListener(PropertyChangeListener listener) {
 		pcs.addPropertyChangeListener(listener);
 	}
 	
-	/**
-	 * @see se.kth.cid.config.Config#addPropertyChangeListener(java.lang.String, java.beans.PropertyChangeListener)
-	 */
 	public void addPropertyChangeListener(String key, PropertyChangeListener listener) {
 		pcs.addPropertyChangeListener(key, listener);
 	}
 	
-	/**
-	 * @see se.kth.cid.config.Config#removePropertyChangeListener(java.beans.PropertyChangeListener)
-	 */
 	public void removePropertyChangeListener(PropertyChangeListener listener) {
 		pcs.removePropertyChangeListener(listener);
 	}
 	
-	/**
-	 * @see se.kth.cid.config.Config#removePropertyChangeListener(java.lang.String, java.beans.PropertyChangeListener)
-	 */
 	public void removePropertyChangeListener(String key, PropertyChangeListener listener) {
 		pcs.removePropertyChangeListener(key, listener);
 	}
 
 	/* Properties / Set Values */
 
-	/**
-	 * @see se.kth.cid.config.Config#clearProperty(java.lang.String)
-	 */
 	public void clearProperty(String key) {
 		int valueCount = getPropertyValueCount(key);
 		Object oldValue = null;
@@ -304,39 +274,24 @@ public class PropertiesConfiguration implements Config {
 		checkFirePropertyChange(key, oldValue, null);
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#addProperty(java.lang.String,
-	 *      java.lang.Object)
-	 */
 	public void addProperty(String key, Object value) {
 		addPropertyValue(key, value);
 		setModified(true);
 		pcs.firePropertyChange(key, null, value);
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#addProperties(java.lang.String,
-	 *      java.util.List)
-	 */
 	public void addProperties(String key, List values) {
 		addPropertyValues(key, values);
 		setModified(true);
 		pcs.firePropertyChange(key, null, values);
 	}
 	
-	/**
-	 * @see se.kth.cid.config.Config#addProperties(java.lang.String, java.util.Iterator)
-	 */
 	public void addProperties(String key, Iterator values) {
 		addPropertyValues(key, values);
 		setModified(true);
 		pcs.firePropertyChange(key, null, values);
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#setProperty(java.lang.String,
-	 *      java.lang.Object)
-	 */
 	public void setProperty(String key, Object value) {
 		String oldValue = null;
 		oldValue = getString(key);
@@ -345,10 +300,6 @@ public class PropertiesConfiguration implements Config {
 		checkFirePropertyChange(key, oldValue, value);
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#setProperties(java.lang.String,
-	 *      java.util.List)
-	 */
 	public void setProperties(String key, List values) {
 		List oldValues = getStringList(key);
 		setPropertyValues(key, values);
@@ -356,9 +307,6 @@ public class PropertiesConfiguration implements Config {
 		checkFirePropertyChange(key, oldValues, values);
 	}
 	
-	/**
-	 * @see se.kth.cid.config.Config#setProperties(java.lang.String, java.util.Iterator)
-	 */
 	public void setProperties(String key, Iterator values) {
 		List oldValues = getStringList(key);
 		setPropertyValues(key, values);
@@ -368,23 +316,14 @@ public class PropertiesConfiguration implements Config {
 
 	/* Keys */
 
-	/**
-	 * @see se.kth.cid.config.Config#containsKey(java.lang.String)
-	 */
 	public boolean containsKey(String key) {
 		return config.containsKey(key);
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getKeyList()
-	 */
 	public List getKeyList() {
 		return getKeyList(null);
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getKeyList(java.lang.String)
-	 */
 	public List getKeyList(String prefix) {
 		Enumeration keyIterator = config.propertyNames();
 		ArrayList<String> result = new ArrayList<String>();
@@ -401,32 +340,18 @@ public class PropertiesConfiguration implements Config {
 
 	/* Get Values */
 
-	/**
-	 * @see se.kth.cid.config.Config#getString(java.lang.String)
-	 */
 	public String getString(String key) {
 		return config.getProperty(key);
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getString(java.lang.String,
-	 *      java.lang.String)
-	 */
 	public String getString(String key, String defaultValue) {
 		return config.getProperty(key, defaultValue);
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getStringList(java.lang.String)
-	 */
 	public List getStringList(String key) {
 		return getPropertyValues(key);
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getStringList(java.lang.String,
-	 *      java.util.List)
-	 */
 	public List getStringList(String key, List defaultValues) {
 		List result = getPropertyValues(key);
 		if (result == null) {
@@ -435,9 +360,6 @@ public class PropertiesConfiguration implements Config {
 		return result;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getBoolean(java.lang.String)
-	 */
 	public boolean getBoolean(String key) {
 		String strValue = config.getProperty(key);
 		boolean boolValue = false;
@@ -449,9 +371,6 @@ public class PropertiesConfiguration implements Config {
 		return boolValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getBoolean(java.lang.String, boolean)
-	 */
 	public boolean getBoolean(String key, boolean defaultValue) {
 		String strValue = config.getProperty(key);
 		boolean boolValue = false;
@@ -465,9 +384,6 @@ public class PropertiesConfiguration implements Config {
 		return boolValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getByte(java.lang.String)
-	 */
 	public byte getByte(String key) {
 		String strValue = config.getProperty(key);
 		byte byteValue = 0;
@@ -479,9 +395,6 @@ public class PropertiesConfiguration implements Config {
 		return byteValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getByte(java.lang.String, byte)
-	 */
 	public byte getByte(String key, byte defaultValue) {
 		String strValue = config.getProperty(key);
 		byte byteValue = 0;
@@ -495,9 +408,6 @@ public class PropertiesConfiguration implements Config {
 		return byteValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getDouble(java.lang.String)
-	 */
 	public double getDouble(String key) {
 		String strValue = config.getProperty(key);
 		double doubleValue = 0;
@@ -509,9 +419,6 @@ public class PropertiesConfiguration implements Config {
 		return doubleValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getDouble(java.lang.String, double)
-	 */
 	public double getDouble(String key, double defaultValue) {
 		String strValue = config.getProperty(key);
 		double doubleValue = 0;
@@ -525,9 +432,6 @@ public class PropertiesConfiguration implements Config {
 		return doubleValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getFloat(java.lang.String)
-	 */
 	public float getFloat(String key) {
 		String strValue = config.getProperty(key);
 		float floatValue = 0;
@@ -539,9 +443,6 @@ public class PropertiesConfiguration implements Config {
 		return floatValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getFloat(java.lang.String, float)
-	 */
 	public float getFloat(String key, float defaultValue) {
 		String strValue = config.getProperty(key);
 		float floatValue = 0;
@@ -555,9 +456,6 @@ public class PropertiesConfiguration implements Config {
 		return floatValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getInt(java.lang.String)
-	 */
 	public int getInt(String key) {
 		String strValue = config.getProperty(key);
 		int intValue = 0;
@@ -569,9 +467,6 @@ public class PropertiesConfiguration implements Config {
 		return intValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getInt(java.lang.String, int)
-	 */
 	public int getInt(String key, int defaultValue) {
 		String strValue = config.getProperty(key);
 		int intValue = 0;
@@ -585,9 +480,6 @@ public class PropertiesConfiguration implements Config {
 		return intValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getLong(java.lang.String)
-	 */
 	public long getLong(String key) {
 		String strValue = config.getProperty(key);
 		long longValue = 0;
@@ -599,9 +491,6 @@ public class PropertiesConfiguration implements Config {
 		return longValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getLong(java.lang.String, long)
-	 */
 	public long getLong(String key, long defaultValue) {
 		String strValue = config.getProperty(key);
 		long longValue = 0;
@@ -615,9 +504,6 @@ public class PropertiesConfiguration implements Config {
 		return longValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getShort(java.lang.String)
-	 */
 	public short getShort(String key) {
 		String strValue = config.getProperty(key);
 		short shortValue = 0;
@@ -629,9 +515,6 @@ public class PropertiesConfiguration implements Config {
 		return shortValue;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getShort(java.lang.String, short)
-	 */
 	public short getShort(String key, short defaultValue) {
 		String strValue = config.getProperty(key);
 		short shortValue = 0;
@@ -645,9 +528,6 @@ public class PropertiesConfiguration implements Config {
 		return shortValue;
 	}
 	
-	/**
-	 * @see se.kth.cid.config.Config#getURI(java.lang.String)
-	 */
 	public URI getURI(String key) {
 		try {
 			String uri = config.getProperty(key);
@@ -659,9 +539,6 @@ public class PropertiesConfiguration implements Config {
 		return null;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getURI(java.lang.String, URI)
-	 */
 	public URI getURI(String key, URI defaultValue) {
 		URI result = getURI(key);
 		if (result == null) {
@@ -670,9 +547,6 @@ public class PropertiesConfiguration implements Config {
 		return result;
 	}
 	
-	/**
-	 * @see se.kth.cid.config.Config#getColor(java.lang.String)
-	 */
 	public Color getColor(String key) {
 		Color result = null;
 		String value = getString(key);
@@ -692,9 +566,6 @@ public class PropertiesConfiguration implements Config {
         return result;
 	}
 
-	/**
-	 * @see se.kth.cid.config.Config#getColor(java.lang.String, java.awt.Color)
-	 */
 	public Color getColor(String key, Color defaultValue) {
 		Color result = getColor(key);
 		if (result == null) {
