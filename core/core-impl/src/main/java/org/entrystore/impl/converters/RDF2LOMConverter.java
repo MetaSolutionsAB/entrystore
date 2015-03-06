@@ -2170,7 +2170,7 @@ public class RDF2LOMConverter implements Converter {
 		String emailStr = null;
 		String orgStr = null;
 		
-		Iterator<Statement> fnStmnts = graph.match(rootNode, createURI(NS.vcard, "FN"), null);
+		Iterator<Statement> fnStmnts = graph.match(rootNode, createURI(NS.vcard_old, "FN"), null);
 		if (fnStmnts.hasNext()) {
 			Value fnValue = fnStmnts.next().getObject();
 			if (fnValue instanceof Literal) {
@@ -2178,7 +2178,7 @@ public class RDF2LOMConverter implements Converter {
 			}
 		}
 		
-		Iterator<Statement> nStmnts = graph.match(rootNode, createURI(NS.vcard, "N"), null);
+		Iterator<Statement> nStmnts = graph.match(rootNode, createURI(NS.vcard_old, "N"), null);
 		if (nStmnts.hasNext()) {
 			Value nValue = nStmnts.next().getObject();
 			if (nValue instanceof Literal) {
@@ -2186,7 +2186,7 @@ public class RDF2LOMConverter implements Converter {
 			}
 		}
 		
-		Iterator<Statement> emailStmnts = graph.match(rootNode, createURI(NS.vcard, "EMAIL"), null);
+		Iterator<Statement> emailStmnts = graph.match(rootNode, createURI(NS.vcard_old, "EMAIL"), null);
 		if (emailStmnts.hasNext()) {
 			Value emailValue = emailStmnts.next().getObject();
 			if (emailValue instanceof Literal) {
@@ -2194,11 +2194,11 @@ public class RDF2LOMConverter implements Converter {
 			}
 		}
 		
-		Iterator<Statement> orgStmnts = graph.match(rootNode, createURI(NS.vcard, "ORG"), null);
+		Iterator<Statement> orgStmnts = graph.match(rootNode, createURI(NS.vcard_old, "ORG"), null);
 		if (orgStmnts.hasNext()) {
 			Value orgValue = orgStmnts.next().getObject();
 			if (orgValue instanceof Resource) {
-				Iterator<Statement> orgNameStmnts = graph.match((Resource) orgValue, createURI(NS.vcard, "Orgname"), null);
+				Iterator<Statement> orgNameStmnts = graph.match((Resource) orgValue, createURI(NS.vcard_old, "Orgname"), null);
 				if (orgNameStmnts.hasNext()) {
 					Value orgNameValue = orgNameStmnts.next().getObject();
 					if (orgNameValue instanceof Literal) {

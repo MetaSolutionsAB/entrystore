@@ -263,7 +263,7 @@ public class EntryUtil {
 	}
 	
 	/**
-	 * Requests the title of an Entry.
+	 * Requests a literal value from a metadata graph.
 	 * 
 	 * @param graph
 	 *            The graph to be used to search for the title.
@@ -273,7 +273,7 @@ public class EntryUtil {
 	 *            The language to prioritize. May be null if any title string
 	 *            should be taken. If no titles match the desired language, any
 	 *            title is used as fallback.
-	 * @return Returns the dcterms:title or dc:title (whichever matches first)
+	 * @return Returns a literal value (whichever matches first)
 	 *         from a specific graph with the given resource URI as root node.
 	 *         If no titles exist null is returned.
 	 */

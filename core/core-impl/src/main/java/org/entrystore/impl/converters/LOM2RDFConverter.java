@@ -145,14 +145,14 @@ public class LOM2RDFConverter implements Converter {
 		if (fnCL != null) {
 			String fnValue = MimeDirUtil.unescapeTextValue(fnCL.getMDCLValue().toString(), true).trim();
 			Literal lit = vf.createLiteral(fnValue.substring(fnValue.indexOf(":") + 1));
-			vcardStmnts.add(vf.createStatement(rootNode, createURI(NS.vcard, "FN"), lit));
+			vcardStmnts.add(vf.createStatement(rootNode, createURI(NS.vcard_old, "FN"), lit));
 		}
 		
 		ContentLine emailCL = MimeDirUtil.getContentLineByName(vcard, "EMAIL");
 		if (emailCL != null) {
 			String emailValue = MimeDirUtil.unescapeTextValue(emailCL.getMDCLValue().toString(), true).trim();
 			Literal lit = vf.createLiteral(emailValue.substring(emailValue.indexOf(":") + 1));
-			vcardStmnts.add(vf.createStatement(rootNode, createURI(NS.vcard, "EMAIL"), lit));
+			vcardStmnts.add(vf.createStatement(rootNode, createURI(NS.vcard_old, "EMAIL"), lit));
 		}
 		
 		ContentLine[] orgCLs = MimeDirUtil.getContentLinesByName(vcard, "ORG");
@@ -163,13 +163,13 @@ public class LOM2RDFConverter implements Converter {
 				if (orgCL != null) {
 					String orgValue = MimeDirUtil.unescapeTextValue(orgCL.getMDCLValue().toString(), true).trim();
 					Literal lit = vf.createLiteral(orgValue.substring(orgValue.indexOf(":") + 1));
-					orgStmns.add(vf.createStatement(orgBNode, createURI(NS.vcard, "Orgname"), lit));
+					orgStmns.add(vf.createStatement(orgBNode, createURI(NS.vcard_old, "Orgname"), lit));
 				}
 			}
 
 			if (!orgStmns.isEmpty()) {
 				vcardStmnts.addAll(orgStmns);
-				vcardStmnts.add(vf.createStatement(rootNode, createURI(NS.vcard, "ORG"), orgBNode));
+				vcardStmnts.add(vf.createStatement(rootNode, createURI(NS.vcard_old, "ORG"), orgBNode));
 			}
 		}
 		
@@ -724,20 +724,20 @@ public class LOM2RDFConverter implements Converter {
 //					if (entity instanceof Literal) {
 //						String entityStr = ((Literal) entity).stringValue();
 //						if (entityStr != null) {
-//							VCard vcard = null;
+//							VCard vcard_old = null;
 //							try {
-//								vcard = EntityImpl.parseEntity(LOM.LifeCycle.Contribute.Entity.TYPE, entityStr, false);
+//								vcard_old = EntityImpl.parseEntity(LOM.LifeCycle.Contribute.Entity.TYPE, entityStr, false);
 //							} catch (ParseException e) {
 //								log.warn("Unable to parse LOM 3.2.2 Entity of " + metadataURI + " to VCard: " + e.getMessage());
 //								log.info("Trying to construct VCard with String as Name instead");
 //								try {
-//									vcard = EntityImpl.parseEntity(LOM.MetaMetadata.Contribute.Entity.TYPE, createVCardString(entityStr, null), false);
+//									vcard_old = EntityImpl.parseEntity(LOM.MetaMetadata.Contribute.Entity.TYPE, createVCardString(entityStr, null), false);
 //								} catch (ParseException pe) {
 //									log.warn("VCard construction failed: " + pe.getMessage());
 //								}
 //							}
-//							if (vcard != null) {
-//								lom.newMetaMetadata().newContribute(contributionCount).newEntity(entityCount).setVCard(vcard);
+//							if (vcard_old != null) {
+//								lom.newMetaMetadata().newContribute(contributionCount).newEntity(entityCount).setVCard(vcard_old);
 //								entityCount++;
 //								statistics.metaMetadataContributeEntity++;
 //							}

@@ -273,7 +273,7 @@ public class DataCorrection {
 //					if (entity instanceof Literal) {
 //						BNode bnode = vf.createBNode();
 //						toAdd.add(vf.createStatement(entityStmnt.getSubject(), createURI(NS.lom, "entity"), bnode));
-//						toAdd.add(vf.createStatement(bnode, createURI(NS.vcard, "FN"), vf.createLiteral(entity.stringValue())));
+//						toAdd.add(vf.createStatement(bnode, createURI(NS.vcard_old, "FN"), vf.createLiteral(entity.stringValue())));
 //						toRemove.add(entityStmnt);
 //					}
 //				}
@@ -446,11 +446,11 @@ public class DataCorrection {
 //							Statement entityStmnt = entityStmnts.next();
 //							Value entity = entityStmnt.getObject();
 //							if (entity instanceof Resource) {
-//								Iterator<Statement> orgStmnts = metadata.match((Resource) entity, createURI(NS.vcard, "ORG"), null);
+//								Iterator<Statement> orgStmnts = metadata.match((Resource) entity, createURI(NS.vcard_old, "ORG"), null);
 //								if (orgStmnts.hasNext()) {
 //									Value orgValue = orgStmnts.next().getObject();
 //									if (orgValue instanceof Resource) {
-//										Iterator<Statement> orgNameStmnts = metadata.match((Resource) orgValue, createURI(NS.vcard, "Orgname"), null);
+//										Iterator<Statement> orgNameStmnts = metadata.match((Resource) orgValue, createURI(NS.vcard_old, "Orgname"), null);
 //										while (orgNameStmnts.hasNext()) {
 //											Statement orgNameStmnt = orgNameStmnts.next();
 //											Value orgNameValue = orgNameStmnt.getObject();

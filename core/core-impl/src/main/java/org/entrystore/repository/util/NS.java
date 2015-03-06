@@ -45,7 +45,9 @@ public class NS {
 
 	public static String xsd = "http://www.w3.org/2001/XMLSchema#";
 	
-	public static String vcard = "http://www.w3.org/2001/vcard-rdf/3.0#";
+	public static String vcard_old = "http://www.w3.org/2001/vcard-rdf/3.0#";
+
+	public static String vcard = "http://www.w3.org/2006/vcard/ns#fn";
 
 	/**
 	 * @return A map with all relevant namespaces. Key is name and Value is namespace.
