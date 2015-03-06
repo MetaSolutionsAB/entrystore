@@ -202,18 +202,21 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="resource" type="string" indexed="true" stored="true"/>
         <field name="context" type="string" indexed="true"/>
         <field name="rdfType" type="string" indexed="true" stored="true" multiValued="true"/>
-        <field name="predicate" type="string" indexed="true" stored="true" multiValued="true"/>
         <field name="creator" type="string" indexed="true"/>
         <field name="contributors" type="string" indexed="true" multiValued="true"/>
         <field name="lists" type="string" indexed="true" multiValued="true"/>
         <field name="public" type="boolean" indexed="true"/>
-        <field name="validated" type="boolean" indexed="true"/>
 		<field name="created" type="date" indexed="true"/>
         <field name="modified" type="date" indexed="true"/>
 		<field name="graphType" type="string" indexed="true"/>
         <field name="entryType" type="string" indexed="true"/>
         <field name="resourceType" type="string" indexed="true"/>
-        
+
+        <field name="metadata.subject" type="string" indexed="true" stored="true" multiValued="true"/>
+        <field name="metadata.predicate" type="string" indexed="true" stored="true" multiValued="true"/>
+        <field name="metadata.object.uri" type="string" indexed="true" stored="true" multiValued="true"/>
+        <field name="metadata.object.literal" type="text" indexed="true" multiValued="true"/>
+
         <field name="admin" type="string" indexed="true" multiValued="true"/>
         <field name="metadata.r" type="string" indexed="true" multiValued="true"/>
         <field name="metadata.rw" type="string" indexed="true" multiValued="true"/>
@@ -223,7 +226,6 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="title" type="text_ngram" indexed="true" multiValued="true"/>
         <field name="description" type="text" indexed="true" multiValued="true"/>
         <field name="keyword" type="text" indexed="true" stored="true" multiValued="true"/>
-        <field name="literal" type="text" indexed="true" multiValued="true"/>
         <field name="lang" type="string" indexed="true" multiValued="true"/>
         <field name="tag" type="text" indexed="true" stored="true" multiValued="true"/>
 

@@ -420,17 +420,20 @@ public class EntryUtil {
 	
 	public static String getFirstName(Entry entry) {
 		if (entry != null) {
-			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl(NS.foaf + "firstName"), null);
+			Set<URI> foafFN = new HashSet<URI>();
+			foafFN.add(new URIImpl(NS.foaf + "givenName"));
+			foafFN.add(new URIImpl(NS.foaf + "firstName"));
+			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafFN, null);
 		}
 		return null;
 	}
 	
 	public static String getLastName(Entry entry) {
 		if (entry != null) {
-			Set<URI> foafLastName = new HashSet<URI>();
-			foafLastName.add(new URIImpl(NS.foaf + "surname"));
-			foafLastName.add(new URIImpl(NS.foaf + "lastName"));
-			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafLastName, null);
+			Set<URI> foafLN = new HashSet<URI>();
+			foafLN.add(new URIImpl(NS.foaf + "surname"));
+			foafLN.add(new URIImpl(NS.foaf + "lastName"));
+			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafLN, null);
 		}
 		return null;
 	}

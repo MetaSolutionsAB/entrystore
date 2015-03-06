@@ -363,28 +363,34 @@ public class SolrSearchIndex implements SearchIndex {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		doc.setField("public", guestReadable);
 
-//		// validated resource?
-//		doc.setField("validated", ConverterUtil.isValidated(mdGraph, resourceURI));
-
-		// all literal values
+		// all subject, predicates and objects in the metadata graph
 		Graph metadata = entry.getMetadataGraph();
 		if (metadata != null) {
 			for (Statement s : metadata) {
+				// subjectURI
+				if (s.getSubject() instanceof org.openrdf.model.URI) {
+					if (!resourceURI.equals(s.getSubject())) {
+						doc.addField("metadata.subject", s.getSubject().stringValue());
+					}
+				}
+
+				// predicateURI
+				if (s.getPredicate() instanceof org.openrdf.model.URI) {
+					doc.addField("metadata.predicate", s.getPredicate().stringValue());
+				}
+
+				// objectURI
+				if (s.getObject() instanceof org.openrdf.model.URI) {
+					doc.addField("metadata.object.uri", s.getObject().stringValue());
+				} else
+				// objectLiteral
 				if (s.getObject() instanceof Literal) {
 					Literal l = (Literal) s.getObject();
 					// we only index plain literals (human-readable text)
 					if (l.getDatatype() == null) {
-						doc.addField("literal", l.getLabel());
+						doc.addField("metadata.object.literal", l.getLabel());
 					}
 				}
-			}
-		}
-
-		// all predicates
-		metadata = entry.getMetadataGraph();
-		if (metadata != null) {
-			for (Statement s : metadata) {
-				doc.addField("predicate", s.getPredicate().stringValue());
 			}
 		}
 
