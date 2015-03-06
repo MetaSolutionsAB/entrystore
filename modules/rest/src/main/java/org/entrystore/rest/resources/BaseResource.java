@@ -34,6 +34,7 @@ import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Header;
 import org.restlet.data.MediaType;
+import org.restlet.data.ServerInfo;
 import org.restlet.data.Status;
 import org.restlet.engine.header.HeaderUtils;
 import org.restlet.ext.json.JsonRepresentation;
@@ -72,11 +73,16 @@ public abstract class BaseResource extends ServerResource {
 	protected Entry entry;
 	
 	private static Logger log = LoggerFactory.getLogger(BaseResource.class);
+
+	private static ServerInfo serverInfo;
 	
 	@Override
 	public void init(Context c, Request request, Response response) {
 		parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
-		super.init(c, request, response);		
+		super.init(c, request, response);
+
+		// we set a custom Server header in the HTTP response
+		setServerInfo(this.getServerInfo());
 		
 		contextId = (String) request.getAttributes().get("context-id");
 		if (getCM() != null) {
@@ -94,6 +100,16 @@ public abstract class BaseResource extends ServerResource {
 				this.format = new MediaType(format);
 			}
 		}
+	}
+
+	@Override
+	public ServerInfo getServerInfo() {
+		if (serverInfo == null) {
+			ServerInfo si = super.getServerInfo();
+			si.setAgent("EntryStore/" + EntryStoreApplication.getVersion());
+			serverInfo = si;
+		}
+		return serverInfo;
 	}
 
 	/**
