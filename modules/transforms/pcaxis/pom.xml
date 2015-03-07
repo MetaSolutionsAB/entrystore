@@ -35,6 +35,22 @@
                                         <artifactId>sesame-store</artifactId>
                                 </exclusion>
                                 <exclusion>
+                                        <groupId>org.openrdf.sesame</groupId>
+                                        <artifactId>sesame-rio-turtle</artifactId>
+                                </exclusion>
+                                <exclusion>
+                                        <groupId>org.openrdf.sesame</groupId>
+                                        <artifactId>sesame-rio-ntriples</artifactId>
+                                </exclusion>
+                                <exclusion>
+                                        <groupId>org.openrdf.sesame</groupId>
+                                        <artifactId>sesame-sail-memory</artifactId>
+                                </exclusion>
+                                <exclusion>
+                                        <groupId>org.openrdf.sesame</groupId>
+                                        <artifactId>sesame-queryparser-sparql</artifactId>
+                                </exclusion>
+                                <exclusion>
                                         <groupId>net.sourceforge.findbugs</groupId>
                                         <artifactId>jsr305</artifactId>
                                 </exclusion>
