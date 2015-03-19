@@ -16,6 +16,9 @@
 
 package org.entrystore.repository.util;
 
+import org.openrdf.model.impl.URIImpl;
+
+import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -47,13 +50,18 @@ public class NS {
 	
 	public static String vcard_old = "http://www.w3.org/2001/vcard-rdf/3.0#";
 
-	public static String vcard = "http://www.w3.org/2006/vcard/ns#fn";
+	public static String vcard = "http://www.w3.org/2006/vcard/ns#";
 
-	/**
-	 * @return A map with all relevant namespaces. Key is name and Value is namespace.
-	 */
-	public static Map<String, String> getMap() {
-		HashMap<String, String> map = new HashMap<String, String>();
+	public static String adms = "http://www.w3.org/ns/adms#";
+
+	public static String dcat = "http://www.w3.org/ns/dcat#";
+
+	public static String odrs = "http://schema.theodi.org/odrs#";
+
+	private static HashMap<String, String> map;
+
+	static {
+		map = new HashMap<String, String>();
 		map.put("dc", NS.dc);
 		map.put("dcterms", NS.dcterms);
 		map.put("foaf", NS.foaf);
@@ -61,7 +69,32 @@ public class NS {
 		map.put("rdfs", NS.rdfs);
 		map.put("xsd", NS.xsd);
 		map.put("es", NS.entrystore);
+		map.put("dcat", NS.dcat);
+		map.put("adms", NS.adms);
+		map.put("odrs", NS.odrs);
+		map.put("vcard", NS.vcard);
+	}
+
+	/**
+	 * @return A map with all relevant namespaces. Key is name and Value is namespace.
+	 */
+	public static Map<String, String> getMap() {
 		return map;
+	}
+
+	public static URI expand(String abbrvURI) {
+		if (!abbrvURI.contains(":")) {
+			return URI.create(abbrvURI);
+		}
+		String[] uriS = abbrvURI.split(":");
+		if (uriS.length != 2) {
+			return URI.create(abbrvURI);
+		}
+		String ns = uriS[0];
+		if (NS.getMap().containsKey(ns)) {
+			return URI.create(NS.getMap().get(ns) + uriS[1]);
+		}
+		return URI.create(abbrvURI);
 	}
 	
 }

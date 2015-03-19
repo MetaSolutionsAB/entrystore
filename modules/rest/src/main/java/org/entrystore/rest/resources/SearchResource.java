@@ -635,7 +635,7 @@ public class SearchResource extends BaseResource {
 				result.put("rights", jaRights);
 				
 				long timeDiff = new Date().getTime() - before.getTime();
-				log.info("Graph fetching and JDIL serialization took " + timeDiff + " ms");
+				log.debug("Graph fetching and serialization took " + timeDiff + " ms");
 
 				return new JsonRepresentation(result.toString(2));
 			} catch (JSONException e) {
