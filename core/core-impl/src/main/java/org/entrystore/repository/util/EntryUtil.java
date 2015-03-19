@@ -16,6 +16,26 @@
 
 package org.entrystore.repository.util;
 
+import com.google.common.collect.Multimap;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.Resource;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.RepositoryManager;
+import org.openrdf.model.Graph;
+import org.openrdf.model.Literal;
+import org.openrdf.model.Model;
+import org.openrdf.model.Statement;
+import org.openrdf.model.URI;
+import org.openrdf.model.Value;
+import org.openrdf.model.impl.LinkedHashModel;
+import org.openrdf.model.impl.URIImpl;
+import org.openrdf.model.vocabulary.RDF;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -24,21 +44,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import org.entrystore.GraphType;
-import org.entrystore.Entry;
-import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.Resource;
-import org.entrystore.AuthorizationException;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.vocabulary.RDF;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -605,5 +610,104 @@ public class EntryUtil {
 		}
 		return false;
 	}
-	
+
+	/**
+	 * Fetches entries and recursively traverses the graph by following a provided set
+	 * of predicates.
+	 *
+	 * @param entries A set of entries to start from.
+	 * @param propertiesToFollow A set of predicate URIs that point to objects (entries)
+	 *                           that are to be fetched during traversal.
+	 * @param level Current traversal level. Used for recursion, should be 0 if called manually.
+	 * @param depth Maximum traversal depth of the graph.
+	 * @param visited Contains URIs that have been visited during traversal.
+	 *                Should be an empty map when called manually.
+	 * @param context The context in which the entries reside.
+	 * @param rm A RepositoryManager instance.
+	 * @return Returns the merged metadata graphs of all matching entries.
+	 */
+	public static Model traverseAndLoadEntryMetadata(Set<URI> entries, Set<java.net.URI> propertiesToFollow, int level, int depth, Multimap<URI, Integer> visited, Context context, RepositoryManager rm) {
+		Model result = new LinkedHashModel();
+		for (URI r : entries) {
+			if (!r.toString().startsWith(rm.getRepositoryURL().toString())) {
+				log.debug("URI has external prefix, skipping: " + r);
+				continue;
+			}
+			if (visited.containsEntry(r, level)) {
+				log.debug("Skipping <" + r + ">, entry already fetched and traversed on level " + level);
+				continue;
+			}
+
+			Model graph = null;
+			try {
+				java.net.URI uri = java.net.URI.create(r.toString());
+				Entry fetchedEntry = null;
+				// we expect a resource URI
+				Set<Entry> resEntries = context.getByResourceURI(uri);
+				if (resEntries != null && resEntries.size() > 0) {
+					fetchedEntry = (Entry) resEntries.toArray()[0];
+				}
+				if (fetchedEntry == null) {
+					// fallback in case the URI is an entry URI
+					fetchedEntry = context.getByEntryURI(uri);
+				}
+				if (fetchedEntry != null) {
+					graph = new LinkedHashModel(fetchedEntry.getMetadataGraph());
+				}
+			} catch (AuthorizationException ae) {
+				// if the starting point for traversal is not accessible we abort
+				// if other entries further down the traversal are inaccessible
+				// we continue without fetching them
+				if (level == 0) {
+					throw ae;
+				} else {
+					continue;
+				}
+			}
+
+			if (graph != null) {
+				visited.put((URI) r, level);
+				result.addAll(graph);
+				if (propertiesToFollow != null && level < depth) {
+					Set<URI> objects = new HashSet<>();
+					for (java.net.URI prop : propertiesToFollow) {
+						objects.addAll(valueToURI(graph.filter(null, new URIImpl(prop.toString()), null).objects()));
+					}
+					objects.remove(r);
+					if (objects.size() > 0) {
+						log.debug("Fetching " + objects.size() + " entr" + (objects.size() == 1 ? "y" : "ies") + " linked from <" + r + ">: " + objects);
+						result.addAll(
+								traverseAndLoadEntryMetadata(
+										objects,
+										propertiesToFollow,
+										level + 1,
+										depth,
+										visited,
+										context,
+										rm)
+						);
+					}
+				}
+			}
+		}
+		return result;
+	}
+
+
+	/**
+	 * Converts a set of Resources to a set of URIs. Removes non-URIs, i.e., BNodes, Literals, etc.
+	 *
+	 * @param values A set of Values.
+	 * @return A filtered and converted set of URIs.
+	 */
+	public static Set<URI> valueToURI(Set<Value> values) {
+		Set<URI> result = new HashSet<>();
+		for (Value v : values) {
+			if (v != null && v instanceof URI) {
+				result.add((URI) v);
+			}
+		}
+		return result;
+	}
+
 }
