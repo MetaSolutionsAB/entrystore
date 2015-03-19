@@ -112,6 +112,8 @@ public class Settings {
 	public static String CORS_MAX_AGE = "entrystore.cors.max-age";
 
 	public static String NONADMIN_GROUPCONTEXT_CREATION = "entrystore.nonadmin.group-context-creation";
+
+	public static String TRAVERSAL_PROFILE = "entrystore.traversal";
 	
 	private Settings() {
 	}
