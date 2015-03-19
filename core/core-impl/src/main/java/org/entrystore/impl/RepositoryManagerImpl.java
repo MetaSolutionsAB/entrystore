@@ -35,6 +35,7 @@ import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
+import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.openrdf.model.Resource;
 import org.openrdf.model.ValueFactory;
@@ -253,9 +254,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		try {
 			try {
 				this.baseURL = new URL(baseURL);
+				NS.getMap().put("store", baseURL);
 			} catch (MalformedURLException e1) {
                 log.error(e1.getMessage());
-				e1.printStackTrace();
 			}
 
 			systemContextAliasList.add("_contexts");
@@ -268,7 +269,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				repository.initialize();
 			} catch (RepositoryException e) {
                 log.error(e.getMessage());
-				e.printStackTrace();
 			}
 
 			this.initialize();
