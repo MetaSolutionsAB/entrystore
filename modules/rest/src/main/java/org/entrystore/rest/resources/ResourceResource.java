@@ -229,10 +229,13 @@ public class ResourceResource extends BaseResource {
 				result = new EmptyRepresentation();
 			}
 
-			Date lastMod = entry.getModifiedDate();
-			if (lastMod != null) {
-				result.setModificationDate(lastMod);
+			if (result != null) {
+				Date lastMod = entry.getModifiedDate();
+				if (lastMod != null) {
+					result.setModificationDate(lastMod);
+				}
 			}
+
 			return result;
 		} catch(AuthorizationException e) {
 			return unauthorizedGET();
@@ -726,7 +729,7 @@ public class ResourceResource extends BaseResource {
 		} else if (EntryType.Local.equals(entry.getEntryType())) {
 
 			/*** String ***/
-			if (entry.getGraphType() == GraphType.String) {
+			if (GraphType.String.equals(entry.getGraphType())) {
 				StringResource stringResource = (StringResource)entry.getResource(); 
 				return new StringRepresentation(stringResource.getString());
 			}
@@ -743,7 +746,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Context ***/
-			if(entry.getGraphType() == GraphType.Context || entry.getGraphType() == GraphType.SystemContext) {
+			if (GraphType.Context.equals(entry.getGraphType()) || GraphType.SystemContext.equals(entry.getGraphType())) {
 				JSONArray array = new JSONArray();
 				Context c = (Context) entry.getResource();
 				Set<URI> uris = c.getEntries(); 
@@ -755,7 +758,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** None ***/
-			if(entry.getGraphType() == GraphType.None) {
+			if (GraphType.None.equals(entry.getGraphType())) {
 
 				// Local data
 				if(entry.getResourceType() == ResourceType.InformationResource) {
@@ -783,18 +786,21 @@ public class ResourceResource extends BaseResource {
 					}
 				}
 
-				// DOES NOT HAVE ANY RESOURCE
-				if(entry.getResourceType() == ResourceType.NamedResource) {
+				// If there is no resource we redirect to the metadata
+				if (ResourceType.NamedResource.equals(entry.getResourceType())) {
+					getResponse().setLocationRef(new Reference(entry.getLocalMetadataURI()));
+					getResponse().setStatus(Status.REDIRECTION_SEE_OTHER);
+					return null;
 				}
 
 				// NOT USED YET
-				if(entry.getResourceType() == ResourceType.Unknown) {	
+				if (ResourceType.Unknown.equals(entry.getResourceType())) {
 				}
 
 			}
 
 			/*** User ***/
-			if(entry.getGraphType() == GraphType.User) {
+			if (GraphType.User.equals(entry.getGraphType())) {
 				JSONObject jsonUserObj = new JSONObject();  
 				User user = (User) entry.getResource(); 
 				try {
@@ -819,7 +825,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Group ***/
-			if(entry.getGraphType() == GraphType.Group) {
+			if (GraphType.Group.equals(entry.getGraphType())) {
 				JSONObject jsonGroupObj = new JSONObject(); 
 				Group group = (Group) entry.getResource(); 
 				JSONArray userArray = new JSONArray(); 
@@ -850,10 +856,8 @@ public class ResourceResource extends BaseResource {
 				} 
 			}
 
-
-			log.error("Cannot find the resource");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource + " ResourceType: " + entry.getGraphType());
+			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource);
 		}
 
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
