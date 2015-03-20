@@ -32,6 +32,7 @@ import org.openrdf.model.URI;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.rio.RDFFormat;
+import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -129,10 +130,30 @@ public abstract class AbstractMetadataResource extends BaseResource {
 					result = new EmptyRepresentation();
 				}
 			}
+
+			// set modification date
 			Date lastMod = entry.getModifiedDate();
 			if (lastMod != null) {
 				result.setModificationDate(lastMod);
 			}
+
+			// set file name
+			String fileName = entry.getFilename();
+			if (fileName == null) {
+				fileName = entry.getId();
+			}
+			fileName += ".rdf";
+
+			// offer download in case client requested this
+			Disposition disp = new Disposition();
+			disp.setFilename(fileName);
+			if (parameters.containsKey("download")) {
+				disp.setType(Disposition.TYPE_ATTACHMENT);
+			} else {
+				disp.setType(Disposition.TYPE_INLINE);
+			}
+			result.setDisposition(disp);
+
 			return result;
 		} catch (AuthorizationException e) {
 			return unauthorizedGET();
