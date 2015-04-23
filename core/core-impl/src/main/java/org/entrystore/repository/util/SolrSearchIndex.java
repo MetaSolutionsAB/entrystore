@@ -259,12 +259,11 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.addField("lists", entry.getReferringListsInSameContext());
 
 		// ACL: admin, metadata r/w, resource r/w
-
-		doc.addField("admin", entry.getAllowedPrincipalsFor(AccessProperty.Administer));
-		doc.addField("metadata.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
-		doc.addField("metadata.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
-		doc.addField("resource.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
-		doc.addField("resource.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteResource));
+		doc.addField("acl.admin", entry.getAllowedPrincipalsFor(AccessProperty.Administer));
+		doc.addField("acl.metadata.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+		doc.addField("acl.metadata.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
+		doc.addField("acl.resource.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
+		doc.addField("acl.resource.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteResource));
 
 		// titles
 		Map<String, String> titles = EntryUtil.getTitles(entry);

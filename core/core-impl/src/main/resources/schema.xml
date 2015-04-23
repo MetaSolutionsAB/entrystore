@@ -217,11 +217,11 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="metadata.object.uri" type="string" indexed="true" stored="true" multiValued="true"/>
         <field name="metadata.object.literal" type="text" indexed="true" multiValued="true"/>
 
-        <field name="admin" type="string" indexed="true" multiValued="true"/>
-        <field name="metadata.r" type="string" indexed="true" multiValued="true"/>
-        <field name="metadata.rw" type="string" indexed="true" multiValued="true"/>
-        <field name="resource.r" type="string" indexed="true" multiValued="true"/>
-        <field name="resource.rw" type="string" indexed="true" multiValued="true"/>
+        <field name="acl.admin" type="string" indexed="true" multiValued="true"/>
+        <field name="acl.metadata.r" type="string" indexed="true" multiValued="true"/>
+        <field name="acl.metadata.rw" type="string" indexed="true" multiValued="true"/>
+        <field name="acl.resource.r" type="string" indexed="true" multiValued="true"/>
+        <field name="acl.resource.rw" type="string" indexed="true" multiValued="true"/>
         
         <field name="title" type="text_ngram" indexed="true" multiValued="true"/>
         <field name="description" type="text" indexed="true" multiValued="true"/>
