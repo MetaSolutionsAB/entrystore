@@ -16,9 +16,6 @@
 
 package org.entrystore.rest.filter;
 
-import java.io.IOException;
-import java.util.HashMap;
-
 import org.entrystore.rest.util.Util;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -27,6 +24,9 @@ import org.restlet.data.Method;
 import org.restlet.routing.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.HashMap;
 
 
 /**
@@ -41,7 +41,7 @@ public class JSCallbackFilter extends Filter {
 	@Override
 	protected void afterHandle(Request request, Response response) {
 		if (request != null && response != null && Method.GET.equals(request.getMethod()) &&
-				response.getEntity() != null && MediaType.APPLICATION_JSON.equals(response.getEntity().getMediaType())) {
+				response.getEntity() != null && isJSON(response.getEntity().getMediaType())) {
 			HashMap<String, String> parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
 			if (parameters.containsKey("callback")) {
 				String callback = parameters.get("callback");
@@ -53,12 +53,22 @@ public class JSCallbackFilter extends Filter {
 					wrappedResponse.append(callback).append("(");
 					wrappedResponse.append(response.getEntity().getText());
 					wrappedResponse.append(")");
-					response.setEntity(wrappedResponse.toString(), MediaType.APPLICATION_JSON);
+					response.setEntity(wrappedResponse.toString(), response.getEntity().getMediaType());
 				} catch (IOException e) {
 					log.error(e.getMessage());
 				}
 			}
 		}
+	}
+
+	private boolean isJSON(MediaType mediaType) {
+		String mime = mediaType.toString();
+		if ("application/json".equals(mime) ||
+				"application/ld+json".equals(mime) ||
+				"application/rdf+json".equals(mime)) {
+			return true;
+		}
+		return false;
 	}
 	
 }

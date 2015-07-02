@@ -7,19 +7,19 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-transforms</artifactId>
-		<version>4.1</version>
+		<version>4.2</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-transforms-tabular</artifactId>
 	<packaging>jar</packaging>
-	<version>4.1</version>
+	<version>4.2</version>
 	<name>EntryStore Transforms Tabular</name>
     
 	<dependencies>
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-transforms-common</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.jena</groupId>

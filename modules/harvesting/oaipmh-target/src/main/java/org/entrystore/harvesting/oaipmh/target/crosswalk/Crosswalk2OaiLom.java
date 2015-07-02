@@ -22,14 +22,15 @@ import net.sf.ehcache.Cache;
 import net.sf.ehcache.CacheManager;
 import net.sf.ehcache.Element;
 import net.sf.ehcache.store.MemoryStoreEvictionPolicy;
-import org.entrystore.repository.Data;
-import org.entrystore.repository.Entry;
+import org.entrystore.Data;
+import org.entrystore.Entry;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.ResourceType;
-import org.entrystore.repository.User;
-import org.entrystore.repository.impl.converters.LRE;
-import org.entrystore.repository.impl.converters.OERDF2LOMConverter;
-import org.entrystore.repository.impl.converters.RDF2LOMConverter;
+import org.entrystore.ResourceType;
+import org.entrystore.User;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.impl.converters.LRE;
+import org.entrystore.impl.converters.OERDF2LOMConverter;
+import org.entrystore.impl.converters.RDF2LOMConverter;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
 import org.ieee.ltsc.datatype.impl.EntityImpl;
@@ -88,7 +89,7 @@ public class Crosswalk2OaiLom extends Crosswalk {
 	}
 	
 	private void initCache(RepositoryManager rm) {
-		CacheManager cacheMan = rm.getCacheManager();
+		CacheManager cacheMan = ((RepositoryManagerImpl) rm).getCacheManager();
 		if (cacheMan != null) {
 			if (!cacheMan.cacheExists("lomxml")) {
 				cacheMan.addCache(new Cache("lomxml", 1000, MemoryStoreEvictionPolicy.LRU, true, null, true, 0, 0, true, 1800, null));

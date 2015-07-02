@@ -24,18 +24,18 @@ import ORG.oclc.oai.server.verb.NoMetadataFormatsException;
 import ORG.oclc.oai.server.verb.NoRecordsMatchException;
 import ORG.oclc.oai.server.verb.NoSetHierarchyException;
 import ORG.oclc.oai.server.verb.OAIInternalServerError;
-import org.entrystore.repository.Context;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.config.Config;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.DeletedEntryInfo;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
-import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.DeletedEntryInfo;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.impl.converters.ConverterUtil;
+import org.entrystore.AuthorizationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -229,7 +229,7 @@ public class SCAMOAICatalog extends AbstractCatalog {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
-			Set<String> aliases = cm.getContextAliases();
+			Set<String> aliases = cm.getNames();
 			for (String contextAlias : aliases) {
 				URI contextURI = cm.getContextURI(contextAlias);
 				contexts.add(contextURI);
@@ -392,7 +392,7 @@ public class SCAMOAICatalog extends AbstractCatalog {
 					}
 					if (contextEntry.getGraphType().equals(GraphType.Context)) {
 						URI resourceURI = contextEntry.getResourceURI();
-						String contextAlias = cm.getContextAlias(resourceURI);
+						String contextAlias = cm.getName(resourceURI);
 						if (contextAlias == null) {
 							contextAlias = "";
 						}

@@ -7,24 +7,54 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-transforms</artifactId>
-		<version>4.1</version>
+		<version>4.2</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-transforms-pcaxis</artifactId>
 	<packaging>jar</packaging>
-	<version>4.1</version>
+	<version>4.2</version>
 	<name>EntryStore Transforms PC-Axis</name>
     
 	<dependencies>
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-transforms-common</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 		</dependency>
 	        <dependency>
-        	    <groupId>com.mysema.stat</groupId>
-	            <artifactId>stat</artifactId>
-        	    <version>0.5.2</version>
+			<groupId>com.mysema.stat</groupId>
+			<artifactId>stat</artifactId>
+			<version>0.5.2</version>
+			<exclusions>
+                                <exclusion>
+                                        <groupId>org.openrdf.sesame</groupId>
+                                        <artifactId>sesame-repository-sail</artifactId>
+                                </exclusion>
+                                <exclusion>
+                                        <groupId>org.openrdf.sesame</groupId>
+                                        <artifactId>sesame-store</artifactId>
+                                </exclusion>
+                                <exclusion>
+                                        <groupId>org.openrdf.sesame</groupId>
+                                        <artifactId>sesame-rio-turtle</artifactId>
+                                </exclusion>
+                                <exclusion>
+                                        <groupId>org.openrdf.sesame</groupId>
+                                        <artifactId>sesame-rio-ntriples</artifactId>
+                                </exclusion>
+                                <exclusion>
+                                        <groupId>org.openrdf.sesame</groupId>
+                                        <artifactId>sesame-sail-memory</artifactId>
+                                </exclusion>
+                                <exclusion>
+                                        <groupId>org.openrdf.sesame</groupId>
+                                        <artifactId>sesame-queryparser-sparql</artifactId>
+                                </exclusion>
+                                <exclusion>
+                                        <groupId>net.sourceforge.findbugs</groupId>
+                                        <artifactId>jsr305</artifactId>
+                                </exclusion>
+                        </exclusions>
 	        </dependency>
 	</dependencies>
 </project>

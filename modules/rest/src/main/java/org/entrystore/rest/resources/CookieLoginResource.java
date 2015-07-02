@@ -16,20 +16,22 @@
 
 package org.entrystore.rest.resources;
 
-import java.util.Date;
-
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.auth.TokenCache;
 import org.entrystore.rest.auth.UserInfo;
+import org.entrystore.rest.util.SimpleHTML;
 import org.restlet.data.CookieSetting;
 import org.restlet.data.Form;
+import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Arrays;
+import java.util.Date;
 
 /**
  * This resource checks credentials and sets a cookie.
@@ -45,6 +47,7 @@ public class CookieLoginResource extends BaseResource {
 
 	@Post
 	public void acceptRepresentation(Representation r) {
+		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
 		Form query = new Form(r);
 		String userName = query.getFirstValue("auth_username");
 		String password = query.getFirstValue("auth_password");
@@ -73,10 +76,15 @@ public class CookieLoginResource extends BaseResource {
 			tokenCookieSetting.setMaxAge(maxAge);
 			tokenCookieSetting.setPath(getRM().getRepositoryURL().getPath());
 	        getResponse().getCookieSettings().add(tokenCookieSetting);
-	        
 	        getResponse().setStatus(Status.SUCCESS_OK);
+			if (html) {
+				getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
+			}
 		} else {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+			if (html) {
+				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
+			}
 		}
 	}
 

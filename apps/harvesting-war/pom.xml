@@ -7,12 +7,12 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-apps</artifactId>
-		<version>4.1</version>
+		<version>4.2</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-harvesting-target</artifactId>
 	<packaging>war</packaging>
-	<version>4.1</version>
+	<version>4.2</version>
 	<name>EntryStore Harvesting Target WebApp</name>
 	
 	<build>
@@ -35,14 +35,14 @@
 	<dependencies>
 		<dependency>
 			<groupId>javax.servlet</groupId>
-			<artifactId>servlet-api</artifactId>
-			<version>2.5</version>
+			<artifactId>javax.servlet-api</artifactId>
+			<version>${servlet.version}</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.entrystore</groupId>
-			<artifactId>entrystore-core</artifactId>
-			<version>${pom.version}</version>
+			<artifactId>entrystore-core-impl</artifactId>
+			<version>${project.version}</version>
 			<exclusions>
 				<exclusion>
 					<groupId>javax.xml.bind</groupId>
@@ -52,8 +52,8 @@
 		</dependency>
 		<dependency>
 			<groupId>org.entrystore</groupId>
-			<artifactId>entrystore-rest-module</artifactId>
-			<version>${pom.version}</version>
+			<artifactId>entrystore-rest</artifactId>
+			<version>${project.version}</version>
 			<exclusions>
 				<exclusion>
 					<groupId>org.entrystore</groupId>
@@ -68,7 +68,7 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-harvesting-oaipmh-target</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 			<exclusions>
 				<exclusion>
 					<groupId>org.entrystore</groupId>
@@ -82,7 +82,7 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-sqi-webservice-module</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 			<exclusions>
 				<exclusion>
 					<groupId>org.entrystore</groupId>

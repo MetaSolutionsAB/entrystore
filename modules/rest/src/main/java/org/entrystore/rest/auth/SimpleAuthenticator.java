@@ -16,7 +16,7 @@
 
 package org.entrystore.rest.auth;
 
-import org.entrystore.repository.PrincipalManager;
+import org.entrystore.PrincipalManager;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;

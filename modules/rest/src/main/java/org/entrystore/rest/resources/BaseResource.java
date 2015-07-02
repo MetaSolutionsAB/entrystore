@@ -17,31 +17,39 @@
 package org.entrystore.rest.resources;
 
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
 import org.entrystore.harvester.Harvester;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.PrincipalManager;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.backup.BackupScheduler;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.EntryStoreApplication;
+import org.entrystore.rest.util.CORSUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.Util;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
+import org.restlet.data.Header;
 import org.restlet.data.MediaType;
+import org.restlet.data.ServerInfo;
 import org.restlet.data.Status;
+import org.restlet.engine.header.HeaderUtils;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
+import org.restlet.resource.Options;
 import org.restlet.resource.ServerResource;
+import org.restlet.util.Series;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  *<p> Base resource class that supports common behaviours or attributes shared by
@@ -60,16 +68,21 @@ public abstract class BaseResource extends ServerResource {
 	
 	protected String entryId;
 	
-	protected org.entrystore.repository.Context context;
+	protected org.entrystore.Context context;
 	
-	protected org.entrystore.repository.Entry entry;
+	protected Entry entry;
 	
 	private static Logger log = LoggerFactory.getLogger(BaseResource.class);
+
+	private static ServerInfo serverInfo;
 	
 	@Override
 	public void init(Context c, Request request, Response response) {
 		parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
-		super.init(c, request, response);		
+		super.init(c, request, response);
+
+		// we set a custom Server header in the HTTP response
+		setServerInfo(this.getServerInfo());
 		
 		contextId = (String) request.getAttributes().get("context-id");
 		if (getCM() != null) {
@@ -87,6 +100,52 @@ public abstract class BaseResource extends ServerResource {
 				this.format = new MediaType(format);
 			}
 		}
+	}
+
+	@Override
+	public ServerInfo getServerInfo() {
+		if (serverInfo == null) {
+			ServerInfo si = super.getServerInfo();
+			si.setAgent("EntryStore/" + EntryStoreApplication.getVersion());
+			serverInfo = si;
+		}
+		return serverInfo;
+	}
+
+	/**
+	 * Sends a response with CORS headers according to the configuration.
+	 */
+	@Options
+	public Representation preflightCORS() {
+		if ("off".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.CORS, "off"))) {
+			log.info("Received CORS preflight request but CORS support is disabled");
+			setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
+			return null;
+		}
+		getResponse().setEntity(new EmptyRepresentation());
+		Series reqHeaders = (Series) getRequest().getAttributes().get("org.restlet.http.headers");
+		String origin = reqHeaders.getFirstValue("Origin", true);
+		if (origin != null) {
+			CORSUtil cors = CORSUtil.getInstance(getRM().getConfiguration());
+			if (!cors.isValidOrigin(origin)) {
+				log.info("Received CORS preflight request with disallowed origin");
+				//setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
+				return new EmptyRepresentation();
+			}
+
+			Series<Header> respHeaders = new Series<Header>(Header.class);
+			respHeaders.set("Access-Control-Allow-Origin", origin);
+			respHeaders.set("Access-Control-Allow-Methods", "HEAD, GET, PUT, POST, DELETE, OPTIONS");
+			respHeaders.set("Access-Control-Allow-Credentials", "true");
+			if (cors.getAllowedHeaders() != null) {
+				respHeaders.set("Access-Control-Allow-Headers", cors.getAllowedHeaders());
+			}
+			if (cors.getMaxAge() > -1) {
+				respHeaders.set("Access-Control-Max-Age", Integer.toString(cors.getMaxAge()));
+			}
+			HeaderUtils.copyExtensionHeaders(respHeaders, getResponse());
+		}
+		return getResponse().getEntity();
 	}
 
 	/**
@@ -120,6 +179,12 @@ public abstract class BaseResource extends ServerResource {
 	
 	public BackupScheduler getBackupScheduler() {
 		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getBackupScheduler();
+	}
+
+	public Representation unauthorizedHEAD() {
+		log.info("Unauthorized HEAD");
+		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+		return new EmptyRepresentation();
 	}
 
 	public Representation unauthorizedGET() {

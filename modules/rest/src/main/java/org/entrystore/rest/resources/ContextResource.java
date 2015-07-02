@@ -16,27 +16,20 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.Set;
-
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.List;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.ResourceType;
-import org.entrystore.repository.User;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
-import org.entrystore.repository.impl.ContextImpl;
-import org.entrystore.repository.impl.RDFResource;
-import org.entrystore.repository.impl.StringResource;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Group;
+import org.entrystore.List;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.ResourceType;
+import org.entrystore.User;
+import org.entrystore.impl.ContextImpl;
+import org.entrystore.impl.RDFResource;
+import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
-import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
@@ -58,6 +51,14 @@ import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.Set;
 
 
 /**
@@ -158,7 +159,7 @@ public class ContextResource extends BaseResource {
 		try {
 			if (context == null) {
 				log.info("The given context id doesn't exist."); 
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				getResponse().setEntity(JSONErrorMessages.errorWrongContextIDmsg, MediaType.APPLICATION_JSON);
 			}
 
@@ -437,7 +438,7 @@ public class ContextResource extends BaseResource {
 		GraphType bt = getGraphType(parameters.get("graphtype"));
 		entry = context.createResource(parameters.get("id"), bt, null, listURI);
 		try {
-			if (setResource(entry, bt)) {
+			if (setResource(entry)) {
 				setLocalMetadataGraph(entry);
 				setEntryGraph(entry);
 				if (listURI != null) {
@@ -456,20 +457,23 @@ public class ContextResource extends BaseResource {
 	/**
 	 * Sets resource to an entry.
 	 * @param entry a reference to a entry
-	 * @return the entry with the resource.
+	 * @return false if there is a resource provided but it cannot be interpreted.
 	 * @throws JSONException 
 	 */
-	private boolean setResource(Entry entry, GraphType bt) throws JSONException {
+	private boolean setResource(Entry entry) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
 		if (requestText != null) {
 			jsonObj = new JSONObject(requestText);
 		}
 
-		if (jsonObj.has("resource")) {
-			jsonObj = jsonObj.getJSONObject("resource");
+		//If there is no resource there is nothing to do yet.
+		if (!jsonObj.has("resource")) {
+			return true;
 		}
-		switch (bt) {
+
+		switch (entry.getGraphType()) {
 		case User:
+			jsonObj = jsonObj.getJSONObject("resource");
 			User user = (User) entry.getResource();
 			
 			if (jsonObj.has("name")) {
@@ -482,7 +486,7 @@ public class ContextResource extends BaseResource {
 			if (jsonObj.has("homecontext")) {
 				Entry homeContextEntry = getCM().get(jsonObj.getString("homecontext"));
 				if (homeContextEntry != null) {
-					user.setHomeContext((org.entrystore.repository.Context) homeContextEntry.getResource());
+					user.setHomeContext((Context) homeContextEntry.getResource());
 				}
 			}
 			if (jsonObj.has("password")) {
@@ -501,32 +505,31 @@ public class ContextResource extends BaseResource {
 			}
 			break;
 		case Group:
+			jsonObj = jsonObj.getJSONObject("resource");
 			Group group = (Group) entry.getResource();
 			if (jsonObj.has("name")) {
 				group.setName(jsonObj.getString("name"));
 			}
 			break;
 		case List:
-			if (jsonObj.has("resource")) {
-				List list = (List)entry.getResource();
-				JSONObject res = (JSONObject) jsonObj.get("resource"); 
-				if(res != null) {
-					JSONArray childrenArray = (JSONArray) res.get("children");
-					if (childrenArray != null) {
-						for(int i = 0; i < childrenArray.length(); i++) {
-							Entry child = context.get(childrenArray.getString(i));
-							if(child != null) {
-								list.addChild(child.getEntryURI());
-							}
-						}
-					}
+			JSONArray childrenArray = (JSONArray) jsonObj.get("resource");
+			List list = (List)entry.getResource();
+			if(childrenArray != null) {
+				if (childrenArray != null) {
+					for(int i = 0; i < childrenArray.length(); i++) {
+						Entry child = context.get(childrenArray.getString(i));
+						if(child != null) {
+							list.addChild(child.getEntryURI());
+						}		
+					}		
 				}
 			}
 			break;
 		case Context:
-			org.entrystore.repository.Context cont = (org.entrystore.repository.Context) entry.getResource();
-			if (jsonObj.has("alias")) {
-				getCM().setContextAlias(cont.getURI(), jsonObj.getString("alias"));
+			jsonObj = jsonObj.getJSONObject("resource");
+			Context cont = (Context) entry.getResource();
+			if (jsonObj.has("name")) {
+				getCM().setName(cont.getURI(), jsonObj.getString("name"));
 			}
 			if (jsonObj.has("quota")) {
 				try {
@@ -538,22 +541,12 @@ public class ContextResource extends BaseResource {
 			break;
 		case String:
 			StringResource stringRes = (StringResource) entry.getResource();
-			if (jsonObj.has("sc:body")){
-				
-				JSONObject resObj = jsonObj.getJSONObject("sc:body"); 
-				if (resObj.has("@value") && resObj.has("@language")) {
-					stringRes.setString(resObj.getString("@value"), resObj.getString("@language")); 
-				} else if (resObj.has("resource") && jsonObj.has("@value")) {
-					stringRes.setString(resObj.getString("@value"), null); 
-				}
-			}
+			stringRes.setString(jsonObj.getString("resource")); 
 			break;
 		case Graph:
-			if (jsonObj.has("resource")) { 
-				RDFResource RDFRes = (RDFResource) entry.getResource();
-				Graph g = RDFJSON.rdfJsonToGraph((JSONObject) jsonObj.get("resource"));
-				RDFRes.setGraph(g);
-			}
+			RDFResource RDFRes = (RDFResource) entry.getResource();
+			Graph g = RDFJSON.rdfJsonToGraph((JSONObject) jsonObj.get("resource"));
+			RDFRes.setGraph(g);
 			break;
 		case None:
 			break;
@@ -616,10 +609,12 @@ public class ContextResource extends BaseResource {
 
 		try {
 			JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
-			JSONObject obj =(JSONObject) mdObj.get("metadata");
-			Graph graph = null;
-			if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
-				entry.getLocalMetadata().setGraph(graph);
+			if (mdObj.has("metadata")) {
+				JSONObject obj =(JSONObject) mdObj.get("metadata");
+				Graph graph = null;
+				if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
+					entry.getLocalMetadata().setGraph(graph);
+				}
 			}
 		} catch (JSONException e) {
 			log.error(e.getMessage());
@@ -639,10 +634,12 @@ public class ContextResource extends BaseResource {
 				EntryType.LinkReference.equals(entry.getEntryType())) {
 			try {
 				JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
-				JSONObject obj = (JSONObject) mdObj.get("cached-external-metadata");
-				Graph graph = null;
-				if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
-					entry.getCachedExternalMetadata().setGraph(graph);
+				if (mdObj.has("cached-external-metadata")) {
+					JSONObject obj = (JSONObject) mdObj.get("cached-external-metadata");
+					Graph graph = null;
+					if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
+						entry.getCachedExternalMetadata().setGraph(graph);
+					}
 				}
 			} catch (JSONException e) {
 				log.error(e.getMessage());

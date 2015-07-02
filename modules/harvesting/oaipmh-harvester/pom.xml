@@ -7,12 +7,12 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-harvesting</artifactId>
-		<version>4.1</version>
+		<version>4.2</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-harvesting-oaipmh-harvester</artifactId>
 	<packaging>jar</packaging>
-	<version>4.1</version>
+	<version>4.2</version>
 	<name>EntryStore OAI-PMH Harvester module</name>
 	
 	<build>
@@ -36,8 +36,8 @@
 		<!-- should not be deployed to the web container (hence the scope is 'provided')-->	  
 		<dependency>
 			<groupId>javax.servlet</groupId>
-			<artifactId>servlet-api</artifactId>
-			<version>2.4</version>
+			<artifactId>javax.servlet-api</artifactId>
+			<version>${servlet.version}</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
@@ -66,7 +66,7 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-harvesting-factory</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 		 </dependency>
 		
 		<!-- start of deps for lom-j -->

@@ -7,13 +7,13 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-modules</artifactId>
-		<version>4.1</version>
+		<version>4.2</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
-	<artifactId>entrystore-rest-module</artifactId>
+	<artifactId>entrystore-rest</artifactId>
 	<packaging>war</packaging>
-	<version>4.1</version>
-	<name>EntryStore REST module</name>
+	<version>4.2</version>
+	<name>EntryStore REST</name>
 	
 	<build>
 		<resources>
@@ -76,29 +76,35 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-harvesting-factory</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-harvesting-oaipmh-harvester</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-transforms-common</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-transforms-tabular</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-transforms-pcaxis</artifactId>
-			<version>${pom.version}</version>
+			<version>${project.version}</version>
 		</dependency>
-		
+                <dependency>
+                        <groupId>javax.servlet</groupId>
+                        <artifactId>javax.servlet-api</artifactId>
+                        <version>${servlet.version}</version>
+                        <!-- should not be deployed to the web container (hence the scope is 'provided')-->
+                        <scope>provided</scope>
+                </dependency>	
 		<dependency>
    			<groupId>org.restlet.jee</groupId>
    			<artifactId>org.restlet</artifactId>
@@ -135,11 +141,6 @@
    			<version>${restlet.version}</version>
 		</dependency>
 		<dependency>
-   			<groupId>org.restlet.jee</groupId>
-   			<artifactId>org.restlet.ext.ssl</artifactId>
-   			<version>${restlet.version}</version>
-		</dependency>
-		<dependency>
 			<groupId>org.restlet.jee</groupId>
 			<artifactId>org.restlet.ext.json</artifactId>
 			<version>${restlet.version}</version>
@@ -154,13 +155,6 @@
    			<artifactId>org.simpleframework</artifactId>
    			<version>4.1.1</version>
 		</dependency>	  
-		<dependency>
-			<groupId>javax.servlet</groupId>
-			<artifactId>servlet-api</artifactId>
-			<version>2.5</version>
-			<!-- should not be deployed to the web container (hence the scope is 'provided')-->
-			<scope>provided</scope>
-		</dependency>
 		<dependency>
 			<groupId>org.json</groupId>
 			<artifactId>json</artifactId>
@@ -182,9 +176,9 @@
 			<version>1.2</version>
 			<exclusions>
    				<exclusion>
-     			<groupId>xml-apis</groupId>
-     				<artifactId>xml-apis</artifactId>
-   			</exclusion>
+					<groupId>xml-apis</groupId>
+     					<artifactId>xml-apis</artifactId>
+   				</exclusion>
 			</exclusions>
 		</dependency>
 		<dependency>

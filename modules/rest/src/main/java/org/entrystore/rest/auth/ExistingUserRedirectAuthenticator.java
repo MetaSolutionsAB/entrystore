@@ -18,9 +18,9 @@ package org.entrystore.rest.auth;
 
 import java.util.Date;
 
-import org.entrystore.repository.PrincipalManager;
+import org.entrystore.PrincipalManager;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.User;
+import org.entrystore.User;
 import org.entrystore.repository.security.Password;
 import org.restlet.Context;
 import org.restlet.Request;
@@ -62,7 +62,7 @@ public class ExistingUserRedirectAuthenticator extends RedirectAuthenticator {
 	}
 	
 	@Override
-	protected void handleUser(org.restlet.security.User user) {
+	protected void handleUser(org.restlet.security.User user, boolean cached) {
 		String email = user.getEmail();
 		if (email == null) {
 			log.warn("Unable to perform OpenID login, no user email set");

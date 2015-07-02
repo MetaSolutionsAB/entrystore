@@ -16,24 +16,24 @@
 
 package org.entrystore.rest;
 
+import org.entrystore.ContextManager;
+import org.entrystore.Converter;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager;
+import org.entrystore.config.Config;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Converter;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.PrincipalManager;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.impl.converters.ConverterManagerImpl;
+import org.entrystore.impl.converters.LOM2RDFConverter;
+import org.entrystore.impl.converters.OAI_DC2RDFGraphConverter;
+import org.entrystore.impl.converters.RDF2LOMConverter;
 import org.entrystore.repository.backup.BackupFactory;
 import org.entrystore.repository.backup.BackupScheduler;
-import org.entrystore.repository.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
-import org.entrystore.repository.impl.converters.ConverterManagerImpl;
-import org.entrystore.repository.impl.converters.LOM2RDFConverter;
-import org.entrystore.repository.impl.converters.OAI_DC2RDFGraphConverter;
-import org.entrystore.repository.impl.converters.RDF2LOMConverter;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.repository.util.DataCorrection;
 import org.entrystore.rest.auth.BasicVerifier;
@@ -41,17 +41,18 @@ import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.ExistingUserRedirectAuthenticator;
 import org.entrystore.rest.auth.NewUserRedirectAuthenticator;
 import org.entrystore.rest.auth.SimpleAuthenticator;
+import org.entrystore.rest.filter.CORSFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
 import org.entrystore.rest.resources.*;
+import org.entrystore.rest.util.CORSUtil;
+import org.entrystore.rest.util.HttpUtil;
 import org.restlet.Application;
-import org.restlet.Component;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.Restlet;
 import org.restlet.data.ChallengeScheme;
-import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.ext.openid.AttributeExchange;
 import org.restlet.ext.openid.OpenIdVerifier;
@@ -69,7 +70,9 @@ import javax.servlet.ServletContext;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Set;
 
 /**
@@ -95,10 +98,19 @@ public class EntryStoreApplication extends Application {
 
 	private ArrayList<Harvester> harvesters = new ArrayList<Harvester>();
 	
-	private BackupScheduler backupScheduler; 
+	private BackupScheduler backupScheduler;
+
+	private static String VERSION = null;
+
+	URI configURI;
 
 	public EntryStoreApplication(Context parentContext) {
+		this(null, parentContext);
+	}
+
+	public EntryStoreApplication(URI configPath, Context parentContext) {
 		super(parentContext);
+		this.configURI = configPath;
 		getContext().getAttributes().put(KEY, this);
 
 		/*
@@ -126,23 +138,24 @@ public class EntryStoreApplication extends Application {
 			harvesters = (ArrayList) getContext().getAttributes().get("Harvesters");
 			backupScheduler = (BackupScheduler) getContext().getAttributes().get("BackupScheduler");
 		} else {
-			javax.naming.Context env = null;
-			URI manualConfigURI = null;
-			try {
-				env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
-				if (env != null && env.lookup("entrystore.config") != null) {
-					manualConfigURI = new File((String) env.lookup("entrystore.config")).toURI();
+			if (configURI == null) {
+				javax.naming.Context env = null;
+				try {
+					env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
+					if (env != null && env.lookup("entrystore.config") != null) {
+						configURI = new File((String) env.lookup("entrystore.config")).toURI();
+					}
+				} catch (NamingException e) {
+					log.warn(e.getMessage());
 				}
-			} catch (NamingException e) {
-				log.warn(e.getMessage());
 			}
 			
 			// Initialize EntryStore
 			ConfigurationManager confManager = null;
 			try {
-				if (manualConfigURI != null) {
-					log.info("Manually configured config location at " + manualConfigURI);
-					confManager = new ConfigurationManager(manualConfigURI);
+				if (configURI != null) {
+					log.info("Manually configured config location at " + configURI);
+					confManager = new ConfigurationManager(configURI);
 				} else {
 					log.info("No config location specified, looking within the classpath");
 					confManager = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
@@ -171,11 +184,10 @@ public class EntryStoreApplication extends Application {
 
 			String storeType = config.getString(Settings.STORE_TYPE, null); 
 			if (storeType == null || storeType.equals("memory")) {
-				// Create contexts, entries and harvesters
+				// Create contexts, entries, etc for testing purposes
 				TestSuite.initDisneySuite(rm);
 				TestSuite.addEntriesInDisneySuite(rm);
-				TestSuite.HarvesterTestSuite(rm, pm, cm);
-				TestSuite.initCourseSuite(rm); 
+				// TestSuite.initCourseSuite(rm);
 			}
 
 			// Load and start harvesters
@@ -227,11 +239,17 @@ public class EntryStoreApplication extends Application {
 		router.attach("/auth/user", UserResource.class);
 		router.attach("/auth/cookie", CookieLoginResource.class);
 		router.attach("/auth/basic", UserResource.class);
+		router.attach("/auth/login", LoginResource.class);
 		router.attach("/auth/logout", LogoutResource.class);
 
 		// signup
 		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP, "off"))) {
 			router.attach("/auth/signup", SignupResource.class);
+		}
+
+		// password reset
+		if ("on".equalsIgnoreCase(config.getString(Settings.PASSWORD_RESET, "off"))) {
+			router.attach("/auth/pwreset", PasswordResetResource.class);
 		}
 
 		// OpenID
@@ -268,16 +286,20 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/merge", MergeResource.class);
 		router.attach("/{context-id}/statistics/{stat-type}", StatisticsResource.class);
 		router.attach("/{context-id}/entry/{entry-id}", EntryResource.class);
+		router.attach("/{context-id}/entry/{entry-id}/name", NameResource.class);
 		router.attach("/{context-id}/resource/{entry-id}", ResourceResource.class);
-		router.attach("/{context-id}/metadata/{entry-id}", MetadataResource.class);
+		router.attach("/{context-id}/metadata/{entry-id}", LocalMetadataResource.class);
 		router.attach("/{context-id}/cached-external-metadata/{entry-id}", ExternalMetadataResource.class);
 		router.attach("/{context-id}/harvester", HarvesterResource.class);
-		router.attach("/{context-id}/alias", AliasResource.class);
-		router.attach("/{context-id}/alias/{entry-id}", AliasResource.class);
 		router.attach("/{context-id}/relation/{entry-id}", RelationResource.class);
 		router.attach("/{context-id}/quota", QuotaResource.class);
 		router.attach("/{context-id}/lookup", LookupResource.class);
 		router.attach("/{context-id}/execute", ExecutionResource.class);
+
+		// principals scope
+		if ("on".equalsIgnoreCase(config.getString(Settings.NONADMIN_GROUPCONTEXT_CREATION, "off"))) {
+			router.attach("/_principals/groups", GroupResource.class);
+		}
 
 		router.attachDefault(DefaultResource.class);
 
@@ -290,7 +312,15 @@ public class EntryStoreApplication extends Application {
 		cookieAuth.setNext(basicAuth);
 		basicAuth.setNext(jsCallback);
 		jsCallback.setNext(modLockOut);
-		modLockOut.setNext(router);
+
+		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
+			log.info("Enabling CORS");
+			CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
+			modLockOut.setNext(corsFilter);
+			corsFilter.setNext(router);
+		} else {
+			modLockOut.setNext(router);
+		}
 
 		if (config.getBoolean(Settings.REPOSITORY_REWRITE_BASEREFERENCE, true)) {
 			// The following Filter resolves a problem that occurs with reverse
@@ -332,27 +362,6 @@ public class EntryStoreApplication extends Application {
 		redirAuth.setOptional(true);
 		redirAuth.setNext(OpenIdResource.class);
 		return redirAuth;
-	}
-
-	/**
-	 * This method exists for running stand-alone without a container.
-	 */
-	public static void main(String[] args) {
-		Component component = new Component();
-		component.getServers().add(Protocol.HTTP, 8181);
-		component.getClients().add(Protocol.FILE);
-		component.getClients().add(Protocol.HTTP);
-		component.getClients().add(Protocol.HTTPS);
-		Context childContext = component.getContext().createChildContext();
-		EntryStoreApplication scamApp = new EntryStoreApplication(childContext);
-		childContext.getAttributes().put(KEY, scamApp);
-		component.getDefaultHost().attach(scamApp);
-
-		try {
-			component.start();
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
 	}
 
 	public ContextManager getCM() {
@@ -426,7 +435,23 @@ public class EntryStoreApplication extends Application {
 			getPM().setAuthenticatedUserURI(realURI);
 		}
 	}
-	
+
+	public static String getVersion() {
+		if (VERSION == null) {
+			URI versionFile = ConfigurationManager.getConfigurationURI("VERSION.txt");
+			try {
+				log.debug("Reading version number from " + versionFile);
+				VERSION = HttpUtil.readFirstLine(versionFile.toURL());
+			} catch (IOException e) {
+				log.error(e.getMessage());
+			}
+			if (VERSION == null) {
+				VERSION = new SimpleDateFormat("yyyyMMdd").format(new Date());
+			}
+		}
+		return VERSION;
+	}
+
 	@Override
 	public synchronized void stop() throws Exception {
 		log.info("Shutting down");

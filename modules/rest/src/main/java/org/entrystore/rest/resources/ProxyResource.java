@@ -39,7 +39,7 @@ import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 
 import org.apache.commons.lang.StringEscapeUtils;
-import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.RDFJSON;
 import org.openrdf.model.Graph;
@@ -141,7 +141,7 @@ public class ProxyResource extends BaseResource {
 				if (xsltURL != null) {
 					try {
 						byte[] converted = transformWithXSLT(representation.getStream(), xsltURL.openStream());
-						Graph graph = ConverterUtil.deserializeGraph(new String(converted), new RDFXMLParser());
+						Graph graph = org.entrystore.rest.util.GraphUtil.deserializeGraph(new String(converted), new RDFXMLParser());
 						Graph fixedGraph = fixCorrectEuropeanaRootURI(graph);
 						return new JsonRepresentation(RDFJSON.graphToRdfJsonObject(fixedGraph));
 					} catch (IOException e) {
@@ -173,21 +173,21 @@ public class ProxyResource extends BaseResource {
 							}
 							return new JsonRepresentation(RDFJSON.graphToRdfJsonObject(g));
 						} else {
-							// simple conversion of different RDF and other metadata (e.g. LOM) formats
+							// FIXME what is actually done below? conversion of anything to RDF/JSON? if so, why?
 							MediaType mediaType = MediaType.valueOf(fromFormat);
 							Graph deserializedGraph = null;
 							if (MediaType.APPLICATION_RDF_XML.equals(mediaType)) {
-								deserializedGraph = ConverterUtil.deserializeGraph(pageContent, new RDFXMLParser());
+								deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new RDFXMLParser());
 							} else if (MediaType.TEXT_RDF_N3.equals(mediaType)) {
-								deserializedGraph = ConverterUtil.deserializeGraph(pageContent, new N3ParserFactory().getParser());
+								deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new N3ParserFactory().getParser());
 							} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-								deserializedGraph = ConverterUtil.deserializeGraph(pageContent, new TurtleParser());
+								deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TurtleParser());
 							} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-								deserializedGraph = ConverterUtil.deserializeGraph(pageContent, new TriXParser());
+								deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TriXParser());
 							} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-								deserializedGraph = ConverterUtil.deserializeGraph(pageContent, new NTriplesParser());
+								deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new NTriplesParser());
 							} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-								deserializedGraph = ConverterUtil.deserializeGraph(pageContent, new TriGParser());
+								deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TriGParser());
 							} else if (mediaType.getName().equals("application/lom+xml")) {
 								URI resURI = null;
 								try {
@@ -224,10 +224,11 @@ public class ProxyResource extends BaseResource {
 
 		if (client == null) {
 			client = new Client(Protocol.HTTP);
-			client.setConnectTimeout(10000);
 			client.setContext(new Context());
 	        client.getContext().getParameters().add("connectTimeout", "10000");
 	        client.getContext().getParameters().add("readTimeout", "10000");
+			client.getContext().getParameters().set("socketTimeout", "10000");
+			client.getContext().getParameters().set("socketConnectTimeoutMs", "10000");
 	        log.info("Initialized HTTP client for proxy request");
 		}
 

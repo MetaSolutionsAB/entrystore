@@ -16,13 +16,13 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.Data;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
-import org.entrystore.repository.ResourceType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.Data;
+import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.ResourceType;
+import org.entrystore.GraphType;
+import org.entrystore.AuthorizationException;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.TransformException;
 import org.json.JSONArray;
@@ -36,7 +36,6 @@ import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;

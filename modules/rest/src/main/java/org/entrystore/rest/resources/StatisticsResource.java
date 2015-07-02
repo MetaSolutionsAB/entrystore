@@ -28,16 +28,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.ContextManager;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.User;
-import org.entrystore.repository.config.Config;
+import org.entrystore.Context;
+import org.entrystore.GraphType;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.repository.impl.converters.ConverterUtil;
+import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.NS;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.json.JSONArray;
@@ -153,7 +154,7 @@ public class StatisticsResource extends BaseResource {
 		}
 	}
 	
-	public JSONObject getPropertyStatistics(org.entrystore.repository.Context context) {
+	public JSONObject getPropertyStatistics(Context context) {
 		JSONObject result = new JSONObject();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
@@ -265,7 +266,7 @@ public class StatisticsResource extends BaseResource {
 		return result;
 	}
 	
-	public JSONObject getOntologyStatistics(org.entrystore.repository.Context context) {
+	public JSONObject getOntologyStatistics(Context context) {
 		JSONObject result = new JSONObject();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
@@ -406,7 +407,7 @@ public class StatisticsResource extends BaseResource {
 		return result;
 	}
 	
-	public JSONObject getKeywordStatistics(org.entrystore.repository.Context context) {
+	public JSONObject getKeywordStatistics(Context context) {
 		JSONObject result = new JSONObject();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
@@ -559,7 +560,7 @@ public class StatisticsResource extends BaseResource {
 		
 		return labelMap;
 	}
-	private JSONObject getCompetenceStatistics(org.entrystore.repository.Context context2) {
+	private JSONObject getCompetenceStatistics(Context context2) {
 		HashMap<String, HashMap<String, Integer>> CompDefToCount = new HashMap<String, HashMap<String, Integer>>();
 		
 		PrincipalManager pm = this.getPM();
@@ -575,8 +576,8 @@ public class StatisticsResource extends BaseResource {
 				org.openrdf.model.URI pred = s.getPredicate();
 				if("http://scam.sf.net/schema#aboutPerson".equals(pred.toString())){
 					java.net.URI resourceURI = java.net.URI.create(s.getSubject().toString());
-					String contextId = org.entrystore.repository.impl.Util.getContextIdFromURI(this.getRM(), resourceURI);
-					org.entrystore.repository.Context context = cm.getContext(contextId);
+					String contextId = org.entrystore.impl.Util.getContextIdFromURI(this.getRM(), resourceURI);
+					Context context = cm.getContext(contextId);
 					Set<Entry> competenceEntries = context.getByResourceURI(resourceURI);
 					Entry competenceEntry = competenceEntries.iterator().next(); //Should only be one!
 					Graph graph = competenceEntry.getMetadataGraph();

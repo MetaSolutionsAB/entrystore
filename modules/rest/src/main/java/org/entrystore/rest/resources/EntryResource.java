@@ -16,22 +16,24 @@
 
 package org.entrystore.rest.resources;
 
-import com.github.jsonldjava.sesame.SesameJSONLDParser;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.Metadata;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.PrincipalManager.AccessProperty;
-import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.User;
-import org.entrystore.repository.config.Config;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Group;
+import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.Resource;
+import org.entrystore.User;
+import org.entrystore.config.Config;
+import org.entrystore.impl.RDFResource;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.impl.StringResource;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.StringResource;
-import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.security.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
+import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;
@@ -39,30 +41,17 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.Rio;
-import org.openrdf.rio.helpers.JSONLDMode;
-import org.openrdf.rio.helpers.JSONLDSettings;
-import org.openrdf.rio.n3.N3ParserFactory;
-import org.openrdf.rio.n3.N3Writer;
-import org.openrdf.rio.ntriples.NTriplesParser;
-import org.openrdf.rio.ntriples.NTriplesWriter;
-import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
-import org.openrdf.rio.trig.TriGParser;
-import org.openrdf.rio.trig.TriGWriter;
-import org.openrdf.rio.trix.TriXParser;
-import org.openrdf.rio.trix.TriXWriter;
-import org.openrdf.rio.turtle.TurtleParser;
-import org.openrdf.rio.turtle.TurtleWriter;
+import org.restlet.Request;
+import org.restlet.Response;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
+import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
 import org.restlet.resource.Post;
@@ -71,12 +60,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.StringWriter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -84,9 +71,8 @@ import java.util.Set;
 /**
  * Handles entries.
  * 
- * @author Eric Johansson (eric.johansson@educ.umu.se)
+ * @author Eric Johansson
  * @author Hannes Ebner
- * @see BaseResource
  */
 public class EntryResource extends BaseResource {
 
@@ -108,6 +94,27 @@ public class EntryResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 
 		Util.handleIfUnmodifiedSince(entry, getRequest());
+	}
+
+	@Override
+	public Representation head() {
+		return head(null);
+	}
+
+	@Override
+	public Representation head(Variant v) {
+		try {
+			Representation repr = new EmptyRepresentation();
+			if (entry == null) {
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+			} else {
+				getResponse().setStatus(Status.SUCCESS_OK);
+				repr.setModificationDate(entry.getModifiedDate());
+			}
+			return repr;
+		} catch (AuthorizationException e) {
+			return unauthorizedHEAD();
+		}
 	}
 
 	/**
@@ -184,7 +191,7 @@ public class EntryResource extends BaseResource {
 		try {
 			if (entry != null && context != null) {
 				if (GraphType.List.equals(entry.getGraphType()) && parameters.containsKey("recursive")) {
-					org.entrystore.repository.List l = (org.entrystore.repository.List) entry.getResource();
+					org.entrystore.List l = (org.entrystore.List) entry.getResource();
 					if (l != null) {
 						l.removeTree();
 					} else {
@@ -194,6 +201,8 @@ public class EntryResource extends BaseResource {
 					context.remove(entry.getEntryURI());
 				}
 				//getResponse().setEntity(new JsonRepresentation("{\"OK\":\"200\"}"));
+			} else {
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			}
 		} catch (AuthorizationException e) {
 			unauthorizedDELETE();
@@ -207,27 +216,8 @@ public class EntryResource extends BaseResource {
 			return getEntryInHTML();
 		} else if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 			return getEntryInJSON();
-		} else if (MediaType.APPLICATION_RDF_XML.equals(mediaType)) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-		} else if (MediaType.TEXT_RDF_N3.equals(mediaType)) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, N3Writer.class);
-		} else if (RDFFormat.TURTLE.getDefaultMIMEType().equals(mediaType.getName())) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, TurtleWriter.class);
-		} else if (RDFFormat.TRIX.getDefaultMIMEType().equals(mediaType.getName())) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, TriXWriter.class);
-		} else if (RDFFormat.NTRIPLES.getDefaultMIMEType().equals(mediaType.getName())) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
-		} else if (RDFFormat.TRIG.getDefaultMIMEType().equals(mediaType.getName())) {
-			serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
-		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(mediaType.getName())) {
-			StringWriter writer = new StringWriter();
-			org.openrdf.rio.RDFWriter rdfWriter = Rio.createWriter(RDFFormat.JSONLD, writer);
-			rdfWriter.getWriterConfig().set(JSONLDSettings.JSONLD_MODE, JSONLDMode.COMPACT);
-			ConverterUtil.serializeGraph(graph, rdfWriter);
-			serializedGraph = writer.toString();
 		} else {
-			mediaType = MediaType.APPLICATION_RDF_XML;
-			serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
+			serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
 		}
 
 		if (serializedGraph != null) {
@@ -235,7 +225,8 @@ public class EntryResource extends BaseResource {
 			return new StringRepresentation(serializedGraph, mediaType);
 		}
 
-		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
+		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		return new EmptyRepresentation();
 	}
 
 	private Representation getEntryInHTML() {
@@ -273,8 +264,8 @@ public class EntryResource extends BaseResource {
 			JSONObject jobj = this.getEntryAsJSONObject();
 			if (jobj != null)
 				return new JsonRepresentation(jobj.toString(2));
-		} catch (JSONException e) {	
-		}		
+		} catch (JSONException e) {
+		}
 		log.error("Can not find the entry. getEntry()");
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
@@ -293,10 +284,10 @@ public class EntryResource extends BaseResource {
 			jdilObj.put("entryId", entry.getId());
 			GraphType bt = entry.getGraphType();
 			if ((bt == GraphType.Context || bt == GraphType.SystemContext) && EntryType.Local.equals(entry.getEntryType())) {
-				jdilObj.put("alias", getCM().getContextAlias(entry.getResourceURI()));
+				jdilObj.put("name", getCM().getName(entry.getResourceURI()));
 				if (entry.getRepositoryManager().hasQuotas()) {
 					JSONObject quotaObj = new JSONObject();
-					org.entrystore.repository.Context c = getCM().getContext(this.entryId);
+					Context c = getCM().getContext(this.entryId);
 					if (c != null) {
 						quotaObj.put("quota", c.getQuota());
 						quotaObj.put("fillLevel", c.getQuotaFillLevel());
@@ -382,31 +373,24 @@ public class EntryResource extends BaseResource {
 			/*
 			 * Resource
 			 */
-			JSONObject resourceObj = new JSONObject();
+			JSONObject resourceObj = null;
 			if (entry.getEntryType() == EntryType.Local) {
 				/*
 				 *  String
 				 */
 				if(entry.getGraphType() == GraphType.String) {
-					StringResource stringResource = (StringResource)entry.getResource(); 
-					Graph graph = stringResource.getGraph(); 
-					Iterator<Statement> iter = graph.iterator(); 
-					while(iter.hasNext()) {
-						Statement s = iter.next(); 
-						Value value = s.getObject();
-						Literal lit = (Literal) value;
-						String language = lit.getLanguage();
-						org.openrdf.model.URI datatype = lit.getDatatype();
-						JSONObject object = new JSONObject();
-						object.accumulate("@value", value.stringValue());
-						if (language != null) {
-							object.accumulate("@language", language);
-						} else if (datatype != null) {
-							object.accumulate("@datatype", datatype.stringValue());					
-						}
-						resourceObj.accumulate(s.getPredicate().stringValue(), object);
-					}
+					StringResource stringResource = (StringResource) entry.getResource(); 
+					jdilObj.put("resource", stringResource.getString());
 				}
+
+				/*
+				 *  Graph
+				 */
+				if(entry.getGraphType() == GraphType.Graph) {
+					RDFResource rdfResource = (RDFResource) entry.getResource(); 
+					jdilObj.put("resource", new JSONObject(RDFJSON.graphToRdfJson(rdfResource.getGraph())));
+				}
+				
 				/*
 				 * List
 				 */
@@ -440,8 +424,8 @@ public class EntryResource extends BaseResource {
 					try {
 						// List<JSONObject> childrenObjects = new ArrayList<JSONObject>();
 						JSONArray childrenArray = new JSONArray();
-						org.entrystore.repository.Resource res = entry.getResource();
-						org.entrystore.repository.List parent = (org.entrystore.repository.List) res;
+						Resource res = entry.getResource();
+						org.entrystore.List parent = (org.entrystore.List) res;
 
 						int maxPos = offset + limit;
 						if (limit == 0) {
@@ -506,12 +490,12 @@ public class EntryResource extends BaseResource {
 							GraphType btChild = childEntry.getGraphType();
 							EntryType locChild = childEntry.getEntryType();
 							if ((btChild == GraphType.Context || btChild == GraphType.SystemContext) && EntryType.Local.equals(locChild)) {
-								childJSON.put("alias", getCM().getContextAlias(childEntry.getResourceURI()));
+								childJSON.put("name", getCM().getName(childEntry.getResourceURI()));
 							} else if (btChild == GraphType.List) {
 								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
-									org.entrystore.repository.Resource childRes = childEntry.getResource();
-									if (childRes != null && childRes instanceof org.entrystore.repository.List) {
-										org.entrystore.repository.List childList = (org.entrystore.repository.List) childRes;
+									Resource childRes = childEntry.getResource();
+									if (childRes != null && childRes instanceof org.entrystore.List) {
+										org.entrystore.List childList = (org.entrystore.List) childRes;
 										try {
 											childJSON.put("size", childList.getChildren().size());
 										} catch (AuthorizationException ae) {}
@@ -577,6 +561,7 @@ public class EntryResource extends BaseResource {
 							childrenArray.put(childJSON);
 						}
 
+						resourceObj = new JSONObject();
 						resourceObj.put("children", childrenArray);
 						resourceObj.put("size", childrenURIs.size());
 						resourceObj.put("limit", limit);
@@ -599,12 +584,13 @@ public class EntryResource extends BaseResource {
 				 */
 				if (entry.getGraphType() == GraphType.User) {
 					try {
+						resourceObj = new JSONObject();
 						User user = (User) entry.getResource();
 						resourceObj.put("name", user.getName());
 
 						// resourceObj.put("password", user.getSecret());
 
-						org.entrystore.repository.Context homeContext = user.getHomeContext();
+						Context homeContext = user.getHomeContext();
 						if (homeContext != null) {
 							resourceObj.put("homecontext", homeContext.getEntry().getId());
 						}
@@ -624,6 +610,7 @@ public class EntryResource extends BaseResource {
 				 */
 				if (entry.getGraphType() == GraphType.Group) {
 					try {
+						resourceObj = new JSONObject();
 						Group group = (Group) entry.getResource();
 						resourceObj.put("name", group.getName());
 						JSONArray userArray = new JSONArray();
@@ -669,7 +656,9 @@ public class EntryResource extends BaseResource {
 
 				// TODO other types, for example Context, SystemContext, PrincipalManager, etc
 				
-				jdilObj.accumulate("resource", resourceObj);
+				if (resourceObj != null) {
+					jdilObj.accumulate("resource", resourceObj);
+				}
 			}
 			return jdilObj;
 	}
@@ -707,29 +696,20 @@ public class EntryResource extends BaseResource {
 		Graph deserializedGraph = null;
 		if (mediaType.equals(MediaType.APPLICATION_JSON)) {
 			try {
-				JSONObject jsonObj = new JSONObject(graphString);
-				JSONObject infoObj = null;
-				if ((infoObj = jsonObj.getJSONObject("info")) != null) {
-					deserializedGraph = RDFJSON.rdfJsonToGraph(infoObj);
+				JSONObject rdfJSON = new JSONObject(graphString);
+				if (rdfJSON != null) {
+					deserializedGraph = RDFJSON.rdfJsonToGraph(rdfJSON);
 				}
 			} catch (JSONException jsone) {
 				log.error(jsone.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
-		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new N3ParserFactory().getParser());
-		} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TurtleParser());
-		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriXParser());
-		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new NTriplesParser());
-		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriGParser());
-		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-			deserializedGraph = ConverterUtil.deserializeGraph(graphString, new SesameJSONLDParser());
 		} else {
+			deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
+		}
+
+		if (deserializedGraph == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
 			return;
 		}
@@ -739,7 +719,7 @@ public class EntryResource extends BaseResource {
 			if (parameters.containsKey("applyACLtoChildren") &&
 					GraphType.List.equals(entry.getGraphType()) &&
 					EntryType.Local.equals(entry.getEntryType())) {
-				((org.entrystore.repository.List) entry.getResource()).applyACLtoChildren(true);
+				((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			getResponse().setStatus(Status.SUCCESS_OK);
 			return;

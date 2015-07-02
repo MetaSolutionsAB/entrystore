@@ -18,11 +18,11 @@ package org.entrystore.rest.resources;
 
 import java.net.URI;
 
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.config.Config;
+import org.entrystore.PrincipalManager;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.AuthorizationException;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.MediaType;
@@ -81,7 +81,7 @@ public class StatusResource extends BaseResource  {
 					if (parameters.containsKey("includeStats")) {
 						try {
 							pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-							result.put("portfolioCount", getRM().getContextManager().getContextAliases().size());
+							result.put("portfolioCount", getRM().getContextManager().getNames().size());
 							result.put("groupCount", pm.getGroupUris().size());
 							result.put("userCount", pm.getUsersAsUris().size());
 							if (pm.getAdminUser().getURI().equals(currentUser) || pm.getAdminGroup().isMember(pm.getUser(currentUser))) {

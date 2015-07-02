@@ -16,14 +16,8 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
 import org.openrdf.model.URI;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.query.MalformedQueryException;
@@ -49,9 +43,16 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.List;
+
 
 /**
- * Provides a SPARQL interface to SCAM contexts.
+ * Provides a SPARQL interface to contexts.
  * 
  * @author Hannes Ebner
  */
@@ -90,6 +91,9 @@ public class SparqlResource extends BaseResource {
 				} catch (UnsupportedEncodingException uee) {
 					log.error(uee.getMessage());
 				}
+			} else {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return null;
 			}
 			
 			Representation result = getSparqlResponse(format, queryString); 
@@ -107,6 +111,11 @@ public class SparqlResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		try {
+			if (this.getRM().getPublicRepository() == null) {
+				getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
+				return;
+			}
+
 			Form form = new Form(getRequest().getEntity());
 			String format = form.getFirstValue("output", true, "json");;
 			if (format.equals("json")) {
@@ -155,7 +164,7 @@ public class SparqlResource extends BaseResource {
 		}
 	}
 	
-	private boolean runSparqlQuery(String queryString, org.entrystore.repository.Context context, TupleQueryResultHandler resultHandler) throws RepositoryException, MalformedQueryException, QueryEvaluationException, TupleQueryResultHandlerException {
+	private boolean runSparqlQuery(String queryString, Context context, TupleQueryResultHandler resultHandler) throws RepositoryException, MalformedQueryException, QueryEvaluationException, TupleQueryResultHandlerException {
 		RepositoryConnection rc = null;
 		try {
 			rc = this.getRM().getPublicRepository().getConnection();

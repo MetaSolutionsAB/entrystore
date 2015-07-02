@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-parent</artifactId>
-		<version>4.1</version>
+		<version>4.2</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-modules</artifactId>
@@ -17,6 +17,7 @@
 	<modules>
 		<module>harvesting</module>
 		<module>rest</module>
+		<module>rest-standalone</module>
 		<module>transforms</module>
 		<!-- SQI not functional at the moment, needs refactoring -->
 		<!-- <module>sqi</module>-->
@@ -25,8 +26,13 @@
 	<dependencies>
 		<dependency>
 			<groupId>org.entrystore</groupId>
-			<artifactId>entrystore-core</artifactId>
-			<version>${pom.version}</version>
+			<artifactId>entrystore-core-api</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-core-impl</artifactId>
+			<version>${project.version}</version>
 		</dependency>
 	</dependencies>
     

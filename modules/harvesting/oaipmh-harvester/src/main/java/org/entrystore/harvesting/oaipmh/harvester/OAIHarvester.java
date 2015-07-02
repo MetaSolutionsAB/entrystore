@@ -23,7 +23,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvesting.oaipmh.jobs.ListRecordsJob;
-import org.entrystore.repository.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
@@ -67,9 +67,9 @@ public class OAIHarvester extends Harvester {
 
 	/**
 	 * Updates only one entry
-	 * @param entryURI
+	 * @param identifier
 	 */
-	public void run(String indentifier) {
+	public void run(String identifier) {
 		log.warn("OAIHarvester.run(String identifier) is not implemented");
 //		ContextManager cm = getRM().getContextManager();	
 //		URI contextURI = getOwnerContextURI(); 

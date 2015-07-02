@@ -22,20 +22,25 @@ import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.validator.routines.EmailValidator;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.PrincipalManager;
-import org.entrystore.repository.User;
-import org.entrystore.repository.config.Config;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
-import org.entrystore.rest.auth.TokenCache;
+import org.entrystore.rest.util.RecaptchaVerifier;
+import org.entrystore.rest.util.SimpleHTML;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.restlet.data.Form;
 import org.restlet.data.Language;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
@@ -44,6 +49,7 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -59,19 +65,21 @@ public class SignupResource extends BaseResource {
 	
 	private static Logger log = LoggerFactory.getLogger(SignupResource.class);
 
+	protected SimpleHTML html = new SimpleHTML("Sign-up");
+
 	@Get
 	public Representation represent() throws ResourceException {
 		if (!parameters.containsKey("confirm")) {
-			boolean reCaptcha = "on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.SIGNUP_RECAPTCHA, "off"));
+			boolean reCaptcha = "on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.AUTH_RECAPTCHA, "off"));
 			return new StringRepresentation(constructHtmlForm(reCaptcha), MediaType.TEXT_HTML, Language.ENGLISH);
 		}
 
 		String token = parameters.get("confirm");
-		TokenCache tc = SignupTokenCache.getInstance();
-		SignupInfo ci = SignupTokenCache.getInstance().getTokenValue(token);
+		SignupTokenCache tc = SignupTokenCache.getInstance();
+		SignupInfo ci = tc.getTokenValue(token);
 		if (ci == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			return htmlRepresentation("Invalid confirmation token.");
+			return html.representation("Invalid confirmation token.");
 		}
 		tc.removeToken(token);
 
@@ -84,7 +92,7 @@ public class SignupResource extends BaseResource {
 			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
 					pm.getUserByExternalID(ci.email) != null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
-				return htmlRepresentation("User with submitted email address exists already.");
+				return html.representation("User with submitted email address exists already.");
 			}
 
 			// Create user
@@ -93,10 +101,11 @@ public class SignupResource extends BaseResource {
 				try {
 					if (ci.urlFailure != null) {
 						getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, "UTF-8"));
+						return new EmptyRepresentation();
 					} else {
 						getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 					}
-					return htmlRepresentation("Unable to create user.");
+					return html.representation("Unable to create user.");
 				} catch (UnsupportedEncodingException e) {
 					log.warn("Unable to decode URL: " + e.getMessage());
 				}
@@ -112,11 +121,11 @@ public class SignupResource extends BaseResource {
 			// Create context and set ACL and alias
 			Entry homeContext = getCM().createResource(null, GraphType.Context, null, null);
 			homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
-			getCM().setContextAlias(homeContext.getEntryURI(), ci.email);
+			getCM().setName(homeContext.getEntryURI(), ci.email);
 			log.info("Created context " + homeContext.getResourceURI());
 
 			// Set home context of user
-			u.setHomeContext((org.entrystore.repository.Context) homeContext.getResource());
+			u.setHomeContext((Context) homeContext.getResource());
 			log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
 		} finally {
 			pm.setAuthenticatedUserURI(authUser);
@@ -125,103 +134,149 @@ public class SignupResource extends BaseResource {
 		try {
 			if (ci.urlSuccess != null) {
 				getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, "UTF-8"));
+				return new EmptyRepresentation();
 			}
-			return htmlRepresentation("Sign-up successful.");
+			getResponse().setStatus(Status.SUCCESS_CREATED);
+			return html.representation("Sign-up successful.");
 		} catch (UnsupportedEncodingException e) {
 			log.warn("Unable to decode URL: " + e.getMessage());
 		}
 
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		return htmlRepresentation("User sign-up failed.");
+		return html.representation("User sign-up failed.");
 	}
 
 	@Post
 	public void acceptRepresentation(Representation r) {
-		Form form = new Form(getRequest().getEntity());
-		String firstName = form.getFirstValue("firstname", true);
-		String lastName = form.getFirstValue("lastname", true);
-		String email = form.getFirstValue("email", true);
-		String password = form.getFirstValue("password", true);
-		String rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
-		String rcResponse = form.getFirstValue("recaptcha_response_field", true);
-		String urlFailure = form.getFirstValue("urlfailure", true);
-		String urlSuccess = form.getFirstValue("urlsuccess", true);
+		SignupInfo ci = new SignupInfo();
+		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
+		String rcChallenge = null;
+		String rcResponse = null;
+		String rcResponseV2 = null;
 
-		if (firstName == null || lastName == null || email == null || password == null) {
+		if (MediaType.APPLICATION_JSON.equals(r.getMediaType())) {
+			try {
+				JSONObject siJson = new JSONObject(r.getText());
+				if (siJson.has("firstname")) {
+					ci.firstName = siJson.getString("firstname");
+				}
+				if (siJson.has("lastname")) {
+					ci.lastName = siJson.getString("lastname");
+				}
+				if (siJson.has("email")) {
+					ci.email = siJson.getString("email");
+				}
+				if (siJson.has("password")) {
+					ci.password = siJson.getString("password");
+				}
+				if (siJson.has("recaptcha_challenge_field")) {
+					rcChallenge = siJson.getString("recaptcha_challenge_field");
+				}
+				if (siJson.has("recaptcha_response_field")) {
+					rcResponse = siJson.getString("recaptcha_response_field");
+				}
+				if (siJson.has("grecaptcharesponse")) {
+					rcResponseV2 = siJson.getString("grecaptcharesponse");
+				}
+				if (siJson.has("urlfailure")) {
+					ci.urlFailure = siJson.getString("urlfailure");
+				}
+				if (siJson.has("urlsuccess")) {
+					ci.urlSuccess = siJson.getString("urlsuccess");
+				}
+			} catch (Exception e) {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return;
+			}
+		} else {
+			Form form = new Form(getRequest().getEntity());
+			ci.firstName = form.getFirstValue("firstname", true);
+			ci.lastName = form.getFirstValue("lastname", true);
+			ci.email = form.getFirstValue("email", true);
+			ci.password = form.getFirstValue("password", true);
+			rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
+			rcResponse = form.getFirstValue("recaptcha_response_field", true);
+			rcResponseV2 = form.getFirstValue("g-recaptcha-response", true);
+			ci.urlFailure = form.getFirstValue("urlfailure", true);
+			ci.urlSuccess = form.getFirstValue("urlsuccess", true);
+		}
+
+		if (ci.firstName == null || ci.lastName == null || ci.email == null || ci.password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(htmlRepresentation("One or more parameters are missing."));
+			getResponse().setEntity(html.representation("One or more parameters are missing."));
 			return;
 		}
 
-		if (firstName.trim().length() < 2 || lastName.trim().length() < 2) {
+		if (ci.firstName.trim().length() < 2 || ci.lastName.trim().length() < 2) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(htmlRepresentation("Invalid name."));
+			getResponse().setEntity(html.representation("Invalid name."));
 			return;
 		}
 
-		if (password.trim().length() < 8) {
+		if (ci.password.trim().length() < 8) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(htmlRepresentation("The password has to consist of at least 8 characters."));
+			getResponse().setEntity(html.representation("The password has to consist of at least 8 characters."));
 			return;
 		}
 
-		if (!EmailValidator.getInstance().isValid(email)) {
+		if (!EmailValidator.getInstance().isValid(ci.email)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(htmlRepresentation("Invalid email address: " + email));
+			getResponse().setEntity(html.representation("Invalid email address: " + ci.email));
 			return;
 		}
 
 		Config config = getRM().getConfiguration();
 
-		log.info("Received sign-up request for " + email);
+		log.info("Received sign-up request for " + ci.email);
 
-		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP_RECAPTCHA, "off"))
-				&& config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY) != null) {
-			if (rcChallenge == null || rcResponse == null) {
+		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
+				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
+			if ((rcChallenge == null || rcResponse == null) && rcResponseV2 == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				getResponse().setEntity(htmlRepresentation("reCaptcha information missing"));
+				getResponse().setEntity(html.representation("reCaptcha information missing"));
 				return;
 			}
-			log.info("Checking reCaptcha for " + email);
+			log.info("Checking reCaptcha for " + ci.email);
 
 			String remoteAddr = getRequest().getClientInfo().getUpstreamAddress();
-			ReCaptchaImpl captcha = new ReCaptchaImpl();
-			captcha.setPrivateKey(config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY));
-			ReCaptchaResponse reCaptchaResponse = captcha.checkAnswer(remoteAddr, rcChallenge, rcResponse);
+			boolean reCaptchaIsValid = false;
 
-			if (reCaptchaResponse.isValid()) {
-				log.info("Valid reCaptcha for " + email);
+			if (rcResponseV2 != null) {
+				RecaptchaVerifier rcVerifier = new RecaptchaVerifier(config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
+				reCaptchaIsValid = rcVerifier.verify(rcResponseV2, remoteAddr);
 			} else {
-				log.info("Invalid reCaptcha for " + email);
+				ReCaptchaImpl captcha = new ReCaptchaImpl();
+				captcha.setPrivateKey(config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
+				ReCaptchaResponse reCaptchaResponse = captcha.checkAnswer(remoteAddr, rcChallenge, rcResponse);
+				reCaptchaIsValid = reCaptchaResponse.isValid();
+			}
+
+			if (reCaptchaIsValid) {
+				log.info("Valid reCaptcha for " + ci.email);
+			} else {
+				log.info("Invalid reCaptcha for " + ci.email);
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				getResponse().setEntity(htmlRepresentation("Invalid reCaptcha received."));
+				getResponse().setEntity(html.representation("Invalid reCaptcha received."));
 				return;
 			}
 		}
-
-		SignupInfo ci = new SignupInfo();
-		ci.firstName = firstName;
-		ci.lastName = lastName;
-		ci.email = email;
-		ci.password = password;
-		ci.urlFailure = urlFailure;
-		ci.urlSuccess = urlSuccess;
-		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
 
 		String token = RandomStringUtils.randomAlphanumeric(16);
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
-		SignupTokenCache.getInstance().addToken(token, ci);
-		log.info("Generated sign-up token " + token + " for " + email);
+		log.info("Generated sign-up token " + token + " for " + ci.email);
 
-		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), firstName + " " + lastName, email, confirmationLink);
+		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), ci.firstName + " " + ci.lastName, ci.email, confirmationLink, false);
 		if (sendSuccessful) {
-			log.info("Sent confirmation request to " + email);
+			SignupTokenCache.getInstance().addToken(token, ci);
+			log.info("Sent confirmation request to " + ci.email);
 		} else {
-			log.info("Failed to send confirmation request to " + email);
+			log.info("Failed to send confirmation request to " + ci.email);
+			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+			return;
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);
-		getResponse().setEntity(htmlRepresentation("A confirmation message was sent to " + email));
+		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.email));
 	}
 
 	private String constructHtmlForm(boolean reCaptcha) {
@@ -229,8 +284,8 @@ public class SignupResource extends BaseResource {
 
 		String reCaptchaHtml = null;
 		if (reCaptcha) {
-			String privateKey = config.getString(Settings.SIGNUP_RECAPTCHA_PRIVATE_KEY);
-			String publicKey = config.getString(Settings.SIGNUP_RECAPTCHA_PUBLIC_KEY);
+			String privateKey = config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
+			String publicKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
 			if (privateKey == null || publicKey == null) {
 				return "reCaptcha keys must be configured";
 			}
@@ -239,7 +294,7 @@ public class SignupResource extends BaseResource {
 		}
 
 		StringBuilder sb = new StringBuilder();
-		sb.append(htmlHeader());
+		sb.append(html.header());
 		sb.append("<form action=\"\" method=\"post\">\n");
 		sb.append("First name<br/><input type=\"text\" name=\"firstname\"><br/>\n");
 		sb.append("Last name<br/><input type=\"text\" name=\"lastname\"><br/>\n");
@@ -252,39 +307,26 @@ public class SignupResource extends BaseResource {
 		}
 		sb.append("<br/>\n<input type=\"submit\" value=\"Sign-up\" />\n");
 		sb.append("</form>\n");
-		sb.append(htmlFooter());
+		boolean openid = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"));
+		if (openid) {
+			boolean google = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_GOOGLE, "off"));
+			boolean yahoo = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_YAHOO, "off"));
+			if (google || yahoo) {
+				sb.append("<br/>\n");
+				sb.append("Sign-up with: ");
+				if (google) {
+					sb.append("<a href=\"openid/google/signup\">Google</a>\n");
+				}
+				if (yahoo) {
+					if (google) {
+						sb.append(" | ");
+					}
+					sb.append("<a href=\"openid/yahoo/signup\">Yahoo!</a>\n");
+				}
+			}
+		}
+		sb.append(html.footer());
 		return sb.toString();
-	}
-
-	private String wrapInHtml(String content) {
-		StringBuilder sb = new StringBuilder();
-		sb.append(htmlHeader());
-		sb.append("<div>");
-		sb.append(content);
-		sb.append("</div>");
-		sb.append(htmlFooter());
-		return sb.toString();
-	}
-
-	private String htmlHeader() {
-		StringBuilder sb = new StringBuilder();
-		sb.append("<html>\n");
-		sb.append("<head>\n<title>EntryStore account sign-up</title>\n</head>\n");
-		sb.append("<body style=\"width:500px;margin-left:auto;margin-right:auto;font-family:verdana;font-size:10pt;\">\n");
-		sb.append("<div>\n<br/>\n");
-		sb.append("<p><a href=\"http://entrystore.org\"><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALwAAAAwCAYAAACrOxAIAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3gICEy8q4+6ghgAADLxJREFUeNrtnHmQFNUdxz+vZ3bZBZZdrhU5BMQLjCmoABopKAgaUEmwUgklQQ41JrFKguaySjRexFSqLBVQi8RIQEBJPCvEcBnUiPFWUIkEMAKywArCsruwO0f3yx/9G7Z3mKOnu1cYt79VXTvbx+vXv/d9v/e7uhW58AcMdld1JxrpTEQd5jcH6wgRooihMu69u/vFKD0L1NeALmhMFBE0B9C8g5Wcz11H9oTiC1HchL+1spyyyAMoNQJ0c47rKrFYwh2H7gtFGKI4Cf9gr1Lq46tRlLm+1jK2ccfBWaEYQxQLIsd/XVy6EkVVVjMnM+V7Mq68Jy81bQxFGaIYYAAwr8ckFAMKIjsA2kIxld92PTsUZYjiIby2bgXiHttoxOT6UJQhioPwd/UcAjrqzxNQ40JRhigOwhvWEFCmT9+3hHk9zwrFGeJURxRTVxJB+2pFk4R4L2BHEJ0a/gCRrj3ook2ihkFi3QzChFeIgAgf0QlQCnyQ3gBjF2WW7fR6bmfS43SLKyZjMFJBAgMNqAnLiaJYr2D9mmk0hsPmfSkGussYHQGS7Y/wSfYTxQAsz62UACsbxwHfBNYCm4FYIU1MfILrEiZDlUEMOJY2TAlglNaMv2wZa1dPZ5XLZs8CLnfxbHXA8oBle5MQ63lg10ke507AWGAgYArxDXnuXcBW4ECWa78BXAwcbgMZnQQbvjTxOqgSX63E1WdWgzkXWANcBPwO+D5wWr5Lp9+DumwZd2vNYAziZA+NKhQxSzF24nJmu+yZhR19yrcl2kC2Mdn0SR7j/sBMoA8tkTgtvzsCg4EfAh2yXG/KcyT4CiDK3MYG7unwnjy4t2VSJf8hv9+WrQMwA/gxUAosBmrIEPqsHcCNyqAjbnMACrRmwMRlTFkznb+67GMEeCMH+WJ8NdEDuEJMlwiwCdgtsu4J9AP6yth8VWWQRngAEnOhZDXoJk8GzW11j2YgUGrfSGAqUA58BKxKmSwTVjAMGCRapDBLFEaPXcLLL8/ic3deBh8UfJ/ix0QhuwWsAI46ju0B3hdpVrUXgdiJp9vrazH1fDAKNW1KMazpec55C7gXeAioAG4DbgbVz4BJXkmoFbGyEiaHfmhW9BF5G8A/08jeSpRin7cjwgPceWgpll6Ms74mn55NRm5mbt1Wl+fXAn8CbgV2lJ+mZhrldPUTcdC2QxUiM84QZZIEPg3FkU54gDu+WATxqx22tspgTGgsVcex5rHcdcBr0diq8Q9aryabfPZeE7t8KW2V8Ep34rrLVki9kSrA2essNrcRUP8r5O8XPttJOlYCt3LrAZ6UWSEy6AJUy/muLZMTSwpub9wBjGNeeR+sjtcA41G6hJiVYL/5Oufye37VcMTvaCQsOvmOYCisuEFlG5B9CDAOeBE4T5w7y6EkaoB/ZSDTj4AyIXrKCfye/K+Al4EP5ffV4kTGgNFCFC0r7E5xsg8CV8r935Z9mTBInFMTeNgRoSJH9CUXzgUmSBumbF2B2dJHC3gk7ZpzsMPSneV46pl3ARtIDzUXJgMnzsQOsZY5+BMRn2RdhvvkIXwKtzXVQNM8YJ7sGYEdcjwSBKMsC8sw/CWqAEq1j/xBdgwXzTxW+meKUBOOCMdVwHPAXsd1JifG/J2Dn3rWUdghwVGOc7RMJhPoLY7+c8An2OHd3jn6OwBoFpLg0OxnyqrUKYcNn82utxz9cj4fGZ5xJLZ5aTquT+V2ekvEbllaHwqRQertugtkYiQdRNfyfzUwHTtXcLRwwp+IvSK8YGwpTZ3SKK28E15pos0JatuA8C+JxkTCeO/QkpjpCHwHqAQuAx5zXPeMDFgcO/atRavvk+Mp7bMROxzYRcZgG7AFOxFUAVyIHc7dA9TLIPfK0d+BDm2awseicRPAZODJApTLp7Qkmc4Dvi79WCX9dbZTJcrQxC4t+bdMPqTP3xZtfAW0CiMXIgMkyjdGyL0feEWUb0RWwLFy/gTgWXc2fG7UyLLWOQhGrZ3BG1rRyZ8JT3zDda00bC5bupBokOEg6GpaZyGPAU+LoEuwEzsp1MuAOZfVo7KvjtZ5iJj06zVZ8mtl30HgBdFsqTZTCaxMpK+SgY6mafhm4F25R2fgWtznWhKOPjc7NHCj7DuSZsokRCFucJyPEPNpkVO19BMPMgA4X+7TCPzN0QdTnvt5kUHvXGZcoWXBu2SZ/CAI0mt4V9kC84SIrT3dIA7cmGF/CbAIKNR9NkVrV8vmp3QgXoDc+wmJ0rV7Up4hPXn0pqxEg+T/McC3ZALvE3Npr89hrBDSbsty/JhMki6yHfQog5QTnO3jAXUOxVYlk8eXhge75qJ/gKbDqkI87DSVrSpqWFMgsTJtXhFzTJq2Rio72i/DsdR47Mxy7TpgvTyrIVqySrT9ZDG9zvAVOrC3uAtZ+YlARVxEi6x89ylUw+8BLg1qFNdNY++wn/PWaSMYpgtwPZVFqYaFf7nFdcgvW2mBgf8akeiXQPhdcp/TMxzrI1ptd47rd8hWLef3FvtZy/I/SVaDdyluREQWiaAGq0YiFEFhzvv302XCYl7THRijXNjZSlNmRlm8fmrWJTTbSlbMpQUxseU7C1FTy3pf0WoRl2bV57K97whnjpXfF8n47i9SGY0QokeymE2elpjDsnT1CsDuu1McnHvWXsuzJRYPa42lsixY2kJFNE1NCe5cP7XoNZFXLW+mmR/9ZZ/XSNUnjmhMQiIjpzoqsfME58k2WKyO4XJ8c5DLsSWappcPTXABMAU7qfNKaucL09k+aQm/jlXQ2WjmeqXpa2kwFArFR5sjPD4sTvKVa056ue3Jwm7shFh/Cf057Xc/TnMMOxx4fgCK7MvA6ZyYk9DiR+yUiE+g9ucnctNNHq6dAgwDFtASmz6Ov89CAw3A/QCXLEWtm9lC8NW0a+yS5bo7LbHwbqLh/b5g0vglOuB+YYllUirRqXrh0hYx14J2uDru7hCNjX7kKfNoQwODMSiNQC1xXp99LZ/l8ORvFgfpblyGAV+c2W61eUarDjuc2A07s2rRknH83GfbqfKMY0Ugh63YSau2jzAsWkpF3Dj2U0tR3niMEUpe/rZA0YHvLlgGCpbOns56x2XV2DHwT4E/h7z1reWrxJSJC+lr8kQs3OAcR1DCKwwXx/wosKRHv9Ob07pgOZPjERZpg3KlTui8BtAGWAbXzF/OAtk/GpiDnTVrb2RP+jAbc9nxEXFce8vKmS0ceSF2vc+gPG1eIjyIZjFTU/VD2cyd1MTLVR2Z+oSjn7xHfZrf0naEf3AZUzRc5bLuxULR7b7HWIxda7IQO8Z7MlFoaUEQOCREGBpgm/sc5KskdzhyMHZm81LgJ9jVn33lWoVdkHalY0LszhLtOSQ86ULmBFWttDcUu94lHSPkuIW/wsOt0veOokgzoRd5Mvd5tc/C5QyyFD+gwHceS8oonb+C2jnTTom4brbSAmek4tGA77kFO8bdA7hBnPE3ge0+262h5eX4ZofmS8c7ouW1bGdjh/MiDgVgyrEGWYWzTbJmIdsV8rsJWCnH/yv3KcPO2m4Vn6JUJlMqb/OGz+eux86lDJGtn8iyVFa7aodfs82zhjfhF3h8wVdpRj30FKfKF8nyfbmgLZyrj4QoFnaJbmlAZo3Tps+GzcAfxcGrc9w7Kc+rpW8fk7+S8hkxbVLXpBcQPkVL0dg5ooFHSkQpInLYFMCzvyqKJCp9GIYdTu0qkzcVvSn3pOEfWcLAhKI7HtPvWhFPNjGOgL5I5gGHRdPp/PO6FY7Idbmee7tosoM5ztmIndUcIBrQGU35GPiM7N+DyYYd2GW/Wtpws9JsEaL2oaUct0ECCW4+xlQvPtgAIVf6W19NwOOyivTFTiwmxRzaKhMuE7zIYKNM5vNlQlkyBgdFvkc9mzRmhKH4/DpVRDG8DcyFQglfKOpcXOd2Eh8VwmVaAbygxLE6F1LpmCB7gZlb7MzTxvYCTTavMmjwaiJF82joVK2G8iohS+V8UydE4ehGS8Y7RJBRGq0p90N2sL9a+ejCwF5MDtF6GQ8RJOENRYPfG2iwrp/dJu+dtmfCI/ZxiCAJb1rsxGdmS+nwmyhtQHgjJHwbED5psQl/mUKFbpelvG2JShm3L0JRBEz4X85iHxb/wWsNhKZTQwXPh2IODFW0VAseCcURMOEBdJL5ylvCxACemHulfz8gxHFUy4rbFIrCq8nhAvOXMxLFLW4FrezvPv5vzjRuD0UcougID/DACgZHNPdqlTuTpaAczYafXX38k28hQhQf4QEWrKQDJjM0jEHTSbV8ICiqFSVYfKg1T940w1XKO0SIU5vwrci/goHAIDQlpuZAdSPvTbshjLeHOLXxfwtA0V3eFK/bAAAAAElFTkSuQmCC\" alt=\"EntryStore\" title=\"EntryStore\"></a></p>\n");
-		sb.append("<br/>\n<h3>EntryStore account sign-up</h3>\n<br/>\n");
-		return sb.toString();
-	}
-
-	private String htmlFooter() {
-		StringBuilder sb = new StringBuilder();
-		sb.append("\n</div>\n</body>\n</html>\n");
-		return sb.toString();
-	}
-
-	private Representation htmlRepresentation(String content) {
-		return new StringRepresentation(wrapInHtml(content), MediaType.TEXT_HTML, Language.ENGLISH);
 	}
 
 }

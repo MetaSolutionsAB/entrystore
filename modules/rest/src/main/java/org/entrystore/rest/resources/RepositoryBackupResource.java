@@ -18,10 +18,10 @@ package org.entrystore.rest.resources;
 
 import java.io.IOException;
 
-import org.entrystore.repository.Entry;
+import org.entrystore.Entry;
 import org.entrystore.repository.backup.BackupFactory;
 import org.entrystore.repository.backup.BackupScheduler;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
 import org.entrystore.rest.EntryStoreApplication;
 import org.json.JSONException;
 import org.json.JSONObject;

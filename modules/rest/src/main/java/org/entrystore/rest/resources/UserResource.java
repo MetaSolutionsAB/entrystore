@@ -16,10 +16,16 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.repository.User;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.User;
+import org.entrystore.AuthorizationException;
+import org.entrystore.rest.auth.LoginTokenCache;
+import org.entrystore.rest.auth.TokenCache;
+import org.entrystore.rest.auth.UserInfo;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.restlet.data.Cookie;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
@@ -48,15 +54,25 @@ public class UserResource extends BaseResource {
 			try {
 				result.put("user", currentUser.getName());
 				result.put("id", currentUser.getEntry().getId());
+				result.put("uri", currentUser.getEntry().getEntryURI());
 
 				if (!guest) {
-					org.entrystore.repository.Context homeContext = currentUser.getHomeContext();
+					Context homeContext = currentUser.getHomeContext();
 					if (homeContext != null) {
 						result.put("homecontext", homeContext.getEntry().getId());
 					}
 					String userLang = currentUser.getLanguage();
 					if (userLang != null) {
 						result.put("language", userLang);
+					}
+
+					Cookie authTokenCookie = getRequest().getCookies().getFirst("auth_token");
+					if (authTokenCookie != null) {
+						String authToken = authTokenCookie.getValue();
+						UserInfo ui = LoginTokenCache.getInstance().getTokenValue(authToken);
+						if (ui != null && ui.getLoginExpiration() != null) {
+							result.put("authTokenExpires", ui.getLoginExpiration());
+						}
 					}
 				}
 			} catch (JSONException e) {

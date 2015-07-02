@@ -16,27 +16,19 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.IOException;
-
-import org.entrystore.repository.PrincipalManager.AccessProperty;
-import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.impl.converters.Graph2Entries;
-import org.entrystore.repository.security.AuthorizationException;
-import org.entrystore.rest.util.RDFJSON;
+import org.entrystore.AuthorizationException;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.impl.converters.Graph2Entries;
+import org.entrystore.rest.util.GraphUtil;
 import org.openrdf.model.Graph;
-import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.n3.N3ParserFactory;
-import org.openrdf.rio.ntriples.NTriplesParser;
-import org.openrdf.rio.rdfxml.RDFXMLParser;
-import org.openrdf.rio.trig.TriGParser;
-import org.openrdf.rio.trix.TriXParser;
-import org.openrdf.rio.turtle.TurtleParser;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
 
 
 /**
@@ -58,7 +50,7 @@ public class MergeResource extends BaseResource {
 			}
 			
 			if (context == null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				return;
 			}
 			
@@ -71,31 +63,15 @@ public class MergeResource extends BaseResource {
 			
 			if (graphString != null) {
 				MediaType mediaType = (format != null) ? format : getRequestEntity().getMediaType();
-
-				Graph deserializedGraph = null;
-				if (mediaType.equals(MediaType.APPLICATION_JSON)) {
-					deserializedGraph = RDFJSON.rdfJsonToGraph(graphString);
-				} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new RDFXMLParser());
-				} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new N3ParserFactory().getParser());
-				} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TurtleParser());
-				} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriXParser());
-				} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new NTriplesParser());
-				} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-					deserializedGraph = ConverterUtil.deserializeGraph(graphString, new TriGParser());
-				} else {
-					getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-					return;
-				}
+				Graph deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
 				
 				if (deserializedGraph != null) {
 					Graph2Entries g2e = new Graph2Entries(this.context);
 					g2e.merge(deserializedGraph, this.parameters.get("resourceId"), null);
 					getResponse().setStatus(Status.SUCCESS_OK);
+					return;
+				} else {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					return;
 				}
 			}			

@@ -31,23 +31,27 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
-import org.entrystore.repository.Data;
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.EntryType;
-import org.entrystore.repository.GraphType;
-import org.entrystore.repository.Group;
-import org.entrystore.repository.Metadata;
-import org.entrystore.repository.QuotaException;
-import org.entrystore.repository.RepositoryProperties;
-import org.entrystore.repository.ResourceType;
-import org.entrystore.repository.User;
-import org.entrystore.repository.impl.ListImpl;
-import org.entrystore.repository.impl.RDFResource;
-import org.entrystore.repository.impl.StringResource;
-import org.entrystore.repository.impl.converters.ConverterUtil;
-import org.entrystore.repository.security.AuthorizationException;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.Data;
+import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Group;
+import org.entrystore.Metadata;
+import org.entrystore.QuotaException;
+import org.entrystore.ResourceType;
+import org.entrystore.User;
+import org.entrystore.impl.ListImpl;
+import org.entrystore.impl.RDFResource;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.impl.StringResource;
+import org.entrystore.impl.converters.ConverterUtil;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
+import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;
@@ -158,7 +162,7 @@ public class ResourceResource extends BaseResource {
 			 */
 			if (parameters.containsKey("syndication")) {
 				try {
-					if (getRM().getSolrSupport() == null) {
+					if (getRM().getIndex() == null) {
 						getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
 						return new JsonRepresentation("{\"error\":\"Feeds are not supported by this installation\"}");
 					}
@@ -174,42 +178,37 @@ public class ResourceResource extends BaseResource {
 				}
 			}
 
-			// ResourceType.Graph
-			if (GraphType.Graph.equals(entry.getGraphType())) {
+			// Graph and List
+			if (GraphType.Graph.equals(entry.getGraphType()) || GraphType.List.equals(entry.getGraphType())) {
+				boolean list = GraphType.List.equals(entry.getGraphType());
 				MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
 				if (preferredMediaType == null) {
 					preferredMediaType = MediaType.APPLICATION_RDF_XML;
 				}
-				RDFResource graphResource = (RDFResource) entry.getResource();
-				Graph graph = graphResource.getGraph();
+				Graph graph = null;
+				if (list) {
+					graph = ((org.entrystore.List) entry.getResource()).getGraph();
+				} else {
+					graph = ((RDFResource) entry.getResource()).getGraph();
+				}
+
 				if (graph != null) {
 					String serializedGraph = null;
 					if (preferredMediaType.equals(MediaType.APPLICATION_JSON)) {
+						if (list) {
+							return getListRepresentation();
+						}
 						serializedGraph = RDFJSON.graphToRdfJson(graph);
-					} else if (preferredMediaType.equals(MediaType.APPLICATION_RDF_XML)) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-					} else if (preferredMediaType.equals(MediaType.ALL)) {
-						preferredMediaType = MediaType.APPLICATION_RDF_XML;
-						serializedGraph = ConverterUtil.serializeGraph(graph, RDFXMLPrettyWriter.class);
-					} else if (preferredMediaType.equals(MediaType.TEXT_RDF_N3)) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, N3Writer.class);
-					} else if (preferredMediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, TurtleWriter.class);
-					} else if (preferredMediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, TriXWriter.class);
-					} else if (preferredMediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, NTriplesWriter.class);
-					} else if (preferredMediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, TriGWriter.class);
-					} else if (preferredMediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-						serializedGraph = ConverterUtil.serializeGraph(graph, SesameJSONLDWriter.class);
 					} else {
-						getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-						return new JsonRepresentation(JSONErrorMessages.errorUnknownFormat);
+						serializedGraph = GraphUtil.serializeGraph(graph, preferredMediaType);
 					}
+
 					if (serializedGraph != null) {
 						getResponse().setStatus(Status.SUCCESS_OK);
 						return new StringRepresentation(serializedGraph, preferredMediaType);
+					} else {
+						getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
+						return new JsonRepresentation(JSONErrorMessages.errorUnknownFormat);
 					}
 				}
 			}
@@ -230,13 +229,15 @@ public class ResourceResource extends BaseResource {
 				result = new EmptyRepresentation();
 			}
 
-			Date lastMod = entry.getModifiedDate();
-			if (lastMod != null) {
-				result.setModificationDate(lastMod);
+			if (result != null) {
+				Date lastMod = entry.getModifiedDate();
+				if (lastMod != null) {
+					result.setModificationDate(lastMod);
+				}
 			}
+
 			return result;
 		} catch(AuthorizationException e) {
-			log.error("unauthorizedGET");
 			return unauthorizedGET();
 		}
 	}
@@ -244,13 +245,17 @@ public class ResourceResource extends BaseResource {
 	@Put
 	public void storeRepresentation(Representation r) {
 		if (entry == null) {
-			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			return;
 		}
 
+		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+		if (preferredMediaType == null) {
+			preferredMediaType = MediaType.APPLICATION_RDF_XML;
+		}
+
 		try {
-			modifyResource();
+			modifyResource(preferredMediaType);
 		} catch(AuthorizationException e) {
 			unauthorizedPUT();
 		}
@@ -259,7 +264,6 @@ public class ResourceResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		if (entry == null) {
-			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			return;
 		}
@@ -508,7 +512,7 @@ public class ResourceResource extends BaseResource {
 	public Set<Entry> getListChildrenRecursively(Entry listEntry) {
 		Set<Entry> result = new HashSet<Entry>();
 		if (GraphType.List.equals(listEntry.getGraphType()) && EntryType.Local.equals(listEntry.getEntryType())) {
-			org.entrystore.repository.List l = (org.entrystore.repository.List) listEntry.getResource();
+			org.entrystore.List l = (org.entrystore.List) listEntry.getResource();
 			List<URI> c = l.getChildren();
 			for (URI uri : c) {
 				Entry e = getRM().getContextManager().getEntry(uri);
@@ -527,7 +531,7 @@ public class ResourceResource extends BaseResource {
 	}
 	
 	public StringRepresentation getSyndicationSolr(Entry entry, String type) {
-		if (getRM().getSolrSupport() == null) {
+		if (getRM().getIndex() == null) {
 			return null;
 		}
 		
@@ -552,7 +556,7 @@ public class ResourceResource extends BaseResource {
 		String alias;
 
 		if (GraphType.Context.equals(bt)) {
-			alias = getCM().getContextAlias(entry.getResourceURI());
+			alias = getCM().getName(entry.getResourceURI());
 			solrQueryValue = "context:";
 		} else {
 			alias = EntryUtil.getTitle(entry, "en");
@@ -570,7 +574,7 @@ public class ResourceResource extends BaseResource {
 		solrQuery.setSortField("modified", ORDER.desc);
 
 		List<SyndEntry> syndEntries = new ArrayList<SyndEntry>();
-		Set<Entry> searchEntries = getRM().getSolrSupport().sendQuery(solrQuery).getEntries();
+		Set<Entry> searchEntries = ((SolrSearchIndex) getRM().getIndex()).sendQuery(solrQuery).getEntries();
 		List<Entry> recursiveEntries = new LinkedList<Entry>();
 		for (Entry e : searchEntries) {
 			recursiveEntries.addAll(getListChildrenRecursively(e));
@@ -647,6 +651,67 @@ public class ResourceResource extends BaseResource {
 		}
 	}
 
+	private Representation getListRepresentation() {
+		JSONArray array = new JSONArray();
+		org.entrystore.List l = (org.entrystore.List) entry.getResource();
+		List<URI> uris = l.getChildren();
+		Set<String> IDs = new HashSet<String>();
+		for (URI u : uris) {
+			String id = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/') + 1);
+			IDs.add(id);
+		}
+
+		if (parameters.containsKey("sort") && (IDs.size() < 501)) {
+			List<Entry> childrenEntries = new ArrayList<Entry>();
+			for (String id : IDs) {
+				Entry childEntry = this.context.get(id);
+				if (childEntry != null) {
+					childrenEntries.add(childEntry);
+				} else {
+					log.warn("Child entry " + id + " in context " + context.getURI() + " does not exist, but is referenced by a list.");
+				}
+			}
+
+			Date before = new Date();
+			boolean asc = true;
+			if ("desc".equalsIgnoreCase(parameters.get("order"))) {
+				asc = false;
+			}
+			GraphType prioritizedResourceType = null;
+			if (parameters.containsKey("prio")) {
+				prioritizedResourceType = GraphType.valueOf(parameters.get("prio"));
+			}
+			String sortType = parameters.get("sort");
+			if ("title".equalsIgnoreCase(sortType)) {
+				String lang = parameters.get("lang");
+				EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedResourceType);
+			} else if ("modified".equalsIgnoreCase(sortType)) {
+				EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedResourceType);
+			} else if ("created".equalsIgnoreCase(sortType)) {
+				EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedResourceType);
+			} else if ("size".equalsIgnoreCase(sortType)) {
+				EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedResourceType);
+			}
+			long sortDuration = new Date().getTime() - before.getTime();
+			log.debug("List entry sorting took " + sortDuration + " ms");
+
+			for (Entry childEntry : childrenEntries) {
+				URI childURI = childEntry.getEntryURI();
+				String id = (childURI.toASCIIString()).substring((childURI.toASCIIString()).lastIndexOf('/') + 1);
+				array.put(id);
+			}
+		} else {
+			if (IDs.size() > 500) {
+				log.warn("No sorting performed because of list size bigger than 500 children");
+			}
+			for (String id : IDs) {
+				array.put(id);
+			}
+		}
+
+		return new JsonRepresentation(array.toString());
+	}
+
 	/**
 	 * Gets the resource's JSON representation
 	 * 
@@ -663,77 +728,10 @@ public class ResourceResource extends BaseResource {
 			}
 		} else if (EntryType.Local.equals(entry.getEntryType())) {
 
-			JSONArray array = new JSONArray(); 
-
-			/*** List ***/
-			if (entry.getGraphType() == GraphType.List) {
-				org.entrystore.repository.List l = (org.entrystore.repository.List) entry.getResource(); 
-				List<URI> uris = l.getChildren();
-				Set<String> IDs = new HashSet<String>();
-				for (URI u: uris) {
-					String id = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/')+1);
-					IDs.add(id);
-				}
-				
-				if (parameters.containsKey("sort") && (IDs.size() < 501)) {
-					List<Entry> childrenEntries = new ArrayList<Entry>();
-					for (String id : IDs) {
-						Entry childEntry = this.context.get(id);
-						if (childEntry != null) {
-							childrenEntries.add(childEntry);
-						} else {
-							log.warn("Child entry " + id + " in context " + context.getURI() + " does not exist, but is referenced by a list.");
-						}
-					}
-					
-					Date before = new Date();
-					boolean asc = true;
-					if ("desc".equalsIgnoreCase(parameters.get("order"))) {
-						asc = false;
-					}
-					GraphType prioritizedResourceType = null;
-					if (parameters.containsKey("prio")) {
-						prioritizedResourceType = GraphType.valueOf(parameters.get("prio"));
-					}
-					String sortType = parameters.get("sort");
-					if ("title".equalsIgnoreCase(sortType)) {
-						String lang = parameters.get("lang");
-						EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedResourceType);
-					} else if ("modified".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedResourceType);
-					} else if ("created".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedResourceType);
-					} else if ("size".equalsIgnoreCase(sortType)) {
-						EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedResourceType);
-					}
-					long sortDuration = new Date().getTime() - before.getTime();
-					log.debug("List entry sorting took " + sortDuration + " ms");
-					
-					for (Entry childEntry : childrenEntries) {
-						URI childURI = childEntry.getEntryURI();
-						String id = (childURI.toASCIIString()).substring((childURI.toASCIIString()).lastIndexOf('/')+1);
-						array.put(id);
-					}
-				} else {
-					if (IDs.size() > 500) {
-						log.warn("No sorting performed because of list size bigger than 500 children");
-					}
-					for (String id : IDs) {
-						array.put(id);
-					}
-				}
-				
-				return new JsonRepresentation(array.toString());
-			}
-
 			/*** String ***/
-			if(entry.getGraphType() == GraphType.String) {
+			if (GraphType.String.equals(entry.getGraphType())) {
 				StringResource stringResource = (StringResource)entry.getResource(); 
-				Graph graph = stringResource.getGraph(); 
-				if (graph == null) {
-					return new JsonRepresentation("{\"error\":\"The string value has not been set yet.\"}"); 
-				}
-				return new JsonRepresentation(RDFJSON.graphToRdfJson(graph));  
+				return new StringRepresentation(stringResource.getString());
 			}
 
 			/*** Graph ***/
@@ -748,8 +746,9 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Context ***/
-			if(entry.getGraphType() == GraphType.Context || entry.getGraphType() == GraphType.SystemContext) {
-				org.entrystore.repository.Context c = (org.entrystore.repository.Context) entry.getResource(); 
+			if (GraphType.Context.equals(entry.getGraphType()) || GraphType.SystemContext.equals(entry.getGraphType())) {
+				JSONArray array = new JSONArray();
+				Context c = (Context) entry.getResource();
 				Set<URI> uris = c.getEntries(); 
 				for(URI u: uris) {
 					String entryId = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/')+1);
@@ -759,7 +758,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** None ***/
-			if(entry.getGraphType() == GraphType.None) {
+			if (GraphType.None.equals(entry.getGraphType())) {
 
 				// Local data
 				if(entry.getResourceType() == ResourceType.InformationResource) {
@@ -787,18 +786,21 @@ public class ResourceResource extends BaseResource {
 					}
 				}
 
-				// DOES NOT HAVE ANY RESOURCE
-				if(entry.getResourceType() == ResourceType.NamedResource) {
+				// If there is no resource we redirect to the metadata
+				if (ResourceType.NamedResource.equals(entry.getResourceType())) {
+					getResponse().setLocationRef(new Reference(entry.getLocalMetadataURI()));
+					getResponse().setStatus(Status.REDIRECTION_SEE_OTHER);
+					return null;
 				}
 
 				// NOT USED YET
-				if(entry.getResourceType() == ResourceType.Unknown) {	
+				if (ResourceType.Unknown.equals(entry.getResourceType())) {
 				}
 
 			}
 
 			/*** User ***/
-			if(entry.getGraphType() == GraphType.User) {
+			if (GraphType.User.equals(entry.getGraphType())) {
 				JSONObject jsonUserObj = new JSONObject();  
 				User user = (User) entry.getResource(); 
 				try {
@@ -806,7 +808,7 @@ public class ResourceResource extends BaseResource {
 
 					//jsonUserObj.put("password", user.getSecret());
 
-					org.entrystore.repository.Context homeContext = user.getHomeContext();
+					Context homeContext = user.getHomeContext();
 					if (homeContext != null) {
 						jsonUserObj.put("homecontext", homeContext.getEntry().getId());
 					}
@@ -823,7 +825,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Group ***/
-			if(entry.getGraphType() == GraphType.Group) {
+			if (GraphType.Group.equals(entry.getGraphType())) {
 				JSONObject jsonGroupObj = new JSONObject(); 
 				Group group = (Group) entry.getResource(); 
 				JSONArray userArray = new JSONArray(); 
@@ -854,69 +856,74 @@ public class ResourceResource extends BaseResource {
 				} 
 			}
 
-
-			log.error("Can not find the resource.");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource + " ResourceType: " + entry.getGraphType());
+			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource);
 		}
 
-		log.info("No resource available.");
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		return new JsonRepresentation("{\"error\":\"No resource available for "+entry.getEntryType()+" entries \"}");
-
 	}
 
 
 	/**
 	 * Set a resource to an entry.
 	 */
-	private void modifyResource() throws AuthorizationException {
+	private void modifyResource(MediaType mediaType) throws AuthorizationException {
 		/*
 		 * List and Group
 		 */
-		if (entry.getGraphType() == GraphType.List || entry.getGraphType() == GraphType.Group) {
-			JSONObject entityJSON = null; 
+		if (GraphType.List.equals(entry.getGraphType()) || GraphType.Group.equals(entry.getGraphType())) {
+			String requestBody = null;
 			try {
-				entityJSON = new JSONObject(getRequest().getEntity().getText());
-				JSONArray childrenJSONArray = (JSONArray) entityJSON.get("resource");
-
-				ArrayList<URI> newResource = new ArrayList<URI>(); 
-
-				// Add new entries to the list. 
-				for(int i = 0; i < childrenJSONArray.length(); i++) {
-					String childId = childrenJSONArray.get(i).toString();
-					Entry childEntry = context.get(childId);
-					if(childEntry == null) {
-						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
-						log.error("Cannot update list, since one of the children does not exist.");
-						return;
-					} else {
-						newResource.add(childEntry.getEntryURI());
-					}
-				}
-				
-				if (entry.getGraphType() == GraphType.List) {
-					org.entrystore.repository.List resourceList = (org.entrystore.repository.List) entry.getResource();
-					resourceList.setChildren(newResource);
-				} else {
-					org.entrystore.repository.Group resourceGroup = (org.entrystore.repository.Group) entry.getResource();
-					resourceGroup.setChildren(newResource); 
-				}
-				getResponse().setStatus(Status.SUCCESS_OK);
-			} catch (JSONException e) {
-				log.error("Wrong JSON syntax: " + e.getMessage()); 
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
+				requestBody = getRequest().getEntity().getText();
 			} catch (IOException e) {
-				log.error("IOException: " + e.getMessage()); 
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
-				getResponse().setEntity(new JsonRepresentation("{\"error\":\"IOException\"}"));
-			} catch (org.entrystore.repository.RepositoryException re) {
-				log.warn(re.getMessage());
-				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorChildExistsInList));
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return;
 			}
-			return; // success!
+			if (MediaType.APPLICATION_JSON.equals(mediaType)) {
+				try {
+					JSONArray childrenJSONArray = new JSONArray(requestBody);
+					ArrayList<URI> newResource = new ArrayList<URI>();
+
+					// Add new entries to the list.
+					for (int i = 0; i < childrenJSONArray.length(); i++) {
+						String childId = childrenJSONArray.get(i).toString();
+						Entry childEntry = context.get(childId);
+						if (childEntry == null) {
+							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+							log.error("Cannot update list, since one of the children does not exist.");
+							return;
+						} else {
+							newResource.add(childEntry.getEntryURI());
+						}
+					}
+
+					if (entry.getGraphType() == GraphType.List) {
+						org.entrystore.List resourceList = (org.entrystore.List) entry.getResource();
+						resourceList.setChildren(newResource);
+					} else {
+						Group resourceGroup = (Group) entry.getResource();
+						resourceGroup.setChildren(newResource);
+					}
+					getResponse().setStatus(Status.SUCCESS_OK);
+				} catch (JSONException e) {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
+				} catch (RepositoryException re) {
+					log.warn(re.getMessage());
+					getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
+					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorChildExistsInList));
+				}
+				return; // success!
+			} else {
+				Graph graph = GraphUtil.deserializeGraph(requestBody, mediaType);
+				if (graph != null && GraphType.List.equals(entry.getGraphType())) {
+					((org.entrystore.List) entry.getResource()).setGraph(graph);
+				} else {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				}
+				// TODO add support for groups here
+			}
 		}
 
 		/*
@@ -1007,24 +1014,10 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** String  ***/
-		// {"@id":"http://localhost:8080/scam/1/resource/11","sc:body":{"@language":"english","@value":"<h1>Title<\/h1>"}}
 		if(entry.getGraphType() == GraphType.String) {
-			JSONObject entityJSON = null; 
 			try {
-				entityJSON = new JSONObject(getRequest().getEntity().getText());
-				if(entityJSON.has("sc:body")) {
-					JSONObject contentObj = (JSONObject)entityJSON.get("sc:body"); 
-					StringResource stringResource = (StringResource)entry.getResource(); 
-
-					if(contentObj.has("@value") && contentObj.has("@language")) {
-						stringResource.setString(contentObj.getString("@value"), contentObj.getString("@language")); 
-					} else if (contentObj.has("@value")) {
-						stringResource.setString(contentObj.getString("@value"), null); 
-					} 
-				}
-			} catch (JSONException e) {
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				getResponse().setEntity(new JsonRepresentation("{\"error\":\"Problem with input.\"}"));
+				StringResource stringResource = (StringResource)entry.getResource(); 
+				stringResource.setString(getRequest().getEntity().getText());
 			} catch (IOException e) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"Problem with input.\"}"));
@@ -1037,23 +1030,20 @@ public class ResourceResource extends BaseResource {
 			if (graphResource != null) {
 				Graph graph = null;
 				try {
-					graph = RDFJSON.rdfJsonToGraph(getRequest().getEntity().getText());
+					graph = GraphUtil.deserializeGraph(getRequest().getEntity().getText(), mediaType);
 				} catch (IOException ioe) {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					getResponse().setEntity(new JsonRepresentation("{\"error\":\"Unable to read request entity\"}"));
-					log.error("Unable to read request entity");
 				}
 				if (graph != null) {
 					graphResource.setGraph(graph);
 				} else {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-					getResponse().setEntity(new JsonRepresentation("{\"error\":\"Unable to convert RDF/JSON to Graph\"}"));
-					log.error("Unable to convert RDF/JSON to Sesame Graph");
 				}
 			} else {
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"No RDF resource found for this entry\"}"));
-				log.error("No RDF resource found for this entry with ResourceType Graph");
+				log.error("No RDF resource found for entry with ResourceType Graph");
 			}
 		}
 
@@ -1094,8 +1084,8 @@ public class ResourceResource extends BaseResource {
 					String homeContext = entityJSON.getString("homecontext");
 					Entry entryHomeContext = getCM().get(homeContext);
 					if (entryHomeContext != null) {
-						if (!(entryHomeContext.getResource() instanceof org.entrystore.repository.Context)
-								|| !resourceUser.setHomeContext((org.entrystore.repository.Context) entryHomeContext.getResource())) {
+						if (!(entryHomeContext.getResource() instanceof Context)
+								|| !resourceUser.setHomeContext((Context) entryHomeContext.getResource())) {
 							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 							getResponse().setEntity(new JsonRepresentation("{\"error\":\"Given homecontext is not a context.\"}"));
 							return;						

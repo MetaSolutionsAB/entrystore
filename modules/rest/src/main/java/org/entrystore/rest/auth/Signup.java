@@ -16,8 +16,8 @@
 
 package org.entrystore.rest.auth;
 
-import org.entrystore.repository.Entry;
-import org.entrystore.repository.config.Config;
+import org.entrystore.Entry;
+import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.NS;
 import org.openrdf.model.Graph;
@@ -48,7 +48,7 @@ public class Signup {
 
 	private static Logger log = LoggerFactory.getLogger(Signup.class);
 
-	public static boolean sendRequestForConfirmation(Config config, String recipientName, String recipientEmail, String confirmationLink) {
+	public static boolean sendRequestForConfirmation(Config config, String recipientName, String recipientEmail, String confirmationLink, boolean resetPassword) {
 		String domain = URI.create(confirmationLink).getHost();
 		String host = config.getString(Settings.SMTP_HOST);
 		int port = config.getInt(Settings.SMTP_PORT, 25);
@@ -56,10 +56,22 @@ public class Signup {
 		boolean starttls = "starttls".equalsIgnoreCase(config.getString(Settings.SMTP_SECURITY));
 		final String username = config.getString(Settings.SMTP_USERNAME);
 		final String password = config.getString(Settings.SMTP_PASSWORD);
-		String from = config.getString(Settings.SIGNUP_FROM_EMAIL, "signup@" + domain);
-		String bcc = config.getString(Settings.SIGNUP_BCC_EMAIL);
-		String subject = config.getString(Settings.SIGNUP_SUBJECT, "Confirm your email address to complete sign-up");
-		String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+		String from = config.getString(Settings.AUTH_FROM_EMAIL, "support@" + domain);
+		String bcc = config.getString(Settings.AUTH_BCC_EMAIL);
+
+		String subject = null;
+		if (resetPassword) {
+			subject = config.getString(Settings.PASSWORD_RESET_SUBJECT, "Password reset request");
+		} else {
+			subject = config.getString(Settings.SIGNUP_SUBJECT, "User sign-up request");
+		}
+
+		String templatePath = null;
+		if (resetPassword) {
+			templatePath = config.getString(Settings.PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+		} else {
+			templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+		}
 
 		if (host == null) {
 			log.error("No SMTP host configured");
@@ -122,20 +134,41 @@ public class Signup {
 				StringBuilder sb = new StringBuilder();
 				sb.append("<html><body style=\"font-family:verdana;font-size:10pt;\"><div><br/>");
 				sb.append("<h3>Email address confirmation necessary</h3>");
-				sb.append("<p>You signed up with the following information:</p>");
-				sb.append("<p>Name: __NAME__<br/>Email: __EMAIL__</p>");
-				sb.append("<p>To complete the sign-up process, you need to follow <a href=\"__CONFIRMATION_LINK__\">this link</a> ");
-				sb.append("or copy/paste<br/>the URL below into a web browser to confirm that you own the email address<br/>you ");
-				sb.append("used to set up an account.</p>");
+				if (resetPassword) {
+					sb.append("<p>We received a password reset request for:</p>");
+				} else {
+					sb.append("<p>You signed up with the following information:</p>");
+				}
+				sb.append("<p>");
+				if (recipientName != null) {
+					sb.append("Name: __NAME__<br/>");
+				}
+				sb.append("Email: __EMAIL__");
+				sb.append("</p>");
+				if (resetPassword) {
+					sb.append("<p>To reset your password, you need to follow <a href=\"__CONFIRMATION_LINK__\">this link</a> ");
+					sb.append("or copy/paste<br/>the URL below into a web browser.</p>");
+				} else {
+					sb.append("<p>To complete the sign-up process, you need to follow <a href=\"__CONFIRMATION_LINK__\">this link</a> ");
+					sb.append("or copy/paste<br/>the URL below into a web browser to confirm that you own the email address<br/>you ");
+					sb.append("used to set up an account.</p>");
+				}
 				sb.append("<p><pre>__CONFIRMATION_LINK__</pre></p>");
 				sb.append("<p>The link is valid for 24 hours.</p><br/>");
 				sb.append("<div style=\"border-top:1px solid #e5e5e5;\"><p><small>&copy; 2014 <a href=\"http://metasolutions.se\" style=\"text-decoration:none;\">MetaSolutions AB</a></small></p></div>");
 				sb.append("</div></body></html>");
 				templateHTML = sb.toString();
 			}
-			String messageText = templateHTML.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
-			messageText = messageText.replaceAll("__NAME__", recipientName);
-			messageText = messageText.replaceAll("__EMAIL__", recipientEmail);
+			String messageText = templateHTML;
+			if (confirmationLink != null) {
+				messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
+			}
+			if (recipientName != null) {
+				messageText = messageText.replaceAll("__NAME__", recipientName);
+			}
+			if (recipientEmail != null) {
+				messageText = messageText.replaceAll("__EMAIL__", recipientEmail);
+			}
 			message.setText(messageText, "utf-8", "html");
 
 			Transport.send(message);
@@ -155,7 +188,6 @@ public class Signup {
 		if (userInfo.getFirstName() != null) {
 			fullname = userInfo.getFirstName();
 			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "givenName"), vf.createLiteral(userInfo.getFirstName())));
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "firstName"), vf.createLiteral(userInfo.getFirstName())));
 		}
 		if (userInfo.getLastName() != null) {
 			if (fullname != null) {
@@ -164,7 +196,6 @@ public class Signup {
 				fullname = userInfo.getLastName();
 			}
 			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "familyName"), vf.createLiteral(userInfo.getLastName())));
-			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "lastName"), vf.createLiteral(userInfo.getLastName())));
 		}
 		if (fullname != null) {
 			graph.add(vf.createStatement(resourceURI, vf.createURI(NS.foaf, "name"), vf.createLiteral(fullname)));
