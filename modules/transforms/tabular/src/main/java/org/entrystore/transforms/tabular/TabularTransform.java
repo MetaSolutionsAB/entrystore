@@ -28,6 +28,7 @@ import org.deri.tarql.CSVToValues;
 import org.deri.tarql.TarqlParser;
 import org.deri.tarql.TarqlQuery;
 import org.deri.tarql.XLSToValues;
+import org.entrystore.Entry;
 import org.entrystore.transforms.Transform;
 import org.entrystore.transforms.TransformParameters;
 import org.openrdf.model.Graph;
@@ -58,7 +59,7 @@ public class TabularTransform extends Transform {
 
 	private static Logger log = LoggerFactory.getLogger(TabularTransform.class);
 
-	public Graph transform(InputStream data, String mimetype) {
+	public Graph transform(Entry sourceEntry, InputStream data, String mimetype) {
 		try {
 			TableData table;
 			if (isCSV(mimetype)) {
