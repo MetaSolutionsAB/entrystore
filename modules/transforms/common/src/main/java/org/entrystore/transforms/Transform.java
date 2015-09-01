@@ -87,11 +87,12 @@ public abstract class Transform implements Comparable<Transform> {
 		this.prio = prio;
 	}
 
-	public abstract Graph transform(Entry sourceEntry, InputStream data, String mimetype) throws TransformException;
+	public abstract Object transform(Pipeline pipeline, Entry sourceEntry) throws TransformException;
 
-	public Graph transform(Graph graph) throws TransformException {
+	public Object transform(Pipeline pipeline, Graph graph) throws TransformException {
 		return graph;
 	}
+
 
 	public Map<String, String> getArguments() {
 		return this.arguments;

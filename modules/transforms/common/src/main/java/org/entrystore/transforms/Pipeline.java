@@ -30,13 +30,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * @author Matthias Palmér
@@ -83,6 +77,10 @@ public class Pipeline {
 		this.entry = entry;
 		this.detectTransforms();
 	}
+
+    public Entry getEntry() {
+        return this.entry;
+    }
 
 	private void detectTransforms() {
 		Graph md = this.entry.getMetadataGraph();
@@ -148,20 +146,33 @@ public class Pipeline {
 		return null;
 	}
 
-	public Set<Entry> run(Entry sourceEntry, InputStream data, String mimetype, java.net.URI listURI) throws TransformException {
+	public Set<Entry> run(Entry sourceEntry, java.net.URI listURI) throws TransformException {
 		//Get the data
 		Transform first = tsteps.get(0);
-		Graph graph = first.transform(sourceEntry, data, mimetype);
+		Object result = first.transform(this, sourceEntry);
 		for (int idx = 1; idx < tsteps.size(); idx++) {
-			graph = tsteps.get(idx).transform(graph);
+            if (result instanceof Graph) {
+                result = tsteps.get(idx).transform(this, (Graph) result);
+            } else if (result instanceof Entry) {
+                result = tsteps.get(idx).transform(this, (Entry) result);
+            } else {
+                throw new IllegalStateException("Transform result must be either Graph or Entry.");
+            }
 		}
 
-		Graph2Entries g2e = new Graph2Entries(this.entry.getContext());
-		if (detectDestination) {
-			return g2e.merge(graph, null, null);			
-		} else {
-			return g2e.merge(graph, destination, listURI);			
-		}
+        if (result instanceof Graph) {
+            Graph graph = (Graph) result;
+            Graph2Entries g2e = new Graph2Entries(this.entry.getContext());
+            if (detectDestination) {
+                return g2e.merge(graph, null, null);
+            } else {
+                return g2e.merge(graph, destination, listURI);
+            }
+        } else if (result instanceof Entry) {
+            return new HashSet<Entry>(Arrays.asList((Entry) result));
+        } else {
+            throw new IllegalStateException("Transform result must be either Graph or Entry.");
+        }
 	}
 
 	private static synchronized void loadTransforms() {

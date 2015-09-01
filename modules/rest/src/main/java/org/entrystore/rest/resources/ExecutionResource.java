@@ -145,7 +145,7 @@ public class ExecutionResource extends BaseResource {
 
 			Set<Entry> processedEntries = null;
 			try {
-				processedEntries = new Pipeline(pipelineEntry).run(sourceEntry, data.getData(), sourceMimeType, listURI);
+				processedEntries = new Pipeline(pipelineEntry).run(sourceEntry, listURI);
 			} catch (TransformException te) {
 				log.error(te.getMessage());
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);

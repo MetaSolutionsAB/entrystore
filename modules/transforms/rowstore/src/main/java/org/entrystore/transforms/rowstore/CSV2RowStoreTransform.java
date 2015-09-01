@@ -16,7 +16,9 @@
 
 package org.entrystore.transforms.rowstore;
 
+import org.entrystore.Data;
 import org.entrystore.Entry;
+import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.Transform;
 import org.entrystore.transforms.TransformParameters;
 import org.openrdf.model.Graph;
@@ -37,7 +39,10 @@ public class CSV2RowStoreTransform extends Transform {
 
 	private static Logger log = LoggerFactory.getLogger(CSV2RowStoreTransform.class);
 
-	public Graph transform(Entry sourceEntry, InputStream data, String mimetype) {
+	public Object transform(Pipeline pipeline, Entry sourceEntry) {
+        String sourceMimeType = sourceEntry.getMimetype();
+        InputStream data = ((Data) sourceEntry.getResource()).getData();
+
 		String baseURI = getArguments().get("baseuri");
 		if (!baseURI.endsWith("/") || !baseURI.endsWith("#")) {
 			baseURI += "/";
