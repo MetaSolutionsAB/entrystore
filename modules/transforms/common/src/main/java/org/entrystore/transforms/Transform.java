@@ -16,6 +16,7 @@
 
 package org.entrystore.transforms;
 
+import org.entrystore.Entry;
 import org.openrdf.model.BNode;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
@@ -86,7 +87,7 @@ public abstract class Transform implements Comparable<Transform> {
 		this.prio = prio;
 	}
 
-	public abstract Graph transform(InputStream data, String mimetype) throws TransformException;
+	public abstract Graph transform(Entry sourceEntry, InputStream data, String mimetype) throws TransformException;
 
 	public Graph transform(Graph graph) throws TransformException {
 		return graph;

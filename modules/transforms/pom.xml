@@ -18,6 +18,7 @@
 		<module>common</module>
 		<module>tabular</module>
 		<module>pcaxis</module>
+		<module>rowstore</module>
 	</modules>
 
 </project>

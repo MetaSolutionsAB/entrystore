@@ -148,10 +148,10 @@ public class Pipeline {
 		return null;
 	}
 
-	public Set<Entry> run(InputStream data, String mimetype, java.net.URI listURI) throws TransformException {
+	public Set<Entry> run(Entry sourceEntry, InputStream data, String mimetype, java.net.URI listURI) throws TransformException {
 		//Get the data
 		Transform first = tsteps.get(0);
-		Graph graph = first.transform(data, mimetype);
+		Graph graph = first.transform(sourceEntry, data, mimetype);
 		for (int idx = 1; idx < tsteps.size(); idx++) {
 			graph = tsteps.get(idx).transform(graph);
 		}

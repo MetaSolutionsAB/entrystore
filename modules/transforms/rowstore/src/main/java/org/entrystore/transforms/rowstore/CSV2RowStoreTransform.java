@@ -14,10 +14,8 @@
  * limitations under the License.
  */
 
-package org.entrystore.transforms.pcaxis;
+package org.entrystore.transforms.rowstore;
 
-import com.mysema.stat.pcaxis.DatasetHandler;
-import com.mysema.stat.pcaxis.PCAxisParser;
 import org.entrystore.Entry;
 import org.entrystore.transforms.Transform;
 import org.entrystore.transforms.TransformParameters;
@@ -27,23 +25,22 @@ import org.openrdf.model.impl.LinkedHashModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Transforms a PC-Axis file into a SCOVO/RDF-graph.
+ * Transforms a CSV file into a RowStore dataset.
  *
  * @author Hannes Ebner
  */
-@TransformParameters(type="pcaxis", extensions={"px"})
-public class PcAxis2ScovoTransform extends Transform {
+@TransformParameters(type="rowstore", extensions={"csv"})
+public class CSV2RowStoreTransform extends Transform {
 
-	private static Logger log = LoggerFactory.getLogger(PcAxis2ScovoTransform.class);
+	private static Logger log = LoggerFactory.getLogger(CSV2RowStoreTransform.class);
 
 	public Graph transform(Entry sourceEntry, InputStream data, String mimetype) {
 		String baseURI = getArguments().get("baseuri");
 		if (!baseURI.endsWith("/") || !baseURI.endsWith("#")) {
-			baseURI = baseURI+"/";
+			baseURI += "/";
 		}
 		String datasetName = getArguments().get("dataset");
 
@@ -53,6 +50,8 @@ public class PcAxis2ScovoTransform extends Transform {
 		}
 
 		Model model = new LinkedHashModel();
+
+		/*
 		DatasetHandler handler = new ScovoHandler(model, baseURI, false);
 		PCAxisParser parser = new PCAxisParser(handler);
 		try {
@@ -61,6 +60,7 @@ public class PcAxis2ScovoTransform extends Transform {
 			log.error(e.getMessage());
 			return null;
 		}
+		*/
 
 		return model;
 	}
