@@ -138,7 +138,7 @@ public class MetadataImpl implements Metadata {
 		//Old graph, remove from target entry relation index.
 		if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.
 
-			Iterator<Statement> iter = rc.getStatements(null, null, null, false, mdContext).asList().iterator(); 
+            RepositoryResult<Statement> iter = rc.getStatements(null, null, null, false, mdContext);
 			while(iter.hasNext()) {
 				Statement statement = iter.next();
 				Value obj = statement.getObject();
