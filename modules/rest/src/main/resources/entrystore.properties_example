@@ -88,7 +88,10 @@ entrystore.solr.extract-fulltext=off
 # entrystore.repository.public.path=file:///srv/entrystore/store/public/
 # entrystore.repository.public.indexes=cspo,spoc,posc
 
-## By default all references are rewritten. This is necessary to makes
+## RowStore integration
+# entrystore.rowstore.url=http://localhost:8282/
+
+## By default all references are rewritten. This is necessary to make
 ## installations work where the internal references are different from
 ## the external ones (this happens when reverse proxying is used). This
 ## option can be used to deactivate this feature, e.g. if EntryStore is

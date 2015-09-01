@@ -114,6 +114,8 @@ public class Settings {
 	public static String NONADMIN_GROUPCONTEXT_CREATION = "entrystore.nonadmin.group-context-creation";
 
 	public static String TRAVERSAL_PROFILE = "entrystore.traversal";
+
+	public static String ROWSTORE_URL = "entrystore.rowstore.url";
 	
 	private Settings() {
 	}
