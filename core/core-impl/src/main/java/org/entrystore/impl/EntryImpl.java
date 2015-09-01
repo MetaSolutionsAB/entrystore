@@ -65,7 +65,7 @@ public class EntryImpl implements Entry {
 	protected String id;
 	protected Resource resource;
 	protected MetadataImpl localMetadata;
-	protected Metadata cachedExternalMetadata;	
+	protected Metadata cachedExternalMetadata;
 	protected URI localMdURI;
 	protected URI relationURI;
 	
@@ -1467,18 +1467,15 @@ public class EntryImpl implements Entry {
 
 	public void remove(RepositoryConnection rc) throws Exception { 
 		rc.clear(entryURI);
-		if (locType == EntryType.Local || locType == EntryType.Link) {
+		if (locType == EntryType.Local || locType == EntryType.Link || locType == EntryType.LinkReference) {
 			localMetadata.removeGraphSynchronized(rc);
-			//rc.clear(localMdURI);
 		}
-		if (locType == EntryType.LinkReference) {
-			localMetadata.removeGraphSynchronized(rc);
-			//rc.clear(localMdURI);
-			rc.clear(cachedExternalMdURI);
-		}
-
-		if (locType == EntryType.Reference) {
-			rc.clear(cachedExternalMdURI);
+		if (locType == EntryType.LinkReference || locType == EntryType.Reference) {
+            if (cachedExternalMetadata instanceof MetadataImpl) {
+                ((MetadataImpl) cachedExternalMetadata).removeGraphSynchronized(rc);
+            } else {
+                rc.clear(cachedExternalMdURI);
+            }
 		}
 
 		localMetadata = null;
