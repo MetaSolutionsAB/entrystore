@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import com.github.jsonldjava.sesame.SesameJSONLDWriter;
 import com.sun.syndication.feed.synd.SyndContent;
 import com.sun.syndication.feed.synd.SyndContentImpl;
 import com.sun.syndication.feed.synd.SyndEntry;
@@ -62,17 +61,15 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.openrdf.model.Graph;
-import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.n3.N3Writer;
-import org.openrdf.rio.ntriples.NTriplesWriter;
-import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
-import org.openrdf.rio.trig.TriGWriter;
-import org.openrdf.rio.trix.TriXWriter;
-import org.openrdf.rio.turtle.TurtleWriter;
+import org.restlet.Client;
 import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.Uniform;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
+import org.restlet.data.Method;
+import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.data.Status;
 import org.restlet.ext.fileupload.RestletFileUpload;
@@ -271,7 +268,7 @@ public class ResourceResource extends BaseResource {
 		try {
 			if (parameters.containsKey("method")) {
 				if ("delete".equalsIgnoreCase(parameters.get("method"))) {
-					removeRepresentations();
+					removeRepresentation();
 				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
 					storeRepresentation(r);
 				}
@@ -341,15 +338,36 @@ public class ResourceResource extends BaseResource {
 	}
 
 	@Delete
-	public void removeRepresentations() {
+	public void removeRepresentation() {
 		if (entry == null) {
 			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			return;
 		}
 		
 		try {
-			deleteResource();
+			if ((EntryType.Link.equals(entry.getEntryType()) ||
+					EntryType.Reference.equals(entry.getEntryType()) ||
+					EntryType.LinkReference.equals(entry.getEntryType()))
+					&& "true".equalsIgnoreCase(parameters.get("proxy"))) {
+				final Response delResponse = deleteRemoteResource(entry.getResourceURI().toString(), 0);
+				if (delResponse != null) {
+					getResponse().setEntity(delResponse.getEntity());
+					getResponse().setStatus(delResponse.getStatus());
+					getResponse().setOnSent(new Uniform() {
+						public void handle(Request request, Response response) {
+							try {
+								delResponse.release();
+							} catch (Exception e) {
+								log.error(e.getMessage());
+							}
+						}
+					});
+				} else {
+					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+				}
+			} else {
+				deleteLocalResource();
+			}
 		} catch(AuthorizationException e) {
 			unauthorizedDELETE();
 		}
@@ -358,7 +376,7 @@ public class ResourceResource extends BaseResource {
 	/**
 	 * Deletes the resource if the entry has any.
 	 */
-	private void deleteResource() {
+	private void deleteLocalResource() {
 		/*
 		 * List
 		 */
@@ -376,23 +394,49 @@ public class ResourceResource extends BaseResource {
 		 */
 		if (entry.getGraphType() == GraphType.None ) {
 			if(entry.getResourceType() == ResourceType.InformationResource) {
-				Data data = (Data)entry.getResource(); 
+				Data data = (Data) entry.getResource();
 				if (data.delete() == false) {
-					log.error("Unknown kind"); 
+					log.error("Unable to delete resource of entry " + entry.getEntryURI());
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorUnknownKind));
 				}
 			}
 		}
-		/*
-		 * String
-		 */
-		if (GraphType.String.equals(entry.getGraphType())) {
-			StringResource strRes = (StringResource) entry.getResource(); // FIXME ?!
-			GraphImpl g = new GraphImpl(); 
-			entry.setGraph(g); 
+	}
+
+	private Response deleteRemoteResource(String url, int loopCount) {
+		if (loopCount > 10) {
+			log.warn("More than 10 redirect loops detected, aborting");
+			return null;
 		}
 
+		Client client = new Client(Protocol.HTTP);
+		client.setContext(new org.restlet.Context());
+		client.getContext().getParameters().add("connectTimeout", "10000");
+		client.getContext().getParameters().add("readTimeout", "10000");
+		client.getContext().getParameters().set("socketTimeout", "10000");
+		client.getContext().getParameters().set("socketConnectTimeoutMs", "10000");
+		log.info("Initialized HTTP client for proxy request to delete remote resource");
+
+		Request request = new Request(Method.DELETE, url);
+		request.getClientInfo().setAcceptedMediaTypes(getRequest().getClientInfo().getAcceptedMediaTypes());
+		Response response = client.handle(request);
+
+		if (response.getStatus().isRedirection()) {
+			Reference ref = response.getLocationRef();
+			response.getEntity().release();
+			if (ref != null) {
+				String refURL = ref.getIdentifier();
+				log.info("Request redirected to " + refURL);
+				return deleteRemoteResource(refURL, ++loopCount);
+			}
+		}
+
+		if (response.getEntity().getLocationRef() != null && response.getEntity().getLocationRef().getBaseRef() == null) {
+			response.getEntity().getLocationRef().setBaseRef(url.substring(0, url.lastIndexOf("/")+1));
+		}
+
+		return response;
 	}
 
 	protected boolean isFile(Entry entry) {
