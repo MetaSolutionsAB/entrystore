@@ -69,7 +69,7 @@ public class RDFResource extends ResourceImpl {
 				try {
 					rc.clear(resourceURI);
 					rc.add(graph, resourceURI);
-					((EntryImpl) this.entry).updateCachedExternalMetadataDateSynchronized(rc, this.entry.repository.getValueFactory());
+                    ((EntryImpl) this.entry).updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
 					rc.commit();
 				} catch (Exception e) {
 					rc.rollback();
