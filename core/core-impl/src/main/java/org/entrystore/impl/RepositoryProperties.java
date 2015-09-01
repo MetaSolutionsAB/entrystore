@@ -128,6 +128,9 @@ public class RepositoryProperties {
 	
 	public static final URI Read;
 	public static final URI Write;
+
+	public static final URI pipeline;
+	public static final URI pipelineData;
 	
 	static {
 		ValueFactory vf = ValueFactoryImpl.getInstance();
@@ -174,7 +177,6 @@ public class RepositoryProperties {
 		externalID = vf.createURI(NSbase, "externalID");
 		
 		originallyCreatedIn = vf.createURI(NSbase + "originallyCreatedIn");
-		
 
 		Created = vf.createURI(NSDCTERMS + "created");
 		Modified = vf.createURI(NSDCTERMS + "modified");
@@ -196,6 +198,9 @@ public class RepositoryProperties {
 		
 		Quota = vf.createURI(NSbase, "hasQuota");
 		QuotaFillLevel = vf.createURI(NSbase, "hasQuotaFillLevel");
+
+		pipeline = vf.createURI(NSbase, "pipeline");
+		pipelineData = vf.createURI(NSbase, "pipelineData");
 	}
 	
 }
