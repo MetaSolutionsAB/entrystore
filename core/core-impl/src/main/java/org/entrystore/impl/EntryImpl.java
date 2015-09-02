@@ -96,6 +96,7 @@ public class EntryImpl implements Entry {
 	private Set<java.net.URI> writeResourcePrincipals;
 	private Set<java.net.URI> readResourcePrincipals;
 	private List<Statement> relations;
+    private boolean invRelations = false;
 	private String format;
 	private long fileSize = -1;
 	private String filename;
@@ -292,7 +293,8 @@ public class EntryImpl implements Entry {
 		RepositoryConnection rc = null;
 
 		try {
-			rc = this.repository.getConnection();
+            String base = repositoryManager.getRepositoryURL().toString();
+            rc = this.repository.getConnection();
 //			referredIn = new HashSet<java.net.URI>();
 			for (Statement statement : existingStatements) {
 				URI predicate = statement.getPredicate();
@@ -325,7 +327,21 @@ public class EntryImpl implements Entry {
 					} catch (NullPointerException e) {
 						log.error(e); 
 					}
-				}
+				} else {
+                    //Check if statement refer other entries that affect their inv-rel cache.
+                    if (!predicate.equals(RepositoryProperties.Read)
+                            && !predicate.equals(RepositoryProperties.Write)
+                            && !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
+                        Value obj = statement.getObject();
+                        org.openrdf.model.Resource subj = statement.getSubject();
+                        //Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
+                        if (obj instanceof org.openrdf.model.URI
+                                && obj.stringValue().startsWith(base)
+                                && subj.stringValue().startsWith(base)) {
+                            invRelations = true;
+                        }
+                    }
+                }
 			}
 
 			//Detect types.
@@ -574,7 +590,7 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	public Set<java.net.URI> getReferringListsInSameContext() {
+    public Set<java.net.URI> getReferringListsInSameContext() {
 		HashSet<java.net.URI> set = new HashSet<java.net.URI>();
 		List<Statement> relations = getRelations();
 		for (Statement statement : relations) {
@@ -1195,9 +1211,11 @@ public class EntryImpl implements Entry {
 	/**
 	 * WARNING, do not use unless you are very certain that you know what you are doing.
 	 * Replaces the entryinformation without questions asked.
+     * The new graph should not change anything that affects inverse-relation-cache on other entries, if so, use setGraph instead.
+     *
 	 * @param metametadata
 	 */
-	public void setGraphRaw(Graph metametadata) {
+	protected void setGraphRaw(Graph metametadata) {
 		checkAdministerRights();
 		try {
 			synchronized (this.repository) {
@@ -1255,7 +1273,9 @@ public class EntryImpl implements Entry {
 				ValueFactory vf = this.repository.getValueFactory();
 				RepositoryConnection rc = this.repository.getConnection();
 				rc.setAutoCommit(false);
+
 				try {
+                    removeInverseRelations(rc);
 					rc.clear(entryURI);
 
 					for (Statement statement : metametadata) {
@@ -1355,6 +1375,7 @@ public class EntryImpl implements Entry {
 					rc.add(entryURI, RepositoryProperties.Modified, vf.createLiteral(modified), entryURI);
 					//------------End basic structure
 
+                    addInverseRelations(rc, metametadata);
 					rc.commit();
 					administerPrincipals = null;
 					readMetadataPrincipals = null;
@@ -1385,7 +1406,62 @@ public class EntryImpl implements Entry {
 		}		
 	}
 
-	private void checkAdministerRights() {
+    private boolean isStatementInvRelationCandidate(Statement statement, String base) {
+        URI predicate = statement.getPredicate();
+        if (!predicate.equals(RepositoryProperties.resource)
+                && !predicate.equals(RepositoryProperties.metadata)
+                && !predicate.equals(RepositoryProperties.externalMetadata)
+                && !predicate.equals(RepositoryProperties.cachedExternalMetadata)
+                && !predicate.equals(RepositoryProperties.relation)
+                && !predicate.equals(RepositoryProperties.cached)
+                && !predicate.equals(RepositoryProperties.Creator)
+                && !predicate.equals(RepositoryProperties.Contributor)
+                && !predicate.equals(RepositoryProperties.Read)
+                && !predicate.equals(RepositoryProperties.Write)
+                && !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
+            Value obj = statement.getObject();
+            org.openrdf.model.Resource subj = statement.getSubject();
+            //Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
+            if (obj instanceof org.openrdf.model.URI
+                    && obj.stringValue().startsWith(base)
+                    && subj.stringValue().startsWith(base)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void removeInverseRelations(RepositoryConnection rc) throws RepositoryException {
+        if (invRelations) {
+            RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, entryURI);
+            String base = repositoryManager.getRepositoryURL().toString();
+            while (rr.hasNext()) {
+                Statement statement = rr.next();
+                if (isStatementInvRelationCandidate(statement, base)) {
+                    java.net.URI entryURI = java.net.URI.create(statement.getObject().stringValue());
+                    EntryImpl sourceEntry =  (EntryImpl) repositoryManager.getContextManager().getEntry(entryURI);
+                    if (sourceEntry != null && sourceEntry != this) {
+                        sourceEntry.removeRelationSynchronized(statement, rc, repository.getValueFactory());
+                    }
+                }
+            }
+            invRelations = false;
+        }
+    }
+    private void addInverseRelations(RepositoryConnection rc, Graph graph) {
+        String base = repositoryManager.getRepositoryURL().toString();
+        for (Statement statement : graph) {
+            if (isStatementInvRelationCandidate(statement, base)) {
+                java.net.URI entryURI = java.net.URI.create(statement.getObject().stringValue());
+                EntryImpl sourceEntry =  (EntryImpl) repositoryManager.getContextManager().getEntry(entryURI);
+                if (sourceEntry != null && sourceEntry != this) {
+                    sourceEntry.addRelationSynchronized(statement, rc, repository.getValueFactory());
+                }
+            }
+        }
+    }
+
+    private void checkAdministerRights() {
 		PrincipalManager pm = this.getRepositoryManager().getPrincipalManager();
 		pm.checkAuthenticatedUserAuthorized(this, AccessProperty.Administer);
 	}
@@ -1465,7 +1541,8 @@ public class EntryImpl implements Entry {
 		return new GraphImpl();
 	}
 
-	public void remove(RepositoryConnection rc) throws Exception { 
+	public void remove(RepositoryConnection rc) throws Exception {
+        removeInverseRelations(rc);
 		rc.clear(entryURI);
 		if (locType == EntryType.Local || locType == EntryType.Link || locType == EntryType.LinkReference) {
 			localMetadata.removeGraphSynchronized(rc);
