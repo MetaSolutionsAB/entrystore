@@ -83,6 +83,7 @@ public class CSV2RowStoreTransform extends Transform {
 		Graph newEntryGraph = newEntry.getGraph();
 		newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipeline, new URIImpl(pipelineURI));
 		newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipelineData, new URIImpl(sourceURI));
+		newEntry.setGraph(newEntryGraph);
 
 		return newEntry;
 	}
