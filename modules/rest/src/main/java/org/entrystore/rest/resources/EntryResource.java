@@ -375,10 +375,11 @@ public class EntryResource extends BaseResource {
 			 */
 			JSONObject resourceObj = null;
 			if (entry.getEntryType() == EntryType.Local) {
+                GraphType graphType = entry.getGraphType();
 				/*
 				 *  String
 				 */
-				if(entry.getGraphType() == GraphType.String) {
+				if(graphType == GraphType.String) {
 					StringResource stringResource = (StringResource) entry.getResource(); 
 					jdilObj.put("resource", stringResource.getString());
 				}
@@ -386,7 +387,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 *  Graph
 				 */
-				if(entry.getGraphType() == GraphType.Graph) {
+				if(graphType == GraphType.Graph || graphType == GraphType.Pipeline) {
 					RDFResource rdfResource = (RDFResource) entry.getResource(); 
 					jdilObj.put("resource", new JSONObject(RDFJSON.graphToRdfJson(rdfResource.getGraph())));
 				}
@@ -394,7 +395,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 * List
 				 */
-				if (entry.getGraphType() == GraphType.List) {
+				if (graphType == GraphType.List) {
 
 					int limit = 0;
 					int offset = 0;

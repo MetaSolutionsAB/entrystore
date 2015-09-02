@@ -543,7 +543,8 @@ public class ContextResource extends BaseResource {
 			StringResource stringRes = (StringResource) entry.getResource();
 			stringRes.setString(jsonObj.getString("resource")); 
 			break;
-		case Graph:
+        case Graph:
+        case Pipeline:
 			RDFResource RDFRes = (RDFResource) entry.getResource();
 			Graph g = RDFJSON.rdfJsonToGraph((JSONObject) jsonObj.get("resource"));
 			RDFRes.setGraph(g);
