@@ -331,6 +331,7 @@ public class EntryImpl implements Entry {
                     //Check if statement refer other entries that affect their inv-rel cache.
                     if (!predicate.equals(RepositoryProperties.Read)
                             && !predicate.equals(RepositoryProperties.Write)
+                            && !predicate.equals(RepositoryProperties.Pipeline)
                             && !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
                         Value obj = statement.getObject();
                         org.openrdf.model.Resource subj = statement.getSubject();
@@ -1418,6 +1419,7 @@ public class EntryImpl implements Entry {
                 && !predicate.equals(RepositoryProperties.Contributor)
                 && !predicate.equals(RepositoryProperties.Read)
                 && !predicate.equals(RepositoryProperties.Write)
+                && !predicate.equals(RepositoryProperties.Pipeline)
                 && !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
             Value obj = statement.getObject();
             org.openrdf.model.Resource subj = statement.getSubject();
