@@ -17,6 +17,7 @@
 package org.entrystore.transforms;
 
 import org.entrystore.Entry;
+import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.converters.Graph2Entries;
 import org.entrystore.repository.util.NS;
 import org.openrdf.model.Graph;
@@ -73,6 +74,10 @@ public class Pipeline {
 
 	private static Map<String, Class<?>> format2Class = null;
 
+    /**
+     *
+     * @param entry must be a Pipeline, i.e. the GraphType must be Pipeline.
+     */
 	public Pipeline(Entry entry) {
 		this.entry = entry;
 		this.detectTransforms();
@@ -83,9 +88,14 @@ public class Pipeline {
     }
 
 	private void detectTransforms() {
-		Graph md = this.entry.getMetadataGraph();
+		Graph graph = ((RDFResource) this.entry.getResource()).getGraph();
 
-		Iterator<Statement> toEntryStmts = md.match(null, transformDestination, null);
+        //Fallback, check for transforms in metadata graph instead, old way of doing things.
+        if (graph.isEmpty()) {
+            graph = this.entry.getMetadataGraph();
+        }
+
+		Iterator<Statement> toEntryStmts = graph.match(null, transformDestination, null);
 		if (toEntryStmts.hasNext()) {
 			destination = toEntryStmts.next().getObject().stringValue();
 			if (destination.startsWith("http")) {
@@ -94,21 +104,21 @@ public class Pipeline {
 			}
 		}
 
-		Iterator<Statement> detectStmts = md.match(null, transformDetectDestination, null);
+		Iterator<Statement> detectStmts = graph.match(null, transformDetectDestination, null);
 		if (detectStmts.hasNext()) {
 			detectDestination = detectStmts.next().getObject().stringValue().contains("true");
 		}
 
-		Iterator<Statement> stmts = md.match(null, transform, null);
+		Iterator<Statement> stmts = graph.match(null, transform, null);
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			if (statement.getObject() instanceof Resource) {
 				Resource transformResource = (Resource) statement.getObject();
-				Iterator<Statement> types = md.match(transformResource, transformType, null);
+				Iterator<Statement> types = graph.match(transformResource, transformType, null);
 				if (types.hasNext()) {
 					Transform transform = createTransform(types.next().getObject().stringValue());
 					if (transform != null) {
-						transform.extractArguments(md, transformResource);
+						transform.extractArguments(graph, transformResource);
 						tsteps.add(transform);
 					}
 				}
