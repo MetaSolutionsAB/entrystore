@@ -98,6 +98,11 @@
 			<artifactId>entrystore-transforms-pcaxis</artifactId>
 			<version>${project.version}</version>
 		</dependency>
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-transforms-rowstore</artifactId>
+			<version>${project.version}</version>
+		</dependency>
                 <dependency>
                         <groupId>javax.servlet</groupId>
                         <artifactId>javax.servlet-api</artifactId>
