@@ -980,7 +980,7 @@ public class ResourceResource extends BaseResource {
 			if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 				try {
 					RestletFileUpload upload = new RestletFileUpload(new DiskFileItemFactory());
-					List<FileItem> items = upload.parseRequest(getRequest());
+					List<FileItem> items = upload.parseRepresentation(getRequest().getEntity());
 					Iterator<FileItem> iter = items.iterator();
 					while (iter.hasNext()) {
 						FileItem item = iter.next();
