@@ -16,17 +16,10 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.AuthorizationException;
-import org.entrystore.Context;
-import org.entrystore.Entry;
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
-import org.entrystore.Group;
-import org.entrystore.List;
+import org.entrystore.*;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.ResourceType;
-import org.entrystore.User;
 import org.entrystore.impl.ContextImpl;
+import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
@@ -102,11 +95,11 @@ public class ContextResource extends BaseResource {
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
 			return new JsonRepresentation(JSONErrorMessages.errorWrongContextIDmsg); 
 		}
-		
+        if (!getPM().isUserAdminOrAdminGroup(null)) {
+            return unauthorizedGET();
+        }
+
 		if (parameters.containsKey("reindex")) {
-			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
-				return unauthorizedGET();
-			}
 			context.reIndex();
 		}
 
@@ -119,7 +112,12 @@ public class ContextResource extends BaseResource {
 				String delID = delURI.substring(delURI.lastIndexOf("/") + 1);
 				array.put(delID);
 			}
-		} else {
+		} else if (context instanceof EntryNamesContext && parameters.containsKey("entryname")) {
+            Entry matchedEntry  = ((EntryNamesContext) context).getEntryByName(parameters.get("entryname"));
+            if (matchedEntry != null) {
+                array.put(matchedEntry.getId());
+            }
+        } else {
 			Set<URI> entriesURI = context.getEntries();
 			for (URI u : entriesURI) {
 				Entry entry = context.getByEntryURI(u);

@@ -100,8 +100,26 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		}
 		throw new org.entrystore.repository.RepositoryException("Given URI does not refer to a Principal.");
 	}
-	
-	/**
+
+    public boolean isUserAdminOrAdminGroup(URI principal) {
+        URI currentUserURI = getAuthenticatedUserURI();
+        URI adminUserURI = getAdminUser().getURI();
+        setAuthenticatedUserURI(adminUserURI);
+        if (principal == null) {
+            principal = currentUserURI;
+        }
+        User user = getUser(principal);
+        if (adminUserURI.equals(principal)
+                || getAdminGroup().isMember(user)) {
+            setAuthenticatedUserURI(currentUserURI);
+            return true;
+        }
+        setAuthenticatedUserURI(currentUserURI);
+        return false;
+    }
+
+
+    /**
 	 * Returns this principal managers all user URIs
 	 * @return all user URIs in this principal manager
 	 */

@@ -65,7 +65,7 @@ public class EntryNamesContext extends ContextImpl {
 		return entryURI2Name.get(entryURI);
 	}
 
-	protected Entry getEntryByName(String name) {
+	public Entry getEntryByName(String name) {
 		if(names2EntryURI == null) {
 			loadNameIndex();
 		}

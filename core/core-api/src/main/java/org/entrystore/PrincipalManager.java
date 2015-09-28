@@ -30,6 +30,8 @@ public interface PrincipalManager extends Context {
 
 	Entry getPrincipalEntry(String name);
 
+    boolean isUserAdminOrAdminGroup(URI principal);
+
 	boolean setPrincipalName(URI principal, String newName);
 
 	public List<URI> getUsersAsUris();
