@@ -575,11 +575,13 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			}
 			@Override
 			public List<User> members() {
-				return getUsers();
+                this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
+                return getUsers();
 			}
 			@Override
 			public List<URI> memberUris() {
-				return getUsersAsUris();
+                this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
+                return getUsersAsUris();
 			}
 		});
 		
@@ -591,12 +593,12 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			allPrincipals = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_all");
 			setMetadata(allPrincipals, "all principals", "This is a list of all principals in the PrincipalManager.");
 			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, this.getGuestUser().getURI());
-			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadResource, this.getGuestUser().getURI());
 			log.info("Successfully added the _all contexts list");
 		}
 		allPrincipals.setResource(new SystemList(allPrincipals, allPrincipals.getSesameResourceURI()) {
 			@Override
 			public List<URI> getChildren() {
+                this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
 				Iterator<URI> entryIterator = getEntries().iterator();
 				List<URI> principalUris = new ArrayList<URI>();
 
