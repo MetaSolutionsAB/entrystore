@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import java.net.*;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -30,11 +31,10 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.test.TestSuite;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
+import org.openrdf.model.*;
 import org.openrdf.model.URI;
-import org.openrdf.model.ValueFactory;
 import org.openrdf.repository.RepositoryConnection;
+import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -251,14 +251,31 @@ public class UserImpl extends RDFResource implements User {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 		try {
 			RepositoryConnection rc = this.entry.repository.getConnection();
+            ValueFactory vf = this.entry.repository.getValueFactory();
 			rc.setAutoCommit(false);
 			try {
 				synchronized (this) {
-					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI), entry.getSesameEntryURI());
+                    //Remove homecontext and remove inverse relation cache.
+                    RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
+                    while(iter.hasNext()) {
+                        Statement statement = iter.next();
+                        java.net.URI sourceEntryURI = java.net.URI.create(statement.getObject().stringValue());
+                        EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
+                        if (sourceEntry != null) {
+                            sourceEntry.removeRelationSynchronized(statement, rc, vf);
+                        }
+                        rc.remove(statement, entry.getSesameEntryURI());
+                    }
+
                     //TODO Remove the following line in future as it corresponds to backward compatability where homecontext where saved in resource graph instead of entry graph.
                     rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI), resourceURI);
 
-                    rc.add(resourceURI,RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
+                    //Add new homecontext and add inverse relational cache
+                    if (context != null) {
+                        Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
+                        rc.add(newStatement);
+                        ((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
+                    }
 					rc.commit();
 				}
 				return true;

@@ -285,7 +285,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	private void removeFromIndex(EntryImpl entry, RepositoryConnection rc) throws RepositoryException {
+	protected void removeFromIndex(EntryImpl entry, RepositoryConnection rc) throws RepositoryException {
 		org.openrdf.model.URI entryURI = entry.getSesameEntryURI();
 		org.openrdf.model.URI resURI = entry.getSesameResourceURI();
 		org.openrdf.model.URI mdURI = entry.getSesameExternalMetadataURI();

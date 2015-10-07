@@ -29,6 +29,7 @@ import org.entrystore.User;
 import org.entrystore.repository.RepositoryException;
 import org.openrdf.model.Statement;
 import org.openrdf.model.URI;
+import org.openrdf.model.ValueFactory;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
@@ -108,12 +109,31 @@ public class GroupImpl extends ListImpl implements Group {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.WriteResource);
 		try {
 			RepositoryConnection rc = this.entry.repository.getConnection();
-			rc.begin();
+            ValueFactory vf = this.entry.repository.getValueFactory();
+
+            rc.begin();
 			try {
 				synchronized (this) {
-					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, entry.getSesameEntryURI()), entry.getSesameEntryURI());
-					rc.add(resourceURI,RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
-					rc.commit();
+
+                    //Remove homecontext and remove inverse relation cache.
+                    RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
+                    while(iter.hasNext()) {
+                        Statement statement = iter.next();
+                        java.net.URI sourceEntryURI = java.net.URI.create(statement.getObject().stringValue());
+                        EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
+                        if (sourceEntry != null) {
+                            sourceEntry.removeRelationSynchronized(statement, rc, vf);
+                        }
+                        rc.remove(statement, entry.getSesameEntryURI());
+                    }
+
+                    //Add new homecontext and add inverse relational cache
+                    if (context != null) {
+                        Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
+                        rc.add(newStatement);
+                        ((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
+                    }
+                    rc.commit();
 				}
 				return true;
 			} catch (Exception e) {
