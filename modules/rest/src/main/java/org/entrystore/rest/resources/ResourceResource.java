@@ -210,6 +210,12 @@ public class ResourceResource extends BaseResource {
 				}
 			}
 
+            if (ResourceType.NamedResource.equals(entry.getResourceType())
+                    && EntryType.Local.equals(entry.getEntryType())) {
+                redirectSeeOther(entry.getLocalMetadataURI().toString());
+                return new EmptyRepresentation();
+            }
+
 			/*
 			 * Resource: 
 			 * ResourceTypes: List, String and None.
