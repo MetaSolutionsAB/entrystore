@@ -486,6 +486,10 @@ public class EntryUtil {
 			Set<URI> titlePredicates = new HashSet<URI>();
 			titlePredicates.add(new URIImpl(NS.dcterms + "title"));
 			titlePredicates.add(new URIImpl(NS.dc + "title"));
+            titlePredicates.add(new URIImpl(NS.skos + "prefLabel"));
+            titlePredicates.add(new URIImpl(NS.skos + "altLabel"));
+            titlePredicates.add(new URIImpl(NS.skos + "hiddenLabel"));
+            titlePredicates.add(new URIImpl(NS.rdfs + "label"));
 			Map<String, String> result = new HashMap<String, String>();
 			for (URI titlePred : titlePredicates) {
 				Iterator<Statement> dctermsTitles = graph.match(resourceURI, titlePred, null);
