@@ -305,20 +305,28 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			} else {
 				//If entry overrides Context ACL (only relevant if the user is not an owner of the context)
 				if(entry.hasAllowedPrincipals()) {
-					if (hasAccess(currentUser, entry, accessProperty)) {
+					if (hasAccess(currentUser, entry, AccessProperty.Administer)
+                    || hasAccess(currentUser, entry, accessProperty)) {
 						return;
-					}
+					} else if (accessProperty == AccessProperty.ReadMetadata
+                            && hasAccess(currentUser, entry, AccessProperty.WriteMetadata)) {
+                        return; //WriteMetadata implies ReadMetadata
+                    } else if (accessProperty == AccessProperty.ReadResource
+                        && hasAccess(currentUser, entry, AccessProperty.WriteResource)) {
+                        return; //WriteResource implies ReadResource
+                    }
 				} else {
 					//Check if user has access to the surrounding context of the entry.
 					if (accessProperty == AccessProperty.ReadMetadata || accessProperty == AccessProperty.ReadResource) {
-						if (hasAccess(currentUser, contextEntry, AccessProperty.ReadResource)) {
-							return;
+						if (hasAccess(currentUser, contextEntry, AccessProperty.ReadResource)
+                                || hasAccess(currentUser, contextEntry, AccessProperty.WriteResource)) {
+							return; //Both read and write on the context resource implies read on all entries for both the metadata and the resource.
 						}
 					} else {
 						if (hasAccess(currentUser, contextEntry, AccessProperty.WriteResource)) {
 							return;
 						}	
-					}					
+					}
 				}
 			}
 			

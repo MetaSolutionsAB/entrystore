@@ -137,7 +137,7 @@ public class GroupResource extends BaseResource {
 			// make the requesting user admin for context
 			newContextEntry.setAllowedPrincipalsFor(AccessProperty.Administer, Sets.newHashSet(requestingUser));
 			// new group gets write access for context
-			newContextEntry.setAllowedPrincipalsFor(AccessProperty.WriteResource, Sets.newHashSet(newGroupEntry.getEntryURI()));
+			newContextEntry.setAllowedPrincipalsFor(AccessProperty.WriteResource, Sets.newHashSet(newGroupEntry.getResourceURI()));
 			// change creator from admin to requesting user
 			newContextEntry.setCreator(requestingUser);
 
