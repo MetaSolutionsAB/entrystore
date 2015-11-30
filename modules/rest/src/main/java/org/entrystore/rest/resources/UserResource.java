@@ -53,7 +53,6 @@ public class UserResource extends BaseResource {
 			
 			try {
 				result.put("user", currentUser.getName());
-				result.put("external_id", currentUser.getExternalID());
 				result.put("id", currentUser.getEntry().getId());
 				result.put("uri", currentUser.getEntry().getEntryURI());
 
@@ -65,6 +64,10 @@ public class UserResource extends BaseResource {
 					String userLang = currentUser.getLanguage();
 					if (userLang != null) {
 						result.put("language", userLang);
+					}
+					String extID = currentUser.getExternalID();
+					if (extID != null) {
+						result.put("external_id", extID);
 					}
 
 					Cookie authTokenCookie = getRequest().getCookies().getFirst("auth_token");
