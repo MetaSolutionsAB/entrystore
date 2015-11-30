@@ -80,11 +80,11 @@ public class CookieVerifier implements Verifier {
 			}
 
 			if (userURI == null) {
-				log.debug("User URI: " + userURI);
+				log.debug("User URI 1: " + userURI);
 				userURI = pm.getGuestUser().getURI();
 				return RESULT_VALID;
 			}
-			log.debug("User URI: " + userURI);
+			log.debug("User URI 2: " + userURI);
 			return RESULT_VALID;
 		} finally {
 			pm.setAuthenticatedUserURI(userURI);
