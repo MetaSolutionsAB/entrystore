@@ -93,10 +93,6 @@ public class Password {
 		return Base64.encodeBase64String(salt) + "$" + hash(password, salt);
 	}
 
-	public static String getSaltedHash(String password, String salt) {
-		return Base64.encodeBase64String(salt.getBytes()) + "$" + hash(password, salt.getBytes());
-	}
-
 	/**
 	 * Checks whether given plaintext password corresponds to a stored salted
 	 * hash of the password.
@@ -113,13 +109,7 @@ public class Password {
 			return false;
 		}
 		String hashOfInput = hash(password, Base64.decodeBase64(saltAndPass[0]));
-		log.debug("hashOfInput: " + hashOfInput);
-		log.debug("saltAndPass[1]: " + saltAndPass[1]);
 		return hashOfInput.equals(saltAndPass[1]);
-	}
-
-	public static String getSalt(String saltedHash) {
-		return saltedHash.split("\\$")[0];
 	}
 
 	private static String hash(String password, byte[] salt) {
