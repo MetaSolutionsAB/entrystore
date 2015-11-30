@@ -162,7 +162,7 @@ public class UserImpl extends RDFResource implements User {
 		}
 		
 		String shSecret = Password.getSaltedHash(secret);
-		if (shSecret ==  null) {
+		if (shSecret == null) {
 			return false;
 		}
 

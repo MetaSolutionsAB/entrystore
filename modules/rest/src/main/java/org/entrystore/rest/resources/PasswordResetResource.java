@@ -108,8 +108,23 @@ public class PasswordResetResource extends BaseResource {
 			}
 
 			// Reset password
-			u.setSecret(ci.password);
-			log.info("Reset password for user " + u.getURI());
+			if (u.setSecret(ci.password)) {
+				log.info("Reset password for user " + u.getURI());
+			} else {
+				log.error("Error when resetting password for user " + u.getURI());
+				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+				if (ci.urlFailure != null) {
+					try {
+						getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, "UTF-8"));
+						return new EmptyRepresentation();
+					} catch (UnsupportedEncodingException use) {
+						log.warn("Unable to decode URL: " + use.getMessage());
+					}
+					return new EmptyRepresentation();
+				} else {
+					return html.representation("Unable to reset password due to internal error.");
+				}
+			}
 		} finally {
 			pm.setAuthenticatedUserURI(authUser);
 		}
