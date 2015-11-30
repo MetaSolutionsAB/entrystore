@@ -86,8 +86,10 @@ public class PasswordResetResource extends BaseResource {
 			Entry userEntry = pm.getPrincipalEntry(ci.email);
 			User u = null;
 			if (userEntry != null) {
+				log.debug("Loaded user entry via email adress");
 				u = (User) userEntry.getResource();
 			} else {
+				log.debug("Trying to load user entry via external ID");
 				u = pm.getUserByExternalID(ci.email);
 			}
 			if (u == null) {

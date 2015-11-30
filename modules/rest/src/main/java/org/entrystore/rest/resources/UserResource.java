@@ -53,6 +53,7 @@ public class UserResource extends BaseResource {
 			
 			try {
 				result.put("user", currentUser.getName());
+				result.put("external_id", currentUser.getExternalID());
 				result.put("id", currentUser.getEntry().getId());
 				result.put("uri", currentUser.getEntry().getEntryURI());
 
