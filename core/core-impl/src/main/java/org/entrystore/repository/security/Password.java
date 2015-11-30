@@ -114,7 +114,7 @@ public class Password {
 		}
 		String hashOfInput = hash(password, Base64.decodeBase64(saltAndPass[0]));
 		log.debug("hashOfInput: " + hashOfInput);
-		log.debug("saltAndPass[1]: " + saltAndPass);
+		log.debug("saltAndPass[1]: " + saltAndPass[1]);
 		return hashOfInput.equals(saltAndPass[1]);
 	}
 
