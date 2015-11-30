@@ -64,15 +64,6 @@ public class CookieVerifier implements Verifier {
 					String userName = ui.getUserName();
 					Entry userEntry = pm.getPrincipalEntry(userName);
 					userURI = userEntry.getResourceURI();
-
-
-
-					log.debug("token: " + authToken);
-					log.debug("ui.userName: " + ui.getUserName());
-					log.debug("ui.loginExpiration: " + ui.getLoginExpiration());
-
-
-
 				} else {
 					log.debug("Auth token not found in token cache: " + authToken);
 					cleanCookies("auth_token", request, response);
@@ -80,11 +71,9 @@ public class CookieVerifier implements Verifier {
 			}
 
 			if (userURI == null) {
-				log.debug("User URI 1: " + userURI);
 				userURI = pm.getGuestUser().getURI();
 				return RESULT_VALID;
 			}
-			log.debug("User URI 2: " + userURI);
 			return RESULT_VALID;
 		} finally {
 			pm.setAuthenticatedUserURI(userURI);
