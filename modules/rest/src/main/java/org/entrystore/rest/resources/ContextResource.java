@@ -460,7 +460,7 @@ public class ContextResource extends BaseResource {
 	 */
 	private boolean setResource(Entry entry) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
-		if (requestText != null) {
+		if (requestText != null && !"".equals(requestText)) {
 			jsonObj = new JSONObject(requestText);
 		}
 
