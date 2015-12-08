@@ -37,10 +37,12 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 		return instance;
 	}
 
-	public synchronized void cleanup() {
-		for (Map.Entry<String, UserInfo> e : tokenCache.entrySet()) {
-			if (e.getValue().getLoginExpiration().before(new Date())) {
-				tokenCache.remove(e.getKey());
+	public void cleanup() {
+		synchronized (tokenCache) {
+			for (Map.Entry<String, UserInfo> e : tokenCache.entrySet()) {
+				if (e.getValue().getLoginExpiration().before(new Date())) {
+					tokenCache.remove(e.getKey());
+				}
 			}
 		}
 	}
