@@ -90,13 +90,16 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	public boolean setPrincipalName(URI principal, String newName) {
+		if (principal == null || newName == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
 		URISplit us = new URISplit(principal, this.entry.getRepositoryManager().getRepositoryURL());
 		Entry principalEntry = getByEntryURI(us.getMetaMetadataURI());
 		if (principalEntry == null) {
 			throw new org.entrystore.repository.RepositoryException("Cannot find an entry for the specified URI");
 		} else if (principalEntry.getGraphType() == GraphType.User ||
 					principalEntry.getGraphType() == GraphType.Group) {
-			return setEntryName(us.getMetaMetadataURI(), newName);
+			return setEntryName(us.getMetaMetadataURI(), newName.toLowerCase());
 		}
 		throw new org.entrystore.repository.RepositoryException("Given URI does not refer to a Principal.");
 	}

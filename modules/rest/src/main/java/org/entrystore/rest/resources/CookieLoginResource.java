@@ -58,7 +58,7 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 		
-		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName);
+		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName.toLowerCase());
 		if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
 			// 24h default, lifetime in seconds
 			int maxAge = 24 * 3600;

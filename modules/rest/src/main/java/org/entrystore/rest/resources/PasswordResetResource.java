@@ -74,7 +74,7 @@ public class PasswordResetResource extends BaseResource {
 		SignupInfo ci = tc.getTokenValue(token);
 		if (ci == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			return html.representation("Invalid confirmation token.");
+			return html.representation("The confirmation token is invalid or has been used already.");
 		}
 		tc.removeToken(token);
 
@@ -194,6 +194,10 @@ public class PasswordResetResource extends BaseResource {
 			getResponse().setEntity(html.representation("One or more parameters are missing."));
 			return;
 		}
+
+		// we have to store it in lower case only to avoid problems with different cases in
+		// different steps of the process (if the user provides inconsistent information)
+		ci.email = ci.email.toLowerCase();
 
 		if (ci.password.trim().length() < 8) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
