@@ -107,47 +107,49 @@ public class GroupImpl extends ListImpl implements Group {
 
 	public boolean setHomeContext(Context context) {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.WriteResource);
-		try {
-			RepositoryConnection rc = this.entry.repository.getConnection();
-            ValueFactory vf = this.entry.repository.getValueFactory();
+        synchronized (this.entry.repository) {
+            RepositoryConnection rc = null;
+            try {
+                rc = this.entry.repository.getConnection();
+                rc.setAutoCommit(false);
+                ValueFactory vf = this.entry.repository.getValueFactory();
 
-            rc.begin();
-			try {
-				synchronized (this) {
-
-                    //Remove homecontext and remove inverse relation cache.
-                    RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
-                    while(iter.hasNext()) {
-                        Statement statement = iter.next();
-                        java.net.URI sourceEntryURI = java.net.URI.create(statement.getObject().stringValue());
-                        EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
-                        if (sourceEntry != null) {
-                            sourceEntry.removeRelationSynchronized(statement, rc, vf);
-                        }
-                        rc.remove(statement, entry.getSesameEntryURI());
+                //Remove homecontext and remove inverse relation cache.
+                RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
+                while(iter.hasNext()) {
+                    Statement statement = iter.next();
+                    java.net.URI sourceEntryURI = java.net.URI.create(statement.getObject().stringValue());
+                    EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
+                    if (sourceEntry != null) {
+                        sourceEntry.removeRelationSynchronized(statement, rc, vf);
                     }
+                    rc.remove(statement, entry.getSesameEntryURI());
+                }
 
-                    //Add new homecontext and add inverse relational cache
-                    if (context != null) {
-                        Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
-                        rc.add(newStatement);
-                        ((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
-                    }
-                    rc.commit();
-				}
-				return true;
-			} catch (Exception e) {
-				log.error(e.getMessage(), e);
-				rc.rollback();
-			} finally {
-				rc.close();
-				this.homeContext = context.getEntry().getEntryURI();
-			}
-		} catch (org.openrdf.repository.RepositoryException e) {
-			log.error(e.getMessage(), e);
-			throw new RepositoryException("Failed to connect to repository", e);
-		}
-		return false;
+                //Add new homecontext and add inverse relational cache
+                if (context != null) {
+                    Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
+                    rc.add(newStatement);
+                    ((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
+                }
+                rc.commit();
+            } catch (org.openrdf.repository.RepositoryException e) {
+                log.error(e.getMessage(), e);
+                try {
+                    rc.rollback();
+                } catch (org.openrdf.repository.RepositoryException e1) {
+                    log.error(e.getMessage(), e1);
+                }
+            } finally {
+                try {
+                    rc.close();
+                } catch (org.openrdf.repository.RepositoryException e) {
+                    log.error(e.getMessage());
+                }
+                this.homeContext = context.getEntry().getEntryURI();
+            }
+        }
+        return true;
 	}
 
 	/**

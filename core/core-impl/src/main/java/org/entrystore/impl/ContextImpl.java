@@ -1361,7 +1361,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 		EntryImpl commentEntry = null; 
 
-		synchronized (this) {
+		synchronized (this.entry.repository) {
 			commentEntry = createNewMinimalItem(
 					null, 
 					null, 
