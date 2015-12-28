@@ -78,7 +78,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	public Entry getPrincipalEntry(String name) {
-		Entry principalEntry = getEntryByName(name);
+		Entry principalEntry = getEntryByName(name.toLowerCase());
 		if (principalEntry == null) {
 			return null;
 		} else if (principalEntry.getGraphType() == GraphType.User ||
