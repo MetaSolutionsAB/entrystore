@@ -54,6 +54,7 @@ import org.entrystore.AuthorizationException;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;
+import org.openrdf.model.Value;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
@@ -341,8 +342,17 @@ public class SolrSearchIndex implements SearchIndex {
 		// tags (dc:subject)
 		Iterator<Statement> tags = mdGraph.match(null, new URIImpl(NS.dc + "subject"), null);
 		while (tags.hasNext()) {
-			doc.addField("tag", tags.next().getObject().stringValue());
+            Value obj = tags.next().getObject();
+            if (obj instanceof Literal) {
+                doc.addField("tag", obj.stringValue());
+            }
 		}
+
+        // topics
+        Iterator<String> topics = EntryUtil.getTopics(entry).iterator();
+        while (topics.hasNext()) {
+            doc.addField("topic", topics.next());
+        }
 		
 		// email (foaf:mbox)
 		String email = EntryUtil.getEmail(entry);

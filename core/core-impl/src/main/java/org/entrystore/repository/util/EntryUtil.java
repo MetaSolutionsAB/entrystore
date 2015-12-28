@@ -36,14 +36,7 @@ import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 
 /**
@@ -600,7 +593,44 @@ public class EntryUtil {
 		}
 		return null;
 	}
-	
+
+    /**
+     * Retrieves all topics, typically skos:Concepts indicated via dcterms:subject,
+     * from the metadata of an Entry. Includes cached external metadata if it
+     * exists.
+     *
+     * @param entry
+     *            Entry from where the keywords should be returned.
+     * @return Returns a list of URIs.
+     */
+    public static List<String> getTopics(Entry entry) {
+        Graph graph = null;
+        try {
+            graph = entry.getMetadataGraph();
+        } catch (AuthorizationException ae) {
+            log.debug("AuthorizationException: " + ae.getMessage());
+        }
+
+        if (graph != null) {
+            URI resourceURI = new URIImpl(entry.getResourceURI().toString());
+            HashSet<URI> subjPreds = new HashSet<URI>();
+            subjPreds.add(graph.getValueFactory().createURI(NS.dcterms, "subject"));
+            List<String> result = new ArrayList<>();
+            for (URI subjPred : subjPreds) {
+                Iterator<Statement> subjects = graph.match(resourceURI, subjPred, null);
+                while (subjects.hasNext()) {
+                    Value value = subjects.next().getObject();
+                    if (value instanceof org.openrdf.model.Resource) {
+                        org.openrdf.model.Resource res = (org.openrdf.model.Resource) value;
+                        result.add(res.stringValue());
+                    }
+                }
+            }
+            return result;
+        }
+        return null;
+    }
+
 	/**
 	 * FIXME this does not take entries in deleted folders into consideration 
 	 */
