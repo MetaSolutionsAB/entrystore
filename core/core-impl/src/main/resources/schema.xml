@@ -225,10 +225,11 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         
         <field name="title" type="text_ngram" indexed="true" multiValued="true"/>
         <field name="description" type="text" indexed="true" multiValued="true"/>
-        <field name="keyword" type="text" indexed="true" stored="true" multiValued="true"/>
         <field name="lang" type="string" indexed="true" multiValued="true"/>
+        
+	<field name="keyword" type="text" indexed="true" stored="true" multiValued="true"/>
         <field name="tag" type="text" indexed="true" stored="true" multiValued="true"/>
-        <field name="topic" type="text" indexed="true" stored="true" multiValued="true"/>
+        <field name="topic" type="string" indexed="true" stored="true" multiValued="true"/>
 
         <field name="email" type="string" indexed="true" stored="true" multiValued="true"/>
 
