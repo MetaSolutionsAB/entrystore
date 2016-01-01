@@ -132,7 +132,6 @@ public class EntryResource extends BaseResource {
 	public Representation represent() {
 		try {
 			if (entry == null) {
-				log.error("Cannot find an entry with that id");
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
 			}

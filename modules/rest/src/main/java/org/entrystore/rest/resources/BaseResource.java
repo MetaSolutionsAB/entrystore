@@ -85,13 +85,19 @@ public abstract class BaseResource extends ServerResource {
 		setServerInfo(this.getServerInfo());
 		
 		contextId = (String) request.getAttributes().get("context-id");
-		if (getCM() != null) {
+		if (getCM() != null && contextId != null) {
 			context = getCM().getContext(contextId);
+			if (context == null) {
+				log.info("There is no context " + contextId);
+			}
 		}
 		
 		entryId = (String) request.getAttributes().get("entry-id");
-		if (context != null) {
+		if (context != null && entryId != null) {
 			entry = context.get(entryId);
+			if (entry == null) {
+				log.info("There is no entry " + entryId + " in context " + contextId);
+			}
 		}
 		
 		if (parameters.containsKey("format")) {

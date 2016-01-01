@@ -149,7 +149,6 @@ public class ResourceResource extends BaseResource {
 	public Representation represent() {
 		try {
 			if (entry == null) {
-				log.info("Cannot find an entry with that ID"); 
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
 				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry); 
 			}
@@ -346,7 +345,6 @@ public class ResourceResource extends BaseResource {
 	@Delete
 	public void removeRepresentation() {
 		if (entry == null) {
-			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		}
 		
