@@ -99,7 +99,7 @@ entrystore.solr.extract-fulltext=off
 entrystore.repository.rewrite-basereference=true
 
 ## Enable creation of groups with linked contexts for normal non-admin users
-entrystore.nonadmin.group-context-creation=on|off (default: off)
+# entrystore.nonadmin.group-context-creation=on|off (default: off)
 
 ## Run metadata correction methods
 ## Only for development and/or migration purposes
