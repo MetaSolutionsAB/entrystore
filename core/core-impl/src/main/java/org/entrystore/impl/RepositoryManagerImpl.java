@@ -590,7 +590,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (solrServer != null) {
 			solrIndex = new SolrSearchIndex(this, solrServer);
 			if (reindex) {
-				solrIndex.reindexLiterals();
+				solrIndex.reindex();
 			}
 		} else {
 			log.error("Unable to initialize Solr, check settings in scam.properties");
