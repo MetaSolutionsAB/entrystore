@@ -227,17 +227,16 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="description" type="text" indexed="true" multiValued="true"/>
         <field name="lang" type="string" indexed="true" multiValued="true"/>
         
-	<field name="keyword" type="text" indexed="true" stored="true" multiValued="true"/>
-        <field name="tag" type="text" indexed="true" stored="true" multiValued="true"/>
-        <field name="topic" type="string" indexed="true" stored="true" multiValued="true"/>
+        <field name="tag.literal" type="text_ngram" indexed="true" stored="true" multiValued="true"/>
+        <field name="tag.uri" type="string" indexed="true" stored="true" multiValued="true"/>
 
         <field name="email" type="string" indexed="true" stored="true" multiValued="true"/>
 
-		<!-- title needs to be single-valued in order be sortable, desc and keyword can be text and multi value -->
+		<!-- title needs to be single-valued in order be sortable, desc and tag can be text and multi value -->
 		<dynamicField name="title.*" type="text" indexed="true" stored="true" multiValued="false"/>
         <dynamicField name="description.*" type="text" indexed="true" stored="true" multiValued="true"/>
-        <dynamicField name="keyword.*" type="text" indexed="true" stored="true" multiValued="true"/>
-        
+        <dynamicField name="tag.literal.*" type="text_ngram" indexed="true" stored="true" multiValued="true"/>
+
         <!-- the fulltext field is filled with a string extracted using apache tika -->
         <field name="fulltext" type="text" indexed="true" stored="false"/>
 
