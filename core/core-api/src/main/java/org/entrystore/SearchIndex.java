@@ -18,7 +18,7 @@ package org.entrystore;
 
 /**
  * FIXME
- * this interface needs some work as it was created ad-hoc to fixe some refactoring problems;
+ * this interface needs some work as it was created ad-hoc to fix some refactoring problems;
  * the Solr implementation contains too many Solr-specific parameters in the method signatures
  *
  * @author Hannes Ebner
@@ -27,7 +27,7 @@ public interface SearchIndex {
 
 	public void shutdown();
 
-	public void reindexLiterals();
+	public void reindex();
 
 	public void postEntry(Entry entry);
 

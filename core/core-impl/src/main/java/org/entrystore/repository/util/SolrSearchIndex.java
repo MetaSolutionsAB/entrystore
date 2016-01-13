@@ -155,7 +155,7 @@ public class SolrSearchIndex implements SearchIndex {
 	 * eventually running reindexing processes are completed, this means that
 	 * this method is thread-safe.
 	 */
-	public void reindexLiterals() {
+	public void reindex() {
 		if (solrServer == null) {
 			log.warn("Ignoring request as Solr is not used by this instance");
 			return;
@@ -317,16 +317,22 @@ public class SolrSearchIndex implements SearchIndex {
 			}
 		}
 
-		// keywords
-		Map<String, String> keywords = EntryUtil.getKeywords(entry);
-		if (keywords != null && keywords.size() > 0) {
-			for (String keyword : keywords.keySet()) {
-				doc.addField("keyword", keyword, 20);
-				String lang = descriptions.get(keyword);
+		// tag.literal[.*]
+		Map<String, String> tagLiterals = EntryUtil.getTagLiterals(entry);
+		if (tagLiterals != null) {
+			for (String tag : tagLiterals.keySet()) {
+				doc.addField("tag.literal", tag, 20);
+				String lang = tagLiterals.get(tag);
 				if (lang != null) {
-					doc.addField("keyword." + lang, keyword, 20);
+					doc.addField("tag.literal." + lang, tag, 20);
 				}
 			}
+		}
+
+		// tag.uri
+		Iterator<String> tagResources = EntryUtil.getTagResources(entry).iterator();
+		while (tagResources.hasNext()) {
+			doc.addField("tag.uri", tagResources.next());
 		}
 
 		// language of the resource
@@ -339,21 +345,6 @@ public class SolrSearchIndex implements SearchIndex {
 			doc.addField("lang", dctLang);
 		}
 
-		// tags (dc:subject)
-		Iterator<Statement> tags = mdGraph.match(null, new URIImpl(NS.dc + "subject"), null);
-		while (tags.hasNext()) {
-            Value obj = tags.next().getObject();
-            if (obj instanceof Literal) {
-                doc.addField("tag", obj.stringValue());
-            }
-		}
-
-        // topics
-        Iterator<String> topics = EntryUtil.getTopics(entry).iterator();
-        while (topics.hasNext()) {
-            doc.addField("topic", topics.next());
-        }
-		
 		// email (foaf:mbox)
 		String email = EntryUtil.getEmail(entry);
 		if (email != null) {
