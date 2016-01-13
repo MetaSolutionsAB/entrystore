@@ -59,7 +59,7 @@ public class SolrResource extends BaseResource {
 					if (getRM().getIndex() != null) {
 						Runnable reindexThread = new Runnable() {
 							public void run() {
-								getRM().getIndex().reindexLiterals();
+								getRM().getIndex().reindex();
 							}
 						};
 						new Thread(reindexThread).start();
