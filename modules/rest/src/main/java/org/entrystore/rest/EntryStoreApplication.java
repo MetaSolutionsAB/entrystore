@@ -245,6 +245,7 @@ public class EntryStoreApplication extends Application {
 		// signup
 		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP, "off"))) {
 			router.attach("/auth/signup", SignupResource.class);
+			router.attach("/auth/signup/whitelist", SignupWhitelistResource.class);
 		}
 
 		// password reset

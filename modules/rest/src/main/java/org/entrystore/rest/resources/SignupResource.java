@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.resources;
 
+import com.google.common.base.Joiner;
 import net.tanesha.recaptcha.ReCaptcha;
 import net.tanesha.recaptcha.ReCaptchaFactory;
 import net.tanesha.recaptcha.ReCaptchaImpl;
@@ -36,6 +37,8 @@ import org.entrystore.rest.util.RecaptchaVerifier;
 import org.entrystore.rest.util.SimpleHTML;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.restlet.Request;
+import org.restlet.Response;
 import org.restlet.data.Form;
 import org.restlet.data.Language;
 import org.restlet.data.MediaType;
@@ -53,7 +56,11 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 
 /**
@@ -66,6 +73,32 @@ public class SignupResource extends BaseResource {
 	private static Logger log = LoggerFactory.getLogger(SignupResource.class);
 
 	protected SimpleHTML html = new SimpleHTML("Sign-up");
+
+	private static Set<String> domainWhitelist = null;
+
+	private static Object mutex = new Object();
+
+	@Override
+	public void doInit() {
+		synchronized (mutex) {
+			if (domainWhitelist == null) {
+				Config config = getRM().getConfiguration();
+				List<String> tmpDomainWhitelist = config.getStringList(Settings.SIGNUP_WHITELIST, new ArrayList<String>());
+				domainWhitelist = new HashSet<>();
+				// we normalize the list to lower case and to not contain null
+				for (String domain : tmpDomainWhitelist) {
+					if (domain != null) {
+						domainWhitelist.add(domain.toLowerCase());
+					}
+				}
+				if (domainWhitelist.size() > 0) {
+					log.info("Sign-up whitelist initialized with following domains: " + Joiner.on(", ").join(domainWhitelist));
+				} else {
+					log.info("No domains provided for sign-up whitelist; sign-ups for any domain are allowed");
+				}
+			}
+		}
+	}
 
 	@Get
 	public Representation represent() throws ResourceException {
@@ -219,10 +252,19 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
-		if (!EmailValidator.getInstance().isValid(ci.email)) {
+		if (!EmailValidator.getInstance(true).isValid(ci.email)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("Invalid email address: " + ci.email));
 			return;
+		}
+
+		if (domainWhitelist.size() > 0) {
+			String emailDomain = ci.email.substring(ci.email.indexOf("@") + 1).toLowerCase();
+			if (!domainWhitelist.contains(emailDomain)) {
+				getResponse().setStatus(Status.CLIENT_ERROR_EXPECTATION_FAILED);
+				getResponse().setEntity(html.representation("The email domain is not allowed for sign-up: " + emailDomain));
+				return;
+			}
 		}
 
 		Config config = getRM().getConfiguration();
