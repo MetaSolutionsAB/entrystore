@@ -701,19 +701,21 @@ public class ContextImpl extends ResourceImpl implements Context {
 				id, RepositoryProperties.ENTRY_PATH, entryId));
 	}
 
-	synchronized public Entry getByEntryURI(URI entryURI) {
-		Entry entry = cache.getByEntryURI(entryURI);
-		if (entry != null) {
-			//			checkAccess(entry, AccessProperty.ReadMetadata);
-			return entry;
-		}
+	public Entry getByEntryURI(URI entryURI) {
+		synchronized (cache) {
+			Entry entry = cache.getByEntryURI(entryURI);
+			if (entry != null) {
+				//			checkAccess(entry, AccessProperty.ReadMetadata);
+				return entry;
+			}
 
-		try {
-			return getByMMdURIDirect(entryURI);
-		} catch (RepositoryException e) {
-			log.error(e.getMessage(), e);
+			try {
+				return getByMMdURIDirect(entryURI);
+			} catch (RepositoryException e) {
+				log.error(e.getMessage(), e);
+			}
+			return null;
 		}
-		return null; 
 	}
 
 	private Entry getByMMdURIDirect(URI entryURI) throws RepositoryException {
@@ -839,7 +841,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		return res2entry.keySet();
 	}
 
-	synchronized public void remove(URI entryURI) {
+	public void remove(URI entryURI) {
 		if (systemEntries.contains(entryURI)) {
 			throw new DisallowedException("Cannot remove system entry with URI: "+entryURI);
 		}

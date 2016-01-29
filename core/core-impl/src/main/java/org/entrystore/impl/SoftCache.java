@@ -21,6 +21,7 @@ import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.SoftReference;
 import java.net.URI;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
@@ -65,8 +66,10 @@ public class SoftCache {
 	}
 	
 	public void clear() {
-		cache.clear();
-		uri2entryURIs.clear();
+		synchronized (cache) {
+			cache.clear();
+			uri2entryURIs.clear();
+		}
 	}
 
 	public void put(Entry entry) {
@@ -190,5 +193,4 @@ public class SoftCache {
 		}
 
 	}
-
 }
