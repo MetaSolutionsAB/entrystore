@@ -101,6 +101,7 @@ public class Settings {
 	public static String SIGNUP = "entrystore.auth.signup";
 	public static String SIGNUP_SUBJECT = "entrystore.auth.signup.email.subject";
 	public static String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.signup.email.template";
+	public static String SIGNUP_WHITELIST = "entrystore.auth.signup.whitelist";
 
 	public static String PASSWORD_RESET = "entrystore.auth.password-reset";
 	public static String PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-reset.email.template";
