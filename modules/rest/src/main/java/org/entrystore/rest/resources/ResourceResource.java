@@ -525,7 +525,7 @@ public class ResourceResource extends BaseResource {
 					resourceURI = new URI(techLoc.string().trim());
 				}
 			} catch (URISyntaxException e) {
-				log.error(e.getMessage());
+				log.info(e.getMessage());
 				return;
 			}
 			if (resourceURI != null) {
@@ -549,7 +549,7 @@ public class ResourceResource extends BaseResource {
 				}
 			}
 		} else {
-			log.error("[IMPORT] No LOM Technical Location found, unable to construct Resource URI");
+			log.info("[IMPORT] No LOM Technical Location found, unable to construct Resource URI");
 		}
 	}
 	
@@ -939,7 +939,7 @@ public class ResourceResource extends BaseResource {
 						Entry childEntry = context.get(childId);
 						if (childEntry == null) {
 							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-							log.error("Cannot update list, since one of the children does not exist.");
+							log.debug("Cannot update list, since one of the children does not exist.");
 							return;
 						} else {
 							newResource.add(childEntry.getEntryURI());
@@ -1142,11 +1142,11 @@ public class ResourceResource extends BaseResource {
 				}
 				getResponse().setStatus(Status.SUCCESS_OK);
 			} catch (JSONException e) {
-				log.error("Wrong JSON syntax: " + e.getMessage()); 
+				log.debug("Wrong JSON syntax: " + e.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
 			} catch (IOException e) {
-				log.error("IOException: " + e.getMessage()); 
+				log.error(e.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"IOException\"}"));
 			}
