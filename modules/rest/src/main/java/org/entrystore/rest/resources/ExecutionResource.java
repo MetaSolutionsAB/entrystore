@@ -113,8 +113,8 @@ public class ExecutionResource extends BaseResource {
 		}
 
 		try {
-			// Pipeline execution requires admin-rights on context
-			getPM().checkAuthenticatedUserAuthorized(context.getEntry(), AccessProperty.Administer);
+			// Pipeline execution requires write-rights on context's resource
+			getPM().checkAuthenticatedUserAuthorized(context.getEntry(), AccessProperty.WriteResource);
 
 			// Load pipeline and source entries from context
 			Entry pipelineEntry = context.getByEntryURI(URI.create(pipeline));
@@ -173,7 +173,7 @@ public class ExecutionResource extends BaseResource {
 			// concurrent threads per EntryStore instance
 
 		} catch(AuthorizationException e) {
-			log.error("unauthorizedPOST");
+			log.info("Unauthorized POST");
 			unauthorizedPOST();
 		}
 	}
