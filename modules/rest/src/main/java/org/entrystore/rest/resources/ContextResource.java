@@ -661,10 +661,12 @@ public class ContextResource extends BaseResource {
 
 		try {
 			JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
-			JSONObject obj =(JSONObject) mdObj.get("info");
-			Graph graph = null;
-			if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
-				entry.setGraph(graph);
+			if (mdObj.has("info")) {
+				JSONObject obj = (JSONObject) mdObj.get("info");
+				Graph graph = null;
+				if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
+					entry.setGraph(graph);
+				}
 			}
 		} catch (JSONException e) {
 			log.error(e.getMessage());
