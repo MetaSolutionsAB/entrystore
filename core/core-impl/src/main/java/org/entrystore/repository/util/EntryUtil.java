@@ -17,11 +17,7 @@
 package org.entrystore.repository.util;
 
 import com.google.common.collect.Multimap;
-import org.entrystore.AuthorizationException;
-import org.entrystore.Context;
-import org.entrystore.Entry;
-import org.entrystore.GraphType;
-import org.entrystore.Resource;
+import org.entrystore.*;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
 import org.openrdf.model.Graph;
@@ -40,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.List;
 
 
 /**
@@ -659,15 +656,30 @@ public class EntryUtil {
 			try {
 				java.net.URI uri = java.net.URI.create(r.toString());
 				Entry fetchedEntry = null;
-				// we expect a resource URI
-				Set<Entry> resEntries = context.getByResourceURI(uri);
-				if (resEntries != null && resEntries.size() > 0) {
-					fetchedEntry = (Entry) resEntries.toArray()[0];
+				ContextManager cm = rm.getContextManager();
+				if (context != null) {
+					//By Resource URI, may be a non-repository URI.
+					Set<Entry> resEntries = context.getByResourceURI(uri);
+					if (resEntries != null && resEntries.size() > 0) {
+						fetchedEntry = (Entry) resEntries.toArray()[0];
+					}
+					//Or by entry URI
+					if (fetchedEntry == null) {
+						// fallback in case the URI is an entry URI
+						fetchedEntry = context.getByEntryURI(uri);
+					}
+				} else {
+					//Check first via repository URIs (includes both resource URI and entry URI)
+					fetchedEntry = cm.getEntry(uri);
+					if (fetchedEntry == null) {
+						// fallback in case we are not referring to repository URIs.
+						Set<Entry> resEntries = cm.getLinks(uri);
+						if (resEntries != null && resEntries.size() > 0) {
+							fetchedEntry = (Entry) resEntries.toArray()[0];
+						}
+					}
 				}
-				if (fetchedEntry == null) {
-					// fallback in case the URI is an entry URI
-					fetchedEntry = context.getByEntryURI(uri);
-				}
+
 				if (fetchedEntry != null) {
 					graph = new LinkedHashModel(fetchedEntry.getMetadataGraph());
 				}
