@@ -43,8 +43,6 @@ import org.json.JSONObject;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
-import org.restlet.Request;
-import org.restlet.Response;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -133,7 +131,7 @@ public class EntryResource extends BaseResource {
 		try {
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
+				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
 			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
@@ -248,7 +246,7 @@ public class EntryResource extends BaseResource {
 			log.error(e.getMessage());
 		}
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);			
+		return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 	}
 	
 	
@@ -268,7 +266,7 @@ public class EntryResource extends BaseResource {
 		}
 
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
+		return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 	}
 
 	

@@ -150,7 +150,7 @@ public class ResourceResource extends BaseResource {
 		try {
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
-				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry); 
+				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
 			/*
@@ -905,7 +905,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource);
+			return new JsonRepresentation(JSONErrorMessages.errorResourceNotFound);
 		}
 
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);

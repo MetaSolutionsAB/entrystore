@@ -72,7 +72,7 @@ public class ExportResource extends BaseResource {
 			if (context == null) {
 				log.error("Unable to find context with that ID"); 
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
-				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry); 
+				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 			
 			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {

@@ -97,7 +97,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		try {
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
+				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
 			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
@@ -165,7 +165,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		try {
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorEntryNotFound));
 				return;
 			}
 
@@ -186,7 +186,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		try {
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorEntryNotFound));
 				return;
 			}
 
@@ -212,7 +212,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		try {
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorEntryNotFound));
 				return;
 			}
 
