@@ -16,16 +16,15 @@
 
 package org.entrystore.rest.auth;
 
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author Hannes Ebner
  */
 public abstract class TokenCache<K, V> {
 
-	protected Map<K, V> tokenCache = Collections.synchronizedMap(new HashMap<K, V>());
+	protected Map<K, V> tokenCache = new ConcurrentHashMap<K, V>();
 
 	public void addToken(K token, V value) {
 		synchronized (tokenCache) {
