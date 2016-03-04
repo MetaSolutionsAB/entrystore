@@ -244,10 +244,10 @@ public class EntryResource extends BaseResource {
 						jobj.toString(2) +
 						"</textarea></body></html>", MediaType.TEXT_HTML);
 			}
-		} catch (JSONException e) {	
-		}		
-		log.error("Can not find the entry. getEntry()");
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		} catch (JSONException e) {
+			log.error(e.getMessage());
+		}
+		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);			
 	}
 	
@@ -260,12 +260,14 @@ public class EntryResource extends BaseResource {
 	private Representation getEntryInJSON() {
 		try {	
 			JSONObject jobj = this.getEntryAsJSONObject();
-			if (jobj != null)
+			if (jobj != null) {
 				return new JsonRepresentation(jobj.toString(2));
+			}
 		} catch (JSONException e) {
+			log.error(e.getMessage());
 		}
-		log.error("Can not find the entry. getEntry()");
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+
+		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
 	}
 
