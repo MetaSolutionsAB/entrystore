@@ -688,7 +688,7 @@ public class EntryResource extends BaseResource {
 		try {
 			graphString = getRequest().getEntity().getText();
 		} catch (IOException e) {
-			log.error(e.getMessage());
+			log.info(e.getMessage());
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
@@ -700,7 +700,7 @@ public class EntryResource extends BaseResource {
 					deserializedGraph = RDFJSON.rdfJsonToGraph(rdfJSON);
 				}
 			} catch (JSONException jsone) {
-				log.error(jsone.getMessage());
+				log.info(jsone.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
