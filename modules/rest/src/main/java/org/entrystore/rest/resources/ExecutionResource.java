@@ -173,7 +173,7 @@ public class ExecutionResource extends BaseResource {
 			// concurrent threads per EntryStore instance
 
 		} catch(AuthorizationException e) {
-			log.info("Unauthorized POST");
+			log.debug("Unauthorized POST");
 			unauthorizedPOST();
 		}
 	}
