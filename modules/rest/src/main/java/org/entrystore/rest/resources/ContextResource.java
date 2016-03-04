@@ -91,7 +91,7 @@ public class ContextResource extends BaseResource {
 	@Get
 	public Representation represent() throws ResourceException {	
 		if (context == null) {
-			log.info("The given context id does not exist."); 
+			log.debug("The given context id does not exist.");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
 			return new JsonRepresentation(JSONErrorMessages.errorWrongContextIDmsg); 
 		}
@@ -156,16 +156,17 @@ public class ContextResource extends BaseResource {
 	public void acceptRepresentation(Representation r) throws ResourceException {
 		try {
 			if (context == null) {
-				log.info("The given context id doesn't exist."); 
+				log.debug("The given context ID does not exist");
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				getResponse().setEntity(JSONErrorMessages.errorWrongContextIDmsg, MediaType.APPLICATION_JSON);
+				return;
 			}
 
 			String entryId = parameters.get("id");
 			if (entryId != null) {
 				Entry preExistingEntry = context.get(entryId);
 				if (preExistingEntry != null) {
-					log.warn("Entry with that id already exists"); 
+					log.debug("Entry with that ID already exists");
 					getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT); 
 					getResponse().setLocationRef(context.get(parameters.get("id")).getEntryURI().toString());
 					getResponse().setEntity(JSONErrorMessages.errorEntryWithGivenIDExists, MediaType.APPLICATION_JSON);
@@ -255,7 +256,7 @@ public class ContextResource extends BaseResource {
 			
 			// Error: 
 			if (entry == null) {
-				log.warn("Can not create an Entry with that JSON"); 
+				log.debug("Can not create an Entry with that JSON");
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(JSONErrorMessages.errorCantCreateEntry, MediaType.APPLICATION_JSON);
 			} else {
@@ -284,7 +285,7 @@ public class ContextResource extends BaseResource {
 					resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), "UTF-8"));
 					metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), "UTF-8"));
 				} catch (UnsupportedEncodingException e) {
-					log.error(e.getMessage());
+					log.warn(e.getMessage());
 					return null;
 				}
 				
@@ -337,7 +338,7 @@ public class ContextResource extends BaseResource {
 					resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), "UTF-8"));
 					metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), "UTF-8"));
 				} catch (UnsupportedEncodingException e) {
-					log.error(e.getMessage());
+					log.warn(e.getMessage());
 					return null;
 				}
 
@@ -369,8 +370,8 @@ public class ContextResource extends BaseResource {
 				return entry;
 			}
 		} catch (URISyntaxException e) {
-			log.error(e.getMessage());
-		} 
+			log.warn(e.getMessage());
+		}
 
 		return null; 
 	}
@@ -476,7 +477,7 @@ public class ContextResource extends BaseResource {
 			
 			if (jsonObj.has("name")) {
 				if(user.setName(jsonObj.getString("name")) == false) {
-						return false; 
+					return false;
 				}
 			} else {
 				return false; 
@@ -498,8 +499,8 @@ public class ContextResource extends BaseResource {
 					Group group = (Group) groupEntry.getResource();
 					group.addMember(user); 
 				} catch (URISyntaxException e) {
-					e.printStackTrace();
-				} 
+					log.warn(e.getMessage());
+				}
 			}
 			break;
 		case Group:
@@ -533,7 +534,7 @@ public class ContextResource extends BaseResource {
 				try {
 					cont.setQuota(jsonObj.getLong("quota"));
 				} catch (JSONException jsone) {
-					log.error("Unable to parse new quota value: " + jsone.getMessage());
+					log.warn("Unable to parse new quota value: " + jsone.getMessage());
 				}
 			}
 			break;
@@ -564,7 +565,7 @@ public class ContextResource extends BaseResource {
 		try {
 			resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), "UTF-8"));
 		} catch (UnsupportedEncodingException e) {
-			log.error("The resource parameter must be encoded using UTF-8");
+			log.debug("The resource parameter must be encoded using UTF-8");
 			return null;
 		}
 
@@ -616,7 +617,7 @@ public class ContextResource extends BaseResource {
 				}
 			}
 		} catch (JSONException e) {
-			log.error(e.getMessage());
+			log.warn(e.getMessage());
 		}
 	}	
 
@@ -641,7 +642,7 @@ public class ContextResource extends BaseResource {
 					}
 				}
 			} catch (JSONException e) {
-				log.error(e.getMessage());
+				log.warn(e.getMessage());
 			}
 		}
 	}
@@ -669,7 +670,7 @@ public class ContextResource extends BaseResource {
 				}
 			}
 		} catch (JSONException e) {
-			log.error(e.getMessage());
+			log.warn(e.getMessage());
 		}
 	}
 
@@ -677,7 +678,7 @@ public class ContextResource extends BaseResource {
 	public void removeRepresentations() throws ResourceException {
 		try {
 			if (context == null) {
-				log.error("Unable to find context with that ID"); 
+				log.debug("Unable to find context with ID " + contextId);
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
 				return;
 			}
