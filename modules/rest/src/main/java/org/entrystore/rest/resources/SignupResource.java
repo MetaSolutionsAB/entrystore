@@ -324,17 +324,6 @@ public class SignupResource extends BaseResource {
 	private String constructHtmlForm(boolean reCaptcha) {
 		Config config = getRM().getConfiguration();
 
-		String reCaptchaHtml = null;
-		if (reCaptcha) {
-			String privateKey = config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
-			String publicKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
-			if (privateKey == null || publicKey == null) {
-				return "reCaptcha keys must be configured";
-			}
-			ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
-			reCaptchaHtml = c.createRecaptchaHtml(null, null);
-		}
-
 		StringBuilder sb = new StringBuilder();
 		sb.append(html.header());
 		sb.append("<form action=\"\" method=\"post\">\n");
@@ -343,12 +332,24 @@ public class SignupResource extends BaseResource {
 		sb.append("E-Mail address<br/><input type=\"text\" name=\"email\"><br/>\n");
 		sb.append("Password<br/><input type=\"password\" name=\"password\"><br/>\n");
 		if (reCaptcha) {
-			sb.append("<br/>\n");
-			sb.append(reCaptchaHtml);
-			sb.append("\n");
+			String siteKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
+			if (siteKey == null) {
+				log.warn("reCaptcha keys must be configured; rendering form without reCaptcha");
+			} else {
+				/* reCaptcha 1.0 (deprecated)
+				String publicKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
+				ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
+				reCaptchaHtml = c.createRecaptchaHtml(null, null);
+				*/
+
+				// reCaptcha 2.0
+				sb.append("<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script>\n");
+				sb.append("<p>\n<div class=\"g-recaptcha\" data-sitekey=\"").append(siteKey).append("\"></div>\n</p>\n");
+			}
 		}
 		sb.append("<br/>\n<input type=\"submit\" value=\"Sign-up\" />\n");
 		sb.append("</form>\n");
+
 		boolean openid = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"));
 		if (openid) {
 			boolean google = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_GOOGLE, "off"));
@@ -367,6 +368,7 @@ public class SignupResource extends BaseResource {
 				}
 			}
 		}
+
 		sb.append(html.footer());
 		return sb.toString();
 	}
