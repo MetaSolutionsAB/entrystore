@@ -16,17 +16,18 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.Context;
-import org.entrystore.Entry;
-import org.entrystore.User;
 import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
 import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.auth.TokenCache;
 import org.entrystore.rest.auth.UserInfo;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Cookie;
+import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
@@ -46,51 +47,49 @@ public class UserResource extends BaseResource {
 	@Get
 	public Representation represent() throws ResourceException {
 		try {
-			User currentUser = getPM().getUser(getPM().getAuthenticatedUserURI());
-			boolean guest = currentUser.getURI().equals(getPM().getGuestUser().getURI()); 
-			
-			JSONObject result = new JSONObject();
-			
 			try {
-				result.put("user", currentUser.getName());
-				result.put("id", currentUser.getEntry().getId());
-				result.put("uri", currentUser.getEntry().getEntryURI());
-
-				if (!guest) {
-					Context homeContext = currentUser.getHomeContext();
-					if (homeContext != null) {
-						result.put("homecontext", homeContext.getEntry().getId());
-					}
-					String userLang = currentUser.getLanguage();
-					if (userLang != null) {
-						result.put("language", userLang);
-					}
-					String extID = currentUser.getExternalID();
-					if (extID != null) {
-						result.put("external_id", extID);
-					}
-
-					Cookie authTokenCookie = getRequest().getCookies().getFirst("auth_token");
-					if (authTokenCookie != null) {
-						String authToken = authTokenCookie.getValue();
-						UserInfo ui = LoginTokenCache.getInstance().getTokenValue(authToken);
-						if (ui != null && ui.getLoginExpiration() != null) {
-							result.put("authTokenExpires", ui.getLoginExpiration());
-						}
-					}
-				}
+				return new JsonRepresentation(buildUserInfo(getPM(), getPM().getUser(getPM().getAuthenticatedUserURI())));
 			} catch (JSONException e) {
-				JSONObject error = new JSONObject();
-				try {
-					error.put("error", e.getMessage());
-				} catch (JSONException ignored) {}
-				return new JsonRepresentation(error);
+				log.error(e.getMessage());
+				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+				return new EmptyRepresentation();
 			}
-			
-			return new JsonRepresentation(result);
 		} catch(AuthorizationException e) {
 			return unauthorizedGET();
 		}
+	}
+
+	private JSONObject buildUserInfo(PrincipalManager pm, User user) throws JSONException {
+		JSONObject result = new JSONObject();
+		result.put("user", user.getName());
+		result.put("id", user.getEntry().getId());
+		result.put("uri", user.getEntry().getEntryURI());
+
+		if (!user.getURI().equals(pm.getGuestUser().getURI())) {
+			Context homeContext = user.getHomeContext();
+			if (homeContext != null) {
+				result.put("homecontext", homeContext.getEntry().getId());
+			}
+			String userLang = user.getLanguage();
+			if (userLang != null) {
+				result.put("language", userLang);
+			}
+			String extID = user.getExternalID();
+			if (extID != null) {
+				result.put("external_id", extID);
+			}
+
+			Cookie authTokenCookie = getRequest().getCookies().getFirst("auth_token");
+			if (authTokenCookie != null) {
+				String authToken = authTokenCookie.getValue();
+				UserInfo ui = LoginTokenCache.getInstance().getTokenValue(authToken);
+				if (ui != null && ui.getLoginExpiration() != null) {
+					result.put("authTokenExpires", ui.getLoginExpiration());
+				}
+			}
+		}
+
+		return result;
 	}
 
 }
