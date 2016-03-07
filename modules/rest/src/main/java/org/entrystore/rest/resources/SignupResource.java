@@ -17,12 +17,9 @@
 package org.entrystore.rest.resources;
 
 import com.google.common.base.Joiner;
-import net.tanesha.recaptcha.ReCaptcha;
-import net.tanesha.recaptcha.ReCaptchaFactory;
 import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
-import org.apache.commons.validator.routines.EmailValidator;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -33,12 +30,10 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
+import org.entrystore.rest.util.EmailValidator;
 import org.entrystore.rest.util.RecaptchaVerifier;
 import org.entrystore.rest.util.SimpleHTML;
-import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.Request;
-import org.restlet.Response;
 import org.restlet.data.Form;
 import org.restlet.data.Language;
 import org.restlet.data.MediaType;
@@ -52,7 +47,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -252,7 +246,7 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
-		if (!EmailValidator.getInstance(true).isValid(ci.email)) {
+		if (!EmailValidator.getInstance().isValid(ci.email)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("Invalid email address: " + ci.email));
 			return;
