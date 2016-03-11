@@ -363,33 +363,41 @@ public class SolrSearchIndex implements SearchIndex {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		doc.setField("public", guestReadable);
 
-		// all subject, predicates and objects in the metadata graph
+		// All subject, predicates and objects in the metadata graph
+		//
+		// We also provide an index for all predicate-object tuples, stored in dynamic fields.
+		// Perhaps all fuzzy matches for object values (the ones that do not take predicates into
+		// consideration) should be removed in the future (marked with a TODO as comment below).
 		Graph metadata = entry.getMetadataGraph();
 		if (metadata != null) {
 			for (Statement s : metadata) {
-				// subjectURI
+				// subject
 				if (s.getSubject() instanceof org.openrdf.model.URI) {
 					if (!resourceURI.equals(s.getSubject())) {
 						doc.addField("metadata.subject", s.getSubject().stringValue());
 					}
 				}
 
-				// predicateURI
-				if (s.getPredicate() instanceof org.openrdf.model.URI) {
-					doc.addField("metadata.predicate", s.getPredicate().stringValue());
-				}
+				// predicate
+				String predString = s.getPredicate().stringValue();
+				String predMD5Trunc8 = Hashing.md5(predString).substring(0, 8);
+				doc.addField("metadata.predicate", predString);
 
-				// objectURI
+				// object
 				if (s.getObject() instanceof org.openrdf.model.URI) {
-					doc.addField("metadata.object.uri", s.getObject().stringValue());
-				} else
-				// objectLiteral
-				if (s.getObject() instanceof Literal) {
+					String objString = s.getObject().stringValue();
+					doc.addField("metadata.object.uri", objString); // TODO remove?
+
+					// predicate value is included in the parameter name, the object value is the field value
+					doc.addField("metadata.predicate.uri." + predMD5Trunc8, objString);
+				} else if (s.getObject() instanceof Literal) {
 					Literal l = (Literal) s.getObject();
-					// we only index plain literals (human-readable text)
-					if (l.getDatatype() == null) {
-						doc.addField("metadata.object.literal", l.getLabel());
+					if (l.getDatatype() == null) { // we only index plain literals (human-readable text)
+						doc.addField("metadata.object.literal", l.getLabel()); // TODO remove?
 					}
+
+					// predicate value is included in the parameter name, the object value is the field value
+					doc.addField("metadata.predicate.literal." + predMD5Trunc8, l.getLabel());
 				}
 			}
 		}
