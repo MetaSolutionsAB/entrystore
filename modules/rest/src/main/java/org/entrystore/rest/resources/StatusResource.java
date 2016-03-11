@@ -16,24 +16,28 @@
 
 package org.entrystore.rest.resources;
 
-import java.net.URI;
-
+import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.AuthorizationException;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.EntryStoreApplication;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 
 /**
@@ -44,14 +48,24 @@ public class StatusResource extends BaseResource  {
 	static Logger log = LoggerFactory.getLogger(StatusResource.class);
 	
 	Config config;
-	
+
+	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+
 	@Override
 	public void doInit() {
+		supportedMediaTypes.add(MediaType.TEXT_PLAIN);
+		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+
 		config = getRM().getConfiguration();
 	}
 	
 	@Get
 	public Representation represent() throws ResourceException {
+		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+		if (preferredMediaType == null) {
+			preferredMediaType = MediaType.TEXT_PLAIN;
+		}
+
 		try {
 			if (parameters.containsKey("extended")) {
 				JSONObject result = new JSONObject();
@@ -66,6 +80,8 @@ public class StatusResource extends BaseResource  {
 					}
 
 					result.put("baseURI", getRM().getRepositoryURL().toString());
+					result.put("version", EntryStoreApplication.getVersion());
+					result.put("repositoryStatus", getRM() != null ? "online" : "offline");
 					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));
 					result.put("repositoryIndices", config.getString(Settings.STORE_INDEXES, "unconfigured"));
 					result.put("repositoryCache", config.getString(Settings.REPOSITORY_CACHE, "off"));
@@ -95,15 +111,30 @@ public class StatusResource extends BaseResource  {
 						}
 					}
 
-					return new JsonRepresentation(result.toString(2));
-				} catch (JSONException e) {
 					return new JsonRepresentation(result);
+				} catch (JSONException e) {
+					log.error(e.getMessage());
+					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+					return new EmptyRepresentation();
 				}
 			} else {
-				if (getRM() != null) {
-					return new StringRepresentation("UP", MediaType.TEXT_PLAIN);
+				if (preferredMediaType.equals(MediaType.APPLICATION_JSON)) {
+					try {
+						JSONObject result = new JSONObject();
+						result.put("version", EntryStoreApplication.getVersion());
+						result.put("repositoryStatus", getRM() != null ? "online" : "offline");
+						return new JsonRepresentation(result);
+					} catch (JSONException e) {
+						log.error(e.getMessage());
+						getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+						return new EmptyRepresentation();
+					}
 				} else {
-					return new StringRepresentation("DOWN", MediaType.TEXT_PLAIN);
+					if (getRM() != null) {
+						return new StringRepresentation("UP", MediaType.TEXT_PLAIN);
+					} else {
+						return new StringRepresentation("DOWN", MediaType.TEXT_PLAIN);
+					}
 				}
 			}
 		} catch (AuthorizationException e) {
