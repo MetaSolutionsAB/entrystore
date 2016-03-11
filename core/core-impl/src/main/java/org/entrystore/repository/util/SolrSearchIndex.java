@@ -68,7 +68,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static Logger log = LoggerFactory.getLogger(SolrSearchIndex.class);
 
-	private static int BATCH_SIZE = 1000;
+	private static final int BATCH_SIZE = 1000;
 
 	private boolean reindexing = false;
 
