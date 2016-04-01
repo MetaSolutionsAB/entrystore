@@ -43,6 +43,7 @@ import org.entrystore.ContextManager;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
+import org.entrystore.GraphType;
 import org.entrystore.SearchIndex;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
@@ -149,6 +150,18 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
+	public void clearSolrIndexFromContextEntries(SolrServer solrServer, Entry contextEntry) {
+		UpdateRequest req = new UpdateRequest();
+		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
+		req.deleteByQuery("context:"+contextEntry.getResourceURI().toString().replace(":", "\\:"));
+		try {
+			req.process(solrServer);
+		} catch (SolrServerException sse) {
+			log.error(sse.getMessage(), sse);
+		} catch (IOException ioe) {
+			log.error(ioe.getMessage(), ioe);
+		}
+	}
 	/**
 	 * Reindexes the Solr index. Does not return before the process is
 	 * completed. All subsequent calls to this method are ignored until other
@@ -446,6 +459,10 @@ public class SolrSearchIndex implements SearchIndex {
 			log.error(sse.getMessage(), sse);
 		} catch (IOException ioe) {
 			log.error(ioe.getMessage(), ioe);
+		}
+		//If entry is a context, also remove all entries inside
+		if (entry.getGraphType() == GraphType.Context) {
+			clearSolrIndexFromContextEntries(solrServer, entry);
 		}
 	}
 
