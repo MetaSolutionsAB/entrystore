@@ -439,7 +439,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 				//resURI - resourceURI
 				org.openrdf.model.URI resURI = null;
 				if (resourceURI != null) {
-					resURI = vf.createURI(resourceURI.toString());
+					String resourceURIStr = resourceURI.toString().replace("_newId", identity);
+					resURI = vf.createURI(resourceURIStr);
 				} else {
 					if (bType == GraphType.Context ||
 							bType == GraphType.SystemContext) {
