@@ -643,10 +643,10 @@ public class EntryUtil {
 	public static Model traverseAndLoadEntryMetadata(Set<URI> entries, Set<java.net.URI> propertiesToFollow, int level, int depth, Multimap<URI, Integer> visited, Context context, RepositoryManager rm) {
 		Model result = new LinkedHashModel();
 		for (URI r : entries) {
-			if (!r.toString().startsWith(rm.getRepositoryURL().toString())) {
+	/*		if (!r.toString().startsWith(rm.getRepositoryURL().toString())) {
 				log.debug("URI has external prefix, skipping: " + r);
 				continue;
-			}
+			}*/
 			if (visited.containsEntry(r, level)) {
 				log.debug("Skipping <" + r + ">, entry already fetched and traversed on level " + level);
 				continue;
