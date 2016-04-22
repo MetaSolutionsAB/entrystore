@@ -85,16 +85,24 @@ public class NameResource extends BaseResource {
 		} catch (IOException ioe) {
 			log.warn(ioe.getMessage());
 		}
-		if (name == null || name.length() == 0 || this.context == null || this.entry == null) {
+
+		if (this.context == null || this.entry == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
-
-		boolean success = false;
+		if (name == null || name.length() == 0) {
+			name = null;
+		}
 		GraphType bt = entry.getGraphType();
+		boolean success = false;
 		if (GraphType.Group.equals(bt)) {
 			success = ((Group) entry.getResource()).setName(name);
 		} else if (GraphType.User.equals(bt)) {
+			//Users must always have a name.
+			if (name == null) {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return;
+			}
 			success = ((User) entry.getResource()).setName(name);
 		} else if (GraphType.Context.equals(bt)) {
 			Context c = getCM().getContext(entryId);
