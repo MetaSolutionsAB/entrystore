@@ -16,8 +16,16 @@
 
 package org.entrystore.rest.resources;
 
-import org.entrystore.*;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.Group;
+import org.entrystore.List;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.ResourceType;
+import org.entrystore.User;
 import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RDFResource;
