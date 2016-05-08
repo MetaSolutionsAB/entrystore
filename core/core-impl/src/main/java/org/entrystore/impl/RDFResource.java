@@ -49,13 +49,13 @@ public class RDFResource extends ResourceImpl {
 			Graph result = new GraphImpl(this.entry.repository.getValueFactory(), rr.asList());
 			return result;
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		} finally {
 			try {
 				rc.close();
 			} catch (RepositoryException e) {
-				e.printStackTrace();
+				log.error(e.getMessage());
 			} 
 		}
 	}
@@ -73,14 +73,14 @@ public class RDFResource extends ResourceImpl {
 					rc.commit();
 				} catch (Exception e) {
 					rc.rollback();
-					e.printStackTrace();
+					log.error(e.getMessage());
 					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 				} finally {
 					rc.close();
 				}
 			} 
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}

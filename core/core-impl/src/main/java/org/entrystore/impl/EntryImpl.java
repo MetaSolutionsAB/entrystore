@@ -1831,8 +1831,8 @@ public class EntryImpl implements Entry {
 				this.relations.add(statement);
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			log.error(e.getMessage());
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);
 		} 
 	}
 	
@@ -1849,8 +1849,8 @@ public class EntryImpl implements Entry {
 				this.relations.remove(statement);
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			log.error(e.getMessage());
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);
 		} 
 	}
 	

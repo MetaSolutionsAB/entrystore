@@ -167,29 +167,31 @@ public class UserImpl extends RDFResource implements User {
 		}
 
 		try {
-			RepositoryConnection rc = this.entry.repository.getConnection();
-			ValueFactory vf = this.entry.repository.getValueFactory();
-			rc.setAutoCommit(false);
-			try {
-				synchronized (this) {
+			synchronized (this.entry.repository) {
+				RepositoryConnection rc = this.entry.repository.getConnection();
+				ValueFactory vf = this.entry.repository.getValueFactory();
+				rc.setAutoCommit(false);
+				try {
+
 					// remove an eventually existing plaintext password and store only a salted hash
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.secret, null, false, resourceURI), resourceURI);
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.saltedHashedSecret, null, false, resourceURI), resourceURI);
 					rc.add(resourceURI, RepositoryProperties.saltedHashedSecret, vf.createLiteral(shSecret), resourceURI);
 					rc.commit();
+					this.saltedHashedSecret = shSecret;
+					return true;
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					rc.rollback();
+				} finally {
+					rc.close();
 				}
-				this.saltedHashedSecret = shSecret;
-				return true;
-			} catch (Exception e) {
-				log.error(e.getMessage(), e);
-				rc.rollback();
-			} finally {
-				rc.close();
 			}
 		} catch (org.openrdf.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new RepositoryException("Failed to connect to repository", e);
 		}
+
 		return false;
 	}
 
@@ -250,45 +252,45 @@ public class UserImpl extends RDFResource implements User {
 	public boolean setHomeContext(Context context) {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 		try {
-			RepositoryConnection rc = this.entry.repository.getConnection();
-            ValueFactory vf = this.entry.repository.getValueFactory();
-			rc.setAutoCommit(false);
-			try {
-				synchronized (this) {
-                    //Remove homecontext and remove inverse relation cache.
-                    RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
-                    while(iter.hasNext()) {
-                        Statement statement = iter.next();
-                        java.net.URI sourceEntryURI = java.net.URI.create(statement.getObject().stringValue());
-                        EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
-                        if (sourceEntry != null) {
-                            sourceEntry.removeRelationSynchronized(statement, rc, vf);
-                        }
-                        rc.remove(statement, entry.getSesameEntryURI());
-                    }
+			synchronized (this.entry.repository) {
+				RepositoryConnection rc = this.entry.repository.getConnection();
+				ValueFactory vf = this.entry.repository.getValueFactory();
+				rc.setAutoCommit(false);
+				try {
+					//Remove homecontext and remove inverse relation cache.
+					RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
+					while (iter.hasNext()) {
+						Statement statement = iter.next();
+						java.net.URI sourceEntryURI = java.net.URI.create(statement.getObject().stringValue());
+						EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
+						if (sourceEntry != null) {
+							sourceEntry.removeRelationSynchronized(statement, rc, vf);
+						}
+						rc.remove(statement, entry.getSesameEntryURI());
+					}
 
-                    //TODO Remove the following line in future as it corresponds to backward compatability where homecontext where saved in resource graph instead of entry graph.
-                    rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI), resourceURI);
+					//TODO Remove the following line in future as it corresponds to backward compatability where homecontext where saved in resource graph instead of entry graph.
+					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, resourceURI), resourceURI);
 
-                    //Add new homecontext and add inverse relational cache
-                    if (context != null) {
-                        Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
-                        rc.add(newStatement);
-                        ((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
-                    }
+					//Add new homecontext and add inverse relational cache
+					if (context != null) {
+						Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
+						rc.add(newStatement);
+						((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
+					}
 					rc.commit();
+					return true;
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					rc.rollback();
+				} finally {
+					rc.close();
+					this.homeContext = context.getEntry().getEntryURI();
 				}
-				return true;
-			} catch (Exception e) {
-				log.error(e.getMessage(), e);
-				rc.rollback();
-			} finally {
-				rc.close();
-				this.homeContext = context.getEntry().getEntryURI();
 			}
 		} catch (org.openrdf.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
-			throw new RepositoryException("Failed to connect to Repository.", e);
+			throw new RepositoryException("Failed to connect to repository.", e);
 		}
 		return false;
 	}
@@ -319,26 +321,26 @@ public class UserImpl extends RDFResource implements User {
 
 	public boolean setLanguage(String language) {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
-		
+
 		try {
-			RepositoryConnection rc = this.entry.repository.getConnection();
-			ValueFactory vf = this.entry.repository.getValueFactory();
-			rc.setAutoCommit(false);
-			try {
-				synchronized (this) {
+			synchronized (this.entry.repository) {
+				RepositoryConnection rc = this.entry.repository.getConnection();
+				ValueFactory vf = this.entry.repository.getValueFactory();
+				rc.setAutoCommit(false);
+				try {
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.language, null, false, resourceURI), resourceURI);
 					if (language != null) {
 						rc.add(resourceURI, RepositoryProperties.language, vf.createLiteral(language), resourceURI);
 					}
 					rc.commit();
+					return true;
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					rc.rollback();
+				} finally {
+					rc.close();
+					this.language = language;
 				}
-				return true;
-			} catch (Exception e) {
-				log.error(e.getMessage(), e);
-				rc.rollback();
-			} finally {
-				rc.close();
-				this.language = language;
 			}
 		} catch (org.openrdf.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
@@ -387,26 +389,26 @@ public class UserImpl extends RDFResource implements User {
 	 */
 	public boolean setExternalID(String eid) {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
-		
+
 		try {
-			RepositoryConnection rc = this.entry.repository.getConnection();
-			ValueFactory vf = this.entry.repository.getValueFactory();
-			rc.setAutoCommit(false);
-			try {
-				synchronized (this) {
+			synchronized (this.entry.repository) {
+				RepositoryConnection rc = this.entry.repository.getConnection();
+				ValueFactory vf = this.entry.repository.getValueFactory();
+				rc.setAutoCommit(false);
+				try {
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.externalID, null, false, resourceURI), resourceURI);
 					if (eid != null) {
 						rc.add(resourceURI, RepositoryProperties.externalID, vf.createURI("mailto:", eid), resourceURI);
 					}
 					rc.commit();
+					return true;
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					rc.rollback();
+				} finally {
+					rc.close();
+					this.externalID = eid;
 				}
-				return true;
-			} catch (Exception e) {
-				log.error(e.getMessage(), e);
-				rc.rollback();
-			} finally {
-				rc.close();
-				this.externalID = eid;
 			}
 		} catch (org.openrdf.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);

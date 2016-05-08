@@ -100,7 +100,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	boolean shutdown = false;
 	
-	Object mutex = new Object();
+	final Object mutex = new Object();
 	
 	SoftCache softCache;
 
