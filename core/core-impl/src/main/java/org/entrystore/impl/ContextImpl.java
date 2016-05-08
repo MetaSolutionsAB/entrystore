@@ -767,7 +767,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		} catch (AuthorizationException ae) {
 			throw ae;
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 		}
 		return newEntry;

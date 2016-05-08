@@ -17,33 +17,22 @@
 
 package org.entrystore.impl;
 
-import java.util.Date;
-import java.util.GregorianCalendar;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-
-import javax.xml.datatype.DatatypeConfigurationException;
-import javax.xml.datatype.DatatypeFactory;
-import javax.xml.datatype.XMLGregorianCalendar;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
 import org.entrystore.Context;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.Resource;
+import org.entrystore.ResourceType;
+import org.entrystore.User;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.ResourceType;
-import org.entrystore.Resource;
-import org.entrystore.User;
-import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.util.URISplit;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
@@ -58,51 +47,58 @@ import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
 
+import javax.xml.datatype.DatatypeConfigurationException;
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.XMLGregorianCalendar;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
+
 
 //TODO change expression to match paper.
 public class EntryImpl implements Entry {
+	protected volatile String id;
+	protected volatile Resource resource;
+	protected volatile MetadataImpl localMetadata;
+	protected volatile Metadata cachedExternalMetadata;
+	protected volatile URI localMdURI;
+	protected volatile URI relationURI;
 
-	protected String id;
-	protected Resource resource;
-	protected MetadataImpl localMetadata;
-	protected Metadata cachedExternalMetadata;
-	protected URI localMdURI;
-	protected URI relationURI;
-	
-
-	protected URI externalMdURI;
-	protected URI cachedExternalMdURI;
+	protected volatile URI externalMdURI;
+	protected volatile URI cachedExternalMdURI;
 	protected ContextImpl context;
 	protected Repository repository;
 	protected RepositoryManagerImpl repositoryManager;
 
-	protected URI entryURI;
-	protected URI resURI;
-	protected EntryType locType = EntryType.Local;
-	protected ResourceType repType = ResourceType.InformationResource;
-	protected GraphType resourceType = GraphType.None;
-	protected XMLGregorianCalendar created;
-	protected XMLGregorianCalendar modified;
-	protected XMLGregorianCalendar cachedAt;
-	protected URI creator;
+	protected volatile URI entryURI;
+	protected volatile URI resURI;
+	protected volatile EntryType locType = EntryType.Local;
+	protected volatile ResourceType repType = ResourceType.InformationResource;
+	protected volatile GraphType resourceType = GraphType.None;
+	protected volatile XMLGregorianCalendar created;
+	protected volatile XMLGregorianCalendar modified;
+	protected volatile XMLGregorianCalendar cachedAt;
+	protected volatile URI creator;
 	//protected Set<java.net.URI> referredIn = new HashSet<java.net.URI>();
-	protected Set<URI> contributors = new HashSet<URI>();
-	protected String mimeType;
+	protected volatile Set<URI> contributors = new HashSet<URI>();
+	protected volatile String mimeType;
 
 	Log log = LogFactory.getLog(EntryImpl.class);
-	private Set<java.net.URI> administerPrincipals;
-	private Set<java.net.URI> readMetadataPrincipals;
-	private Set<java.net.URI> writeMetadataPrincipals;
-	private Set<java.net.URI> writeResourcePrincipals;
-	private Set<java.net.URI> readResourcePrincipals;
-	private List<Statement> relations;
+	private volatile Set<java.net.URI> administerPrincipals;
+	private volatile Set<java.net.URI> readMetadataPrincipals;
+	private volatile Set<java.net.URI> writeMetadataPrincipals;
+	private volatile Set<java.net.URI> writeResourcePrincipals;
+	private volatile Set<java.net.URI> readResourcePrincipals;
+	private volatile List<Statement> relations;
     private boolean invRelations = false;
-	private String format;
-	private long fileSize = -1;
-	private String filename;
+	private volatile String format;
+	private volatile long fileSize = -1;
+	private volatile String filename;
 	private Boolean readOrWrite;
 	private String originalList;
-
 
 	//A ugly hack to be able to initialize the ContextManager itself.
 	EntryImpl(RepositoryManagerImpl repositoryManager, Repository repository) {
@@ -139,19 +135,19 @@ public class EntryImpl implements Entry {
 				}
 				return false;
 			} catch (Exception e) {
-				e.printStackTrace();
+				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
 
 	/**
-	 * Loads an entry information from existig list of statements.
+	 * Loads an entry information from existing list of statements.
 	 * @throws RepositoryException 
 	 */
 	protected boolean load(RepositoryConnection rc) throws RepositoryException {
@@ -164,9 +160,9 @@ public class EntryImpl implements Entry {
 
 	protected void initMetadataObjects() {
 		if (locType == EntryType.Local || locType == EntryType.Link) {
-
 			this.localMetadata = new MetadataImpl(this, localMdURI, resURI, false);
 		}
+
 		if (locType == EntryType.LinkReference) {
 			this.localMetadata = new MetadataImpl(this, localMdURI, resURI, false);
 			if (externalMdURI.stringValue().startsWith(this.repositoryManager.getRepositoryURL().toString())) {
@@ -190,8 +186,7 @@ public class EntryImpl implements Entry {
 	 * @throws DatatypeConfigurationException 
 	 * @throws RepositoryException 
 	 */
-	protected void create(URI resURI, URI externalMetadataURI, GraphType bType, EntryType lType, ResourceType rType, RepositoryConnection rc)
-	throws RepositoryException, DatatypeConfigurationException {
+	protected void create(URI resURI, URI externalMetadataURI, GraphType bType, EntryType lType, ResourceType rType, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
 		String base = repositoryManager.getRepositoryURL().toString();
 		ValueFactory vf = repository.getValueFactory();
 		this.resURI = resURI;
@@ -205,13 +200,12 @@ public class EntryImpl implements Entry {
 			this.cachedExternalMdURI = vf.createURI(URISplit.fabricateURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
 			this.externalMdURI = externalMetadataURI;
 		}
+
 		initialize(bType, lType, rType, rc);
 		initMetadataObjects();
-
 	}
 
-	private void initialize(GraphType bt, EntryType locT, ResourceType repT, RepositoryConnection rc)
-	throws RepositoryException, DatatypeConfigurationException {
+	private void initialize(GraphType bt, EntryType locT, ResourceType repT, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
 		ValueFactory vf = rc.getRepository().getValueFactory();
 		if (bt != null) {
 			setBuiltinType(bt, rc);
@@ -262,45 +256,48 @@ public class EntryImpl implements Entry {
 	}
 
 	private boolean loadFromStatements(List<Statement> existingStatements) throws RepositoryException {
-		// FIXME add synchronized (this) in here and also relevant get-methods to avoid object
-		// with null-value in case somebody runs GET while loadFromStatements is still active
-
 		if (existingStatements.isEmpty()) {
 			return false;
 		}
-		administerPrincipals = null;
-		readMetadataPrincipals = null;
-		writeMetadataPrincipals = null;
-		readResourcePrincipals = null;
-		writeResourcePrincipals = null;
-		entryURI = null;
-		resURI = null;
-		created = null;
-		creator = null;
-		modified = null;
-		externalMdURI = null;
-		cachedAt = null;
-		locType = EntryType.Local;
-		repType = ResourceType.InformationResource;
-		resourceType = GraphType.None;
+
+		Set<java.net.URI> administerPrincipals = null;
+		Set<java.net.URI> readMetadataPrincipals = null;
+		Set<java.net.URI> writeMetadataPrincipals = null;
+		Set<java.net.URI> readResourcePrincipals = null;
+		Set<java.net.URI> writeResourcePrincipals = null;
+		Set<URI> contributors = new HashSet<URI>();
+		URI entryURI = null;
+		URI resURI = null;
+		URI localMdURI = null;
+		URI cachedExternalMdURI = null;
+		URI relationURI = null;
+		XMLGregorianCalendar created = null;
+		URI creator = null;
+		XMLGregorianCalendar modified = null;
+		URI externalMdURI = null;
+		XMLGregorianCalendar cachedAt = null;
+		EntryType locType = EntryType.Local;
+		ResourceType repType = ResourceType.InformationResource;
+		GraphType resourceType = GraphType.None;
 
 		//Following are cached on request. (Move more values here if possible)
-		format = null;
-		fileSize = -1;
-		filename = null;
-		mimeType = null;
+		String format = null;
+		long fileSize = -1;
+		String filename = null;
+		String mimeType = null;
+		boolean invRelations = false;
 
 		RepositoryConnection rc = null;
 
 		try {
-            String base = repositoryManager.getRepositoryURL().toString();
-            rc = this.repository.getConnection();
+			String base = repositoryManager.getRepositoryURL().toString();
+			rc = this.repository.getConnection();
 //			referredIn = new HashSet<java.net.URI>();
 			for (Statement statement : existingStatements) {
 				URI predicate = statement.getPredicate();
 				if (predicate.equals(RepositoryProperties.resource)) {
-					this.entryURI = (org.openrdf.model.URI) statement.getSubject();
-					this.resURI = (org.openrdf.model.URI) statement.getObject();
+					entryURI = (org.openrdf.model.URI) statement.getSubject();
+					resURI = (org.openrdf.model.URI) statement.getObject();
 				} else if (predicate.equals(RepositoryProperties.metadata)) {
 					localMdURI = ((URI) statement.getObject());
 				} else if (predicate.equals(RepositoryProperties.externalMetadata)) {
@@ -318,48 +315,48 @@ public class EntryImpl implements Entry {
 					created = ((Literal) statement.getObject()).calendarValue();
 				} else if (predicate.equals(RepositoryProperties.Creator)) {
 					creator = ((URI) statement.getObject());
-				} else if (predicate.equals(RepositoryProperties.Contributor)){
+				} else if (predicate.equals(RepositoryProperties.Contributor)) {
 					contributors.add((URI) statement.getObject());
 				} else if (predicate.equals(RepositoryProperties.Modified)) {
 					try {
-						//log.info(statement.getObject().stringValue()); 
+						//log.info(statement.getObject().stringValue());
 						modified = ((Literal) statement.getObject()).calendarValue();
 					} catch (NullPointerException e) {
-						log.error(e); 
+						log.error(e);
 					}
 				} else {
-                    //Check if statement refer other entries that affect their inv-rel cache.
-                    if (!predicate.equals(RepositoryProperties.Read)
-                            && !predicate.equals(RepositoryProperties.Write)
-                            && !predicate.equals(RepositoryProperties.Pipeline)
-                            && !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
-                        Value obj = statement.getObject();
-                        org.openrdf.model.Resource subj = statement.getSubject();
-                        //Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-                        if (obj instanceof org.openrdf.model.URI
-                                && obj.stringValue().startsWith(base)
-                                && subj.stringValue().startsWith(base)) {
-                            invRelations = true;
-                        }
-                    }
-                }
+					//Check if statement refer other entries that affect their inv-rel cache.
+					if (!predicate.equals(RepositoryProperties.Read)
+							&& !predicate.equals(RepositoryProperties.Write)
+							&& !predicate.equals(RepositoryProperties.Pipeline)
+							&& !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
+						Value obj = statement.getObject();
+						org.openrdf.model.Resource subj = statement.getSubject();
+						//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
+						if (obj instanceof org.openrdf.model.URI
+								&& obj.stringValue().startsWith(base)
+								&& subj.stringValue().startsWith(base)) {
+							invRelations = true;
+						}
+					}
+				}
 			}
 
 			//Detect types.
 			for (Statement statement : existingStatements) {
 				org.openrdf.model.Resource subject = statement.getSubject();
-				if ( statement.getPredicate().equals(RDF.TYPE)) {
-					if (this.resURI.equals(subject)) {
+				if (statement.getPredicate().equals(RDF.TYPE)) {
+					if (resURI.equals(subject)) {
 						GraphType bt = getBuiltinType(statement.getObject());
 						if (bt != null) {
-							this.resourceType = bt;
+							resourceType = bt;
 						} else {
 							ResourceType rt = getRepresentationType(statement.getObject());
 							if (rt != null) {
 								repType = rt;
 							}
 						}
-					} else if (this.entryURI.equals(subject)) {
+					} else if (entryURI.equals(subject)) {
 						EntryType lt = getLocationType(statement.getObject());
 						if (lt != null) {
 							locType = lt;
@@ -367,25 +364,40 @@ public class EntryImpl implements Entry {
 					}
 				}
 			}
-
-//						log.info("*****************************"); 
-//						log.info("entryUri: " + entryURI); 
-//						log.info("resURI :" + resURI);
-//						log.info("locType :" + locType);
-//						log.info("repType :" + repType);
-//						log.info("resourceType :" + resourceType);
-//						log.info("created :" + created);
-//						log.info("modified :" + modified);
-//						log.info("externalMdURI :" + externalMdURI);
-//						log.info("cachedAt:" + cachedAt);
-//						log.info("*****************************"); 
-			//TODO check that neccessary things where found among the statements.
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw e;
 		} finally {
 			rc.close();
 		}
+
+		// We set all values at once to avoid any delays and possible
+		// inconsistencies that could occur when setting in the loop above
+		this.administerPrincipals = administerPrincipals;
+		this.readMetadataPrincipals = readMetadataPrincipals;
+		this.writeMetadataPrincipals = writeMetadataPrincipals;
+		this.readResourcePrincipals = readResourcePrincipals;
+		this.writeResourcePrincipals = writeResourcePrincipals;
+		this.contributors = contributors;
+		this.entryURI = entryURI;
+		this.resURI = resURI;
+		this.localMdURI = localMdURI;
+		this.cachedExternalMdURI = cachedExternalMdURI;
+		this.relationURI = relationURI;
+		this.created = created;
+		this.creator = creator;
+		this.modified = modified;
+		this.externalMdURI = externalMdURI;
+		this.cachedAt = cachedAt;
+		this.locType = locType;
+		this.repType = repType;
+		this.resourceType = resourceType;
+		this.format = format;
+		this.fileSize = fileSize;
+		this.filename = filename;
+		this.mimeType = mimeType;
+		this.invRelations = invRelations;
+
 		return true;
 	}
 
@@ -562,7 +574,7 @@ public class EntryImpl implements Entry {
 	}
 
 	public Graph getGraph() {
-		//ACL check not necessary as the prerequisite for accessing the MetaMetadata object at all is 
+		//ACL check not necessary as the prerequisite for accessing the MetaMetadata object at all is
 		//AccessProperty.readMetadata rights. It is supposed that the object is not delegated
 		//to principals with less rights.
 		RepositoryConnection rc = null; 
