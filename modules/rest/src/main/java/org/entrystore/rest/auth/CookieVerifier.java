@@ -17,6 +17,8 @@
 package org.entrystore.rest.auth;
 
 import java.net.URI;
+import java.util.Date;
+import java.util.concurrent.TimeUnit;
 
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -24,6 +26,7 @@ import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Cookie;
 import org.restlet.data.CookieSetting;
+import org.restlet.engine.util.DateUtils;
 import org.restlet.security.Verifier;
 import org.restlet.util.Series;
 import org.slf4j.Logger;
@@ -81,15 +84,88 @@ public class CookieVerifier implements Verifier {
 	}
 	
 	public static void cleanCookies(String cookieName, Request request, Response response) {
+		response.getCookieSettings().removeAll(cookieName);
 		Series<Cookie> cookies = request.getCookies();		
 		for (Cookie c : cookies) {
 			if (c.getName().equals(cookieName)) {
 				CookieSetting cs = new CookieSetting(c.getVersion(), c.getName(), c.getValue());
 				cs.setPath(c.getPath());
-				cs.setMaxAge(0);
-				response.getCookieSettings().add(cs);
+				// we don't use Restlet's getCookieSettings().add(cs) with
+				// Max-Age of 0 due to some shortcoming of the implementation,
+				// see comment on createExpireCookie() below
+				response.getHeaders().add("Set-Cookie", createExpiredCookie(cs));
 			}
 		}
 	}
-	
+
+	/**
+	 * This method is a workaround for Restlet's inability of setting a Cookie
+	 * expiration date in the past. This is needed for some browsers (e.g. Edge)
+	 * which take the local machine's time instead of the server time to decide
+	 * whether the cookie is expired or not.
+	 *
+	 * This method should only be used to unset/expire a Cookie. Also, for the
+	 * sake of simplicity it lacks support for Cookie version 1.
+	 *
+	 * @param cookieSetting The Cookie setting to be used to write the header.
+	 * @return The value of the header (without "Set-Cookie:") to be set on a Response body.
+	 */
+	private static String createExpiredCookie(CookieSetting cookieSetting) {
+		if (cookieSetting.getVersion() > 0) {
+			throw new IllegalArgumentException("This method does not support Cookie version 1");
+		}
+
+		StringBuffer result = new StringBuffer();
+
+		String name = cookieSetting.getName();
+		String value = cookieSetting.getValue();
+
+		if ((name == null) || (name.length() == 0)) {
+			throw new IllegalArgumentException(
+					"Can't write cookie. Invalid name detected");
+		}
+
+		result.append(name).append('=');
+
+		// Append the value
+		if ((value != null) && (value.length() > 0)) {
+			result.append(value);
+		}
+
+		// Append the path
+		String path = cookieSetting.getPath();
+
+		if ((path != null) && (path.length() > 0)) {
+			result.append("; Path=").append(path);
+		}
+
+		// Append the expiration date
+		long currentTime = System.currentTimeMillis();
+		long expiresTime = currentTime - TimeUnit.DAYS.toMillis(1);
+		Date expires = new Date(expiresTime);
+
+		result.append("; Expires=");
+		result.append(DateUtils.format(expires,	DateUtils.FORMAT_RFC_1123.get(0)));
+
+		// Append the domain
+		String domain = cookieSetting.getDomain();
+
+		if ((domain != null) && (domain.length() > 0)) {
+			result.append("; Domain=");
+			result.append(domain.toLowerCase());
+		}
+
+		// Append the secure flag
+		if (cookieSetting.isSecure()) {
+			result.append("; Secure");
+		}
+
+		// Append the secure flag
+		if (cookieSetting.isAccessRestricted()) {
+			result.append("; HttpOnly");
+		}
+
+		return result.toString();
+	}
+
 }
