@@ -26,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServer;
@@ -71,13 +72,13 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final int BATCH_SIZE = 1000;
 
-	private boolean reindexing = false;
+	private volatile boolean reindexing = false;
 
 	private boolean extractFulltext = false;
 
 	private RepositoryManager rm;
 
-	private SolrServer solrServer;
+	private final SolrServer solrServer;
 
 	private Thread documentSubmitter;
 
@@ -111,7 +112,7 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 				} else {
 					try {
-						Thread.sleep(5000);
+						Thread.sleep(2000);
 					} catch (InterruptedException ie) {
 						log.info("Solr document submitter got interrupted, shutting down submitter thread");
 						return;
@@ -165,8 +166,7 @@ public class SolrSearchIndex implements SearchIndex {
 	/**
 	 * Reindexes the Solr index. Does not return before the process is
 	 * completed. All subsequent calls to this method are ignored until other
-	 * eventually running reindexing processes are completed, this means that
-	 * this method is thread-safe.
+	 * eventually running reindexing processes are completed.
 	 */
 	public void reindex() {
 		if (solrServer == null) {
@@ -174,13 +174,11 @@ public class SolrSearchIndex implements SearchIndex {
 			return;
 		}
 
-		synchronized (solrServer) {
-			if (reindexing) {
-				log.warn("Solr is already being reindexed: ignoring additional reindexing request");
-				return;
-			} else {
-				reindexing = true;
-			}
+		if (reindexing) {
+			log.warn("Solr is already being reindexed: ignoring additional reindexing request");
+			return;
+		} else {
+			reindexing = true;
 		}
 
 		try {
