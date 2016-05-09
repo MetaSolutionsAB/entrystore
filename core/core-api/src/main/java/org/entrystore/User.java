@@ -17,6 +17,7 @@
 package org.entrystore;
 
 import java.net.URI;
+import java.util.Map;
 import java.util.Set;
 
 public interface User extends Resource, java.security.Principal {
@@ -49,5 +50,23 @@ public interface User extends Resource, java.security.Principal {
 	 * referring the resource of the group entry.
 	 */
 	Set<URI> getGroups();
+
+	/**
+	 * @return A map with key-value pairs of custom properties that do not
+	 * need any standardized representation in RDF, e.g. customer specific
+	 * user information such as civic registration number.
+	 */
+	Map<String, String> getCustomProperties();
+
+	/**
+	 * Sets custom user information that is not covered by any other user.
+	 * If already existing information is to be amended by a new tuple, the
+	 * existing map has be fetched, modified and set again.
+	 *
+	 * @param properties A map with key-value pairs of custom user properties.
+	 * @return True of successful.
+	 * @see #getCustomProperties()
+	 */
+	boolean setCustomProperties(Map<String, String> properties);
 
 }
