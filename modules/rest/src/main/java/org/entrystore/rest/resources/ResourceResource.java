@@ -98,6 +98,7 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -854,8 +855,6 @@ public class ResourceResource extends BaseResource {
 				try {
 					jsonUserObj.put("name", user.getName());
 
-					//jsonUserObj.put("password", user.getSecret());
-
 					Context homeContext = user.getHomeContext();
 					if (homeContext != null) {
 						jsonUserObj.put("homecontext", homeContext.getEntry().getId());
@@ -865,6 +864,15 @@ public class ResourceResource extends BaseResource {
 					if (prefLang != null) {
 						jsonUserObj.put("language", prefLang);
 					}
+
+					JSONArray customProperties = new JSONArray();
+					for (java.util.Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
+						JSONObject propEntryObj = new JSONObject();
+						propEntryObj.put("key", propEntry.getKey());
+						propEntryObj.put("value", propEntry.getValue());
+						customProperties.put(propEntryObj);
+					}
+					jsonUserObj.put("customProperties", customProperties);
 
 					return new JsonRepresentation(jsonUserObj);
 				} catch (JSONException e) {
@@ -1139,6 +1147,17 @@ public class ResourceResource extends BaseResource {
 							return;						
 						}
 					}
+				}
+				if (entityJSON.has("customProperties")) {
+					Map<String, String> customPropMap = new HashMap<>();
+					JSONArray customPropJson = entityJSON.getJSONArray("customProperties");
+					for (int i=0; i < customPropJson.length(); i++) {
+						JSONObject propObj = customPropJson.getJSONObject(i);
+						if (propObj.has("key") && propObj.has("value")) {
+							customPropMap.put(propObj.getString("key"), propObj.getString("value"));
+						}
+					}
+					resourceUser.setCustomProperties(customPropMap);
 				}
 				getResponse().setStatus(Status.SUCCESS_OK);
 			} catch (JSONException e) {
