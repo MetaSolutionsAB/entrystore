@@ -598,6 +598,12 @@ public class EntryResource extends BaseResource {
 						if (prefLang != null) {
 							resourceObj.put("language", prefLang);
 						}
+
+						JSONObject customProperties = new JSONObject();
+						for (java.util.Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
+							customProperties.put(propEntry.getKey(), propEntry.getValue());
+						}
+						resourceObj.put("customProperties", customProperties);
 					} catch (AuthorizationException ae) {
 						//jdilObj.accumulate("noAccessToResource", true);
 //						TODO: Replaced by using "rights" in json, do something else in this catch-clause
