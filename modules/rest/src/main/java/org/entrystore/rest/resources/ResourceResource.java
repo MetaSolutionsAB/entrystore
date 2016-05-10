@@ -865,12 +865,9 @@ public class ResourceResource extends BaseResource {
 						jsonUserObj.put("language", prefLang);
 					}
 
-					JSONArray customProperties = new JSONArray();
+					JSONObject customProperties = new JSONObject();
 					for (java.util.Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
-						JSONObject propEntryObj = new JSONObject();
-						propEntryObj.put("key", propEntry.getKey());
-						propEntryObj.put("value", propEntry.getValue());
-						customProperties.put(propEntryObj);
+						customProperties.put(propEntry.getKey(), propEntry.getValue());
 					}
 					jsonUserObj.put("customProperties", customProperties);
 
@@ -1150,12 +1147,10 @@ public class ResourceResource extends BaseResource {
 				}
 				if (entityJSON.has("customProperties")) {
 					Map<String, String> customPropMap = new HashMap<>();
-					JSONArray customPropJson = entityJSON.getJSONArray("customProperties");
-					for (int i=0; i < customPropJson.length(); i++) {
-						JSONObject propObj = customPropJson.getJSONObject(i);
-						if (propObj.has("key") && propObj.has("value")) {
-							customPropMap.put(propObj.getString("key"), propObj.getString("value"));
-						}
+					JSONObject customPropJson = entityJSON.getJSONObject("customProperties");
+					for (Iterator cPIt = customPropJson.keys(); cPIt.hasNext();) {
+						String key = (String) cPIt.next();
+						customPropMap.put(key, customPropJson.getString(key));
 					}
 					resourceUser.setCustomProperties(customPropMap);
 				}
