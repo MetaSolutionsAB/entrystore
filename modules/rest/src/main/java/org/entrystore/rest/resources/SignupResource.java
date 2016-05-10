@@ -52,7 +52,9 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
@@ -143,6 +145,9 @@ public class SignupResource extends BaseResource {
 			Signup.setFoafMetadata(entry, new org.restlet.security.User("", "", ci.firstName, ci.lastName, ci.email));
 			User u = (User) entry.getResource();
 			u.setSecret(ci.password);
+			if (ci.customProperties != null) {
+				u.setCustomProperties(ci.customProperties);
+			}
 			log.info("Created user " + u.getURI());
 
 			// Create context and set ACL and alias
@@ -177,9 +182,11 @@ public class SignupResource extends BaseResource {
 	public void acceptRepresentation(Representation r) {
 		SignupInfo ci = new SignupInfo();
 		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
+		ci.customProperties = new HashMap<>();
 		String rcChallenge = null;
 		String rcResponse = null;
 		String rcResponseV2 = null;
+		String customPropPrefix = "custom_";
 
 		if (MediaType.APPLICATION_JSON.equals(r.getMediaType())) {
 			try {
@@ -211,6 +218,15 @@ public class SignupResource extends BaseResource {
 				if (siJson.has("urlsuccess")) {
 					ci.urlSuccess = siJson.getString("urlsuccess");
 				}
+
+				// Extract custom properties
+				Iterator siJsonKeyIt = siJson.keys();
+				while (siJsonKeyIt.hasNext()) {
+					String key = (String) siJsonKeyIt.next();
+					if (key.startsWith(customPropPrefix) && (key.length() > customPropPrefix.length())) {
+						ci.customProperties.put(key.substring(customPropPrefix.length()), siJson.getString(key));
+					}
+				}
 			} catch (Exception e) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
@@ -226,6 +242,13 @@ public class SignupResource extends BaseResource {
 			rcResponseV2 = form.getFirstValue("g-recaptcha-response", true);
 			ci.urlFailure = form.getFirstValue("urlfailure", true);
 			ci.urlSuccess = form.getFirstValue("urlsuccess", true);
+
+			// Extract custom properties
+			for (String key : form.getNames()) {
+				if (key.startsWith(customPropPrefix) && (key.length() > customPropPrefix.length())) {
+					ci.customProperties.put(key.substring(customPropPrefix.length()), form.getFirstValue(key));
+				}
+			}
 		}
 
 		if (ci.firstName == null || ci.lastName == null || ci.email == null || ci.password == null) {
