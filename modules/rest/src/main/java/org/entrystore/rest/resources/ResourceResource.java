@@ -991,7 +991,7 @@ public class ResourceResource extends BaseResource {
 					RestletFileUpload upload = new RestletFileUpload(new DiskFileItemFactory());
 					List<FileItem> items = upload.parseRepresentation(getRequest().getEntity());
 					Iterator<FileItem> iter = items.iterator();
-					while (iter.hasNext()) {
+					if (iter.hasNext()) {
 						FileItem item = iter.next();
 						((Data) entry.getResource()).setData(item.getInputStream());
 						entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
