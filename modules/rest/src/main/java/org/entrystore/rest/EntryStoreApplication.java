@@ -234,6 +234,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/search", SearchResource.class);
 		router.attach("/sparql", SparqlResource.class);
 		router.attach("/proxy", ProxyResource.class);
+		router.attach("/echo", EchoResource.class);
 		
 		// authentication resources
 		router.attach("/auth/user", UserResource.class);
