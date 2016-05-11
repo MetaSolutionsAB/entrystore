@@ -1015,7 +1015,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				rc.remove(rc.getStatements(this.resourceURI, RepositoryProperties.Quota, null, false, this.resourceURI), this.resourceURI);
 				rc.add(this.resourceURI, RepositoryProperties.Quota, rc.getValueFactory().createLiteral(quotaInBytes), this.resourceURI);
 				rc.commit();
-				this.quota  = quotaInBytes;
+				this.quota = quotaInBytes;
 			} catch (RepositoryException re) {
 				log.error(re.getMessage(), re);
 				try {
@@ -1154,6 +1154,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
+	 * FIXME ENTRYSTORE-418
+	 *
 	 * This method should only be called by increaseQuotaFillLevel() and
 	 * decreaseQuotaFillLevel().
 	 * 
