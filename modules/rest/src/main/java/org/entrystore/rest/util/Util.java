@@ -16,16 +16,21 @@
 
 package org.entrystore.rest.util;
 
-import java.util.Date;
-import java.util.HashMap;
-
+import org.apache.commons.fileupload.disk.DiskFileItemFactory;
+import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.entrystore.Entry;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.data.Method;
+import org.restlet.ext.fileupload.RestletFileUpload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.servlet.ServletContext;
+import java.util.Date;
+import java.util.HashMap;
 
 
 /**
@@ -44,7 +49,7 @@ public class Util {
 	 *            the request which contains the parameters.
 	 * @return A map with the parameters.
 	 */
-	static public HashMap<String, String> parseRequest(String request) {
+	public static HashMap<String, String> parseRequest(String request) {
 		HashMap<String, String> argsAndVal = new HashMap<String, String>();
 
 		int r = request.lastIndexOf("?");
@@ -77,7 +82,7 @@ public class Util {
 	 * THIS IS ONLY A HACK AND SHOULD BE REPLACED WITH PROPER HANDLING DIRECTLY
 	 * IN RESTLETS WHEN SUPPORTED.
 	 */
-	static public void handleIfUnmodifiedSince(Entry entry, Request request) {
+	public static void handleIfUnmodifiedSince(Entry entry, Request request) {
 		if (entry != null && request != null) {
 			Date modDate = entry.getModifiedDate();
 			Date unmodSince = request.getConditions().getUnmodifiedSince();
@@ -99,7 +104,7 @@ public class Util {
 		}
 	}
 	
-	static public JSONObject createResponseObject(int statusCode, String message) {
+	public static JSONObject createResponseObject(int statusCode, String message) {
 		JSONObject obj = new JSONObject();
 		try {
 			obj.put("status", statusCode);
@@ -108,6 +113,23 @@ public class Util {
 			log.error(e.getMessage());
 		}
 		return obj;
+	}
+
+	public static RestletFileUpload createRestletFileUpload(Context context) {
+		if (context == null) {
+			throw new IllegalArgumentException("Context must not be null");
+		}
+		// Content with size above 100kB is cached on disk
+		DiskFileItemFactory dfif = new DiskFileItemFactory(1024*100, null);
+		RestletFileUpload upload = new RestletFileUpload(dfif);
+		ServletContext sc = (ServletContext) context.getServerDispatcher().getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext");
+		if (sc != null) {
+			log.debug("Setting FileCleaningTracker on DiskFileItemFactory");
+			dfif.setFileCleaningTracker(FileCleanerCleanup.getFileCleaningTracker(sc));
+		} else {
+			log.debug("Unable to get ServletContext instance, no FileCleaningTracker assigned to DiskFileItemFactory");
+		}
+		return upload;
 	}
 
 }

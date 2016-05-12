@@ -16,6 +16,8 @@
 
 package org.entrystore.rest;
 
+import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
+import org.apache.commons.io.FileCleaningTracker;
 import org.entrystore.ContextManager;
 import org.entrystore.Converter;
 import org.entrystore.Entry;
@@ -120,11 +122,9 @@ public class EntryStoreApplication extends Application {
 		getRangeService().setEnabled(false);
 		log.warn("Restlet RangeService deactivated");
 
-		ServletContext sc = (ServletContext) this.getContext().getAttributes().get("org.restlet.ext.ser​vlet.ServletContext");
-		// Alt: sc = (ServletContext) getContext().getServerDispatcher().getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext"); 
-		if (sc != null) {
+		if (getServletContext() != null) {
 			// Application created by ServerServlet, try to get RepositoryManager from ServletContext
-			rm = (RepositoryManagerImpl) sc.getAttribute("RepositoryManager");
+			rm = (RepositoryManagerImpl) getServletContext().getAttribute("RepositoryManager");
 		}
 	
 		if (rm != null) {
@@ -460,13 +460,19 @@ public class EntryStoreApplication extends Application {
 		if (rm != null) {
 			rm.shutdown();
 		}
-//		RepositoryManagerImpl repositoryManager = (RepositoryManagerImpl) getContext().getAttributes().get("RepositoryManager");
-//		if (repositoryManager == null) {
-//			rm.shutdown();
-//		} else {
-//			// do cleanup in ServletContextListener
-//		}
+		if (getServletContext() != null) {
+			FileCleaningTracker fct = FileCleanerCleanup.getFileCleaningTracker(getServletContext());
+			if (fct != null) {
+				log.info("Shutting down file cleaning tracker");
+				fct.exitWhenFinished();
+			}
+		}
 		super.stop();
+	}
+
+	public ServletContext getServletContext() {
+		// Alt: (ServletContext) getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext");
+		return (ServletContext) getContext().getServerDispatcher().getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext");
 	}
 
 }

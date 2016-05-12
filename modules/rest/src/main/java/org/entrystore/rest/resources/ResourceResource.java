@@ -26,7 +26,6 @@ import com.sun.syndication.io.FeedException;
 import com.sun.syndication.io.SyndFeedOutput;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
-import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
@@ -72,7 +71,6 @@ import org.restlet.data.Method;
 import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.data.Status;
-import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.FileRepresentation;
@@ -988,8 +986,7 @@ public class ResourceResource extends BaseResource {
 
 			if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 				try {
-					RestletFileUpload upload = new RestletFileUpload(new DiskFileItemFactory());
-					List<FileItem> items = upload.parseRepresentation(getRequest().getEntity());
+					List<FileItem> items = Util.createRestletFileUpload(getContext()).parseRepresentation(getRequest().getEntity());
 					Iterator<FileItem> iter = items.iterator();
 					if (iter.hasNext()) {
 						FileItem item = iter.next();
@@ -1015,8 +1012,6 @@ public class ResourceResource extends BaseResource {
 					error = qe.getMessage();
 					getResponse().setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 				}
-				
-
 			} else {
 				Request req = getRequest();
 				try {

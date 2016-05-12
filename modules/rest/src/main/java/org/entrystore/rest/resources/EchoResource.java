@@ -18,11 +18,10 @@ package org.entrystore.rest.resources;
 
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
-import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.entrystore.rest.util.Util;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
-import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
@@ -45,9 +44,7 @@ public class EchoResource extends BaseResource {
 	public void acceptRepresentation(Representation r) {
 		if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 			try {
-				// Content with size above 1 MB is cached on disk
-				RestletFileUpload upload = new RestletFileUpload(new DiskFileItemFactory(1024*1024, null));
-				List<FileItem> items = upload.parseRepresentation(getRequest().getEntity());
+				List<FileItem> items = Util.createRestletFileUpload(getContext()).parseRepresentation(getRequest().getEntity());
 				Iterator<FileItem> iter = items.iterator();
 				if (iter.hasNext()) {
 					FileItem item = iter.next();
