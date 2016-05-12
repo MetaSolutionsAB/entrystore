@@ -471,8 +471,15 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public ServletContext getServletContext() {
-		// Alt: (ServletContext) getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext");
-		return (ServletContext) getContext().getServerDispatcher().getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext");
+		ServletContext sc = null;
+		Context c = getContext().getServerDispatcher().getContext();
+		if (c != null) {
+			sc = (ServletContext) c.getAttributes().get("org.restlet.ext.servlet.ServletContext");
+		}
+		if (sc == null) {
+			sc = (ServletContext) getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext");
+		}
+		return sc;
 	}
 
 }
