@@ -122,9 +122,9 @@ public class EntryStoreApplication extends Application {
 		getRangeService().setEnabled(false);
 		log.warn("Restlet RangeService deactivated");
 
-		if (getServletContext() != null) {
+		if (getServletContext(getContext()) != null) {
 			// Application created by ServerServlet, try to get RepositoryManager from ServletContext
-			rm = (RepositoryManagerImpl) getServletContext().getAttribute("RepositoryManager");
+			rm = (RepositoryManagerImpl) getServletContext(getContext()).getAttribute("RepositoryManager");
 		}
 	
 		if (rm != null) {
@@ -460,8 +460,8 @@ public class EntryStoreApplication extends Application {
 		if (rm != null) {
 			rm.shutdown();
 		}
-		if (getServletContext() != null) {
-			FileCleaningTracker fct = FileCleanerCleanup.getFileCleaningTracker(getServletContext());
+		if (getServletContext(getContext()) != null) {
+			FileCleaningTracker fct = FileCleanerCleanup.getFileCleaningTracker(getServletContext(getContext()));
 			if (fct != null) {
 				log.info("Shutting down file cleaning tracker");
 				fct.exitWhenFinished();
@@ -470,14 +470,14 @@ public class EntryStoreApplication extends Application {
 		super.stop();
 	}
 
-	public ServletContext getServletContext() {
+	public static ServletContext getServletContext(Context context) {
 		ServletContext sc = null;
-		Context c = getContext().getServerDispatcher().getContext();
+		Context c = context.getServerDispatcher().getContext();
 		if (c != null) {
 			sc = (ServletContext) c.getAttributes().get("org.restlet.ext.servlet.ServletContext");
 		}
 		if (sc == null) {
-			sc = (ServletContext) getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext");
+			sc = (ServletContext) context.getAttributes().get("org.restlet.ext.servlet.ServletContext");
 		}
 		return sc;
 	}

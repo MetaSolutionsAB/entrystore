@@ -19,6 +19,7 @@ package org.entrystore.rest.util;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.entrystore.Entry;
+import org.entrystore.rest.EntryStoreApplication;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.Context;
@@ -29,6 +30,7 @@ import org.restlet.ext.fileupload.RestletFileUpload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.servlet.Servlet;
 import javax.servlet.ServletContext;
 import java.util.Date;
 import java.util.HashMap;
@@ -123,19 +125,13 @@ public class Util {
 		// Content with size above 100kB is cached on disk
 		DiskFileItemFactory dfif = new DiskFileItemFactory(1024*100, null);
 		RestletFileUpload upload = new RestletFileUpload(dfif);
-		Context c = context.getServerDispatcher().getContext();
-		if (c != null) {
-			ServletContext sc = (ServletContext) c.getAttributes().get("org.restlet.ext.servlet.ServletContext");
-			if (sc != null) {
-				log.debug("Setting FileCleaningTracker on DiskFileItemFactory");
-				dfif.setFileCleaningTracker(FileCleanerCleanup.getFileCleaningTracker(sc));
-			} else {
-				log.debug("Unable to get ServletContext instance, no FileCleaningTracker assigned to DiskFileItemFactory");
-			}
+		ServletContext sc = EntryStoreApplication.getServletContext(context);
+		if (sc != null) {
+			log.debug("Setting FileCleaningTracker on DiskFileItemFactory");
+			dfif.setFileCleaningTracker(FileCleanerCleanup.getFileCleaningTracker(sc));
 		} else {
-			log.debug("Unable to get Restlet context instance, no FileCleaningTracker assigned to DiskFileItemFactory");
+			log.debug("Unable to get ServletContext instance, no FileCleaningTracker assigned to DiskFileItemFactory");
 		}
 		return upload;
 	}
-
 }
