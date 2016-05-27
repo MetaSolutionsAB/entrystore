@@ -37,6 +37,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.repository.util.StringUtils;
 import org.openrdf.model.Resource;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.repository.Repository;
@@ -111,6 +112,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	boolean quotaEnabled = false;
 	
 	long defaultQuota = Quota.VALUE_UNLIMITED;
+
+	long maximumFileSize = Quota.VALUE_UNLIMITED;
 	
 	//ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
 	
@@ -227,27 +230,19 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			if (quotaValue == null) {
 				log.info("Quota default set to UNLIMITED");
 			} else {
-				char unit = quotaValue.charAt(quotaValue.length() - 1);
-				long factor = 1;
-				if (unit == 'k' || unit == 'K') { // Kilo
-					factor = 1024;
-				} else if (unit == 'm' || unit == 'M') { // Mega
-					factor = 1024*1024;
-				} else if (unit == 'g' || unit == 'G') { // Giga
-					factor = 1024*1024*1024;
-				} else if (unit == 't' || unit == 'T') { // Tera
-					factor = 1024*1024*1024*1024;
-				}
-				
-				if (factor > 1) {
-					defaultQuota = Long.valueOf(quotaValue.substring(0, quotaValue.length() - 1)) * factor;
-				} else {
-					defaultQuota = Long.valueOf(quotaValue);
-				}
+				defaultQuota = StringUtils.convertUnitStringToByteSize(quotaValue);
 				log.info("Quota default set to " + defaultQuota + " bytes");
 			}
 		} else {
 			log.info("Context quotas disabled");
+		}
+
+		String maxFileSizeValue = config.getString(Settings.DATA_MAX_FILE_SIZE);
+		if (maxFileSizeValue == null) {
+			log.info("Maximum file size set to UNLIMITED");
+		} else {
+			maximumFileSize = StringUtils.convertUnitStringToByteSize(maxFileSizeValue);
+			log.info("Maximum file size set to " + maxFileSizeValue + " bytes");
 		}
 		
 		setCheckForAuthorization(false);
@@ -493,6 +488,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	public boolean hasQuotas() {
 		return quotaEnabled;
+	}
+
+	public long getMaximumFileSize() {
+		return maximumFileSize;
 	}
 
 	public void fireRepositoryEvent(RepositoryEventObject eventObject) {

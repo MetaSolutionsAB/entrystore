@@ -990,6 +990,13 @@ public class ResourceResource extends BaseResource {
 					Iterator<FileItem> iter = items.iterator();
 					if (iter.hasNext()) {
 						FileItem item = iter.next();
+						long maxFileSize = getRM().getMaximumFileSize();
+
+						// we check if the file is not too big
+						if (maxFileSize != -1 && item.getSize() > maxFileSize) {
+							throw new QuotaException(QuotaException.QUOTA_FILE_TOO_BIG);
+						}
+
 						((Data) entry.getResource()).setData(item.getInputStream());
 						entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
 						String mimeType = item.getContentType();

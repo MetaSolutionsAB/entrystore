@@ -22,6 +22,8 @@ public class QuotaException extends Exception {
 	public static final int QUOTA_EXCEEDED = 1;
 	
 	public static final int QUOTA_ERROR_UNKNOWN = 2;
+
+	public static final int QUOTA_FILE_TOO_BIG = 3;
 	
 	private int reason; 
 	
@@ -37,7 +39,8 @@ public class QuotaException extends Exception {
 		switch (reason) {
 		case QUOTA_EXCEEDED:
 			return "Quota exceeded";
-
+		case QUOTA_FILE_TOO_BIG:
+			return "File too big";
 		case QUOTA_ERROR_UNKNOWN:
 		default:
 			return "Unknown error";

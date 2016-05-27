@@ -44,6 +44,7 @@ public class Settings {
 	public static String DATA_FOLDER = "entrystore.data.folder";
 	public static String DATA_QUOTA = "entrystore.data.quota";
 	public static String DATA_QUOTA_DEFAULT = "entrystore.data.quota.default";
+	public static String DATA_MAX_FILE_SIZE = "entrystore.data.max-file-size";
 	
 	public static String BASE_URL = "entrystore.baseurl.folder";
 	
