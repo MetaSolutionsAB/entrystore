@@ -775,14 +775,15 @@ public class ResourceResource extends BaseResource {
 			}
 		} else if (EntryType.Local.equals(entry.getEntryType())) {
 
+			GraphType gt = entry.getGraphType();
 			/*** String ***/
-			if (GraphType.String.equals(entry.getGraphType())) {
+			if (GraphType.String.equals(gt)) {
 				StringResource stringResource = (StringResource)entry.getResource(); 
 				return new StringRepresentation(stringResource.getString());
 			}
 
 			/*** Graph ***/
-			if (GraphType.Graph.equals(entry.getGraphType())) {
+			if (GraphType.Graph.equals(gt) || GraphType.Pipeline.equals(gt)) {
 				RDFResource graphResource = (RDFResource) entry.getResource(); 
 				Graph graph = graphResource.getGraph();
 				if (graph == null) {
@@ -793,7 +794,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Context ***/
-			if (GraphType.Context.equals(entry.getGraphType()) || GraphType.SystemContext.equals(entry.getGraphType())) {
+			if (GraphType.Context.equals(gt) || GraphType.SystemContext.equals(gt)) {
 				JSONArray array = new JSONArray();
 				Context c = (Context) entry.getResource();
 				Set<URI> uris = c.getEntries(); 
@@ -805,7 +806,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** None ***/
-			if (GraphType.None.equals(entry.getGraphType())) {
+			if (GraphType.None.equals(gt)) {
 
 				// Local data
 				if(entry.getResourceType() == ResourceType.InformationResource) {
@@ -847,7 +848,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** User ***/
-			if (GraphType.User.equals(entry.getGraphType())) {
+			if (GraphType.User.equals(gt)) {
 				JSONObject jsonUserObj = new JSONObject();  
 				User user = (User) entry.getResource(); 
 				try {
@@ -876,7 +877,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Group ***/
-			if (GraphType.Group.equals(entry.getGraphType())) {
+			if (GraphType.Group.equals(gt)) {
 				JSONObject jsonGroupObj = new JSONObject(); 
 				Group group = (Group) entry.getResource(); 
 				JSONArray userArray = new JSONArray(); 
