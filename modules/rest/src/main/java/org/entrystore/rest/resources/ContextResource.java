@@ -470,7 +470,7 @@ public class ContextResource extends BaseResource {
 	private boolean setResource(Entry entry) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
 		if (requestText != null && !"".equals(requestText)) {
-			jsonObj = new JSONObject(requestText);
+			jsonObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 		}
 
 		//If there is no resource there is nothing to do yet.
