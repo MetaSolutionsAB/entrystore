@@ -424,6 +424,9 @@ public class ContextResource extends BaseResource {
 		if (gt.equalsIgnoreCase("pipeline")) {
 			return GraphType.Pipeline;
 		}
+		if (gt.equalsIgnoreCase("pipelineresult")) {
+			return GraphType.PipelineResult;
+		}
 		return GraphType.None;
 	}
 
@@ -556,6 +559,7 @@ public class ContextResource extends BaseResource {
 			Graph g = RDFJSON.rdfJsonToGraph((JSONObject) jsonObj.get("resource"));
 			RDFRes.setGraph(g);
 			break;
+		case PipelineResult:
 		case None:
 			break;
 		}

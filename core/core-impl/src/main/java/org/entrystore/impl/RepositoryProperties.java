@@ -96,6 +96,7 @@ public class RepositoryProperties {
 	public static final URI User;
 	public static final URI Group;
 	public static final URI Pipeline;
+	public static final URI PipelineResult;
 	public static final URI None;	
 	public static final URI String;	
 
@@ -166,6 +167,7 @@ public class RepositoryProperties {
 		User = vf.createURI(NSbase + "User");
 		Group = vf.createURI(NSbase + "Group");
 		Pipeline = vf.createURI(NSbase + "Pipeline");
+		PipelineResult = vf.createURI(NSbase + "PipelineResult");
 		None = vf.createURI(NSbase + "None");
 		String = vf.createURI(NSbase + "String");
 		Graph = vf.createURI(NSbase + "Graph");

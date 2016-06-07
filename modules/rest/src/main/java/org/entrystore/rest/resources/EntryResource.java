@@ -377,7 +377,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 *  String
 				 */
-				if(graphType == GraphType.String) {
+				if (graphType == GraphType.String) {
 					StringResource stringResource = (StringResource) entry.getResource(); 
 					jdilObj.put("resource", stringResource.getString());
 				}
@@ -385,7 +385,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 *  Graph
 				 */
-				if(graphType == GraphType.Graph || graphType == GraphType.Pipeline) {
+				if (graphType == GraphType.Graph || graphType == GraphType.Pipeline) {
 					RDFResource rdfResource = (RDFResource) entry.getResource(); 
 					jdilObj.put("resource", new JSONObject(RDFJSON.graphToRdfJson(rdfResource.getGraph())));
 				}

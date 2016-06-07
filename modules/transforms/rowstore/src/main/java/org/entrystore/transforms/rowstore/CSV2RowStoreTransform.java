@@ -18,6 +18,7 @@ package org.entrystore.transforms.rowstore;
 
 import org.entrystore.Data;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryProperties;
@@ -78,6 +79,7 @@ public class CSV2RowStoreTransform extends Transform {
 		String newDatasetInfoURL = newDatasetURL + "/info";
 
 		Entry newEntry = pipeline.getEntry().getContext().createReference(null, URI.create(newDatasetURL), URI.create(newDatasetInfoURL), null);
+		newEntry.setGraphType(GraphType.PipelineResult);
 		newEntry.setResourceType(ResourceType.InformationResource);
 		String newEntryURI = newEntry.getEntryURI().toString();
 		Graph newEntryGraph = newEntry.getGraph();

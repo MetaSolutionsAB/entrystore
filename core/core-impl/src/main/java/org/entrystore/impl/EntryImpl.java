@@ -429,6 +429,8 @@ public class EntryImpl implements Entry {
 			return GraphType.Group;
 		} else if (bt.equals(RepositoryProperties.Pipeline)) {
 			return GraphType.Pipeline;
+		} else if (bt.equals(RepositoryProperties.PipelineResult)) {
+			return GraphType.PipelineResult;
 		} else if (bt.equals(RepositoryProperties.String)) {
 			return GraphType.String;
 		} else if (bt.equals(RepositoryProperties.Graph)) {
@@ -1118,9 +1120,12 @@ public class EntryImpl implements Entry {
 		case Pipeline:
 			rc.add(resURI, RDF.TYPE, RepositoryProperties.Pipeline, entryURI);
 			break;
+		case PipelineResult:
+			rc.add(resURI, RDF.TYPE, RepositoryProperties.PipelineResult, entryURI);
+			break;
 		case String:
 			rc.add(resURI, RDF.TYPE, RepositoryProperties.String, entryURI); 
-			break; 
+			break;
 		case Graph:
 			rc.add(resURI, RDF.TYPE, RepositoryProperties.Graph, entryURI);
 		}
@@ -1130,7 +1135,7 @@ public class EntryImpl implements Entry {
 
 	public void setResourceType(ResourceType representType) {
 		checkAdministerRights();
-		if (this.repType != representType && this.locType == EntryType.Local && (this.resourceType != GraphType.None && this.resourceType != GraphType.Pipeline)) {
+		if (this.repType != representType && this.locType == EntryType.Local && (this.resourceType != GraphType.None && this.resourceType != GraphType.Pipeline && this.resourceType != GraphType.PipelineResult)) {
 			throw new org.entrystore.repository.RepositoryException("Cannot change the representationtype of a local and / or builtin resource");
 		}
 		try {

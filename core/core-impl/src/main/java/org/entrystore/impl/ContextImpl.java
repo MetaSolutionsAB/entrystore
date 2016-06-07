@@ -502,6 +502,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 		switch (newEntry.getGraphType()) {
 		case None:
+		case PipelineResult:
 			if (newEntry.getEntryType() == EntryType.Local) {
 				//TODO check Representationtype as well.
 				newEntry.setResource(new DataImpl(newEntry));
