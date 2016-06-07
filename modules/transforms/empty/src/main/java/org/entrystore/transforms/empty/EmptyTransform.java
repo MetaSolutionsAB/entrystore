@@ -1,0 +1,86 @@
+/*
+ * Copyright (c) 2007-2016 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.entrystore.transforms.empty;
+
+import org.entrystore.Data;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.ResourceType;
+import org.entrystore.config.Config;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.util.NS;
+import org.entrystore.transforms.Pipeline;
+import org.entrystore.transforms.Transform;
+import org.entrystore.transforms.TransformParameters;
+import org.openrdf.model.Graph;
+import org.openrdf.model.Statement;
+import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
+import org.openrdf.model.impl.URIImpl;
+import org.restlet.Client;
+import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.data.MediaType;
+import org.restlet.data.Method;
+import org.restlet.data.Protocol;
+import org.restlet.data.Status;
+import org.restlet.representation.InputRepresentation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.InputStream;
+import java.net.URI;
+import java.util.Iterator;
+
+/**
+ * Creates an empty pipeline result that can be further processed by external services.
+ *
+ * @author Hannes Ebner
+ */
+@TransformParameters(type="empty", extensions={})
+public class EmptyTransform extends Transform {
+
+	private static Logger log = LoggerFactory.getLogger(EmptyTransform.class);
+
+	@Override
+	public Object transform(Pipeline pipeline, Entry sourceEntry) {
+		String pipelineURI = pipeline.getEntry().getEntryURI().toString();
+		String sourceURI = sourceEntry.getEntryURI().toString();
+
+		Entry newEntry = pipeline.getEntry().getContext().createResource(null, GraphType.PipelineResult, ResourceType.InformationResource, null);
+		String newEntryURI = newEntry.getEntryURI().toString();
+		Graph newEntryGraph = newEntry.getGraph();
+		newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipeline, new URIImpl(pipelineURI));
+		newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipelineData, new URIImpl(sourceURI));
+		newEntry.setGraph(newEntryGraph);
+
+		Graph pipelineMd = pipeline.getEntry().getMetadataGraph();
+		Graph pipelineResultMd = new LinkedHashModel();
+		Iterator<Statement> titles = pipelineMd.match(null, new URIImpl(NS.dcterms + "title"), null);
+		while (titles.hasNext()) {
+			Statement titleStmnt = titles.next();
+			pipelineResultMd.add(new URIImpl(newEntry.getResourceURI().toString()), titleStmnt.getPredicate(), titleStmnt.getObject());
+		}
+		if (!pipelineResultMd.isEmpty()) {
+			newEntry.getLocalMetadata().setGraph(pipelineResultMd);
+		}
+
+		return newEntry;
+	}
+
+}
