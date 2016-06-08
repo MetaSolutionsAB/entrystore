@@ -25,6 +25,7 @@ import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.Transform;
+import org.entrystore.transforms.TransformException;
 import org.entrystore.transforms.TransformParameters;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.URIImpl;
@@ -54,6 +55,9 @@ public class CSV2RowStoreTransform extends Transform {
 
 	@Override
 	public Object transform(Pipeline pipeline, Entry sourceEntry) {
+		if (sourceEntry == null) {
+			throw new IllegalStateException("CSV2RowStoreTransform requires a sourceEntry");
+		}
         InputStream data = ((Data) sourceEntry.getResource()).getData();
 		String pipelineURI = pipeline.getEntry().getEntryURI().toString();
 		String sourceURI = sourceEntry.getEntryURI().toString();

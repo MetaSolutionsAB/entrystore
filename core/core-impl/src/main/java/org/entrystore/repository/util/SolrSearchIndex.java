@@ -277,6 +277,12 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.addField("acl.resource.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
 		doc.addField("acl.resource.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteResource));
 
+		//Status
+		URI status = entry.getStatus();
+		if (status != null) {
+			doc.setField("status", status.toString());
+		}
+
 		// titles
 		Map<String, String> titles = EntryUtil.getTitles(entry);
 		if (titles != null && titles.size() > 0) {

@@ -84,7 +84,7 @@ public class EntryImpl implements Entry {
 	protected volatile URI creator;
 	//protected Set<java.net.URI> referredIn = new HashSet<java.net.URI>();
 	protected volatile Set<URI> contributors = new HashSet<URI>();
-	protected volatile String mimeType;
+	protected volatile java.net.URI status;
 
 	Log log = LogFactory.getLog(EntryImpl.class);
 	private volatile Set<java.net.URI> administerPrincipals;
@@ -284,7 +284,7 @@ public class EntryImpl implements Entry {
 		String format = null;
 		long fileSize = -1;
 		String filename = null;
-		String mimeType = null;
+		URI status = null;
 		boolean invRelations = false;
 
 		RepositoryConnection rc = null;
@@ -395,7 +395,6 @@ public class EntryImpl implements Entry {
 		this.format = format;
 		this.fileSize = fileSize;
 		this.filename = filename;
-		this.mimeType = mimeType;
 		this.invRelations = invRelations;
 
 		return true;
@@ -1402,6 +1401,7 @@ public class EntryImpl implements Entry {
 					writeResourcePrincipals = null;
 					readOrWrite = null;
 					format = null;
+					status = null;
 
 					// we reload the internal cache
 					loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
@@ -1628,6 +1628,24 @@ public class EntryImpl implements Entry {
 		ValueFactory vf = this.repository.getValueFactory();		
 		if (replaceStatement(resURI, RepositoryProperties.fileSize, vf.createLiteral(size))) {
 			this.fileSize = size;
+		}
+	}
+	public java.net.URI getStatus() {
+		if (this.status == null) {
+			// the mime type in the local MD overwrites the mime type in the entry graph
+			Statement st = getStatement(entryURI, RepositoryProperties.status, null);
+			if (st != null) {
+				this.status = java.net.URI.create(st.getObject().stringValue());
+			}
+		}
+		return this.status;
+	}
+
+	public void setStatus(java.net.URI newStatus) {
+		checkAdministerRights();
+		ValueFactory vf = this.repository.getValueFactory();
+		if (replaceStatement(entryURI, RepositoryProperties.status, vf.createURI(newStatus.toString()))) {
+			this.status = newStatus;
 		}
 	}
 

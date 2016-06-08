@@ -60,13 +60,16 @@ public class EmptyTransform extends Transform {
 	@Override
 	public Object transform(Pipeline pipeline, Entry sourceEntry) {
 		String pipelineURI = pipeline.getEntry().getEntryURI().toString();
-		String sourceURI = sourceEntry.getEntryURI().toString();
 
 		Entry newEntry = pipeline.getEntry().getContext().createResource(null, GraphType.PipelineResult, ResourceType.InformationResource, null);
+		newEntry.setStatus(java.net.URI.create(RepositoryProperties.Pending.toString()));
 		String newEntryURI = newEntry.getEntryURI().toString();
 		Graph newEntryGraph = newEntry.getGraph();
 		newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipeline, new URIImpl(pipelineURI));
-		newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipelineData, new URIImpl(sourceURI));
+		if (sourceEntry != null) {
+			String sourceURI = sourceEntry.getEntryURI().toString();
+			newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipelineData, new URIImpl(sourceURI));
+		}
 		newEntry.setGraph(newEntryGraph);
 
 		Graph pipelineMd = pipeline.getEntry().getMetadataGraph();
@@ -82,5 +85,4 @@ public class EmptyTransform extends Transform {
 
 		return newEntry;
 	}
-
 }

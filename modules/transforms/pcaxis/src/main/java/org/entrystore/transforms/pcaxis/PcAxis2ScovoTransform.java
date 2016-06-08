@@ -43,7 +43,11 @@ public class PcAxis2ScovoTransform extends Transform {
 	private static Logger log = LoggerFactory.getLogger(PcAxis2ScovoTransform.class);
 
 	public Object transform(Pipeline pipeline, Entry sourceEntry) {
-        String sourceMimeType = sourceEntry.getMimetype();
+		if (sourceEntry == null) {
+			throw new IllegalStateException("PcAxis2ScovoTransform requires a sourceEntry");
+		}
+
+		String sourceMimeType = sourceEntry.getMimetype();
         InputStream data = ((Data) sourceEntry.getResource()).getData();
 
 		String baseURI = getArguments().get("baseuri");
