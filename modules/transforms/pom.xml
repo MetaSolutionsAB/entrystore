@@ -19,6 +19,7 @@
 		<module>tabular</module>
 		<module>pcaxis</module>
 		<module>rowstore</module>
+		<module>empty</module>
 	</modules>
 
 </project>

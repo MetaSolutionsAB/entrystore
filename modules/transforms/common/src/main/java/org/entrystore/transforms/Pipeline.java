@@ -158,6 +158,9 @@ public class Pipeline {
 
 	public Set<Entry> run(Entry sourceEntry, java.net.URI listURI) throws TransformException {
 		//Get the data
+		if (tsteps.size() == 0) {
+			throw new IllegalStateException("Pipeline has no recognizable transforms.");
+		}
 		Transform first = tsteps.get(0);
 		Object result = first.transform(this, sourceEntry);
 		for (int idx = 1; idx < tsteps.size(); idx++) {

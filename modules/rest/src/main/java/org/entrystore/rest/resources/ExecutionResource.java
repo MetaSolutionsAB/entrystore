@@ -84,13 +84,15 @@ public class ExecutionResource extends BaseResource {
 		}
 
 		String pipeline;
-		String source;
+		String source = null;
 //		String destination;
 //		boolean async = false;
 
 		try {
 			pipeline = request.getString("pipeline"); // Pipeline Entry URI
-			source = request.getString("source"); // Data source Entry URI
+			if (request.has("source")) {
+				source = request.getString("source"); // Data source Entry URI
+			}
 //			destination = request.getString("destination"); // Destination Entry URI
 //			async = "async".equalsIgnoreCase(request.getString("async")); // sync is default
 		} catch (JSONException e) {
@@ -98,16 +100,22 @@ public class ExecutionResource extends BaseResource {
 			return;
 		}
 
-		// Parameters pipeline and source are required
-		if (pipeline == null || source == null) {
+		// Parameter pipeline is required
+		if (pipeline == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
 
 		String contextResUri = context.getEntry().getResourceURI().toString();
 
-		// Pipeline and source have to be located in the same context
-		if (!pipeline.startsWith(contextResUri) || !source.startsWith(contextResUri)) {
+		// Pipeline have to be located in the same context
+		if (!pipeline.startsWith(contextResUri)) {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			return;
+		}
+
+		// Source (if provided= have to be located in the same context
+		if ( source != null && !source.startsWith(contextResUri)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
@@ -116,29 +124,41 @@ public class ExecutionResource extends BaseResource {
 			// Pipeline execution requires write-rights on context's resource
 			getPM().checkAuthenticatedUserAuthorized(context.getEntry(), AccessProperty.WriteResource);
 
-			// Load pipeline and source entries from context
+			// Load pipeline entry from context
 			Entry pipelineEntry = context.getByEntryURI(URI.create(pipeline));
-			Entry sourceEntry = context.getByEntryURI(URI.create(source));
-			if (pipelineEntry == null || sourceEntry == null) {
+			if (pipelineEntry == null) {
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				return;
 			}
-			Set<URI> lists = sourceEntry.getReferringListsInSameContext();
+			// Load source entry from context
+			Entry sourceEntry = null;
 			URI listURI = null;
-			if (lists.size() == 1) {
-				listURI = lists.iterator().next();
+			String sourceMimeType = null;
+			Data data = null;
+			if (source != null) {
+				sourceEntry = context.getByEntryURI(URI.create(source));
+				if (sourceEntry == null) {
+					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+					return;
+				}
+				Set<URI> lists = sourceEntry.getReferringListsInSameContext();
+				if (lists.size() == 1) {
+					listURI = lists.iterator().next();
+				}
+				sourceMimeType = sourceEntry.getMimetype();
+				data = (Data) sourceEntry.getResource();
+				if (!EntryType.Local.equals(sourceEntry.getEntryType()) ||
+						!ResourceType.InformationResource.equals(sourceEntry.getResourceType()) ||
+						sourceMimeType == null ||
+						data == null) {
+					getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
+					return;
+				}
 			}
-			
+
 			// TODO add support for non-local resources
 
-			String sourceMimeType = sourceEntry.getMimetype();
-			Data data = (Data) sourceEntry.getResource();
-
-			if (!GraphType.Pipeline.equals(pipelineEntry.getGraphType()) ||
-					!EntryType.Local.equals(sourceEntry.getEntryType()) ||
-					!ResourceType.InformationResource.equals(sourceEntry.getResourceType()) ||
-					sourceMimeType == null ||
-					data == null) {
+			if (!GraphType.Pipeline.equals(pipelineEntry.getGraphType())) {
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 				return;
 			}

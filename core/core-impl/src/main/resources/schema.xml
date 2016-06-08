@@ -234,7 +234,9 @@ lexicographic ordering isn't equal to the numeric ordering) -->
 
         <field name="email" type="string" indexed="true" multiValued="true"/>
 
-		<!-- title needs to be single-valued in order be sortable, desc and tag can be text and multi value -->
+        <field name="status" type="string" indexed="true" multiValued="false"/>
+
+        <!-- title needs to be single-valued in order be sortable, desc and tag can be text and multi value -->
 		<dynamicField name="title.*" type="text_ngram" indexed="true" multiValued="false"/>
         <dynamicField name="description.*" type="text" indexed="true" multiValued="true"/>
         <dynamicField name="tag.literal.*" type="text_ngram" indexed="true" multiValued="true"/>

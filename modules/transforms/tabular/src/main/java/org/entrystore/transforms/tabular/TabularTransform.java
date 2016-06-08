@@ -62,7 +62,11 @@ public class TabularTransform extends Transform {
 	private static Logger log = LoggerFactory.getLogger(TabularTransform.class);
 
 	public Object transform(Pipeline pipeline, Entry sourceEntry) {
-        // TODO add support for non-local resources
+		if (sourceEntry == null) {
+			throw new IllegalStateException("TabularTransform requires a sourceEntry");
+		}
+
+		// TODO add support for non-local resources
         String mimetype = sourceEntry.getMimetype();
         InputStream data = ((Data) sourceEntry.getResource()).getData();
 

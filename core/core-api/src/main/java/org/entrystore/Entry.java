@@ -284,5 +284,9 @@ public interface Entry {
 
 	void setResourceURI(URI resourceURI);
 
-	void setExternalMetadataURI(URI externalMetadataURI);	
+	void setExternalMetadataURI(URI externalMetadataURI);
+
+	URI getStatus();
+
+	void setStatus(URI newStatus);
 }
