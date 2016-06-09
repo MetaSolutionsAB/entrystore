@@ -921,10 +921,11 @@ public class ResourceResource extends BaseResource {
 	 * Set a resource to an entry.
 	 */
 	private void modifyResource(MediaType mediaType) throws AuthorizationException {
+		GraphType gt = entry.getGraphType();
 		/*
 		 * List and Group
 		 */
-		if (GraphType.List.equals(entry.getGraphType()) || GraphType.Group.equals(entry.getGraphType())) {
+		if (GraphType.List.equals(gt) || GraphType.Group.equals(gt)) {
 			String requestBody = null;
 			try {
 				requestBody = getRequest().getEntity().getText();
@@ -981,7 +982,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * Data
 		 */
-		if (entry.getGraphType() == GraphType.None){
+		if (GraphType.None.equals(gt)){
 			boolean textarea = this.parameters.keySet().contains("textarea");
 			String error = null;
 
@@ -1070,7 +1071,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** String  ***/
-		if(entry.getGraphType() == GraphType.String) {
+		if(GraphType.String.equals(gt)) {
 			try {
 				StringResource stringResource = (StringResource)entry.getResource(); 
 				stringResource.setString(getRequest().getEntity().getText());
@@ -1080,8 +1081,8 @@ public class ResourceResource extends BaseResource {
 			}
 		}
 		
-		/*** Graph ***/
-		if (GraphType.Graph.equals(entry.getGraphType())) {
+		/*** Graph and Pipeline ***/
+		if (GraphType.Graph.equals(gt) || GraphType.Pipeline.equals(gt)) {
 			RDFResource graphResource = (RDFResource) entry.getResource(); 
 			if (graphResource != null) {
 				Graph graph = null;
@@ -1104,7 +1105,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** User ***/
-		if (entry.getGraphType() == GraphType.User) {
+		if (GraphType.User.equals(gt)) {
 			JSONObject entityJSON = null; 
 			try {
 				entityJSON = new JSONObject(getRequest().getEntity().getText());
