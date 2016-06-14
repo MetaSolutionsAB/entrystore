@@ -548,6 +548,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
 
 		boolean reindex = "on".equalsIgnoreCase(config.getString(Settings.SOLR_REINDEX_ON_STARTUP, "off"));
+
+		// Check whether memory store is configured without persistence and enforce
+		// reindexing to avoid inconsistencies between memory store and Solr index
+		if (!reindex && "memory".equalsIgnoreCase(config.getString(Settings.STORE_TYPE)) &&	!config.containsKey(Settings.STORE_PATH)) {
+			reindex = true;
+		}
+		
 		String solrURL = config.getString(Settings.SOLR_URL);
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at " + solrURL);
