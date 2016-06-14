@@ -208,7 +208,6 @@ public class ContextResource extends BaseResource {
 			if (entry != null) {
 				ResourceType rt = getResourceType(parameters.get("informationresource"));
 				entry.setResourceType(rt);
-
 				
 				String template = parameters.get("template");
 				if (template != null) {
@@ -261,10 +260,9 @@ public class ContextResource extends BaseResource {
 					}
 				}
 			}
-			
-			// Error: 
+
 			if (entry == null) {
-				log.debug("Can not create an Entry with that JSON");
+				log.debug("Cannot create an entry with provided JSON");
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(JSONErrorMessages.errorCantCreateEntry, MediaType.APPLICATION_JSON);
 			} else {
@@ -284,6 +282,10 @@ public class ContextResource extends BaseResource {
 	 * @return the new created entry object.
 	 */
 	private Entry createLinkReferenceEntry(Entry entry) {
+		if (isGraphTypeForbidden()) {
+			return null;
+		}
+
 		try {
 			if (parameters.get("resource") != null
 					&& "linkreference".equalsIgnoreCase(parameters.get("entrytype"))) {
@@ -336,6 +338,10 @@ public class ContextResource extends BaseResource {
 	 * @return the new created entry
 	 */
 	private Entry createReferenceEntry(Entry entry) {
+		if (isGraphTypeForbidden()) {
+			return null;
+		}
+
 		try {
 			if ((parameters.get("resource") != null) &&
 					(parameters.get("cached-external-metadata") != null) &&
@@ -435,7 +441,11 @@ public class ContextResource extends BaseResource {
 	 * @param entry a reference to a entry
 	 * @return the new created entry
 	 */
-	private Entry createLocalEntry(Entry entry) {	
+	private Entry createLocalEntry(Entry entry) {
+		if (isGraphTypeForbidden()) {
+			return null;
+		}
+
 		URI listURI = null;
 		if (parameters.containsKey("list")) {
 			try {
@@ -572,6 +582,10 @@ public class ContextResource extends BaseResource {
 	 * @return the new created entry
 	 */
 	private Entry createLinkEntry(Entry entry) {
+		if (isGraphTypeForbidden()) {
+			return null;
+		}
+
 		//check the request
 		URI resourceURI = null;
 		try {
@@ -581,7 +595,7 @@ public class ContextResource extends BaseResource {
 			return null;
 		}
 
-		if(parameters.containsKey("list")) {
+		if (parameters.containsKey("list")) {
 			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("list")));
 		} else {
 			entry = context.createLink(parameters.get("id"), resourceURI, null);
@@ -709,6 +723,21 @@ public class ContextResource extends BaseResource {
 		} catch(AuthorizationException e) {
 			unauthorizedDELETE();
 		}
+	}
+
+	/**
+	 * Returns false if the Graph Type provided in the parameters
+	 * cannot be used for manually created entries
+	 *
+	 * @return True if Graph Type is forbidden/blacklisted.
+	 */
+	private boolean isGraphTypeForbidden() {
+		// Pipeline results may only be created by Pipelines
+		if (GraphType.PipelineResult.equals(getGraphType(parameters.get("graphtype")))) {
+			log.debug("Pipeline results may only be created by Pipelines");
+			return true;
+		}
+		return false;
 	}
 
 }
