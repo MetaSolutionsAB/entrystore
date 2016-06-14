@@ -74,10 +74,18 @@ public class EmptyTransform extends Transform {
 
 		Graph pipelineMd = pipeline.getEntry().getMetadataGraph();
 		Graph pipelineResultMd = new LinkedHashModel();
+
+		//Copy over title, to make presentation nicer from the start (already when pending)
 		Iterator<Statement> titles = pipelineMd.match(null, new URIImpl(NS.dcterms + "title"), null);
 		while (titles.hasNext()) {
 			Statement titleStmnt = titles.next();
 			pipelineResultMd.add(new URIImpl(newEntry.getResourceURI().toString()), titleStmnt.getPredicate(), titleStmnt.getObject());
+		}
+		//Copy over tags, to make it easier to find specific pipelineresults
+		Iterator<Statement> tags = pipelineMd.match(null, new URIImpl(NS.dcterms + "subject"), null);
+		while (tags.hasNext()) {
+			Statement tagStmnt = tags.next();
+			pipelineResultMd.add(new URIImpl(newEntry.getResourceURI().toString()), tagStmnt.getPredicate(), tagStmnt.getObject());
 		}
 		if (!pipelineResultMd.isEmpty()) {
 			newEntry.getLocalMetadata().setGraph(pipelineResultMd);
