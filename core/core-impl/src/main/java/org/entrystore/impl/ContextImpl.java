@@ -480,7 +480,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
 					return newEntry;
 				} catch (Exception e) {
-					e.printStackTrace();
 					rc.rollback();
 					if (newEntry != null) {
 						newEntry.refreshFromRepository(rc);
@@ -852,7 +851,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			checkAccess(removeEntry, AccessProperty.Administer);
 
 
-			if(removeEntry.resourceType == GraphType.String) {
+			if (removeEntry.graphType == GraphType.String) {
 				// removes the relation from the source entry. 
 				removeEntry.getLocalMetadata().setGraph(new GraphImpl()); 
 			}
