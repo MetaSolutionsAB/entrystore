@@ -1436,7 +1436,7 @@ public class EntryImpl implements Entry {
                 && !predicate.equals(RepositoryProperties.Contributor)
                 && !predicate.equals(RepositoryProperties.Read)
                 && !predicate.equals(RepositoryProperties.Write)
-                && !predicate.equals(RepositoryProperties.Pipeline)
+//                && !predicate.equals(RepositoryProperties.Pipeline)
                 && !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
             Value obj = statement.getObject();
             org.openrdf.model.Resource subj = statement.getSubject();
