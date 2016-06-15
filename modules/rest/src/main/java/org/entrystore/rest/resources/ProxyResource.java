@@ -119,7 +119,6 @@ public class ProxyResource extends BaseResource {
 		representation = null;
 		if (clientResponse != null) {
 			representation = clientResponse.getEntity();
-			getResponse().setStatus(clientResponse.getStatus());
 			getResponse().setOnSent(new Uniform() {
 				public void handle(Request request, Response response) {
 					try {
@@ -131,6 +130,13 @@ public class ProxyResource extends BaseResource {
 					}
 				}
 			});
+			if (Status.isConnectorError(clientResponse.getStatus().getCode())) {
+				log.debug("Proxy request to " + extResourceURL + " timed out");
+				getResponse().setStatus(Status.SERVER_ERROR_GATEWAY_TIMEOUT);
+				return null;
+			} else {
+				getResponse().setStatus(clientResponse.getStatus());
+			}
 		}
 
 		if (representation != null && representation.isAvailable()) {
@@ -225,10 +231,10 @@ public class ProxyResource extends BaseResource {
 		if (client == null) {
 			client = new Client(Protocol.HTTP);
 			client.setContext(new Context());
-	        client.getContext().getParameters().add("connectTimeout", "10000");
-	        client.getContext().getParameters().add("readTimeout", "10000");
-			client.getContext().getParameters().set("socketTimeout", "10000");
-			client.getContext().getParameters().set("socketConnectTimeoutMs", "10000");
+			client.getContext().getParameters().set("connectTimeout", "30000");
+			client.getContext().getParameters().set("socketConnectTimeoutMs", "30000");
+			client.getContext().getParameters().set("socketTimeout", "60000");
+			client.getContext().getParameters().set("readTimeout", "60000");
 	        log.info("Initialized HTTP client for proxy request");
 		}
 
@@ -246,9 +252,12 @@ public class ProxyResource extends BaseResource {
 			}
 		}
 
-		if (response.getEntity().getLocationRef() != null && response.getEntity().getLocationRef().getBaseRef() == null) {
-			response.getEntity().getLocationRef().setBaseRef(url.substring(0, url.lastIndexOf("/")+1));
-		}			
+		if (response.getEntity() != null) {
+			if (response.getEntity().getLocationRef() != null && response.getEntity().getLocationRef().getBaseRef() == null) {
+				response.getEntity().getLocationRef().setBaseRef(url.substring(0, url.lastIndexOf("/") + 1));
+			}
+		}
+
 		return response;
 	}
 	
