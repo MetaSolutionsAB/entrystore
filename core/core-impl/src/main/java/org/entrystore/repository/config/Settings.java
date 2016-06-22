@@ -67,6 +67,7 @@ public class Settings {
 	public static String STORE_ENDPOINT_UPDATE = "entrystore.repository.store.endpoint-update";
 	public static String STORE_INDEXES = "entrystore.repository.store.indexes";
 	public static String STORE_TYPE = "entrystore.repository.store.type";
+	public static String STORE_INIT_WITH_TEST_DATA = "entrystore.repository.store.init-with-test-data";
 
 	public static String STOREJS_JS = "entrystore.repository.storejs.js";
 	public static String STOREJS_CSS = "entrystore.repository.storejs.css";

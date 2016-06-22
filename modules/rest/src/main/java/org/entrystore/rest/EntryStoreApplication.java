@@ -182,12 +182,20 @@ public class EntryStoreApplication extends Application {
 			cm = rm.getContextManager();
 			pm = rm.getPrincipalManager();
 
-			String storeType = config.getString(Settings.STORE_TYPE, null); 
-			if (storeType == null || storeType.equals("memory")) {
-				// Create contexts, entries, etc for testing purposes
-				TestSuite.initDisneySuite(rm);
-				TestSuite.addEntriesInDisneySuite(rm);
-				// TestSuite.initCourseSuite(rm);
+			if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
+				// Check for existence of Donald
+				Entry donald = rm.getPrincipalManager().getPrincipalEntry("Donald");
+				// We only initialize of test suite has not been loaded before,
+				// otherwise we end up with duplicates (if store is persisted)
+				if (donald == null) {
+					log.info("Initializing store with test data");
+					// Create contexts, entries, etc for testing purposes
+					TestSuite.initDisneySuite(rm);
+					TestSuite.addEntriesInDisneySuite(rm);
+					// TestSuite.initCourseSuite(rm);
+				} else {
+					log.warn("Test data is already present, not loading it again");
+				}
 			}
 
 			// Load and start harvesters
