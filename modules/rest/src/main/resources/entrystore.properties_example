@@ -11,6 +11,9 @@ entrystore.repository.store.indexes=cspo,posc
 ## if type=sparql: entrystore.repository.store.endpoint-query=Query URL of SPARQL repository
 ## if type=sparql: entrystore.repository.store.endpoint-update=Update URL of SPARQL repository
 
+## Populate an empty repository with test data (from TestSuite)
+# entrystore.repository.store.init-with-test-data=on|off (default: off)
+
 ## Data folder
 entrystore.data.folder=/srv/entrystore/files/
 
