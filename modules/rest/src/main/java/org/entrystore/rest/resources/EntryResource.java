@@ -81,7 +81,7 @@ public class EntryResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		supportedMediaTypes.add(MediaType.TEXT_HTML);
+		//supportedMediaTypes.add(MediaType.TEXT_HTML);
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
@@ -208,9 +208,9 @@ public class EntryResource extends BaseResource {
 	private Representation getEntry(MediaType mediaType) {
 		String serializedGraph = null;
 		Graph graph = entry.getGraph();
-		if (MediaType.TEXT_HTML.equals(mediaType)) {
+		/* if (MediaType.TEXT_HTML.equals(mediaType)) {
 			return getEntryInHTML();
-		} else if (MediaType.APPLICATION_JSON.equals(mediaType)) {
+		} else */ if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 			return getEntryInJSON();
 		} else {
 			serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
@@ -225,6 +225,7 @@ public class EntryResource extends BaseResource {
 		return new EmptyRepresentation();
 	}
 
+	/* Temporarily disabled code, see ENTRYSTORE-435 for details
 	private Representation getEntryInHTML() {
 		try {	
 			if (parameters != null) {
@@ -248,7 +249,7 @@ public class EntryResource extends BaseResource {
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 	}
-	
+	*/
 	
 	/**
 	 * Gets the entry JSON
