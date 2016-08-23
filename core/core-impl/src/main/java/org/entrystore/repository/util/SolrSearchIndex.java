@@ -16,18 +16,6 @@
 
 package org.entrystore.repository.util;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -39,28 +27,38 @@ import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
-import org.entrystore.SearchIndex;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.repository.RepositoryManager;
 import org.entrystore.ResourceType;
-import org.entrystore.repository.config.Settings;
+import org.entrystore.SearchIndex;
 import org.entrystore.impl.LocalMetadataWrapper;
-import org.entrystore.AuthorizationException;
+import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.config.Settings;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 
 /**
@@ -232,13 +230,13 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.setField("context", entry.getContext().getEntry().getResourceURI().toString());
 
 		// RDF type
-		String rdfTypeE = EntryUtil.getResource(entry.getGraph(), resourceURI, RDF.TYPE);
-		if (rdfTypeE != null) {
-			doc.addField("rdfType", rdfTypeE);
+		Iterator<Statement> rdfTypeE = entry.getGraph().match(new URIImpl(resourceURI.toString()), RDF.TYPE, null);
+		while (rdfTypeE.hasNext()) {
+			doc.addField("rdfType", rdfTypeE.next().getObject().stringValue());
 		}
-		String rdfTypeM = EntryUtil.getResource(mdGraph, resourceURI, RDF.TYPE);
-		if (rdfTypeM != null) {
-			doc.addField("rdfType", rdfTypeM);
+		Iterator<Statement> rdfTypeM = mdGraph.match(new URIImpl(resourceURI.toString()), RDF.TYPE, null);
+		while (rdfTypeM.hasNext()) {
+			doc.addField("rdfType", rdfTypeM.next().getObject().stringValue());
 		}
 
 		// creation date
