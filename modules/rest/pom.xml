@@ -7,12 +7,12 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-modules</artifactId>
-		<version>4.3</version>
+		<version>4.4-SNAPSHOT</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-rest</artifactId>
 	<packaging>war</packaging>
-	<version>4.3</version>
+	<version>4.4-SNAPSHOT</version>
 	<name>EntryStore REST</name>
 	
 	<build>
