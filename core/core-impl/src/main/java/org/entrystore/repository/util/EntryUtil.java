@@ -17,11 +17,7 @@
 package org.entrystore.repository.util;
 
 import com.google.common.collect.Multimap;
-import org.entrystore.AuthorizationException;
-import org.entrystore.Context;
-import org.entrystore.Entry;
-import org.entrystore.GraphType;
-import org.entrystore.Resource;
+import org.entrystore.*;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
 import org.openrdf.model.Graph;
@@ -30,20 +26,17 @@ import org.openrdf.model.Model;
 import org.openrdf.model.Statement;
 import org.openrdf.model.URI;
 import org.openrdf.model.Value;
+import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.impl.URIImpl;
+import org.openrdf.model.impl.ValueFactoryBase;
+import org.openrdf.model.impl.ValueFactoryImpl;
 import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 
 /**
@@ -474,32 +467,15 @@ public class EntryUtil {
 	 *         and dc:title
 	 */
 	public static Map<String, String> getTitles(Entry entry) {
-		Graph graph = null;
-		try {
-			graph = entry.getMetadataGraph();
-		} catch (AuthorizationException ae) {
-			log.debug("AuthorizationException: " + ae.getMessage());
-		}
-		
-		if (graph != null) {
-			URI resourceURI = new URIImpl(entry.getResourceURI().toString());
-			Set<URI> titlePredicates = new HashSet<URI>();
-			titlePredicates.add(new URIImpl(NS.dcterms + "title"));
-			titlePredicates.add(new URIImpl(NS.dc + "title"));
-			Map<String, String> result = new HashMap<String, String>();
-			for (URI titlePred : titlePredicates) {
-				Iterator<Statement> dctermsTitles = graph.match(resourceURI, titlePred, null);
-				while (dctermsTitles.hasNext()) {
-					Value value = dctermsTitles.next().getObject();
-					if (value instanceof Literal) {
-						Literal lit = (Literal) value;
-						result.put(lit.stringValue(), lit.getLanguage());
-					}
-				}
-			}
-			return result;
-		}
-		return null;
+		ValueFactory vf = new ValueFactoryImpl();
+		Set<URI> titlePredicates = new HashSet<URI>();
+		titlePredicates.add(new URIImpl(NS.dcterms + "title"));
+		titlePredicates.add(new URIImpl(NS.dc + "title"));
+		titlePredicates.add(new URIImpl(NS.skos + "prefLabel"));
+		titlePredicates.add(new URIImpl(NS.skos + "altLabel"));
+		titlePredicates.add(new URIImpl(NS.skos + "hiddenLabel"));
+		titlePredicates.add(new URIImpl(NS.rdfs + "label"));
+		return getLiteralValues(entry, titlePredicates);
 	}
 	
 	/**
@@ -512,78 +488,79 @@ public class EntryUtil {
 	 *         and dc:description
 	 */
 	public static Map<String, String> getDescriptions(Entry entry) {
-		Graph graph = null;
-		try {
-			graph = entry.getMetadataGraph();
-		} catch (AuthorizationException ae) {
-			log.debug("AuthorizationException: " + ae.getMessage());
-		}
-		
-		if (graph != null) {
-			URI resourceURI = new URIImpl(entry.getResourceURI().toString());
-			Set<URI> descPreds = new HashSet<URI>();
-			descPreds.add(graph.getValueFactory().createURI(NS.dcterms, "description"));
-			descPreds.add(graph.getValueFactory().createURI(NS.dc, "description"));
-			Map<String, String> result = new HashMap<String, String>();
-			for (URI titlePred : descPreds) {
-				Iterator<Statement> descriptions = graph.match(resourceURI, titlePred, null);
-				while (descriptions.hasNext()) {
-					Value value = descriptions.next().getObject();
-					if (value instanceof Literal) {
-						Literal lit = (Literal) value;
-						result.put(lit.stringValue(), lit.getLanguage());
-					} else if (value instanceof org.openrdf.model.Resource) {
-						Iterator<Statement> descriptions2 = graph.match((org.openrdf.model.Resource) value, RDF.VALUE, null);
-						if (descriptions2.hasNext()) {
-							Value value2 = descriptions2.next().getObject();
-							if (value2 instanceof Literal) {
-								Literal lit2 = (Literal) value2;
-								result.put(lit2.stringValue(), lit2.getLanguage());
-							}
-						}
-					}
-				}
-			}
-			return result;
-		}
-		return null;
+		ValueFactory vf = new ValueFactoryImpl();
+		Set<URI> descPreds = new HashSet<URI>();
+		descPreds.add(vf.createURI(NS.dcterms, "description"));
+		descPreds.add(vf.createURI(NS.dc, "description"));
+		return getLiteralValues(entry, descPreds);
 	}
-	
+
+
 	/**
-	 * Retrieves all keywords and subjects (dc and dcterms:subject, lom:keyword)
-	 * from the metadata of an Entry. Includes cached external metadata if it
-	 * exists.
-	 * 
-	 * @param entry
-	 *            Entry from where the keywords should be returned.
-	 * @return Returns all key/value (keyword/language) pairs for
-	 *         dcterms:description and dc:description
+	 * Retrieves all literals of subjects, tags and keywords from the metadata of an Entry.
+	 * Includes cached external metadata if it exists.
+	 *
+	 * @param entry Entry from where the keywords should be returned.
+	 * @return Returns all matching literal-language pairs.
 	 */
-	public static Map<String, String> getKeywords(Entry entry) {
+	public static Map<String, String> getTagLiterals(Entry entry) {
+		ValueFactory vf = new ValueFactoryImpl();
+		Set<URI> preds = new HashSet<URI>();
+		preds.add(vf.createURI(NS.dc, "subject"));
+		preds.add(vf.createURI(NS.dcterms, "subject"));
+		preds.add(vf.createURI(NS.dcat, "keyword"));
+		preds.add(vf.createURI(NS.lom, "keyword"));
+		return getLiteralValues(entry, preds);
+	}
+
+	/**
+	 * Retrieves all resource values of subjects, tags and keywords from the metadata of an Entry.
+	 * Includes cached external metadata if it exists.
+	 *
+	 * @param entry Entry from where the keywords should be returned.
+	 * @return Returns all matching literal-language pairs.
+	 */
+	public static List<String> getTagResources(Entry entry) {
+		ValueFactory vf = new ValueFactoryImpl();
+		Set<URI> preds = new HashSet<URI>();
+		preds.add(vf.createURI(NS.dc, "subject"));
+		preds.add(vf.createURI(NS.dcterms, "subject"));
+		return getResourceValues(entry, preds);
+	}
+
+	/**
+	 * Retrieves literals from statements that match a set of predicates.
+	 *
+	 * @param entry Entry from where the metadata graph should be used for matching.
+	 * @param predicates A list of predicates to use for statement matching.
+	 * @return Returns all matching literal-language pairs.
+	 */
+	public static Map<String, String> getLiteralValues(Entry entry, Set<URI> predicates) {
+		if (entry == null || predicates == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
+
 		Graph graph = null;
 		try {
 			graph = entry.getMetadataGraph();
 		} catch (AuthorizationException ae) {
 			log.debug("AuthorizationException: " + ae.getMessage());
 		}
-		
+
 		if (graph != null) {
 			URI resourceURI = new URIImpl(entry.getResourceURI().toString());
-			Set<URI> keywPreds = new HashSet<URI>();
-			keywPreds.add(graph.getValueFactory().createURI(NS.dc, "subject"));
-			keywPreds.add(graph.getValueFactory().createURI(NS.lom, "keyword"));
 			Map<String, String> result = new HashMap<String, String>();
-			for (URI titlePred : keywPreds) {
-				Iterator<Statement> keywords = graph.match(resourceURI, titlePred, null);
-				while (keywords.hasNext()) {
-					Value value = keywords.next().getObject();
+			for (URI pred : predicates) {
+				Iterator<Statement> stmnts = graph.match(resourceURI, pred, null);
+				while (stmnts.hasNext()) {
+					Value value = stmnts.next().getObject();
 					if (value instanceof Literal) {
 						Literal lit = (Literal) value;
 						result.put(lit.stringValue(), lit.getLanguage());
 					} else if (value instanceof org.openrdf.model.Resource) {
-						Iterator<Statement> keywords2 = graph.match((org.openrdf.model.Resource) value, RDF.VALUE, null);
-						if (keywords2.hasNext()) {
-							Value value2 = keywords2.next().getObject();
+						Iterator<Statement> stmnts2 = graph.match((org.openrdf.model.Resource) value, RDF.VALUE, null);
+						if (stmnts2.hasNext()) {
+							Value value2 = stmnts2.next().getObject();
 							if (value2 instanceof Literal) {
 								Literal lit2 = (Literal) value2;
 								result.put(lit2.stringValue(), lit2.getLanguage());
@@ -596,7 +573,44 @@ public class EntryUtil {
 		}
 		return null;
 	}
-	
+
+	/**
+	 * Retrieves resource values from statements that match a set of predicates.
+	 *
+	 * @param entry	Entry from where the metadata graph should be used for matching.
+	 * @predicates A list of predicates to use for statement matching.
+	 * @return Returns a list of URIs.
+	 */
+    public static List<String> getResourceValues(Entry entry, Set<URI> predicates) {
+		if (entry == null || predicates == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
+
+		Graph graph = null;
+        try {
+            graph = entry.getMetadataGraph();
+        } catch (AuthorizationException ae) {
+            log.debug("AuthorizationException: " + ae.getMessage());
+        }
+
+        if (graph != null) {
+            URI resourceURI = new URIImpl(entry.getResourceURI().toString());
+            List<String> result = new ArrayList<>();
+            for (URI pred : predicates) {
+                Iterator<Statement> subjects = graph.match(resourceURI, pred, null);
+                while (subjects.hasNext()) {
+                    Value value = subjects.next().getObject();
+                    if (value instanceof org.openrdf.model.Resource) {
+                        org.openrdf.model.Resource res = (org.openrdf.model.Resource) value;
+                        result.add(res.stringValue());
+                    }
+                }
+            }
+            return result;
+        }
+        return null;
+    }
+
 	/**
 	 * FIXME this does not take entries in deleted folders into consideration 
 	 */
@@ -629,10 +643,10 @@ public class EntryUtil {
 	public static Model traverseAndLoadEntryMetadata(Set<URI> entries, Set<java.net.URI> propertiesToFollow, int level, int depth, Multimap<URI, Integer> visited, Context context, RepositoryManager rm) {
 		Model result = new LinkedHashModel();
 		for (URI r : entries) {
-			if (!r.toString().startsWith(rm.getRepositoryURL().toString())) {
+	/*		if (!r.toString().startsWith(rm.getRepositoryURL().toString())) {
 				log.debug("URI has external prefix, skipping: " + r);
 				continue;
-			}
+			}*/
 			if (visited.containsEntry(r, level)) {
 				log.debug("Skipping <" + r + ">, entry already fetched and traversed on level " + level);
 				continue;
@@ -642,15 +656,30 @@ public class EntryUtil {
 			try {
 				java.net.URI uri = java.net.URI.create(r.toString());
 				Entry fetchedEntry = null;
-				// we expect a resource URI
-				Set<Entry> resEntries = context.getByResourceURI(uri);
-				if (resEntries != null && resEntries.size() > 0) {
-					fetchedEntry = (Entry) resEntries.toArray()[0];
+				ContextManager cm = rm.getContextManager();
+				if (context != null) {
+					//By Resource URI, may be a non-repository URI.
+					Set<Entry> resEntries = context.getByResourceURI(uri);
+					if (resEntries != null && resEntries.size() > 0) {
+						fetchedEntry = (Entry) resEntries.toArray()[0];
+					}
+					//Or by entry URI
+					if (fetchedEntry == null) {
+						// fallback in case the URI is an entry URI
+						fetchedEntry = context.getByEntryURI(uri);
+					}
+				} else {
+					//Check first via repository URIs (includes both resource URI and entry URI)
+					fetchedEntry = cm.getEntry(uri);
+					if (fetchedEntry == null) {
+						// fallback in case we are not referring to repository URIs.
+						Set<Entry> resEntries = cm.getLinks(uri);
+						if (resEntries != null && resEntries.size() > 0) {
+							fetchedEntry = (Entry) resEntries.toArray()[0];
+						}
+					}
 				}
-				if (fetchedEntry == null) {
-					// fallback in case the URI is an entry URI
-					fetchedEntry = context.getByEntryURI(uri);
-				}
+
 				if (fetchedEntry != null) {
 					graph = new LinkedHashModel(fetchedEntry.getMetadataGraph());
 				}

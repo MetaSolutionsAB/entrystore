@@ -16,6 +16,8 @@
 
 package org.entrystore.rest;
 
+import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
+import org.apache.commons.io.FileCleaningTracker;
 import org.entrystore.ContextManager;
 import org.entrystore.Converter;
 import org.entrystore.Entry;
@@ -120,11 +122,9 @@ public class EntryStoreApplication extends Application {
 		getRangeService().setEnabled(false);
 		log.warn("Restlet RangeService deactivated");
 
-		ServletContext sc = (ServletContext) this.getContext().getAttributes().get("org.restlet.ext.ser​vlet.ServletContext");
-		// Alt: sc = (ServletContext) getContext().getServerDispatcher().getContext().getAttributes().get("org.restlet.ext.servlet.ServletContext"); 
-		if (sc != null) {
+		if (getServletContext(getContext()) != null) {
 			// Application created by ServerServlet, try to get RepositoryManager from ServletContext
-			rm = (RepositoryManagerImpl) sc.getAttribute("RepositoryManager");
+			rm = (RepositoryManagerImpl) getServletContext(getContext()).getAttribute("RepositoryManager");
 		}
 	
 		if (rm != null) {
@@ -182,12 +182,20 @@ public class EntryStoreApplication extends Application {
 			cm = rm.getContextManager();
 			pm = rm.getPrincipalManager();
 
-			String storeType = config.getString(Settings.STORE_TYPE, null); 
-			if (storeType == null || storeType.equals("memory")) {
-				// Create contexts, entries, etc for testing purposes
-				TestSuite.initDisneySuite(rm);
-				TestSuite.addEntriesInDisneySuite(rm);
-				// TestSuite.initCourseSuite(rm);
+			if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
+				// Check for existence of Donald
+				Entry donald = rm.getPrincipalManager().getPrincipalEntry("Donald");
+				// We only initialize of test suite has not been loaded before,
+				// otherwise we end up with duplicates (if store is persisted)
+				if (donald == null) {
+					log.info("Initializing store with test data");
+					// Create contexts, entries, etc for testing purposes
+					TestSuite.initDisneySuite(rm);
+					TestSuite.addEntriesInDisneySuite(rm);
+					// TestSuite.initCourseSuite(rm);
+				} else {
+					log.warn("Test data is already present, not loading it again");
+				}
 			}
 
 			// Load and start harvesters
@@ -234,6 +242,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/search", SearchResource.class);
 		router.attach("/sparql", SparqlResource.class);
 		router.attach("/proxy", ProxyResource.class);
+		router.attach("/echo", EchoResource.class);
 		
 		// authentication resources
 		router.attach("/auth/user", UserResource.class);
@@ -245,6 +254,7 @@ public class EntryStoreApplication extends Application {
 		// signup
 		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP, "off"))) {
 			router.attach("/auth/signup", SignupResource.class);
+			router.attach("/auth/signup/whitelist", SignupWhitelistResource.class);
 		}
 
 		// password reset
@@ -458,13 +468,26 @@ public class EntryStoreApplication extends Application {
 		if (rm != null) {
 			rm.shutdown();
 		}
-//		RepositoryManagerImpl repositoryManager = (RepositoryManagerImpl) getContext().getAttributes().get("RepositoryManager");
-//		if (repositoryManager == null) {
-//			rm.shutdown();
-//		} else {
-//			// do cleanup in ServletContextListener
-//		}
+		if (getServletContext(getContext()) != null) {
+			FileCleaningTracker fct = FileCleanerCleanup.getFileCleaningTracker(getServletContext(getContext()));
+			if (fct != null) {
+				log.info("Shutting down file cleaning tracker");
+				fct.exitWhenFinished();
+			}
+		}
 		super.stop();
+	}
+
+	public static ServletContext getServletContext(Context context) {
+		ServletContext sc = null;
+		Context c = context.getServerDispatcher().getContext();
+		if (c != null) {
+			sc = (ServletContext) c.getAttributes().get("org.restlet.ext.servlet.ServletContext");
+		}
+		if (sc == null) {
+			sc = (ServletContext) context.getAttributes().get("org.restlet.ext.servlet.ServletContext");
+		}
+		return sc;
 	}
 
 }

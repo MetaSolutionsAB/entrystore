@@ -58,7 +58,9 @@ public class NS {
 
 	public static String odrs = "http://schema.theodi.org/odrs#";
 
-	private static HashMap<String, String> map;
+    public static String skos = "http://www.w3.org/2004/02/skos/core#";
+
+    private static HashMap<String, String> map;
 
 	static {
 		map = new HashMap<String, String>();

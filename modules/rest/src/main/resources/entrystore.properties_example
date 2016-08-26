@@ -11,6 +11,9 @@ entrystore.repository.store.indexes=cspo,posc
 ## if type=sparql: entrystore.repository.store.endpoint-query=Query URL of SPARQL repository
 ## if type=sparql: entrystore.repository.store.endpoint-update=Update URL of SPARQL repository
 
+## Populate an empty repository with test data (from TestSuite)
+# entrystore.repository.store.init-with-test-data=on|off (default: off)
+
 ## Data folder
 entrystore.data.folder=/srv/entrystore/files/
 
@@ -39,7 +42,7 @@ entrystore.data.folder=/srv/entrystore/files/
 
 ## Generic settings for user-initiated sign-up and password reset
 # entrystore.auth.email.from=signup@yourdomain.tld
-# entrystore.auth.email.bcc=info+signup@youdomain.tld
+# entrystore.auth.email.bcc=info+signup@yourdomain.tld
 # entrystore.auth.recaptcha=on (default: off)
 # entrystore.auth.recaptcha.public-key=your-public-recaptcha-key
 # entrystore.auth.recaptcha.private-key=your-private-recaptcha-key
@@ -48,13 +51,17 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.signup=off
 # entrystore.auth.signup.email.subject=User sign-up request
 # entrystore.auth.signup.email.template=/path/to/template.html
+## Whitelist of email-domains that are allowed to perform sign-up
+## Any domain is allowed if no whitelist is provided here
+# entrystore.auth.signup.whitelist.1=yourdomain.tld
+# entrystore.auth.signup.whitelist.2=ext.yourdomain.tld
 
 ## User-initiated password reset (default: off)
 # entrystore.auth.password-reset=off
 # entrystore.auth.password-reset.email.subject=Password reset request
 # entrystore.auth.password-reset.email.template=/path/to/template.html
 
-## OpenID
+## OpenID (deprecated)
 # entrystore.auth.openid=on|off (default: off)
 # entrystore.auth.openid.google=on
 # entrystore.auth.openid.yahoo=off
@@ -88,7 +95,10 @@ entrystore.solr.extract-fulltext=off
 # entrystore.repository.public.path=file:///srv/entrystore/store/public/
 # entrystore.repository.public.indexes=cspo,spoc,posc
 
-## By default all references are rewritten. This is necessary to makes
+## RowStore integration
+# entrystore.rowstore.url=http://localhost:8282/
+
+## By default all references are rewritten. This is necessary to make
 ## installations work where the internal references are different from
 ## the external ones (this happens when reverse proxying is used). This
 ## option can be used to deactivate this feature, e.g. if EntryStore is
@@ -96,7 +106,7 @@ entrystore.solr.extract-fulltext=off
 entrystore.repository.rewrite-basereference=true
 
 ## Enable creation of groups with linked contexts for normal non-admin users
-entrystore.nonadmin.group-context-creation=on|off (default: off)
+# entrystore.nonadmin.group-context-creation=on|off (default: off)
 
 ## Run metadata correction methods
 ## Only for development and/or migration purposes

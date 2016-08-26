@@ -285,7 +285,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	private void removeFromIndex(EntryImpl entry, RepositoryConnection rc) throws RepositoryException {
+	protected void removeFromIndex(EntryImpl entry, RepositoryConnection rc) throws RepositoryException {
 		org.openrdf.model.URI entryURI = entry.getSesameEntryURI();
 		org.openrdf.model.URI resURI = entry.getSesameResourceURI();
 		org.openrdf.model.URI mdURI = entry.getSesameExternalMetadataURI();
@@ -439,7 +439,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 				//resURI - resourceURI
 				org.openrdf.model.URI resURI = null;
 				if (resourceURI != null) {
-					resURI = vf.createURI(resourceURI.toString());
+					String resourceURIStr = resourceURI.toString().replace("_newId", identity);
+					resURI = vf.createURI(resourceURIStr);
 				} else {
 					if (bType == GraphType.Context ||
 							bType == GraphType.SystemContext) {
@@ -479,7 +480,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
 					return newEntry;
 				} catch (Exception e) {
-					e.printStackTrace();
 					rc.rollback();
 					if (newEntry != null) {
 						newEntry.refreshFromRepository(rc);
@@ -501,6 +501,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 		switch (newEntry.getGraphType()) {
 		case None:
+		case PipelineResult:
 			if (newEntry.getEntryType() == EntryType.Local) {
 				//TODO check Representationtype as well.
 				newEntry.setResource(new DataImpl(newEntry));
@@ -653,16 +654,18 @@ public class ContextImpl extends ResourceImpl implements Context {
 			
 			if (GraphType.Context.equals(buiType)) {
 				((Context) entry.getResource()).initializeSystemEntries();
-			} else if (GraphType.User.equals(buiType) || GraphType.Group.equals(buiType)) {
-				entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, entry.getResourceURI());
-				entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, entry.getResourceURI());
-				entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, ((PrincipalManager) this).getGuestUser().getURI());
-				entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getGuestUser().getURI());
-				if (GraphType.Group.equals(buiType)) {
-					entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, ((PrincipalManager) this).getAuthenticatedUserURI());
-					entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, ((PrincipalManager) this).getAuthenticatedUserURI());
-				}
-			}
+			} else if (GraphType.User.equals(buiType)) {
+                entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, entry.getResourceURI());
+                entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, entry.getResourceURI());
+                entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, ((PrincipalManager) this).getGuestUser().getURI());
+                entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getGuestUser().getURI());
+			} else if (GraphType.Group.equals(buiType)) {
+                entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, ((PrincipalManager) this).getGuestUser().getURI());
+                entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getGuestUser().getURI());
+                //TODO: not obvious that the following two are good defaults for group.
+                entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, ((PrincipalManager) this).getAuthenticatedUserURI());
+                entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, ((PrincipalManager) this).getAuthenticatedUserURI());
+            }
 			return entry;
 		}
 	}
@@ -699,19 +702,21 @@ public class ContextImpl extends ResourceImpl implements Context {
 				id, RepositoryProperties.ENTRY_PATH, entryId));
 	}
 
-	synchronized public Entry getByEntryURI(URI entryURI) {
-		Entry entry = cache.getByEntryURI(entryURI);
-		if (entry != null) {
-			//			checkAccess(entry, AccessProperty.ReadMetadata);
-			return entry;
-		}
+	public Entry getByEntryURI(URI entryURI) {
+		synchronized (cache) {
+			Entry entry = cache.getByEntryURI(entryURI);
+			if (entry != null) {
+				//			checkAccess(entry, AccessProperty.ReadMetadata);
+				return entry;
+			}
 
-		try {
-			return getByMMdURIDirect(entryURI);
-		} catch (RepositoryException e) {
-			log.error(e.getMessage(), e);
+			try {
+				return getByMMdURIDirect(entryURI);
+			} catch (RepositoryException e) {
+				log.error(e.getMessage(), e);
+			}
+			return null;
 		}
-		return null; 
 	}
 
 	private Entry getByMMdURIDirect(URI entryURI) throws RepositoryException {
@@ -762,7 +767,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		} catch (AuthorizationException ae) {
 			throw ae;
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 		}
 		return newEntry;
@@ -837,16 +842,16 @@ public class ContextImpl extends ResourceImpl implements Context {
 		return res2entry.keySet();
 	}
 
-	synchronized public void remove(URI entryURI) {
+	public void remove(URI entryURI) {
 		if (systemEntries.contains(entryURI)) {
 			throw new DisallowedException("Cannot remove system entry with URI: "+entryURI);
 		}
 		synchronized (this.entry.repository) {
 			EntryImpl removeEntry = (EntryImpl) getByEntryURI(entryURI);
-			checkAccess(removeEntry, AccessProperty.WriteResource);
+			checkAccess(removeEntry, AccessProperty.Administer);
 
 
-			if(removeEntry.resourceType == GraphType.String) {
+			if (removeEntry.graphType == GraphType.String) {
 				// removes the relation from the source entry. 
 				removeEntry.getLocalMetadata().setGraph(new GraphImpl()); 
 			}
@@ -1010,7 +1015,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				rc.remove(rc.getStatements(this.resourceURI, RepositoryProperties.Quota, null, false, this.resourceURI), this.resourceURI);
 				rc.add(this.resourceURI, RepositoryProperties.Quota, rc.getValueFactory().createLiteral(quotaInBytes), this.resourceURI);
 				rc.commit();
-				this.quota  = quotaInBytes;
+				this.quota = quotaInBytes;
 			} catch (RepositoryException re) {
 				log.error(re.getMessage(), re);
 				try {
@@ -1149,6 +1154,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
+	 * FIXME ENTRYSTORE-418
+	 *
 	 * This method should only be called by increaseQuotaFillLevel() and
 	 * decreaseQuotaFillLevel().
 	 * 
@@ -1359,7 +1366,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 		EntryImpl commentEntry = null; 
 
-		synchronized (this) {
+		synchronized (this.entry.repository) {
 			commentEntry = createNewMinimalItem(
 					null, 
 					null, 

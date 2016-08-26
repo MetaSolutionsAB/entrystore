@@ -43,8 +43,6 @@ import org.json.JSONObject;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
-import org.restlet.Request;
-import org.restlet.Response;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -83,7 +81,7 @@ public class EntryResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		supportedMediaTypes.add(MediaType.TEXT_HTML);
+		//supportedMediaTypes.add(MediaType.TEXT_HTML);
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
@@ -132,9 +130,8 @@ public class EntryResource extends BaseResource {
 	public Representation represent() {
 		try {
 			if (entry == null) {
-				log.error("Cannot find an entry with that id");
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
+				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
 			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
@@ -164,23 +161,22 @@ public class EntryResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		try {
-			if (entry != null && context != null) {
-				if (parameters.containsKey("method")) {
-					if ("delete".equalsIgnoreCase(parameters.get("method"))) {
-						removeRepresentations();		
-					} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
-						storeRepresentation(r);
-					}
-				} 
+			if (entry == null || context == null) {
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				return;
 			}
 
-			/*
-			 * Error: If we comes to this point there is an ERROR.
-			 */
-			log.error("Wrong POST request");
+			if (parameters.containsKey("method")) {
+				if ("delete".equalsIgnoreCase(parameters.get("method"))) {
+					removeRepresentations();
+					return;
+				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
+					storeRepresentation(r);
+					return;
+				}
+			}
+
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
 		} catch (AuthorizationException e) {
 			unauthorizedPOST();
 		}
@@ -212,9 +208,9 @@ public class EntryResource extends BaseResource {
 	private Representation getEntry(MediaType mediaType) {
 		String serializedGraph = null;
 		Graph graph = entry.getGraph();
-		if (MediaType.TEXT_HTML.equals(mediaType)) {
+		/* if (MediaType.TEXT_HTML.equals(mediaType)) {
 			return getEntryInHTML();
-		} else if (MediaType.APPLICATION_JSON.equals(mediaType)) {
+		} else */ if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 			return getEntryInJSON();
 		} else {
 			serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
@@ -229,6 +225,7 @@ public class EntryResource extends BaseResource {
 		return new EmptyRepresentation();
 	}
 
+	/* Temporarily disabled code, see ENTRYSTORE-435 for details
 	private Representation getEntryInHTML() {
 		try {	
 			if (parameters != null) {
@@ -246,13 +243,13 @@ public class EntryResource extends BaseResource {
 						jobj.toString(2) +
 						"</textarea></body></html>", MediaType.TEXT_HTML);
 			}
-		} catch (JSONException e) {	
-		}		
-		log.error("Can not find the entry. getEntry()");
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);			
+		} catch (JSONException e) {
+			log.error(e.getMessage());
+		}
+		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+		return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 	}
-	
+	*/
 	
 	/**
 	 * Gets the entry JSON
@@ -262,13 +259,15 @@ public class EntryResource extends BaseResource {
 	private Representation getEntryInJSON() {
 		try {	
 			JSONObject jobj = this.getEntryAsJSONObject();
-			if (jobj != null)
+			if (jobj != null) {
 				return new JsonRepresentation(jobj.toString(2));
+			}
 		} catch (JSONException e) {
+			log.error(e.getMessage());
 		}
-		log.error("Can not find the entry. getEntry()");
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
+
+		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+		return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 	}
 
 	
@@ -375,10 +374,11 @@ public class EntryResource extends BaseResource {
 			 */
 			JSONObject resourceObj = null;
 			if (entry.getEntryType() == EntryType.Local) {
+                GraphType graphType = entry.getGraphType();
 				/*
 				 *  String
 				 */
-				if(entry.getGraphType() == GraphType.String) {
+				if (graphType == GraphType.String) {
 					StringResource stringResource = (StringResource) entry.getResource(); 
 					jdilObj.put("resource", stringResource.getString());
 				}
@@ -386,7 +386,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 *  Graph
 				 */
-				if(entry.getGraphType() == GraphType.Graph) {
+				if (graphType == GraphType.Graph || graphType == GraphType.Pipeline) {
 					RDFResource rdfResource = (RDFResource) entry.getResource(); 
 					jdilObj.put("resource", new JSONObject(RDFJSON.graphToRdfJson(rdfResource.getGraph())));
 				}
@@ -394,7 +394,7 @@ public class EntryResource extends BaseResource {
 				/*
 				 * List
 				 */
-				if (entry.getGraphType() == GraphType.List) {
+				if (graphType == GraphType.List) {
 
 					int limit = 0;
 					int offset = 0;
@@ -599,6 +599,12 @@ public class EntryResource extends BaseResource {
 						if (prefLang != null) {
 							resourceObj.put("language", prefLang);
 						}
+
+						JSONObject customProperties = new JSONObject();
+						for (java.util.Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
+							customProperties.put(propEntry.getKey(), propEntry.getValue());
+						}
+						resourceObj.put("customProperties", customProperties);
 					} catch (AuthorizationException ae) {
 						//jdilObj.accumulate("noAccessToResource", true);
 //						TODO: Replaced by using "rights" in json, do something else in this catch-clause
@@ -689,7 +695,7 @@ public class EntryResource extends BaseResource {
 		try {
 			graphString = getRequest().getEntity().getText();
 		} catch (IOException e) {
-			log.error(e.getMessage());
+			log.info(e.getMessage());
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
@@ -701,7 +707,7 @@ public class EntryResource extends BaseResource {
 					deserializedGraph = RDFJSON.rdfJsonToGraph(rdfJSON);
 				}
 			} catch (JSONException jsone) {
-				log.error(jsone.getMessage());
+				log.info(jsone.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}

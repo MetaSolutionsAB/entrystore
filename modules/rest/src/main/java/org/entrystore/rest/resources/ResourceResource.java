@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import com.github.jsonldjava.sesame.SesameJSONLDWriter;
 import com.sun.syndication.feed.synd.SyndContent;
 import com.sun.syndication.feed.synd.SyndContentImpl;
 import com.sun.syndication.feed.synd.SyndEntry;
@@ -27,7 +26,6 @@ import com.sun.syndication.io.FeedException;
 import com.sun.syndication.io.SyndFeedOutput;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
-import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
@@ -62,20 +60,17 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.openrdf.model.Graph;
-import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.n3.N3Writer;
-import org.openrdf.rio.ntriples.NTriplesWriter;
-import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
-import org.openrdf.rio.trig.TriGWriter;
-import org.openrdf.rio.trix.TriXWriter;
-import org.openrdf.rio.turtle.TurtleWriter;
+import org.restlet.Client;
 import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.Uniform;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
+import org.restlet.data.Method;
+import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.data.Status;
-import org.restlet.ext.fileupload.RestletFileUpload;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.FileRepresentation;
@@ -101,6 +96,7 @@ import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -152,9 +148,8 @@ public class ResourceResource extends BaseResource {
 	public Representation represent() {
 		try {
 			if (entry == null) {
-				log.info("Cannot find an entry with that ID"); 
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
-				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry); 
+				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
 			/*
@@ -212,6 +207,12 @@ public class ResourceResource extends BaseResource {
 					}
 				}
 			}
+
+            if (ResourceType.NamedResource.equals(entry.getResourceType())
+                    && EntryType.Local.equals(entry.getEntryType())) {
+                redirectSeeOther(entry.getLocalMetadataURI().toString());
+                return new EmptyRepresentation();
+            }
 
 			/*
 			 * Resource: 
@@ -271,7 +272,7 @@ public class ResourceResource extends BaseResource {
 		try {
 			if (parameters.containsKey("method")) {
 				if ("delete".equalsIgnoreCase(parameters.get("method"))) {
-					removeRepresentations();
+					removeRepresentation();
 				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
 					storeRepresentation(r);
 				}
@@ -341,15 +342,35 @@ public class ResourceResource extends BaseResource {
 	}
 
 	@Delete
-	public void removeRepresentations() {
+	public void removeRepresentation() {
 		if (entry == null) {
-			log.info("Cannot find an entry with that ID"); 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			return;
 		}
 		
 		try {
-			deleteResource();
+			if ((EntryType.Link.equals(entry.getEntryType()) ||
+					EntryType.Reference.equals(entry.getEntryType()) ||
+					EntryType.LinkReference.equals(entry.getEntryType()))
+					&& "true".equalsIgnoreCase(parameters.get("proxy"))) {
+				final Response delResponse = deleteRemoteResource(entry.getResourceURI().toString(), 0);
+				if (delResponse != null) {
+					getResponse().setEntity(delResponse.getEntity());
+					getResponse().setStatus(delResponse.getStatus());
+					getResponse().setOnSent(new Uniform() {
+						public void handle(Request request, Response response) {
+							try {
+								delResponse.release();
+							} catch (Exception e) {
+								log.error(e.getMessage());
+							}
+						}
+					});
+				} else {
+					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+				}
+			} else {
+				deleteLocalResource();
+			}
 		} catch(AuthorizationException e) {
 			unauthorizedDELETE();
 		}
@@ -358,7 +379,7 @@ public class ResourceResource extends BaseResource {
 	/**
 	 * Deletes the resource if the entry has any.
 	 */
-	private void deleteResource() {
+	private void deleteLocalResource() {
 		/*
 		 * List
 		 */
@@ -376,23 +397,49 @@ public class ResourceResource extends BaseResource {
 		 */
 		if (entry.getGraphType() == GraphType.None ) {
 			if(entry.getResourceType() == ResourceType.InformationResource) {
-				Data data = (Data)entry.getResource(); 
+				Data data = (Data) entry.getResource();
 				if (data.delete() == false) {
-					log.error("Unknown kind"); 
+					log.error("Unable to delete resource of entry " + entry.getEntryURI());
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorUnknownKind));
 				}
 			}
 		}
-		/*
-		 * String
-		 */
-		if (GraphType.String.equals(entry.getGraphType())) {
-			StringResource strRes = (StringResource) entry.getResource(); // FIXME ?!
-			GraphImpl g = new GraphImpl(); 
-			entry.setGraph(g); 
+	}
+
+	private Response deleteRemoteResource(String url, int loopCount) {
+		if (loopCount > 10) {
+			log.warn("More than 10 redirect loops detected, aborting");
+			return null;
 		}
 
+		Client client = new Client(Protocol.HTTP);
+		client.setContext(new org.restlet.Context());
+		client.getContext().getParameters().add("connectTimeout", "10000");
+		client.getContext().getParameters().add("readTimeout", "10000");
+		client.getContext().getParameters().set("socketTimeout", "10000");
+		client.getContext().getParameters().set("socketConnectTimeoutMs", "10000");
+		log.info("Initialized HTTP client for proxy request to delete remote resource");
+
+		Request request = new Request(Method.DELETE, url);
+		request.getClientInfo().setAcceptedMediaTypes(getRequest().getClientInfo().getAcceptedMediaTypes());
+		Response response = client.handle(request);
+
+		if (response.getStatus().isRedirection()) {
+			Reference ref = response.getLocationRef();
+			response.getEntity().release();
+			if (ref != null) {
+				String refURL = ref.getIdentifier();
+				log.info("Request redirected to " + refURL);
+				return deleteRemoteResource(refURL, ++loopCount);
+			}
+		}
+
+		if (response.getEntity().getLocationRef() != null && response.getEntity().getLocationRef().getBaseRef() == null) {
+			response.getEntity().getLocationRef().setBaseRef(url.substring(0, url.lastIndexOf("/")+1));
+		}
+
+		return response;
 	}
 
 	protected boolean isFile(Entry entry) {
@@ -477,7 +524,7 @@ public class ResourceResource extends BaseResource {
 					resourceURI = new URI(techLoc.string().trim());
 				}
 			} catch (URISyntaxException e) {
-				log.error(e.getMessage());
+				log.info(e.getMessage());
 				return;
 			}
 			if (resourceURI != null) {
@@ -501,7 +548,7 @@ public class ResourceResource extends BaseResource {
 				}
 			}
 		} else {
-			log.error("[IMPORT] No LOM Technical Location found, unable to construct Resource URI");
+			log.info("[IMPORT] No LOM Technical Location found, unable to construct Resource URI");
 		}
 	}
 	
@@ -728,14 +775,15 @@ public class ResourceResource extends BaseResource {
 			}
 		} else if (EntryType.Local.equals(entry.getEntryType())) {
 
+			GraphType gt = entry.getGraphType();
 			/*** String ***/
-			if (GraphType.String.equals(entry.getGraphType())) {
+			if (GraphType.String.equals(gt)) {
 				StringResource stringResource = (StringResource)entry.getResource(); 
 				return new StringRepresentation(stringResource.getString());
 			}
 
 			/*** Graph ***/
-			if (GraphType.Graph.equals(entry.getGraphType())) {
+			if (GraphType.Graph.equals(gt) || GraphType.Pipeline.equals(gt)) {
 				RDFResource graphResource = (RDFResource) entry.getResource(); 
 				Graph graph = graphResource.getGraph();
 				if (graph == null) {
@@ -746,7 +794,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Context ***/
-			if (GraphType.Context.equals(entry.getGraphType()) || GraphType.SystemContext.equals(entry.getGraphType())) {
+			if (GraphType.Context.equals(gt) || GraphType.SystemContext.equals(gt)) {
 				JSONArray array = new JSONArray();
 				Context c = (Context) entry.getResource();
 				Set<URI> uris = c.getEntries(); 
@@ -758,7 +806,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** None ***/
-			if (GraphType.None.equals(entry.getGraphType())) {
+			if (GraphType.None.equals(gt)) {
 
 				// Local data
 				if(entry.getResourceType() == ResourceType.InformationResource) {
@@ -800,13 +848,11 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** User ***/
-			if (GraphType.User.equals(entry.getGraphType())) {
+			if (GraphType.User.equals(gt)) {
 				JSONObject jsonUserObj = new JSONObject();  
 				User user = (User) entry.getResource(); 
 				try {
 					jsonUserObj.put("name", user.getName());
-
-					//jsonUserObj.put("password", user.getSecret());
 
 					Context homeContext = user.getHomeContext();
 					if (homeContext != null) {
@@ -818,6 +864,12 @@ public class ResourceResource extends BaseResource {
 						jsonUserObj.put("language", prefLang);
 					}
 
+					JSONObject customProperties = new JSONObject();
+					for (java.util.Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
+						customProperties.put(propEntry.getKey(), propEntry.getValue());
+					}
+					jsonUserObj.put("customProperties", customProperties);
+
 					return new JsonRepresentation(jsonUserObj);
 				} catch (JSONException e) {
 					log.error(e.getMessage());
@@ -825,7 +877,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			/*** Group ***/
-			if (GraphType.Group.equals(entry.getGraphType())) {
+			if (GraphType.Group.equals(gt)) {
 				JSONObject jsonGroupObj = new JSONObject(); 
 				Group group = (Group) entry.getResource(); 
 				JSONArray userArray = new JSONArray(); 
@@ -857,7 +909,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			return new JsonRepresentation(JSONErrorMessages.errorCantFindResource);
+			return new JsonRepresentation(JSONErrorMessages.errorResourceNotFound);
 		}
 
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -869,10 +921,11 @@ public class ResourceResource extends BaseResource {
 	 * Set a resource to an entry.
 	 */
 	private void modifyResource(MediaType mediaType) throws AuthorizationException {
+		GraphType gt = entry.getGraphType();
 		/*
 		 * List and Group
 		 */
-		if (GraphType.List.equals(entry.getGraphType()) || GraphType.Group.equals(entry.getGraphType())) {
+		if (GraphType.List.equals(gt) || GraphType.Group.equals(gt)) {
 			String requestBody = null;
 			try {
 				requestBody = getRequest().getEntity().getText();
@@ -891,7 +944,7 @@ public class ResourceResource extends BaseResource {
 						Entry childEntry = context.get(childId);
 						if (childEntry == null) {
 							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-							log.error("Cannot update list, since one of the children does not exist.");
+							log.debug("Cannot update list, since one of the children does not exist.");
 							return;
 						} else {
 							newResource.add(childEntry.getEntryURI());
@@ -929,17 +982,23 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * Data
 		 */
-		if (entry.getGraphType() == GraphType.None){
+		if (GraphType.None.equals(gt)){
 			boolean textarea = this.parameters.keySet().contains("textarea");
 			String error = null;
 
 			if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 				try {
-					RestletFileUpload upload = new RestletFileUpload(new DiskFileItemFactory());
-					List<FileItem> items = upload.parseRequest(getRequest());
+					List<FileItem> items = Util.createRestletFileUpload(getContext()).parseRepresentation(getRequest().getEntity());
 					Iterator<FileItem> iter = items.iterator();
-					while (iter.hasNext()) {
+					if (iter.hasNext()) {
 						FileItem item = iter.next();
+						long maxFileSize = getRM().getMaximumFileSize();
+
+						// we check if the file is not too big
+						if (maxFileSize != -1 && item.getSize() > maxFileSize) {
+							throw new QuotaException(QuotaException.QUOTA_FILE_TOO_BIG);
+						}
+
 						((Data) entry.getResource()).setData(item.getInputStream());
 						entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
 						String mimeType = item.getContentType();
@@ -962,8 +1021,6 @@ public class ResourceResource extends BaseResource {
 					error = qe.getMessage();
 					getResponse().setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 				}
-				
-
 			} else {
 				Request req = getRequest();
 				try {
@@ -1014,7 +1071,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** String  ***/
-		if(entry.getGraphType() == GraphType.String) {
+		if(GraphType.String.equals(gt)) {
 			try {
 				StringResource stringResource = (StringResource)entry.getResource(); 
 				stringResource.setString(getRequest().getEntity().getText());
@@ -1024,8 +1081,8 @@ public class ResourceResource extends BaseResource {
 			}
 		}
 		
-		/*** Graph ***/
-		if (GraphType.Graph.equals(entry.getGraphType())) {
+		/*** Graph and Pipeline ***/
+		if (GraphType.Graph.equals(gt) || GraphType.Pipeline.equals(gt)) {
 			RDFResource graphResource = (RDFResource) entry.getResource(); 
 			if (graphResource != null) {
 				Graph graph = null;
@@ -1048,7 +1105,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** User ***/
-		if (entry.getGraphType() == GraphType.User) {
+		if (GraphType.User.equals(gt)) {
 			JSONObject entityJSON = null; 
 			try {
 				entityJSON = new JSONObject(getRequest().getEntity().getText());
@@ -1092,13 +1149,22 @@ public class ResourceResource extends BaseResource {
 						}
 					}
 				}
+				if (entityJSON.has("customProperties")) {
+					Map<String, String> customPropMap = new HashMap<>();
+					JSONObject customPropJson = entityJSON.getJSONObject("customProperties");
+					for (Iterator cPIt = customPropJson.keys(); cPIt.hasNext();) {
+						String key = (String) cPIt.next();
+						customPropMap.put(key, customPropJson.getString(key));
+					}
+					resourceUser.setCustomProperties(customPropMap);
+				}
 				getResponse().setStatus(Status.SUCCESS_OK);
 			} catch (JSONException e) {
-				log.error("Wrong JSON syntax: " + e.getMessage()); 
+				log.debug("Wrong JSON syntax: " + e.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
 			} catch (IOException e) {
-				log.error("IOException: " + e.getMessage()); 
+				log.error(e.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"IOException\"}"));
 			}

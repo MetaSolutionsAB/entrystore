@@ -30,4 +30,36 @@ public class StringUtils {
 		return buf.toString();
 	}
 
+	/**
+	 * Converts a string with or without units (kilo, mega, etc) to bytes.
+	 *
+	 * Supported unit abbreviations: k, m, g, t. Lower- and uppercase are supported.
+	 *
+	 * @param input A String with or without abbreviated unit. E.g., an input value of
+	 *                 1024 returns the same result as an input value of 1k.
+	 * @return The converted value in bytes as long variable.
+	 */
+	public static long convertUnitStringToByteSize(String input) {
+		if (input == null || input.length() < 1) {
+			throw new IllegalArgumentException("Parameter must not be null or empty");
+		}
+		char unit = input.charAt(input.length() - 1);
+		long factor = 1;
+		if (unit == 'k' || unit == 'K') { // Kilo
+			factor = 1024;
+		} else if (unit == 'm' || unit == 'M') { // Mega
+			factor = 1024*1024;
+		} else if (unit == 'g' || unit == 'G') { // Giga
+			factor = 1024*1024*1024;
+		} else if (unit == 't' || unit == 'T') { // Tera
+			factor = 1024*1024*1024*1024;
+		}
+
+		if (factor > 1) {
+			return Long.valueOf(input.substring(0, input.length() - 1)) * factor;
+		} else {
+			return Long.valueOf(input);
+		}
+	}
+
 }

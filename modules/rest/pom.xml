@@ -7,12 +7,12 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-modules</artifactId>
-		<version>4.2</version>
+		<version>4.3</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-rest</artifactId>
 	<packaging>war</packaging>
-	<version>4.2</version>
+	<version>4.3</version>
 	<name>EntryStore REST</name>
 	
 	<build>
@@ -96,6 +96,16 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-transforms-pcaxis</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-transforms-rowstore</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-transforms-empty</artifactId>
 			<version>${project.version}</version>
 		</dependency>
                 <dependency>

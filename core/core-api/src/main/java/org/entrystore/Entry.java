@@ -153,7 +153,7 @@ public interface Entry {
 	/**
 	 * @param prop corresponds to which {@link org.entrystore.PrincipalManager.AccessProperty} to
 	 * find allowed principals for.
-	 * @return a set of principals that are allowed according to the 
+	 * @return a set of principals (entry URIs, not resource URIs) that are allowed according to the
 	 * {@link org.entrystore.PrincipalManager.AccessProperty} prop.
 	 */
 	Set<URI> getAllowedPrincipalsFor(PrincipalManager.AccessProperty prop);
@@ -166,7 +166,7 @@ public interface Entry {
 	/**
 	 * @param prop corresponds to which {@link org.entrystore.PrincipalManager.AccessProperty} to allow for.
 	 * @param principals a set of principals that are allowed according to the 
-	 * {@link org.entrystore.PrincipalManager.AccessProperty} prop.
+	 * {@link org.entrystore.PrincipalManager.AccessProperty} prop. Note, must be resource URIs, not EntryURIs.
 	 */
 	void setAllowedPrincipalsFor(PrincipalManager.AccessProperty prop, Set<URI> principals);
 	
@@ -284,5 +284,9 @@ public interface Entry {
 
 	void setResourceURI(URI resourceURI);
 
-	void setExternalMetadataURI(URI externalMetadataURI);	
+	void setExternalMetadataURI(URI externalMetadataURI);
+
+	URI getStatus();
+
+	void setStatus(URI newStatus);
 }

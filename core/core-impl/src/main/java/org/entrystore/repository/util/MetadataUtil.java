@@ -16,10 +16,34 @@
 
 package org.entrystore.repository.util;
 
+import org.openrdf.model.Literal;
+
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * @author Hannes Ebner
  */
 public class MetadataUtil {
+
+	public static Set<String> integerDataTypes;
+
+	static {
+		integerDataTypes = new HashSet();
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#byte");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#int");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#integer");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#long");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#negativeInteger");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#nonNegativeInteger");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#nonPositiveInteger");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#positiveInteger");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#short");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#unsignedLong");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#unsignedInt");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#unsignedShort");
+		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#unsignedByte");
+	}
 
 	/**
 	 * Filters all invalid XML characters out of the string.
@@ -53,6 +77,18 @@ public class MetadataUtil {
 		}
 
 		return out.toString();
+	}
+
+	public static boolean isIntegerLiteral(Literal l) {
+		if (l == null) {
+			throw new IllegalArgumentException("Literal must not be null");
+		}
+
+		if (l.getDatatype() == null) {
+			return false;
+		}
+
+		return integerDataTypes.contains(l.getDatatype().stringValue());
 	}
 
 }

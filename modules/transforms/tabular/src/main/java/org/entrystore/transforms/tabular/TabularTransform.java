@@ -28,6 +28,9 @@ import org.deri.tarql.CSVToValues;
 import org.deri.tarql.TarqlParser;
 import org.deri.tarql.TarqlQuery;
 import org.deri.tarql.XLSToValues;
+import org.entrystore.Data;
+import org.entrystore.Entry;
+import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.Transform;
 import org.entrystore.transforms.TransformParameters;
 import org.openrdf.model.Graph;
@@ -58,8 +61,17 @@ public class TabularTransform extends Transform {
 
 	private static Logger log = LoggerFactory.getLogger(TabularTransform.class);
 
-	public Graph transform(InputStream data, String mimetype) {
-		try {
+	public Object transform(Pipeline pipeline, Entry sourceEntry) {
+		if (sourceEntry == null) {
+			throw new IllegalStateException("TabularTransform requires a sourceEntry");
+		}
+
+		// TODO add support for non-local resources
+        String mimetype = sourceEntry.getMimetype();
+        InputStream data = ((Data) sourceEntry.getResource()).getData();
+
+
+        try {
 			TableData table;
 			if (isCSV(mimetype)) {
 				Reader reader = CSVQueryExecutionFactory.createReader(data);

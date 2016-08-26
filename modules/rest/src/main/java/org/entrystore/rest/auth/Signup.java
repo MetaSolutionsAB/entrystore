@@ -39,6 +39,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.Properties;
 
 /**
@@ -155,11 +157,12 @@ public class Signup {
 				}
 				sb.append("<p><pre>__CONFIRMATION_LINK__</pre></p>");
 				sb.append("<p>The link is valid for 24 hours.</p><br/>");
-				sb.append("<div style=\"border-top:1px solid #e5e5e5;\"><p><small>&copy; 2014 <a href=\"http://metasolutions.se\" style=\"text-decoration:none;\">MetaSolutions AB</a></small></p></div>");
+				sb.append("<div style=\"border-top:1px solid #e5e5e5;\"><p><small>&copy; __YEAR__ <a href=\"http://metasolutions.se\" style=\"text-decoration:none;\">MetaSolutions AB</a></small></p></div>");
 				sb.append("</div></body></html>");
 				templateHTML = sb.toString();
 			}
 			String messageText = templateHTML;
+			messageText = messageText.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
 			if (confirmationLink != null) {
 				messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 			}

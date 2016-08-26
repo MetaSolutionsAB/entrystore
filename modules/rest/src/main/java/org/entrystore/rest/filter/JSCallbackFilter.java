@@ -53,7 +53,7 @@ public class JSCallbackFilter extends Filter {
 					wrappedResponse.append(callback).append("(");
 					wrappedResponse.append(response.getEntity().getText());
 					wrappedResponse.append(")");
-					response.setEntity(wrappedResponse.toString(), response.getEntity().getMediaType());
+					response.setEntity(wrappedResponse.toString(), MediaType.APPLICATION_JAVASCRIPT);
 				} catch (IOException e) {
 					log.error(e.getMessage());
 				}

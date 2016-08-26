@@ -17,6 +17,7 @@
 package org.entrystore.rest.auth;
 
 import java.util.Date;
+import java.util.Map;
 
 /**
 * @author Hannes Ebner
@@ -29,4 +30,5 @@ public class SignupInfo {
 	public Date expirationDate;
 	public String urlSuccess;
 	public String urlFailure;
+	public Map<String, String> customProperties;
 }

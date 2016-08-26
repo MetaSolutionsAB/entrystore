@@ -78,7 +78,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	public Entry getPrincipalEntry(String name) {
-		Entry principalEntry = getEntryByName(name);
+		Entry principalEntry = getEntryByName(name.toLowerCase());
 		if (principalEntry == null) {
 			return null;
 		} else if (principalEntry.getGraphType() == GraphType.User ||
@@ -90,18 +90,43 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	public boolean setPrincipalName(URI principal, String newName) {
+		if (principal == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
 		URISplit us = new URISplit(principal, this.entry.getRepositoryManager().getRepositoryURL());
 		Entry principalEntry = getByEntryURI(us.getMetaMetadataURI());
 		if (principalEntry == null) {
 			throw new org.entrystore.repository.RepositoryException("Cannot find an entry for the specified URI");
-		} else if (principalEntry.getGraphType() == GraphType.User ||
-					principalEntry.getGraphType() == GraphType.Group) {
-			return setEntryName(us.getMetaMetadataURI(), newName);
+		} else if (principalEntry.getGraphType() == GraphType.User) {
+			if (newName == null) {
+				throw new IllegalArgumentException("Name must not be null for user");
+			}
+			return setEntryName(us.getMetaMetadataURI(), newName.toLowerCase());
+		} else if (principalEntry.getGraphType() == GraphType.Group) {
+			return setEntryName(us.getMetaMetadataURI(), newName.toLowerCase());
 		}
 		throw new org.entrystore.repository.RepositoryException("Given URI does not refer to a Principal.");
 	}
-	
-	/**
+
+    public boolean isUserAdminOrAdminGroup(URI principal) {
+        URI currentUserURI = getAuthenticatedUserURI();
+        URI adminUserURI = getAdminUser().getURI();
+        setAuthenticatedUserURI(adminUserURI);
+        if (principal == null) {
+            principal = currentUserURI;
+        }
+        User user = getUser(principal);
+        if (adminUserURI.equals(principal)
+                || getAdminGroup().isMember(user)) {
+            setAuthenticatedUserURI(currentUserURI);
+            return true;
+        }
+        setAuthenticatedUserURI(currentUserURI);
+        return false;
+    }
+
+
+    /**
 	 * Returns this principal managers all user URIs
 	 * @return all user URIs in this principal manager
 	 */
@@ -287,20 +312,28 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			} else {
 				//If entry overrides Context ACL (only relevant if the user is not an owner of the context)
 				if(entry.hasAllowedPrincipals()) {
-					if (hasAccess(currentUser, entry, accessProperty)) {
+					if (hasAccess(currentUser, entry, AccessProperty.Administer)
+                    || hasAccess(currentUser, entry, accessProperty)) {
 						return;
-					}
+					} else if (accessProperty == AccessProperty.ReadMetadata
+                            && hasAccess(currentUser, entry, AccessProperty.WriteMetadata)) {
+                        return; //WriteMetadata implies ReadMetadata
+                    } else if (accessProperty == AccessProperty.ReadResource
+                        && hasAccess(currentUser, entry, AccessProperty.WriteResource)) {
+                        return; //WriteResource implies ReadResource
+                    }
 				} else {
 					//Check if user has access to the surrounding context of the entry.
 					if (accessProperty == AccessProperty.ReadMetadata || accessProperty == AccessProperty.ReadResource) {
-						if (hasAccess(currentUser, contextEntry, AccessProperty.ReadResource)) {
-							return;
+						if (hasAccess(currentUser, contextEntry, AccessProperty.ReadResource)
+                                || hasAccess(currentUser, contextEntry, AccessProperty.WriteResource)) {
+							return; //Both read and write on the context resource implies read on all entries for both the metadata and the resource.
 						}
 					} else {
 						if (hasAccess(currentUser, contextEntry, AccessProperty.WriteResource)) {
 							return;
 						}	
-					}					
+					}
 				}
 			}
 			
@@ -557,11 +590,13 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			}
 			@Override
 			public List<User> members() {
-				return getUsers();
+                this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
+                return getUsers();
 			}
 			@Override
 			public List<URI> memberUris() {
-				return getUsersAsUris();
+                this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
+                return getUsersAsUris();
 			}
 		});
 		
@@ -573,12 +608,12 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			allPrincipals = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_all");
 			setMetadata(allPrincipals, "all principals", "This is a list of all principals in the PrincipalManager.");
 			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, this.getGuestUser().getURI());
-			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadResource, this.getGuestUser().getURI());
 			log.info("Successfully added the _all contexts list");
 		}
 		allPrincipals.setResource(new SystemList(allPrincipals, allPrincipals.getSesameResourceURI()) {
 			@Override
 			public List<URI> getChildren() {
+                this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
 				Iterator<URI> entryIterator = getEntries().iterator();
 				List<URI> principalUris = new ArrayList<URI>();
 

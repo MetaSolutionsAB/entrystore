@@ -65,7 +65,7 @@ public class EntryNamesContext extends ContextImpl {
 		return entryURI2Name.get(entryURI);
 	}
 
-	protected Entry getEntryByName(String name) {
+	public Entry getEntryByName(String name) {
 		if(names2EntryURI == null) {
 			loadNameIndex();
 		}
@@ -73,8 +73,26 @@ public class EntryNamesContext extends ContextImpl {
 		return getByEntryURI(names2EntryURI.get(name));
 	}
 
-	protected boolean setEntryName(URI entryURI, String newName) {
-		if (entryURI == null || newName == null) {
+    protected void removeFromIndex(EntryImpl entry, RepositoryConnection rc) throws RepositoryException {
+        super.removeFromIndex(entry, rc);
+        if(names2EntryURI == null) {
+            loadNameIndex();
+        }
+
+        URI entryURI = entry.getEntryURI();
+        org.openrdf.model.URI cURI = rc.getValueFactory().createURI(entryURI.toString());
+
+        if (entryURI2Name.containsKey(entryURI)) {
+            String oldName = entryURI2Name.get(entryURI);
+            entryURI2Name.remove(entryURI);
+            names2EntryURI.remove(oldName);
+            Literal oldAliasLiteral = rc.getValueFactory().createLiteral(oldName);
+            rc.remove(cURI, RepositoryProperties.alias, oldAliasLiteral, this.resourceURI);
+        }
+    }
+
+    protected boolean setEntryName(URI entryURI, String newName) {
+        if (entryURI == null) {
 			throw new IllegalArgumentException("Arguments must not be null");
 		}
 		
@@ -92,7 +110,7 @@ public class EntryNamesContext extends ContextImpl {
 			loadNameIndex();
 		}
 
-		if (names2EntryURI.containsKey(newName)) {
+		if (newName != null && names2EntryURI.containsKey(newName)) {
 			if (newName.equals(entryURI2Name.get(entryURI))) {
 				return true;
 			} else {
@@ -108,7 +126,6 @@ public class EntryNamesContext extends ContextImpl {
 					ValueFactory vf = entry.repository.getValueFactory();
 					rc.setAutoCommit(false);
 					org.openrdf.model.URI cURI = vf.createURI(entryURI.toString());
-					Literal nameLiteral = vf.createLiteral(newName);
 					if (entryURI2Name.containsKey(entryURI)) {
 						String oldName = entryURI2Name.get(entryURI);
 						entryURI2Name.remove(entryURI);
@@ -116,10 +133,13 @@ public class EntryNamesContext extends ContextImpl {
 						Literal oldAliasLiteral = vf.createLiteral(oldName);
 						rc.remove(cURI, RepositoryProperties.alias, oldAliasLiteral, this.resourceURI);
 					}
-					names2EntryURI.put(newName, entryURI);
-					entryURI2Name.put(entryURI, newName);
-					rc.add(cURI, RepositoryProperties.alias, nameLiteral, this.resourceURI);
-					this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
+                    if (newName != null) {
+                        names2EntryURI.put(newName, entryURI);
+                        entryURI2Name.put(entryURI, newName);
+                        Literal nameLiteral = vf.createLiteral(newName);
+                        rc.add(cURI, RepositoryProperties.alias, nameLiteral, this.resourceURI);
+                        this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
+                    }
 					rc.commit();
 					return true;
 				} catch (Exception e) {

@@ -87,6 +87,11 @@ public enum GraphType {
 	 * A pipeline for data transformations
 	 */
 	Pipeline,
+
+	/**
+	 * Pipeline result for storing the result of data transformations
+	 */
+	PipelineResult,
 	
 	/**
 	 * All other resource that have no specific treatment in the repository.

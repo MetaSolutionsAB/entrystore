@@ -44,6 +44,7 @@ public class Settings {
 	public static String DATA_FOLDER = "entrystore.data.folder";
 	public static String DATA_QUOTA = "entrystore.data.quota";
 	public static String DATA_QUOTA_DEFAULT = "entrystore.data.quota.default";
+	public static String DATA_MAX_FILE_SIZE = "entrystore.data.max-file-size";
 	
 	public static String BASE_URL = "entrystore.baseurl.folder";
 	
@@ -66,6 +67,7 @@ public class Settings {
 	public static String STORE_ENDPOINT_UPDATE = "entrystore.repository.store.endpoint-update";
 	public static String STORE_INDEXES = "entrystore.repository.store.indexes";
 	public static String STORE_TYPE = "entrystore.repository.store.type";
+	public static String STORE_INIT_WITH_TEST_DATA = "entrystore.repository.store.init-with-test-data";
 
 	public static String STOREJS_JS = "entrystore.repository.storejs.js";
 	public static String STOREJS_CSS = "entrystore.repository.storejs.css";
@@ -101,6 +103,7 @@ public class Settings {
 	public static String SIGNUP = "entrystore.auth.signup";
 	public static String SIGNUP_SUBJECT = "entrystore.auth.signup.email.subject";
 	public static String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.signup.email.template";
+	public static String SIGNUP_WHITELIST = "entrystore.auth.signup.whitelist";
 
 	public static String PASSWORD_RESET = "entrystore.auth.password-reset";
 	public static String PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-reset.email.template";
@@ -114,6 +117,8 @@ public class Settings {
 	public static String NONADMIN_GROUPCONTEXT_CREATION = "entrystore.nonadmin.group-context-creation";
 
 	public static String TRAVERSAL_PROFILE = "entrystore.traversal";
+
+	public static String ROWSTORE_URL = "entrystore.rowstore.url";
 	
 	private Settings() {
 	}

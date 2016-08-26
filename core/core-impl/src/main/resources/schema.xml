@@ -212,9 +212,12 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="entryType" type="string" indexed="true"/>
         <field name="resourceType" type="string" indexed="true"/>
 
-        <field name="metadata.subject" type="string" indexed="true" stored="true" multiValued="true"/>
-        <field name="metadata.predicate" type="string" indexed="true" stored="true" multiValued="true"/>
-        <field name="metadata.object.uri" type="string" indexed="true" stored="true" multiValued="true"/>
+        <field name="metadata.subject" type="string" indexed="true" multiValued="true"/>
+        <field name="metadata.predicate" type="string" indexed="true" multiValued="true"/>
+        <dynamicField name="metadata.predicate.uri.*" type="string" indexed="true" multiValued="true"/>
+        <dynamicField name="metadata.predicate.literal.*" type="text" indexed="true" multiValued="true"/>
+        <dynamicField name="metadata.predicate.integer.*" type="slong" indexed="true" multiValued="false"/>
+        <field name="metadata.object.uri" type="string" indexed="true" multiValued="true"/>
         <field name="metadata.object.literal" type="text" indexed="true" multiValued="true"/>
 
         <field name="acl.admin" type="string" indexed="true" multiValued="true"/>
@@ -225,17 +228,20 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         
         <field name="title" type="text_ngram" indexed="true" multiValued="true"/>
         <field name="description" type="text" indexed="true" multiValued="true"/>
-        <field name="keyword" type="text" indexed="true" stored="true" multiValued="true"/>
         <field name="lang" type="string" indexed="true" multiValued="true"/>
-        <field name="tag" type="text" indexed="true" stored="true" multiValued="true"/>
-
-        <field name="email" type="string" indexed="true" stored="true" multiValued="true"/>
-
-		<!-- title needs to be single-valued in order be sortable, desc and keyword can be text and multi value -->
-		<dynamicField name="title.*" type="text" indexed="true" stored="true" multiValued="false"/>
-        <dynamicField name="description.*" type="text" indexed="true" stored="true" multiValued="true"/>
-        <dynamicField name="keyword.*" type="text" indexed="true" stored="true" multiValued="true"/>
         
+        <field name="tag.literal" type="text_ngram" indexed="true" multiValued="true"/>
+        <field name="tag.uri" type="string" indexed="true" multiValued="true"/>
+
+        <field name="email" type="string" indexed="true" multiValued="true"/>
+
+        <field name="status" type="string" indexed="true" multiValued="false"/>
+
+        <!-- title needs to be single-valued in order be sortable, desc and tag can be text and multi value -->
+		<dynamicField name="title.*" type="text_ngram" indexed="true" multiValued="false"/>
+        <dynamicField name="description.*" type="text" indexed="true" multiValued="true"/>
+        <dynamicField name="tag.literal.*" type="text_ngram" indexed="true" multiValued="true"/>
+
         <!-- the fulltext field is filled with a string extracted using apache tika -->
         <field name="fulltext" type="text" indexed="true" stored="false"/>
 
@@ -274,7 +280,7 @@ is added to the index.  It's used either to index the same field differently,
 or to add multiple fields to the same field for easier/faster searching.  -->
     <copyField source="title" dest="all"/>
     <copyField source="description" dest="all"/>
-    <copyField source="keyword" dest="all"/>
+    <copyField source="tag.literal" dest="all"/>
 
     <!-- Similarity is the scoring routine for each document vs. a query.
 A custom similarity may be specified here, but the default is fine

@@ -16,12 +16,10 @@
 
 package org.entrystore.rest.resources;
 
-import net.tanesha.recaptcha.ReCaptcha;
-import net.tanesha.recaptcha.ReCaptchaFactory;
+import com.google.common.base.Joiner;
 import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
-import org.apache.commons.validator.routines.EmailValidator;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -32,9 +30,9 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
+import org.entrystore.rest.util.EmailValidator;
 import org.entrystore.rest.util.RecaptchaVerifier;
 import org.entrystore.rest.util.SimpleHTML;
-import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Form;
 import org.restlet.data.Language;
@@ -49,11 +47,16 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 
 
 /**
@@ -66,6 +69,32 @@ public class SignupResource extends BaseResource {
 	private static Logger log = LoggerFactory.getLogger(SignupResource.class);
 
 	protected SimpleHTML html = new SimpleHTML("Sign-up");
+
+	private static Set<String> domainWhitelist = null;
+
+	private static Object mutex = new Object();
+
+	@Override
+	public void doInit() {
+		synchronized (mutex) {
+			if (domainWhitelist == null) {
+				Config config = getRM().getConfiguration();
+				List<String> tmpDomainWhitelist = config.getStringList(Settings.SIGNUP_WHITELIST, new ArrayList<String>());
+				domainWhitelist = new HashSet<>();
+				// we normalize the list to lower case and to not contain null
+				for (String domain : tmpDomainWhitelist) {
+					if (domain != null) {
+						domainWhitelist.add(domain.toLowerCase());
+					}
+				}
+				if (domainWhitelist.size() > 0) {
+					log.info("Sign-up whitelist initialized with following domains: " + Joiner.on(", ").join(domainWhitelist));
+				} else {
+					log.info("No domains provided for sign-up whitelist; sign-ups for any domain are allowed");
+				}
+			}
+		}
+	}
 
 	@Get
 	public Representation represent() throws ResourceException {
@@ -116,6 +145,9 @@ public class SignupResource extends BaseResource {
 			Signup.setFoafMetadata(entry, new org.restlet.security.User("", "", ci.firstName, ci.lastName, ci.email));
 			User u = (User) entry.getResource();
 			u.setSecret(ci.password);
+			if (ci.customProperties != null) {
+				u.setCustomProperties(ci.customProperties);
+			}
 			log.info("Created user " + u.getURI());
 
 			// Create context and set ACL and alias
@@ -150,9 +182,11 @@ public class SignupResource extends BaseResource {
 	public void acceptRepresentation(Representation r) {
 		SignupInfo ci = new SignupInfo();
 		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
+		ci.customProperties = new HashMap<>();
 		String rcChallenge = null;
 		String rcResponse = null;
 		String rcResponseV2 = null;
+		String customPropPrefix = "custom_";
 
 		if (MediaType.APPLICATION_JSON.equals(r.getMediaType())) {
 			try {
@@ -184,6 +218,15 @@ public class SignupResource extends BaseResource {
 				if (siJson.has("urlsuccess")) {
 					ci.urlSuccess = siJson.getString("urlsuccess");
 				}
+
+				// Extract custom properties
+				Iterator siJsonKeyIt = siJson.keys();
+				while (siJsonKeyIt.hasNext()) {
+					String key = (String) siJsonKeyIt.next();
+					if (key.startsWith(customPropPrefix) && (key.length() > customPropPrefix.length())) {
+						ci.customProperties.put(key.substring(customPropPrefix.length()), siJson.getString(key));
+					}
+				}
 			} catch (Exception e) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
@@ -199,6 +242,13 @@ public class SignupResource extends BaseResource {
 			rcResponseV2 = form.getFirstValue("g-recaptcha-response", true);
 			ci.urlFailure = form.getFirstValue("urlfailure", true);
 			ci.urlSuccess = form.getFirstValue("urlsuccess", true);
+
+			// Extract custom properties
+			for (String key : form.getNames()) {
+				if (key.startsWith(customPropPrefix) && (key.length() > customPropPrefix.length())) {
+					ci.customProperties.put(key.substring(customPropPrefix.length()), form.getFirstValue(key));
+				}
+			}
 		}
 
 		if (ci.firstName == null || ci.lastName == null || ci.email == null || ci.password == null) {
@@ -223,6 +273,15 @@ public class SignupResource extends BaseResource {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("Invalid email address: " + ci.email));
 			return;
+		}
+
+		if (domainWhitelist.size() > 0) {
+			String emailDomain = ci.email.substring(ci.email.indexOf("@") + 1).toLowerCase();
+			if (!domainWhitelist.contains(emailDomain)) {
+				getResponse().setStatus(Status.CLIENT_ERROR_EXPECTATION_FAILED);
+				getResponse().setEntity(html.representation("The email domain is not allowed for sign-up: " + emailDomain));
+				return;
+			}
 		}
 
 		Config config = getRM().getConfiguration();
@@ -282,17 +341,6 @@ public class SignupResource extends BaseResource {
 	private String constructHtmlForm(boolean reCaptcha) {
 		Config config = getRM().getConfiguration();
 
-		String reCaptchaHtml = null;
-		if (reCaptcha) {
-			String privateKey = config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
-			String publicKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
-			if (privateKey == null || publicKey == null) {
-				return "reCaptcha keys must be configured";
-			}
-			ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
-			reCaptchaHtml = c.createRecaptchaHtml(null, null);
-		}
-
 		StringBuilder sb = new StringBuilder();
 		sb.append(html.header());
 		sb.append("<form action=\"\" method=\"post\">\n");
@@ -301,12 +349,24 @@ public class SignupResource extends BaseResource {
 		sb.append("E-Mail address<br/><input type=\"text\" name=\"email\"><br/>\n");
 		sb.append("Password<br/><input type=\"password\" name=\"password\"><br/>\n");
 		if (reCaptcha) {
-			sb.append("<br/>\n");
-			sb.append(reCaptchaHtml);
-			sb.append("\n");
+			String siteKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
+			if (siteKey == null) {
+				log.warn("reCaptcha keys must be configured; rendering form without reCaptcha");
+			} else {
+				/* reCaptcha 1.0 (deprecated)
+				String publicKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
+				ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
+				reCaptchaHtml = c.createRecaptchaHtml(null, null);
+				*/
+
+				// reCaptcha 2.0
+				sb.append("<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script>\n");
+				sb.append("<p>\n<div class=\"g-recaptcha\" data-sitekey=\"").append(siteKey).append("\"></div>\n</p>\n");
+			}
 		}
 		sb.append("<br/>\n<input type=\"submit\" value=\"Sign-up\" />\n");
 		sb.append("</form>\n");
+
 		boolean openid = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"));
 		if (openid) {
 			boolean google = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_GOOGLE, "off"));
@@ -325,6 +385,7 @@ public class SignupResource extends BaseResource {
 				}
 			}
 		}
+
 		sb.append(html.footer());
 		return sb.toString();
 	}

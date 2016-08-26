@@ -18,6 +18,9 @@ package org.entrystore.transforms.pcaxis;
 
 import com.mysema.stat.pcaxis.DatasetHandler;
 import com.mysema.stat.pcaxis.PCAxisParser;
+import org.entrystore.Data;
+import org.entrystore.Entry;
+import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.Transform;
 import org.entrystore.transforms.TransformParameters;
 import org.openrdf.model.Graph;
@@ -39,7 +42,14 @@ public class PcAxis2ScovoTransform extends Transform {
 
 	private static Logger log = LoggerFactory.getLogger(PcAxis2ScovoTransform.class);
 
-	public Graph transform(InputStream data, String mimetype) {
+	public Object transform(Pipeline pipeline, Entry sourceEntry) {
+		if (sourceEntry == null) {
+			throw new IllegalStateException("PcAxis2ScovoTransform requires a sourceEntry");
+		}
+
+		String sourceMimeType = sourceEntry.getMimetype();
+        InputStream data = ((Data) sourceEntry.getResource()).getData();
+
 		String baseURI = getArguments().get("baseuri");
 		if (!baseURI.endsWith("/") || !baseURI.endsWith("#")) {
 			baseURI = baseURI+"/";

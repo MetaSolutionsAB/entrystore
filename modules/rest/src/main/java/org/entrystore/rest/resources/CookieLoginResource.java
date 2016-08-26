@@ -58,7 +58,7 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 		
-		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName);
+		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName.toLowerCase());
 		if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
 			// 24h default, lifetime in seconds
 			int maxAge = 24 * 3600;
@@ -77,6 +77,8 @@ public class CookieLoginResource extends BaseResource {
 			tokenCookieSetting.setPath(getRM().getRepositoryURL().getPath());
 	        getResponse().getCookieSettings().add(tokenCookieSetting);
 	        getResponse().setStatus(Status.SUCCESS_OK);
+
+			log.debug("User " + userName + " received authentication token that will expire on " + loginExpiration);
 			if (html) {
 				getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
 			}

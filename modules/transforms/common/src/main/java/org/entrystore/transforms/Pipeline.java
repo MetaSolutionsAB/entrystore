@@ -17,6 +17,7 @@
 package org.entrystore.transforms;
 
 import org.entrystore.Entry;
+import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.converters.Graph2Entries;
 import org.entrystore.repository.util.NS;
 import org.openrdf.model.Graph;
@@ -30,13 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * @author Matthias Palmér
@@ -79,15 +74,28 @@ public class Pipeline {
 
 	private static Map<String, Class<?>> format2Class = null;
 
+    /**
+     *
+     * @param entry must be a Pipeline, i.e. the GraphType must be Pipeline.
+     */
 	public Pipeline(Entry entry) {
 		this.entry = entry;
 		this.detectTransforms();
 	}
 
-	private void detectTransforms() {
-		Graph md = this.entry.getMetadataGraph();
+    public Entry getEntry() {
+        return this.entry;
+    }
 
-		Iterator<Statement> toEntryStmts = md.match(null, transformDestination, null);
+	private void detectTransforms() {
+		Graph graph = ((RDFResource) this.entry.getResource()).getGraph();
+
+        //Fallback, check for transforms in metadata graph instead, old way of doing things.
+        if (graph.isEmpty()) {
+            graph = this.entry.getMetadataGraph();
+        }
+
+		Iterator<Statement> toEntryStmts = graph.match(null, transformDestination, null);
 		if (toEntryStmts.hasNext()) {
 			destination = toEntryStmts.next().getObject().stringValue();
 			if (destination.startsWith("http")) {
@@ -96,21 +104,21 @@ public class Pipeline {
 			}
 		}
 
-		Iterator<Statement> detectStmts = md.match(null, transformDetectDestination, null);
+		Iterator<Statement> detectStmts = graph.match(null, transformDetectDestination, null);
 		if (detectStmts.hasNext()) {
 			detectDestination = detectStmts.next().getObject().stringValue().contains("true");
 		}
 
-		Iterator<Statement> stmts = md.match(null, transform, null);
+		Iterator<Statement> stmts = graph.match(null, transform, null);
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			if (statement.getObject() instanceof Resource) {
 				Resource transformResource = (Resource) statement.getObject();
-				Iterator<Statement> types = md.match(transformResource, transformType, null);
+				Iterator<Statement> types = graph.match(transformResource, transformType, null);
 				if (types.hasNext()) {
 					Transform transform = createTransform(types.next().getObject().stringValue());
 					if (transform != null) {
-						transform.extractArguments(md, transformResource);
+						transform.extractArguments(graph, transformResource);
 						tsteps.add(transform);
 					}
 				}
@@ -148,20 +156,36 @@ public class Pipeline {
 		return null;
 	}
 
-	public Set<Entry> run(InputStream data, String mimetype, java.net.URI listURI) throws TransformException {
+	public Set<Entry> run(Entry sourceEntry, java.net.URI listURI) throws TransformException {
 		//Get the data
+		if (tsteps.size() == 0) {
+			throw new IllegalStateException("Pipeline has no recognizable transforms.");
+		}
 		Transform first = tsteps.get(0);
-		Graph graph = first.transform(data, mimetype);
+		Object result = first.transform(this, sourceEntry);
 		for (int idx = 1; idx < tsteps.size(); idx++) {
-			graph = tsteps.get(idx).transform(graph);
+            if (result instanceof Graph) {
+                result = tsteps.get(idx).transform(this, (Graph) result);
+            } else if (result instanceof Entry) {
+                result = tsteps.get(idx).transform(this, (Entry) result);
+            } else {
+                throw new IllegalStateException("Transform result must be either Graph or Entry.");
+            }
 		}
 
-		Graph2Entries g2e = new Graph2Entries(this.entry.getContext());
-		if (detectDestination) {
-			return g2e.merge(graph, null, null);			
-		} else {
-			return g2e.merge(graph, destination, listURI);			
-		}
+        if (result instanceof Graph) {
+            Graph graph = (Graph) result;
+            Graph2Entries g2e = new Graph2Entries(this.entry.getContext());
+            if (detectDestination) {
+                return g2e.merge(graph, null, null);
+            } else {
+                return g2e.merge(graph, destination, listURI);
+            }
+        } else if (result instanceof Entry) {
+            return new HashSet<Entry>(Arrays.asList((Entry) result));
+        } else {
+            throw new IllegalStateException("Transform result must be either Graph or Entry.");
+        }
 	}
 
 	private static synchronized void loadTransforms() {

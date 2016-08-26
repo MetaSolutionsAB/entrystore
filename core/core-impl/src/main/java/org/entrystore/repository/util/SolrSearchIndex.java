@@ -16,17 +16,6 @@
 
 package org.entrystore.repository.util;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
-
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -38,19 +27,20 @@ import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
-import org.entrystore.SearchIndex;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.repository.RepositoryManager;
 import org.entrystore.ResourceType;
-import org.entrystore.repository.config.Settings;
+import org.entrystore.SearchIndex;
 import org.entrystore.impl.LocalMetadataWrapper;
-import org.entrystore.AuthorizationException;
+import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.config.Settings;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;
@@ -58,6 +48,17 @@ import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 
 /**
@@ -67,15 +68,15 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static Logger log = LoggerFactory.getLogger(SolrSearchIndex.class);
 
-	private static int BATCH_SIZE = 1000;
+	private static final int BATCH_SIZE = 1000;
 
-	private boolean reindexing = false;
+	private volatile boolean reindexing = false;
 
 	private boolean extractFulltext = false;
 
 	private RepositoryManager rm;
 
-	private SolrServer solrServer;
+	private final SolrServer solrServer;
 
 	private Thread documentSubmitter;
 
@@ -109,7 +110,7 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 				} else {
 					try {
-						Thread.sleep(5000);
+						Thread.sleep(2000);
 					} catch (InterruptedException ie) {
 						log.info("Solr document submitter got interrupted, shutting down submitter thread");
 						return;
@@ -148,25 +149,34 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
+	public void clearSolrIndexFromContextEntries(SolrServer solrServer, Entry contextEntry) {
+		UpdateRequest req = new UpdateRequest();
+		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
+		req.deleteByQuery("context:"+contextEntry.getResourceURI().toString().replace(":", "\\:"));
+		try {
+			req.process(solrServer);
+		} catch (SolrServerException sse) {
+			log.error(sse.getMessage(), sse);
+		} catch (IOException ioe) {
+			log.error(ioe.getMessage(), ioe);
+		}
+	}
 	/**
 	 * Reindexes the Solr index. Does not return before the process is
 	 * completed. All subsequent calls to this method are ignored until other
-	 * eventually running reindexing processes are completed, this means that
-	 * this method is thread-safe.
+	 * eventually running reindexing processes are completed.
 	 */
-	public void reindexLiterals() {
+	public void reindex() {
 		if (solrServer == null) {
 			log.warn("Ignoring request as Solr is not used by this instance");
 			return;
 		}
 
-		synchronized (solrServer) {
-			if (reindexing) {
-				log.warn("Solr is already being reindexed: ignoring additional reindexing request");
-				return;
-			} else {
-				reindexing = true;
-			}
+		if (reindexing) {
+			log.warn("Solr is already being reindexed: ignoring additional reindexing request");
+			return;
+		} else {
+			reindexing = true;
 		}
 
 		try {
@@ -220,13 +230,13 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.setField("context", entry.getContext().getEntry().getResourceURI().toString());
 
 		// RDF type
-		String rdfTypeE = EntryUtil.getResource(entry.getGraph(), resourceURI, RDF.TYPE);
-		if (rdfTypeE != null) {
-			doc.addField("rdfType", rdfTypeE);
+		Iterator<Statement> rdfTypeE = entry.getGraph().match(new URIImpl(resourceURI.toString()), RDF.TYPE, null);
+		while (rdfTypeE.hasNext()) {
+			doc.addField("rdfType", rdfTypeE.next().getObject().stringValue());
 		}
-		String rdfTypeM = EntryUtil.getResource(mdGraph, resourceURI, RDF.TYPE);
-		if (rdfTypeM != null) {
-			doc.addField("rdfType", rdfTypeM);
+		Iterator<Statement> rdfTypeM = mdGraph.match(new URIImpl(resourceURI.toString()), RDF.TYPE, null);
+		while (rdfTypeM.hasNext()) {
+			doc.addField("rdfType", rdfTypeM.next().getObject().stringValue());
 		}
 
 		// creation date
@@ -264,6 +274,12 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.addField("acl.metadata.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
 		doc.addField("acl.resource.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
 		doc.addField("acl.resource.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteResource));
+
+		//Status
+		URI status = entry.getStatus();
+		if (status != null) {
+			doc.setField("status", status.toString());
+		}
 
 		// titles
 		Map<String, String> titles = EntryUtil.getTitles(entry);
@@ -316,16 +332,22 @@ public class SolrSearchIndex implements SearchIndex {
 			}
 		}
 
-		// keywords
-		Map<String, String> keywords = EntryUtil.getKeywords(entry);
-		if (keywords != null && keywords.size() > 0) {
-			for (String keyword : keywords.keySet()) {
-				doc.addField("keyword", keyword, 20);
-				String lang = descriptions.get(keyword);
+		// tag.literal[.*]
+		Map<String, String> tagLiterals = EntryUtil.getTagLiterals(entry);
+		if (tagLiterals != null) {
+			for (String tag : tagLiterals.keySet()) {
+				doc.addField("tag.literal", tag, 20);
+				String lang = tagLiterals.get(tag);
 				if (lang != null) {
-					doc.addField("keyword." + lang, keyword, 20);
+					doc.addField("tag.literal." + lang, tag, 20);
 				}
 			}
+		}
+
+		// tag.uri
+		Iterator<String> tagResources = EntryUtil.getTagResources(entry).iterator();
+		while (tagResources.hasNext()) {
+			doc.addField("tag.uri", tagResources.next());
 		}
 
 		// language of the resource
@@ -338,12 +360,6 @@ public class SolrSearchIndex implements SearchIndex {
 			doc.addField("lang", dctLang);
 		}
 
-		// tags (dc:subject)
-		Iterator<Statement> tags = mdGraph.match(null, new URIImpl(NS.dc + "subject"), null);
-		while (tags.hasNext()) {
-			doc.addField("tag", tags.next().getObject().stringValue());
-		}
-		
 		// email (foaf:mbox)
 		String email = EntryUtil.getEmail(entry);
 		if (email != null) {
@@ -362,32 +378,46 @@ public class SolrSearchIndex implements SearchIndex {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		doc.setField("public", guestReadable);
 
-		// all subject, predicates and objects in the metadata graph
+		// All subject, predicates and objects in the metadata graph
+		//
+		// We also provide an index for all predicate-object tuples, stored in dynamic fields.
+		// Perhaps all fuzzy matches for object values (the ones that do not take predicates into
+		// consideration) should be removed in the future (marked with a TODO as comment below).
 		Graph metadata = entry.getMetadataGraph();
 		if (metadata != null) {
 			for (Statement s : metadata) {
-				// subjectURI
+				// subject
 				if (s.getSubject() instanceof org.openrdf.model.URI) {
 					if (!resourceURI.equals(s.getSubject())) {
 						doc.addField("metadata.subject", s.getSubject().stringValue());
 					}
 				}
 
-				// predicateURI
-				if (s.getPredicate() instanceof org.openrdf.model.URI) {
-					doc.addField("metadata.predicate", s.getPredicate().stringValue());
-				}
+				// predicate
+				String predString = s.getPredicate().stringValue();
+				String predMD5Trunc8 = Hashing.md5(predString).substring(0, 8);
+				doc.addField("metadata.predicate", predString);
 
-				// objectURI
+				// object
 				if (s.getObject() instanceof org.openrdf.model.URI) {
-					doc.addField("metadata.object.uri", s.getObject().stringValue());
-				} else
-				// objectLiteral
-				if (s.getObject() instanceof Literal) {
+					String objString = s.getObject().stringValue();
+					doc.addField("metadata.object.uri", objString); // TODO remove?
+
+					// predicate value is included in the parameter name, the object value is the field value
+					doc.addField("metadata.predicate.uri." + predMD5Trunc8, objString);
+				} else if (s.getObject() instanceof Literal) {
 					Literal l = (Literal) s.getObject();
-					// we only index plain literals (human-readable text)
-					if (l.getDatatype() == null) {
-						doc.addField("metadata.object.literal", l.getLabel());
+					if (l.getDatatype() == null) { // we only index plain literals (human-readable text)
+						doc.addField("metadata.object.literal", l.getLabel()); // TODO remove?
+					}
+
+					// predicate value is included in the parameter name, the object value is the field value
+					doc.addField("metadata.predicate.literal." + predMD5Trunc8, l.getLabel());
+
+					// special handling of integer values, to be used for e.g. sorting
+					if (MetadataUtil.isIntegerLiteral(l)) {
+						// it's a single-value field so we call setField instead of addField just in case there should be
+						doc.setField("metadata.predicate.integer." + predMD5Trunc8, l.longValue());
 					}
 				}
 			}
@@ -437,6 +467,10 @@ public class SolrSearchIndex implements SearchIndex {
 			log.error(sse.getMessage(), sse);
 		} catch (IOException ioe) {
 			log.error(ioe.getMessage(), ioe);
+		}
+		//If entry is a context, also remove all entries inside
+		if (entry.getGraphType() == GraphType.Context) {
+			clearSolrIndexFromContextEntries(solrServer, entry);
 		}
 	}
 

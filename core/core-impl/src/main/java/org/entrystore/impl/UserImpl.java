@@ -16,8 +16,12 @@
 
 package org.entrystore.impl;
 
+import java.net.*;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.entrystore.Context;
@@ -30,11 +34,12 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.test.TestSuite;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
+import org.entrystore.repository.util.NS;
+import org.openrdf.model.*;
 import org.openrdf.model.URI;
-import org.openrdf.model.ValueFactory;
+import org.openrdf.model.impl.ValueFactoryImpl;
 import org.openrdf.repository.RepositoryConnection;
+import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,7 +58,20 @@ public class UserImpl extends RDFResource implements User {
 	private String externalID;
 	
 	private RepositoryManager rm;
-	
+
+	public static final org.openrdf.model.URI customProperty;
+
+	public static final org.openrdf.model.URI customPropertyKey;
+
+	public static final org.openrdf.model.URI customPropertyValue;
+
+	static {
+		ValueFactory vf = ValueFactoryImpl.getInstance();
+		customProperty = vf.createURI(NS.entrystore, "customProperty");
+		customPropertyKey = vf.createURI(NS.entrystore, "customPropertyKey");
+		customPropertyValue = vf.createURI(NS.entrystore, "customPropertyValue");
+	}
+
 	/**
 	 * Creates a new user
 	 * @param entry
@@ -162,34 +180,36 @@ public class UserImpl extends RDFResource implements User {
 		}
 		
 		String shSecret = Password.getSaltedHash(secret);
-		if (shSecret ==  null) {
+		if (shSecret == null) {
 			return false;
 		}
 
 		try {
-			RepositoryConnection rc = this.entry.repository.getConnection();
-			ValueFactory vf = this.entry.repository.getValueFactory();
-			rc.setAutoCommit(false);
-			try {
-				synchronized (this) {
+			synchronized (this.entry.repository) {
+				RepositoryConnection rc = this.entry.repository.getConnection();
+				ValueFactory vf = this.entry.repository.getValueFactory();
+				rc.setAutoCommit(false);
+				try {
+
 					// remove an eventually existing plaintext password and store only a salted hash
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.secret, null, false, resourceURI), resourceURI);
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.saltedHashedSecret, null, false, resourceURI), resourceURI);
 					rc.add(resourceURI, RepositoryProperties.saltedHashedSecret, vf.createLiteral(shSecret), resourceURI);
 					rc.commit();
+					this.saltedHashedSecret = shSecret;
+					return true;
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					rc.rollback();
+				} finally {
+					rc.close();
 				}
-				this.saltedHashedSecret = shSecret;
-				return true;
-			} catch (Exception e) {
-				log.error(e.getMessage(), e);
-				rc.rollback();
-			} finally {
-				rc.close();
 			}
 		} catch (org.openrdf.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new RepositoryException("Failed to connect to repository", e);
 		}
+
 		return false;
 	}
 
@@ -250,28 +270,45 @@ public class UserImpl extends RDFResource implements User {
 	public boolean setHomeContext(Context context) {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 		try {
-			RepositoryConnection rc = this.entry.repository.getConnection();
-			rc.setAutoCommit(false);
-			try {
-				synchronized (this) {
-					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI), entry.getSesameEntryURI());
-                    //TODO Remove the following line in future as it corresponds to backward compatability where homecontext where saved in resource graph instead of entry graph.
-                    rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, resourceURI), resourceURI);
+			synchronized (this.entry.repository) {
+				RepositoryConnection rc = this.entry.repository.getConnection();
+				ValueFactory vf = this.entry.repository.getValueFactory();
+				rc.setAutoCommit(false);
+				try {
+					//Remove homecontext and remove inverse relation cache.
+					RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
+					while (iter.hasNext()) {
+						Statement statement = iter.next();
+						java.net.URI sourceEntryURI = java.net.URI.create(statement.getObject().stringValue());
+						EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
+						if (sourceEntry != null) {
+							sourceEntry.removeRelationSynchronized(statement, rc, vf);
+						}
+						rc.remove(statement, entry.getSesameEntryURI());
+					}
 
-                    rc.add(resourceURI,RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
+					//TODO Remove the following line in future as it corresponds to backward compatability where homecontext where saved in resource graph instead of entry graph.
+					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, resourceURI), resourceURI);
+
+					//Add new homecontext and add inverse relational cache
+					if (context != null) {
+						Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
+						rc.add(newStatement);
+						((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
+					}
 					rc.commit();
+					return true;
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					rc.rollback();
+				} finally {
+					rc.close();
+					this.homeContext = context.getEntry().getEntryURI();
 				}
-				return true;
-			} catch (Exception e) {
-				log.error(e.getMessage(), e);
-				rc.rollback();
-			} finally {
-				rc.close();
-				this.homeContext = context.getEntry().getEntryURI();
 			}
 		} catch (org.openrdf.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
-			throw new RepositoryException("Failed to connect to Repository.", e);
+			throw new RepositoryException("Failed to connect to repository.", e);
 		}
 		return false;
 	}
@@ -302,26 +339,26 @@ public class UserImpl extends RDFResource implements User {
 
 	public boolean setLanguage(String language) {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
-		
+
 		try {
-			RepositoryConnection rc = this.entry.repository.getConnection();
-			ValueFactory vf = this.entry.repository.getValueFactory();
-			rc.setAutoCommit(false);
-			try {
-				synchronized (this) {
+			synchronized (this.entry.repository) {
+				RepositoryConnection rc = this.entry.repository.getConnection();
+				ValueFactory vf = this.entry.repository.getValueFactory();
+				rc.setAutoCommit(false);
+				try {
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.language, null, false, resourceURI), resourceURI);
 					if (language != null) {
 						rc.add(resourceURI, RepositoryProperties.language, vf.createLiteral(language), resourceURI);
 					}
 					rc.commit();
+					return true;
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					rc.rollback();
+				} finally {
+					rc.close();
+					this.language = language;
 				}
-				return true;
-			} catch (Exception e) {
-				log.error(e.getMessage(), e);
-				rc.rollback();
-			} finally {
-				rc.close();
-				this.language = language;
 			}
 		} catch (org.openrdf.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
@@ -370,26 +407,26 @@ public class UserImpl extends RDFResource implements User {
 	 */
 	public boolean setExternalID(String eid) {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
-		
+
 		try {
-			RepositoryConnection rc = this.entry.repository.getConnection();
-			ValueFactory vf = this.entry.repository.getValueFactory();
-			rc.setAutoCommit(false);
-			try {
-				synchronized (this) {
+			synchronized (this.entry.repository) {
+				RepositoryConnection rc = this.entry.repository.getConnection();
+				ValueFactory vf = this.entry.repository.getValueFactory();
+				rc.setAutoCommit(false);
+				try {
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.externalID, null, false, resourceURI), resourceURI);
 					if (eid != null) {
 						rc.add(resourceURI, RepositoryProperties.externalID, vf.createURI("mailto:", eid), resourceURI);
 					}
 					rc.commit();
+					return true;
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					rc.rollback();
+				} finally {
+					rc.close();
+					this.externalID = eid;
 				}
-				return true;
-			} catch (Exception e) {
-				log.error(e.getMessage(), e);
-				rc.rollback();
-			} finally {
-				rc.close();
-				this.externalID = eid;
 			}
 		} catch (org.openrdf.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
@@ -407,6 +444,80 @@ public class UserImpl extends RDFResource implements User {
 			}
 		}
 		return set;
+	}
+
+	public Map<String, String> getCustomProperties() {
+		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
+
+		Map<String, String> result = new HashMap<>();
+		Graph userResourceGraph = getGraph();
+		Iterator<Statement> args = userResourceGraph.match(resourceURI, customProperty, null);
+		while (args.hasNext()) {
+			Statement s = args.next();
+			if (s.getObject() instanceof BNode) {
+				String keyStr = null;
+				String valueStr = null;
+				Iterator<Statement> argKeyIt = userResourceGraph.match((BNode) s.getObject(), customPropertyKey, null);
+				if (argKeyIt.hasNext()) {
+					Value argKey = argKeyIt.next().getObject();
+					if (argKey instanceof Literal) {
+						keyStr = ((Literal) argKey).stringValue();
+						Iterator<Statement> argValueIt = userResourceGraph.match((BNode) s.getObject(), customPropertyValue, null);
+						if (argValueIt.hasNext()) {
+							Value argValue = argValueIt.next().getObject();
+							if (argValue instanceof Literal) {
+								valueStr = ((Literal) argValue).stringValue();
+							}
+						}
+					}
+				}
+				if (keyStr != null && valueStr != null) {
+					result.put(keyStr.toLowerCase(), valueStr);
+				}
+			}
+		}
+
+		return result;
+	}
+
+	public boolean setCustomProperties(Map<String, String> properties) {
+		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
+
+		if (properties == null) {
+			throw new IllegalArgumentException("Parameter must not be null");
+		}
+
+		try {
+			synchronized (this.entry.repository) {
+				RepositoryConnection rc = this.entry.repository.getConnection();
+				ValueFactory vf = this.entry.repository.getValueFactory();
+				rc.begin();
+				try {
+					rc.remove(rc.getStatements(null, customProperty, null, false, resourceURI), resourceURI);
+					rc.remove(rc.getStatements(null, customPropertyKey, null, false, resourceURI), resourceURI);
+					rc.remove(rc.getStatements(null, customPropertyValue, null, false, resourceURI), resourceURI);
+
+					for (java.util.Map.Entry<String, String> e : properties.entrySet()) {
+						BNode bnode = vf.createBNode();
+						rc.add(resourceURI, customProperty, bnode, resourceURI);
+						rc.add(bnode, customPropertyKey, vf.createLiteral(e.getKey()), resourceURI);
+						rc.add(bnode, customPropertyValue, vf.createLiteral(e.getValue()), resourceURI);
+					}
+
+					rc.commit();
+					return true;
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					rc.rollback();
+				} finally {
+					rc.close();
+				}
+			}
+		} catch (org.openrdf.repository.RepositoryException e) {
+			log.error(e.getMessage(), e);
+			throw new RepositoryException("Failed to connect to repository", e);
+		}
+		return false;
 	}
 
 }

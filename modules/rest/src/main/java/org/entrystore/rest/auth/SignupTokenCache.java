@@ -37,10 +37,12 @@ public class SignupTokenCache extends TokenCache<String, SignupInfo> {
 		return instance;
 	}
 
-	public synchronized void cleanup() {
-		for (Map.Entry<String, SignupInfo> e : tokenCache.entrySet()) {
-			if (e.getValue().expirationDate.before(new Date())) {
-				tokenCache.remove(e.getKey());
+	public void cleanup() {
+		synchronized (tokenCache) {
+			for (Map.Entry<String, SignupInfo> e : tokenCache.entrySet()) {
+				if (e.getValue().expirationDate.before(new Date())) {
+					tokenCache.remove(e.getKey());
+				}
 			}
 		}
 	}

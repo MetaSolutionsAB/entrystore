@@ -1384,13 +1384,13 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			allContexts = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_all");
 			setMetadata(allContexts, "all contexts", "This is a list of all contexts in the ContextManager.");
 			allContexts.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, repMan.getPrincipalManager().getGuestUser().getURI());
-			allContexts.addAllowedPrincipalsFor(AccessProperty.ReadResource, repMan.getPrincipalManager().getGuestUser().getURI());
 			log.info("Successfully added the _all contexts list");
 		}
 		EntryImpl e = (EntryImpl) allContexts;
 		e.setResource(new SystemList(e, e.getSesameResourceURI()) {
 			@Override
 			public List<URI> getChildren() {
+                this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
 				Iterator<URI> entryIterator = getEntries().iterator();
 				List<URI> contextUris = new ArrayList<URI>();
 

@@ -1,4 +1,4 @@
-# EntryStore code repository
+# EntryStore [![Build Status](https://drone.io/bitbucket.org/metasolutions/entrystore/status.png)](https://drone.io/bitbucket.org/metasolutions/entrystore/latest)
 
 EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3). ReM3 is an information model for keeping track of resources and their metadata and provides a unique approach to information management. It allows web pages, physical objects, abstract concepts, events, etc. to be described by established metadata standards and to be managed in a single system.
 

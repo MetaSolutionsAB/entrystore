@@ -31,10 +31,10 @@ public class JSONErrorMessages {
 	public static String errorWrongContextIDmsg = new String("{\"error\":\"The requested context ID does not exist\"}");
 	public static String errorCantCreateEntry = new String("{\"error\":\"Cannot create entry\"}");
 	public static String errorEntryWithGivenIDExists = new String("{\"error\":\"Entry already exists with provided ID\"}");
-	public static String errorCantNotFindEntry = new String("{\"error\":\"Entry not found\"}");
-	public static String errorCantFindResource = new String("{\"error\":\"Resource not found\"}"); 
-	public static String errorCantFindMetadata = new String("{\"error\":\"Metadata not found\"}");
-	public static String errorCantFindCachedMetadata = new String("{\"error\":\"Cached external metadata not found\"}");
+	public static String errorEntryNotFound = new String("{\"error\":\"Entry not found\"}");
+	public static String errorResourceNotFound = new String("{\"error\":\"Resource not found\"}");
+	public static String errorMetadataNotFound = new String("{\"error\":\"Metadata not found\"}");
+	public static String errorCachedMetadataNotFound = new String("{\"error\":\"Cached external metadata not found\"}");
 	public static String errorJSONSyntax = new String("{\"error\":\"Error in JSON syntax\"}");
 	public static String errorUnknownKind = new String("{\"error\":\"Unknown kind\"}");
 	public static String errorNotAContext = new String("{\"error\":\"Not a context\"}");

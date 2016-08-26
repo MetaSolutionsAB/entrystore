@@ -27,6 +27,7 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.impl.ContextImpl;
+import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
@@ -98,15 +99,15 @@ public class ContextResource extends BaseResource {
 	@Get
 	public Representation represent() throws ResourceException {	
 		if (context == null) {
-			log.info("The given context id does not exist."); 
+			log.debug("The given context id does not exist.");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
 			return new JsonRepresentation(JSONErrorMessages.errorWrongContextIDmsg); 
 		}
-		
+        if (!getPM().isUserAdminOrAdminGroup(null)) {
+            return unauthorizedGET();
+        }
+
 		if (parameters.containsKey("reindex")) {
-			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
-				return unauthorizedGET();
-			}
 			context.reIndex();
 		}
 
@@ -119,7 +120,12 @@ public class ContextResource extends BaseResource {
 				String delID = delURI.substring(delURI.lastIndexOf("/") + 1);
 				array.put(delID);
 			}
-		} else {
+		} else if (context instanceof EntryNamesContext && parameters.containsKey("entryname")) {
+            Entry matchedEntry  = ((EntryNamesContext) context).getEntryByName(parameters.get("entryname"));
+            if (matchedEntry != null) {
+                array.put(matchedEntry.getId());
+            }
+        } else {
 			Set<URI> entriesURI = context.getEntries();
 			for (URI u : entriesURI) {
 				Entry entry = context.getByEntryURI(u);
@@ -158,16 +164,17 @@ public class ContextResource extends BaseResource {
 	public void acceptRepresentation(Representation r) throws ResourceException {
 		try {
 			if (context == null) {
-				log.info("The given context id doesn't exist."); 
+				log.debug("The given context ID does not exist");
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				getResponse().setEntity(JSONErrorMessages.errorWrongContextIDmsg, MediaType.APPLICATION_JSON);
+				return;
 			}
 
 			String entryId = parameters.get("id");
 			if (entryId != null) {
 				Entry preExistingEntry = context.get(entryId);
 				if (preExistingEntry != null) {
-					log.warn("Entry with that id already exists"); 
+					log.debug("Entry with that ID already exists");
 					getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT); 
 					getResponse().setLocationRef(context.get(parameters.get("id")).getEntryURI().toString());
 					getResponse().setEntity(JSONErrorMessages.errorEntryWithGivenIDExists, MediaType.APPLICATION_JSON);
@@ -201,7 +208,6 @@ public class ContextResource extends BaseResource {
 			if (entry != null) {
 				ResourceType rt = getResourceType(parameters.get("informationresource"));
 				entry.setResourceType(rt);
-
 				
 				String template = parameters.get("template");
 				if (template != null) {
@@ -254,10 +260,9 @@ public class ContextResource extends BaseResource {
 					}
 				}
 			}
-			
-			// Error: 
+
 			if (entry == null) {
-				log.warn("Can not create an Entry with that JSON"); 
+				log.debug("Cannot create an entry with provided JSON");
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(JSONErrorMessages.errorCantCreateEntry, MediaType.APPLICATION_JSON);
 			} else {
@@ -277,6 +282,10 @@ public class ContextResource extends BaseResource {
 	 * @return the new created entry object.
 	 */
 	private Entry createLinkReferenceEntry(Entry entry) {
+		if (isGraphTypeForbidden()) {
+			return null;
+		}
+
 		try {
 			if (parameters.get("resource") != null
 					&& "linkreference".equalsIgnoreCase(parameters.get("entrytype"))) {
@@ -286,7 +295,7 @@ public class ContextResource extends BaseResource {
 					resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), "UTF-8"));
 					metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), "UTF-8"));
 				} catch (UnsupportedEncodingException e) {
-					log.error(e.getMessage());
+					log.warn(e.getMessage());
 					return null;
 				}
 				
@@ -329,6 +338,10 @@ public class ContextResource extends BaseResource {
 	 * @return the new created entry
 	 */
 	private Entry createReferenceEntry(Entry entry) {
+		if (isGraphTypeForbidden()) {
+			return null;
+		}
+
 		try {
 			if ((parameters.get("resource") != null) &&
 					(parameters.get("cached-external-metadata") != null) &&
@@ -339,7 +352,7 @@ public class ContextResource extends BaseResource {
 					resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), "UTF-8"));
 					metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), "UTF-8"));
 				} catch (UnsupportedEncodingException e) {
-					log.error(e.getMessage());
+					log.warn(e.getMessage());
 					return null;
 				}
 
@@ -371,8 +384,8 @@ public class ContextResource extends BaseResource {
 				return entry;
 			}
 		} catch (URISyntaxException e) {
-			log.error(e.getMessage());
-		} 
+			log.warn(e.getMessage());
+		}
 
 		return null; 
 	}
@@ -417,6 +430,9 @@ public class ContextResource extends BaseResource {
 		if (gt.equalsIgnoreCase("pipeline")) {
 			return GraphType.Pipeline;
 		}
+		if (gt.equalsIgnoreCase("pipelineresult")) {
+			return GraphType.PipelineResult;
+		}
 		return GraphType.None;
 	}
 
@@ -425,7 +441,11 @@ public class ContextResource extends BaseResource {
 	 * @param entry a reference to a entry
 	 * @return the new created entry
 	 */
-	private Entry createLocalEntry(Entry entry) {	
+	private Entry createLocalEntry(Entry entry) {
+		if (isGraphTypeForbidden()) {
+			return null;
+		}
+
 		URI listURI = null;
 		if (parameters.containsKey("list")) {
 			try {
@@ -462,8 +482,8 @@ public class ContextResource extends BaseResource {
 	 */
 	private boolean setResource(Entry entry) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
-		if (requestText != null) {
-			jsonObj = new JSONObject(requestText);
+		if (requestText != null && !"".equals(requestText)) {
+			jsonObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 		}
 
 		//If there is no resource there is nothing to do yet.
@@ -478,7 +498,7 @@ public class ContextResource extends BaseResource {
 			
 			if (jsonObj.has("name")) {
 				if(user.setName(jsonObj.getString("name")) == false) {
-						return false; 
+					return false;
 				}
 			} else {
 				return false; 
@@ -500,8 +520,8 @@ public class ContextResource extends BaseResource {
 					Group group = (Group) groupEntry.getResource();
 					group.addMember(user); 
 				} catch (URISyntaxException e) {
-					e.printStackTrace();
-				} 
+					log.warn(e.getMessage());
+				}
 			}
 			break;
 		case Group:
@@ -535,7 +555,7 @@ public class ContextResource extends BaseResource {
 				try {
 					cont.setQuota(jsonObj.getLong("quota"));
 				} catch (JSONException jsone) {
-					log.error("Unable to parse new quota value: " + jsone.getMessage());
+					log.warn("Unable to parse new quota value: " + jsone.getMessage());
 				}
 			}
 			break;
@@ -543,11 +563,13 @@ public class ContextResource extends BaseResource {
 			StringResource stringRes = (StringResource) entry.getResource();
 			stringRes.setString(jsonObj.getString("resource")); 
 			break;
-		case Graph:
+        case Graph:
+        case Pipeline:
 			RDFResource RDFRes = (RDFResource) entry.getResource();
 			Graph g = RDFJSON.rdfJsonToGraph((JSONObject) jsonObj.get("resource"));
 			RDFRes.setGraph(g);
 			break;
+		case PipelineResult:
 		case None:
 			break;
 		}
@@ -560,16 +582,20 @@ public class ContextResource extends BaseResource {
 	 * @return the new created entry
 	 */
 	private Entry createLinkEntry(Entry entry) {
+		if (isGraphTypeForbidden()) {
+			return null;
+		}
+
 		//check the request
 		URI resourceURI = null;
 		try {
 			resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), "UTF-8"));
 		} catch (UnsupportedEncodingException e) {
-			log.error("The resource parameter must be encoded using UTF-8");
+			log.debug("The resource parameter must be encoded using UTF-8");
 			return null;
 		}
 
-		if(parameters.containsKey("list")) {
+		if (parameters.containsKey("list")) {
 			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("list")));
 		} else {
 			entry = context.createLink(parameters.get("id"), resourceURI, null);
@@ -617,7 +643,7 @@ public class ContextResource extends BaseResource {
 				}
 			}
 		} catch (JSONException e) {
-			log.error(e.getMessage());
+			log.warn(e.getMessage());
 		}
 	}	
 
@@ -642,7 +668,7 @@ public class ContextResource extends BaseResource {
 					}
 				}
 			} catch (JSONException e) {
-				log.error(e.getMessage());
+				log.warn(e.getMessage());
 			}
 		}
 	}
@@ -662,13 +688,15 @@ public class ContextResource extends BaseResource {
 
 		try {
 			JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
-			JSONObject obj =(JSONObject) mdObj.get("info");
-			Graph graph = null;
-			if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
-				entry.setGraph(graph);
+			if (mdObj.has("info")) {
+				JSONObject obj = (JSONObject) mdObj.get("info");
+				Graph graph = null;
+				if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
+					entry.setGraph(graph);
+				}
 			}
 		} catch (JSONException e) {
-			log.error(e.getMessage());
+			log.warn(e.getMessage());
 		}
 	}
 
@@ -676,7 +704,7 @@ public class ContextResource extends BaseResource {
 	public void removeRepresentations() throws ResourceException {
 		try {
 			if (context == null) {
-				log.error("Unable to find context with that ID"); 
+				log.debug("Unable to find context with ID " + contextId);
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
 				return;
 			}
@@ -695,6 +723,21 @@ public class ContextResource extends BaseResource {
 		} catch(AuthorizationException e) {
 			unauthorizedDELETE();
 		}
+	}
+
+	/**
+	 * Returns false if the Graph Type provided in the parameters
+	 * cannot be used for manually created entries
+	 *
+	 * @return True if Graph Type is forbidden/blacklisted.
+	 */
+	private boolean isGraphTypeForbidden() {
+		// Pipeline results may only be created by Pipelines
+		if (GraphType.PipelineResult.equals(getGraphType(parameters.get("graphtype")))) {
+			log.debug("Pipeline results may only be created by Pipelines");
+			return true;
+		}
+		return false;
 	}
 
 }

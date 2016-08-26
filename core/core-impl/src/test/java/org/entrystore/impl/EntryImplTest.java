@@ -25,6 +25,8 @@ import org.entrystore.repository.RepositoryException;
 import org.junit.Before;
 import org.junit.Test;
 import org.openrdf.model.Graph;
+import org.openrdf.model.Statement;
+import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.vocabulary.RDF;
 
@@ -178,4 +180,41 @@ public class EntryImplTest extends AbstractCoreTest {
 		assertTrue(ref.getCachedExternalMetadata().getGraph().size() == linkEntry.getLocalMetadata().getGraph().size());
 	}
 
+    @Test
+    public void invRelCache() {
+        EntryImpl sourceEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+        EntryImpl targetEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+        ValueFactory vf = sourceEntry.getRepository().getValueFactory();
+        org.openrdf.model.URI pred = vf.createURI("http://example.com/related");
+        Statement stm = vf.createStatement(sourceEntry.getSesameResourceURI(), pred, targetEntry.getSesameResourceURI());
+        EntryImpl guestE = (EntryImpl) pm.getGuestUser().getEntry();
+        Statement readStm = vf.createStatement(sourceEntry.getSesameResourceURI(), RepositoryProperties.Read, guestE.getSesameResourceURI());
+        Graph g = sourceEntry.getGraph();
+
+        //No relations in target entry
+        assertTrue(targetEntry.getRelations().isEmpty());
+
+        //Testing to create a relation to target entry
+        g.add(stm);
+        sourceEntry.setGraph(g);
+        assertTrue(!targetEntry.getRelations().isEmpty());
+
+        //Testing to manually remove relation to target entry
+        g.remove(stm);
+        sourceEntry.setGraph(g);
+        assertTrue(targetEntry.getRelations().isEmpty());
+
+        //Testing to change acl and making sure that principal inv-rel-cache (relations) is not affected.
+        int rels = guestE.getRelations().size();
+        g.add(readStm);
+        sourceEntry.setGraph(g);
+        assertTrue(guestE.getRelations().size() == rels);
+
+        //Testing that inv-rel-cache of target entry is updated upon remove of source entry.
+        g.add(stm);
+        sourceEntry.setGraph(g);
+        assertTrue(!targetEntry.getRelations().isEmpty());
+        context.remove(sourceEntry.getEntryURI());
+        assertTrue(targetEntry.getRelations().isEmpty());
+    }
 }

@@ -74,7 +74,7 @@ public class PasswordResetResource extends BaseResource {
 		SignupInfo ci = tc.getTokenValue(token);
 		if (ci == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			return html.representation("Invalid confirmation token.");
+			return html.representation("The confirmation token is invalid or has been used already.");
 		}
 		tc.removeToken(token);
 
@@ -86,8 +86,10 @@ public class PasswordResetResource extends BaseResource {
 			Entry userEntry = pm.getPrincipalEntry(ci.email);
 			User u = null;
 			if (userEntry != null) {
+				log.debug("Loaded user entry via email adress");
 				u = (User) userEntry.getResource();
 			} else {
+				log.debug("Trying to load user entry via external ID");
 				u = pm.getUserByExternalID(ci.email);
 			}
 			if (u == null) {
@@ -106,8 +108,23 @@ public class PasswordResetResource extends BaseResource {
 			}
 
 			// Reset password
-			u.setSecret(ci.password);
-			log.info("Reset password for user " + u.getURI());
+			if (u.setSecret(ci.password)) {
+				log.info("Reset password for user " + u.getURI());
+			} else {
+				log.error("Error when resetting password for user " + u.getURI());
+				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+				if (ci.urlFailure != null) {
+					try {
+						getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, "UTF-8"));
+						return new EmptyRepresentation();
+					} catch (UnsupportedEncodingException use) {
+						log.warn("Unable to decode URL: " + use.getMessage());
+					}
+					return new EmptyRepresentation();
+				} else {
+					return html.representation("Unable to reset password due to internal error.");
+				}
+			}
 		} finally {
 			pm.setAuthenticatedUserURI(authUser);
 		}
@@ -178,6 +195,10 @@ public class PasswordResetResource extends BaseResource {
 			return;
 		}
 
+		// we have to store it in lower case only to avoid problems with different cases in
+		// different steps of the process (if the user provides inconsistent information)
+		ci.email = ci.email.toLowerCase();
+
 		if (ci.password.trim().length() < 8) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("The password has to consist of at least 8 characters."));
@@ -247,26 +268,26 @@ public class PasswordResetResource extends BaseResource {
 	private String constructHtmlForm(boolean reCaptcha) {
 		Config config = getRM().getConfiguration();
 
-		String reCaptchaHtml = null;
-		if (reCaptcha) {
-			String privateKey = config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
-			String publicKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
-			if (privateKey == null || publicKey == null) {
-				return "reCaptcha keys must be configured";
-			}
-			ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
-			reCaptchaHtml = c.createRecaptchaHtml(null, null);
-		}
-
 		StringBuilder sb = new StringBuilder();
 		sb.append(html.header());
 		sb.append("<form action=\"\" method=\"post\">\n");
 		sb.append("E-Mail address<br/><input type=\"text\" name=\"email\"><br/>\n");
 		sb.append("New password<br/><input type=\"password\" name=\"password\"><br/>\n");
 		if (reCaptcha) {
-			sb.append("<br/>\n");
-			sb.append(reCaptchaHtml);
-			sb.append("\n");
+			String siteKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
+			if (siteKey == null) {
+				log.warn("reCaptcha site key must be configured; rendering form without reCaptcha");
+			} else {
+				/* reCaptcha 1.0 (deprecated)
+				String publicKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
+				ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
+				reCaptchaHtml = c.createRecaptchaHtml(null, null);
+				*/
+
+				// reCaptcha 2.0
+				sb.append("<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script>\n");
+				sb.append("<p>\n<div class=\"g-recaptcha\" data-sitekey=\"").append(siteKey).append("\"></div>\n</p>\n");
+			}
 		}
 		sb.append("<br/>\n<input type=\"submit\" value=\"Reset password\" />\n");
 		sb.append("</form>\n");

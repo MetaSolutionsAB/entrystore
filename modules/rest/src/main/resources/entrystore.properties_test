@@ -6,6 +6,7 @@ entrystore.solr.reindex-on-startup=off
 entrystore.solr.url=/tmp/entrystore-test-solr/
 
 entrystore.repository.store.type=memory
+entrystore.repository.store.init-with-test-data=on
 
 entrystore.cors=on
 entrystore.cors.origins=*

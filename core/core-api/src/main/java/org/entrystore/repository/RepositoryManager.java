@@ -86,6 +86,8 @@ public interface RepositoryManager {
 	boolean hasQuotas();
 	
 	long getDefaultQuota();
+
+	long getMaximumFileSize();
 	
 	void registerListener(RepositoryListener listener, RepositoryEvent event);
 	

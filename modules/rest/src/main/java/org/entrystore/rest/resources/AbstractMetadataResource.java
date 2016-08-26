@@ -97,7 +97,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		try {
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				return new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry);
+				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
 			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
@@ -114,7 +114,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				} catch (UnsupportedEncodingException e) {
 					log.error(e.getMessage());
 				}
-				result = getRepresentation(traverse(entry.getEntryURI(), resolvePredicates(traversalParam)), prefFormat);
+				result = getRepresentation(traverse(entry.getEntryURI(), resolvePredicates(traversalParam), parameters.containsKey("repository")), prefFormat);
 			} else {
 				if (getMetadata() == null) {
 					getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -165,7 +165,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		try {
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorEntryNotFound));
 				return;
 			}
 
@@ -186,7 +186,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		try {
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorEntryNotFound));
 				return;
 			}
 
@@ -212,7 +212,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		try {
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorCantNotFindEntry));
+				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorEntryNotFound));
 				return;
 			}
 
@@ -298,14 +298,14 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @return Returns a Graph consisting of merged metadata graphs. Contains
 	 * 			all metadata, including e.g. cached external.
 	 */
-	private Graph traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow) {
+	private Graph traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow, boolean repository) {
 		return EntryUtil.traverseAndLoadEntryMetadata(
 				ImmutableSet.of((URI) new URIImpl(entryURI.toString())),
 				predToFollow,
 				0,
 				10,
 				HashMultimap.<URI, Integer>create(),
-				context,
+				repository ? null : context,
 				getRM()
 		);
 	}
