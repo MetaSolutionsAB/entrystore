@@ -291,6 +291,10 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			return;
 		}
 
+		if (currentUserURI.equals(entry.getResourceURI()) &&
+				(accessProperty == AccessProperty.ReadMetadata || accessProperty == AccessProperty.ReadResource)) {
+			return;
+		}
 		//Switch to admin so that the PrincipalManager can perform all
 		//neccessary checks without being hindered by itself (results in loops).
 		setAuthenticatedUserURI(getAdminUser().getURI());
