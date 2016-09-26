@@ -31,12 +31,10 @@ import org.entrystore.config.Config;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
-import org.entrystore.rest.util.Util;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -44,6 +42,7 @@ import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
 import org.restlet.data.MediaType;
+import org.restlet.data.Method;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
@@ -90,8 +89,6 @@ public class EntryResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
-
-		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
 
 	@Override
@@ -134,11 +131,16 @@ public class EntryResource extends BaseResource {
 				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
-			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
-			if (preferredMediaType == null) {
-				preferredMediaType = MediaType.APPLICATION_RDF_XML;
+			Representation result = null;
+			if (Method.GET.equals(getRequest().getMethod())) {
+				MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+				if (preferredMediaType == null) {
+					preferredMediaType = MediaType.APPLICATION_RDF_XML;
+				}
+				result = getEntry((format != null) ? format : preferredMediaType);
+			} else {
+				result = new EmptyRepresentation();
 			}
-			Representation result = getEntry((format != null) ? format : preferredMediaType);
 			Date lastMod = entry.getModifiedDate();
 			if (lastMod != null) {
 				result.setModificationDate(lastMod);
@@ -152,6 +154,11 @@ public class EntryResource extends BaseResource {
 	@Put
 	public void storeRepresentation(Representation r) {
 		try {
+			if (getRequest().getEntity().isEmpty()) {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return;
+			}
+
 			modifyEntry((format != null) ? format : getRequestEntity().getMediaType());
 		} catch (AuthorizationException e) {
 			unauthorizedPUT();
@@ -700,7 +707,7 @@ public class EntryResource extends BaseResource {
 			return;
 		}
 		Graph deserializedGraph = null;
-		if (mediaType.equals(MediaType.APPLICATION_JSON)) {
+		if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 			try {
 				JSONObject rdfJSON = new JSONObject(graphString);
 				if (rdfJSON != null) {

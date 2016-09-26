@@ -60,7 +60,6 @@ public class GraphUtil {
 
 	private static Logger log = LoggerFactory.getLogger(GraphUtil.class);
 
-
 	/**
 	 * @param graph  The Graph to be serialized.
 	 * @param writer One of the following: N3Writer, NTriplesWriter,

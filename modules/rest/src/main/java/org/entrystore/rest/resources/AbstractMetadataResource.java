@@ -26,7 +26,6 @@ import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
-import org.entrystore.rest.util.Util;
 import org.openrdf.model.Graph;
 import org.openrdf.model.URI;
 import org.openrdf.model.impl.GraphImpl;
@@ -34,6 +33,7 @@ import org.openrdf.model.impl.URIImpl;
 import org.openrdf.rio.RDFFormat;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
+import org.restlet.data.Method;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
@@ -81,8 +81,6 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType("application/lom+xml"));
 		supportedMediaTypes.add(new MediaType("application/rdf+json"));
-
-		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
 	
 	/**
@@ -100,35 +98,49 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
-			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
-			if (preferredMediaType == null) {
-				preferredMediaType = MediaType.APPLICATION_RDF_XML;
-			}
-			MediaType prefFormat = (format != null) ? format : preferredMediaType;
 			Representation result = null;
-
-			if (parameters.containsKey("recursive")) {
-				String traversalParam = null;
-				try {
-					traversalParam = URLDecoder.decode(parameters.get("recursive"), "UTF-8");
-				} catch (UnsupportedEncodingException e) {
-					log.error(e.getMessage());
+			if (Method.GET.equals(getRequest().getMethod())) {
+				MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+				if (preferredMediaType == null) {
+					preferredMediaType = MediaType.APPLICATION_RDF_XML;
 				}
-				result = getRepresentation(traverse(entry.getEntryURI(), resolvePredicates(traversalParam), parameters.containsKey("repository")), prefFormat);
-			} else {
-				if (getMetadata() == null) {
-					getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-					return null;
-				}
+				MediaType prefFormat = (format != null) ? format : preferredMediaType;
 
-				// the check for resource safety is necessary to avoid an implicit
-				// getMetadata() in the case of a PUT on (not yet) existant metadata
-				// - this is e.g. the case if conditional requests are issued
-				if (getRequest().getMethod().isSafe()) {
-					result = getRepresentation(getMetadata().getGraph(), prefFormat);
+				if (parameters.containsKey("recursive")) {
+					String traversalParam = null;
+					try {
+						traversalParam = URLDecoder.decode(parameters.get("recursive"), "UTF-8");
+					} catch (UnsupportedEncodingException e) {
+						log.error(e.getMessage());
+					}
+					result = getRepresentation(traverse(entry.getEntryURI(), resolvePredicates(traversalParam), parameters.containsKey("repository")), prefFormat);
 				} else {
-					result = new EmptyRepresentation();
+					if (getMetadata() == null) {
+						getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+						return null;
+					}
+
+					result = getRepresentation(getMetadata().getGraph(), prefFormat);
 				}
+
+				// set file name
+				String fileName = entry.getFilename();
+				if (fileName == null) {
+					fileName = entry.getId();
+				}
+				fileName += ".rdf";
+
+				// offer download in case client requested this
+				Disposition disp = new Disposition();
+				disp.setFilename(fileName);
+				if (parameters.containsKey("download")) {
+					disp.setType(Disposition.TYPE_ATTACHMENT);
+				} else {
+					disp.setType(Disposition.TYPE_INLINE);
+				}
+				result.setDisposition(disp);
+			} else {
+				result = new EmptyRepresentation();
 			}
 
 			// set modification date
@@ -136,23 +148,6 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			if (lastMod != null) {
 				result.setModificationDate(lastMod);
 			}
-
-			// set file name
-			String fileName = entry.getFilename();
-			if (fileName == null) {
-				fileName = entry.getId();
-			}
-			fileName += ".rdf";
-
-			// offer download in case client requested this
-			Disposition disp = new Disposition();
-			disp.setFilename(fileName);
-			if (parameters.containsKey("download")) {
-				disp.setType(Disposition.TYPE_ATTACHMENT);
-			} else {
-				disp.setType(Disposition.TYPE_INLINE);
-			}
-			result.setDisposition(disp);
 
 			return result;
 		} catch (AuthorizationException e) {

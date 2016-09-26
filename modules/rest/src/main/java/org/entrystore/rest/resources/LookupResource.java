@@ -65,8 +65,6 @@ public class LookupResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType("application/lom+xml"));
 
-		Util.handleIfUnmodifiedSince(entry, getRequest());
-		
 		entry = null;
 	}
 

@@ -106,6 +106,8 @@ public abstract class BaseResource extends ServerResource {
 				this.format = new MediaType(format);
 			}
 		}
+
+		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
 
 	@Override

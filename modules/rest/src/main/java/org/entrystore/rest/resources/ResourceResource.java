@@ -129,8 +129,6 @@ public class ResourceResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
-
-		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
 
 	/**
@@ -152,79 +150,12 @@ public class ResourceResource extends BaseResource {
 				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
-			/*
-			 * RSS feed
-			 */
-			if (parameters.containsKey("syndication")) {
-				try {
-					if (getRM().getIndex() == null) {
-						getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
-						return new JsonRepresentation("{\"error\":\"Feeds are not supported by this installation\"}");
-					}
-					StringRepresentation rep = getSyndicationSolr(entry, parameters.get("syndication"));
-					if (rep == null) {
-						getResponse().setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
-						return new JsonRepresentation(JSONErrorMessages.errorNotAContext); 
-					}
-					return rep; 
-				} catch (IllegalArgumentException e) {
-					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-					return new JsonRepresentation(JSONErrorMessages.syndicationFormat); 
-				}
-			}
-
-			// Graph and List
-			if (GraphType.Graph.equals(entry.getGraphType()) || GraphType.List.equals(entry.getGraphType())) {
-				boolean list = GraphType.List.equals(entry.getGraphType());
-				MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
-				if (preferredMediaType == null) {
-					preferredMediaType = MediaType.APPLICATION_RDF_XML;
-				}
-				Graph graph = null;
-				if (list) {
-					graph = ((org.entrystore.List) entry.getResource()).getGraph();
-				} else {
-					graph = ((RDFResource) entry.getResource()).getGraph();
-				}
-
-				if (graph != null) {
-					String serializedGraph = null;
-					if (preferredMediaType.equals(MediaType.APPLICATION_JSON)) {
-						if (list) {
-							return getListRepresentation();
-						}
-						serializedGraph = RDFJSON.graphToRdfJson(graph);
-					} else {
-						serializedGraph = GraphUtil.serializeGraph(graph, preferredMediaType);
-					}
-
-					if (serializedGraph != null) {
-						getResponse().setStatus(Status.SUCCESS_OK);
-						return new StringRepresentation(serializedGraph, preferredMediaType);
-					} else {
-						getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-						return new JsonRepresentation(JSONErrorMessages.errorUnknownFormat);
-					}
-				}
-			}
-
-            if (ResourceType.NamedResource.equals(entry.getResourceType())
-                    && EntryType.Local.equals(entry.getEntryType())) {
-                redirectSeeOther(entry.getLocalMetadataURI().toString());
-                return new EmptyRepresentation();
-            }
-
-			/*
-			 * Resource: 
-			 * ResourceTypes: List, String and None.
-			 * RepresentationType: InformationResource, NamesResource and Unknown. 
-			 */
 			Representation result = null;
 
 			// the check for resource safety is necessary to avoid an implicit
 			// getMetadata() in the case of a PUT on (not yet) existant metadata
 			// - this is e.g. the case if conditional requests are issued 
-			if (getRequest().getMethod().isSafe()) {
+			if (Method.GET.equals(getRequest().getMethod())) {
 				result = getResource();
 			} else {
 				result = new EmptyRepresentation();
@@ -765,6 +696,66 @@ public class ResourceResource extends BaseResource {
 	 * @return JSON representation
 	 */
 	private Representation getResource() throws AuthorizationException {
+		// RSS feed
+		if (parameters.containsKey("syndication")) {
+			try {
+				if (getRM().getIndex() == null) {
+					getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
+					return new JsonRepresentation("{\"error\":\"Feeds are not supported by this installation\"}");
+				}
+				StringRepresentation rep = getSyndicationSolr(entry, parameters.get("syndication"));
+				if (rep == null) {
+					getResponse().setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
+					return new JsonRepresentation(JSONErrorMessages.errorNotAContext);
+				}
+				return rep;
+			} catch (IllegalArgumentException e) {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return new JsonRepresentation(JSONErrorMessages.syndicationFormat);
+			}
+		}
+
+		// Graph and List
+		if (GraphType.Graph.equals(entry.getGraphType()) || GraphType.List.equals(entry.getGraphType())) {
+			boolean list = GraphType.List.equals(entry.getGraphType());
+			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+			if (preferredMediaType == null) {
+				preferredMediaType = MediaType.APPLICATION_RDF_XML;
+			}
+			Graph graph = null;
+			if (list) {
+				graph = ((org.entrystore.List) entry.getResource()).getGraph();
+			} else {
+				graph = ((RDFResource) entry.getResource()).getGraph();
+			}
+
+			if (graph != null) {
+				String serializedGraph = null;
+				if (preferredMediaType.equals(MediaType.APPLICATION_JSON)) {
+					if (list) {
+						return getListRepresentation();
+					}
+					serializedGraph = RDFJSON.graphToRdfJson(graph);
+				} else {
+					serializedGraph = GraphUtil.serializeGraph(graph, preferredMediaType);
+				}
+
+				if (serializedGraph != null) {
+					getResponse().setStatus(Status.SUCCESS_OK);
+					return new StringRepresentation(serializedGraph, preferredMediaType);
+				} else {
+					getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
+					return new JsonRepresentation(JSONErrorMessages.errorUnknownFormat);
+				}
+			}
+		}
+
+		if (ResourceType.NamedResource.equals(entry.getResourceType())
+				&& EntryType.Local.equals(entry.getEntryType())) {
+			redirectSeeOther(entry.getLocalMetadataURI().toString());
+			return new EmptyRepresentation();
+		}
+
 		if (EntryType.Link.equals(entry.getEntryType()) ||
 				EntryType.LinkReference.equals(entry.getEntryType()) ||
 				EntryType.Reference.equals(entry.getEntryType())) {
