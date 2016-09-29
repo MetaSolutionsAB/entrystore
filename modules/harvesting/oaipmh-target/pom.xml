@@ -7,12 +7,12 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-harvesting</artifactId>
-		<version>4.3.1</version>
+		<version>4.4-SNAPSHOT</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-harvesting-oaipmh-target</artifactId>
 	<packaging>war</packaging>
-	<version>4.3.1</version>
+	<version>4.4-SNAPSHOT</version>
 	<name>EntryStore OAI-PMH Target module</name>
 	
 	<build>
