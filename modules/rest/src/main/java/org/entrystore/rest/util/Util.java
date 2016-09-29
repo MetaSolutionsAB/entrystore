@@ -98,10 +98,10 @@ public class Util {
 				if (dT < 0) {
 					dT *= -1;
 				}
-				if (dT < 1000 || Method.GET.equals(request.getMethod())) {
+				if (dT < 1000) {
 					request.getConditions().setUnmodifiedSince(null);
 				}
-			} else if (modDate == null || unmodSince == null) {
+			} else {
 				request.getConditions().setUnmodifiedSince(null);
 			}
 		}

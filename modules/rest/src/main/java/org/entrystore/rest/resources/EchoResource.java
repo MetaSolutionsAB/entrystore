@@ -27,6 +27,7 @@ import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.UnsupportedEncodingException;
 import java.util.Iterator;
 import java.util.List;
 
@@ -54,7 +55,11 @@ public class EchoResource extends BaseResource {
 					}
 					StringBuffer escapedContent = new StringBuffer();
 					escapedContent.append("<textarea>");
-					escapedContent.append(StringEscapeUtils.escapeHtml(item.getString()));
+					try {
+						escapedContent.append(StringEscapeUtils.escapeHtml(item.getString("UTF-8")));
+					} catch (UnsupportedEncodingException e) {
+						log.error(e.getMessage());
+					}
 					escapedContent.append("</textarea>");
 					getResponse().setEntity(escapedContent.toString(), MediaType.TEXT_HTML);
 				}
