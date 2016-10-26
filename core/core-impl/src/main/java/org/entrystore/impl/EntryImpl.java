@@ -93,7 +93,7 @@ public class EntryImpl implements Entry {
 	private volatile Set<java.net.URI> writeResourcePrincipals;
 	private volatile Set<java.net.URI> readResourcePrincipals;
 	private volatile List<Statement> relations;
-    private boolean invRelations = false;
+    protected boolean invRelations = false;
 	private volatile String format;
 	private volatile long fileSize = -1;
 	private volatile String filename;
