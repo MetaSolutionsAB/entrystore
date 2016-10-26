@@ -301,7 +301,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/metadata/{entry-id}", LocalMetadataResource.class);
 		router.attach("/{context-id}/cached-external-metadata/{entry-id}", ExternalMetadataResource.class);
 		router.attach("/{context-id}/harvester", HarvesterResource.class);
-		router.attach("/{context-id}/relation/{entry-id}", RelationResource.class);
+		router.attach("/{context-id}/relations/{entry-id}", RelationResource.class);
 		router.attach("/{context-id}/quota", QuotaResource.class);
 		router.attach("/{context-id}/lookup", LookupResource.class);
 		router.attach("/{context-id}/execute", ExecutionResource.class);
