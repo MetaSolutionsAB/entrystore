@@ -1,248 +1,227 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
-	
-	<!-- ================= EntryStore  ================= -->
-	<modelVersion>4.0.0</modelVersion>
-	<groupId>org.entrystore</groupId>
-	<artifactId>entrystore-parent</artifactId>
-	<version>4.4-SNAPSHOT</version>
-	<packaging>pom</packaging>
-	<name>EntryStore</name>
-	<url>http://entrystore.org</url>
-	<description>
-		EntryStore is a Linked Data-based repository backend.
-	</description>
-	<inceptionYear>2008</inceptionYear>
-	
-	<!-- ================= Default Properties ================= -->
-	<properties>
-		<restlet.version>2.3.6</restlet.version>
-		<solr.version>4.7.2</solr.version>
-		<sesame.version>2.7.16</sesame.version>
-		<slf4j.version>1.7.5</slf4j.version>
-		<servlet.version>3.0.1</servlet.version>
-		<site.url>http://entrystore.org</site.url>
-		<distribution.snapshot.url>http://entrystore.org</distribution.snapshot.url>
-		<distribution.url>http://entrystore.org</distribution.url>
-		<license.licenseName>apache_v2</license.licenseName>
-	</properties>
-		
-	<!-- ================= Developers ================= -->
-	<developers>
-		<developer>
-			<name>Matthias Palmér</name>
-			<id>matthias</id>
-			<email>matthias at metasolutions.se</email>
-			<organization>MetaSolutions AB</organization>
-		</developer>
-		<developer>
-			<name>Hannes Ebner</name>
-			<id>hannes</id>
-			<email>hannes at metasolutions.se</email>
-			<organization>MetaSolutions AB</organization>
-		</developer>
-	</developers>
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
-	<!-- ================= DistributionManagement ================= -->
-	<distributionManagement>
-		<repository>
-			<id>libs-releases-local</id>
-			<name>release repository</name>
-			<url>${distribution.url}</url>
-			<uniqueVersion>false</uniqueVersion>
-		</repository>
-		<snapshotRepository>
-			<id>libs-snapshots-local</id>
-			<name>snapshot repository</name>
-			<url>${distribution.snapshot.url}</url>
-			<uniqueVersion>false</uniqueVersion>
-		</snapshotRepository>
-		<site>
-			<id>entrystore-website</id>
-			<url>${site.url}</url>
-		</site>
-	</distributionManagement>
+    <!-- ================= EntryStore  ================= -->
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.entrystore</groupId>
+    <artifactId>entrystore-parent</artifactId>
+    <version>4.4-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>EntryStore</name>
+    <url>http://entrystore.org</url>
+    <description>
+        EntryStore is a Linked Data-based resource and metadata management framework. It provides a reference
+        implementation of the Resource and Metadata Management Model (ReM3).
+    </description>
+    <inceptionYear>2008</inceptionYear>
 
-	<scm>
-		<connection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</connection>
-		<developerConnection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</developerConnection>
-		<url>https://bitbucket.org/metasolutions/entrystore.git</url>
-	</scm>
+    <!-- ================= Default Properties ================= -->
+    <properties>
+        <restlet.version>2.3.8</restlet.version>
+        <solr.version>4.7.2</solr.version>
+        <sesame.version>2.7.16</sesame.version>
+        <slf4j.version>1.7.5</slf4j.version>
+        <servlet.version>3.0.1</servlet.version>
+        <site.url>http://entrystore.org</site.url>
+        <distribution.snapshot.url>http://entrystore.org</distribution.snapshot.url>
+        <distribution.url>http://entrystore.org</distribution.url>
+        <license.licenseName>apache_v2</license.licenseName>
+    </properties>
 
-	<!-- ================= Modules ================= -->
-	<modules>
-		<module>core</module>
-		<module>modules</module>
-		<module>apps</module>
-	</modules>
+    <!-- ================= Developers ================= -->
+    <developers>
+        <developer>
+            <name>Matthias Palmér</name>
+            <id>matthias</id>
+            <email>matthias at metasolutions.se</email>
+            <organization>MetaSolutions AB</organization>
+        </developer>
+        <developer>
+            <name>Hannes Ebner</name>
+            <id>hannes</id>
+            <email>hannes at metasolutions.se</email>
+            <organization>MetaSolutions AB</organization>
+        </developer>
+    </developers>
 
-	<!-- ================= Licenses ================= -->
-	<licenses>
-		<license>
-			<name>Apache License Version 2.0</name>
-			<url>http://www.apache.org/licenses/</url>
-			<distribution>repo</distribution>
-			<comments />
-		</license>
-	</licenses>
-	
-	<!-- ================= Organization ================= -->
-	<organization>
-		<name>MetaSolutions AB</name>
-		<url>http://www.metasolutions.se</url>
-	</organization>
-	
-	<!-- ================= Build ================= -->
-	<build>
-		<defaultGoal>install</defaultGoal>
+    <!-- ================= DistributionManagement ================= -->
+    <distributionManagement>
+        <repository>
+            <id>libs-releases-local</id>
+            <name>release repository</name>
+            <url>${distribution.url}</url>
+            <uniqueVersion>false</uniqueVersion>
+        </repository>
+        <snapshotRepository>
+            <id>libs-snapshots-local</id>
+            <name>snapshot repository</name>
+            <url>${distribution.snapshot.url}</url>
+            <uniqueVersion>false</uniqueVersion>
+        </snapshotRepository>
+        <site>
+            <id>entrystore-website</id>
+            <url>${site.url}</url>
+        </site>
+    </distributionManagement>
 
-		<pluginManagement>
-			<plugins>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-deploy-plugin</artifactId>
-					<version>2.7</version>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-compiler-plugin</artifactId>
-					<configuration>
-						<source>1.7</source>
-						<target>1.7</target>
-					</configuration>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-eclipse-plugin</artifactId>
-					<configuration>
-						<downloadSources>true</downloadSources>
-					</configuration>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-source-plugin</artifactId>
-					<executions>
-						<execution>
-							<id>attach-source</id>
-							<goals>
-								<goal>jar</goal>
-							</goals>
-						</execution>
-					</executions>
-				</plugin>
-			</plugins>
-		</pluginManagement>
-	</build>
-	
-	<!-- ================= Repositories ================= -->
-	<repositories>
-		<repository>
-			<id>EntryStore</id>
-			<url>http://maven.entrystore.org</url>
-		</repository>
-		<repository>
-			<id>Restlet</id>
-			<name>Restlet Framework repository</name>
-			<url>http://maven.restlet.com</url>
-		</repository>
-		<!--
-		// 3rd party repos below //
-		<repository>
-			<id>Maven</id>
-			<url>http://repo1.maven.org/maven2</url>
-			<releases> 
-				<enabled>true</enabled>
-			</releases>
-		</repository>
-		// 3rd party repos above //
-		-->
-	</repositories>
-	<pluginRepositories>
-		<pluginRepository>
-			<id>EntryStore</id>
-			<url>http://maven.entrystore.org</url>
-		</pluginRepository>
-		<!--
-		// 3rd party repos below //
-		<pluginRepository>
-			<id>Maven</id>
-			<url>http://repo1.maven.org/maven2</url>
-			<releases> 
-				<enabled>true</enabled>
-			</releases>
-		</pluginRepository>
-		// 3rd party repos above //
-		-->
-	</pluginRepositories>
-	
-	<!-- ================= Dependencies ================= -->
-	<dependencies>
-		<dependency>
-			<groupId>junit</groupId>
-			<artifactId>junit</artifactId>
-			<version>4.4</version>
-			<scope>test</scope>
-		</dependency>
-		<!-- use no-commons-logging -->
-		<dependency>
-			<groupId>commons-logging</groupId>
-			<artifactId>commons-logging</artifactId>
-			<version>99.0-does-not-exist</version>
-		</dependency>
-		<!-- no-commons-logging-api, if you need it -->
-		<dependency>
-			<groupId>commons-logging</groupId>
-			<artifactId>commons-logging-api</artifactId>
-			<version>99.0-does-not-exist</version>
-		</dependency>
-		<!-- the slf4j commons-logging replacement -->
-		<dependency>
-			<groupId>org.slf4j</groupId>
-			<!--<artifactId>jcl104-over-slf4j</artifactId>-->
-			<artifactId>jcl-over-slf4j</artifactId>
-			<version>${slf4j.version}</version>
-		</dependency>
-		<!-- the other slf4j jars -->
-		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>slf4j-api</artifactId>
-			<version>${slf4j.version}</version>
-		</dependency>
-		<!-- using log4j as backend -->
-		<dependency>
-			<groupId>org.slf4j</groupId>
-			<artifactId>slf4j-log4j12</artifactId>
-			<version>${slf4j.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.codehaus.cargo</groupId>
-			<artifactId>cargo-core-uberjar</artifactId>
-			<version>0.9</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.codehaus.cargo</groupId>
-			<artifactId>cargo-ant</artifactId>
-			<version>0.9</version>
-			<scope>test</scope>
-		</dependency>
-	</dependencies>
-	
-	<dependencyManagement>
-		<dependencies>
-			<dependency>
-				<groupId>org.apache.httpcomponents</groupId>
-				<artifactId>httpclient</artifactId>
-				<version>4.2.6</version>
-			</dependency>
-			<dependency>
-				<groupId>org.apache.httpcomponents</groupId>
-				<artifactId>httpcore</artifactId>
-				<version>4.2.5</version>
-			</dependency>
-		</dependencies>
-	</dependencyManagement>
+    <scm>
+        <connection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</connection>
+        <developerConnection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</developerConnection>
+        <url>https://bitbucket.org/metasolutions/entrystore.git</url>
+    </scm>
+
+    <!-- ================= Modules ================= -->
+    <modules>
+        <module>core</module>
+        <module>modules</module>
+        <module>apps</module>
+    </modules>
+
+    <!-- ================= Licenses ================= -->
+    <licenses>
+        <license>
+            <name>Apache License Version 2.0</name>
+            <url>http://www.apache.org/licenses/</url>
+            <distribution>repo</distribution>
+            <comments/>
+        </license>
+    </licenses>
+
+    <!-- ================= Organization ================= -->
+    <organization>
+        <name>MetaSolutions AB</name>
+        <url>http://www.metasolutions.se</url>
+    </organization>
+
+    <!-- ================= Build ================= -->
+    <build>
+        <defaultGoal>install</defaultGoal>
+
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>2.7</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <source>1.8</source>
+                        <target>1.8</target>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-eclipse-plugin</artifactId>
+                    <configuration>
+                        <downloadSources>true</downloadSources>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <executions>
+                        <execution>
+                            <id>attach-source</id>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <!-- ================= Repositories ================= -->
+    <repositories>
+        <repository>
+            <id>EntryStore</id>
+            <url>http://maven.entrystore.org</url>
+        </repository>
+        <repository>
+            <id>Restlet</id>
+            <name>Restlet Framework repository</name>
+            <url>http://maven.restlet.com</url>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>EntryStore</id>
+            <url>http://maven.entrystore.org</url>
+        </pluginRepository>
+    </pluginRepositories>
+
+    <!-- ================= Dependencies ================= -->
+    <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.4</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- use no-commons-logging -->
+        <dependency>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging</artifactId>
+            <version>99.0-does-not-exist</version>
+        </dependency>
+        <!-- no-commons-logging-api, if you need it -->
+        <dependency>
+            <groupId>commons-logging</groupId>
+            <artifactId>commons-logging-api</artifactId>
+            <version>99.0-does-not-exist</version>
+        </dependency>
+        <!-- the slf4j commons-logging replacement -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <!--<artifactId>jcl104-over-slf4j</artifactId>-->
+            <artifactId>jcl-over-slf4j</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <!-- the other slf4j jars -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <!-- using log4j as backend -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.codehaus.cargo</groupId>
+            <artifactId>cargo-core-uberjar</artifactId>
+            <version>0.9</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.codehaus.cargo</groupId>
+            <artifactId>cargo-ant</artifactId>
+            <version>0.9</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.apache.httpcomponents</groupId>
+                <artifactId>httpclient</artifactId>
+                <version>4.2.6</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents</groupId>
+                <artifactId>httpcore</artifactId>
+                <version>4.2.5</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
 </project>
