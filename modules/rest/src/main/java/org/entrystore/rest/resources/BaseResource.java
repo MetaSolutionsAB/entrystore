@@ -17,6 +17,7 @@
 package org.entrystore.rest.resources;
 
 
+import com.google.common.collect.Sets;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -32,11 +33,10 @@ import org.entrystore.rest.util.Util;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.data.Header;
 import org.restlet.data.MediaType;
+import org.restlet.data.Method;
 import org.restlet.data.ServerInfo;
 import org.restlet.data.Status;
-import org.restlet.engine.header.HeaderUtils;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
@@ -141,17 +141,16 @@ public abstract class BaseResource extends ServerResource {
 				return new EmptyRepresentation();
 			}
 
-			Series<Header> respHeaders = new Series<Header>(Header.class);
-			respHeaders.set("Access-Control-Allow-Origin", origin);
-			respHeaders.set("Access-Control-Allow-Methods", "HEAD, GET, PUT, POST, DELETE, OPTIONS");
-			respHeaders.set("Access-Control-Allow-Credentials", "true");
+			getResponse().setAccessControlAllowOrigin(origin);
+			getResponse().setAccessControlAllowMethods(Sets.newHashSet(Method.HEAD, Method.GET, Method.PUT, Method.POST, Method.DELETE, Method.OPTIONS));
+			getResponse().setAccessControlAllowCredentials(true);
 			if (cors.getAllowedHeaders() != null) {
-				respHeaders.set("Access-Control-Allow-Headers", cors.getAllowedHeaders());
+				getResponse().setAccessControlAllowHeaders(cors.getAllowedHeaders());
+				getResponse().setAccessControlExposeHeaders(cors.getAllowedHeaders());
 			}
 			if (cors.getMaxAge() > -1) {
-				respHeaders.set("Access-Control-Max-Age", Integer.toString(cors.getMaxAge()));
+				getResponse().setAccessControlMaxAge(cors.getMaxAge());
 			}
-			HeaderUtils.copyExtensionHeaders(respHeaders, getResponse());
 		}
 		return getResponse().getEntity();
 	}
