@@ -8,6 +8,6 @@ pipelines:
           - mvn clean install
           - mkdir -p ~/.ssh
           - echo $SSH_KNOWN_HOSTS >> ~/.ssh/known_hosts
-          - (umask 077 ; echo $SSH_KEY | base64 --decode --ignore-garbage > ~/.ssh/id_rsa)
-          - tar --create --directory modules/rest-standalone/target/dist --gzip --file entrystore-rest-`cat VERSION.txt`.tar.gz *
+          - ( umask 077 ; echo $SSH_KEY | base64 --decode --ignore-garbage > ~/.ssh/id_rsa )
+          - ( cd modules/rest-standalone/target/dist && tar czf entrystore-rest-`cat ../../../../VERSION.txt`.tar.gz * )
           - scp -v modules/rest/target/*.war modules/rest/rest-standalone/target/dist/*.tar.gz deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
