@@ -6,3 +6,7 @@ pipelines:
         script:
           - mvn --version
           - mvn clean install
+          - mkdir -p ~/.ssh
+          - echo $SSH_KNOWN_HOSTS >> ~/.ssh/known_hosts
+          - (umask  077 ; echo $SSH_KEY | base64 --decode > ~/.ssh/id_rsa)
+          - scp -v modules/rest/target/*.?ar deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
