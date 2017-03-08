@@ -7,12 +7,12 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-transforms</artifactId>
-		<version>4.3.1</version>
+		<version>4.3.2</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-transforms-pcaxis</artifactId>
 	<packaging>jar</packaging>
-	<version>4.3.1</version>
+	<version>4.3.2</version>
 	<name>EntryStore Transforms PC-Axis</name>
     
 	<dependencies>
