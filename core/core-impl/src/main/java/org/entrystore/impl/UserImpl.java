@@ -303,6 +303,8 @@ public class UserImpl extends RDFResource implements User {
 					rc.rollback();
 				} finally {
 					rc.close();
+					//We poke in the internals of entryImpl, to notify that it has relations for later setGraph calls to work
+					entry.invRelations = true;
 					this.homeContext = context.getEntry().getEntryURI();
 				}
 			}

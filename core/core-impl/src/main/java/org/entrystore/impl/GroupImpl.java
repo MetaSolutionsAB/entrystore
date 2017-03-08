@@ -143,6 +143,8 @@ public class GroupImpl extends ListImpl implements Group {
             } finally {
                 try {
                     rc.close();
+					//We poke in the internals of entryImpl, to notify that it has relations for later setGraph calls to work
+					entry.invRelations = true;
                 } catch (org.openrdf.repository.RepositoryException e) {
                     log.error(e.getMessage());
                 }
