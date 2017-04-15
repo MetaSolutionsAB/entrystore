@@ -103,6 +103,8 @@ public abstract class BaseResource extends ServerResource {
 		if (parameters.containsKey("format")) {
 			String format = parameters.get("format");
 			if (format != null) {
+				// workaround for URL-decoded pluses (space) in MIME-type names, e.g. ld+json
+				format = format.replaceAll(" ", "+");
 				this.format = new MediaType(format);
 			}
 		}
