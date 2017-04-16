@@ -104,6 +104,8 @@ public class EntryStoreApplication extends Application {
 
 	private static String VERSION = null;
 
+	protected static String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
+
 	URI configURI;
 
 	public EntryStoreApplication(Context parentContext) {
@@ -139,14 +141,21 @@ public class EntryStoreApplication extends Application {
 			backupScheduler = (BackupScheduler) getContext().getAttributes().get("BackupScheduler");
 		} else {
 			if (configURI == null) {
-				javax.naming.Context env = null;
-				try {
-					env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
-					if (env != null && env.lookup("entrystore.config") != null) {
-						configURI = new File((String) env.lookup("entrystore.config")).toURI();
+				// First we check for a config URI in an environment variable
+				String envConfigURI = System.getenv(ENV_CONFIG_URI);
+				if (envConfigURI != null) {
+					configURI = URI.create(envConfigURI);
+				} else {
+					// We try the context
+					javax.naming.Context env = null;
+					try {
+						env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
+						if (env != null && env.lookup("entrystore.config") != null) {
+							configURI = new File((String) env.lookup("entrystore.config")).toURI();
+						}
+					} catch (NamingException e) {
+						log.warn(e.getMessage());
 					}
-				} catch (NamingException e) {
-					log.warn(e.getMessage());
 				}
 			}
 			
@@ -154,10 +163,10 @@ public class EntryStoreApplication extends Application {
 			ConfigurationManager confManager = null;
 			try {
 				if (configURI != null) {
-					log.info("Manually configured config location at " + configURI);
+					log.info("Manually specified config location at " + configURI);
 					confManager = new ConfigurationManager(configURI);
 				} else {
-					log.info("No config location specified, looking within the classpath");
+					log.info("No config location specified, looking within classpath");
 					confManager = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
 				}
 			} catch (IOException e) {
@@ -436,7 +445,6 @@ public class EntryStoreApplication extends Application {
 							harvesters.add(har);
 						} catch (HarvesterFactoryException e) {
 							log.error(e.getMessage());
-							e.printStackTrace();
 						}
 					}
 				}
