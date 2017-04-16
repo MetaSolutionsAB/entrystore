@@ -193,8 +193,12 @@ public interface Entry {
 	 * @return the singleton RepositoryManager, never null.
 	 */
 	RepositoryManager getRepositoryManager();
-	
-	
+
+	/**
+	 * @return a provenance instance for this entry
+	 */
+	Provenance getProvenance();
+
 	//***************Utility methods************************************//
 	// The functionality below for accessing and updating information   //
 	// is not strictly neccessary as it can be done indirectly via the  //

@@ -649,8 +649,8 @@ public class DataCorrection {
 //							newO = oeNS + "Meat";
 //						} else if (o.equals(oeNS + "RabbitMeat")) {
 //							newO = oeNS + "Meat";
-//						} else if (o.equals(oeNS + "ActivityType")) {
-//							newO = oeNS + "Activity";
+//						} else if (o.equals(oeNS + "ProvenanceType")) {
+//							newO = oeNS + "Entity";
 //						} else if (o.equals(oeNS + "EducationActivity")) {
 //							newO = oeNS + "EducationalActivity";
 //						} else if (o.equals(oeNS + "JuridicalPerson")) {

@@ -88,6 +88,12 @@ public class Settings {
 	public static String REPOSITORY_PUBLIC_TYPE = "entrystore.repository.public.type";
 	public static String REPOSITORY_PUBLIC_REBUILD_ON_STARTUP = "entrystore.repository.public.rebuild-on-startup";
 
+	public static String REPOSITORY_PROVENANCE = "entrystore.repository.provenance";
+	public static String REPOSITORY_PROVENANCE_PATH = "entrystore.repository.provenance.path";
+	public static String REPOSITORY_PROVENANCE_INDEXES = "entrystore.repository.provenance.indexes";
+	public static String REPOSITORY_PROVENANCE_TYPE = "entrystore.repository.provenance.type";
+	public static String REPOSITORY_PROVENANCE_REBUILD_ON_STARTUP = "entrystore.repository.provenance.rebuild-on-startup";
+
 	public static String SMTP_HOST = "entrystore.smtp.host";
 	public static String SMTP_PORT = "entrystore.smtp.port";
 	public static String SMTP_SECURITY = "entrystore.smtp.security";
