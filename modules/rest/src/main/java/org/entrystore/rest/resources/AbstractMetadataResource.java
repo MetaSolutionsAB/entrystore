@@ -113,7 +113,12 @@ public abstract class AbstractMetadataResource extends BaseResource {
 					} catch (UnsupportedEncodingException e) {
 						log.error(e.getMessage());
 					}
-					result = getRepresentation(traverse(entry.getEntryURI(), resolvePredicates(traversalParam), parameters.containsKey("repository")), prefFormat);
+					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), resolvePredicates(traversalParam), parameters.containsKey("repository"));
+
+					result = getRepresentation(travResult.getGraph(), prefFormat);
+					if (travResult.getLatestModified() != null) {
+						result.setModificationDate(travResult.getLatestModified());
+					}
 				} else {
 					if (getMetadata() == null) {
 						getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -293,7 +298,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @return Returns a Graph consisting of merged metadata graphs. Contains
 	 * 			all metadata, including e.g. cached external.
 	 */
-	private Graph traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow, boolean repository) {
+	private EntryUtil.TraversalResult traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow, boolean repository) {
 		return EntryUtil.traverseAndLoadEntryMetadata(
 				ImmutableSet.of((URI) new URIImpl(entryURI.toString())),
 				predToFollow,
