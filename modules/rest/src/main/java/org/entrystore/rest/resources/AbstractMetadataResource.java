@@ -148,9 +148,10 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				result = new EmptyRepresentation();
 			}
 
-			// set modification date
+			// set modification date only in case it has not been
+			// set before (e.g. when handling recursive-requests)
 			Date lastMod = entry.getModifiedDate();
-			if (lastMod != null) {
+			if (lastMod != null && result.getModificationDate() == null) {
 				result.setModificationDate(lastMod);
 			}
 
