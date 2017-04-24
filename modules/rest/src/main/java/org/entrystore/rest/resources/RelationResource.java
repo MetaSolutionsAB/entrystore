@@ -65,7 +65,6 @@ public class RelationResource extends BaseResource {
 	}
 
 	private JSONObject getRelations() throws JSONException {
-		return new JSONObject(RDFJSON.graphToRdfJson(new GraphImpl(entry.getRelations())));
+		return RDFJSON.graphToRdfJsonObject(new GraphImpl(entry.getRelations()));
 	}
-	
 }
