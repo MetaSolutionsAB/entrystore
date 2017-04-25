@@ -114,7 +114,7 @@ public class MetadataImpl implements Metadata {
 					Graph oldGraph = removeGraphSynchronized(rc);
 					addGraphSynchronized(rc, graph);
 					ProvenanceImpl provenance = (ProvenanceImpl) this.entry.getProvenance();
-					if (provenance != null) {
+					if (provenance != null && !cached) {
 						provenance.addMetadataEntity(oldGraph, rc);
 					}
 					rc.commit();
