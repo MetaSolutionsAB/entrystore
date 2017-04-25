@@ -412,7 +412,7 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 
 					// predicate value is included in the parameter name, the object value is the field value
-					doc.addField("metadata.predicate.literal." + predMD5Trunc8, l.getLabel());
+					doc.addField("metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
 
 					// special handling of integer values, to be used for e.g. sorting
 					if (MetadataUtil.isIntegerLiteral(l)) {

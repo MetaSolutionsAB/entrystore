@@ -65,6 +65,7 @@ public class StatusResource extends BaseResource  {
 		if (preferredMediaType == null) {
 			preferredMediaType = MediaType.TEXT_PLAIN;
 		}
+		MediaType prefFormat = (format != null) ? format : preferredMediaType;
 
 		try {
 			if (parameters.containsKey("extended")) {
@@ -118,7 +119,7 @@ public class StatusResource extends BaseResource  {
 					return new EmptyRepresentation();
 				}
 			} else {
-				if (preferredMediaType.equals(MediaType.APPLICATION_JSON)) {
+				if (prefFormat.equals(MediaType.APPLICATION_JSON)) {
 					try {
 						JSONObject result = new JSONObject();
 						result.put("version", EntryStoreApplication.getVersion());
