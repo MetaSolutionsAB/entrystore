@@ -17,55 +17,81 @@
 package org.entrystore.rest.resources;
 
 import org.entrystore.AuthorizationException;
-import org.entrystore.rest.util.RDFJSON;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.openrdf.model.impl.GraphImpl;
+import org.entrystore.rest.util.GraphUtil;
+import org.entrystore.rest.util.JSONErrorMessages;
+import org.openrdf.model.impl.LinkedHashModel;
+import org.openrdf.rio.RDFFormat;
+import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
+import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
 
 public class RelationResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(RelationResource.class);
+
+	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 	
 	@Override
 	public void doInit() {
-		
+		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
+		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
+		supportedMediaTypes.add(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType("application/rdf+json"));
 	}
 
 	@Get
 	public Representation represent() throws ResourceException {
 		try {
-			JSONObject jsonObj = null; 
-			try {
-				jsonObj = getRelations(); 
-			} catch (JSONException e) {
-				log.error(e.getMessage()); 
-			}
+			Representation result = null;
 
-			if (jsonObj == null) {
+			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				return new JsonRepresentation("{\"error\":\"No information found about the relation\"}");
+				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
-			try {
-				return new JsonRepresentation(jsonObj.toString(2));
-			} catch (JSONException e) {
-				return new JsonRepresentation(jsonObj);
+			MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+			if (preferredMediaType == null) {
+				preferredMediaType = MediaType.APPLICATION_RDF_XML;
 			}
+			MediaType prefFormat = (format != null) ? format : preferredMediaType;
+
+			String serializedGraph = GraphUtil.serializeGraph(new LinkedHashModel(entry.getRelations()), prefFormat);
+
+			if (serializedGraph != null) {
+				getResponse().setStatus(Status.SUCCESS_OK);
+				result = new StringRepresentation(serializedGraph, prefFormat);
+			} else {
+				result = new EmptyRepresentation();
+				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+			}
+
+			// set modification date
+			Date lastMod = entry.getModifiedDate();
+			if (lastMod != null) {
+				result.setModificationDate(lastMod);
+			}
+
+			return result;
 		} catch(AuthorizationException e) {
 			return unauthorizedGET();
 		}
 	}
 
-	private JSONObject getRelations() throws JSONException {
-		return new JSONObject(RDFJSON.graphToRdfJson(new GraphImpl(entry.getRelations())));
-	}
-	
 }
