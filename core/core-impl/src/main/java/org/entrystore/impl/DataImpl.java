@@ -31,7 +31,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -53,19 +52,25 @@ public class DataImpl extends ResourceImpl implements Data {
 		super((EntryImpl) entry, new URIImpl(entry.getResourceURI().toString()));
 	}
 
-	private File getFile() {
+	private File getFile() throws IOException {
 		if (file == null) {
-			File dataDir = new File(entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER));
-			if (!dataDir.exists()) {
-				if (!dataDir.mkdirs()) {
-					log.error("Unable to create data folder");
+			String dataDirStr = entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER);
+			if (dataDirStr != null) {
+				File dataDir = new File(dataDirStr);
+				if (!dataDir.exists()) {
+					if (!dataDir.mkdirs()) {
+						log.error("Unable to create data folder");
+					}
 				}
+				File contextDir = new File(dataDir, entry.getContext().getEntry().getId());
+				if (!contextDir.exists()) {
+					contextDir.mkdir();
+				}
+				file = new File(contextDir, entry.getId());
 			}
-			File contextDir = new File(dataDir, entry.getContext().getEntry().getId());
-			if (!contextDir.exists()) {
-				contextDir.mkdir();
+			if (file == null) {
+				throw new IOException("Unable to get local file of resource");
 			}
-			file = new File(contextDir, entry.getId());
 		}
 		return file;
 	}
@@ -73,11 +78,13 @@ public class DataImpl extends ResourceImpl implements Data {
 	public InputStream getData() {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 		try {
-			return new FileInputStream(getFile());
-		} catch (FileNotFoundException e) {
+			if (getFile() != null) {
+				return new FileInputStream(getFile());
+			}
+		} catch (IOException e) {
 			log.error(e.getMessage());
-			return null;
 		}
+		return null;
 	}
 
 	public void setData(InputStream is) throws QuotaException, IOException {
@@ -100,8 +107,12 @@ public class DataImpl extends ResourceImpl implements Data {
 	}
 
 	public void useData(File file) throws QuotaException, IOException {
+		if (file == null) {
+			throw new IllegalArgumentException("File must not be null");
+		}
+
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
-		
+
 		long sizeBefore = 0;
 		long sizeAfter = 0;
 		if (entry.getRepositoryManager().hasQuotas()) {
@@ -134,24 +145,32 @@ public class DataImpl extends ResourceImpl implements Data {
 	}
 
 	public boolean delete() {
-		File f = getFile();
-		if (f.exists()) {
-			long size = f.length();
-			boolean success = f.delete();
-			if (success && entry.getRepositoryManager().hasQuotas()) {
-				entry.getContext().decreaseQuotaFillLevel(size);
+		boolean success = false;
+		try {
+			File f = getFile();
+			if (f != null && f.exists()) {
+				long size = f.length();
+				success = f.delete();
+				if (success && entry.getRepositoryManager().hasQuotas()) {
+					entry.getContext().decreaseQuotaFillLevel(size);
+				}
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceDeleted));
 			}
-			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceDeleted));
-			return success;
+		} catch (IOException ioe) {
+			log.error(ioe.getMessage());
 		}
-		return true; // file did not exist
+		return success;
 	}
 
 	public File getDataFile() {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
-		File f = getFile();
-		if (f.exists()) {
-			return f;
+		try {
+			File f = getFile();
+			if (f != null && f.exists()) {
+				return f;
+			}
+		} catch (IOException ioe) {
+			log.error(ioe.getMessage());
 		}
 		return null;
 	}
