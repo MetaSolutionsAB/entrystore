@@ -16,10 +16,6 @@
 
 package org.entrystore.rest.auth;
 
-import java.net.URI;
-import java.util.Date;
-import java.util.concurrent.TimeUnit;
-
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.restlet.Request;
@@ -31,6 +27,10 @@ import org.restlet.security.Verifier;
 import org.restlet.util.Series;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.Date;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -66,7 +66,13 @@ public class CookieVerifier implements Verifier {
 				if (ui != null) {
 					String userName = ui.getUserName();
 					Entry userEntry = pm.getPrincipalEntry(userName);
-					userURI = userEntry.getResourceURI();
+					if (userEntry != null) {
+						userURI = userEntry.getResourceURI();
+					} else {
+						log.error("Auth token maps to non-existing user, removing token");
+						tc.removeToken(authToken);
+						cleanCookies("auth_token", request, response);
+					}
 				} else {
 					log.debug("Auth token not found in token cache: " + authToken);
 					cleanCookies("auth_token", request, response);
