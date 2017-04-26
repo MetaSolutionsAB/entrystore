@@ -37,4 +37,12 @@ public class UserInfo {
 		return loginExpiration;
 	}
 
+	public void setUserName(String userName) {
+		this.userName = userName;
+	}
+
+	public void setLoginExpiration(Date loginExpiration) {
+		this.loginExpiration = loginExpiration;
+	}
+
 }
