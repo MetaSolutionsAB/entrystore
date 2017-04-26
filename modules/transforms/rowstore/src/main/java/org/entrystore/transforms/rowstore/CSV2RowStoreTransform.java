@@ -16,6 +16,7 @@
 
 package org.entrystore.transforms.rowstore;
 
+import org.apache.commons.io.IOUtils;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -74,7 +75,7 @@ public class CSV2RowStoreTransform extends Transform {
 					datasetsUrl += "/";
 				}
 				datasetsUrl += "datasets";
-				httpResponse = sendData(Method.POST, datasetsUrl, data);
+				httpResponse = sendData(Method.POST, datasetsUrl, data, MediaType.TEXT_CSV);
 				if (!Status.SUCCESS_ACCEPTED.equals(httpResponse.getStatus())) {
 					log.error("Dataset could not be created in RowStore");
 					return null;
@@ -92,15 +93,24 @@ public class CSV2RowStoreTransform extends Transform {
 				newEntry.setGraph(newEntryGraph);
 
 				result = newEntry;
-			} else if ("replace".equalsIgnoreCase(action) || "append".equalsIgnoreCase(action)) {
+			} else if ("replace".equalsIgnoreCase(action) || "append".equalsIgnoreCase(action) || "setalias".equalsIgnoreCase(action)) {
 				String datasetURL = getArguments().get("datasetURL");
 				if (datasetURL == null) {
 					throw new IllegalStateException("CSV2RowStoreTransform action " + action + " requires a datasetURL parameter");
 				}
 				if ("replace".equalsIgnoreCase(action)) {
-					httpResponse = sendData(Method.PUT, datasetURL, data);
+					httpResponse = sendData(Method.PUT, datasetURL, data, MediaType.TEXT_CSV);
 				} else if ("append".equalsIgnoreCase(action)) {
-					httpResponse = sendData(Method.POST, datasetURL, data);
+					httpResponse = sendData(Method.POST, datasetURL, data, MediaType.TEXT_CSV);
+				} else if ("setalias".equalsIgnoreCase(action)) {
+					String datasetAliasURL = datasetURL + (datasetURL.endsWith("/") ? "" : "/") + "aliases";
+					String alias = getArguments().get("alias");
+					if (alias == null || alias.length() == 0) {
+						httpResponse = sendData(Method.DELETE, datasetAliasURL, null, null);
+					} else {
+						String jsonArray = "[\"" + alias + "\"]";
+						httpResponse = sendData(Method.PUT, datasetAliasURL, IOUtils.toInputStream(jsonArray), MediaType.APPLICATION_JSON);
+					}
 				}
 				if (!Status.SUCCESS_ACCEPTED.equals(httpResponse.getStatus())) {
 					log.error("Dataset could not modified");
@@ -125,7 +135,7 @@ public class CSV2RowStoreTransform extends Transform {
 		return result;
 	}
 
-	private Response sendData(Method method, String url, InputStream data) {
+	private Response sendData(Method method, String url, InputStream data, MediaType mediaType) {
 		if (method == null || url == null || data == null) {
 			throw new IllegalArgumentException("Arguments must not be null");
 		}
@@ -139,7 +149,9 @@ public class CSV2RowStoreTransform extends Transform {
 		log.info("Initialized HTTP client for RowStore Transform");
 
 		Request request = new Request(method, url);
-		request.setEntity(new InputRepresentation(data, MediaType.TEXT_CSV));
+		if (data != null) {
+			request.setEntity(new InputRepresentation(data, mediaType));
+		}
 
 		return client.handle(request);
 	}
