@@ -16,19 +16,12 @@
 
 package org.entrystore.impl;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-
 import org.entrystore.Data;
 import org.entrystore.Entry;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.QuotaException;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
-import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
 import org.openrdf.model.impl.URIImpl;
@@ -36,11 +29,18 @@ import org.openrdf.repository.RepositoryConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
 
 /**
  * Data class to handle binary local resources.
  * 
- * @author Eric Johansson (eric.johansson@educ.umu.se)
+ * @author Eric Johansson
  * @author Hannes Ebner
  */
 public class DataImpl extends ResourceImpl implements Data {
@@ -55,18 +55,16 @@ public class DataImpl extends ResourceImpl implements Data {
 
 	private File getFile() {
 		if (file == null) {
-			String dataPath = entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER, System.getProperty("user.home") + "/scam-data-files/");
-			File dataDir = new File(dataPath);
-			if (dataDir.exists() == false) {
-				if (dataDir.mkdirs() == false) {
-					dataPath = System.getProperty("user.home");
+			File dataDir = new File(entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER));
+			if (!dataDir.exists()) {
+				if (!dataDir.mkdirs()) {
+					log.error("Unable to create data folder");
 				}
 			}
 			File contextDir = new File(dataDir, entry.getContext().getEntry().getId());
-			if (contextDir.exists() == false) {
+			if (!contextDir.exists()) {
 				contextDir.mkdir();
 			}
-
 			file = new File(contextDir, entry.getId());
 		}
 		return file;
