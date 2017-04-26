@@ -112,7 +112,7 @@ public class CSV2RowStoreTransform extends Transform {
 						httpResponse = sendData(Method.PUT, datasetAliasURL, IOUtils.toInputStream(jsonArray), MediaType.APPLICATION_JSON);
 					}
 				}
-				if (!Status.SUCCESS_ACCEPTED.equals(httpResponse.getStatus())) {
+				if (!Status.SUCCESS_ACCEPTED.equals(httpResponse.getStatus()) && !Status.SUCCESS_OK.equals(httpResponse.getStatus())) {
 					log.error("Dataset could not modified");
 					return null;
 				}
