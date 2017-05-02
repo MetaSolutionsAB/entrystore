@@ -74,17 +74,17 @@ public class ProvenanceImpl implements Provenance {
 
     public List<Entity> getEntities(ProvenanceType type, RepositoryConnection rc) throws RepositoryException {
         List<Entity> entities = new ArrayList<Entity>();
-        RepositoryResult<Statement> rr = rc.getStatements(null, RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
         RepositoryResult<Statement> latestStmt = rc.getStatements(null, OWL.SAMEAS, this.entry.getSesameLocalMetadataURI(), false, this.entry.entryURI);
         org.openrdf.model.URI latestURI = latestStmt.hasNext() ? (org.openrdf.model.URI) latestStmt.next().getSubject() : null;
-        while (rr.hasNext()) {
+		if (!latestStmt.isClosed()) {
+			latestStmt.isClosed();
+		}
+		RepositoryResult<Statement> rr = rc.getStatements(null, RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
+		while (rr.hasNext()) {
             entities.add(new MetadataEntityImpl(this.entry, rr.next(), latestURI));
         }
         if (!rr.isClosed()) {
 			rr.close();
-		}
-		if (!latestStmt.isClosed()) {
-			latestStmt.isClosed();
 		}
         entities.sort(new Comparator<Entity>() {
             public int compare(Entity t1, Entity t2) {
