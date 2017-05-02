@@ -77,7 +77,7 @@ public class ProvenanceImpl implements Provenance {
         RepositoryResult<Statement> latestStmt = rc.getStatements(null, OWL.SAMEAS, this.entry.getSesameLocalMetadataURI(), false, this.entry.entryURI);
         org.openrdf.model.URI latestURI = latestStmt.hasNext() ? (org.openrdf.model.URI) latestStmt.next().getSubject() : null;
 		if (!latestStmt.isClosed()) {
-			latestStmt.isClosed();
+			latestStmt.close();
 		}
 		RepositoryResult<Statement> rr = rc.getStatements(null, RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
 		while (rr.hasNext()) {
