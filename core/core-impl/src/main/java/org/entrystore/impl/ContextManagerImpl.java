@@ -191,9 +191,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				
 				String contextPath = this.entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER);
 	            if (contextPath != null) {
-	            	File contextPathFile = new File(URI.create(contextPath));
+	            	File contextPathFile = new File(contextPath);
 	            	File contextFolder = new File(contextPathFile, contextId);
-	            	if (contextFolder.isDirectory() && contextFolder.canWrite()) {
+	            	if (contextFolder.exists() && contextFolder.isDirectory() && contextFolder.canWrite()) {
 	            		log.info("Removing all local files referenced by context " + contextURI);
 	            		FileOperations.deleteAllFilesInDir(contextFolder);
 	            		contextFolder.delete();
@@ -201,7 +201,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	            		log.error("The data path of context " + contextId + " is not a folder or not writable: " + contextFolder);
 	            	}
 	            } else {
-	            	log.error("No SCAM data folder configured");
+	            	log.error("No data folder configured");
 	            }
 			} catch (RepositoryException e) {
 				rc.rollback();

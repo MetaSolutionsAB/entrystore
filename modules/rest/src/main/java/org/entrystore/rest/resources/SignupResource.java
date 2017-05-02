@@ -326,7 +326,7 @@ public class SignupResource extends BaseResource {
 
 		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), ci.firstName + " " + ci.lastName, ci.email, confirmationLink, false);
 		if (sendSuccessful) {
-			SignupTokenCache.getInstance().addToken(token, ci);
+			SignupTokenCache.getInstance().putToken(token, ci);
 			log.info("Sent confirmation request to " + ci.email);
 		} else {
 			log.info("Failed to send confirmation request to " + ci.email);

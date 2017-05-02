@@ -70,7 +70,7 @@ public class CookieLoginResource extends BaseResource {
 			
 			String token = Password.getRandomBase64(128);
 			Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
-			LoginTokenCache.getInstance().addToken(token, new UserInfo(userName, loginExpiration));
+			LoginTokenCache.getInstance().putToken(token, new UserInfo(userName, loginExpiration));
 			
 			CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 			tokenCookieSetting.setMaxAge(maxAge);

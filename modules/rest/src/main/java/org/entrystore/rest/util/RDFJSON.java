@@ -146,7 +146,77 @@ public class RDFJSON {
 			return null;
 		}
 	}
-	
+
+	private static JSONObject getValue(Value v) {
+		JSONObject valueObj = new JSONObject();
+		if (v instanceof BNode && !v.stringValue().startsWith("_:")) {
+			valueObj.put("value", "_:"+v.stringValue());
+		} else {
+			valueObj.put("value", v.stringValue());
+		}
+		if (v instanceof Literal) {
+			valueObj.put("type", "literal");
+			Literal l = (Literal) v;
+			if (l.getLanguage() != null) {
+				valueObj.put("lang", l.getLanguage());
+			} else if (l.getDatatype() != null) {
+				valueObj.put("datatype", l.getDatatype().stringValue());
+			}
+		} else if (v instanceof BNode) {
+			valueObj.put("type", "bnode");
+		} else if (v instanceof URI) {
+			valueObj.put("type", "uri");
+		}
+		return valueObj;
+	}
+
+	public static JSONObject graphToRdfJsonObject(Graph graph) {
+		try {
+			//First build the json structure using maps to avoid iterating through the graph more than once
+			HashMap<Resource, HashMap<URI, JSONArray>> struct = new HashMap<Resource, HashMap<URI, JSONArray>>();
+			for (Statement stmt : graph) {
+				Resource subject = stmt.getSubject();
+				URI predicate = stmt.getPredicate();
+				Value object = stmt.getObject();
+				HashMap<URI, JSONArray> pred2values = struct.get(subject);
+				if (pred2values == null) {
+					pred2values = new HashMap<URI, JSONArray>();
+					struct.put(subject, pred2values);
+					JSONArray values = new JSONArray();
+					pred2values.put(predicate, values);
+					values.put(getValue(object));
+					continue;
+				}
+				JSONArray values = pred2values.get(predicate);
+				if (values == null) {
+					values = new JSONArray();
+					pred2values.put(predicate, values);
+				}
+				values.put(getValue(object));
+			}
+
+			//Now construct the JSONObject graph from the structure
+			JSONObject result = new JSONObject(); //Top level object
+			for (Resource subject : struct.keySet()) {
+				JSONObject predicateObj = new JSONObject(); //Predicate object where each predicate is a key
+				HashMap<URI, JSONArray> pred2values = struct.get(subject);
+				for (URI predicate : pred2values.keySet()) {
+					predicateObj.put(predicate.stringValue(), pred2values.get(predicate)); //The value is an array of objects
+				}
+
+				if (subject instanceof BNode && !subject.stringValue().startsWith("_:")) {
+					result.put("_:"+subject.stringValue(), predicateObj);
+				} else {
+					result.put(subject.stringValue(), predicateObj);
+				}
+			}
+			return result;
+		} catch (JSONException e) {
+			log.error(e.getMessage(), e);
+		}
+		return null;
+	}
+
 	/**
 	 * Implementation using the org.json API.
 	 * 
@@ -155,69 +225,14 @@ public class RDFJSON {
 	 * @return An RDF/JSON string if successful, otherwise null.
 	 */
 	public static String graphToRdfJson(Graph graph) {
-		JSONObject result = new JSONObject();
-		try {
-			Set<Resource> subjects = new HashSet<Resource>();
-			for (Statement s1 : graph) {
-				subjects.add(s1.getSubject());
-			}
-			for (Resource subject : subjects) {
-				JSONObject predicateObj = new JSONObject();
-				Set<URI> predicates = new HashSet<URI>();
-				Iterator<Statement> s2 = graph.match(subject, null, null);
-				while (s2.hasNext()) {
-					predicates.add(s2.next().getPredicate());
-				}
-				for (URI predicate : predicates) {
-					JSONArray valueArray = new JSONArray();
-					Iterator<Statement> stmnts = graph.match(subject, predicate, null);
-					while (stmnts.hasNext()) {
-						Value v = stmnts.next().getObject();
-						JSONObject valueObj = new JSONObject();
-						if (v instanceof BNode && !v.stringValue().startsWith("_:")) {
-							valueObj.put("value", "_:"+v.stringValue());
-						} else {
-							valueObj.put("value", v.stringValue());							
-						}
-						if (v instanceof Literal) {
-							valueObj.put("type", "literal");	
-							Literal l = (Literal) v;
-							if (l.getLanguage() != null) {
-								valueObj.put("lang", l.getLanguage());
-							} else if (l.getDatatype() != null) {
-								valueObj.put("datatype", l.getDatatype().stringValue());
-							}
-						} else if (v instanceof BNode) {
-							valueObj.put("type", "bnode");
-						} else if (v instanceof URI) {
-							valueObj.put("type", "uri");
-						}
-						valueArray.put(valueObj);
-					}
-					predicateObj.put(predicate.stringValue(), valueArray);
-				}
-				if (subject instanceof BNode && !subject.stringValue().startsWith("_:")) {
-					result.put("_:"+subject.stringValue(), predicateObj);					
-				} else {
-					result.put(subject.stringValue(), predicateObj);					
-				}
-			}
-			return result.toString(2);
-		} catch (JSONException e) {
-			log.error(e.getMessage(), e);
-		}
-		return null;
-	}
-	
-	public static JSONObject graphToRdfJsonObject(Graph graph) {
-		try {
-			return new JSONObject(graphToRdfJson(graph));
-		} catch (JSONException e) {
-			log.error(e.getMessage());
+		JSONObject obj = graphToRdfJsonObject(graph);
+		if (obj != null) {
+			return obj.toString(2);
+		} else {
 			return null;
 		}
 	}
-	
+
 	/**
 	 * Implementation using the Streaming API of the Jackson framework.
 	 * 
