@@ -8,6 +8,9 @@ entrystore.solr.url=/tmp/entrystore-test-solr/
 entrystore.repository.store.type=memory
 entrystore.repository.store.init-with-test-data=on
 
+entrystore.repository.provenance=on
+entrystore.repository.provenance.type=memory
+
 entrystore.cors=on
 entrystore.cors.origins=*
 entrystore.cors.max-age=3600
