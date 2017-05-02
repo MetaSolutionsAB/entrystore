@@ -33,7 +33,7 @@ import java.util.List;
  * The expression is encoded in the entry graph where each entity is described
  * with the following properties:
  * <ul>
- *     <li>prov:wasDerivedFrom - pointing to the previous revision (if any)</li>
+ *     <li>prov:wasRevisionOf - pointing to the previous revision (if any)</li>
  *     <li>prov:wasAttributedTo - pointing to the resource URI of the user causing the revision</li>
  *     <li>prov:generatedAtTime - providing the date of change</li>
  * </ul>

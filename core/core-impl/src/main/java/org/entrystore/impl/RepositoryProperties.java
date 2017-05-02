@@ -142,7 +142,7 @@ public class RepositoryProperties {
 
 	public static final URI wasAttributedTo;
 	public static final URI generatedAtTime;
-	public static final URI wasDerivedFrom;
+	public static final URI wasRevisionOf;
 
 
 	static {
@@ -222,6 +222,6 @@ public class RepositoryProperties {
 
 		wasAttributedTo = vf.createURI(NSPROV, "wasAttributedTo");
 		generatedAtTime = vf.createURI(NSPROV, "generatedAtTime");
-		wasDerivedFrom = vf.createURI(NSPROV, "wasDerivedFrom");
+		wasRevisionOf = vf.createURI(NSPROV, "wasRevisionOf");
 	}
 }

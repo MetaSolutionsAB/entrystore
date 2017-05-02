@@ -204,7 +204,7 @@ public class ProvenanceImpl implements Provenance {
         } else {
             URI newMDURI = getNewRevisionURIFromOld(latestEntity.getURI(), ProvenanceType.Metadata);
             uri = vf.createURI(newMDURI.toString());
-            rc.add(uri, RepositoryProperties.wasDerivedFrom, latestEntity.getSesameURI(), eURI);
+            rc.add(uri, RepositoryProperties.wasRevisionOf, latestEntity.getSesameURI(), eURI);
             rc.remove(rc.getStatements(latestEntity.getSesameURI(), OWL.SAMEAS, null, false, eURI), eURI);
             storeProvenanceGraph(latestEntity.getSesameURI(), oldgraph);
         }
@@ -242,7 +242,7 @@ public class ProvenanceImpl implements Provenance {
 
     protected boolean hasProvenanceCharacter(Statement st) {
         org.openrdf.model.URI predicate = st.getPredicate();
-        return RepositoryProperties.wasDerivedFrom.equals(predicate) ||
+        return RepositoryProperties.wasRevisionOf.equals(predicate) ||
                 RepositoryProperties.generatedAtTime.equals(predicate) ||
                 RepositoryProperties.wasAttributedTo.equals(predicate) ||
                 (OWL.SAMEAS.equals(predicate) && entry.getSesameLocalMetadataURI().equals(st.getObject()));
