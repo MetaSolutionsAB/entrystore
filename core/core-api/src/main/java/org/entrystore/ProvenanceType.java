@@ -17,12 +17,14 @@
 package org.entrystore;
 
 /**
+ * Provenance may contains entities for different kinds of changes.
+ * Currently only changes to the local metadata graph is supported.
  * @author Matthias Palmér
  */
 public enum ProvenanceType {
 	
 	/**
-	 *
+	 * The metadata entity type.
 	 */
 	Metadata
 }

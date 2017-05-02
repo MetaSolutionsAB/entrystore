@@ -20,7 +20,14 @@ package org.entrystore;
 import org.openrdf.model.Graph;
 
 /**
+ * A graph entity contains, in addition to when and who,
+ * also the actual graph that the change led to.
+ * Access to this graph is provided via the same methods
+ * as for other metadata objects.
  *
+ * Note that modifying the history is not allowed,
+ * hence the setGraph methods from the Metadata interface will
+ * throw an UnsupportedOperationException.
  * @author Matthias Palmér
  */
 public interface GraphEntity extends Entity, Metadata {

@@ -21,12 +21,15 @@ import java.util.Date;
 
 
 /**
+ * Each provenance entity corresponds to a change and contains information about
+ * who made the change and when. Furthermore, each entity have a unique
+ * URI as well as a provenance type.
  *
  * @author Matthias Palmér
  */
 public interface Entity {
 	/**
-	 * @return an URI for this entity
+	 * @return a unique URI for this entity
 	 */
 	URI getURI();
 
@@ -36,12 +39,14 @@ public interface Entity {
 	Date getGeneratedDate();
 
 	/**
-	 * @return the
+	 * A reference to the user object who made the change.
+	 *
+	 * @return a resourceURI of the user (never a group).
 	 */
 	URI getAttributedURI();
 
 	/**
-	 * @return the type of this activity
+	 * @return the type of this entity
 	 */
 	ProvenanceType getProvenanceType();
 }

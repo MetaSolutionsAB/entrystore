@@ -24,7 +24,14 @@ import java.util.List;
 
 
 /**
+ * Maintains the provenance, that is, a change history for various parts
+ * of an entry according to the prov ontology.
+ * The changes are recorded as entities, currently only metadata entities
+ * are supported, but later support for changes to the resource and the
+ * entry information may be added.
+ *
  * @author Matthias Palmér
+ * @see <a href="https://www.w3.org/TR/prov-o/">https://www.w3.org/TR/prov-o/</a>
  */
 public interface Provenance {
 
@@ -61,9 +68,9 @@ public interface Provenance {
 	Entity getEntityFor(String revision, ProvenanceType type);
 
 	/**
-	 * Adds a new entity Metadata, since the new metadata will be
-	 * in the current repository, we provide only the old graph,
-	 * to be stored in the previous metadata activity.
+	 * Adds a new metadata entity, since the new metadata will be
+	 * in the current repository, we provide only the graph before this change,
+	 * to be stored in the previous metadata entity.
 	 * @param oldgraph the metadata graph corresponding to how the metadata looked before the change.
 	 * @return a new GraphEntity
 	 */

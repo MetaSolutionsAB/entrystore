@@ -195,7 +195,9 @@ public interface Entry {
 	RepositoryManager getRepositoryManager();
 
 	/**
-	 * @return a provenance instance for this entry
+	 * The provencance for this entry. Null if not enabled for this entry.
+	 *
+	 * @return a provenance instance for this entry, may be null.
 	 */
 	Provenance getProvenance();
 
