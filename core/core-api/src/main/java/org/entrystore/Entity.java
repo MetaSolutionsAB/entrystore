@@ -21,8 +21,8 @@ import java.util.Date;
 
 
 /**
- * Each provenance entity corresponds to a change and contains information about
- * who made the change and when. Furthermore, each entity have a unique
+ * Each provenance entity corresponds to a revision and contains information about
+ * who made it and when. Furthermore, each entity have a unique
  * URI as well as a provenance type.
  *
  * @author Matthias Palmér
@@ -39,7 +39,7 @@ public interface Entity {
 	Date getGeneratedDate();
 
 	/**
-	 * A reference to the user object who made the change.
+	 * A reference to the user object who made the revision.
 	 *
 	 * @return a resourceURI of the user (never a group).
 	 */

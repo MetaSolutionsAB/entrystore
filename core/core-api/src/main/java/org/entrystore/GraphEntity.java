@@ -21,7 +21,7 @@ import org.openrdf.model.Graph;
 
 /**
  * A graph entity contains, in addition to when and who,
- * also the actual graph that the change led to.
+ * also the actual graph of the revision.
  * Access to this graph is provided via the same methods
  * as for other metadata objects.
  *

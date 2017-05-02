@@ -24,11 +24,24 @@ import java.util.List;
 
 
 /**
- * Maintains the provenance, that is, a change history for various parts
+ * Maintains the provenance, that is, a revision history for various parts
  * of an entry according to the prov ontology.
- * The changes are recorded as entities, currently only metadata entities
- * are supported, but later support for changes to the resource and the
+ * The revisions are recorded as entities, currently only metadata entities
+ * are supported, but support for revisions to the resource and the
  * entry information may be added.
+ *
+ * The expression is encoded in the entry graph where each entity is described
+ * with the following properties:
+ * <ul>
+ *     <li>prov:wasDerivedFrom - pointing to the previous revision (if any)</li>
+ *     <li>prov:wasAttributedTo - pointing to the resource URI of the user causing the revision</li>
+ *     <li>prov:generatedAtTime - providing the date of change</li>
+ * </ul>
+ *
+ * The latest metadata entity (revision) points to the current metadata URI
+ * via owl:sameAs. The URI of each metadata entity is constructed from the local
+ * metadata URI with a "?rev=nr" appended where nr is 1 for the first revision
+ * and then incremented for each revision.
  *
  * @author Matthias Palmér
  * @see <a href="https://www.w3.org/TR/prov-o/">https://www.w3.org/TR/prov-o/</a>
@@ -69,10 +82,11 @@ public interface Provenance {
 
 	/**
 	 * Adds a new metadata entity, since the new metadata will be
-	 * in the current repository, we provide only the graph before this change,
+	 * in the current repository, we provide only the graph before this revision,
 	 * to be stored in the previous metadata entity.
-	 * @param oldgraph the metadata graph corresponding to how the metadata looked before the change.
+	 * @param previousRevisionGraph the graph corresponding to how the metadata looked
+	 *                    before this revision (the previous revision).
 	 * @return a new GraphEntity
 	 */
-	GraphEntity addMetadataEntity(Graph oldgraph);
+	GraphEntity addMetadataEntity(Graph previousRevisionGraph);
 }
