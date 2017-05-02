@@ -80,6 +80,12 @@ public class ProvenanceImpl implements Provenance {
         while (rr.hasNext()) {
             entities.add(new MetadataEntityImpl(this.entry, rr.next(), latestURI));
         }
+        if (!rr.isClosed()) {
+			rr.close();
+		}
+		if (!latestStmt.isClosed()) {
+			latestStmt.isClosed();
+		}
         entities.sort(new Comparator<Entity>() {
             public int compare(Entity t1, Entity t2) {
                 Date d1 = t1.getGeneratedDate();
