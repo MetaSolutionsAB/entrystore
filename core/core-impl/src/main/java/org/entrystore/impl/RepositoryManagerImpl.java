@@ -126,7 +126,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	SolrSearchIndex solrIndex;
 	
 	PublicRepository publicRepository;
-	
+
+	private Repository provenanceRepository;
+
 	public RepositoryManagerImpl(String baseURL, Config config) {
 		System.setProperty("org.openrdf.repository.debug", "true");
 		this.config = config;
@@ -290,13 +292,52 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			publicRepository = new PublicRepository(this);
 			registerPublicRepositoryListeners();
 		}
-		
+
+		if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PROVENANCE, "off"))) {
+			initializeProvenanceRepository();
+		}
+
+
 		log.info("Adding shutdown hook");
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			public void run() {
 				shutdown();
 			}
 		});
+	}
+
+	private void initializeProvenanceRepository() {
+		String storeType = config.getString(Settings.REPOSITORY_PROVENANCE_TYPE, "memory").trim();
+		log.info("Provenance repository type: " + storeType);
+
+		if (storeType.equalsIgnoreCase("memory")) {
+			this.provenanceRepository = new SailRepository(new MemoryStore());
+		} else if (storeType.equalsIgnoreCase("native")) {
+			if (!config.containsKey(Settings.REPOSITORY_PROVENANCE_PATH)) {
+				log.error("Incomplete configuration of provenance repository");
+			} else {
+				File path = new File(config.getURI(Settings.REPOSITORY_PROVENANCE_PATH));
+				String indexes = config.getString(Settings.REPOSITORY_PROVENANCE_INDEXES);
+
+				log.info("Provenance repository path: " + path);
+				log.info("Provenance repository indexes: " + indexes);
+
+				NativeStore store = null;
+				if (indexes != null) {
+					store = new NativeStore(path, indexes);
+				} else {
+					store = new NativeStore(path);
+				}
+				if (store != null) {
+					this.provenanceRepository = new SailRepository(store);
+				}
+			}
+		}
+		try {
+			this.provenanceRepository.initialize();
+		} catch (RepositoryException e) {
+			log.error(e.getMessage());
+		}
 	}
 
 	/**
@@ -329,6 +370,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	public PublicRepository getPublicRepository() {
 		return this.publicRepository;
+	}
+
+	public Repository getProvenanceRepository() {
+		return this.provenanceRepository;
 	}
 	
 	/**
@@ -418,7 +463,16 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					log.info("Shutting down public repository");
 					publicRepository.shutdown();
 				}
-				
+				if (provenanceRepository != null) {
+					log.info("Shutting down Sesame provenance repository");
+					try {
+						provenanceRepository.shutDown();
+					} catch (RepositoryException re) {
+						log.error("Error when shutting down Sesame provenance repository: " + re.getMessage());
+						re.printStackTrace();
+					}
+				}
+
 				shutdown = true;
 			}
 		}

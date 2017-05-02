@@ -61,7 +61,10 @@ public class RepositoryProperties {
 	public static final String NSDCTERMS = "http://purl.org/dc/terms/";
 	// RDF namespace.
 	public static final String NSRDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-	
+	// Provenance namespace
+	public static final String NSPROV = "http://www.w3.org/ns/prov#";
+
+
 	public static final URI counter;
 	public static final URI mdHasEntry;
 	public static final URI resHasEntry;
@@ -136,6 +139,10 @@ public class RepositoryProperties {
 	public static final URI Pending;
 	public static final URI Failed;
 	public static final URI Succeeded;
+
+	public static final URI wasAttributedTo;
+	public static final URI generatedAtTime;
+	public static final URI wasRevisionOf;
 
 
 	static {
@@ -212,6 +219,9 @@ public class RepositoryProperties {
 		Pending = vf.createURI(NSbase, "Pending");
 		Failed = vf.createURI(NSbase, "Failed");
 		Succeeded = vf.createURI(NSbase, "Succeeded");
+
+		wasAttributedTo = vf.createURI(NSPROV, "wasAttributedTo");
+		generatedAtTime = vf.createURI(NSPROV, "generatedAtTime");
+		wasRevisionOf = vf.createURI(NSPROV, "wasRevisionOf");
 	}
-	
 }
