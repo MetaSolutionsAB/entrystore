@@ -111,23 +111,35 @@ public class ProvenanceImpl implements Provenance {
     @Override
     public Entity getEntityFor(URI uri) {
         RepositoryConnection rc = null;
+        RepositoryResult<Statement> rr = null;
         try {
             rc = this.entry.repository.getConnection();
-            RepositoryResult<Statement> rr = rc.getStatements(rc.getValueFactory().createURI(uri.toString()), RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
+            rr = rc.getStatements(rc.getValueFactory().createURI(uri.toString()), RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
             RepositoryResult<Statement> latestStmt = rc.getStatements(null, OWL.SAMEAS, this.entry.getSesameLocalMetadataURI(), false, this.entry.entryURI);
             org.openrdf.model.URI latestURI = latestStmt.hasNext() ? (org.openrdf.model.URI) latestStmt.next().getSubject() : null;
+			if (latestStmt != null && !latestStmt.isClosed()) {
+				latestStmt.close();
+			}
             Entity entity = null;
-            while (rr.hasNext()) {
+            if (rr.hasNext()) {
                 entity = new MetadataEntityImpl(this.entry, rr.next(), latestURI);
-                break;
             }
             return entity;
         } catch (RepositoryException e) {
             log.error(e.getMessage());
             return null;
         } finally {
+			try {
+				if (rr != null && !rr.isClosed()) {
+					rr.close();
+				}
+			} catch (RepositoryException e) {
+				log.error(e.getMessage());
+			}
             try {
-                rc.close();
+                if (rc != null) {
+					rc.close();
+				}
             } catch (RepositoryException e) {
                 log.error(e.getMessage());
             }
