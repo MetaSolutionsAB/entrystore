@@ -17,8 +17,6 @@
 package org.entrystore;
 
 
-import org.openrdf.model.Graph;
-
 /**
  * A graph entity contains, in addition to when and who,
  * also the actual graph of the revision.
@@ -28,6 +26,7 @@ import org.openrdf.model.Graph;
  * Note that modifying the history is not allowed,
  * hence the setGraph methods from the Metadata interface will
  * throw an UnsupportedOperationException.
+ *
  * @author Matthias Palmér
  */
 public interface GraphEntity extends Entity, Metadata {

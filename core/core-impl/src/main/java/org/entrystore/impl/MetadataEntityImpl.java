@@ -18,7 +18,6 @@ package org.entrystore.impl;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.http.MethodNotSupportedException;
 import org.entrystore.GraphEntity;
 import org.entrystore.ProvenanceType;
 import org.openrdf.model.Graph;
@@ -33,7 +32,7 @@ import java.net.URI;
 import java.util.Date;
 
 /**
- * Created by matthias on 2017-04-13.
+ * @author Matthias Palmér
  */
 public class MetadataEntityImpl implements GraphEntity {
     private org.openrdf.model.URI uri;
@@ -83,12 +82,11 @@ public class MetadataEntityImpl implements GraphEntity {
             try {
                 rc = this.entry.repository.getConnection();
                 RepositoryResult<Statement> attr = rc.getStatements(this.uri, RepositoryProperties.wasAttributedTo, null, false, this.entry.entryURI);
-                while (attr.hasNext()) {
+                if (attr.hasNext()) {
                     this.attributedURI = (org.openrdf.model.URI) attr.next().getObject();
-                    break;
                 }
             } catch (RepositoryException e) {
-                e.printStackTrace();
+                log.error(e.getMessage());
             } finally {
                 try {
                     rc.close();
@@ -131,7 +129,7 @@ public class MetadataEntityImpl implements GraphEntity {
     @Override
     public void setGraph(Graph graph) {
         //Currently no need to rewrite history.
-        throw new UnsupportedOperationException("Changing metadata history is not supported!");
+        throw new UnsupportedOperationException("Changing metadata history is not supported by this instance");
     }
 
     @Override

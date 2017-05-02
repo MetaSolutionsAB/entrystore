@@ -20,9 +20,9 @@ import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.Entity;
-import org.entrystore.ProvenanceType;
 import org.entrystore.GraphEntity;
 import org.entrystore.Provenance;
+import org.entrystore.ProvenanceType;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;
@@ -43,7 +43,7 @@ import java.util.GregorianCalendar;
 import java.util.List;
 
 /**
- * Created by matthias on 2017-04-08.
+ * @author Matthias Palmér
  */
 public class ProvenanceImpl implements Provenance {
 
