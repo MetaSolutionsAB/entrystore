@@ -297,7 +297,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			initializeProvenanceRepository();
 		}
 
-
 		log.info("Adding shutdown hook");
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			public void run() {
