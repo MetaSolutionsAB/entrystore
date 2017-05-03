@@ -248,11 +248,12 @@ public class EntryStoreApplication extends Application {
 		router.attach("/favicon.ico", FaviconResource.class);
 		
 		// global scope
+		router.attach("/echo", EchoResource.class);
+		router.attach("/lookup", LookupResource.class);
+		router.attach("/proxy", ProxyResource.class);
 		router.attach("/search", SearchResource.class);
 		router.attach("/sparql", SparqlResource.class);
-		router.attach("/proxy", ProxyResource.class);
-		router.attach("/echo", EchoResource.class);
-		
+
 		// authentication resources
 		router.attach("/auth/user", UserResource.class);
 		router.attach("/auth/cookie", CookieLoginResource.class);
