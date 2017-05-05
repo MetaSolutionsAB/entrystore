@@ -16,6 +16,18 @@
 
 package org.entrystore.repository.backup;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.util.FileOperations;
+import org.quartz.InterruptableJob;
+import org.quartz.Job;
+import org.quartz.JobDataMap;
+import org.quartz.JobExecutionContext;
+import org.quartz.JobExecutionException;
+import org.quartz.UnableToInterruptJobException;
+
 import java.io.File;
 import java.net.URI;
 import java.text.DateFormat;
@@ -26,17 +38,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.entrystore.repository.config.Settings;
-import org.entrystore.impl.RepositoryManagerImpl;
-import org.quartz.InterruptableJob;
-import org.quartz.Job;
-import org.quartz.JobDataMap;
-import org.quartz.JobExecutionContext;
-import org.quartz.JobExecutionException;
-import org.quartz.UnableToInterruptJobException;
 
 
 /**
@@ -129,7 +130,7 @@ public class BackupJob implements Job, InterruptableJob {
 			} else {
 				File dataPathFile = new File(dataPath);
 				log.info("Copying data folder from " + dataPathFile + " to " + newBackupDirectory);
-				CopyDirectory.copyDirectory(dataPathFile, newBackupDirectory); 
+				FileOperations.copyDirectory(dataPathFile, newBackupDirectory);
 			}
 		}
 		log.info("Backup job done with execution");
@@ -200,7 +201,7 @@ public class BackupJob implements Job, InterruptableJob {
 				for (int i = 0; i < nrRemoveItems; i++) {
 					String folder = formatter.format(backupFolders.get(i));
 					File f = new File(exportPath, folder);
-					if (deleteDirectory(f)) {
+					if (FileOperations.deleteDirectory(f)) {
 						backupFolders.remove(i);
 						log.info("Deleted " + f);
 					} else {
@@ -217,7 +218,7 @@ public class BackupJob implements Job, InterruptableJob {
 					if (daysBetween(d, today) > expiresAfterDays) {
 						String folder = formatter.format(backupFolders.get(i)); 
 						File f = new File(exportPath, folder);
-						if (deleteDirectory(f)) {
+						if (FileOperations.deleteDirectory(f)) {
 							backupFolders.remove(i);
 							log.info("Deleted " + f);
 						} else {
@@ -231,20 +232,6 @@ public class BackupJob implements Job, InterruptableJob {
 		}
 
 		log.info("Backup maintenance job done with execution");
-	}
-	
-	public static boolean deleteDirectory(File path) {
-		if (path.exists()) {
-			File[] files = path.listFiles();
-			for (int i=0; i < files.length; i++) {
-				if (files[i].isDirectory()) {
-					deleteDirectory(files[i]);
-				} else {
-					files[i].delete();
-				}
-			}
-		}
-		return path.delete();
 	}
 	
 	public static long daysBetween(Date d1, Date d2) {

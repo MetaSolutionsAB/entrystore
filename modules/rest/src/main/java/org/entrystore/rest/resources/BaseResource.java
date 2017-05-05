@@ -24,7 +24,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.util.CORSUtil;
@@ -184,10 +183,6 @@ public abstract class BaseResource extends ServerResource {
 
 	public ArrayList<Harvester> getHarvesters() {
 		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getHarvesters();
-	}
-	
-	public BackupScheduler getBackupScheduler() {
-		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getBackupScheduler();
 	}
 
 	public Representation unauthorizedHEAD() {

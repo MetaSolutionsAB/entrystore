@@ -212,13 +212,4 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 
 	}
 
-	@Test
-	public void systemEntriesListCheck() {
-		Entry seEntry = cm.get("_systemEntries");
-		org.entrystore.List listOfSEEntries = (org.entrystore.List) seEntry.getResource();
-		int nrOfSE = listOfSEEntries.getChildren().size();
-		int nrOfSC = rm.getSystemContextAliases().size();
-		assertTrue(nrOfSE == nrOfSC + 5); //All #SystemEntries = #SystemContext + the special _all,  _top, and _backup systemEntries
-	}
-
 }

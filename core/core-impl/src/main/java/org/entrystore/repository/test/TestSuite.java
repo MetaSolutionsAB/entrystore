@@ -17,27 +17,24 @@
 
 package org.entrystore.repository.test;
 
-import java.net.URI;
-
-import java.util.ArrayList;
-
-import java.util.HashSet;
-
-import org.entrystore.GraphType;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
-import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.RepositoryManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
-import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.RepositoryManager;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.ValueFactoryImpl;
+
+import java.net.URI;
+import java.util.HashSet;
 
 
 public class TestSuite {
@@ -67,272 +64,6 @@ public class TestSuite {
 		scam_type = vf.createURI(NSbase + "type");
 		scam_group = vf.createURI(NSbase + "group");
 	}
-
-	private static void createTeacher(PrincipalManager pm, ContextManager cm, Group group, String name, String password, String email,
-			ArrayList<Group> studentGroups) {
-		Entry entry = pm.createResource(null, GraphType.User, null, null);
-		pm.setPrincipalName(entry.getResourceURI(), name);
-		setMetadata(entry, name, "teacher", null, null, "teacher");
-		User u = (User) entry.getResource();
-		u.setSecret(password);
-		u.setName(email); 
-		group.addMember(u); 
-		Entry userHomeContextE = cm.createResource(null, GraphType.Context, null, null);
-		userHomeContextE.addAllowedPrincipalsFor(AccessProperty.Administer, u.getURI()); 
-		
-		userHomeContextE.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getGuestUser().getEntry().getEntryURI());
-		userHomeContextE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getEntry().getEntryURI());
-
-		Context c = (Context)userHomeContextE.getResource();
-		cm.setName(userHomeContextE.getEntryURI(), name);
-		u.setHomeContext(c); 
-		
-		for(Group g : studentGroups) {
-			
-			Entry linkRefEntry = c.createLinkReference(null, g.getURI(), g.getEntry().getLocalMetadata().getURI(), c.get("_top").getResourceURI());
-			linkRefEntry.setGraphType(GraphType.List);
-			setMetadata(linkRefEntry, g.getName(), null, null, "text/html", null);
-		}
-
-//		if(supervisor) {
-//			Entry groupAEntry = c.createResource(ResourceType.List, null, c.get("_top").getResourceURI());
-//			setMetadata(groupAEntry, "Grupp A", "Grupp A", null, null, null); 
-//			Entry groupBEntry = c.createResource(ResourceType.List, null, c.get("_top").getResourceURI());
-//			setMetadata(groupBEntry, "Grupp B", "Grupp B", null, null, null); 
-//			Entry groupCEntry = c.createResource(ResourceType.List, null, c.get("_top").getResourceURI());
-//			setMetadata(groupCEntry, "Grupp C", "Grupp C", null, null, null); 
-//			Entry groupDEntry = c.createResource(ResourceType.List, null, c.get("_top").getResourceURI());
-//			setMetadata(groupDEntry, "Grupp D", "Grupp D", null, null, null); 
-//			Entry groupOvikEntry = c.createResource(ResourceType.List, null, c.get("_top").getResourceURI());
-//			setMetadata(groupOvikEntry, "Grupp Ö-vik", "Grupp Ö-vik", null, null, null); 
-//		} else {
-//			Entry supContextEntry = cm.getEntry(cm.getContextURI("Supervisor"));
-//
-//			Context supContext = (Context)supContextEntry.getResource(); 
-//			Entry topEntry = supContext.get("_top"); 
-//
-//			for(URI ur : ((List)topEntry.getResource()).getChildren()) {
-//				Entry e = cm.getEntry(ur);
-//				
-//				Iterator<Statement> iter = e.getLocalMetadata().getGraph().iterator(); 
-//				while(iter.hasNext()) {
-//					Statement s = iter.next(); 
-//					if(s.getPredicate().stringValue().equals(dc_title.stringValue())) {
-//						if(s.getObject().stringValue().equals("Grupp A")
-//								|| s.getObject().stringValue().equals("Grupp B")
-//								|| s.getObject().stringValue().equals("Grupp C") 
-//								|| s.getObject().stringValue().equals("Grupp D") 
-//								|| s.getObject().stringValue().equals("Grupp Ö-vik")) {
-//							Entry linkRefEntry = c.createLinkReference(e.getResourceURI(), e.getLocalMetadataURI(), c.get("_top").getResourceURI());
-//							linkRefEntry.setResourceType(ResourceType.List);
-//							//linkRefEntry.getCachedExternalMetadata().setGraph(e.getLocalMetadata().getGraph());
-//							setMetadata(linkRefEntry, s.getObject().stringValue(), null, null, "text/html", null);
-//
-//							break; 
-//						}
-//					}
-//				}
-//			}
-
-		//}
-
-	}
-
-	public static void initCourseSuite(RepositoryManager rm) {
-		PrincipalManager pm = rm.getPrincipalManager();
-		ContextManager cm = rm.getContextManager();
-		URI currentUserURI = pm.getAuthenticatedUserURI();
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-		
-		Entry teacherGroupE = pm.createResource(null, GraphType.Group, null, null);
-		pm.setPrincipalName(teacherGroupE.getResourceURI(), "Teacher Group");
-		setMetadata(teacherGroupE, "Teacher Group", "Teachers of the course", null, null, null);
-		Group teacherGroup = (Group) teacherGroupE.getResource();
-		
-		Group studenteGroupA = createStudentGroup(pm, "Grupp A", teacherGroup); 
-		Group studenteGroupB= createStudentGroup(pm, "Grupp B", teacherGroup); 
-		Group studenteGroupC = createStudentGroup(pm, "Grupp C", teacherGroup); 
-		Group studenteGroupD = createStudentGroup(pm, "Grupp D", teacherGroup); 
-		Group studenteGroupOvik = createStudentGroup(pm, "Grupp \u00f6-vik", teacherGroup); 
-		
-		ArrayList<Group> studentGroups = new ArrayList<Group>(); 
-		studentGroups.add(studenteGroupA); 
-		studentGroups.add(studenteGroupB); 
-		studentGroups.add(studenteGroupC); 
-		studentGroups.add(studenteGroupD); 
-		studentGroups.add(studenteGroupOvik); 
-		
-		try{
-
-//			// lars-ake.pennlert@svshv.umu.se
-//			createTeacher(pm, cm, teacherGroup, "Supervisor","supervisorsupervisor", "supervisor", true); 
-
-
-			// lars-ake.pennlert@svshv.umu.se
-			createTeacher(pm, cm, teacherGroup, "Lars-\u00e5ke Pennlert","pennlertpennlert", "lars-ake.pennlert@svshv.umu.se", studentGroups); 
-
-			// gunnar.lindstrom@svshv.umu.se
-			createTeacher(pm, cm, teacherGroup, "Gunnar Lindstr\u00f6m","lindstromlindstrom", "gunnar.lindstrom@svshv.umu.se", studentGroups);
-
-			//jan-soren.andersson@educ.umu.se
-			createTeacher(pm, cm, teacherGroup, "Jan-S\u00f6ren Andersson","anderssonandersson", "jan-soren.andersson@educ.umu.se", studentGroups);
-
-			//jarl.cederblad@educ.umu.se
-			createTeacher(pm, cm, teacherGroup, "Jarl Cederblad","cederbladcederblad", "jarl.cederblad@educ.umu.se", studentGroups);
-
-			//tomas.bergqvist@educ.umu.se
-			createTeacher(pm, cm, teacherGroup, "Tomas Bergqvist","bergqvistbergqvist", "tomas.bergqvist@educ.umu.se", studentGroups);
-
-			//
-			//Lärare Ö-vik
-			//krister.lindwall@educ.umu.se
-			createTeacher(pm, cm, teacherGroup, "Krister Lindwal","lindwallindwal", "krister.lindwall@educ.umu.se", studentGroups);
-
-			//ingalill.gustafsson@svshv.umu.se
-			createTeacher(pm, cm, teacherGroup, "Ingalill Gustafsson","gustafssongustafsson", "ingalill.gustafsson@svshv.umu.se", studentGroups);
-
-			createStudent(pm, cm, "Eric Johansson", "eric@editio.se", studenteGroupA, "johanssonjohansson", teacherGroup); 
-			createStudent(pm, cm, "Mikael Karlsson", "mikael.karlsson@educ.umu.se", studenteGroupB, "micke123", teacherGroup);
-			createStudent(pm, cm,  "Andreas Wikstr\u00f6m", "cuy@umu.se", studenteGroupOvik, "andreas123", teacherGroup);
-		} finally {
-			pm.setAuthenticatedUserURI(currentUserURI);
-		}	
-	}
-
-	private static Group createStudentGroup(PrincipalManager pm, String groupName, Group teacherGroup) {
-		Entry groupE = pm.createResource(null, GraphType.Group, null, null);
-		pm.setPrincipalName(groupE.getResourceURI(), groupName);
-		setMetadata(groupE, groupName, groupName, null, null, null);
-		groupE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, teacherGroup.getURI());
-		groupE.addAllowedPrincipalsFor(AccessProperty.ReadResource, teacherGroup.getURI());
-		return (Group) groupE.getResource();
-	}
-
-	private static void createStudent(PrincipalManager pm, ContextManager cm, String name, String email, Group group, String password, Group teacherGroup) {
-
-		Entry userEntry = pm.createResource(null, GraphType.User, null, null);
-		setStudentMetadata(userEntry, "Student "+ name, "student", name, email); 
-		pm.setPrincipalName(userEntry.getResourceURI(), name);
-	
-		
-		User u = (User)userEntry.getResource();  
-		
-		u.setSecret(password); 
-		u.setLanguage("Swedish"); 
-		u.setName(email);
-		userEntry.setResourceURI(u.getURI()); 
-		group.addMember(u); 
-		
-
-		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
-		contextEntry.addAllowedPrincipalsFor(AccessProperty.Administer, u.getURI());
-		contextEntry.addAllowedPrincipalsFor(AccessProperty.Administer, teacherGroup.getURI());
-		
-		setStudentMetadata(contextEntry, name + "s portfolio", "Student portfolio", null,null);
-
-		Context contextResource = (Context) contextEntry.getResource();
-
-		Entry top = contextResource.get("_top"); 
-		Entry folderEntry1 = contextResource.createResource(null, GraphType.List, null, top.getResourceURI());
-		setStudentMetadata(folderEntry1, "Arbetsportfolio", null, null, null); 
-
-		Entry folderEntry2 = contextResource.createResource(null, GraphType.List, null, top.getResourceURI());
-		setStudentMetadata(folderEntry2, "Redovisningsportfolio", null, null, null); 
-
-		Entry folderEntry3 = contextResource.createResource(null, GraphType.List, null, top.getResourceURI());
-		setStudentMetadata(folderEntry3, "Utv\u00e4rderingsportfolio", null, null, null); 
-
-		cm.setName(contextEntry.getEntryURI(), name);
-		u.setHomeContext(contextResource); 
-			
-		// TODO: cut from RegisterResource.java, is it correct?   
-		int i = 0; 
-		for(URI uri : pm.getGroupUris()) {
-			Group g = pm.getGroup(uri); 
-
-
-			if(g.getName().equals("Teacher Group")) {
-				contextEntry.addAllowedPrincipalsFor(AccessProperty.Administer, g.getURI());
-				if ((++i)>=3) { break; } else { continue; }  
-			}
-
-			if(g.getName().equals("_users")) {
-				folderEntry1.addAllowedPrincipalsFor(AccessProperty.ReadResource, g.getURI());
-				folderEntry1.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, g.getURI());
-				folderEntry3.addAllowedPrincipalsFor(AccessProperty.ReadResource, g.getURI());
-				folderEntry3.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, g.getURI());
-				contextEntry.addAllowedPrincipalsFor(AccessProperty.ReadResource, pm.getGuestUser().getEntry().getEntryURI());
-				contextEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getEntry().getEntryURI());
-
-
-				if ((++i)>=3) { break; } else { continue; }  
-			}
-
-
-			if(g.getName().equals(group)) {
-				g.addMember(u); 
-
-				if ((++i)>=3) { break; } else { continue; }  
-			}
-		}
-		//END TODO
-		
-		
-		
-		
-		
-//		Entry supContextEntry = cm.getEntry(cm.getContextURI("Supervisor"));
-//
-//		Context supContext = (Context)supContextEntry.getResource(); 
-//		Entry topEntry = supContext.get("_top"); 
-//
-//		for(URI ur : ((List)topEntry.getResource()).getChildren()) {
-//			Entry e = cm.getEntry(ur);
-//			
-//			Iterator<Statement> iter = e.getLocalMetadata().getGraph().iterator(); 
-//			while(iter.hasNext()) {
-//				Statement s = iter.next(); 
-//				if(s.getPredicate().stringValue().equals(dc_title.stringValue())) {
-//					if(s.getObject().stringValue().equals(group)) {
-//						
-//						Entry linkRefEntry = supContext.createLinkReference(top.getResourceURI(), top.getLocalMetadataURI(), e.getResourceURI());
-//						linkRefEntry.setResourceType(ResourceType.List);
-//						setMetadata(linkRefEntry, name +" portfolio", "Detta är "+name+"s portfolio", null, "text/html", null);
-//
-//						break; 
-//					}
-//				}
-//			}
-//		}
-
-	}
-
-	public static void setStudentMetadata(Entry entry, String title, String type, String name, String email) {
-		Graph graph = entry.getLocalMetadata().getGraph();
-		ValueFactory vf = graph.getValueFactory(); 
-		org.openrdf.model.URI root = vf.createURI(entry.getResourceURI().toString());
-		try {
-			if (title != null) {
-				graph.add(root, dc_title, vf.createLiteral(title, "swe"));
-			}
-			if (type != null) {
-				graph.add(root, scam_type, vf.createLiteral(type, "swe"));
-			}
-			if (name != null) {
-				graph.add(root, scam_name, vf.createLiteral(name));
-			}
-			if (email != null) {
-				graph.add(root, scam_email, vf.createLiteral(email));
-			}
-		
-			entry.getLocalMetadata().setGraph(graph);
-		} catch (RepositoryException e) {
-			e.printStackTrace();
-		}
-	}
-
-
-
 
 	/**
 	 * Initializes the following contexts, users and groups:
@@ -407,18 +138,6 @@ public class TestSuite {
 			mouseE.addAllowedPrincipalsFor(AccessProperty.ReadResource, friendsOfMickey.getURI());
 			mouseE.addAllowedPrincipalsFor(AccessProperty.WriteResource, friendsOfMickey.getURI());
 			mickey.setHomeContext(mouse);
-
-			//Add mickey and originals group as contacts in duck context (as references).
-			Entry contactsEntry = duck.get("_contacts");
-			Entry mickeyRefE = duck.createReference(null, mickey.getURI(), mickeyE.getLocalMetadataURI(), contactsEntry.getResourceURI());
-			mickeyRefE.setGraphType(GraphType.User);
-			//			mickeyRefE.getCachedExternalMetadata().setGraph(mickeyE.getLocalMetadata().getGraph());
-			Entry friendsRefE = duck.createReference(null, friendsOfMickey.getURI(), friendsOfMickeyE.getLocalMetadataURI(), contactsEntry.getResourceURI());
-			friendsRefE.setGraphType(GraphType.Group);
-			//			friendsRefE.getCachedExternalMetadata().setGraph(friendsOfMickeyE.getLocalMetadata().getGraph());
-
-
-
 		} finally {
 			pm.setAuthenticatedUserURI(currentUserURI);
 		}
@@ -460,17 +179,14 @@ public class TestSuite {
 			User Mickey = (User) pm.getPrincipalEntry("Mickey").getResource();
 
 			//The mouse context
-			//----------------
-			Entry topMouseEntry = mouse.get("_top"); // list (folder) 1.
-			setMetadata(topMouseEntry, "Mickeys top level folder", "Wherever I put my gloves is my home.", "mainFolder", null, null);
 
 			//A plain Link to Daisy at wikipedia.
-			Entry linkToDaisyEntry = mouse.createLink(null, URI.create("http://en.wikipedia.org/wiki/Daisy_Duck"), topMouseEntry.getResourceURI());
+			Entry linkToDaisyEntry = mouse.createLink(null, URI.create("http://en.wikipedia.org/wiki/Daisy_Duck"), null);
 			setMetadata(linkToDaisyEntry, "Donalds girlfriend", "Seriously Donald, you have been dating this girl for ages, isn't it time to make the move soon?", null, null, null);
 
 
 			//A plain Link to Daisy at wikipedia.
-			Entry linkToDonaldEntry = mouse.createLink(null, URI.create("http://en.wikipedia.org/wiki/Donald_Duck"), topMouseEntry.getResourceURI());
+			Entry linkToDonaldEntry = mouse.createLink(null, URI.create("http://en.wikipedia.org/wiki/Donald_Duck"), null);
 			HashSet<URI> mdRead = new HashSet<URI>();
 			mdRead.add(pm.getPrincipalEntry("Daisy").getResourceURI());
 			linkToDonaldEntry.setAllowedPrincipalsFor(AccessProperty.ReadMetadata, mdRead);
@@ -480,23 +196,13 @@ public class TestSuite {
 			//The duck context
 			//----------------
 
-			Entry topEntry = duck.get("_top");
-			setMetadata(topEntry, "Duckburg", "A place where Donald and Daisy Duck and their friends live.", "mainFolder", null, null);
-
-			//A LinkReference to the mickeys context ("mouse"). 
-			//The referenced metadata is explicitly cached and additional local metadata is provided.
-			Entry linkRefEntry = duck.createLinkReference(null, topMouseEntry.getResourceURI(), topMouseEntry.getLocalMetadataURI(), topEntry.getResourceURI());
-			linkRefEntry.setGraphType(GraphType.List);
-			//			linkRefEntry.getCachedExternalMetadata().setGraph(topMouseEntry.getLocalMetadata().getGraph());
-			setMetadata(linkRefEntry, "Our old friend Mickeys place", "Useful shortcut, sorry Daisy, you are not allowed in here.", null, "text/html", null);
-
 			//A plain reference to mickeys user (no local metadata).
 			//TODO move this to the special system entry friends list when it is introduced.
-			Entry linkEntry = duck.createReference(null, Mickey.getURI(), Mickey.getEntry().getLocalMetadataURI(), topEntry.getResourceURI());
+			Entry linkEntry = duck.createReference(null, Mickey.getURI(), Mickey.getEntry().getLocalMetadataURI(), null);
 			linkEntry.setGraphType(GraphType.User);
 			//			linkEntry.getCachedExternalMetadata().setGraph(Mickey.getEntry().getLocalMetadata().getGraph());
 
-			Entry subListEntry = duck.createResource(null, GraphType.List, null, topEntry.getResourceURI()); // list (folder) 1.
+			Entry subListEntry = duck.createResource(null, GraphType.List, null, null); // list (folder) 1.
 			setMetadata(subListEntry, "Material", "Mixed material.", null, null, null);
 
 			//A link to the wikipedia page on the nephews.
@@ -508,74 +214,13 @@ public class TestSuite {
 			setMetadata(familyTree, "Family tree", "The duck family from Dingus to Donald, Daisy is not in there yet...", null, null, null);
 
 			//A picture of the fourth nephew that sometimes appears.
-			Entry phooey = duck.createResource(null, GraphType.None, ResourceType.NamedResource, topEntry.getResourceURI());
+			Entry phooey = duck.createResource(null, GraphType.None, ResourceType.NamedResource, null);
 			setMetadata(phooey, "Phooey Duck", "A mysterius fourth nephew, a freak of nature. Drawn by accident?", null, null, null);
 
 			//A picture of the fourth nephew that sometimes appears.
 			//TODO upload jpeg as well.
-			Entry image = duck.createResource(null, GraphType.None, ResourceType.InformationResource, topEntry.getResourceURI());
+			Entry image = duck.createResource(null, GraphType.None, ResourceType.InformationResource, null);
 			setMetadata(image, "An image", "A image, remains to be uploaded.", null, "image/jpeg", null);
-
-
-			//			try {
-			//				// Create Comment Entries
-			//				Entry commentEntryString1 = duck.createComment(
-			//						ResourceType.String,
-			//						null, 
-			//						null, 
-			//
-			//						linkEntry.getEntryURI(), 
-			//						"commentsOf");
-			//
-			//				Entry commentEntryString2 = duck.createComment(
-			//						ResourceType.String,
-			//						null, 
-			//						null, 
-			//
-			//						linkEntry.getEntryURI(),
-			//						"reviewsOf"); 
-			//
-			//				Entry commentEntryString3 = duck.createComment(
-			//						ResourceType.String,
-			//						null, 
-			//						null, 
-			//
-			//						nephews.getEntryURI(), 
-			//						"commentsOf"); 
-			//
-			//				Entry commentEntryString4 = duck.createResource(ResourceType.String, RepresentationType.InformationResource, null);
-			//
-			//				Graph graph = commentEntryString4.getLocalMetadata().getGraph(); 
-			//				ValueFactory vf = graph.getValueFactory(); 
-			//				org.openrdf.model.URI localSourceEntryURI = vf.createURI(familyTree.getEntryURI().toString());
-			//				graph.add(
-			//						vf.createURI(commentEntryString4.getResourceURI().toString()), 
-			//						RepositoryProperties.CommentsOn,
-			//						localSourceEntryURI, 
-			//						vf.createURI(commentEntryString4.getLocalMetadataURI().toString()));
-			//				graph.add(
-			//						vf.createURI(commentEntryString4.getResourceURI().toString()), 
-			//						RepositoryProperties.ReviewsOn,
-			//						localSourceEntryURI, 
-			//						vf.createURI(commentEntryString4.getLocalMetadataURI().toString()));
-			//
-			//				commentEntryString4.getLocalMetadata().setGraph(graph);
-			//				System.err.println(familyTree.getEntryURI());
-			//
-			//				StringResource strRes = (StringResource)commentEntryString1.getResource(); 
-			//				strRes.setString("Nice entry BRO!", null); 
-			//
-			//
-			//				StringResource strRes2 = (StringResource)commentEntryString2.getResource(); 
-			//				strRes2.setString("<h1>Title</h1>", "English"); 
-			//
-			//				StringResource strRes3 = (StringResource)commentEntryString3.getResource(); 
-			//				strRes.setString("Nice entry SIS!", "Swedish");
-			//				
-			//			} catch (Exception e) {
-			//				e.printStackTrace(); 
-			//			}
-
 		} finally {
 			pm.setAuthenticatedUserURI(currentUserURI);
 		}

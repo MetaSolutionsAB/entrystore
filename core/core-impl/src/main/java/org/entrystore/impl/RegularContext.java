@@ -16,22 +16,19 @@
 
 package org.entrystore.impl;
 
-import java.net.URI;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
 import org.entrystore.Entry;
-import org.entrystore.repository.RepositoryException;
+import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
+import org.entrystore.repository.RepositoryException;
 
+import java.net.URI;
 
 /**
- * @author matthias
- *
+ * @author Matthias Palmér
  */
-public class RegularContext extends ContextImpl{
+public class RegularContext extends ContextImpl {
 	private static Log log = LogFactory.getLog(RegularContext.class);
 
 	/**
@@ -50,7 +47,7 @@ public class RegularContext extends ContextImpl{
 		switch (buiType) {
 		case List:
 		case ResultList:
-		case Graph:  //TODO: Check if OK!!!
+		case Graph:
 		case String:
 		case None:
 		case Pipeline:
@@ -59,75 +56,6 @@ public class RegularContext extends ContextImpl{
 		default:
 			throw new RepositoryException("Regular context only support Lists, ResultLists and None as BuiltinTypes");
 		}
-	}
-
-	public void initializeSystemEntries() {
-		super.initializeSystemEntries();
-		Entry entry;
-
-		Entry comments = get("_comments");
-		if(comments == null) {
-			comments = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_comments");
-			setMetadata(comments, "Comments folder", null);
-			log.info("Successfully added the comments list");
-		} 
-		addSystemEntryToSystemEntries(comments.getEntryURI());
-
-		entry = get("_top");
-		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_top");
-			setMetadata(entry, "Top folder", null);
-			log.info("Successfully added the top list");
-		}
-		addSystemEntryToSystemEntries(entry.getEntryURI());
-
-		entry = get("_contacts");
-		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_contacts");
-			setMetadata(entry, "Contacts", "A list of all your contacts.");
-			log.info("Successfully added the contact list");
-		}
-		addSystemEntryToSystemEntries(entry.getEntryURI());
-
-		entry = get("_featured");
-		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_featured");
-			setMetadata(entry, "Featured", "A list of featured content divided into sublists.");
-			log.info("Successfully added the featured list");
-		}
-		addSystemEntryToSystemEntries(entry.getEntryURI());
-
-		entry = get("_feeds");
-		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_feeds");
-			setMetadata(entry, "Feeds", "A list of feeds.");
-			log.info("Successfully added the feeds list");
-		}
-		addSystemEntryToSystemEntries(entry.getEntryURI());
-
-/*		entry = get("_ontologies");
-		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_ontologies");
-			setMetadata(entry, "Ontologies", null);
-			log.info("Successfully added the ontologies list");
-		}
-		addSystemEntryToSystemEntries(entry.getEntryURI());
-
-		entry = get("_types");
-		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, ResourceType.List, null, "_types");
-			setMetadata(entry, "Types", null);
-			log.info("Successfully added the types list");
-		}
-		addSystemEntryToSystemEntries(entry.getEntryURI());
-*/
-		entry = get("_trash");
-		if(entry == null) {
-			entry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_trash");
-			setMetadata(entry, "Garbage bin", null);
-			log.info("Successfully added the trash list");
-		}
-		addSystemEntryToSystemEntries(entry.getEntryURI());
 	}
 
 }

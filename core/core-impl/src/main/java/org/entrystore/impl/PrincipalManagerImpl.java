@@ -16,22 +16,15 @@
 
 package org.entrystore.impl;
 
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
-import org.entrystore.Entry;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.repository.util.URISplit.URIType;
 import org.openrdf.model.Resource;
@@ -40,6 +33,13 @@ import org.openrdf.model.ValueFactory;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 
 
 /**
@@ -525,17 +525,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		Entry guestUserEntry;
 		Entry top;
 		
-		top = get("_top");
-		if(top == null) {
-			top = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_top");
-			setMetadata(top, "Top folder", null);
-			log.info("Successfully added the top list");
-		}
-		addSystemEntryToSystemEntries(top.getEntryURI());
-
-		
 		guestUserEntry = get("_guest");
-		if(guestUserEntry != null) {
+		if (guestUserEntry != null) {
 			guestUser = (User) guestUserEntry.getResource();
 		} else {
 			guestUserEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.User, null, "_guest");
@@ -549,7 +540,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 		
 		adminUserEntry = get("_admin");
-		if(adminUserEntry != null) {
+		if (adminUserEntry != null) {
 			adminUser = (User) adminUserEntry.getResource();
 		} else {
 			adminUserEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.User, null, "_admin");
@@ -606,35 +597,6 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		
 		userGroup = (Group) userGroupEntry.getResource();
 		addSystemEntryToSystemEntries(userGroupEntry.getEntryURI());
-		
-		allPrincipals = (EntryImpl) get("_all");
-		if(allPrincipals == null) {
-			allPrincipals = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_all");
-			setMetadata(allPrincipals, "all principals", "This is a list of all principals in the PrincipalManager.");
-			allPrincipals.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, this.getGuestUser().getURI());
-			log.info("Successfully added the _all contexts list");
-		}
-		allPrincipals.setResource(new SystemList(allPrincipals, allPrincipals.getSesameResourceURI()) {
-			@Override
-			public List<URI> getChildren() {
-                this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
-				Iterator<URI> entryIterator = getEntries().iterator();
-				List<URI> principalUris = new ArrayList<URI>();
-
-				//sort out the principals
-				while(entryIterator.hasNext()) {
-					URI nextURI = entryIterator.next();
-					
-					Entry nextEntry = getByEntryURI(nextURI);
-					GraphType bt = nextEntry.getGraphType();
-					if(bt == GraphType.User || bt == GraphType.Group) {
-						principalUris.add(nextEntry.getEntryURI());
-					}
-				}
-				return principalUris;
-			}
-		});
-		addSystemEntryToSystemEntries(allPrincipals.getEntryURI());
 	}
 	
 	/**

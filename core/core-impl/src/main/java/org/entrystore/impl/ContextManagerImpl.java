@@ -109,20 +109,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		loadIndex();
 	}
 
-	public boolean deleteDirectory(File path) {
-		if (path.exists()) {
-			File[] files = path.listFiles();
-			for (int i=0; i<files.length; i++) {
-				if (files[i].isDirectory()) {
-					deleteDirectory(files[i]);
-				} else {
-					files[i].delete();
-				}
-			}
-		}
-		return path.delete();
-	}
-	
 	public void deleteContext(URI contextURI) throws RepositoryException {
 		if (contextURI == null) {
 			throw new IllegalArgumentException("Context URI must not be null");
@@ -582,7 +568,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		String folder = getContextBackupFolder(contexturi, fromTime); 
 		File backupFolder = new File(folder);
 		if(backupFolder.exists()) {
-			return deleteDirectory(backupFolder);  
+			return FileOperations.deleteDirectory(backupFolder);
 		} else {
 			log.error("The folder does not exist"); 
 		}
@@ -1251,12 +1237,12 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw e;
 		} catch (MalformedQueryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		} catch (QueryEvaluationException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		} finally {
 			rc.close();
 		}
@@ -1323,14 +1309,14 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw e;
 		} catch (MalformedQueryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		} catch (URISyntaxException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		} catch (QueryEvaluationException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		} finally {
 			rc.close();
 		}
@@ -1345,7 +1331,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	public void initializeSystemEntries() {
 		super.initializeSystemEntries();
 
-		// TODO Auto-generated method stub
 		RepositoryManager repMan = entry.repositoryManager;
 		String base = repMan.getRepositoryURL().toString();
 		for (String id: repMan.getSystemContextAliases()) {
@@ -1366,10 +1351,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 			addSystemEntryToSystemEntries(scon.getEntryURI());
 		}
-		//Special case, metadata cannot be set on initialization before PrincipalManager is available.
-		if (systemEntriesEntry.getLocalMetadata().getGraph().isEmpty()) {
-			setMetadata(systemEntriesEntry, "System entries", null);
-		}
 
 		for (String id: repMan.getSystemContextAliases()) {
 			Entry scon = this.getByEntryURI(URISplit.fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID,
@@ -1378,54 +1359,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				scon.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, repMan.getPrincipalManager().getGuestUser().getURI());
 			}
 		}
-		
-		allContexts = (EntryImpl) get("_all");
-		if (allContexts == null) {
-			allContexts = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_all");
-			setMetadata(allContexts, "all contexts", "This is a list of all contexts in the ContextManager.");
-			allContexts.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, repMan.getPrincipalManager().getGuestUser().getURI());
-			log.info("Successfully added the _all contexts list");
-		}
-		EntryImpl e = (EntryImpl) allContexts;
-		e.setResource(new SystemList(e, e.getSesameResourceURI()) {
-			@Override
-			public List<URI> getChildren() {
-                this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
-				Iterator<URI> entryIterator = getEntries().iterator();
-				List<URI> contextUris = new ArrayList<URI>();
-
-				//sort out the users
-				while(entryIterator.hasNext()) {
-					URI nextURI = entryIterator.next();
-					
-					Entry nextEntry = getByEntryURI(nextURI);
-					GraphType bt = nextEntry.getGraphType();
-					if(bt == GraphType.Context || bt == GraphType.SystemContext) {
-						contextUris.add(nextEntry.getEntryURI());
-					}
-				}
-
-				return contextUris;
-			}
-		});
-		addSystemEntryToSystemEntries(allContexts.getEntryURI());
-		
-		Entry top = get("_top");
-		if(top == null) {
-			top = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_top");
-			setMetadata(top, "Top folder", null);
-			log.info("Successfully added the top list");
-		}
-		addSystemEntryToSystemEntries(top.getEntryURI());
-		
-		Entry backup = get("_backup");
-		if (backup == null) {
-			backup = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.None, null, RepositoryProperties.BACKUP_ID);
-			setMetadata(backup, "Backup entry", "Holds information for the backup scheduler");
-			log.info("Successfully added _backup entry: " + backup.getEntryURI());
-		}
-		addSystemEntryToSystemEntries(backup.getEntryURI());
 	}
-	
-	
+
 }

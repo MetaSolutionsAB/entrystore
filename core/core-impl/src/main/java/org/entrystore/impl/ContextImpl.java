@@ -17,46 +17,24 @@
 
 package org.entrystore.impl;
 
-import java.io.File;
-import java.net.URI;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.GregorianCalendar;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.StringTokenizer;
-
-import javax.xml.datatype.DatatypeConfigurationException;
-import javax.xml.datatype.DatatypeFactory;
-import javax.xml.datatype.XMLGregorianCalendar;
-
-import org.entrystore.DeletedEntryInfo;
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
+import org.entrystore.DeletedEntryInfo;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Quota;
 import org.entrystore.QuotaException;
-import org.entrystore.repository.RepositoryEvent;
-import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
-import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.repository.util.NS;
-import org.entrystore.AuthorizationException;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;
+import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.URISplit;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
@@ -71,6 +49,25 @@ import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.xml.datatype.DatatypeConfigurationException;
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.XMLGregorianCalendar;
+import java.io.File;
+import java.net.URI;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.StringTokenizer;
+
 
 public class ContextImpl extends ResourceImpl implements Context {
 
@@ -81,8 +78,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 	protected HashMap<URI, Object> res2entry;
 	protected ArrayList<URI> systemEntries = new ArrayList<URI>();
 	private static Logger log = LoggerFactory.getLogger(ContextImpl.class);
-	protected EntryImpl systemEntriesEntry;
-	protected EntryImpl unlistedEntriesEntry;
 
 	public static final org.openrdf.model.URI DCModified;
 	public static final org.openrdf.model.URI DCTermsModified;
@@ -1191,117 +1186,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public void initializeSystemEntries() {
-		systemEntriesEntry = (EntryImpl) get("_systemEntries");
-		if(systemEntriesEntry == null) {
-			systemEntriesEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_systemEntries");
-			setMetadata(systemEntriesEntry, "System entries", null);
-			log.info("Successfully added the systemEntries list");
-		}
-		EntryImpl e = (EntryImpl) systemEntriesEntry;
-		e.setResource(new SystemList(e, e.getSesameResourceURI()) {
-			@Override
-			public List<URI> getChildren() {
-				return systemEntries;
-			}
-		});
-
-		Entry latest = get("_latest");
-		if (latest == null) {
-			latest = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_latest");
-			setMetadata(latest, "Latest entries", null);
-			log.info("Successfully added the latest list");
-
-		} 
-		EntryImpl e2 = (EntryImpl) latest;
-		e2.setResource(new SystemList(e2, e2.getSesameResourceURI()) {
-			@Override
-			public List<URI> getChildren() {
-
-				List<URI> entryURIs = new ArrayList<URI>(); 
-				if (this.getEntry().getGraphType() == GraphType.List) {
-					Iterator<URI> entryIterator = getEntries().iterator();
-					ArrayList<Entry> entries = new ArrayList<Entry>(); 
-
-					//sort out the users
-					while (entryIterator.hasNext()) {
-						URI u = entryIterator.next();
-						Entry localEntry = getByEntryURI(u); 
-						if (localEntry != null) {
-							if (GraphType.Context.equals(localEntry.getGraphType())
-									|| GraphType.None.equals(localEntry.getGraphType())
-									|| GraphType.List.equals(localEntry.getGraphType())) {
-//								try {
-//									Integer.parseInt(localEntry.getId());
-									entries.add(localEntry); 
-//								} catch (NumberFormatException e) {
-//
-//								}
-							}
-						}
-					}
-
-					Collections.sort(entries, new Comparator<Entry> () {
-						/** 
-						 * 1 	if a < b
-						 * 0 	if a == b
-						 * -1  	if a < b
-						 */
-						public int compare(Entry a, Entry b) {
-							Date aDate = a.getModifiedDate();
-							Date bDate = b.getModifiedDate();
-							if (aDate != null && bDate != null) {
-								if (aDate.before(bDate)) {
-									return 1;
-								} else if (aDate.after(bDate)) {
-									return -1;
-								} else {
-									return 0;
-								}
-							}
-							return 0; 
-						}
-					});
-
-					for (int i = 0; entries.size() > i && i < 50; i++) {
-						entryURIs.add(entries.get(i).getEntryURI());
-					}
-				}
-				return entryURIs;
-			}
-		});
-		addSystemEntryToSystemEntries(latest.getEntryURI());
-
-		unlistedEntriesEntry = (EntryImpl) get("_unlisted");
-		if (unlistedEntriesEntry == null) {
-			unlistedEntriesEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_unlisted");
-			setMetadata(unlistedEntriesEntry, "Unlisted entries", null);
-			log.info("Successfully added the _unlisted list");
-		}
-		if (unlistedEntriesEntry != null) {
-			unlistedEntriesEntry.setResource(new SystemList(unlistedEntriesEntry, unlistedEntriesEntry.getSesameResourceURI()) {
-				@Override
-				public List<URI> getChildren() {
-					Set<URI> allEntries = getEntries();
-					List<URI> unlistedChildren = new ArrayList<URI>();
-					for (URI uri : allEntries) {
-						Entry childEntry = getByEntryURI(uri);
-						if (childEntry == null) {
-							log.warn("Entry is null for URI: " + uri);
-							continue;
-						}
-						if (childEntry.getGraphType().equals(GraphType.None) || childEntry.getGraphType().equals(GraphType.List)) {
-							if (!systemEntries.contains(uri) &&
-									!systemEntriesEntry.getEntryURI().equals(uri) &&
-									childEntry.getReferringListsInSameContext().isEmpty()) {
-								unlistedChildren.add(uri);
-							}
-						}
-					}
-					return unlistedChildren;
-				}
-			});
-			addSystemEntryToSystemEntries(unlistedEntriesEntry.getEntryURI());
-		}
 	}
 
 	protected void addSystemEntryToSystemEntries(URI uri) {
@@ -1319,88 +1203,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 			}
 			entry.getLocalMetadata().setGraph(graph);
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		}
 	}
 
-	private String getModifiedDate(Entry entry) {
-		Iterator<Statement> it = entry.getGraph().match(null, DCTermsModified, null);
-		if (it.hasNext()) {
-			String s = it.next().getObject().stringValue();
-			int i = s.lastIndexOf(":");
-			String s2 = s.substring(i+1);
-			String s3 = s.substring(0, i);			
-			return s3+s2; 
-		}
-		it = entry.getGraph().match(null, DCModified, null);
-		if (it.hasNext()) {
-			String s = it.next().getObject().stringValue();
-			int i = s.lastIndexOf(":");
-			String s2 = s.substring(i+1);
-			String s3 = s.substring(0, i);			
-			return s3+s2; 
-		}
-		return DATE_PARSER.format(new Date()).toString(); 
-	}
-
-	public Entry createComment(String entryId, GraphType buiType, URI resourceURI,
-			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception {
-
-
-		URI userURI = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI(); 
-		Entry userEntry = entry.getRepositoryManager().getPrincipalManager().getByEntryURI(userURI); 
-		User user = null; 
-		try {
-			user = (User)userEntry.getResource();
-		} catch (NullPointerException e) {
-			throw new Exception("Could not find the users resource"); 
-		}
-		Context userContext = user.getHomeContext();
-		if(userContext == null) {
-			throw new Exception("The authenticated user has no home context."); 
-		}
-		Entry commentsEntry = userContext.get("_comments"); 
-
-		ListImpl list = getList(commentsEntry.getResourceURI());
-		checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
-
-		EntryImpl commentEntry = null; 
-
-		synchronized (this.entry.repository) {
-			commentEntry = createNewMinimalItem(
-					null, 
-					null, 
-					EntryType.Local,
-					buiType, 
-					ResourceType.InformationResource, 
-					entryId);
-
-		}
-		try {
-			org.openrdf.model.URI commentKind = null; 
-			if(commentType.equals("reviewsOf")) {
-				commentKind = RepositoryProperties.ReviewsOn;  
-			} else {
-				commentKind = RepositoryProperties.CommentsOn; 
-			}
-
-			Graph graph = commentEntry.getLocalMetadata().getGraph(); 
-			ValueFactory vf = graph.getValueFactory(); 
-			org.openrdf.model.URI localSourceEntryURI = vf.createURI(sourceEntryURI.toString());
-			graph.add(
-					commentEntry.getSesameResourceURI(), 
-					commentKind,
-					localSourceEntryURI, 
-					commentEntry.getSesameLocalMetadataURI());
-
-			commentEntry.getLocalMetadata().setGraph(graph);
-
-			if (list != null) {
-				list.addChild(commentEntry.getEntryURI());
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		return commentEntry; 
-	}
 }

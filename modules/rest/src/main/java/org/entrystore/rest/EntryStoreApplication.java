@@ -32,7 +32,6 @@ import org.entrystore.impl.converters.ConverterManagerImpl;
 import org.entrystore.impl.converters.LOM2RDFConverter;
 import org.entrystore.impl.converters.OAI_DC2RDFGraphConverter;
 import org.entrystore.impl.converters.RDF2LOMConverter;
-import org.entrystore.repository.backup.BackupFactory;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
@@ -294,7 +293,6 @@ public class EntryStoreApplication extends Application {
 		}
 		
 		// management/configuration resources
-		router.attach("/management/backup", RepositoryBackupResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
 		
@@ -396,21 +394,13 @@ public class EntryStoreApplication extends Application {
 		return this.rm; 
 	}
 	
-	public BackupScheduler getBackupScheduler() {
-		return backupScheduler;
-	}
-	
-	public void setBackupScheduler(BackupScheduler scheduler) {
-		this.backupScheduler = scheduler;
-	}
-	
 	private void startBackupScheduler() {
 		URI userURI = getPM().getAuthenticatedUserURI();
 		try {
 			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
-			BackupScheduler bs = new BackupFactory(rm).getBackupScheduler();
+			BackupScheduler bs = BackupScheduler.getInstance(rm);
 			if (bs != null) {
-				setBackupScheduler(bs);
+				this.backupScheduler = bs;
 				bs.run();
 			}
 		} finally {

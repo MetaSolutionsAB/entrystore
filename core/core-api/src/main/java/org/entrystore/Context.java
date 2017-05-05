@@ -58,21 +58,7 @@ public interface Context extends Resource{
 	 * @see {@link GraphType}.
 	 */
 	Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI); // files, folders, persons
-	
-	/**
-	 * 
-	 * @param entryId, optional value to use for id for the new entry.
-	 * @param resType - None if file and String if text
-	 * @param resourceURI - URI to the resourceURI
-	 * @param metadataURI - URI to the metadataURIURI
-	 * @param sourceEntryURI
-	 * @param commentType
-	 * @return A new comment entry
-	 * @throws Exception 
-	 */
-	Entry createComment(String entryId, GraphType resType, URI resourceURI,
-			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception; 
-	
+
 	/**
 	 * Creates an Entry where the {@link EntryType} is {@link EntryType#Link}.
 	 * The creation is allowed if: 

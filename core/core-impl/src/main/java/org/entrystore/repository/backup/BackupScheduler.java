@@ -16,18 +16,18 @@
 
 package org.entrystore.repository.backup;
 
-import java.net.URI;
-import java.text.ParseException;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.entrystore.config.Config;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.impl.RepositoryManagerImpl;
 import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.impl.StdSchedulerFactory;
+
+import java.text.ParseException;
 
 
 /**
@@ -37,19 +37,29 @@ import org.quartz.impl.StdSchedulerFactory;
  */
 public class BackupScheduler {
 
-	Log log = LogFactory.getLog(BackupScheduler.class);
+	static Log log = LogFactory.getLog(BackupScheduler.class);
+
 	Scheduler scheduler;
+
 	JobDetail job;
-	RepositoryManagerImpl rm;
+
+	RepositoryManager rm;
+
 	boolean gzip;
+
 	String timeRegularExpression;
-	URI backupEntryURI;
+
 	boolean maintenance;
+
 	int upperLimit;
+
 	int lowerLimit;
+
 	int expiresAfterDays;
 
-	public BackupScheduler(URI entryURI, RepositoryManagerImpl rm, String timeRegExp, boolean gzip, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays) {
+	public static BackupScheduler instance;
+
+	private BackupScheduler(RepositoryManager rm, String timeRegExp, boolean gzip, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays) {
 		try {
 			scheduler = StdSchedulerFactory.getDefaultScheduler();
 		} catch (SchedulerException e) {
@@ -66,9 +76,34 @@ public class BackupScheduler {
 		if (upperLimit == -1 || lowerLimit == -1 || expiresAfterDays == -1) {
 			this.maintenance = false;
 		}
-
-		this.backupEntryURI = entryURI;
 		log.info("Created backup scheduler");
+	}
+
+	public static synchronized BackupScheduler getInstance(RepositoryManager rm) {
+		if (instance == null) {
+			log.info("Loading backup configuration");
+			Config config = rm.getConfiguration();
+			String timeRegExp = config.getString(Settings.BACKUP_TIMEREGEXP);
+			if (timeRegExp == null) {
+				return null;
+			}
+			boolean gzip = "on".equalsIgnoreCase(config.getString(Settings.BACKUP_GZIP, "off"));
+			boolean maintenance = "on".equalsIgnoreCase(config.getString(Settings.BACKUP_MAINTENANCE, "off"));
+			int upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
+			int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
+			int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
+
+			log.info("Time regular expression: " + timeRegExp);
+			log.info("GZIP: " + gzip);
+			log.info("Maintenance: " + maintenance);
+			log.info("Maintenance upper limit: " + upperLimit);
+			log.info("Maintenance lower limit: " + lowerLimit);
+			log.info("Maintenance expires after days: " + expiresAfterDays);
+
+			instance = new BackupScheduler(rm, timeRegExp, gzip, maintenance, upperLimit, lowerLimit, expiresAfterDays);
+		}
+
+		return instance;
 	}
 
 	public void run() {
@@ -92,7 +127,6 @@ public class BackupScheduler {
 			job = new JobDetail(jobIndex, "backupGroup", BackupJob.class);
 			job.getJobDataMap().put("rm", this.rm);
 			job.getJobDataMap().put("gzip", this.gzip);
-			job.getJobDataMap().put("contextURI", this.backupEntryURI);
 			job.getJobDataMap().put("maintenance", this.maintenance);
 			job.getJobDataMap().put("upperLimit", this.upperLimit);
 			job.getJobDataMap().put("lowerLimit", this.lowerLimit);
