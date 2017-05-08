@@ -98,7 +98,7 @@ public class EntryStoreApplication extends Application {
 	private String baseURI; 
 
 	private ArrayList<Harvester> harvesters = new ArrayList<Harvester>();
-	
+
 	private BackupScheduler backupScheduler;
 
 	private static String VERSION = null;
@@ -223,9 +223,6 @@ public class EntryStoreApplication extends Application {
 				DataCorrection mc = new DataCorrection(rm);
 				mc.fixMetadataGlobally();
 			}
-			
-			// For old installations: convert plaintext passwords to salted hashes
-			new DataCorrection(rm).convertPasswordsToHashes();
 		}
 	}
 

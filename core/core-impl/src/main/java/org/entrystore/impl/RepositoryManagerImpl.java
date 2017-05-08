@@ -395,24 +395,24 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			RDFWriter writer = new TriGWriterFactory().getWriter(out);
 			con.export(writer);
 		} catch (RepositoryException re) {
-			re.printStackTrace();
+			log.error(re.getMessage());
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			log.error(ioe.getMessage());
 		} catch (RDFHandlerException rdfhe) {
-			rdfhe.printStackTrace();
+			log.error(rdfhe.getMessage());
 		} finally {
 			if (out != null) {
 				try {
 					out.close();
 				} catch (IOException ioe) {
-					ioe.printStackTrace();
+					log.error(ioe.getMessage());
 				}
 			}
 			if (con != null) {
 				try {
 					con.close();
 				} catch (RepositoryException re) {
-					re.printStackTrace();
+					log.error(re.getMessage());
 				}
 			}
 		}
@@ -468,7 +468,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 						provenanceRepository.shutDown();
 					} catch (RepositoryException re) {
 						log.error("Error when shutting down Sesame provenance repository: " + re.getMessage());
-						re.printStackTrace();
 					}
 				}
 
@@ -511,7 +510,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 	
 	public Class getRegularContextClass() {
-		return RegularContext.class; //TODO make this configurable
+		return RegularContext.class;
 	}
 	
 	public boolean hasModificationLockOut() {
@@ -591,10 +590,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		}
 	}
-	
-//	public ThreadPoolExecutor getListenerExecutor() {
-//		return listenerExecutor;
-//	}
 	
 	private void initSolr() {
 		log.info("Manually setting property \"javax.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");
