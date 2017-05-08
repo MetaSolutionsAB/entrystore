@@ -28,6 +28,8 @@ import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.Transform;
 import org.entrystore.transforms.TransformParameters;
 import org.openrdf.model.Graph;
+import org.openrdf.model.Model;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.impl.URIImpl;
 import org.restlet.Client;
 import org.restlet.Request;
@@ -98,10 +100,25 @@ public class CSV2RowStoreTransform extends Transform {
 				if (datasetURL == null) {
 					throw new IllegalStateException("CSV2RowStoreTransform action " + action + " requires a datasetURL parameter");
 				}
+				Set<Entry> datasetEntries = pipeline.getEntry().getContext().getByResourceURI(URI.create(datasetURL));
+				Entry datasetEntry = null;
+				if (datasetEntries.size() == 1) {
+					datasetEntry = datasetEntries.iterator().next();
+				} else {
+					throw new IllegalStateException("Found multiple result entries for same dataset, aborting update");
+				}
+
+				Model datasetEntryGraph = new LinkedHashModel(datasetEntry.getGraph());
+
 				if ("replace".equalsIgnoreCase(action)) {
 					httpResponse = sendData(Method.PUT, datasetURL, data, MediaType.TEXT_CSV);
+					datasetEntryGraph.remove(null, RepositoryProperties.pipelineData, null);
+					datasetEntryGraph.add(new URIImpl(datasetEntry.getEntryURI().toString()), RepositoryProperties.pipelineData, new URIImpl(sourceURI));
+					datasetEntry.setGraph(datasetEntryGraph);
 				} else if ("append".equalsIgnoreCase(action)) {
 					httpResponse = sendData(Method.POST, datasetURL, data, MediaType.TEXT_CSV);
+					datasetEntryGraph.add(new URIImpl(datasetEntry.getEntryURI().toString()), RepositoryProperties.pipelineData, new URIImpl(sourceURI));
+					datasetEntry.setGraph(datasetEntryGraph);
 				} else if ("setalias".equalsIgnoreCase(action)) {
 					String datasetAliasURL = datasetURL + (datasetURL.endsWith("/") ? "" : "/") + "aliases";
 					String alias = getArguments().get("alias");
