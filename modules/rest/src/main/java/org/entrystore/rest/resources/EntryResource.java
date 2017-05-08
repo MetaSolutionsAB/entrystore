@@ -80,7 +80,6 @@ public class EntryResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		//supportedMediaTypes.add(MediaType.TEXT_HTML);
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
@@ -203,7 +202,6 @@ public class EntryResource extends BaseResource {
 				} else {
 					context.remove(entry.getEntryURI());
 				}
-				//getResponse().setEntity(new JsonRepresentation("{\"OK\":\"200\"}"));
 			} else {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			}

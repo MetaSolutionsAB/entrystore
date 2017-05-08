@@ -49,6 +49,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  *<p> Base resource class that supports common behaviours or attributes shared by
@@ -85,9 +86,13 @@ public abstract class BaseResource extends ServerResource {
 		
 		contextId = (String) request.getAttributes().get("context-id");
 		if (getCM() != null && contextId != null) {
-			context = getCM().getContext(contextId);
-			if (context == null) {
-				log.info("There is no context " + contextId);
+			if (getReservedNames().contains(contextId.toLowerCase())) {
+				log.error("Context ID is a reserved term and must not be used: \"" + contextId + "\". This error is likely to be caused by an error in the REST routing.");
+			} else {
+				context = getCM().getContext(contextId);
+				if (context == null) {
+					log.info("There is no context " + contextId);
+				}
 			}
 		}
 		
@@ -183,6 +188,10 @@ public abstract class BaseResource extends ServerResource {
 
 	public ArrayList<Harvester> getHarvesters() {
 		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getHarvesters();
+	}
+
+	public Set<String> getReservedNames() {
+		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getReservedNames();
 	}
 
 	public Representation unauthorizedHEAD() {

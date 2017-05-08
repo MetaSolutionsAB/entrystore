@@ -74,6 +74,7 @@ import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -106,6 +107,8 @@ public class EntryStoreApplication extends Application {
 	protected static String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
 
 	URI configURI;
+
+	private Set<String> reservedNames = new HashSet<>();
 
 	public EntryStoreApplication(Context parentContext) {
 		this(null, parentContext);
@@ -239,18 +242,31 @@ public class EntryStoreApplication extends Application {
 		Config config = rm.getConfiguration();
 		Router router = new Router(getContext());
 		//router.setDefaultMatchingMode(Template.MODE_STARTS_WITH);
+
+		reservedNames.add("favicon.ico");
 		
 		// to prevent unnecessary context-id lookups we route favicon.ico to a real icon
+		reservedNames.add("favicon.ico");
 		router.attach("/favicon.ico", FaviconResource.class);
 		
 		// global scope
+		reservedNames.add("echo");
 		router.attach("/echo", EchoResource.class);
+
+		reservedNames.add("lookup");
 		router.attach("/lookup", LookupResource.class);
+
+		reservedNames.add("proxy");
 		router.attach("/proxy", ProxyResource.class);
+
+		reservedNames.add("search");
 		router.attach("/search", SearchResource.class);
+
+		reservedNames.add("sparql");
 		router.attach("/sparql", SparqlResource.class);
 
 		// authentication resources
+		reservedNames.add("auth");
 		router.attach("/auth/user", UserResource.class);
 		router.attach("/auth/cookie", CookieLoginResource.class);
 		router.attach("/auth/basic", UserResource.class);
@@ -290,6 +306,7 @@ public class EntryStoreApplication extends Application {
 		}
 		
 		// management/configuration resources
+		reservedNames.add("management");
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
 		
@@ -390,7 +407,11 @@ public class EntryStoreApplication extends Application {
 	public RepositoryManagerImpl getRM() {
 		return this.rm; 
 	}
-	
+
+	public Set<String> getReservedNames() {
+		return this.reservedNames;
+	}
+
 	private void startBackupScheduler() {
 		URI userURI = getPM().getAuthenticatedUserURI();
 		try {

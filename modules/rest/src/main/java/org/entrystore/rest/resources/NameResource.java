@@ -81,9 +81,9 @@ public class NameResource extends BaseResource {
 				name = nameObj.getString("name").trim();
 			}
 		} catch (JSONException jsone) {
-			log.warn(jsone.getMessage());
+			log.error(jsone.getMessage());
 		} catch (IOException ioe) {
-			log.warn(ioe.getMessage());
+			log.error(ioe.getMessage());
 		}
 
 		if (this.context == null || this.entry == null) {
@@ -105,8 +105,10 @@ public class NameResource extends BaseResource {
 			}
 			success = ((User) entry.getResource()).setName(name);
 		} else if (GraphType.Context.equals(bt)) {
-			Context c = getCM().getContext(entryId);
-			success = getCM().setName(c.getURI(), name);
+			if (!getReservedNames().contains(name.toLowerCase())) {
+				Context c = getCM().getContext(entryId);
+				success = getCM().setName(c.getURI(), name);
+			}
 		}
 
 		if (!success) {
