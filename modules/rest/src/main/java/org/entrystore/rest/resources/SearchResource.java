@@ -16,39 +16,21 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
-import java.util.StringTokenizer;
-
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.common.SolrException;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
-import org.entrystore.ContextManager;
-import org.entrystore.Entry;
 import org.entrystore.Group;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
-import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.User;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.User;
+import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.NS;
-import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.RDFJSON;
@@ -56,12 +38,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.openrdf.model.Graph;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.util.GraphUtil;
 import org.openrdf.model.vocabulary.RDF;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
@@ -72,6 +50,18 @@ import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
+import java.util.StringTokenizer;
 
 
 /**
@@ -330,7 +320,7 @@ public class SearchResource extends BaseResource {
 						timeDiff = afterContextFilter.getTime() - after.getTime();
 						log.info("Context filtering took " + timeDiff + " ms (both ResourceType and EntryType)");
 					} else if (entryType != null) {
-						entries = new ArrayList<Entry>();
+						entries = new ArrayList<>();
 						for (Entry entry : searchResult) {
 							if (entryType.contains(entry.getEntryType())) {
 								entries.add(entry);
@@ -340,7 +330,7 @@ public class SearchResource extends BaseResource {
 						timeDiff = afterContextFilter.getTime() - after.getTime();
 						log.info("Context filtering took " + timeDiff + " ms (only entry type)");
 					} else if (resourceType != null) {
-						entries = new ArrayList<Entry>();
+						entries = new ArrayList<>();
 						for (Entry entry : searchResult) {
 							if (resourceType.contains(entry.getGraphType())) {
 								entries.add(entry);
@@ -390,11 +380,8 @@ public class SearchResource extends BaseResource {
 						String[] fieldAndOrder = string.split(" ");
 						if (fieldAndOrder.length == 2) {
 							String field = fieldAndOrder[0];
-							if ("title".equalsIgnoreCase(field)) {
-								// we need this hack to be able to sort after
-								// title as this requires untokenized field type
-								// string (title_sort) instead of text (title)
-								field = "title_exact";
+							if (field.startsWith("title.")) {
+								field = field.replace("title.", "title_s.");
 							}
 							ORDER order = ORDER.asc;
 							try {
@@ -402,12 +389,12 @@ public class SearchResource extends BaseResource {
 							} catch (IllegalArgumentException iae) {
 								log.warn("Unable to parse sorting value, using ascending by default");
 							}
-							q.addSortField(field, order);
+							q.addSort(field, order);
 						}
 					}
 				} else {
-					q.addSortField("score", ORDER.desc);
-					q.addSortField("modified", ORDER.desc);
+					q.addSort("score", ORDER.desc);
+					q.addSort("modified", ORDER.desc);
 				}
 				
 				try {

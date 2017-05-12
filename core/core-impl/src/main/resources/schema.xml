@@ -240,6 +240,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
 
         <!-- title needs to be single-valued in order be sortable, desc and tag can be text and multi value -->
         <dynamicField name="title.*" type="text_ngram" indexed="true" multiValued="false"/>
+        <dynamicField name="title_s.*" type="string" indexed="true" multiValued="false"/>
         <dynamicField name="description.*" type="text" indexed="true" multiValued="true"/>
         <dynamicField name="tag.literal.*" type="text_ngram" indexed="true" multiValued="true"/>
 
@@ -280,6 +281,7 @@ both match, the first appearing in the schema will be used.  -->
 is added to the index.  It's used either to index the same field differently,
 or to add multiple fields to the same field for easier/faster searching.  -->
     <copyField source="title" dest="all"/>
+    <copyField source="title.*" dest="title_s.*"/>
     <copyField source="description" dest="all"/>
     <copyField source="tag.literal" dest="all"/>
     <copyField source="metadata.predicate.literal_s.*" dest="metadata.predicate.literal.*"/>
