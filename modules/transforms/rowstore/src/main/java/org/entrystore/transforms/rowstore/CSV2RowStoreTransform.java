@@ -58,16 +58,20 @@ public class CSV2RowStoreTransform extends Transform {
 
 	@Override
 	public Object transform(Pipeline pipeline, Entry sourceEntry) {
-		String action = getArguments().getOrDefault("action", "create");
+		Config conf = pipeline.getEntry().getRepositoryManager().getConfiguration();
+		String action = getArguments().getOrDefault("action", "create").toLowerCase();
+		String pipelineURI = pipeline.getEntry().getEntryURI().toString();
+		InputStream data = null;
+		String sourceURI = null;
 
 		if (sourceEntry == null && !"setalias".equalsIgnoreCase(action)) {
-			throw new IllegalStateException("CSV2RowStoreTransform requires a sourceEntry");
+			throw new IllegalStateException("CSV2RowStoreTransform requires a sourceEntry for action " + action);
 		}
 
-        InputStream data = ((Data) sourceEntry.getResource()).getData();
-		String pipelineURI = pipeline.getEntry().getEntryURI().toString();
-		String sourceURI = sourceEntry.getEntryURI().toString();
-		Config conf = pipeline.getEntry().getRepositoryManager().getConfiguration();
+		if (!"setalias".equalsIgnoreCase(action)) {
+			data = ((Data) sourceEntry.getResource()).getData();
+			sourceURI = sourceEntry.getEntryURI().toString();
+		}
 
 		Entry result = null;
 		Response httpResponse = null;
