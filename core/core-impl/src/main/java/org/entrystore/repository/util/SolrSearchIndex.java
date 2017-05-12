@@ -290,8 +290,11 @@ public class SolrSearchIndex implements SearchIndex {
 				// we also store title.{lang} as dynamic field to be able to
 				// sort after titles in a specific language
 				String lang = titles.get(title);
+				if (lang == null) {
+					lang = "nolang";
+				}
 				// we only want one title per language, otherwise sorting will not work
-				if (lang != null && !langs.contains(lang)) {
+				if (!langs.contains(lang)) {
 					doc.addField("title." + lang, title, 10);
 					langs.add(lang);
 				}
