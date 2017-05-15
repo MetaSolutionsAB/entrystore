@@ -478,12 +478,20 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, SolrServer solrServer, int offset, int limit) throws SolrException {
+		if (query == null) {
+			throw new IllegalArgumentException("Query object must not be null");
+		}
+
 		if (offset > -1) {
 			query.setStart(offset);
 		}
 		if (limit > -1) {
 			query.setRows(limit);
 		}
+
+		// We only need the "uri" field in the response,
+		// so we skip the rest (default is "*")
+		query.setFields("uri");
 
 		long hits = -1;
 
