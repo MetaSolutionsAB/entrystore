@@ -101,7 +101,7 @@ public class CSV2RowStoreTransform extends Transform {
 
 				result = newEntry;
 			} else if ("replace".equalsIgnoreCase(action) || "append".equalsIgnoreCase(action) || "setalias".equalsIgnoreCase(action)) {
-				String datasetURL = getArguments().get("datasetURL");
+				String datasetURL = getArguments().get("dataseturl");
 				if (datasetURL == null) {
 					throw new IllegalStateException("CSV2RowStoreTransform action " + action + " requires a datasetURL parameter");
 				}
