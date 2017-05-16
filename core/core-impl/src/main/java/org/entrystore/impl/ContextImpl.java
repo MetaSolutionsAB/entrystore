@@ -41,7 +41,6 @@ import org.openrdf.model.Literal;
 import org.openrdf.model.Resource;
 import org.openrdf.model.Statement;
 import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.impl.ValueFactoryImpl;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
@@ -172,15 +171,15 @@ public class ContextImpl extends ResourceImpl implements Context {
 					rc.commit();
 				} catch (Exception e) {
 					rc.rollback();
-					e.printStackTrace();
+					log.error(e.getMessage());
 					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+			log.error(e.getMessage());
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);
 		}
 		
 		this.res2entry = null;
@@ -258,7 +257,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 		}
 	}
@@ -721,7 +720,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			rc = this.entry.getRepository().getConnection();
 			result = getByMMdURIDirect(entryURI, rc);
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 		} finally {
 			rc.close();
@@ -769,7 +768,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public Set<Entry> getByExternalMdURI(URI metadataURI) {
-		if (res2entry == null) {
+		if (extMdUri2entry == null) {
 			loadIndex();
 		}
 		HashSet<Entry> entries = new HashSet<Entry>();
@@ -839,71 +838,44 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public void remove(URI entryURI) {
 		if (systemEntries.contains(entryURI)) {
-			throw new DisallowedException("Cannot remove system entry with URI: "+entryURI);
+			throw new DisallowedException("Cannot remove system entry with URI: " + entryURI);
 		}
+
 		synchronized (this.entry.repository) {
 			EntryImpl removeEntry = (EntryImpl) getByEntryURI(entryURI);
 			checkAccess(removeEntry, AccessProperty.Administer);
 
-
-			if (removeEntry.graphType == GraphType.String) {
-				// removes the relation from the source entry. 
-				removeEntry.getLocalMetadata().setGraph(new GraphImpl()); 
+			try {
+				Iterator<URI> it = removeEntry.getReferringListsInSameContext().iterator();
+				while (it.hasNext()) {
+					URI uri = it.next();
+					Entry listItem = getByResourceURI(uri).iterator().next();
+					((ListImpl) listItem.getResource()).removeChild(entryURI, false);
+				}
+			} catch (Exception e) {
+				log.error(e.getMessage(), e);
+				throw new org.entrystore.repository.RepositoryException("An error occured when removing the entry from one or more lists", e);
 			}
 
 			RepositoryConnection rc = null;
 			try {
 				rc = entry.repository.getConnection();
-				rc.setAutoCommit(false);
-				boolean incomplete = false;
+				rc.begin();
+				removeFromIndex(removeEntry, rc);
+				removeEntry.remove(rc);
+				this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
+				rc.commit();
+				cache.remove(removeEntry);
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removeEntry, RepositoryEvent.EntryDeleted));
+			} catch (Exception e) {
 				try {
-					Iterator<URI> it = removeEntry.getReferringListsInSameContext().iterator();
-					while (it.hasNext()) {
-						URI uri = it.next();
-						Entry listItem = null;
-						Set<Entry> entries = cache.getByURI(uri);
-						if (entries != null) {
-							listItem = entries.iterator().next();
-						} else {
-							Object value = res2entry.get(resourceURI);
-							if (value != null && value instanceof URI) {
-								listItem = getByMMdURIDirect((URI) value, rc);
-							} else {
-								throw new org.entrystore.repository.RepositoryException("Strange, a referring list is used twice in the same context,\n" +
-								"this is not allowed for local builtin resources");
-							}
-						}
-						listItem = getByResourceURI(uri).iterator().next();
-						((ListImpl) listItem.getResource()).removeChild(entryURI, false);
-						incomplete = true;
-					}
-				} catch (Exception e) {
-					log.error(e.getMessage(), e);
-					if (incomplete) {
-						throw new org.entrystore.repository.RepositoryException("Error in removing the item from lists, " +
-								"unfortunately now only removed from some of the lists. Hence, the item will not be removed completely.", e);
-					} else {
-						throw new org.entrystore.repository.RepositoryException("Error in removing the item from lists.\n" +
-								"Hence, the item will not be removed completely.", e);
-					}
-				}
-
-				try {
-					removeFromIndex(removeEntry, rc);
-					removeEntry.remove(rc);
-					this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
-					rc.commit();
-					cache.remove(removeEntry);
-					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removeEntry, RepositoryEvent.EntryDeleted));
-				} catch (Exception e) {
 					rc.rollback();
-					log.error(e.getMessage(), e);
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+				} catch (RepositoryException e1) {
+					log.error(e1.getMessage());
+					throw new org.entrystore.repository.RepositoryException("Error when rolling back transaction", e);
 				}
-
-			} catch (RepositoryException e) {
 				log.error(e.getMessage(), e);
-				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+				throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 			} finally {
 				try {
 					rc.close();
