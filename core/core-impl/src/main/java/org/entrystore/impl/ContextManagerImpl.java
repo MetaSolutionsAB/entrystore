@@ -130,51 +130,45 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				remove(contextURI);
 				
 				rc = entry.getRepository().getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				
 				ValueFactory vf = rc.getValueFactory();
 				
 				RepositoryResult<org.openrdf.model.Resource> availableNGs = rc.getContextIDs();
-				List<org.openrdf.model.Resource> filteredNGs = new ArrayList<org.openrdf.model.Resource>();
-				for (org.openrdf.model.Resource ng : availableNGs.asList()) {
+				List<org.openrdf.model.Resource> filteredNGs = new ArrayList<>();
+				while (availableNGs.hasNext()) {
+					org.openrdf.model.Resource ng = availableNGs.next();
 					if (ng.toString().startsWith(contextURIStr)) {
 						filteredNGs.add(ng);
 					}
 				}
-				
+
 				org.openrdf.model.Resource[] filteredNGsArray = filteredNGs.toArray(new org.openrdf.model.Resource[filteredNGs.size()]);
 				if (filteredNGsArray == null || filteredNGsArray.length == 0) {
-					log.warn("No named graphs matching this context");
+					log.warn("No named graphs match this context");
 					return;
 				}
-				
-				// remove all triples belonging to the context
-				
+
 				org.openrdf.model.URI contextURISesame = vf.createURI(contextURI.toString());
 				org.openrdf.model.URI baseURI = vf.createURI(entry.getRepositoryManager().getRepositoryURL().toString());
 				String baseURIStr = baseURI.toString();
-				
-				List<Statement> stmntsToRemove = rc.getStatements(null, null, null, false, filteredNGsArray).asList();
-				log.info("Removing " + stmntsToRemove.size() + " triples contained in context " + contextURI);
-				rc.remove(stmntsToRemove);
-				
-				List<Statement> referencesToRemove = rc.getStatements(null, null, contextURISesame, false).asList();
-				referencesToRemove.addAll(rc.getStatements(contextURISesame, null, null, false).asList());
+
+				// remove all triples belonging to the context
+				log.info("Removing triples contained in context " + contextURI);
+				rc.remove(rc.getStatements(null, null, null, false, filteredNGsArray));
+				rc.remove(rc.getStatements(null, null, contextURISesame, false));
+				rc.remove(rc.getStatements(contextURISesame, null, null, false));
 				
 				// remove all triples in named graphs which look like: http://base/_contexts/{kind}/{context-id}
-				
-				referencesToRemove.addAll(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString())).asList());
-				referencesToRemove.addAll(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId).toString())).asList());
-				referencesToRemove.addAll(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.DATA_PATH, contextId).toString())).asList());
-				referencesToRemove.addAll(rc.getStatements(vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString()), null, null, false).asList());
-				
-				log.info("Removing " + referencesToRemove.size() + " references to context " + contextURI);
-				rc.remove(referencesToRemove);
+				log.info("Removing references to context " + contextURI);
+				rc.remove(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.DATA_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString()), null, null, false));
 				
 				rc.commit();
 				
 				// recursively remove the file directory on the hard disk
-				
 				String contextPath = this.entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER);
 	            if (contextPath != null) {
 	            	File contextPathFile = new File(contextPath);
@@ -892,7 +886,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				org.openrdf.model.URI resource = vf.createURI(uri.toString());
 				if (findLinks) {
 					RepositoryResult<Statement> resources = rc.getStatements(resource, RepositoryProperties.resHasEntry, null, false);
-					for (Statement statement: resources.asList()) {
+					while (resources.hasNext()) {
+						Statement statement = resources.next();
 						try {
 							Entry entry = getItemInRepositoryByMMdURI(URI.create(statement.getObject().stringValue()));
 							if (entry.getEntryType() == EntryType.Link) {
@@ -903,7 +898,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					}
 				} else {
 					RepositoryResult<Statement> resources = rc.getStatements(resource, RepositoryProperties.mdHasEntry, null, false);
-					for (Statement statement: resources.asList()) {
+					while (resources.hasNext()) {
+						Statement statement = resources.next();
 						try {
 							Entry entry = getItemInRepositoryByMMdURI(URI.create(statement.getObject().stringValue()));
 							if (entry.getEntryType() == EntryType.Reference) {
