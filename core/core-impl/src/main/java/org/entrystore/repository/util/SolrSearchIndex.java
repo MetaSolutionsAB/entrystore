@@ -81,7 +81,7 @@ public class SolrSearchIndex implements SearchIndex {
 	private final SolrServer solrServer;
 
 	private Thread documentSubmitter;
-	
+
 	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
 
 	public class SolrInputDocumentSubmitter extends Thread {
