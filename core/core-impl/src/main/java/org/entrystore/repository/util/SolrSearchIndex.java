@@ -16,6 +16,8 @@
 
 package org.entrystore.repository.util;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -58,7 +60,7 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
 
 
 /**
@@ -79,29 +81,37 @@ public class SolrSearchIndex implements SearchIndex {
 	private final SolrServer solrServer;
 
 	private Thread documentSubmitter;
-
-	private final ConcurrentLinkedQueue<SolrInputDocument> postQueue = new ConcurrentLinkedQueue<SolrInputDocument>();
+	
+	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
 
 	public class SolrInputDocumentSubmitter extends Thread {
 
 		@Override
 		public void run() {
 			while (!interrupted()) {
-				if (!postQueue.isEmpty()) {
+				postQueue.cleanUp();
+				if (postQueue.estimatedSize() > 0) {
 					UpdateRequest req = new UpdateRequest();
 					req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
 
-					for (int i = 0; i < BATCH_SIZE; i++) {
-						SolrInputDocument doc = postQueue.poll();
-						if (doc == null) {
-							break;
+					synchronized (postQueue) {
+						ConcurrentMap<URI, SolrInputDocument> postQueueMap = postQueue.asMap();
+						Iterator<URI> it = postQueueMap.keySet().iterator();
+						for (int i = 0; i < BATCH_SIZE && it.hasNext(); i++) {
+							URI key = it.next();
+							SolrInputDocument doc = postQueueMap.get(key);
+							postQueueMap.remove(key, doc);
+							if (doc == null) {
+								log.warn("Value for key " + key + " is null in Solr submit queue");
+							}
+							req.add(doc);
 						}
-						req.add(doc);
 					}
 
 					try {
+						postQueue.cleanUp();
 						log.info("Sending commit with " + req.getDocuments().size() + " entries to Solr, "
-								+ postQueue.size() + " documents remaining in post queue");
+								+ postQueue.estimatedSize() + " documents remaining in post queue");
 						req.process(solrServer);
 					} catch (SolrServerException sse) {
 						log.error(sse.getMessage(), sse);
@@ -200,8 +210,10 @@ public class SolrSearchIndex implements SearchIndex {
 								if (entry == null) {
 									continue;
 								}
-								log.info("Adding document to Solr post queue: " + entryURI);
-								postQueue.add(constructSolrInputDocument(entry, extractFulltext));
+								synchronized (postQueue) {
+									log.info("Adding document to Solr post queue: " + entryURI);
+									postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+								}
 							}
 						}
 					}
@@ -448,8 +460,10 @@ public class SolrSearchIndex implements SearchIndex {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
-			log.info("Adding document to Solr post queue: " + entry.getEntryURI());
-			postQueue.add(constructSolrInputDocument(entry, extractFulltext));
+			synchronized (postQueue) {
+				log.info("Adding document to Solr post queue: " + entry.getEntryURI());
+				postQueue.put(entry.getEntryURI(), constructSolrInputDocument(entry, extractFulltext));
+			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
