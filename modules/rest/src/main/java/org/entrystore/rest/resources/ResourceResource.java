@@ -370,7 +370,9 @@ public class ResourceResource extends BaseResource {
 			}
 		}
 
-		if (response.getEntity().getLocationRef() != null && response.getEntity().getLocationRef().getBaseRef() == null) {
+		if (response.getEntity() != null &&
+				response.getEntity().getLocationRef() != null &&
+				response.getEntity().getLocationRef().getBaseRef() == null) {
 			response.getEntity().getLocationRef().setBaseRef(url.substring(0, url.lastIndexOf("/")+1));
 		}
 
