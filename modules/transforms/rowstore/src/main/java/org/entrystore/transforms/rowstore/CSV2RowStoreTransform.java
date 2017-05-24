@@ -136,7 +136,7 @@ public class CSV2RowStoreTransform extends Transform {
 				}
 
 				if (!Status.isSuccess(httpResponse.getStatus().getCode())) {
-					log.error("Dataset could not modified");
+					log.error("Dataset could not be modified");
 					return null;
 				}
 				Set<Entry> resultEntries = pipeline.getEntry().getContext().getByResourceURI(URI.create(datasetURL));
