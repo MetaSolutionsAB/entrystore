@@ -159,7 +159,7 @@ public class CSV2RowStoreTransform extends Transform {
 	}
 
 	private Response sendData(Method method, String url, InputStream data, MediaType mediaType) {
-		if (method == null || url == null || data == null) {
+		if (method == null || url == null) {
 			throw new IllegalArgumentException("Arguments must not be null");
 		}
 
