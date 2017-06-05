@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -81,9 +81,9 @@ public class NameResource extends BaseResource {
 				name = nameObj.getString("name").trim();
 			}
 		} catch (JSONException jsone) {
-			log.warn(jsone.getMessage());
+			log.error(jsone.getMessage());
 		} catch (IOException ioe) {
-			log.warn(ioe.getMessage());
+			log.error(ioe.getMessage());
 		}
 
 		if (this.context == null || this.entry == null) {
@@ -105,8 +105,10 @@ public class NameResource extends BaseResource {
 			}
 			success = ((User) entry.getResource()).setName(name);
 		} else if (GraphType.Context.equals(bt)) {
-			Context c = getCM().getContext(entryId);
-			success = getCM().setName(c.getURI(), name);
+			if (!getReservedNames().contains(name.toLowerCase())) {
+				Context c = getCM().getContext(entryId);
+				success = getCM().setName(c.getURI(), name);
+			}
 		}
 
 		if (!success) {

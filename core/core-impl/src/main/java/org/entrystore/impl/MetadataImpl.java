@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -111,8 +111,12 @@ public class MetadataImpl implements Metadata {
 				RepositoryConnection rc = this.entry.repository.getConnection();
 				rc.setAutoCommit(false);
 				try {
-					removeGraphSynchronized(rc);
+					Graph oldGraph = removeGraphSynchronized(rc);
 					addGraphSynchronized(rc, graph);
+					ProvenanceImpl provenance = (ProvenanceImpl) this.entry.getProvenance();
+					if (provenance != null && !cached) {
+						provenance.addMetadataEntity(oldGraph, rc);
+					}
 					rc.commit();
 					if (cached) {
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ExternalMetadataUpdated, graph));
@@ -133,14 +137,17 @@ public class MetadataImpl implements Metadata {
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
-	public void removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {
+	public Graph removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {
 		String base = this.entry.repositoryManager.getRepositoryURL().toString();
-		//Old graph, remove from target entry relation index.
-		if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.
+		//Fetch old graph
+		RepositoryResult<Statement> iter = rc.getStatements(null, null, null, false, mdContext);
+		GraphImpl graph = new GraphImpl(rc.getValueFactory(), iter.asList());
 
-            RepositoryResult<Statement> iter = rc.getStatements(null, null, null, false, mdContext);
-			while(iter.hasNext()) {
-				Statement statement = iter.next();
+		// Remove relations in other entries inverse relational cache if entry has repository URL.
+		if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.
+			Iterator<Statement> iter2 = graph.iterator();
+ 			while(iter2.hasNext()) {
+				Statement statement = iter2.next();
 				Value obj = statement.getObject();
 				Resource subj = statement.getSubject();
 				//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
@@ -157,6 +164,7 @@ public class MetadataImpl implements Metadata {
 			}
 		}
 		rc.clear(mdContext);
+		return graph;
 	}
 	
 	public void addGraphSynchronized(RepositoryConnection rc, Graph graph) throws RepositoryException, DatatypeConfigurationException {

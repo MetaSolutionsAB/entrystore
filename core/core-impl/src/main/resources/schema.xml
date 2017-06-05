@@ -25,12 +25,12 @@
 -->
 
 <schema name="entrystore" version="1.1">
-<!-- attribute "name" is the name of this schema and is only used for display purposes.
-Applications should change this to reflect the nature of the search collection.
-version="1.1" is Solr's version number for the schema syntax and semantics.  It should
-not normally be changed by applications.
-1.0: multiValued attribute did not exist, all fields are multiValued by nature
-1.1: multiValued attribute introduced, false by default -->
+    <!-- attribute "name" is the name of this schema and is only used for display purposes.
+    Applications should change this to reflect the nature of the search collection.
+    version="1.1" is Solr's version number for the schema syntax and semantics.  It should
+    not normally be changed by applications.
+    1.0: multiValued attribute did not exist, all fields are multiValued by nature
+    1.1: multiValued attribute introduced, false by default -->
 
     <types>
         <!-- field type definitions. The "name" attribute is
@@ -141,9 +141,9 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         -->
         <fieldtype name="text" class="solr.TextField" positionIncrementGap="100">
             <analyzer type="index">
-            	<tokenizer class="solr.WhitespaceTokenizerFactory"/>
-            	<!-- NGramTokenizer has to be used if substring matching should work -->
-            	<!-- <tokenizer class="solr.NGramTokenizerFactory" minGramSize="3" maxGramSize="15" />-->
+                <tokenizer class="solr.WhitespaceTokenizerFactory"/>
+                <!-- NGramTokenizer has to be used if substring matching should work -->
+                <!-- <tokenizer class="solr.NGramTokenizerFactory" minGramSize="3" maxGramSize="15" />-->
                 <!-- in this example, we will only use synonyms at query time
                 <filter class="solr.SynonymFilterFactory" synonyms="index_synonyms.txt" ignoreCase="true" expand="false"/>
                 -->
@@ -163,19 +163,19 @@ lexicographic ordering isn't equal to the numeric ordering) -->
                 <filter class="solr.RemoveDuplicatesTokenFilterFactory"/>
             </analyzer>
         </fieldtype>
-        
-		<fieldType name="text_ngram" class="solr.TextField">
-			<analyzer type="index">
-				<tokenizer class="solr.NGramTokenizerFactory" minGramSize="3" maxGramSize="15"/>
-				<filter class="solr.LowerCaseFilterFactory"/>
-			</analyzer>
-			<analyzer type="query">
-				<tokenizer class="solr.WhitespaceTokenizerFactory"/>
-				<filter class="solr.LowerCaseFilterFactory"/>
-			</analyzer>
-		</fieldType>
 
-</types>
+        <fieldType name="text_ngram" class="solr.TextField">
+            <analyzer type="index">
+                <tokenizer class="solr.NGramTokenizerFactory" minGramSize="3" maxGramSize="15"/>
+                <filter class="solr.LowerCaseFilterFactory"/>
+            </analyzer>
+            <analyzer type="query">
+                <tokenizer class="solr.WhitespaceTokenizerFactory"/>
+                <filter class="solr.LowerCaseFilterFactory"/>
+            </analyzer>
+        </fieldType>
+
+    </types>
 
     <fields>
         <!-- Valid attributes for fields:
@@ -192,11 +192,11 @@ lexicographic ordering isn't equal to the numeric ordering) -->
             boosting for the field, and saves some memory).  Only full-text
             fields or fields that need an index-time boost need norms.
         -->
-        
+
         <field name="_version_" type="long" indexed="true" stored="true" multiValued="false"/>
 
-		<!-- id is needed for duplicate detection, configured in solrconfig.xml -->
-		<field name="id" type="string" indexed="true"/>
+        <!-- id is needed for duplicate detection, configured in solrconfig.xml -->
+        <field name="id" type="string" indexed="true"/>
 
         <field name="uri" type="string" indexed="true" stored="true"/>
         <field name="resource" type="string" indexed="true" stored="true"/>
@@ -206,9 +206,9 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="contributors" type="string" indexed="true" multiValued="true"/>
         <field name="lists" type="string" indexed="true" multiValued="true"/>
         <field name="public" type="boolean" indexed="true"/>
-		<field name="created" type="date" indexed="true"/>
+        <field name="created" type="date" indexed="true"/>
         <field name="modified" type="date" indexed="true"/>
-		<field name="graphType" type="string" indexed="true"/>
+        <field name="graphType" type="string" indexed="true"/>
         <field name="entryType" type="string" indexed="true"/>
         <field name="resourceType" type="string" indexed="true"/>
 
@@ -216,6 +216,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="metadata.predicate" type="string" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.uri.*" type="string" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.literal.*" type="text" indexed="true" multiValued="true"/>
+        <dynamicField name="metadata.predicate.literal_s.*" type="string" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.integer.*" type="slong" indexed="true" multiValued="false"/>
         <field name="metadata.object.uri" type="string" indexed="true" multiValued="true"/>
         <field name="metadata.object.literal" type="text" indexed="true" multiValued="true"/>
@@ -225,11 +226,11 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="acl.metadata.rw" type="string" indexed="true" multiValued="true"/>
         <field name="acl.resource.r" type="string" indexed="true" multiValued="true"/>
         <field name="acl.resource.rw" type="string" indexed="true" multiValued="true"/>
-        
+
         <field name="title" type="text_ngram" indexed="true" multiValued="true"/>
         <field name="description" type="text" indexed="true" multiValued="true"/>
         <field name="lang" type="string" indexed="true" multiValued="true"/>
-        
+
         <field name="tag.literal" type="text_ngram" indexed="true" multiValued="true"/>
         <field name="tag.uri" type="string" indexed="true" multiValued="true"/>
 
@@ -238,7 +239,8 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="status" type="string" indexed="true" multiValued="false"/>
 
         <!-- title needs to be single-valued in order be sortable, desc and tag can be text and multi value -->
-		<dynamicField name="title.*" type="text_ngram" indexed="true" multiValued="false"/>
+        <dynamicField name="title.*" type="text_ngram" indexed="true" multiValued="false"/>
+        <dynamicField name="title_s.*" type="string" indexed="true" multiValued="false"/>
         <dynamicField name="description.*" type="text" indexed="true" multiValued="true"/>
         <dynamicField name="tag.literal.*" type="text_ngram" indexed="true" multiValued="true"/>
 
@@ -279,8 +281,10 @@ both match, the first appearing in the schema will be used.  -->
 is added to the index.  It's used either to index the same field differently,
 or to add multiple fields to the same field for easier/faster searching.  -->
     <copyField source="title" dest="all"/>
+    <copyField source="title.*" dest="title_s.*"/>
     <copyField source="description" dest="all"/>
     <copyField source="tag.literal" dest="all"/>
+    <copyField source="metadata.predicate.literal_s.*" dest="metadata.predicate.literal.*"/>
 
     <!-- Similarity is the scoring routine for each document vs. a query.
 A custom similarity may be specified here, but the default is fine

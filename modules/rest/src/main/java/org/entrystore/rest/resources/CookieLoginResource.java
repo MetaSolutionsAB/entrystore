@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -70,7 +70,7 @@ public class CookieLoginResource extends BaseResource {
 			
 			String token = Password.getRandomBase64(128);
 			Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
-			LoginTokenCache.getInstance().addToken(token, new UserInfo(userName, loginExpiration));
+			LoginTokenCache.getInstance().putToken(token, new UserInfo(userName, loginExpiration));
 			
 			CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 			tokenCookieSetting.setMaxAge(maxAge);

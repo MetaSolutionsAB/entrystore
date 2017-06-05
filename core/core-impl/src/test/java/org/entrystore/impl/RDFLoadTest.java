@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,36 +54,23 @@ public class RDFLoadTest extends AbstractCoreTest {
 		assertTrue(duck.getEntry().getGraphType() == GraphType.Context);
 		assertTrue(duck.getEntry().getResourceType() == ResourceType.InformationResource);
 
-		//Top list
-		Entry entry = duck.get("_top");
-		assertTrue(entry.getEntryType() == EntryType.Local);
-		assertTrue(entry.getGraphType() == GraphType.List);
+		Entry entry = duck.get("3");
+		assertTrue("Locationtype should be LinkReference, it is now: " + entry.getEntryType(), entry.getEntryType() == EntryType.Link);
 		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
 
-		//LinkReference to Mickeys top list.
-		entry = duck.get("3");
-		assertTrue("Locationtype should be LinkReference, it is now: " + entry.getEntryType(),
-				entry.getEntryType() == EntryType.LinkReference);
-		assertTrue(entry.getGraphType() == GraphType.List);
-		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
-
-		//Reference to the principal Mickey
 		entry = duck.get("4");
-		assertTrue(entry.getEntryType() == EntryType.Reference);
-		assertTrue(entry.getGraphType() == GraphType.User);
-		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
-
-		//Link to wikipedia
-		entry = duck.get("6");
 		assertTrue(entry.getEntryType() == EntryType.Link);
-		assertTrue(entry.getGraphType() == GraphType.None);
 		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
 
-		//Phooey, a abstract resource
-		entry = duck.get("8");
+		entry = duck.get("6");
 		assertTrue(entry.getEntryType() == EntryType.Local);
 		assertTrue(entry.getGraphType() == GraphType.None);
-		assertTrue(entry.getResourceType() == ResourceType.NamedResource);
+		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
+
+		entry = duck.get("6");
+		assertTrue(entry.getEntryType() == EntryType.Local);
+		assertTrue(entry.getGraphType() == GraphType.None);
+		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
 	}
 
 	@Test

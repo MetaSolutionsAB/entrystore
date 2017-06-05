@@ -1,12 +1,13 @@
-# This is a sample build configuration for Maven.
-# Only use spaces to indent your .yml configuration.
-# -----
-# You can specify a custom docker image from Dockerhub as your build environment.
-image: maven:3.3.3
+image: maven:3.3.9-jdk-8
 
 pipelines:
   default:
     - step:
-        script: # Modify the commands below to build your repository.
+        script:
           - mvn --version
           - mvn clean install
+          - mkdir -p ~/.ssh
+          - echo $SSH_KNOWN_HOSTS >> ~/.ssh/known_hosts
+          - ( umask 077 ; echo $SSH_KEY | base64 --decode --ignore-garbage > ~/.ssh/id_rsa )
+          - ( cd modules/rest-standalone/target/dist && tar czf entrystore-rest-`cat ../../../../VERSION.txt`.tar.gz * )
+          - scp -v modules/rest/target/*.war modules/rest-standalone/target/dist/*.tar.gz deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,8 @@ import org.entrystore.rest.auth.UserInfo;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Cookie;
+import org.restlet.data.Language;
+import org.restlet.data.Preference;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
@@ -33,6 +35,9 @@ import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
 
 
 /**
@@ -64,6 +69,18 @@ public class UserResource extends BaseResource {
 		result.put("user", user.getName());
 		result.put("id", user.getEntry().getId());
 		result.put("uri", user.getEntry().getEntryURI());
+
+		// we also send back the browser's Accept-Language header
+		// as this information is not accessible from JavaScript
+		JSONObject clientAcceptLanguage = new JSONObject();
+		// we need the hack with DecimalFormat and Float.valueOf
+		// due to ugly numbers in the JSON representation otherwise
+		DecimalFormat decFormat= new DecimalFormat("#.##");
+		decFormat.setRoundingMode(RoundingMode.FLOOR);
+		for (Preference<Language> lang : getRequest ().getClientInfo().getAcceptedLanguages()) {
+			clientAcceptLanguage.put(lang.getMetadata().toString(), Float.valueOf(decFormat.format(lang.getQuality())));
+		}
+		result.put("clientAcceptLanguage", clientAcceptLanguage);
 
 		if (!user.getURI().equals(pm.getGuestUser().getURI())) {
 			Context homeContext = user.getHomeContext();

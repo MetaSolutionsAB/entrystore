@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,22 +35,27 @@ import java.net.URI;
 public class EntryStoreApplicationStandalone extends Application {
 
 	public static void main(String[] args) {
-		if (args.length < 1 || args.length > 3) {
+		int port = 8181;
+
+		if ((args.length < 1 && System.getenv(EntryStoreApplication.ENV_CONFIG_URI) == null) || args.length > 3) {
 			out("EntryStore standalone");
 			out("http://entrystore.org");
 			out("");
-			out("Usage: entrystore /path/to/entrystore.properties [listening port] [log level]");
+			out("Usage: entrystore [path to configuration file] [listening port] [log level]");
 			out("");
-			out("Default listening port is 8181.");
+			out("Path to configuration file may be omitted only if environment variable ENTRYSTORE_CONFIG_URI is set to a URI. No other parameters must be provided if the configuration file is not provided as parameter.");
+			out("Default listening port is " + port + ".");
 			out("Log level may be one of: ALL, DEBUG, INFO, WARN, ERROR, FATAL, OFF, TRACE");
 			out("");
 			System.exit(0);
 		}
 
-		String configStr = args[0];
-		URI config = new File(configStr).toURI();
+		URI config = null;
+		if (args.length > 0) {
+			String configStr = args[0];
+			config = new File(configStr).toURI();
+		}
 
-		int port = 8181;
 		if (args.length >= 2) {
 			try {
 				port = Integer.valueOf(args[1]);

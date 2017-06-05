@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,9 +19,7 @@ package org.entrystore.rest.filter;
 import org.entrystore.rest.util.CORSUtil;
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.data.Header;
 import org.restlet.data.Method;
-import org.restlet.engine.header.HeaderUtils;
 import org.restlet.routing.Filter;
 import org.restlet.util.Series;
 import org.slf4j.Logger;
@@ -60,16 +58,16 @@ public class CORSFilter extends Filter {
 						log.debug("Received CORS request with disallowed origin");
 						return;
 					}
-					Series<Header> respHeaders = new Series<>(Header.class);
-					respHeaders.add("Access-Control-Allow-Origin", origin);
-					respHeaders.add("Access-Control-Allow-Credentials", "true");
-					if (cors.getAllowedHeaders() != null) {
-						respHeaders.add("Access-Control-Expose-Headers", cors.getAllowedHeaders());
-					}
+
+					response.setAccessControlAllowOrigin(origin);
+					response.setAccessControlAllowCredentials(true);
 					if (cors.getMaxAge() > -1) {
-						respHeaders.add("Access-Control-Max-Age", Integer.toString(cors.getMaxAge()));
+						response.setAccessControlMaxAge(cors.getMaxAge());
 					}
-					HeaderUtils.copyExtensionHeaders(respHeaders, response);
+					if (cors.getAllowedHeaders() != null) {
+						response.setAccessControlAllowHeaders(cors.getAllowedHeaders());
+						response.setAccessControlExposeHeaders(cors.getAllowedHeaders());
+					}
 				}
 			}
 		}

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,9 @@
 
 package org.entrystore.rest.auth;
 
-import java.util.Date;
-
 import org.entrystore.PrincipalManager;
-import org.entrystore.repository.RepositoryManager;
 import org.entrystore.User;
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.security.Password;
 import org.restlet.Context;
 import org.restlet.Request;
@@ -32,6 +30,8 @@ import org.restlet.ext.openid.RedirectAuthenticator;
 import org.restlet.security.Verifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Date;
 
 /**
  * Handles OpenID login procedure and lookup for EntryStore users.
@@ -93,7 +93,7 @@ public class ExistingUserRedirectAuthenticator extends RedirectAuthenticator {
 		String token = Password.getRandomBase64(128);
 		Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
 
-		LoginTokenCache.getInstance().addToken(token, new UserInfo(u.getName(), loginExpiration));
+		LoginTokenCache.getInstance().putToken(token, new UserInfo(u.getName(), loginExpiration));
 		CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 		tokenCookieSetting.setMaxAge(maxAge);
 		tokenCookieSetting.setPath(rm.getRepositoryURL().getPath());

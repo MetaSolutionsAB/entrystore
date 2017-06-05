@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,13 @@
 package org.entrystore.rest.resources;
 
 
+import com.google.common.collect.Sets;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.util.CORSUtil;
@@ -32,11 +32,10 @@ import org.entrystore.rest.util.Util;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.data.Header;
 import org.restlet.data.MediaType;
+import org.restlet.data.Method;
 import org.restlet.data.ServerInfo;
 import org.restlet.data.Status;
-import org.restlet.engine.header.HeaderUtils;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
@@ -50,6 +49,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  *<p> Base resource class that supports common behaviours or attributes shared by
@@ -86,9 +86,13 @@ public abstract class BaseResource extends ServerResource {
 		
 		contextId = (String) request.getAttributes().get("context-id");
 		if (getCM() != null && contextId != null) {
-			context = getCM().getContext(contextId);
-			if (context == null) {
-				log.info("There is no context " + contextId);
+			if (getReservedNames().contains(contextId.toLowerCase())) {
+				log.error("Context ID is a reserved term and must not be used: \"" + contextId + "\". This error is likely to be caused by an error in the REST routing.");
+			} else {
+				context = getCM().getContext(contextId);
+				if (context == null) {
+					log.info("There is no context " + contextId);
+				}
 			}
 		}
 		
@@ -103,6 +107,8 @@ public abstract class BaseResource extends ServerResource {
 		if (parameters.containsKey("format")) {
 			String format = parameters.get("format");
 			if (format != null) {
+				// workaround for URL-decoded pluses (space) in MIME-type names, e.g. ld+json
+				format = format.replaceAll(" ", "+");
 				this.format = new MediaType(format);
 			}
 		}
@@ -141,17 +147,16 @@ public abstract class BaseResource extends ServerResource {
 				return new EmptyRepresentation();
 			}
 
-			Series<Header> respHeaders = new Series<Header>(Header.class);
-			respHeaders.set("Access-Control-Allow-Origin", origin);
-			respHeaders.set("Access-Control-Allow-Methods", "HEAD, GET, PUT, POST, DELETE, OPTIONS");
-			respHeaders.set("Access-Control-Allow-Credentials", "true");
+			getResponse().setAccessControlAllowOrigin(origin);
+			getResponse().setAccessControlAllowMethods(Sets.newHashSet(Method.HEAD, Method.GET, Method.PUT, Method.POST, Method.DELETE, Method.OPTIONS));
+			getResponse().setAccessControlAllowCredentials(true);
 			if (cors.getAllowedHeaders() != null) {
-				respHeaders.set("Access-Control-Allow-Headers", cors.getAllowedHeaders());
+				getResponse().setAccessControlAllowHeaders(cors.getAllowedHeaders());
+				getResponse().setAccessControlExposeHeaders(cors.getAllowedHeaders());
 			}
 			if (cors.getMaxAge() > -1) {
-				respHeaders.set("Access-Control-Max-Age", Integer.toString(cors.getMaxAge()));
+				getResponse().setAccessControlMaxAge(cors.getMaxAge());
 			}
-			HeaderUtils.copyExtensionHeaders(respHeaders, getResponse());
 		}
 		return getResponse().getEntity();
 	}
@@ -184,9 +189,9 @@ public abstract class BaseResource extends ServerResource {
 	public ArrayList<Harvester> getHarvesters() {
 		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getHarvesters();
 	}
-	
-	public BackupScheduler getBackupScheduler() {
-		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getBackupScheduler();
+
+	public Set<String> getReservedNames() {
+		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getReservedNames();
 	}
 
 	public Representation unauthorizedHEAD() {

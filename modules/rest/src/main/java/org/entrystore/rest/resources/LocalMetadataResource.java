@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,16 @@
 
 package org.entrystore.rest.resources;
 
+import org.entrystore.Entity;
 import org.entrystore.EntryType;
+import org.entrystore.GraphEntity;
 import org.entrystore.Metadata;
+import org.entrystore.Provenance;
+import org.entrystore.ProvenanceType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
 
 
 /**
@@ -36,6 +42,14 @@ public class LocalMetadataResource extends AbstractMetadataResource {
 		if (entry != null) {
 			EntryType et = entry.getEntryType();
 			if (EntryType.Local.equals(et) || EntryType.Link.equals(et) || EntryType.LinkReference.equals(et)) {
+				Provenance provenance = entry.getProvenance();
+				if (this.parameters.containsKey("rev") && provenance != null) {
+					Entity entity = provenance.getEntityFor(parameters.get("rev"), ProvenanceType.Metadata);
+					if (entity instanceof GraphEntity) {
+						return ((GraphEntity) entity);
+					}
+					return null;
+				}
 				return entry.getLocalMetadata();
 			}
 		}

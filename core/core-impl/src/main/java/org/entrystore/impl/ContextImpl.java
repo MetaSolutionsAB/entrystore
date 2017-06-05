@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +17,45 @@
 
 package org.entrystore.impl;
 
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.Data;
+import org.entrystore.DeletedEntryInfo;
+import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.Quota;
+import org.entrystore.QuotaException;
+import org.entrystore.ResourceType;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
+import org.entrystore.repository.security.DisallowedException;
+import org.entrystore.repository.test.TestSuite;
+import org.entrystore.repository.util.NS;
+import org.entrystore.repository.util.URISplit;
+import org.openrdf.model.Graph;
+import org.openrdf.model.Literal;
+import org.openrdf.model.Resource;
+import org.openrdf.model.Statement;
+import org.openrdf.model.ValueFactory;
+import org.openrdf.model.impl.ValueFactoryImpl;
+import org.openrdf.repository.RepositoryConnection;
+import org.openrdf.repository.RepositoryException;
+import org.openrdf.repository.RepositoryResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.xml.datatype.DatatypeConfigurationException;
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.XMLGregorianCalendar;
 import java.io.File;
 import java.net.URI;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
@@ -34,42 +65,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
-
-import javax.xml.datatype.DatatypeConfigurationException;
-import javax.xml.datatype.DatatypeFactory;
-import javax.xml.datatype.XMLGregorianCalendar;
-
-import org.entrystore.DeletedEntryInfo;
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
-import org.entrystore.Context;
-import org.entrystore.Data;
-import org.entrystore.Entry;
-import org.entrystore.PrincipalManager;
-import org.entrystore.Quota;
-import org.entrystore.QuotaException;
-import org.entrystore.repository.RepositoryEvent;
-import org.entrystore.repository.RepositoryEventObject;
-import org.entrystore.ResourceType;
-import org.entrystore.User;
-import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.repository.util.NS;
-import org.entrystore.AuthorizationException;
-import org.entrystore.repository.security.DisallowedException;
-import org.entrystore.repository.test.TestSuite;
-import org.entrystore.repository.util.URISplit;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.impl.ValueFactoryImpl;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.RepositoryResult;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 public class ContextImpl extends ResourceImpl implements Context {
@@ -81,8 +76,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 	protected HashMap<URI, Object> res2entry;
 	protected ArrayList<URI> systemEntries = new ArrayList<URI>();
 	private static Logger log = LoggerFactory.getLogger(ContextImpl.class);
-	protected EntryImpl systemEntriesEntry;
-	protected EntryImpl unlistedEntriesEntry;
 
 	public static final org.openrdf.model.URI DCModified;
 	public static final org.openrdf.model.URI DCTermsModified;
@@ -177,15 +170,15 @@ public class ContextImpl extends ResourceImpl implements Context {
 					rc.commit();
 				} catch (Exception e) {
 					rc.rollback();
-					e.printStackTrace();
+					log.error(e.getMessage());
 					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
-			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+			log.error(e.getMessage());
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);
 		}
 		
 		this.res2entry = null;
@@ -263,7 +256,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 		}
 	}
@@ -621,21 +614,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI) {
 		ListImpl list = null;
-		boolean isOwner;
-		if(buiType == GraphType.String) {
-			// the user that has logged in must have a home context, inorder to make a string comment. 
-			URI userURI = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI(); 
-			Entry userEntry = entry.getRepositoryManager().getPrincipalManager().getByEntryURI(userURI); 
-			User user = (User)userEntry.getResource(); 
-			Context userContext = user.getHomeContext();
-			if(userContext == null) {
-				return null; 
-			}
-			Entry commentsEntry = userContext.get("_comments"); 
+		boolean isOwner = false;
 
-			list = getList(commentsEntry.getResourceURI());
-			isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
-		} else {
+		if (listURI != null) {
 			list = getList(listURI);
 			isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		}
@@ -726,7 +707,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			rc = this.entry.getRepository().getConnection();
 			result = getByMMdURIDirect(entryURI, rc);
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
 		} finally {
 			rc.close();
@@ -774,7 +755,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public Set<Entry> getByExternalMdURI(URI metadataURI) {
-		if (res2entry == null) {
+		if (extMdUri2entry == null) {
 			loadIndex();
 		}
 		HashSet<Entry> entries = new HashSet<Entry>();
@@ -844,71 +825,44 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public void remove(URI entryURI) {
 		if (systemEntries.contains(entryURI)) {
-			throw new DisallowedException("Cannot remove system entry with URI: "+entryURI);
+			throw new DisallowedException("Cannot remove system entry with URI: " + entryURI);
 		}
+
 		synchronized (this.entry.repository) {
 			EntryImpl removeEntry = (EntryImpl) getByEntryURI(entryURI);
 			checkAccess(removeEntry, AccessProperty.Administer);
 
-
-			if (removeEntry.graphType == GraphType.String) {
-				// removes the relation from the source entry. 
-				removeEntry.getLocalMetadata().setGraph(new GraphImpl()); 
+			try {
+				Iterator<URI> it = removeEntry.getReferringListsInSameContext().iterator();
+				while (it.hasNext()) {
+					URI uri = it.next();
+					Entry listItem = getByResourceURI(uri).iterator().next();
+					((ListImpl) listItem.getResource()).removeChild(entryURI, false);
+				}
+			} catch (Exception e) {
+				log.error(e.getMessage(), e);
+				throw new org.entrystore.repository.RepositoryException("An error occured when removing the entry from one or more lists", e);
 			}
 
 			RepositoryConnection rc = null;
 			try {
 				rc = entry.repository.getConnection();
-				rc.setAutoCommit(false);
-				boolean incomplete = false;
+				rc.begin();
+				removeFromIndex(removeEntry, rc);
+				removeEntry.remove(rc);
+				this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
+				rc.commit();
+				cache.remove(removeEntry);
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removeEntry, RepositoryEvent.EntryDeleted));
+			} catch (Exception e) {
 				try {
-					Iterator<URI> it = removeEntry.getReferringListsInSameContext().iterator();
-					while (it.hasNext()) {
-						URI uri = it.next();
-						Entry listItem = null;
-						Set<Entry> entries = cache.getByURI(uri);
-						if (entries != null) {
-							listItem = entries.iterator().next();
-						} else {
-							Object value = res2entry.get(resourceURI);
-							if (value != null && value instanceof URI) {
-								listItem = getByMMdURIDirect((URI) value, rc);
-							} else {
-								throw new org.entrystore.repository.RepositoryException("Strange, a referring list is used twice in the same context,\n" +
-								"this is not allowed for local builtin resources");
-							}
-						}
-						listItem = getByResourceURI(uri).iterator().next();
-						((ListImpl) listItem.getResource()).removeChild(entryURI, false);
-						incomplete = true;
-					}
-				} catch (Exception e) {
-					log.error(e.getMessage(), e);
-					if (incomplete) {
-						throw new org.entrystore.repository.RepositoryException("Error in removing the item from lists, " +
-								"unfortunately now only removed from some of the lists. Hence, the item will not be removed completely.", e);
-					} else {
-						throw new org.entrystore.repository.RepositoryException("Error in removing the item from lists.\n" +
-								"Hence, the item will not be removed completely.", e);
-					}
-				}
-
-				try {
-					removeFromIndex(removeEntry, rc);
-					removeEntry.remove(rc);
-					this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
-					rc.commit();
-					cache.remove(removeEntry);
-					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removeEntry, RepositoryEvent.EntryDeleted));
-				} catch (Exception e) {
 					rc.rollback();
-					log.error(e.getMessage(), e);
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+				} catch (RepositoryException e1) {
+					log.error(e1.getMessage());
+					throw new org.entrystore.repository.RepositoryException("Error when rolling back transaction", e);
 				}
-
-			} catch (RepositoryException e) {
 				log.error(e.getMessage(), e);
-				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+				throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 			} finally {
 				try {
 					rc.close();
@@ -1191,117 +1145,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public void initializeSystemEntries() {
-		systemEntriesEntry = (EntryImpl) get("_systemEntries");
-		if(systemEntriesEntry == null) {
-			systemEntriesEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_systemEntries");
-			setMetadata(systemEntriesEntry, "System entries", null);
-			log.info("Successfully added the systemEntries list");
-		}
-		EntryImpl e = (EntryImpl) systemEntriesEntry;
-		e.setResource(new SystemList(e, e.getSesameResourceURI()) {
-			@Override
-			public List<URI> getChildren() {
-				return systemEntries;
-			}
-		});
-
-		Entry latest = get("_latest");
-		if (latest == null) {
-			latest = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_latest");
-			setMetadata(latest, "Latest entries", null);
-			log.info("Successfully added the latest list");
-
-		} 
-		EntryImpl e2 = (EntryImpl) latest;
-		e2.setResource(new SystemList(e2, e2.getSesameResourceURI()) {
-			@Override
-			public List<URI> getChildren() {
-
-				List<URI> entryURIs = new ArrayList<URI>(); 
-				if (this.getEntry().getGraphType() == GraphType.List) {
-					Iterator<URI> entryIterator = getEntries().iterator();
-					ArrayList<Entry> entries = new ArrayList<Entry>(); 
-
-					//sort out the users
-					while (entryIterator.hasNext()) {
-						URI u = entryIterator.next();
-						Entry localEntry = getByEntryURI(u); 
-						if (localEntry != null) {
-							if (GraphType.Context.equals(localEntry.getGraphType())
-									|| GraphType.None.equals(localEntry.getGraphType())
-									|| GraphType.List.equals(localEntry.getGraphType())) {
-//								try {
-//									Integer.parseInt(localEntry.getId());
-									entries.add(localEntry); 
-//								} catch (NumberFormatException e) {
-//
-//								}
-							}
-						}
-					}
-
-					Collections.sort(entries, new Comparator<Entry> () {
-						/** 
-						 * 1 	if a < b
-						 * 0 	if a == b
-						 * -1  	if a < b
-						 */
-						public int compare(Entry a, Entry b) {
-							Date aDate = a.getModifiedDate();
-							Date bDate = b.getModifiedDate();
-							if (aDate != null && bDate != null) {
-								if (aDate.before(bDate)) {
-									return 1;
-								} else if (aDate.after(bDate)) {
-									return -1;
-								} else {
-									return 0;
-								}
-							}
-							return 0; 
-						}
-					});
-
-					for (int i = 0; entries.size() > i && i < 50; i++) {
-						entryURIs.add(entries.get(i).getEntryURI());
-					}
-				}
-				return entryURIs;
-			}
-		});
-		addSystemEntryToSystemEntries(latest.getEntryURI());
-
-		unlistedEntriesEntry = (EntryImpl) get("_unlisted");
-		if (unlistedEntriesEntry == null) {
-			unlistedEntriesEntry = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_unlisted");
-			setMetadata(unlistedEntriesEntry, "Unlisted entries", null);
-			log.info("Successfully added the _unlisted list");
-		}
-		if (unlistedEntriesEntry != null) {
-			unlistedEntriesEntry.setResource(new SystemList(unlistedEntriesEntry, unlistedEntriesEntry.getSesameResourceURI()) {
-				@Override
-				public List<URI> getChildren() {
-					Set<URI> allEntries = getEntries();
-					List<URI> unlistedChildren = new ArrayList<URI>();
-					for (URI uri : allEntries) {
-						Entry childEntry = getByEntryURI(uri);
-						if (childEntry == null) {
-							log.warn("Entry is null for URI: " + uri);
-							continue;
-						}
-						if (childEntry.getGraphType().equals(GraphType.None) || childEntry.getGraphType().equals(GraphType.List)) {
-							if (!systemEntries.contains(uri) &&
-									!systemEntriesEntry.getEntryURI().equals(uri) &&
-									childEntry.getReferringListsInSameContext().isEmpty()) {
-								unlistedChildren.add(uri);
-							}
-						}
-					}
-					return unlistedChildren;
-				}
-			});
-			addSystemEntryToSystemEntries(unlistedEntriesEntry.getEntryURI());
-		}
 	}
 
 	protected void addSystemEntryToSystemEntries(URI uri) {
@@ -1319,88 +1162,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 			}
 			entry.getLocalMetadata().setGraph(graph);
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		}
 	}
 
-	private String getModifiedDate(Entry entry) {
-		Iterator<Statement> it = entry.getGraph().match(null, DCTermsModified, null);
-		if (it.hasNext()) {
-			String s = it.next().getObject().stringValue();
-			int i = s.lastIndexOf(":");
-			String s2 = s.substring(i+1);
-			String s3 = s.substring(0, i);			
-			return s3+s2; 
-		}
-		it = entry.getGraph().match(null, DCModified, null);
-		if (it.hasNext()) {
-			String s = it.next().getObject().stringValue();
-			int i = s.lastIndexOf(":");
-			String s2 = s.substring(i+1);
-			String s3 = s.substring(0, i);			
-			return s3+s2; 
-		}
-		return DATE_PARSER.format(new Date()).toString(); 
-	}
-
-	public Entry createComment(String entryId, GraphType buiType, URI resourceURI,
-			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception {
-
-
-		URI userURI = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI(); 
-		Entry userEntry = entry.getRepositoryManager().getPrincipalManager().getByEntryURI(userURI); 
-		User user = null; 
-		try {
-			user = (User)userEntry.getResource();
-		} catch (NullPointerException e) {
-			throw new Exception("Could not find the users resource"); 
-		}
-		Context userContext = user.getHomeContext();
-		if(userContext == null) {
-			throw new Exception("The authenticated user has no home context."); 
-		}
-		Entry commentsEntry = userContext.get("_comments"); 
-
-		ListImpl list = getList(commentsEntry.getResourceURI());
-		checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
-
-		EntryImpl commentEntry = null; 
-
-		synchronized (this.entry.repository) {
-			commentEntry = createNewMinimalItem(
-					null, 
-					null, 
-					EntryType.Local,
-					buiType, 
-					ResourceType.InformationResource, 
-					entryId);
-
-		}
-		try {
-			org.openrdf.model.URI commentKind = null; 
-			if(commentType.equals("reviewsOf")) {
-				commentKind = RepositoryProperties.ReviewsOn;  
-			} else {
-				commentKind = RepositoryProperties.CommentsOn; 
-			}
-
-			Graph graph = commentEntry.getLocalMetadata().getGraph(); 
-			ValueFactory vf = graph.getValueFactory(); 
-			org.openrdf.model.URI localSourceEntryURI = vf.createURI(sourceEntryURI.toString());
-			graph.add(
-					commentEntry.getSesameResourceURI(), 
-					commentKind,
-					localSourceEntryURI, 
-					commentEntry.getSesameLocalMetadataURI());
-
-			commentEntry.getLocalMetadata().setGraph(graph);
-
-			if (list != null) {
-				list.addChild(commentEntry.getEntryURI());
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		return commentEntry; 
-	}
 }

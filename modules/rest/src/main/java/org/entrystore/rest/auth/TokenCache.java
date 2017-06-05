@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ public abstract class TokenCache<K, V> {
 
 	protected Map<K, V> tokenCache = new ConcurrentHashMap<K, V>();
 
-	public void addToken(K token, V value) {
+	public void putToken(K token, V value) {
 		synchronized (tokenCache) {
 			tokenCache.put(token, value);
 		}

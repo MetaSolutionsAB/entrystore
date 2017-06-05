@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,21 +58,7 @@ public interface Context extends Resource{
 	 * @see {@link GraphType}.
 	 */
 	Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI); // files, folders, persons
-	
-	/**
-	 * 
-	 * @param entryId, optional value to use for id for the new entry.
-	 * @param resType - None if file and String if text
-	 * @param resourceURI - URI to the resourceURI
-	 * @param metadataURI - URI to the metadataURIURI
-	 * @param sourceEntryURI
-	 * @param commentType
-	 * @return A new comment entry
-	 * @throws Exception 
-	 */
-	Entry createComment(String entryId, GraphType resType, URI resourceURI,
-			URI metadataURI, URI sourceEntryURI, String commentType) throws Exception; 
-	
+
 	/**
 	 * Creates an Entry where the {@link EntryType} is {@link EntryType#Link}.
 	 * The creation is allowed if: 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2016 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,8 +49,8 @@ public class EchoResource extends BaseResource {
 				Iterator<FileItem> iter = items.iterator();
 				if (iter.hasNext()) {
 					FileItem item = iter.next();
-					// We don't echo payloads bigger than 1 MB
-					if (item.getSize() > 1024*1024) {
+					// We don't echo payloads bigger than 10 MB
+					if (item.getSize() > 10*1024*1024) {
 						getResponse().setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 					}
 					StringBuffer escapedContent = new StringBuffer();

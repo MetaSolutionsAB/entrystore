@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,6 @@ import org.entrystore.impl.converters.ConverterManagerImpl;
 import org.entrystore.impl.converters.LOM2RDFConverter;
 import org.entrystore.impl.converters.OAI_DC2RDFGraphConverter;
 import org.entrystore.impl.converters.RDF2LOMConverter;
-import org.entrystore.repository.backup.BackupFactory;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
@@ -75,6 +74,7 @@ import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -99,12 +99,16 @@ public class EntryStoreApplication extends Application {
 	private String baseURI; 
 
 	private ArrayList<Harvester> harvesters = new ArrayList<Harvester>();
-	
+
 	private BackupScheduler backupScheduler;
 
 	private static String VERSION = null;
 
+	protected static String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
+
 	URI configURI;
+
+	private Set<String> reservedNames = new HashSet<>();
 
 	public EntryStoreApplication(Context parentContext) {
 		this(null, parentContext);
@@ -139,14 +143,21 @@ public class EntryStoreApplication extends Application {
 			backupScheduler = (BackupScheduler) getContext().getAttributes().get("BackupScheduler");
 		} else {
 			if (configURI == null) {
-				javax.naming.Context env = null;
-				try {
-					env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
-					if (env != null && env.lookup("entrystore.config") != null) {
-						configURI = new File((String) env.lookup("entrystore.config")).toURI();
+				// First we check for a config URI in an environment variable
+				String envConfigURI = System.getenv(ENV_CONFIG_URI);
+				if (envConfigURI != null) {
+					configURI = URI.create(envConfigURI);
+				} else {
+					// We try the context
+					javax.naming.Context env = null;
+					try {
+						env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
+						if (env != null && env.lookup("entrystore.config") != null) {
+							configURI = new File((String) env.lookup("entrystore.config")).toURI();
+						}
+					} catch (NamingException e) {
+						log.warn(e.getMessage());
 					}
-				} catch (NamingException e) {
-					log.warn(e.getMessage());
 				}
 			}
 			
@@ -154,10 +165,10 @@ public class EntryStoreApplication extends Application {
 			ConfigurationManager confManager = null;
 			try {
 				if (configURI != null) {
-					log.info("Manually configured config location at " + configURI);
+					log.info("Manually specified config location at " + configURI);
 					confManager = new ConfigurationManager(configURI);
 				} else {
-					log.info("No config location specified, looking within the classpath");
+					log.info("No config location specified, looking within classpath");
 					confManager = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
 				}
 			} catch (IOException e) {
@@ -215,9 +226,6 @@ public class EntryStoreApplication extends Application {
 				DataCorrection mc = new DataCorrection(rm);
 				mc.fixMetadataGlobally();
 			}
-			
-			// For old installations: convert plaintext passwords to salted hashes
-			new DataCorrection(rm).convertPasswordsToHashes();
 		}
 	}
 
@@ -234,17 +242,31 @@ public class EntryStoreApplication extends Application {
 		Config config = rm.getConfiguration();
 		Router router = new Router(getContext());
 		//router.setDefaultMatchingMode(Template.MODE_STARTS_WITH);
+
+		reservedNames.add("favicon.ico");
 		
 		// to prevent unnecessary context-id lookups we route favicon.ico to a real icon
+		reservedNames.add("favicon.ico");
 		router.attach("/favicon.ico", FaviconResource.class);
 		
 		// global scope
-		router.attach("/search", SearchResource.class);
-		router.attach("/sparql", SparqlResource.class);
-		router.attach("/proxy", ProxyResource.class);
+		reservedNames.add("echo");
 		router.attach("/echo", EchoResource.class);
-		
+
+		reservedNames.add("lookup");
+		router.attach("/lookup", LookupResource.class);
+
+		reservedNames.add("proxy");
+		router.attach("/proxy", ProxyResource.class);
+
+		reservedNames.add("search");
+		router.attach("/search", SearchResource.class);
+
+		reservedNames.add("sparql");
+		router.attach("/sparql", SparqlResource.class);
+
 		// authentication resources
+		reservedNames.add("auth");
 		router.attach("/auth/user", UserResource.class);
 		router.attach("/auth/cookie", CookieLoginResource.class);
 		router.attach("/auth/basic", UserResource.class);
@@ -284,7 +306,7 @@ public class EntryStoreApplication extends Application {
 		}
 		
 		// management/configuration resources
-		router.attach("/management/backup", RepositoryBackupResource.class);
+		reservedNames.add("management");
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
 		
@@ -301,7 +323,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/metadata/{entry-id}", LocalMetadataResource.class);
 		router.attach("/{context-id}/cached-external-metadata/{entry-id}", ExternalMetadataResource.class);
 		router.attach("/{context-id}/harvester", HarvesterResource.class);
-		router.attach("/{context-id}/relation/{entry-id}", RelationResource.class);
+		router.attach("/{context-id}/relations/{entry-id}", RelationResource.class);
 		router.attach("/{context-id}/quota", QuotaResource.class);
 		router.attach("/{context-id}/lookup", LookupResource.class);
 		router.attach("/{context-id}/execute", ExecutionResource.class);
@@ -385,22 +407,18 @@ public class EntryStoreApplication extends Application {
 	public RepositoryManagerImpl getRM() {
 		return this.rm; 
 	}
-	
-	public BackupScheduler getBackupScheduler() {
-		return backupScheduler;
+
+	public Set<String> getReservedNames() {
+		return this.reservedNames;
 	}
-	
-	public void setBackupScheduler(BackupScheduler scheduler) {
-		this.backupScheduler = scheduler;
-	}
-	
+
 	private void startBackupScheduler() {
 		URI userURI = getPM().getAuthenticatedUserURI();
 		try {
 			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
-			BackupScheduler bs = new BackupFactory(rm).getBackupScheduler();
+			BackupScheduler bs = BackupScheduler.getInstance(rm);
 			if (bs != null) {
-				setBackupScheduler(bs);
+				this.backupScheduler = bs;
 				bs.run();
 			}
 		} finally {
@@ -436,7 +454,6 @@ public class EntryStoreApplication extends Application {
 							harvesters.add(har);
 						} catch (HarvesterFactoryException e) {
 							log.error(e.getMessage());
-							e.printStackTrace();
 						}
 					}
 				}

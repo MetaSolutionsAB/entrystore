@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,8 +24,10 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Helper class for CORS handling.
@@ -40,7 +42,7 @@ public class CORSUtil {
 
 	private List<String> allowedOriginPatterns;
 
-	private String allowedHeaders;
+	private Set<String> allowedHeaders;
 
 	private int maxAge = -1;
 
@@ -53,8 +55,9 @@ public class CORSUtil {
 			allowedOriginPatterns.add(p.trim().toLowerCase());
 		}
 		if (config.containsKey(Settings.CORS_HEADERS)) {
-			allowedHeaders = config.getString(Settings.CORS_HEADERS);
-			log.info("CORS allowed headers: " + allowedHeaders);
+			String confAllHeaders = config.getString(Settings.CORS_HEADERS);
+			allowedHeaders = new HashSet(Arrays.asList(confAllHeaders.split(",")));
+			log.info("CORS allowed/exposed headers: " + confAllHeaders);
 		}
 		if (config.containsKey(Settings.CORS_MAX_AGE)) {
 			maxAge = config.getInt(Settings.CORS_MAX_AGE, -1);
@@ -94,7 +97,7 @@ public class CORSUtil {
 		return false;
 	}
 
-	public String getAllowedHeaders() {
+	public Set<String> getAllowedHeaders() {
 		return allowedHeaders;
 	}
 

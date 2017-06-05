@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,6 +65,7 @@ public class StatusResource extends BaseResource  {
 		if (preferredMediaType == null) {
 			preferredMediaType = MediaType.TEXT_PLAIN;
 		}
+		MediaType prefFormat = (format != null) ? format : preferredMediaType;
 
 		try {
 			if (parameters.containsKey("extended")) {
@@ -84,15 +85,16 @@ public class StatusResource extends BaseResource  {
 					result.put("repositoryStatus", getRM() != null ? "online" : "offline");
 					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));
 					result.put("repositoryIndices", config.getString(Settings.STORE_INDEXES, "unconfigured"));
-					result.put("repositoryCache", config.getString(Settings.REPOSITORY_CACHE, "off"));
-					result.put("quota", config.getString(Settings.DATA_QUOTA, "off"));
+					result.put("repositoryCache", settingToBoolean(Settings.REPOSITORY_CACHE));
+					result.put("quota", settingToBoolean(Settings.DATA_QUOTA));
 					result.put("quotaDefault", config.getString(Settings.DATA_QUOTA_DEFAULT, "unconfigured"));
-					result.put("solr", config.getString(Settings.SOLR, "off"));
-					result.put("solrReindexOnStartup", config.getString(Settings.SOLR_REINDEX_ON_STARTUP, "off"));
-					result.put("backup", config.getString(Settings.BACKUP_SCHEDULER, "off"));
-					result.put("backupMaintenance", config.getString(Settings.BACKUP_MAINTENANCE, "off"));
-					result.put("oaiHarvester", config.getString(Settings.HARVESTER_OAI, "off"));
-					result.put("oaiHarvesterMultiThreaded", config.getString(Settings.HARVESTER_OAI_MULTITHREADED, "off"));
+					result.put("solr", settingToBoolean(Settings.SOLR));
+					result.put("solrReindexOnStartup", settingToBoolean(Settings.SOLR_REINDEX_ON_STARTUP));
+					result.put("backup", settingToBoolean(Settings.BACKUP_SCHEDULER));
+					result.put("backupMaintenance", settingToBoolean(Settings.BACKUP_MAINTENANCE));
+					result.put("oaiHarvester", settingToBoolean(Settings.HARVESTER_OAI));
+					result.put("oaiHarvesterMultiThreaded", settingToBoolean(Settings.HARVESTER_OAI_MULTITHREADED));
+					result.put("provenance", settingToBoolean(Settings.REPOSITORY_PROVENANCE));
 
 					if (parameters.containsKey("includeStats")) {
 						try {
@@ -118,7 +120,7 @@ public class StatusResource extends BaseResource  {
 					return new EmptyRepresentation();
 				}
 			} else {
-				if (preferredMediaType.equals(MediaType.APPLICATION_JSON)) {
+				if (prefFormat.equals(MediaType.APPLICATION_JSON)) {
 					try {
 						JSONObject result = new JSONObject();
 						result.put("version", EntryStoreApplication.getVersion());
@@ -140,6 +142,10 @@ public class StatusResource extends BaseResource  {
 		} catch (AuthorizationException e) {
 			return unauthorizedGET();
 		}
+	}
+
+	private boolean settingToBoolean(String key) {
+		return "on".equalsIgnoreCase(config.getString(key, "off")) ? true : false;
 	}
 
 }

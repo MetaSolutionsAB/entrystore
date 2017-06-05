@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -192,6 +192,26 @@ public class FileOperations {
 	}
 
 	/**
+	 * Deletes all files and subdirectories in a given directory.
+	 *
+	 * @param path Directory to be deleted.
+	 * @return True if successful.
+	 */
+	public static boolean deleteDirectory(File path) {
+		if (path.exists()) {
+			File[] files = path.listFiles();
+			for (int i=0; i<files.length; i++) {
+				if (files[i].isDirectory()) {
+					deleteDirectory(files[i]);
+				} else {
+					files[i].delete();
+				}
+			}
+		}
+		return path.delete();
+	}
+
+	/**
 	 * Lists all files from a directory and its subdirectories.
 	 * 
 	 * @param folder
@@ -369,6 +389,44 @@ public class FileOperations {
 		tempFile.delete();
 		tempFile.mkdir();
 		return tempFile;
+	}
+
+	public static void copyDirectory(File srcPath, File dstPath) throws IOException {
+		if (srcPath.isDirectory()) {
+			if (!dstPath.exists()) {
+				dstPath.mkdir();
+			}
+
+			String files[] = srcPath.list();
+			for (int i = 0; i < files.length; i++) {
+				copyDirectory(new File(srcPath, files[i]), new File(dstPath, files[i]));
+			}
+		} else {
+			if (!srcPath.exists()) {
+				log.error(srcPath + ": file or directory does not exist.");
+			} else {
+				InputStream in = null;
+				OutputStream out = null;
+				try {
+					in = new FileInputStream(srcPath);
+					out = new FileOutputStream(dstPath);
+					// Transfer bytes from in to out
+					byte[] buf = new byte[1024];
+					int len;
+
+					while ((len = in.read(buf)) > 0) {
+						out.write(buf, 0, len);
+					}
+				} finally {
+					if (in != null) {
+						in.close();
+					}
+					if (out != null) {
+						out.close();
+					}
+				}
+			}
+		}
 	}
 
 }

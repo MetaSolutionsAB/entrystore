@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,15 @@
 
 package org.entrystore.rest.resources;
 
+import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.common.SolrException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.impl.converters.ConverterUtil;
+import org.entrystore.repository.util.QueryResult;
+import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.GraphUtil;
-import org.entrystore.rest.util.Util;
 import org.openrdf.model.Graph;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.rio.RDFFormat;
@@ -89,25 +92,50 @@ public class LookupResource extends BaseResource {
 			}
 		}
 		
-		if (resourceURI == null || context == null) {
+		if (resourceURI == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return null;
 		}
-		
-		// get entry based on uri
-		Set<Entry> entries = context.getByResourceURI(URI.create(resourceURI));
-		if (entries.isEmpty()) {
+
+		Set<Entry> entries = null;
+		if (context != null) {
+			// get entry based on uri
+			entries = context.getByResourceURI(URI.create(resourceURI));
+		} else {
+			// we perform a global lookup using Solr instead
+			if (getRM().getIndex() == null) {
+				getResponse().setStatus(Status.SERVER_ERROR_SERVICE_UNAVAILABLE, "Solr search deactivated");
+				return null;
+			}
+
+			String solrEscapedURI = resourceURI.replaceAll(":", "\\\\:");
+			SolrQuery q = new SolrQuery("resource:" + solrEscapedURI + " AND public:true");
+			q.setStart(0);
+			q.setRows(1);
+
+			try {
+				QueryResult qResult = ((SolrSearchIndex) getRM().getIndex()).sendQuery(q);
+				entries = qResult.getEntries();
+			} catch (SolrException se) {
+				log.warn(se.getMessage());
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return null;
+			}
+		}
+
+		if (entries == null || entries.isEmpty()) {
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			return null;
 		}
-		
+
 		if (entries.size() > 1) {
-			log.warn("Multiple matching entries for resource URI " + resourceURI);
+			log.info("Multiple matching entries for resource URI " + resourceURI);
 		}
-		
+
 		// we take the first matching entry
 		entry = entries.iterator().next();
 		
+
 		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
 		if (preferredMediaType == null) {
 			preferredMediaType = MediaType.APPLICATION_RDF_XML;

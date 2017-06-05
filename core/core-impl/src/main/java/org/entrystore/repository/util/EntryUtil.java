@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,12 @@
 package org.entrystore.repository.util;
 
 import com.google.common.collect.Multimap;
-import org.entrystore.*;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.Resource;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
 import org.openrdf.model.Graph;
@@ -29,14 +34,21 @@ import org.openrdf.model.Value;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.impl.ValueFactoryBase;
 import org.openrdf.model.impl.ValueFactoryImpl;
 import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 
 /**
@@ -640,8 +652,9 @@ public class EntryUtil {
 	 * @param rm A RepositoryManager instance.
 	 * @return Returns the merged metadata graphs of all matching entries.
 	 */
-	public static Model traverseAndLoadEntryMetadata(Set<URI> entries, Set<java.net.URI> propertiesToFollow, int level, int depth, Multimap<URI, Integer> visited, Context context, RepositoryManager rm) {
-		Model result = new LinkedHashModel();
+	public static TraversalResult traverseAndLoadEntryMetadata(Set<URI> entries, Set<java.net.URI> propertiesToFollow, int level, int depth, Multimap<URI, Integer> visited, Context context, RepositoryManager rm) {
+		Model resultGraph = new LinkedHashModel();
+		Date latestModified = null;
 		for (URI r : entries) {
 	/*		if (!r.toString().startsWith(rm.getRepositoryURL().toString())) {
 				log.debug("URI has external prefix, skipping: " + r);
@@ -682,6 +695,11 @@ public class EntryUtil {
 
 				if (fetchedEntry != null) {
 					graph = new LinkedHashModel(fetchedEntry.getMetadataGraph());
+
+					// we want to get the date of the latest modification of any of the entries in the traversal process
+					if (latestModified == null || latestModified.before(fetchedEntry.getModifiedDate())) {
+						latestModified = fetchedEntry.getModifiedDate();
+					}
 				}
 			} catch (AuthorizationException ae) {
 				// if the starting point for traversal is not accessible we abort
@@ -696,7 +714,7 @@ public class EntryUtil {
 
 			if (graph != null) {
 				visited.put((URI) r, level);
-				result.addAll(graph);
+				resultGraph.addAll(graph);
 				if (propertiesToFollow != null && level < depth) {
 					Set<URI> objects = new HashSet<>();
 					for (java.net.URI prop : propertiesToFollow) {
@@ -705,23 +723,24 @@ public class EntryUtil {
 					objects.remove(r);
 					if (objects.size() > 0) {
 						log.debug("Fetching " + objects.size() + " entr" + (objects.size() == 1 ? "y" : "ies") + " linked from <" + r + ">: " + objects);
-						result.addAll(
-								traverseAndLoadEntryMetadata(
-										objects,
-										propertiesToFollow,
-										level + 1,
-										depth,
-										visited,
-										context,
-										rm)
-						);
+						TraversalResult nextLevel = traverseAndLoadEntryMetadata(
+								objects,
+								propertiesToFollow,
+								level + 1,
+								depth,
+								visited,
+								context,
+								rm);
+						resultGraph.addAll(nextLevel.getGraph());
+						if (latestModified == null || latestModified.before(nextLevel.getLatestModified())) {
+							latestModified = nextLevel.getLatestModified();
+						}
 					}
 				}
 			}
 		}
-		return result;
+		return new TraversalResult(resultGraph, latestModified);
 	}
-
 
 	/**
 	 * Converts a set of Resources to a set of URIs. Removes non-URIs, i.e., BNodes, Literals, etc.
@@ -737,6 +756,27 @@ public class EntryUtil {
 			}
 		}
 		return result;
+	}
+
+	public static class TraversalResult {
+
+		private Model graph;
+
+		private Date latestModified;
+
+		private TraversalResult(Model graph, Date latestModified) {
+			this.graph = graph;
+			this.latestModified = latestModified;
+		}
+
+		public Model getGraph() {
+			return graph;
+		}
+
+		public Date getLatestModified() {
+			return latestModified;
+		}
+
 	}
 
 }

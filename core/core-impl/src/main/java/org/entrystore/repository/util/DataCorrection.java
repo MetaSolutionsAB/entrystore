@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -649,8 +649,8 @@ public class DataCorrection {
 //							newO = oeNS + "Meat";
 //						} else if (o.equals(oeNS + "RabbitMeat")) {
 //							newO = oeNS + "Meat";
-//						} else if (o.equals(oeNS + "ActivityType")) {
-//							newO = oeNS + "Activity";
+//						} else if (o.equals(oeNS + "ProvenanceType")) {
+//							newO = oeNS + "Entity";
 //						} else if (o.equals(oeNS + "EducationActivity")) {
 //							newO = oeNS + "EducationalActivity";
 //						} else if (o.equals(oeNS + "JuridicalPerson")) {

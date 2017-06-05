@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,6 +49,9 @@ import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.auth.LoginTokenCache;
+import org.entrystore.rest.auth.TokenCache;
+import org.entrystore.rest.auth.UserInfo;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
@@ -65,6 +68,7 @@ import org.restlet.Client;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.Uniform;
+import org.restlet.data.Cookie;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
@@ -366,7 +370,9 @@ public class ResourceResource extends BaseResource {
 			}
 		}
 
-		if (response.getEntity().getLocationRef() != null && response.getEntity().getLocationRef().getBaseRef() == null) {
+		if (response.getEntity() != null &&
+				response.getEntity().getLocationRef() != null &&
+				response.getEntity().getLocationRef().getBaseRef() == null) {
 			response.getEntity().getLocationRef().setBaseRef(url.substring(0, url.lastIndexOf("/")+1));
 		}
 
@@ -1103,8 +1109,21 @@ public class ResourceResource extends BaseResource {
 
 				User resourceUser = (User) entry.getResource();
 				if (entityJSON.has("name")) {
-					String name =  entityJSON.getString("name");
-					if (!resourceUser.setName(name)) {
+					String name = entityJSON.getString("name");
+					if (resourceUser.setName(name)) {
+						// the username was successfully changed, so we need to update the
+						// UserInfo object to not invalidate logged in user sessions
+						Cookie authTokenCookie = getRequest().getCookies().getFirst("auth_token");
+						if (authTokenCookie != null) {
+							TokenCache<String, UserInfo> tc = LoginTokenCache.getInstance();
+							String authToken = authTokenCookie.getValue();
+							UserInfo ui = tc.getTokenValue(authToken);
+							if (ui != null) {
+								ui.setUserName(name);
+								tc.putToken(authToken, ui);
+							}
+						}
+					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Name already taken.\"}"));
 						return;

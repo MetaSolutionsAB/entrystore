@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import org.entrystore.Group;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.Provenance;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
@@ -99,11 +100,15 @@ public class EntryImpl implements Entry {
 	private volatile String filename;
 	private Boolean readOrWrite;
 	private String originalList;
+	private ProvenanceImpl provenance;
 
 	//A ugly hack to be able to initialize the ContextManager itself.
 	EntryImpl(RepositoryManagerImpl repositoryManager, Repository repository) {
 		this.repositoryManager = repositoryManager;
 		this.repository = repository;
+		if (repositoryManager.getProvenanceRepository() != null) {
+			this.provenance = new ProvenanceImpl(this);
+		}
 	}
 
 	public EntryImpl(String id, ContextImpl context, RepositoryManagerImpl repositoryManager, Repository repository) {
@@ -116,6 +121,9 @@ public class EntryImpl implements Entry {
 		this.context = context;
 		this.repositoryManager = repositoryManager;
 		this.repository = repository;
+		if (repositoryManager.getProvenanceRepository() != null) {
+			this.provenance = new ProvenanceImpl(this);
+		}
 	}
 
 	public String getId() {
@@ -1285,6 +1293,10 @@ public class EntryImpl implements Entry {
 				ValueFactory vf = this.repository.getValueFactory();
 				RepositoryConnection rc = this.repository.getConnection();
 				rc.setAutoCommit(false);
+				Graph minimalProvenanceGraph = null;
+				if (this.provenance != null) {
+					minimalProvenanceGraph = this.provenance.getMinimalGraph(rc);
+				}
 
 				try {
                     removeInverseRelations(rc);
@@ -1334,6 +1346,9 @@ public class EntryImpl implements Entry {
 									}
 								}
 							}
+						} else if (this.provenance != null
+								&& this.provenance.hasProvenanceCharacter(statement)) {
+							//Filter out provenance as it will be added back in a controlled manner below
 						} else {
 							rc.add(statement, entryURI);
 						}
@@ -1385,6 +1400,9 @@ public class EntryImpl implements Entry {
 
 					modified = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
 					rc.add(entryURI, RepositoryProperties.Modified, vf.createLiteral(modified), entryURI);
+					if (minimalProvenanceGraph != null) {
+						rc.add(minimalProvenanceGraph, entryURI);
+					}
 					//------------End basic structure
 
                     addInverseRelations(rc, metametadata);
@@ -1484,6 +1502,11 @@ public class EntryImpl implements Entry {
 
 	public RepositoryManager getRepositoryManager() {
 		return repositoryManager;
+	}
+
+	@Override
+	public Provenance getProvenance() {
+		return this.provenance;
 	}
 
 	public Resource getResource() {

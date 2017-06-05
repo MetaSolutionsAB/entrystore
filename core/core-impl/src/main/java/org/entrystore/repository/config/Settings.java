@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -87,6 +87,12 @@ public class Settings {
 	public static String REPOSITORY_PUBLIC_INDEXES = "entrystore.repository.public.indexes";
 	public static String REPOSITORY_PUBLIC_TYPE = "entrystore.repository.public.type";
 	public static String REPOSITORY_PUBLIC_REBUILD_ON_STARTUP = "entrystore.repository.public.rebuild-on-startup";
+
+	public static String REPOSITORY_PROVENANCE = "entrystore.repository.provenance";
+	public static String REPOSITORY_PROVENANCE_PATH = "entrystore.repository.provenance.path";
+	public static String REPOSITORY_PROVENANCE_INDEXES = "entrystore.repository.provenance.indexes";
+	public static String REPOSITORY_PROVENANCE_TYPE = "entrystore.repository.provenance.type";
+	public static String REPOSITORY_PROVENANCE_REBUILD_ON_STARTUP = "entrystore.repository.provenance.rebuild-on-startup";
 
 	public static String SMTP_HOST = "entrystore.smtp.host";
 	public static String SMTP_PORT = "entrystore.smtp.port";

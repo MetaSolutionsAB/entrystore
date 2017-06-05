@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,6 +35,14 @@ public class UserInfo {
 	
 	public Date getLoginExpiration() {
 		return loginExpiration;
+	}
+
+	public void setUserName(String userName) {
+		this.userName = userName;
+	}
+
+	public void setLoginExpiration(Date loginExpiration) {
+		this.loginExpiration = loginExpiration;
 	}
 
 }

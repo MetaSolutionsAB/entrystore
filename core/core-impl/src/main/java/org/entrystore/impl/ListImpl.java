@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -668,14 +668,14 @@ public class ListImpl extends RDFResource implements List {
 			if (children == null) {
 				loadChildren();
 			}
-			rc.clear(this.resourceURI);			
+			rc.clear(this.resourceURI);
 			for (URI uri : children) {
 				EntryImpl childEntry = ((EntryImpl) this.entry.getContext().getByEntryURI(uri));
 				childEntry.removeReferringList(this, rc);
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 			}
 			children = null;
-			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
+			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceDeleted));
 		}
 	}
 	

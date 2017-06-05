@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import net.tanesha.recaptcha.ReCaptcha;
-import net.tanesha.recaptcha.ReCaptchaFactory;
 import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
@@ -253,7 +251,7 @@ public class PasswordResetResource extends BaseResource {
 
 		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), null, ci.email, confirmationLink, true);
 		if (sendSuccessful) {
-			SignupTokenCache.getInstance().addToken(token, ci);
+			SignupTokenCache.getInstance().putToken(token, ci);
 			log.info("Sent confirmation request to " + ci.email);
 		} else {
 			log.info("Failed to send confirmation request to " + ci.email);

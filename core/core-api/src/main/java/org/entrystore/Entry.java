@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -193,8 +193,14 @@ public interface Entry {
 	 * @return the singleton RepositoryManager, never null.
 	 */
 	RepositoryManager getRepositoryManager();
-	
-	
+
+	/**
+	 * The provencance for this entry. Null if not enabled for this entry.
+	 *
+	 * @return a provenance instance for this entry, may be null.
+	 */
+	Provenance getProvenance();
+
 	//***************Utility methods************************************//
 	// The functionality below for accessing and updating information   //
 	// is not strictly neccessary as it can be done indirectly via the  //

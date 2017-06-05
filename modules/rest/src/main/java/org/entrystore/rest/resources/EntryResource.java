@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -80,7 +80,6 @@ public class EntryResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		//supportedMediaTypes.add(MediaType.TEXT_HTML);
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
@@ -203,7 +202,6 @@ public class EntryResource extends BaseResource {
 				} else {
 					context.remove(entry.getEntryURI());
 				}
-				//getResponse().setEntity(new JsonRepresentation("{\"OK\":\"200\"}"));
 			} else {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			}
@@ -499,18 +497,14 @@ public class EntryResource extends BaseResource {
 							if ((btChild == GraphType.Context || btChild == GraphType.SystemContext) && EntryType.Local.equals(locChild)) {
 								childJSON.put("name", getCM().getName(childEntry.getResourceURI()));
 							} else if (btChild == GraphType.List) {
-								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
-									Resource childRes = childEntry.getResource();
-									if (childRes != null && childRes instanceof org.entrystore.List) {
-										org.entrystore.List childList = (org.entrystore.List) childRes;
-										try {
-											childJSON.put("size", childList.getChildren().size());
-										} catch (AuthorizationException ae) {}
-									} else {
-										log.warn("Entry has ResourceType.List but the resource is either null or not an instance of List");
-									}
+								Resource childRes = childEntry.getResource();
+								if (childRes != null && childRes instanceof org.entrystore.List) {
+									org.entrystore.List childList = (org.entrystore.List) childRes;
+									try {
+										childJSON.put("size", childList.getChildren().size());
+									} catch (AuthorizationException ae) {}
 								} else {
-									log.warn("Not calculating list size of " + entryId + " because of potential performance problems");
+									log.warn("Entry has ResourceType.List but the resource is either null or not an instance of List");
 								}
 							} else if (btChild == GraphType.User && locChild == EntryType.Local) {
 								childJSON.put("name", ((User) childEntry.getResource()).getName());

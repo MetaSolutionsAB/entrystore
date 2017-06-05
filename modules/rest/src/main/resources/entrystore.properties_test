@@ -1,12 +1,17 @@
 entrystore.baseurl.folder=http://localhost:8181/
 entrystore.repository.rewrite-basereference=false
 
+entrystore.data.folder=/tmp/entrystore-test-files/
+
 entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
 entrystore.solr.url=/tmp/entrystore-test-solr/
 
 entrystore.repository.store.type=memory
 entrystore.repository.store.init-with-test-data=on
+
+entrystore.repository.provenance=on
+entrystore.repository.provenance.type=memory
 
 entrystore.cors=on
 entrystore.cors.origins=*

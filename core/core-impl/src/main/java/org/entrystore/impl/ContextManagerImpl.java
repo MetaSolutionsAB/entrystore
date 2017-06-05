@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -109,20 +109,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		loadIndex();
 	}
 
-	public boolean deleteDirectory(File path) {
-		if (path.exists()) {
-			File[] files = path.listFiles();
-			for (int i=0; i<files.length; i++) {
-				if (files[i].isDirectory()) {
-					deleteDirectory(files[i]);
-				} else {
-					files[i].delete();
-				}
-			}
-		}
-		return path.delete();
-	}
-	
 	public void deleteContext(URI contextURI) throws RepositoryException {
 		if (contextURI == null) {
 			throw new IllegalArgumentException("Context URI must not be null");
@@ -144,56 +130,50 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				remove(contextURI);
 				
 				rc = entry.getRepository().getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				
 				ValueFactory vf = rc.getValueFactory();
 				
 				RepositoryResult<org.openrdf.model.Resource> availableNGs = rc.getContextIDs();
-				List<org.openrdf.model.Resource> filteredNGs = new ArrayList<org.openrdf.model.Resource>();
-				for (org.openrdf.model.Resource ng : availableNGs.asList()) {
+				List<org.openrdf.model.Resource> filteredNGs = new ArrayList<>();
+				while (availableNGs.hasNext()) {
+					org.openrdf.model.Resource ng = availableNGs.next();
 					if (ng.toString().startsWith(contextURIStr)) {
 						filteredNGs.add(ng);
 					}
 				}
-				
+
 				org.openrdf.model.Resource[] filteredNGsArray = filteredNGs.toArray(new org.openrdf.model.Resource[filteredNGs.size()]);
 				if (filteredNGsArray == null || filteredNGsArray.length == 0) {
-					log.warn("No named graphs matching this context");
+					log.warn("No named graphs match this context");
 					return;
 				}
-				
-				// remove all triples belonging to the context
-				
+
 				org.openrdf.model.URI contextURISesame = vf.createURI(contextURI.toString());
 				org.openrdf.model.URI baseURI = vf.createURI(entry.getRepositoryManager().getRepositoryURL().toString());
 				String baseURIStr = baseURI.toString();
-				
-				List<Statement> stmntsToRemove = rc.getStatements(null, null, null, false, filteredNGsArray).asList();
-				log.info("Removing " + stmntsToRemove.size() + " triples contained in context " + contextURI);
-				rc.remove(stmntsToRemove);
-				
-				List<Statement> referencesToRemove = rc.getStatements(null, null, contextURISesame, false).asList();
-				referencesToRemove.addAll(rc.getStatements(contextURISesame, null, null, false).asList());
+
+				// remove all triples belonging to the context
+				log.info("Removing triples contained in context " + contextURI);
+				rc.remove(rc.getStatements(null, null, null, false, filteredNGsArray));
+				rc.remove(rc.getStatements(null, null, contextURISesame, false));
+				rc.remove(rc.getStatements(contextURISesame, null, null, false));
 				
 				// remove all triples in named graphs which look like: http://base/_contexts/{kind}/{context-id}
-				
-				referencesToRemove.addAll(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString())).asList());
-				referencesToRemove.addAll(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId).toString())).asList());
-				referencesToRemove.addAll(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.DATA_PATH, contextId).toString())).asList());
-				referencesToRemove.addAll(rc.getStatements(vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString()), null, null, false).asList());
-				
-				log.info("Removing " + referencesToRemove.size() + " references to context " + contextURI);
-				rc.remove(referencesToRemove);
+				log.info("Removing references to context " + contextURI);
+				rc.remove(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.DATA_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString()), null, null, false));
 				
 				rc.commit();
 				
 				// recursively remove the file directory on the hard disk
-				
 				String contextPath = this.entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER);
 	            if (contextPath != null) {
-	            	File contextPathFile = new File(URI.create(contextPath));
+	            	File contextPathFile = new File(contextPath);
 	            	File contextFolder = new File(contextPathFile, contextId);
-	            	if (contextFolder.isDirectory() && contextFolder.canWrite()) {
+	            	if (contextFolder.exists() && contextFolder.isDirectory() && contextFolder.canWrite()) {
 	            		log.info("Removing all local files referenced by context " + contextURI);
 	            		FileOperations.deleteAllFilesInDir(contextFolder);
 	            		contextFolder.delete();
@@ -201,7 +181,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	            		log.error("The data path of context " + contextId + " is not a folder or not writable: " + contextFolder);
 	            	}
 	            } else {
-	            	log.error("No SCAM data folder configured");
+	            	log.error("No data folder configured");
 	            }
 			} catch (RepositoryException e) {
 				rc.rollback();
@@ -582,7 +562,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		String folder = getContextBackupFolder(contexturi, fromTime); 
 		File backupFolder = new File(folder);
 		if(backupFolder.exists()) {
-			return deleteDirectory(backupFolder);  
+			return FileOperations.deleteDirectory(backupFolder);
 		} else {
 			log.error("The folder does not exist"); 
 		}
@@ -906,7 +886,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				org.openrdf.model.URI resource = vf.createURI(uri.toString());
 				if (findLinks) {
 					RepositoryResult<Statement> resources = rc.getStatements(resource, RepositoryProperties.resHasEntry, null, false);
-					for (Statement statement: resources.asList()) {
+					while (resources.hasNext()) {
+						Statement statement = resources.next();
 						try {
 							Entry entry = getItemInRepositoryByMMdURI(URI.create(statement.getObject().stringValue()));
 							if (entry.getEntryType() == EntryType.Link) {
@@ -917,7 +898,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					}
 				} else {
 					RepositoryResult<Statement> resources = rc.getStatements(resource, RepositoryProperties.mdHasEntry, null, false);
-					for (Statement statement: resources.asList()) {
+					while (resources.hasNext()) {
+						Statement statement = resources.next();
 						try {
 							Entry entry = getItemInRepositoryByMMdURI(URI.create(statement.getObject().stringValue()));
 							if (entry.getEntryType() == EntryType.Reference) {
@@ -1251,12 +1233,12 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw e;
 		} catch (MalformedQueryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		} catch (QueryEvaluationException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		} finally {
 			rc.close();
 		}
@@ -1323,14 +1305,14 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 			throw e;
 		} catch (MalformedQueryException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		} catch (URISyntaxException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		} catch (QueryEvaluationException e) {
-			e.printStackTrace();
+			log.error(e.getMessage());
 		} finally {
 			rc.close();
 		}
@@ -1345,7 +1327,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	public void initializeSystemEntries() {
 		super.initializeSystemEntries();
 
-		// TODO Auto-generated method stub
 		RepositoryManager repMan = entry.repositoryManager;
 		String base = repMan.getRepositoryURL().toString();
 		for (String id: repMan.getSystemContextAliases()) {
@@ -1366,10 +1347,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 			addSystemEntryToSystemEntries(scon.getEntryURI());
 		}
-		//Special case, metadata cannot be set on initialization before PrincipalManager is available.
-		if (systemEntriesEntry.getLocalMetadata().getGraph().isEmpty()) {
-			setMetadata(systemEntriesEntry, "System entries", null);
-		}
 
 		for (String id: repMan.getSystemContextAliases()) {
 			Entry scon = this.getByEntryURI(URISplit.fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID,
@@ -1378,54 +1355,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				scon.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, repMan.getPrincipalManager().getGuestUser().getURI());
 			}
 		}
-		
-		allContexts = (EntryImpl) get("_all");
-		if (allContexts == null) {
-			allContexts = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_all");
-			setMetadata(allContexts, "all contexts", "This is a list of all contexts in the ContextManager.");
-			allContexts.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, repMan.getPrincipalManager().getGuestUser().getURI());
-			log.info("Successfully added the _all contexts list");
-		}
-		EntryImpl e = (EntryImpl) allContexts;
-		e.setResource(new SystemList(e, e.getSesameResourceURI()) {
-			@Override
-			public List<URI> getChildren() {
-                this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(this.entry, AccessProperty.ReadResource);
-				Iterator<URI> entryIterator = getEntries().iterator();
-				List<URI> contextUris = new ArrayList<URI>();
-
-				//sort out the users
-				while(entryIterator.hasNext()) {
-					URI nextURI = entryIterator.next();
-					
-					Entry nextEntry = getByEntryURI(nextURI);
-					GraphType bt = nextEntry.getGraphType();
-					if(bt == GraphType.Context || bt == GraphType.SystemContext) {
-						contextUris.add(nextEntry.getEntryURI());
-					}
-				}
-
-				return contextUris;
-			}
-		});
-		addSystemEntryToSystemEntries(allContexts.getEntryURI());
-		
-		Entry top = get("_top");
-		if(top == null) {
-			top = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.List, null, "_top");
-			setMetadata(top, "Top folder", null);
-			log.info("Successfully added the top list");
-		}
-		addSystemEntryToSystemEntries(top.getEntryURI());
-		
-		Entry backup = get("_backup");
-		if (backup == null) {
-			backup = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.None, null, RepositoryProperties.BACKUP_ID);
-			setMetadata(backup, "Backup entry", "Holds information for the backup scheduler");
-			log.info("Successfully added _backup entry: " + backup.getEntryURI());
-		}
-		addSystemEntryToSystemEntries(backup.getEntryURI());
 	}
-	
-	
+
 }

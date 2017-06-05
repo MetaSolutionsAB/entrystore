@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -126,7 +126,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	SolrSearchIndex solrIndex;
 	
 	PublicRepository publicRepository;
-	
+
+	private Repository provenanceRepository;
+
 	public RepositoryManagerImpl(String baseURL, Config config) {
 		System.setProperty("org.openrdf.repository.debug", "true");
 		this.config = config;
@@ -290,13 +292,51 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			publicRepository = new PublicRepository(this);
 			registerPublicRepositoryListeners();
 		}
-		
+
+		if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PROVENANCE, "off"))) {
+			initializeProvenanceRepository();
+		}
+
 		log.info("Adding shutdown hook");
 		Runtime.getRuntime().addShutdownHook(new Thread() {
 			public void run() {
 				shutdown();
 			}
 		});
+	}
+
+	private void initializeProvenanceRepository() {
+		String storeType = config.getString(Settings.REPOSITORY_PROVENANCE_TYPE, "memory").trim();
+		log.info("Provenance repository type: " + storeType);
+
+		if (storeType.equalsIgnoreCase("memory")) {
+			this.provenanceRepository = new SailRepository(new MemoryStore());
+		} else if (storeType.equalsIgnoreCase("native")) {
+			if (!config.containsKey(Settings.REPOSITORY_PROVENANCE_PATH)) {
+				log.error("Incomplete configuration of provenance repository");
+			} else {
+				File path = new File(config.getURI(Settings.REPOSITORY_PROVENANCE_PATH));
+				String indexes = config.getString(Settings.REPOSITORY_PROVENANCE_INDEXES);
+
+				log.info("Provenance repository path: " + path);
+				log.info("Provenance repository indexes: " + indexes);
+
+				NativeStore store = null;
+				if (indexes != null) {
+					store = new NativeStore(path, indexes);
+				} else {
+					store = new NativeStore(path);
+				}
+				if (store != null) {
+					this.provenanceRepository = new SailRepository(store);
+				}
+			}
+		}
+		try {
+			this.provenanceRepository.initialize();
+		} catch (RepositoryException e) {
+			log.error(e.getMessage());
+		}
 	}
 
 	/**
@@ -330,6 +370,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	public PublicRepository getPublicRepository() {
 		return this.publicRepository;
 	}
+
+	public Repository getProvenanceRepository() {
+		return this.provenanceRepository;
+	}
 	
 	/**
 	 * Export the whole repository.
@@ -351,24 +395,24 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			RDFWriter writer = new TriGWriterFactory().getWriter(out);
 			con.export(writer);
 		} catch (RepositoryException re) {
-			re.printStackTrace();
+			log.error(re.getMessage());
 		} catch (IOException ioe) {
-			ioe.printStackTrace();
+			log.error(ioe.getMessage());
 		} catch (RDFHandlerException rdfhe) {
-			rdfhe.printStackTrace();
+			log.error(rdfhe.getMessage());
 		} finally {
 			if (out != null) {
 				try {
 					out.close();
 				} catch (IOException ioe) {
-					ioe.printStackTrace();
+					log.error(ioe.getMessage());
 				}
 			}
 			if (con != null) {
 				try {
 					con.close();
 				} catch (RepositoryException re) {
-					re.printStackTrace();
+					log.error(re.getMessage());
 				}
 			}
 		}
@@ -418,7 +462,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					log.info("Shutting down public repository");
 					publicRepository.shutdown();
 				}
-				
+				if (provenanceRepository != null) {
+					log.info("Shutting down Sesame provenance repository");
+					try {
+						provenanceRepository.shutDown();
+					} catch (RepositoryException re) {
+						log.error("Error when shutting down Sesame provenance repository: " + re.getMessage());
+					}
+				}
+
 				shutdown = true;
 			}
 		}
@@ -458,7 +510,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 	
 	public Class getRegularContextClass() {
-		return RegularContext.class; //TODO make this configurable
+		return RegularContext.class;
 	}
 	
 	public boolean hasModificationLockOut() {
@@ -538,10 +590,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		}
 	}
-	
-//	public ThreadPoolExecutor getListenerExecutor() {
-//		return listenerExecutor;
-//	}
 	
 	private void initSolr() {
 		log.info("Manually setting property \"javax.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");

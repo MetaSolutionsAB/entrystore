@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2014 MetaSolutions AB
+ * Copyright (c) 2007-2017 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,13 @@
 
 package org.entrystore.rest.resources;
 
+import org.entrystore.AuthorizationException;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
-import org.entrystore.GraphType;
-import org.entrystore.AuthorizationException;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.TransformException;
 import org.json.JSONArray;
@@ -166,6 +166,10 @@ public class ExecutionResource extends BaseResource {
 			Set<Entry> processedEntries = null;
 			try {
 				processedEntries = new Pipeline(pipelineEntry).run(sourceEntry, listURI);
+			} catch (IllegalStateException iae) {
+				log.error(iae.getMessage());
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return;
 			} catch (TransformException te) {
 				log.error(te.getMessage());
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
