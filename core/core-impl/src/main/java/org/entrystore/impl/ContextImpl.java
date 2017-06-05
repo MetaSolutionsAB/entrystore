@@ -29,7 +29,6 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Quota;
 import org.entrystore.QuotaException;
 import org.entrystore.ResourceType;
-import org.entrystore.User;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.DisallowedException;
@@ -615,21 +614,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI) {
 		ListImpl list = null;
-		boolean isOwner;
-		if(buiType == GraphType.String) {
-			// the user that has logged in must have a home context, inorder to make a string comment. 
-			URI userURI = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI(); 
-			Entry userEntry = entry.getRepositoryManager().getPrincipalManager().getByEntryURI(userURI); 
-			User user = (User)userEntry.getResource(); 
-			Context userContext = user.getHomeContext();
-			if(userContext == null) {
-				return null; 
-			}
-			Entry commentsEntry = userContext.get("_comments"); 
+		boolean isOwner = false;
 
-			list = getList(commentsEntry.getResourceURI());
-			isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
-		} else {
+		if (listURI != null) {
 			list = getList(listURI);
 			isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		}
