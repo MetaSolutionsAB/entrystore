@@ -497,18 +497,14 @@ public class EntryResource extends BaseResource {
 							if ((btChild == GraphType.Context || btChild == GraphType.SystemContext) && EntryType.Local.equals(locChild)) {
 								childJSON.put("name", getCM().getName(childEntry.getResourceURI()));
 							} else if (btChild == GraphType.List) {
-								if (!("_unlisted".equals(entryId) || "_latest".equals(entryId))) {
-									Resource childRes = childEntry.getResource();
-									if (childRes != null && childRes instanceof org.entrystore.List) {
-										org.entrystore.List childList = (org.entrystore.List) childRes;
-										try {
-											childJSON.put("size", childList.getChildren().size());
-										} catch (AuthorizationException ae) {}
-									} else {
-										log.warn("Entry has ResourceType.List but the resource is either null or not an instance of List");
-									}
+								Resource childRes = childEntry.getResource();
+								if (childRes != null && childRes instanceof org.entrystore.List) {
+									org.entrystore.List childList = (org.entrystore.List) childRes;
+									try {
+										childJSON.put("size", childList.getChildren().size());
+									} catch (AuthorizationException ae) {}
 								} else {
-									log.warn("Not calculating list size of " + entryId + " because of potential performance problems");
+									log.warn("Entry has ResourceType.List but the resource is either null or not an instance of List");
 								}
 							} else if (btChild == GraphType.User && locChild == EntryType.Local) {
 								childJSON.put("name", ((User) childEntry.getResource()).getName());
