@@ -16,9 +16,11 @@
 
 package org.entrystore.repository.util;
 
-import java.util.Set;
-
+import org.apache.solr.client.solrj.response.FacetField;
 import org.entrystore.Entry;
+
+import java.util.List;
+import java.util.Set;
 
 
 public class QueryResult {
@@ -26,10 +28,16 @@ public class QueryResult {
 	private Set<Entry> entries;
 	
 	private long hits;
+
+	private List<FacetField> facetFields;
+
+	private List<FacetField> limitingFacets;
 	
-	public QueryResult(Set<Entry> entries, long hits) {
+	public QueryResult(Set<Entry> entries, long hits, List<FacetField> facetFields, List<FacetField> limitingFacets) {
 		this.entries = entries;
 		this.hits = hits;
+		this.facetFields = facetFields;
+		this.limitingFacets = limitingFacets;
 	}
 	
 	public Set<Entry> getEntries() {
@@ -38,6 +46,14 @@ public class QueryResult {
 	
 	public long getHits() {
 		return hits;
+	}
+
+	public List<FacetField> getFacetFields() {
+		return facetFields;
+	}
+
+	public List<FacetField> getLimitingFacets() {
+		return limitingFacets;
 	}
 	
 }

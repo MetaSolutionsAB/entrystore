@@ -23,6 +23,7 @@ import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
 import org.apache.solr.client.solrj.request.UpdateRequest;
+import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.client.solrj.response.UpdateResponse;
 import org.apache.solr.common.SolrDocument;
@@ -54,10 +55,12 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
@@ -491,7 +494,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, SolrServer solrServer, int offset, int limit) throws SolrException {
+	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, List<FacetField> limitingFacets, SolrServer solrServer, int offset, int limit) throws SolrException {
 		if (query == null) {
 			throw new IllegalArgumentException("Query object must not be null");
 		}
@@ -513,6 +516,8 @@ public class SolrSearchIndex implements SearchIndex {
 		QueryResponse r = null;
 		try {
 			r = solrServer.query(query);
+			facetFields.addAll(r.getFacetFields());
+			limitingFacets.addAll(r.getLimitingFacets());
 			SolrDocumentList docs = r.getResults();
 			hits = docs.getNumFound();
 			for (SolrDocument solrDocument : docs) {
@@ -537,6 +542,8 @@ public class SolrSearchIndex implements SearchIndex {
 		long hits = -1;
 		int limit = query.getRows();
 		int offset = query.getStart();
+		List<FacetField> facetFields = new ArrayList();
+		List<FacetField> limitingFacets = new ArrayList();
 		query.setIncludeScore(true);
 		query.setRequestHandler("dismax");
 		int resultFillIteration = 0;
@@ -549,7 +556,7 @@ public class SolrSearchIndex implements SearchIndex {
 				offset += 10;
 				log.warn("Increasing offset to fill the result limit");
 			}
-			hits = sendQueryForEntryURIs(query, entries, solrServer, offset, -1);
+			hits = sendQueryForEntryURIs(query, entries, facetFields, limitingFacets, solrServer, offset, -1);
 			Date before = new Date();
 			for (URI uri : entries) {
 				try {
@@ -582,7 +589,7 @@ public class SolrSearchIndex implements SearchIndex {
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");
 		} while ((limit > result.size()) && (hits > (offset + limit)));
 
-		return new QueryResult(result, hits);
+		return new QueryResult(result, hits, facetFields, limitingFacets);
 	}
 
 	public static String extractFulltext(File f) {

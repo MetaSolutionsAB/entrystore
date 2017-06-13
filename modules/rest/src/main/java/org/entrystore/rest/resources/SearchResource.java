@@ -18,6 +18,7 @@ package org.entrystore.rest.resources;
 
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
+import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.common.SolrException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
@@ -29,8 +30,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.RDFJSON;
@@ -38,9 +37,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.openrdf.model.Graph;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.vocabulary.RDF;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -52,16 +49,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.UnsupportedEncodingException;
-import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
-import java.util.StringTokenizer;
 
 
 /**
@@ -109,6 +103,8 @@ public class SearchResource extends BaseResource {
 			int offset = 0;
 			int limit = 50;
 			long results = 0;
+			List<FacetField> responseFacetFields = null;
+			List<FacetField> responseLimitingFacets = null;
 			
 			// size of returned entry list
 			if (parameters.containsKey("limit")) {
@@ -147,214 +143,6 @@ public class SearchResource extends BaseResource {
 						return new JsonRepresentation("error");
 					}
 				}
-			} else if ("simple".equalsIgnoreCase(type)) {
-				// check for context URI in query				
-				URI contextURI = null;
-				if (parameters.containsKey("context")) {
-					try {
-						contextURI = new URI(URLDecoder.decode(parameters.get("context"), "UTF-8"));
-					} catch (Exception ignored) {
-						log.warn(ignored.getMessage());
-					}
-				}
-				List<URI> contextList = null;
-				if (contextURI != null) {
-					contextList = new ArrayList<URI>(1);
-					contextList.add(contextURI);
-				}
-				
-				// check language in query
-				String lang = null;
-				if (parameters.containsKey("lang")) {
-					lang = parameters.get("lang");
-				}
-				
-				boolean validatedOnly = false;
-				boolean unvalidatedOnly = false;
-				boolean readyForValidation = false;
-				if (parameters.containsKey("validation")) {
-					String validation = parameters.get("validation");
-					if ("validated".equalsIgnoreCase(validation)) {
-						validatedOnly = true;
-					} else if ("unvalidated".equalsIgnoreCase(validation)) {
-						unvalidatedOnly = true;
-					} else if ("annotated".equalsIgnoreCase(validation)) {
-						readyForValidation = true;
-					}
-				}
-				
-				// filter for EntryType
-				Set<EntryType> entryType = null;
-				if (parameters.containsKey("entrytype")) {
-					entryType = new HashSet<EntryType>();
-					StringTokenizer tok = new StringTokenizer(parameters.get("entrytype"), ",");
-					while (tok.hasMoreTokens()) {
-						String entryTypeToken = tok.nextToken();
-						if ("Reference".equalsIgnoreCase(entryTypeToken)) {
-							entryType.add(EntryType.Reference);
-						} else if ("LinkReference".equalsIgnoreCase(entryTypeToken)) {
-							entryType.add(EntryType.LinkReference);
-						} else if ("Link".equalsIgnoreCase(entryTypeToken)) {
-							entryType.add(EntryType.Link);
-						} else if ("Local".equalsIgnoreCase(entryTypeToken)) {
-							entryType.add(EntryType.Local);
-						}
-					}
-				}
-				Set<GraphType> resourceType = null;
-				if(parameters.containsKey("resourcetype")){
-					resourceType = new HashSet<GraphType>();
-					StringTokenizer tokenizer = new StringTokenizer(parameters.get("resourcetype"),",");
-					while (tokenizer.hasMoreTokens()){
-						String resourceTypeToken = tokenizer.nextToken();
-						if("context".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(GraphType.Context);
-						}else if("group".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(GraphType.Group);
-						}else if("user".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(GraphType.User);
-						}else if("list".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(GraphType.List);
-						}else if("resultList".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(GraphType.ResultList);
-						}else if("string".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(GraphType.String);
-						}else if("none".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(GraphType.None);
-						}else if("graph".equalsIgnoreCase(resourceTypeToken)){
-							resourceType.add(GraphType.Graph);
-						}
-					}
-				}
-
-				String filter = "regex(str(?y), \"" + queryValue + "\", \"i\")";
-				if (lang != null) {
-					filter = " langMatches(lang(?y),\"" + lang + "\") && " + filter;
-				}
-				if (contextURI != null) {
-					String contextFilter = contextURI.toString();
-					if (!contextFilter.endsWith("/")) {
-						contextFilter += "/";
-					}
-					filter = "regex(str(?g), \"^" + contextFilter + "\", \"\") && " + filter;
-				}
-				
-				String entryQuery = null;
-
-				if (readyForValidation) {
-					entryQuery = new String(
-						"PREFIX es:<http://entrystore.org/terms/> \n" +
-						"SELECT ?g \n" +
-						"WHERE { GRAPH ?g { \n" +
-						" ?x es:status \"annotated\" \n" +
-						"} }");
-				}
-				
-				String userQueryAddition = "";
-				if(resourceType != null && resourceType.contains(GraphType.User)){
-					userQueryAddition += " UNION {?x foaf:name ?y} UNION {?x foaf:surname ?y} UNION {?x foaf:firstname ?y} ";
-				}
-				
-				String metadataQuery = new String(
-						"PREFIX rdf:<http://www.w3.org/1999/02/22-rdf-syntax-ns#> \n" +
-						"PREFIX dcterms:<http://purl.org/dc/terms/> \n" +
-						"PREFIX dc:<http://purl.org/dc/elements/1.1/> \n" +
-						"PREFIX foaf:<http://xmlns.com/foaf/0.1/> \n" +
-						"PREFIX lom:<" + NS.lom + "> \n" +
-						"SELECT DISTINCT ?g \n" +
-						"WHERE { GRAPH ?g { \n" +
-						"{ ?x dc:title ?y } UNION \n" +
-						"{ ?x dc:description ?y } UNION \n" +
-						"{ ?x dcterms:title ?y } UNION \n" +
-						"{ ?x dcterms:description ?b. \n" +
-						"  ?b rdf:value ?y } UNION \n" +
-						"{ ?x lom:keyword ?b. \n" +
-						"  ?b rdf:value ?y } UNION \n" +
-						"{ ?x dc:subject ?y } \n" + 
-						userQueryAddition+
-						"FILTER(" + filter + ") \n" +
-						" } } \n" +
-						"ORDER BY ASC(?g)");
-//						"ORDER BY ASC(?g) \n" +
-//						"LIMIT " + limit + "\n" + // FIXME temporarily disabled
-//						"OFFSET " + offset); // FIXME temp disabled
-
-				try {
-					String storeType = getRM().getConfiguration().getString(Settings.STORE_TYPE);
-					
-					Date before = new Date();
-					List<Entry> searchResult = null;
-					if ("memory".equalsIgnoreCase(storeType) || "native".equalsIgnoreCase(storeType)) {
-						log.info("Performing literal iteration");
-						Set<org.openrdf.model.URI> preds = new HashSet<org.openrdf.model.URI>();
-						preds.add(new URIImpl(NS.dc + "title"));
-						preds.add(new URIImpl(NS.dc + "subject"));
-						preds.add(new URIImpl(NS.dc + "description"));
-						preds.add(new URIImpl(NS.dcterms + "title"));
-						preds.add(RDF.VALUE);
-						if (resourceType != null && resourceType.contains(GraphType.User)) {
-							preds.add(new URIImpl(NS.foaf + "name"));
-							preds.add(new URIImpl(NS.foaf + "surname"));
-							preds.add(new URIImpl(NS.foaf + "firstname"));
-						}
-						searchResult = new ArrayList<Entry>(getCM().searchLiterals(preds, queryValue.split(" "), lang, contextList, true).keySet());
-					} else {
-						log.info("Performing SPARQL search");
-						searchResult = new ArrayList<Entry>(getCM().search(entryQuery, metadataQuery, contextList));	
-					}
-					Date after = new Date();
-					long timeDiff = after.getTime() - before.getTime();
-					log.info("Query took " + timeDiff + " ms");
-					log.info("Returned " + searchResult.size() + " results");
-					
-					// Filter for EntryType
-					
-					if (entryType != null && resourceType != null){
-						entries = new ArrayList<Entry>();
-						for(Entry entry : searchResult){
-							if(entryType.contains(entry.getEntryType()) && resourceType.contains(entry.getGraphType())){
-								entries.add(entry);
-							}
-						}
-						Date afterContextFilter = new Date();
-						timeDiff = afterContextFilter.getTime() - after.getTime();
-						log.info("Context filtering took " + timeDiff + " ms (both ResourceType and EntryType)");
-					} else if (entryType != null) {
-						entries = new ArrayList<>();
-						for (Entry entry : searchResult) {
-							if (entryType.contains(entry.getEntryType())) {
-								entries.add(entry);
-							}
-						}
-						Date afterContextFilter = new Date();
-						timeDiff = afterContextFilter.getTime() - after.getTime();
-						log.info("Context filtering took " + timeDiff + " ms (only entry type)");
-					} else if (resourceType != null) {
-						entries = new ArrayList<>();
-						for (Entry entry : searchResult) {
-							if (resourceType.contains(entry.getGraphType())) {
-								entries.add(entry);
-							}
-						}
-						Date afterContextFilter = new Date();
-						timeDiff = afterContextFilter.getTime() - after.getTime();
-						log.info("Context filtering took " + timeDiff + " ms");
-					} else {
-						entries = searchResult;
-					}
-					
-					results = entries.size();
-				} catch (Exception e1) {
-					log.error(e1.getMessage());
-					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
-					try {
-						return new JsonRepresentation("{\"error\":\"" + URLEncoder.encode(e1.getMessage(), "UTF-8") + "\"}");
-					} catch (UnsupportedEncodingException ignored) {
-						return new JsonRepresentation("{\"error\": \"Unknown error\"}");
-					} catch (NullPointerException npe) {
-						return new JsonRepresentation("{\"error\": \"Unknown error\"}");
-					}
-				}
 			} else if ("solr".equalsIgnoreCase(type)) {
 				if (getRM().getIndex() == null) {
 					getResponse().setStatus(Status.SERVER_ERROR_SERVICE_UNAVAILABLE, "Solr search deactivated");
@@ -369,14 +157,46 @@ public class SearchResource extends BaseResource {
 						log.error(e.getMessage());
 					}
 				}
+
+				String facetFields = null;
+				if (parameters.containsKey("facetFields")) {
+					try {
+						facetFields = URLDecoder.decode(parameters.get("facetFields"), "UTF-8");
+					} catch (UnsupportedEncodingException e) {
+						log.error(e.getMessage());
+					}
+				}
+
+				List<String> filterQueries = new ArrayList();
+				if (parameters.containsKey("filterQuery")) {
+					try {
+						// We URLDecode after the split because we want to be able to use comma
+						// as separator (unencoded) for FQs and as content inside FQs (encoded)
+						for (String fq : parameters.get("filterQuery").split(",")) {
+							filterQueries.add(URLDecoder.decode(fq, "UTF-8"));
+						}
+					} catch (UnsupportedEncodingException e) {
+						log.error(e.getMessage());
+					}
+				}
+
+				int facetMinCount = 1;
+				if (parameters.containsKey("facetMinCount")) {
+					try {
+						facetMinCount = Integer.valueOf(parameters.get("facetMinCount"));
+					} catch (NumberFormatException nfe) {
+						log.info(nfe.getMessage());
+						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+						return null;
+					}
+				}
 				
 				SolrQuery q = new SolrQuery(queryValue);
 				q.setStart(offset);
 				q.setRows(limit);
 				
 				if (sorting != null) {
-					String[] sortFields = sorting.split(",");
-					for (String string : sortFields) {
+					for (String string : sorting.split(",")) {
 						String[] fieldAndOrder = string.split(" ");
 						if (fieldAndOrder.length == 2) {
 							String field = fieldAndOrder[0];
@@ -396,11 +216,23 @@ public class SearchResource extends BaseResource {
 					q.addSort("score", ORDER.desc);
 					q.addSort("modified", ORDER.desc);
 				}
+
+				if (facetFields != null) {
+					q.setFacet(true);
+					q.setFacetMinCount(facetMinCount);
+					q.addFacetField(facetFields.split(","));
+				}
+
+				for (String fq : filterQueries) {
+					q.addFilterQuery(fq);
+				}
 				
 				try {
 					QueryResult qResult = ((SolrSearchIndex) getRM().getIndex()).sendQuery(q);
 					entries = new LinkedList<Entry>(qResult.getEntries());
 					results = qResult.getHits();
+					responseFacetFields = qResult.getFacetFields();
+					responseLimitingFacets = qResult.getLimitingFacets();
 				} catch (SolrException se) {
 					log.warn(se.getMessage());
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -409,25 +241,6 @@ public class SearchResource extends BaseResource {
 			}
 
 			try {
-				// the following iteration adds pagination support
-				if (!"solr".equalsIgnoreCase(type)) {
-					List<Entry> truncatedEntries = new ArrayList<Entry>();
-					if (offset < entries.size()) {
-						int i = 0;
-						for (Entry entry : entries) {
-							i++;
-							if (i > (offset + limit)) {
-								break;
-							}
-							if (i >= (offset + 1)) {
-								truncatedEntries.add(entry);
-							}
-						}
-						entries = truncatedEntries;
-					}
-				}
-				// <- pagination
-				
 				Date before = new Date();
 				JSONArray children = new JSONArray();
 				if (entries != null) {
@@ -500,7 +313,7 @@ public class SearchResource extends BaseResource {
 							}
 							
 							if (e.getRelations() != null) {
-								Graph childRelationsGraph = new GraphImpl(e.getRelations());
+								Graph childRelationsGraph = new LinkedHashModel(e.getRelations());
 								JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
 								childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 							}
@@ -516,7 +329,45 @@ public class SearchResource extends BaseResource {
 				result.put("results", results);
 				result.put("limit", limit);
 				result.put("offset", offset);
-				
+
+				JSONArray facetFieldsArr = new JSONArray();
+				for (FacetField ff : responseFacetFields) {
+					JSONObject ffObj = new JSONObject();
+					ffObj.put("name", ff.getName());
+					ffObj.put("valueCount", ff.getValueCount());
+					JSONArray ffValArr = new JSONArray();
+					for (FacetField.Count ffVal : ff.getValues()) {
+						JSONObject ffValObj = new JSONObject();
+						ffValObj.put("name", ffVal.getName());
+						ffValObj.put("count", ffVal.getCount());
+						ffValArr.put(ffValObj);
+					}
+					ffObj.put("values", ffValArr);
+					facetFieldsArr.put(ffObj);
+				}
+				result.put("facetFields", facetFieldsArr);
+
+				// FIXME do we really need the limiting fields? if it's only a
+				// subset of facet fields it can be omitted
+				// TODO compare both
+				JSONArray limitingFieldsArr = new JSONArray();
+				for (FacetField ff : responseLimitingFacets) {
+					JSONObject ffObj = new JSONObject();
+					ffObj.put("name", ff.getName());
+					ffObj.put("valueCount", ff.getValueCount());
+					JSONArray ffValArr = new JSONArray();
+					for (FacetField.Count ffVal : ff.getValues()) {
+						JSONObject ffValObj = new JSONObject();
+						ffValObj.put("name", ffVal.getName());
+						ffValObj.put("count", ffVal.getCount());
+						ffValArr.put(ffValObj);
+					}
+					ffObj.put("values", ffValArr);
+					limitingFieldsArr.put(ffObj);
+				}
+				result.put("limitingFacets", limitingFieldsArr);
+
+				// FIXME remove jaRights below?
 				JSONArray jaRights = new JSONArray();
 				jaRights.put("readmetadata");
 				jaRights.put("readresource");
