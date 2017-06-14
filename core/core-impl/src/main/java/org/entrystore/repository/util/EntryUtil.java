@@ -712,6 +712,7 @@ public class EntryUtil {
 				if (level == 0) {
 					throw ae;
 				} else {
+					log.info("Unable to load entry due to ACL restrictions: " + r);
 					continue;
 				}
 			}
