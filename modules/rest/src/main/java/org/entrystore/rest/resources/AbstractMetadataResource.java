@@ -28,7 +28,7 @@ import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.openrdf.model.Graph;
 import org.openrdf.model.URI;
-import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.rio.RDFFormat;
 import org.restlet.data.Disposition;
@@ -226,7 +226,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				return;
 			}
 
-			getMetadata().setGraph(new GraphImpl());
+			getMetadata().setGraph(new LinkedHashModel());
 		} catch (AuthorizationException e) {
 			unauthorizedDELETE();
 		}
