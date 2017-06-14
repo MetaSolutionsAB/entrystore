@@ -697,8 +697,12 @@ public class EntryUtil {
 					graph = new LinkedHashModel(fetchedEntry.getMetadataGraph());
 
 					// we want to get the date of the latest modification of any of the entries in the traversal process
-					if (latestModified == null || latestModified.before(fetchedEntry.getModifiedDate())) {
-						latestModified = fetchedEntry.getModifiedDate();
+					if (fetchedEntry.getModifiedDate() != null) {
+						if (latestModified == null || latestModified.before(fetchedEntry.getModifiedDate())) {
+							latestModified = fetchedEntry.getModifiedDate();
+						}
+					} else {
+						log.warn("Entry does not have a modification date: " + fetchedEntry.getEntryURI());
 					}
 				}
 			} catch (AuthorizationException ae) {
@@ -732,8 +736,12 @@ public class EntryUtil {
 								context,
 								rm);
 						resultGraph.addAll(nextLevel.getGraph());
-						if (latestModified == null || latestModified.before(nextLevel.getLatestModified())) {
-							latestModified = nextLevel.getLatestModified();
+						if (nextLevel.getLatestModified() != null) {
+							if (latestModified == null || latestModified.before(nextLevel.getLatestModified())) {
+								latestModified = nextLevel.getLatestModified();
+							}
+						} else {
+							log.warn("No latest modification date on traversal level " + (level + 1));
 						}
 					}
 				}
