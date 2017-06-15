@@ -697,12 +697,16 @@ public class EntryUtil {
 					graph = new LinkedHashModel(fetchedEntry.getMetadataGraph());
 
 					// we want to get the date of the latest modification of any of the entries in the traversal process
-					if (fetchedEntry.getModifiedDate() != null) {
-						if (latestModified == null || latestModified.before(fetchedEntry.getModifiedDate())) {
-							latestModified = fetchedEntry.getModifiedDate();
+					Date entryDateTmp = fetchedEntry.getModifiedDate();
+					if (entryDateTmp == null) {
+						entryDateTmp = fetchedEntry.getCreationDate();
+					}
+					if (entryDateTmp != null) {
+						if (latestModified == null || latestModified.before(entryDateTmp)) {
+							latestModified = entryDateTmp;
 						}
 					} else {
-						log.warn("Entry does not have a modification date: " + fetchedEntry.getEntryURI());
+						log.warn("Entry does neither have a creation nor a modification date: " + fetchedEntry.getEntryURI());
 					}
 				}
 			} catch (AuthorizationException ae) {
