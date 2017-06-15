@@ -174,43 +174,4 @@ public class BackupScheduler {
 		return true;
 	}
 
-//	private JobDetail getJob() {
-//		try {
-//			String[] names = scheduler.getJobNames("group");
-//			for(int i = 0; i < names.length; i++) {
-//				JobDetail job = scheduler.getJobDetail(names[i].toString(), "group");
-//				if (((URI)job.getJobDataMap().get("contextURI")).toString().equals(this.backupEntryURI)) {
-//					return job;
-//				}
-//			}
-//		} catch (SchedulerException e) {
-//			log.error(e.getMessage());
-//		}
-//		return null; 
-//	}
-
-	public boolean hasCompression() {
-		return gzip;
-	}
-	
-	public boolean hasMaintenance() {
-		return maintenance;
-	}
-
-	public String getTimeRegularExpression() {
-		return timeRegularExpression;
-	}
-	
-	public int getUpperLimit() {
-		return upperLimit;
-	}
-	
-	public int getLowerLimit() {
-		return lowerLimit;
-	}
-	
-	public int getExpiresAfterDays() {
-		return expiresAfterDays;
-	}
-
 }

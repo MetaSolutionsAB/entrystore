@@ -80,21 +80,32 @@ public class StatusResource extends BaseResource  {
 						return new JsonRepresentation(result);
 					}
 
-					result.put("baseURI", getRM().getRepositoryURL().toString());
-					result.put("version", EntryStoreApplication.getVersion());
-					result.put("repositoryStatus", getRM() != null ? "online" : "offline");
-					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));
-					result.put("repositoryIndices", config.getString(Settings.STORE_INDEXES, "unconfigured"));
-					result.put("repositoryCache", settingToBoolean(Settings.REPOSITORY_CACHE));
-					result.put("quota", settingToBoolean(Settings.DATA_QUOTA));
-					result.put("quotaDefault", config.getString(Settings.DATA_QUOTA_DEFAULT, "unconfigured"));
-					result.put("solr", settingToBoolean(Settings.SOLR));
-					result.put("solrReindexOnStartup", settingToBoolean(Settings.SOLR_REINDEX_ON_STARTUP));
 					result.put("backup", settingToBoolean(Settings.BACKUP_SCHEDULER));
 					result.put("backupMaintenance", settingToBoolean(Settings.BACKUP_MAINTENANCE));
+					result.put("backupTimeRegExp", config.getString(Settings.BACKUP_TIMEREGEXP, "unconfigured"));
+					result.put("backupMaintenanceExpiresAfterDays", config.getString(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, "unconfigured"));
+					result.put("backupMaintenanceLowerLimit", config.getString(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, "unconfigured"));
+					result.put("backupMaintenanceUpperLimit", config.getString(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, "unconfigured"));
+					result.put("baseURI", getRM().getRepositoryURL().toString());
+					result.put("cors", settingToBoolean(Settings.CORS));
+					result.put("corsHeaders", config.getString(Settings.CORS_HEADERS, "unconfigured"));
+					result.put("corsMaxAge", config.getString(Settings.CORS_MAX_AGE, "unconfigured"));
+					result.put("corsOrigins", config.getString(Settings.CORS_ORIGINS, "unconfigured"));
 					result.put("oaiHarvester", settingToBoolean(Settings.HARVESTER_OAI));
 					result.put("oaiHarvesterMultiThreaded", settingToBoolean(Settings.HARVESTER_OAI_MULTITHREADED));
 					result.put("provenance", settingToBoolean(Settings.REPOSITORY_PROVENANCE));
+					result.put("quota", settingToBoolean(Settings.DATA_QUOTA));
+					result.put("quotaDefault", config.getString(Settings.DATA_QUOTA_DEFAULT, "unconfigured"));
+					result.put("repositoryCache", settingToBoolean(Settings.REPOSITORY_CACHE));
+					result.put("repositoryIndices", config.getString(Settings.STORE_INDEXES, "unconfigured"));
+					result.put("repositoryStatus", getRM() != null ? "online" : "offline");
+					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));
+					result.put("rowstoreURL", config.getString(Settings.ROWSTORE_URL, "unconfigured"));
+					result.put("passwordReset", settingToBoolean(Settings.PASSWORD_RESET));
+					result.put("solr", settingToBoolean(Settings.SOLR));
+					result.put("solrReindexOnStartup", settingToBoolean(Settings.SOLR_REINDEX_ON_STARTUP));
+					result.put("signup", settingToBoolean(Settings.SIGNUP));
+					result.put("version", EntryStoreApplication.getVersion());
 
 					if (parameters.containsKey("includeStats")) {
 						try {

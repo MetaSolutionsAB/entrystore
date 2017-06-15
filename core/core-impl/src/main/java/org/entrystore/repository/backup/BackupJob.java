@@ -54,7 +54,6 @@ public class BackupJob implements Job, InterruptableJob {
 
 	public void execute(JobExecutionContext context) throws JobExecutionException {
 		if (interrupted == false) {
-			log.info("Backup job starts: " + ((URI) context.getJobDetail().getJobDataMap().get("contextURI")).toString()); 
 			try {
 				JobDataMap dataMap = context.getJobDetail().getJobDataMap();
 				RepositoryManagerImpl rm = (RepositoryManagerImpl) dataMap.get("rm");
@@ -85,7 +84,6 @@ public class BackupJob implements Job, InterruptableJob {
 				}
 			} catch (Exception e) {
 				log.error(e.getMessage());
-				e.printStackTrace();
 			}
 		}
 	}
