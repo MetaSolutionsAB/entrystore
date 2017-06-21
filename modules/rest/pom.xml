@@ -168,7 +168,7 @@
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20131018</version>
+            <version>20170516</version>
         </dependency>
         <dependency>
             <groupId>org.codehaus.jackson</groupId>
@@ -222,4 +222,5 @@
             <version>0.0.7</version>
         </dependency>
     </dependencies>
+
 </project>
