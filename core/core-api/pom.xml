@@ -44,4 +44,5 @@
 			<version>${sesame.version}</version>
 		</dependency>
 	</dependencies>
+
 </project>

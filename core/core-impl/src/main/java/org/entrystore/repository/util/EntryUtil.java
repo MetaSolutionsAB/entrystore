@@ -697,8 +697,16 @@ public class EntryUtil {
 					graph = new LinkedHashModel(fetchedEntry.getMetadataGraph());
 
 					// we want to get the date of the latest modification of any of the entries in the traversal process
-					if (latestModified == null || latestModified.before(fetchedEntry.getModifiedDate())) {
-						latestModified = fetchedEntry.getModifiedDate();
+					Date entryDateTmp = fetchedEntry.getModifiedDate();
+					if (entryDateTmp == null) {
+						entryDateTmp = fetchedEntry.getCreationDate();
+					}
+					if (entryDateTmp != null) {
+						if (latestModified == null || latestModified.before(entryDateTmp)) {
+							latestModified = entryDateTmp;
+						}
+					} else {
+						log.warn("Entry does neither have a creation nor a modification date: " + fetchedEntry.getEntryURI());
 					}
 				}
 			} catch (AuthorizationException ae) {
@@ -708,6 +716,7 @@ public class EntryUtil {
 				if (level == 0) {
 					throw ae;
 				} else {
+					log.info("Unable to load entry due to ACL restrictions: " + r);
 					continue;
 				}
 			}
@@ -732,8 +741,12 @@ public class EntryUtil {
 								context,
 								rm);
 						resultGraph.addAll(nextLevel.getGraph());
-						if (latestModified == null || latestModified.before(nextLevel.getLatestModified())) {
-							latestModified = nextLevel.getLatestModified();
+						if (nextLevel.getLatestModified() != null) {
+							if (latestModified == null || latestModified.before(nextLevel.getLatestModified())) {
+								latestModified = nextLevel.getLatestModified();
+							}
+						} else {
+							log.warn("No latest modification date on traversal level " + (level + 1));
 						}
 					}
 				}

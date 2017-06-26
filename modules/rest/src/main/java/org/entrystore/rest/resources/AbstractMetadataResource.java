@@ -28,7 +28,7 @@ import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.openrdf.model.Graph;
 import org.openrdf.model.URI;
-import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.rio.RDFFormat;
 import org.restlet.data.Disposition;
@@ -113,8 +113,12 @@ public abstract class AbstractMetadataResource extends BaseResource {
 					} catch (UnsupportedEncodingException e) {
 						log.error(e.getMessage());
 					}
-					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), resolvePredicates(traversalParam), parameters.containsKey("repository"));
-
+					Set<java.net.URI> predicatesToFollow = resolvePredicates(traversalParam);
+					if (predicatesToFollow.isEmpty()) {
+						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+						return null;
+					}
+					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), predicatesToFollow, parameters.containsKey("repository"));
 					result = getRepresentation(travResult.getGraph(), prefFormat);
 					if (travResult.getLatestModified() != null) {
 						result.setModificationDate(travResult.getLatestModified());
@@ -222,7 +226,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				return;
 			}
 
-			getMetadata().setGraph(new GraphImpl());
+			getMetadata().setGraph(new LinkedHashModel());
 		} catch (AuthorizationException e) {
 			unauthorizedDELETE();
 		}
@@ -324,7 +328,11 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		for (String s : predCSV.split(",")) {
 			Set<java.net.URI> pSet = loadTraversalProfile(s);
 			if (pSet.isEmpty()) {
-				result.add(java.net.URI.create(NS.expand(s).toString()));
+				java.net.URI expanded = NS.expand(s);
+				// we add it to the result if it could be expanded
+				if (!s.equals(expanded.toString())) {
+					result.add(java.net.URI.create(NS.expand(s).toString()));
+				}
 			} else {
 				result.addAll(pSet);
 			}
