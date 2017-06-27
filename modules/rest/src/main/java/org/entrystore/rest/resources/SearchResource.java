@@ -104,7 +104,6 @@ public class SearchResource extends BaseResource {
 			int limit = 50;
 			long results = 0;
 			List<FacetField> responseFacetFields = null;
-			List<FacetField> responseLimitingFacets = null;
 			
 			// size of returned entry list
 			if (parameters.containsKey("limit")) {
@@ -220,7 +219,9 @@ public class SearchResource extends BaseResource {
 				if (facetFields != null) {
 					q.setFacet(true);
 					q.setFacetMinCount(facetMinCount);
-					q.addFacetField(facetFields.split(","));
+					for (String ff : facetFields.split(",")) {
+						q.addFacetField(ff.replace("metadata.predicate.literal.", "metadata.predicate.literal_s."));
+					}
 				}
 
 				for (String fq : filterQueries) {
@@ -232,7 +233,6 @@ public class SearchResource extends BaseResource {
 					entries = new LinkedList<Entry>(qResult.getEntries());
 					results = qResult.getHits();
 					responseFacetFields = qResult.getFacetFields();
-					responseLimitingFacets = qResult.getLimitingFacets();
 				} catch (SolrException se) {
 					log.warn(se.getMessage());
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -347,31 +347,13 @@ public class SearchResource extends BaseResource {
 				}
 				result.put("facetFields", facetFieldsArr);
 
-				// FIXME do we really need the limiting fields? if it's only a
-				// subset of facet fields it can be omitted
-				// TODO compare both
-				JSONArray limitingFieldsArr = new JSONArray();
-				for (FacetField ff : responseLimitingFacets) {
-					JSONObject ffObj = new JSONObject();
-					ffObj.put("name", ff.getName());
-					ffObj.put("valueCount", ff.getValueCount());
-					JSONArray ffValArr = new JSONArray();
-					for (FacetField.Count ffVal : ff.getValues()) {
-						JSONObject ffValObj = new JSONObject();
-						ffValObj.put("name", ffVal.getName());
-						ffValObj.put("count", ffVal.getCount());
-						ffValArr.put(ffValObj);
-					}
-					ffObj.put("values", ffValArr);
-					limitingFieldsArr.put(ffObj);
-				}
-				result.put("limitingFacets", limitingFieldsArr);
-
-				// FIXME remove jaRights below?
+				// TODO remove the commented four lines below if there is no use found for it
+				/*
 				JSONArray jaRights = new JSONArray();
 				jaRights.put("readmetadata");
 				jaRights.put("readresource");
 				result.put("rights", jaRights);
+				*/
 				
 				long timeDiff = new Date().getTime() - before.getTime();
 				log.debug("Graph fetching and serialization took " + timeDiff + " ms");

@@ -494,7 +494,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, List<FacetField> limitingFacets, SolrServer solrServer, int offset, int limit) throws SolrException {
+	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrServer solrServer, int offset, int limit) throws SolrException {
 		if (query == null) {
 			throw new IllegalArgumentException("Query object must not be null");
 		}
@@ -516,8 +516,9 @@ public class SolrSearchIndex implements SearchIndex {
 		QueryResponse r = null;
 		try {
 			r = solrServer.query(query);
-			facetFields.addAll(r.getFacetFields());
-			limitingFacets.addAll(r.getLimitingFacets());
+			if (r.getFacetFields() != null) {
+				facetFields.addAll(r.getFacetFields());
+			}
 			SolrDocumentList docs = r.getResults();
 			hits = docs.getNumFound();
 			for (SolrDocument solrDocument : docs) {
@@ -543,7 +544,6 @@ public class SolrSearchIndex implements SearchIndex {
 		int limit = query.getRows();
 		int offset = query.getStart();
 		List<FacetField> facetFields = new ArrayList();
-		List<FacetField> limitingFacets = new ArrayList();
 		query.setIncludeScore(true);
 		query.setRequestHandler("dismax");
 		int resultFillIteration = 0;
@@ -556,7 +556,7 @@ public class SolrSearchIndex implements SearchIndex {
 				offset += 10;
 				log.warn("Increasing offset to fill the result limit");
 			}
-			hits = sendQueryForEntryURIs(query, entries, facetFields, limitingFacets, solrServer, offset, -1);
+			hits = sendQueryForEntryURIs(query, entries, facetFields, solrServer, offset, -1);
 			Date before = new Date();
 			for (URI uri : entries) {
 				try {
@@ -589,7 +589,7 @@ public class SolrSearchIndex implements SearchIndex {
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");
 		} while ((limit > result.size()) && (hits > (offset + limit)));
 
-		return new QueryResult(result, hits, facetFields, limitingFacets);
+		return new QueryResult(result, hits, facetFields);
 	}
 
 	public static String extractFulltext(File f) {

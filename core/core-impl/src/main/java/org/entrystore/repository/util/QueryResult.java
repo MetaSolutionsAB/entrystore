@@ -30,14 +30,11 @@ public class QueryResult {
 	private long hits;
 
 	private List<FacetField> facetFields;
-
-	private List<FacetField> limitingFacets;
 	
-	public QueryResult(Set<Entry> entries, long hits, List<FacetField> facetFields, List<FacetField> limitingFacets) {
+	public QueryResult(Set<Entry> entries, long hits, List<FacetField> facetFields) {
 		this.entries = entries;
 		this.hits = hits;
 		this.facetFields = facetFields;
-		this.limitingFacets = limitingFacets;
 	}
 	
 	public Set<Entry> getEntries() {
@@ -50,10 +47,6 @@ public class QueryResult {
 
 	public List<FacetField> getFacetFields() {
 		return facetFields;
-	}
-
-	public List<FacetField> getLimitingFacets() {
-		return limitingFacets;
 	}
 	
 }
