@@ -41,6 +41,8 @@ public class EchoResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(EchoResource.class);
 
+	public static long MAX_ENTITY_SIZE = 10*1024*1024; // in bytes
+
 	@Post
 	public void acceptRepresentation(Representation r) {
 		if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
@@ -50,7 +52,7 @@ public class EchoResource extends BaseResource {
 				if (iter.hasNext()) {
 					FileItem item = iter.next();
 					// We don't echo payloads bigger than 10 MB
-					if (item.getSize() > 10*1024*1024) {
+					if (item.getSize() > MAX_ENTITY_SIZE) {
 						getResponse().setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 					}
 					StringBuffer escapedContent = new StringBuffer();

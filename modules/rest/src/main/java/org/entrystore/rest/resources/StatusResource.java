@@ -91,6 +91,7 @@ public class StatusResource extends BaseResource  {
 					result.put("corsHeaders", config.getString(Settings.CORS_HEADERS, "unconfigured"));
 					result.put("corsMaxAge", config.getString(Settings.CORS_MAX_AGE, "unconfigured"));
 					result.put("corsOrigins", config.getString(Settings.CORS_ORIGINS, "unconfigured"));
+					result.put("echoMaxEntitySize", EchoResource.MAX_ENTITY_SIZE);
 					result.put("oaiHarvester", settingToBoolean(Settings.HARVESTER_OAI));
 					result.put("oaiHarvesterMultiThreaded", settingToBoolean(Settings.HARVESTER_OAI_MULTITHREADED));
 					result.put("provenance", settingToBoolean(Settings.REPOSITORY_PROVENANCE));
