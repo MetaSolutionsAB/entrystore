@@ -20,6 +20,7 @@ import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.entrystore.rest.util.Util;
+import org.restlet.Response;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
@@ -47,13 +48,19 @@ public class EchoResource extends BaseResource {
 	public void acceptRepresentation(Representation r) {
 		if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 			try {
+				if (getRequest().getEntity().getSize() > MAX_ENTITY_SIZE) {
+					respondWithEntityTooLarge(getResponse());
+					return;
+				}
+
 				List<FileItem> items = Util.createRestletFileUpload(getContext()).parseRepresentation(getRequest().getEntity());
 				Iterator<FileItem> iter = items.iterator();
 				if (iter.hasNext()) {
 					FileItem item = iter.next();
 					// We don't echo payloads bigger than 10 MB
 					if (item.getSize() > MAX_ENTITY_SIZE) {
-						getResponse().setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
+						respondWithEntityTooLarge(getResponse());
+						return;
 					}
 					StringBuffer escapedContent = new StringBuffer();
 					escapedContent.append("<textarea>");
@@ -71,6 +78,11 @@ public class EchoResource extends BaseResource {
 		} else {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNSUPPORTED_MEDIA_TYPE);
 		}
+	}
+
+	private void respondWithEntityTooLarge(Response resp) {
+		resp.setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
+		resp.setEntity("<textarea></textarea>", MediaType.TEXT_HTML);
 	}
 
 }
