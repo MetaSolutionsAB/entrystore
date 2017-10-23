@@ -173,7 +173,6 @@ public class CSV2RowStoreTransform extends Transform {
 		log.info("Initialized HTTP client for RowStore Transform");
 
 		Request request = new Request(method, url);
-		request.getClientInfo().setPort(uri.getPort());
 		if (data != null) {
 			request.setEntity(new InputRepresentation(data, mediaType));
 		}
