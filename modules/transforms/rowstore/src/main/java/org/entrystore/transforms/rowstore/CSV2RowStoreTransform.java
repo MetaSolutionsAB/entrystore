@@ -164,8 +164,6 @@ public class CSV2RowStoreTransform extends Transform {
 			throw new IllegalArgumentException("Arguments must not be null");
 		}
 
-		URI uri = URI.create(url);
-
 		Client client = new Client(Protocol.HTTP);
 		client.setContext(new org.restlet.Context());
 		client.getContext().getParameters().add("connectTimeout", "10000");
@@ -175,9 +173,7 @@ public class CSV2RowStoreTransform extends Transform {
 		log.info("Initialized HTTP client for RowStore Transform");
 
 		Request request = new Request(method, url);
-		log.info("Port before: " + request.getClientInfo().getPort());
 		request.getClientInfo().setPort(uri.getPort());
-		log.info("Port after: " + request.getClientInfo().getPort());
 		if (data != null) {
 			request.setEntity(new InputRepresentation(data, mediaType));
 		}
