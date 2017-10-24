@@ -268,6 +268,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
                 log.error(e.getMessage());
 			}
 
+			if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PROVENANCE, "off"))) {
+				initializeProvenanceRepository();
+			}
+			
 			this.initialize();
 			
 			String baseURI = config.getString(Settings.BASE_URL);
@@ -291,10 +295,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			log.info("Initializing public repository");
 			publicRepository = new PublicRepository(this);
 			registerPublicRepositoryListeners();
-		}
-
-		if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PROVENANCE, "off"))) {
-			initializeProvenanceRepository();
 		}
 
 		log.info("Adding shutdown hook");
