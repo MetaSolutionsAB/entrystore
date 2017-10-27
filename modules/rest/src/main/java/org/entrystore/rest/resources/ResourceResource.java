@@ -1048,7 +1048,7 @@ public class ResourceResource extends BaseResource {
 			
 			if (error != null) {
 				if (textarea) {
-					getResponse().setEntity("<textarea>" + error + "</textarea>", MediaType.TEXT_HTML);
+					getResponse().setEntity("<textarea>{\"error\":\"" + error + "\"}</textarea>", MediaType.TEXT_HTML);
 				} else {
 					JSONObject jsonError = new JSONObject();
 					try {
