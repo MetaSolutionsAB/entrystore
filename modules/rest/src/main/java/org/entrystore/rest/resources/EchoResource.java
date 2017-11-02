@@ -49,7 +49,7 @@ public class EchoResource extends BaseResource {
 		if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 			try {
 				if (getRequest().getEntity().getSize() > MAX_ENTITY_SIZE) {
-					respondWithEntityTooLarge(getResponse());
+					respondWith(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 					return;
 				}
 
@@ -59,12 +59,13 @@ public class EchoResource extends BaseResource {
 					FileItem item = iter.next();
 					// We don't echo payloads bigger than 10 MB
 					if (item.getSize() > MAX_ENTITY_SIZE) {
-						respondWithEntityTooLarge(getResponse());
+						respondWith(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 						return;
 					}
 					StringBuffer escapedContent = new StringBuffer();
 					escapedContent.append("<textarea>");
 					try {
+						escapedContent.append("status:"+Status.SUCCESS_OK.getCode()+"\n");
 						escapedContent.append(StringEscapeUtils.escapeHtml(item.getString("UTF-8")));
 					} catch (UnsupportedEncodingException e) {
 						log.error(e.getMessage());
@@ -73,16 +74,16 @@ public class EchoResource extends BaseResource {
 					getResponse().setEntity(escapedContent.toString(), MediaType.TEXT_HTML);
 				}
 			} catch (FileUploadException e) {
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				respondWith(Status.CLIENT_ERROR_BAD_REQUEST);
 			}
 		} else {
-			getResponse().setStatus(Status.CLIENT_ERROR_UNSUPPORTED_MEDIA_TYPE);
+			respondWith(Status.CLIENT_ERROR_UNSUPPORTED_MEDIA_TYPE);
 		}
 	}
 
-	private void respondWithEntityTooLarge(Response resp) {
-		resp.setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
-		resp.setEntity("<textarea></textarea>", MediaType.TEXT_HTML);
+	private void respondWith(Status status) {
+		Response resp = getResponse();
+		resp.setStatus(status);
+		resp.setEntity("<textarea>status:"+status.getCode()+"\n</textarea>", MediaType.TEXT_HTML);
 	}
-
 }
