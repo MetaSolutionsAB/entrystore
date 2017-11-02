@@ -22,14 +22,17 @@ package org.entrystore.repository.config;
  * @author Hannes Ebner
  */
 public class Settings {
-	
-	public static String AUTH_SCHEME = "entrystore.auth.scheme";
 	public static String AUTH_ADMIN_SECRET = "entrystore.auth.adminpw";
 	
 	public static String AUTH_OPENID = "entrystore.auth.openid";
 	public static String AUTH_OPENID_GOOGLE = "entrystore.auth.openid.google";
 	public static String AUTH_OPENID_YAHOO = "entrystore.auth.openid.yahoo";
 	public static String AUTH_OPENID_MYOPENID = "entrystore.auth.openid.myopenid";
+
+	public static String AUTH_CAS = "entrystore.auth.cas";
+	public static String AUTH_CAS_VERSION = "entrystore.auth.cas.version";
+	public static String AUTH_CAS_SERVER_URL = "entrystore.auth.cas.server.url";
+	public static String AUTH_CAS_SERVER_LOGIN_URL = "entrystore.auth.cas.server.url.login";
 	
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
@@ -125,6 +128,8 @@ public class Settings {
 	public static String TRAVERSAL_PROFILE = "entrystore.traversal";
 
 	public static String ROWSTORE_URL = "entrystore.rowstore.url";
+
+	public static String HTTPS_DISABLE_VERIFICATION = "entrystore.https.disable-verification";
 	
 	private Settings() {
 	}
