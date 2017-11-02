@@ -273,6 +273,12 @@ public class EntryStoreApplication extends Application {
 		router.attach("/auth/login", LoginResource.class);
 		router.attach("/auth/logout", LogoutResource.class);
 
+		// CAS
+		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_CAS, "off"))) {
+			router.attach("/auth/cas", CasLoginResource.class);
+			log.info("CAS authentication enabled");
+		}
+
 		// signup
 		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP, "off"))) {
 			router.attach("/auth/signup", SignupResource.class);
