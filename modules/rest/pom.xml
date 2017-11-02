@@ -221,6 +221,16 @@
             <artifactId>recaptcha4j</artifactId>
             <version>0.0.7</version>
         </dependency>
+        <dependency>
+            <groupId>org.jasig.cas.client</groupId>
+            <artifactId>cas-client-core</artifactId>
+            <version>3.4.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jasig.cas.client</groupId>
+            <artifactId>cas-client-support-saml</artifactId>
+            <version>3.4.1</version>
+        </dependency>
     </dependencies>
 
 </project>
