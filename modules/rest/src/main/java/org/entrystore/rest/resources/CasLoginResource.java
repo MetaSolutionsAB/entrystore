@@ -18,6 +18,10 @@ package org.entrystore.rest.resources;
 
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
+import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.rest.auth.LoginTokenCache;
+import org.entrystore.rest.auth.UserInfo;
 import org.jasig.cas.client.Protocol;
 import org.jasig.cas.client.util.CommonUtils;
 import org.jasig.cas.client.validation.Assertion;
@@ -25,13 +29,14 @@ import org.jasig.cas.client.validation.Cas10TicketValidator;
 import org.jasig.cas.client.validation.Cas20ServiceTicketValidator;
 import org.jasig.cas.client.validation.Cas30ServiceTicketValidator;
 import org.jasig.cas.client.validation.Saml11TicketValidator;
+import org.jasig.cas.client.validation.TicketValidationException;
 import org.jasig.cas.client.validation.TicketValidator;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
+import org.restlet.data.CookieSetting;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
-import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
@@ -48,6 +53,7 @@ import java.net.URI;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
+import java.util.Date;
 import java.util.Map;
 
 /**
@@ -64,8 +70,6 @@ public class CasLoginResource extends BaseResource {
 	private static String casServerUrlPrefix;
 
 	private static TicketValidator ticketValidator;
-
-	// TODO cache ticket together with auth_token
 
 	// TODO support logout
 
@@ -174,20 +178,42 @@ public class CasLoginResource extends BaseResource {
 					log.info(k + ": " + attr.get(k));
 				}
 				// cacheAuthentication(request, authentication);
-				return new StringRepresentation("Logged in as " + assertion.getPrincipal(), MediaType.TEXT_HTML);
+				String userName = assertion.getPrincipal().getName();
+				log.info("Received principal from CAS: " + userName);
 
-				// TODO redirect to user resource?
-			} catch (Exception e) {
+				if (new CookieVerifier(getPM()).userExists(userName)) {
+					// TODO externalize the whole section for generating token and setting cookie into an own method
+					// in a helper class so that it can be used here and in CookieLoginResource
+
+					// 24h default, lifetime in seconds
+					// TODO make maxAge configurable, use same config for CookieLoginResource
+					int maxAge = 24 * 3600;
+					String token = Password.getRandomBase64(128);
+					Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
+					LoginTokenCache.getInstance().putToken(token, new UserInfo(userName, loginExpiration));
+
+					// TODO cache CAS ticket together with auth_token
+
+					CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
+					tokenCookieSetting.setMaxAge(maxAge);
+					tokenCookieSetting.setPath(getRM().getRepositoryURL().getPath());
+					getResponse().getCookieSettings().add(tokenCookieSetting);
+					getResponse().setStatus(Status.SUCCESS_OK);
+
+					log.debug("User " + userName + " received authentication token that will expire on " + loginExpiration);
+				} else {
+					getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+				}
+			} catch (TicketValidationException e) {
 				getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 				log.error(e.getMessage());
 			}
 		} else {
-			// boolean renew = (Boolean) ReflectUtils.getField("renew", ticketValidator);
 			String redirUrl = CommonUtils.constructRedirectUrl(casLoginUrl, protocol.getServiceParameterName(), constructServiceUrl(), false, false);
 			getResponse().redirectTemporary(redirUrl);
 		}
 
-		return new EmptyRepresentation();
+		return new StringRepresentation("Authenticated user: " + getPM().getAuthenticatedUserURI(), MediaType.TEXT_HTML);
 	}
 
 	private String constructServiceUrl() {

@@ -88,7 +88,21 @@ public class CookieVerifier implements Verifier {
 			pm.setAuthenticatedUserURI(userURI);
 		}
 	}
-	
+
+	public boolean userExists(String userName) {
+		URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			Entry userEntry = pm.getPrincipalEntry(userName);
+			if (userEntry != null) {
+				return true;
+			}
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
+		return false;
+	}
+
 	public static void cleanCookies(String cookieName, Request request, Response response) {
 		response.getCookieSettings().removeAll(cookieName);
 		Series<Cookie> cookies = request.getCookies();		
