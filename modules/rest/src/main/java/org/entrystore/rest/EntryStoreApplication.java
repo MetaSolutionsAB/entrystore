@@ -341,7 +341,7 @@ public class EntryStoreApplication extends Application {
 
 		router.attachDefault(DefaultResource.class);
 
-		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(pm), pm);
+		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm), pm);
 		ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm), pm);
 		
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
