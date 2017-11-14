@@ -18,10 +18,7 @@ package org.entrystore.rest.resources;
 
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.CookieVerifier;
-import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.auth.UserInfo;
 import org.jasig.cas.client.Protocol;
 import org.jasig.cas.client.util.CommonUtils;
 import org.jasig.cas.client.validation.Assertion;
@@ -34,7 +31,6 @@ import org.jasig.cas.client.validation.TicketValidator;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.data.CookieSetting;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
@@ -49,11 +45,12 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
-import java.util.Date;
 import java.util.Map;
 
 /**
@@ -84,11 +81,8 @@ public class CasLoginResource extends BaseResource {
 		Config config = getRM().getConfiguration();
 
 		if (!sslVerificationInitialized) {
-			// TODO instead of checking for localhost we could also check the configuration for a corresponding
-			// setting (should be global and not specific to SSO/CAS since the trustmanager is valid for the whole
-			// java application scope and not only the CAS related stuff.
-			// See Settings.HTTPS_DISABLE_VERIFICATION
-			if ("localhost".equals(URI.create(getBaseUrl()).getHost())) {
+			if ("localhost".equals(URI.create(getBaseUrl()).getHost()) ||
+					config.getBoolean(Settings.HTTPS_DISABLE_VERIFICATION, false)) {
 				disableSslVerification();
 			}
 			sslVerificationInitialized = true;
@@ -130,20 +124,103 @@ public class CasLoginResource extends BaseResource {
 		}
 	}
 
+	@Get
+	public Representation represent() {
+		String ticket = parameters.get(protocol.getArtifactParameterName());
+		String redirSuccess = parameters.get("redirectOnSuccess");
+		String redirFailure = parameters.get("redirectOnFailure");
+
+		if (ticket != null) {
+			try {
+				final Assertion assertion = ticketValidator.validate(ticket, constructServiceUrl());
+
+				log.info("Successfully authenticated via CAS: " + assertion.getPrincipal());
+				Map<String, Object> attr = assertion.getPrincipal().getAttributes();
+				for (String k : attr.keySet()) {
+					log.info(k + ": " + attr.get(k));
+				}
+				// cacheAuthentication(request, authentication);
+				String userName = assertion.getPrincipal().getName();
+				log.info("Received principal from CAS: " + userName);
+
+				CookieVerifier verifier = new CookieVerifier(getRM());
+
+				if (verifier.userExists(userName)) {
+					verifier.createAuthToken(userName, null, getResponse());
+
+					// TODO cache CAS ticket together with auth_token
+
+					if (redirSuccess != null) {
+						try {
+							getResponse().redirectTemporary(URLDecoder.decode(redirSuccess, "UTF-8"));
+						} catch (UnsupportedEncodingException e) {
+							log.warn("Unable to decode URL parameter redirectOnSuccess: " + e.getMessage());
+						}
+					}
+
+					getResponse().setStatus(Status.SUCCESS_OK);
+				} else {
+					if (redirFailure != null) {
+						try {
+							getResponse().redirectTemporary(URLDecoder.decode(redirFailure, "UTF-8"));
+						} catch (UnsupportedEncodingException e) {
+							log.warn("Unable to decode URL parameter redirectOnFailure: " + e.getMessage());
+						}
+					}
+
+					getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+				}
+			} catch (TicketValidationException e) {
+				getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+				log.error(e.getMessage());
+			}
+		} else {
+			String serviceUrl = constructServiceUrl();
+			if (redirSuccess != null) {
+				serviceUrl += "?redirectOnSuccess=";
+				serviceUrl += redirSuccess;
+			}
+			if (redirFailure != null) {
+				if (redirSuccess == null) {
+					serviceUrl += "?";
+				}
+				serviceUrl += "redirectOnFailure=";
+				serviceUrl += redirFailure;
+			}
+
+			String redirUrl = CommonUtils.constructRedirectUrl(casLoginUrl, protocol.getServiceParameterName(), serviceUrl, false, false);
+			getResponse().redirectTemporary(redirUrl);
+		}
+
+		return new StringRepresentation("Authenticated user: " + getPM().getAuthenticatedUserURI(), MediaType.TEXT_HTML);
+	}
+
+	private String constructServiceUrl() {
+		return getBaseUrl() + "auth/cas";
+	}
+
+	private String getBaseUrl() {
+		String baseUrl = getRM().getConfiguration().getString(Settings.BASE_URL);
+		if (!baseUrl.endsWith("/")) {
+			baseUrl += "/";
+		}
+		return baseUrl;
+	}
+
 	private static void disableSslVerification() {
 		try
 		{
 			// create a trust manager that does not validate certificate chains
 			TrustManager[] trustAllCerts = new TrustManager[]{
-				new X509TrustManager() {
-					public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-						return null;
+					new X509TrustManager() {
+						public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+							return null;
+						}
+
+						public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+
+						public void checkServerTrusted(X509Certificate[] certs, String authType) {}
 					}
-
-					public void checkClientTrusted(X509Certificate[] certs, String authType) {}
-
-					public void checkServerTrusted(X509Certificate[] certs, String authType) {}
-				}
 			};
 
 			// install the all-trusting trust manager
@@ -165,69 +242,6 @@ public class CasLoginResource extends BaseResource {
 		} catch (KeyManagementException e) {
 			log.error(e.getMessage());
 		}
-	}
-
-	@Get
-	public Representation represent() {
-		String ticket = parameters.get(protocol.getArtifactParameterName());
-		if (ticket != null) {
-			try {
-				final Assertion assertion = ticketValidator.validate(ticket, constructServiceUrl());
-
-				log.info("Successfully authenticated via CAS: " + assertion.getPrincipal());
-				Map<String, Object> attr = assertion.getPrincipal().getAttributes();
-				for (String k : attr.keySet()) {
-					log.info(k + ": " + attr.get(k));
-				}
-				// cacheAuthentication(request, authentication);
-				String userName = assertion.getPrincipal().getName();
-				log.info("Received principal from CAS: " + userName);
-
-				if (new CookieVerifier(getPM()).userExists(userName)) {
-					// TODO externalize the whole section for generating token and setting cookie into an own method
-					// in a helper class so that it can be used here and in CookieLoginResource
-
-					// 24h default, lifetime in seconds
-					// TODO make maxAge configurable, use same config for CookieLoginResource
-					int maxAge = 24 * 3600;
-					String token = Password.getRandomBase64(128);
-					Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
-					LoginTokenCache.getInstance().putToken(token, new UserInfo(userName, loginExpiration));
-
-					// TODO cache CAS ticket together with auth_token
-
-					CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
-					tokenCookieSetting.setMaxAge(maxAge);
-					tokenCookieSetting.setPath(getRM().getRepositoryURL().getPath());
-					getResponse().getCookieSettings().add(tokenCookieSetting);
-					getResponse().setStatus(Status.SUCCESS_OK);
-
-					log.debug("User " + userName + " received authentication token that will expire on " + loginExpiration);
-				} else {
-					getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-				}
-			} catch (TicketValidationException e) {
-				getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-				log.error(e.getMessage());
-			}
-		} else {
-			String redirUrl = CommonUtils.constructRedirectUrl(casLoginUrl, protocol.getServiceParameterName(), constructServiceUrl(), false, false);
-			getResponse().redirectTemporary(redirUrl);
-		}
-
-		return new StringRepresentation("Authenticated user: " + getPM().getAuthenticatedUserURI(), MediaType.TEXT_HTML);
-	}
-
-	private String constructServiceUrl() {
-		return getBaseUrl() + "auth/cas";
-	}
-
-	private String getBaseUrl() {
-		String baseUrl = getRM().getConfiguration().getString(Settings.BASE_URL);
-		if (!baseUrl.endsWith("/")) {
-			baseUrl += "/";
-		}
-		return baseUrl;
 	}
 
 }
