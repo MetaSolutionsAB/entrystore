@@ -29,6 +29,8 @@ public class Settings {
 	public static String AUTH_OPENID_YAHOO = "entrystore.auth.openid.yahoo";
 	public static String AUTH_OPENID_MYOPENID = "entrystore.auth.openid.myopenid";
 
+	public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.token.max-age";
+
 	public static String AUTH_CAS = "entrystore.auth.cas";
 	public static String AUTH_CAS_VERSION = "entrystore.auth.cas.version";
 	public static String AUTH_CAS_SERVER_URL = "entrystore.auth.cas.server.url";
