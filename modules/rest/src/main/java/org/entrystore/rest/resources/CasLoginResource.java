@@ -130,19 +130,18 @@ public class CasLoginResource extends BaseResource {
 		String redirSuccess = parameters.get("redirectOnSuccess");
 		String redirFailure = parameters.get("redirectOnFailure");
 
+		boolean authSuccess = false;
+
 		if (ticket != null) {
 			try {
-				final Assertion assertion = ticketValidator.validate(ticket, constructServiceUrl());
+				final Assertion assertion = ticketValidator.validate(ticket, constructServiceUrl(redirSuccess, redirFailure));
 
 				log.info("Successfully authenticated via CAS: " + assertion.getPrincipal());
 				Map<String, Object> attr = assertion.getPrincipal().getAttributes();
 				for (String k : attr.keySet()) {
 					log.info(k + ": " + attr.get(k));
 				}
-				// cacheAuthentication(request, authentication);
 				String userName = assertion.getPrincipal().getName();
-				log.info("Received principal from CAS: " + userName);
-
 				CookieVerifier verifier = new CookieVerifier(getRM());
 
 				if (verifier.userExists(userName)) {
@@ -156,47 +155,46 @@ public class CasLoginResource extends BaseResource {
 						} catch (UnsupportedEncodingException e) {
 							log.warn("Unable to decode URL parameter redirectOnSuccess: " + e.getMessage());
 						}
+					} else {
+						getResponse().setStatus(Status.SUCCESS_OK);
 					}
 
-					getResponse().setStatus(Status.SUCCESS_OK);
-				} else {
-					if (redirFailure != null) {
-						try {
-							getResponse().redirectTemporary(URLDecoder.decode(redirFailure, "UTF-8"));
-						} catch (UnsupportedEncodingException e) {
-							log.warn("Unable to decode URL parameter redirectOnFailure: " + e.getMessage());
-						}
-					}
-
-					getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+					authSuccess = true;
 				}
 			} catch (TicketValidationException e) {
-				getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 				log.error(e.getMessage());
 			}
-		} else {
-			String serviceUrl = constructServiceUrl();
-			if (redirSuccess != null) {
-				serviceUrl += "?redirectOnSuccess=";
-				serviceUrl += redirSuccess;
-			}
-			if (redirFailure != null) {
-				if (redirSuccess == null) {
-					serviceUrl += "?";
-				}
-				serviceUrl += "redirectOnFailure=";
-				serviceUrl += redirFailure;
-			}
 
-			String redirUrl = CommonUtils.constructRedirectUrl(casLoginUrl, protocol.getServiceParameterName(), serviceUrl, false, false);
-			getResponse().redirectTemporary(redirUrl);
+			if (!authSuccess) {
+				if (redirFailure != null) {
+					try {
+						getResponse().redirectTemporary(URLDecoder.decode(redirFailure, "UTF-8"));
+					} catch (UnsupportedEncodingException e) {
+						log.warn("Unable to decode URL parameter redirectOnFailure: " + e.getMessage());
+					}
+				} else {
+					getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+				}
+			}
+		} else {
+			getResponse().redirectTemporary(CommonUtils.constructRedirectUrl(casLoginUrl, protocol.getServiceParameterName(), constructServiceUrl(redirSuccess, redirFailure), false, false));
 		}
 
 		return new StringRepresentation("Authenticated user: " + getPM().getAuthenticatedUserURI(), MediaType.TEXT_HTML);
 	}
 
-	private String constructServiceUrl() {
-		return getBaseUrl() + "auth/cas";
+	private String constructServiceUrl(String redirSuccess, String redirFailure) {
+		String result = getBaseUrl() + "auth/cas";
+		if (redirSuccess != null) {
+			result += "?redirectOnSuccess=";
+			result += redirSuccess;
+		}
+		if (redirFailure != null) {
+			result += (redirSuccess == null ? "?" : "&");
+			result += "redirectOnFailure=";
+			result += redirFailure;
+		}
+		return result;
 	}
 
 	private String getBaseUrl() {
