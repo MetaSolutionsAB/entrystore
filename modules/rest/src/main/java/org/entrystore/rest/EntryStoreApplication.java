@@ -43,6 +43,7 @@ import org.entrystore.rest.auth.ExistingUserRedirectAuthenticator;
 import org.entrystore.rest.auth.NewUserRedirectAuthenticator;
 import org.entrystore.rest.auth.SimpleAuthenticator;
 import org.entrystore.rest.filter.CORSFilter;
+import org.entrystore.rest.filter.IgnoreAuthFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
 import org.entrystore.rest.resources.*;
@@ -343,10 +344,12 @@ public class EntryStoreApplication extends Application {
 
 		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm), pm);
 		ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm), pm);
-		
+
+		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
-		
+
+		ignoreAuth.setNext(cookieAuth);
 		cookieAuth.setNext(basicAuth);
 		basicAuth.setNext(jsCallback);
 		jsCallback.setNext(modLockOut);
@@ -378,11 +381,11 @@ public class EntryStoreApplication extends Application {
 					return super.beforeHandle(request, response);
 				}
 			};
-			referenceFix.setNext(cookieAuth);
+			referenceFix.setNext(ignoreAuth);
 			return referenceFix;
 		} else {
 			log.warn("Rewriting of base reference has been manually disabled");
-			return cookieAuth;
+			return ignoreAuth;
 		}
 	}
 	

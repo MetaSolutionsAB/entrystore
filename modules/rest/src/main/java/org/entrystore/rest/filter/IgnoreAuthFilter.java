@@ -16,36 +16,29 @@
 
 package org.entrystore.rest.filter;
 
-import org.entrystore.rest.EntryStoreApplication;
+import org.entrystore.rest.util.Util;
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.data.Method;
-import org.restlet.data.Status;
 import org.restlet.routing.Filter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.HashMap;
 
 
 /**
  * @author Hannes Ebner
  */
-public class ModificationLockOutFilter extends Filter {
+public class IgnoreAuthFilter extends Filter {
 	
-	static private Logger log = LoggerFactory.getLogger(ModificationLockOutFilter.class);
+	static private Logger log = LoggerFactory.getLogger(IgnoreAuthFilter.class);
 	
 	@Override
 	protected int beforeHandle(Request request, Response response) {
-		if (request.getMethod().equals(Method.GET)) {
-			return CONTINUE;
-		} else {
-			EntryStoreApplication esa = (EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY);
-			boolean lockout = esa.getRM().hasModificationLockOut();
-			if (lockout) {
-				String maintMsg = "The service is being maintained and does not accept modification requests right now, please check back later";
-				response.setStatus(Status.SERVER_ERROR_SERVICE_UNAVAILABLE, maintMsg);
-				log.warn(maintMsg);
-				return STOP;
-			}
+		HashMap<String,String> parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
+		if (parameters.containsKey("ignoreAuth")) {
+			log.debug("Removing auth_token cookie from request due to ignoreAuth request parameter");
+			request.getCookies().removeAll("auth_token");
 		}
 		return CONTINUE;
 	}
