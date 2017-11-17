@@ -19,6 +19,7 @@ package org.entrystore.rest.resources;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.rest.util.SimpleHTML;
 import org.jasig.cas.client.Protocol;
 import org.jasig.cas.client.util.CommonUtils;
 import org.jasig.cas.client.validation.Assertion;
@@ -33,8 +34,8 @@ import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +52,7 @@ import java.net.URLDecoder;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
 import java.util.Map;
 
 /**
@@ -130,7 +132,11 @@ public class CasLoginResource extends BaseResource {
 		String redirSuccess = parameters.get("redirectOnSuccess");
 		String redirFailure = parameters.get("redirectOnFailure");
 
+		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
+
 		boolean authSuccess = false;
+
+		Representation result = new EmptyRepresentation();
 
 		if (ticket != null) {
 			try {
@@ -157,6 +163,9 @@ public class CasLoginResource extends BaseResource {
 						}
 					} else {
 						getResponse().setStatus(Status.SUCCESS_OK);
+						if (html) {
+							result = new SimpleHTML("Login").representation("Login successful.");
+						}
 					}
 
 					authSuccess = true;
@@ -174,13 +183,16 @@ public class CasLoginResource extends BaseResource {
 					}
 				} else {
 					getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+					if (html) {
+						result = new SimpleHTML("Login").representation("Login failed.");
+					}
 				}
 			}
 		} else {
 			getResponse().redirectTemporary(CommonUtils.constructRedirectUrl(casLoginUrl, protocol.getServiceParameterName(), constructServiceUrl(redirSuccess, redirFailure), false, false));
 		}
 
-		return new StringRepresentation("Authenticated user: " + getPM().getAuthenticatedUserURI(), MediaType.TEXT_HTML);
+		return result;
 	}
 
 	private String constructServiceUrl(String redirSuccess, String redirFailure) {
