@@ -18,10 +18,8 @@ package org.entrystore.rest.resources;
 
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.BasicVerifier;
-import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.auth.UserInfo;
+import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.util.SimpleHTML;
-import org.restlet.data.CookieSetting;
 import org.restlet.data.Form;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
@@ -31,7 +29,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
-import java.util.Date;
 
 /**
  * This resource checks credentials and sets a cookie.
@@ -60,25 +57,9 @@ public class CookieLoginResource extends BaseResource {
 		
 		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName.toLowerCase());
 		if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
-			// 24h default, lifetime in seconds
-			int maxAge = 24 * 3600;
-			if (maxAgeStr != null) {
-				try {
-					maxAge = Integer.parseInt(maxAgeStr);
-				} catch (NumberFormatException nfe) {}
-			}
-			
-			String token = Password.getRandomBase64(128);
-			Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
-			LoginTokenCache.getInstance().putToken(token, new UserInfo(userName, loginExpiration));
-			
-			CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
-			tokenCookieSetting.setMaxAge(maxAge);
-			tokenCookieSetting.setPath(getRM().getRepositoryURL().getPath());
-	        getResponse().getCookieSettings().add(tokenCookieSetting);
+			new CookieVerifier(getRM()).createAuthToken(userName, maxAgeStr, getResponse());
 	        getResponse().setStatus(Status.SUCCESS_OK);
 
-			log.debug("User " + userName + " received authentication token that will expire on " + loginExpiration);
 			if (html) {
 				getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
 			}

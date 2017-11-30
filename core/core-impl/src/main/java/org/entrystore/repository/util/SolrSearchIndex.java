@@ -494,7 +494,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrServer solrServer, int offset, int limit) throws SolrException {
+	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrServer solrServer, int offset, int limit) {
 		if (query == null) {
 			throw new IllegalArgumentException("Query object must not be null");
 		}
