@@ -19,6 +19,7 @@ package org.entrystore.repository.util;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
@@ -95,7 +96,7 @@ public class SolrSearchIndex implements SearchIndex {
 				postQueue.cleanUp();
 				if (postQueue.estimatedSize() > 0) {
 					UpdateRequest req = new UpdateRequest();
-					req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
+					//req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
 
 					synchronized (postQueue) {
 						ConcurrentMap<URI, SolrInputDocument> postQueueMap = postQueue.asMap();
@@ -151,7 +152,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public void clearSolrIndex(SolrServer solrServer) {
 		UpdateRequest req = new UpdateRequest();
-		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
+		//req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
 		req.deleteByQuery("*:*");
 		try {
 			req.process(solrServer);
@@ -164,7 +165,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public void clearSolrIndexFromContextEntries(SolrServer solrServer, Entry contextEntry) {
 		UpdateRequest req = new UpdateRequest();
-		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
+		//req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
 		req.deleteByQuery("context:"+contextEntry.getResourceURI().toString().replace(":", "\\:"));
 		try {
 			req.process(solrServer);
@@ -474,7 +475,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public void removeEntry(Entry entry) {
 		UpdateRequest req = new UpdateRequest();
-		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
+		//req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
 		String escapedURI = StringUtils.replace(entry.getEntryURI().toString(), ":", "\\:");
 		req.deleteByQuery("uri:" + escapedURI);
 		try {
