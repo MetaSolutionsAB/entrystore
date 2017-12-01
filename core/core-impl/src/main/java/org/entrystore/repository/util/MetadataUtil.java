@@ -91,4 +91,16 @@ public class MetadataUtil {
 		return integerDataTypes.contains(l.getDatatype().stringValue());
 	}
 
+	public static boolean isDateLiteral(Literal l) {
+		if (l == null) {
+			throw new IllegalArgumentException("Literal must not be null");
+		}
+
+		if (l.getDatatype() == null) {
+			return false;
+		}
+
+		return "http://www.w3.org/2001/XMLSchema#date".equals(l.getDatatype().stringValue());
+	}
+
 }

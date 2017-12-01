@@ -217,6 +217,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <dynamicField name="metadata.predicate.uri.*" type="string" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.literal.*" type="text" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.literal_s.*" type="string" indexed="true" multiValued="true"/>
+        <dynamicField name="metadata.predicate.literal_d.*" type="date" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.integer.*" type="slong" indexed="true" multiValued="false"/>
         <field name="metadata.object.uri" type="string" indexed="true" multiValued="true"/>
         <field name="metadata.object.literal" type="text" indexed="true" multiValued="true"/>

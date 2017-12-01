@@ -51,9 +51,12 @@ import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.xml.datatype.DatatypeConstants;
+import javax.xml.datatype.XMLGregorianCalendar;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
@@ -63,6 +66,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.concurrent.ConcurrentMap;
 
 
@@ -88,6 +92,8 @@ public class SolrSearchIndex implements SearchIndex {
 	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
 
 	private final Queue<URI> deleteQueue = Queues.newConcurrentLinkedQueue();
+
+	private SimpleDateFormat solrDateFormatter;
 
 	public class SolrInputDocumentSubmitter extends Thread {
 
@@ -173,10 +179,11 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public SolrSearchIndex(RepositoryManager rm, SolrServer solrServer) {
+		solrDateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+		solrDateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"));
 		this.rm = rm;
 		this.solrServer = solrServer;
-		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(
-				Settings.SOLR_EXTRACT_FULLTEXT, "off"));
+		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_EXTRACT_FULLTEXT, "off"));
 		documentSubmitter = new SolrInputDocumentSubmitter();
 		documentSubmitter.start();
 	}
@@ -266,7 +273,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	public static SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
+	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
 		Graph mdGraph = entry.getMetadataGraph();
 		URI resourceURI = entry.getResourceURI();
 
@@ -474,6 +481,10 @@ public class SolrSearchIndex implements SearchIndex {
 						// it's a single-value field so we call setField instead of addField just in case there should be
 						doc.setField("metadata.predicate.integer." + predMD5Trunc8, l.longValue());
 					}
+
+					if (MetadataUtil.isDateLiteral(l)) {
+						doc.setField("metadata.predicate.literal_d." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
+					}
 				}
 			}
 		}
@@ -493,6 +504,13 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		return doc;
+	}
+
+	private String dateToSolrDateString(XMLGregorianCalendar c) {
+		if (c.getTimezone() == DatatypeConstants.FIELD_UNDEFINED) {
+			c.setTimezone(0);
+		}
+		return solrDateFormatter.format(c.toGregorianCalendar().getTime());
 	}
 
 	public void postEntry(Entry entry) {
