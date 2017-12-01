@@ -483,7 +483,7 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 
 					if (MetadataUtil.isDateLiteral(l)) {
-						doc.setField("metadata.predicate.literal_d." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
+						doc.setField("metadata.predicate.literal_dt." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
 					}
 				}
 			}
