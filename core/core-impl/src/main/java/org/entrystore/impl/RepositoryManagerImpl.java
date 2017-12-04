@@ -34,6 +34,7 @@ import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.util.DataCorrection;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
@@ -129,6 +130,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private Repository provenanceRepository;
 
+	public static boolean trackDeletedEntries;
+
 	public RepositoryManagerImpl(String baseURL, Config config) {
 		System.setProperty("org.openrdf.repository.debug", "true");
 		this.config = config;
@@ -201,7 +204,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			log.error("Failed to create SailRepository");
 			throw new IllegalStateException("Failed to create SailRepository");
 		}
-		
+
 		// create soft cache
 		softCache = new SoftCache();
 		
@@ -284,7 +287,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		} finally {
 			setCheckForAuthorization(true);
 		}
-		
+
+		trackDeletedEntries = config.getBoolean(Settings.REPOSITORY_TRACK_DELETED, false);
+		log.info("Tracking of deleted entries is " + (trackDeletedEntries ? "activated" : "deactivated"));
+		boolean cleanupDeleted = config.getBoolean(Settings.REPOSITORY_TRACK_DELETED_CLEANUP, false);
+		if (cleanupDeleted) {
+			DataCorrection.cleanupTrackedDeletedEntries(repository);
+		}
+
 		if ("on".equalsIgnoreCase(config.getString(Settings.SOLR, "off")) && config.containsKey(Settings.SOLR_URL)) {
 			log.info("Initializing Solr");
 			initSolr();

@@ -99,6 +99,9 @@ public class Settings {
 	public static String REPOSITORY_PROVENANCE_TYPE = "entrystore.repository.provenance.type";
 	public static String REPOSITORY_PROVENANCE_REBUILD_ON_STARTUP = "entrystore.repository.provenance.rebuild-on-startup";
 
+	public static String REPOSITORY_TRACK_DELETED = "entrystore.repository.track-deleted-entries";
+	public static String REPOSITORY_TRACK_DELETED_CLEANUP = "entrystore.repository.track-deleted-entries.cleanup";
+
 	public static String SMTP_HOST = "entrystore.smtp.host";
 	public static String SMTP_PORT = "entrystore.smtp.port";
 	public static String SMTP_SECURITY = "entrystore.smtp.security";

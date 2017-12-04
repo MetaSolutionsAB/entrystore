@@ -52,8 +52,6 @@ import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
 import java.io.File;
 import java.net.URI;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -79,8 +77,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public static final org.openrdf.model.URI DCModified;
 	public static final org.openrdf.model.URI DCTermsModified;
-
-	private static final DateFormat DATE_PARSER = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
 	
 	private Object quotaMutex = new Object();
 	protected long quotaFillLevel = Quota.VALUE_UNCACHED;
@@ -294,23 +290,25 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (res2entry != null) {
 			pop(entry.getResourceURI(), entry.getEntryURI(), res2entry);
 		}
-		
-		// add deletion information to index
-		ValueFactory vf = rc.getValueFactory();
-		XMLGregorianCalendar deletedDate = null;
-		try {
-			deletedDate = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
-		} catch (DatatypeConfigurationException e) {
-			log.error(e.getMessage());
-		}
-		if (deletedDate != null) {
-			Statement delDateStmnt = vf.createStatement(entryURI, RepositoryProperties.Deleted, vf.createLiteral(deletedDate), this.resourceURI);
-			rc.add(delDateStmnt, this.resourceURI);
-		}
-		URI deletedBy = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI();
-		if (deletedBy != null) {
-			Statement delByStmnt = vf.createStatement(entryURI, RepositoryProperties.DeletedBy, vf.createURI(deletedBy.toString()), this.resourceURI);
-			rc.add(delByStmnt, this.resourceURI);
+
+		if (entry.repositoryManager.trackDeletedEntries) {
+			// add deletion information to index
+			ValueFactory vf = rc.getValueFactory();
+			XMLGregorianCalendar deletedDate = null;
+			try {
+				deletedDate = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
+			} catch (DatatypeConfigurationException e) {
+				log.error(e.getMessage());
+			}
+			if (deletedDate != null) {
+				Statement delDateStmnt = vf.createStatement(entryURI, RepositoryProperties.Deleted, vf.createLiteral(deletedDate), this.resourceURI);
+				rc.add(delDateStmnt, this.resourceURI);
+			}
+			URI deletedBy = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI();
+			if (deletedBy != null) {
+				Statement delByStmnt = vf.createStatement(entryURI, RepositoryProperties.DeletedBy, vf.createURI(deletedBy.toString()), this.resourceURI);
+				rc.add(delByStmnt, this.resourceURI);
+			}
 		}
 	}
 	
