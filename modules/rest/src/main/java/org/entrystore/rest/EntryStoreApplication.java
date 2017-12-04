@@ -36,7 +36,6 @@ import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
-import org.entrystore.repository.util.DataCorrection;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.ExistingUserRedirectAuthenticator;
@@ -220,12 +219,6 @@ public class EntryStoreApplication extends Application {
 				startBackupScheduler();
 			} else {
 				log.warn("Backup is disabled in configuration");
-			}
-
-			boolean correct = config.getBoolean("entrystore.repository.store.correct-metadata", false);
-			if (correct) {
-				DataCorrection mc = new DataCorrection(rm);
-				mc.fixMetadataGlobally();
 			}
 		}
 	}
