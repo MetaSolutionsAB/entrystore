@@ -72,6 +72,7 @@ entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
 entrystore.solr.url=http://localhost:8080/solr/entrystore-core1
 #entrystore.solr.url=/srv/entrystore/files/solr/
+entrystore.solr.ngram-all-literals=off
 entrystore.solr.extract-fulltext=off
 
 ## OAI-PMH harvester (not to confuse with the OAI-PMH target which is an own WebApp

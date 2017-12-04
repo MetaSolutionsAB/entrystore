@@ -83,6 +83,8 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private boolean extractFulltext = false;
 
+	private boolean ngramAllLiterals = false;
+
 	private RepositoryManager rm;
 
 	private final SolrServer solrServer;
@@ -184,6 +186,7 @@ public class SolrSearchIndex implements SearchIndex {
 		this.rm = rm;
 		this.solrServer = solrServer;
 		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_EXTRACT_FULLTEXT, "off"));
+		this.ngramAllLiterals = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_NGRAM_ALL_LITERALS, "off"));
 		documentSubmitter = new SolrInputDocumentSubmitter();
 		documentSubmitter.start();
 	}
@@ -476,6 +479,10 @@ public class SolrSearchIndex implements SearchIndex {
 					// predicate value is included in the parameter name, the object value is the field value
 					doc.addField("metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
 
+					if (this.ngramAllLiterals) {
+						doc.addField("metadata.predicate.literal_ng." + predMD5Trunc8, l.getLabel());
+					}
+
 					// special handling of integer values, to be used for e.g. sorting
 					if (MetadataUtil.isIntegerLiteral(l)) {
 						// it's a single-value field so we call setField instead of addField just in case there should be
@@ -483,7 +490,7 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 
 					if (MetadataUtil.isDateLiteral(l)) {
-						doc.setField("metadata.predicate.literal_dt." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
+						doc.addField("metadata.predicate.date." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
 					}
 				}
 			}
