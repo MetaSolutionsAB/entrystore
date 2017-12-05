@@ -16,17 +16,13 @@
 
 package org.entrystore.rest.auth;
 
-import java.net.URI;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-
-import org.entrystore.GraphType;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.config.Config;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
-import org.entrystore.rest.util.Util;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.ChallengeResponse;
@@ -34,6 +30,13 @@ import org.restlet.data.Status;
 import org.restlet.security.Verifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -49,8 +52,13 @@ public class BasicVerifier implements Verifier {
 	
 	private static Map<String, Long> loginCache = new HashMap<String, Long>();
 
-	public BasicVerifier(PrincipalManager pm) {
+	private List<String> passwordLoginWhitelist;
+
+	public BasicVerifier(PrincipalManager pm, Config config) {
 		this.pm = pm;
+		if ("whitelist".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD))) {
+			this.passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST, new ArrayList());
+		}
 	}
 
 	public static String getSaltedHashedSecret(PrincipalManager pm , String identifier) {
@@ -82,7 +90,6 @@ public class BasicVerifier implements Verifier {
 		
 		URI userURI = null;
 		boolean challenge = !"false".equalsIgnoreCase(response.getRequest().getResourceRef().getQueryAsForm().getFirstValue("auth_challenge"));
-		Map<String, String> params = Util.parseRequest(request.getResourceRef().getRemainingPart());
 
 		try {
 			if (request.getChallengeResponse() == null && "basic".equals(request.getResourceRef().getLastSegment())) {
@@ -116,6 +123,11 @@ public class BasicVerifier implements Verifier {
 			} else if (identifier != null && secret == null) { 
 				return RESULT_MISSING;
 			} else {
+				if (passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(identifier)) {
+					response.setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+					return RESULT_INVALID;
+				}
+
 				Entry userEntry = pm.getPrincipalEntry(identifier);
 				if (userEntry == null) {
 					return RESULT_UNKNOWN;

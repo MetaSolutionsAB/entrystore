@@ -237,6 +237,8 @@ public class EntryStoreApplication extends Application {
 		Router router = new Router(getContext());
 		//router.setDefaultMatchingMode(Template.MODE_STARTS_WITH);
 
+		boolean passwordAuthOff = "off".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD, "on"));
+
 		reservedNames.add("favicon.ico");
 		
 		// to prevent unnecessary context-id lookups we route favicon.ico to a real icon
@@ -261,10 +263,13 @@ public class EntryStoreApplication extends Application {
 
 		// authentication resources
 		reservedNames.add("auth");
+		if (!passwordAuthOff) {
+			// we allow login with username/password
+			router.attach("/auth/cookie", CookieLoginResource.class);
+			router.attach("/auth/login", LoginResource.class);
+		}
 		router.attach("/auth/user", UserResource.class);
-		router.attach("/auth/cookie", CookieLoginResource.class);
 		router.attach("/auth/basic", UserResource.class);
-		router.attach("/auth/login", LoginResource.class);
 		router.attach("/auth/logout", LogoutResource.class);
 
 		// CAS
@@ -336,15 +341,23 @@ public class EntryStoreApplication extends Application {
 		router.attachDefault(DefaultResource.class);
 
 		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm), pm);
-		ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm), pm);
 
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
 
 		ignoreAuth.setNext(cookieAuth);
-		cookieAuth.setNext(basicAuth);
-		basicAuth.setNext(jsCallback);
+
+		// if password authentication is disabled we only allow cookie verification (as this may verify auth_tokens
+		// generated through a CAS-login), but not basic authentication (as this always requires username/password)
+		if (passwordAuthOff) {
+			cookieAuth.setNext(jsCallback);
+		} else {
+			ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm, config), pm);
+			cookieAuth.setNext(basicAuth);
+			basicAuth.setNext(jsCallback);
+		}
+
 		jsCallback.setNext(modLockOut);
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
