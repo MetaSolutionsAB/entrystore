@@ -485,12 +485,20 @@ public class SolrSearchIndex implements SearchIndex {
 
 					// special handling of integer values, to be used for e.g. sorting
 					if (MetadataUtil.isIntegerLiteral(l)) {
-						// it's a single-value field so we call setField instead of addField just in case there should be
-						doc.setField("metadata.predicate.integer." + predMD5Trunc8, l.longValue());
+						try {
+							// it's a single-value field so we call setField instead of addField just in case there should be
+							doc.setField("metadata.predicate.integer." + predMD5Trunc8, l.longValue());
+						} catch (NumberFormatException nfe) {
+							log.debug("Unable to index integer literal: " + nfe.getMessage() + ". (Subject: " + s.getSubject() + ", Predicate: " + predString + ", Object: " + l.getLabel() + ")");
+						}
 					}
 
 					if (MetadataUtil.isDateLiteral(l)) {
-						doc.addField("metadata.predicate.date." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
+						try {
+							doc.addField("metadata.predicate.date." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
+						} catch (IllegalArgumentException iae) {
+							log.debug("Unable to index date literal: " + iae.getMessage() + ". (Subject: " + s.getSubject() + ", Predicate: " + predString + ", Object: " + l.getLabel() + ")");
+						}
 					}
 				}
 			}
