@@ -18,6 +18,7 @@ package org.entrystore.rest.resources;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
+import info.aduna.iteration.Iterations;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Metadata;
 import org.entrystore.impl.converters.ConverterUtil;
@@ -27,10 +28,20 @@ import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.openrdf.model.Graph;
+import org.openrdf.model.Model;
 import org.openrdf.model.URI;
 import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.impl.URIImpl;
+import org.openrdf.query.GraphQuery;
+import org.openrdf.query.MalformedQueryException;
+import org.openrdf.query.QueryEvaluationException;
+import org.openrdf.query.QueryLanguage;
+import org.openrdf.repository.Repository;
+import org.openrdf.repository.RepositoryConnection;
+import org.openrdf.repository.RepositoryException;
+import org.openrdf.repository.sail.SailRepository;
 import org.openrdf.rio.RDFFormat;
+import org.openrdf.sail.memory.MemoryStore;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
@@ -106,6 +117,15 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				}
 				MediaType prefFormat = (format != null) ? format : preferredMediaType;
 
+				String graphQuery = null;
+				if (parameters.containsKey("graphQuery")) {
+					try {
+						graphQuery = URLDecoder.decode(parameters.get("graphQuery"), "UTF-8");
+					} catch (UnsupportedEncodingException e) {
+						log.error(e.getMessage());
+					}
+				}
+
 				if (parameters.containsKey("recursive")) {
 					String traversalParam = null;
 					try {
@@ -119,7 +139,17 @@ public abstract class AbstractMetadataResource extends BaseResource {
 						return null;
 					}
 					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), predicatesToFollow, parameters.containsKey("repository"));
-					result = getRepresentation(travResult.getGraph(), prefFormat);
+					if (graphQuery != null) {
+						Model graphQueryResult = applyGraphQuery(graphQuery, travResult.getGraph());
+						if (graphQueryResult != null) {
+							result = getRepresentation(graphQueryResult, prefFormat);
+						} else {
+							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+							return null;
+						}
+					} else {
+						result = getRepresentation(travResult.getGraph(), prefFormat);
+					}
 					if (travResult.getLatestModified() != null) {
 						result.setModificationDate(travResult.getLatestModified());
 					}
@@ -129,7 +159,17 @@ public abstract class AbstractMetadataResource extends BaseResource {
 						return null;
 					}
 
-					result = getRepresentation(getMetadata().getGraph(), prefFormat);
+					if (graphQuery != null) {
+						Model graphQueryResult = applyGraphQuery(graphQuery, getMetadata().getGraph());
+						if (graphQueryResult != null) {
+							result = getRepresentation(graphQueryResult, prefFormat);
+						} else {
+							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+							return null;
+						}
+					} else {
+						result = getRepresentation(getMetadata().getGraph(), prefFormat);
+					}
 				}
 
 				// set file name
@@ -149,6 +189,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				}
 				result.setDisposition(disp);
 			} else {
+				// for HEAD requests
 				result = new EmptyRepresentation();
 			}
 
@@ -350,6 +391,43 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		Set<java.net.URI> result = new HashSet<>();
 		for (String s : predicates) {
 			result.add(java.net.URI.create(s));
+		}
+		return result;
+	}
+
+	private Model applyGraphQuery(String query, Graph graph) {
+		Date before = new Date();
+		MemoryStore ms = new MemoryStore();
+		Repository sr = new SailRepository(ms);
+		Model result = null;
+		RepositoryConnection rc = null;
+		try {
+			sr.initialize();
+			rc = sr.getConnection();
+			rc.add(graph);
+			GraphQuery gq = rc.prepareGraphQuery(QueryLanguage.SPARQL, query);
+			gq.setMaxQueryTime(10); // 10 seconds, TODO: make this configurable
+			result = Iterations.addAll(gq.evaluate(), new LinkedHashModel());
+			log.info("Graph query took " + (new Date().getTime() - before.getTime()) + " ms");
+		} catch (RepositoryException e) {
+			log.error(e.getMessage());
+		} catch (MalformedQueryException mfqe) {
+			log.debug(mfqe.getMessage());
+		} catch (QueryEvaluationException qee) {
+			log.error(qee.getMessage());
+		} finally {
+			if (rc != null) {
+				try {
+					rc.close();
+				} catch (RepositoryException e) {
+					log.error(e.getMessage());
+				}
+			}
+			try {
+				sr.shutDown();
+			} catch (RepositoryException e) {
+				log.error(e.getMessage());
+			}
 		}
 		return result;
 	}
