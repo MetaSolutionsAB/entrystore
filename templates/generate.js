@@ -49,7 +49,6 @@ fs.writeFileSync(outDir + 'signup.txt', mailGenerator.generatePlaintext(emailSig
 
 var emailPwReset = {
     body: {
-        name: '__NAME__',
         intro: 'You have received this email because a password reset request for your ' + conf.productName + ' account was received.',
         action: {
             instructions: 'Click the button below to reset your password:',
