@@ -1,7 +1,44 @@
 {
-  "productName": "ENTRYSCAPE",
-  "productURL": "https://entryscape.com",
-  "productLogoURL": "https://entryscape.com/logo.png",
-  "supportText": "Need help, or have questions? Contact us at <a href=\"mailto:support@entryscape.com\">support@entryscape.com</a>, we'd love to help.",
-  "copyright": "Copyright © __YEAR__ MetaSolutions AB. All rights reserved."
+  "en": {
+    "productName": "ENTRYSCAPE",
+    "productURL": "https://entryscape.com",
+    "productLogoURL": "https://entryscape.com/logo.png",
+    "supportText": "Need help, or have questions? Contact us at <a href=\"mailto:support@entryscape.com\">support@entryscape.com</a>, we'd love to help.",
+    "copyright": "Copyright © __YEAR__ MetaSolutions AB. All rights reserved.",
+    "signupIntro": "Welcome to ENTRYSCAPE!",
+    "signupInstructions": "To get started with ENTRYSCAPE, please click here:",
+    "signupButton": "Confirm your account",
+    "pwresetIntro": "You have received this email because a password reset request for your ENTRYSCAPE account was received.",
+    "pwresetInstructions": "Click the button below to reset your password:",
+    "pwresetButton": "Reset your password",
+    "pwresetOutro": "If you did not request a password reset, no further action is required on your part."
+  },
+  "sv": {
+    "productName": "ENTRYSCAPE",
+    "productURL": "https://entryscape.com",
+    "productLogoURL": "https://entryscape.com/logo.png",
+    "supportText": "Behöver du hjälp eller har du frågor? Kontakta oss på <a href=\"mailto:support@entryscape.com\">support@entryscape.com</a>, vi hjälper gärna till.",
+    "copyright": "Copyright © __YEAR__ MetaSolutions AB.",
+    "signupIntro": "Välkommen till ENTRYSCAPE!",
+    "signupInstructions": "Klicka här för att komma igång med ENTRYSCAPE:",
+    "signupButton": "Bekräfta din användare",
+    "pwresetIntro": "Du har fått det här meddelandet eftersom vi har tagit emot en begäran om återställning av lösenord för ditt ENTRYSCAPE-konto.",
+    "pwresetInstructions": "Klicka på knappen nedan för att återställa ditt lösenord:",
+    "pwresetButton": "Återställ ditt lösenord",
+    "pwresetOutro": "Om du inte begärt återställning av lösenord krävs det ingen åtgärd från din sida."
+  },
+  "de": {
+    "productName": "ENTRYSCAPE",
+    "productURL": "https://entryscape.com",
+    "productLogoURL": "https://entryscape.com/logo.png",
+    "supportText": "Brauchen Sie Hilfe oder haben Sie Fragen? Kontaktieren Sie uns unter <a href=\"mailto:support@entryscape.com\">support@entryscape.com</a>, wir helfen Ihnen gerne weiter.",
+    "copyright": "Copyright © __YEAR__ MetaSolutions AB. Alle Rechte vorbehalten.",
+    "signupIntro": "Willkommen zu ENTRYSCAPE!",
+    "signupInstructions": "Klicken Sie hier um mit ENTRYSCAPE zu beginnen:",
+    "signupButton": "Bestätigen Sie ihr Konto",
+    "pwresetIntro": "Sie haben diese E-Mail erhalten weil wir eine Aufforderung zum Zurücksetzen des Passworts für Ihr ENTRYSCAPE-Konto erhalten haben.",
+    "pwresetInstructions": "Klicken Sie auf die Schaltfläche unten, um Ihr Passwort zurückzusetzen:",
+    "pwresetButton": "Setze Passwort zurück",
+    "pwresetOutro": "Falls Sie kein Zurücksetzen des Kennworts angefordert haben sind keine weiteren Maßnahmen ihrerseits erforderlich."
+  }
 }
