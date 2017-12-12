@@ -16,9 +16,21 @@ if (!fs.existsSync(outDir)){
     fs.mkdirSync(outDir);
 }
 
+var path = require('path');
 var Mailgen = require('mailgen');
+var htmlMinify = require('html-minifier').minify;
+
+var minify = function(html) {
+    return htmlMinify(html, {removeComments: true, collapseWhitespace: true, minifyCSS: true, keepClosingSlash: true, caseSensitive: true});
+};
 
 var mailGenerator = new Mailgen({
+    /*
+    theme: {
+        path: path.resolve('theme/index.html'),
+        plaintextPath: path.resolve('theme/index.txt')
+    },
+    */
     theme: 'salted',
     product: {
         name: conf.productName,
@@ -44,7 +56,7 @@ var emailSignup = {
     }
 };
 
-fs.writeFileSync(outDir + 'signup.html', mailGenerator.generate(emailSignup), 'utf8');
+fs.writeFileSync(outDir + 'signup.html', minify(mailGenerator.generate(emailSignup)), 'utf8');
 fs.writeFileSync(outDir + 'signup.txt', mailGenerator.generatePlaintext(emailSignup), 'utf8');
 
 var emailPwReset = {
@@ -65,5 +77,5 @@ var emailPwReset = {
     }
 };
 
-fs.writeFileSync(outDir + 'pwreset.html', mailGenerator.generate(emailPwReset), 'utf8');
+fs.writeFileSync(outDir + 'pwreset.html', minify(mailGenerator.generate(emailPwReset)), 'utf8');
 fs.writeFileSync(outDir + 'pwreset.txt', mailGenerator.generatePlaintext(emailPwReset), 'utf8');
