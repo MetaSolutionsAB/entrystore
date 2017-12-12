@@ -87,8 +87,8 @@ for (var lang in conf) {
     lang = '_' + lang;
   }
 
-  fs.writeFileSync(outDir + 'signup' + lang + '.html', minify(mailGenerator.generate(emailSignup)), 'utf8');
-  fs.writeFileSync(outDir + 'signup' + lang + '.txt', mailGenerator.generatePlaintext(emailSignup), 'utf8');
-  fs.writeFileSync(outDir + 'pwreset' + lang + '.html', minify(mailGenerator.generate(emailPwReset)), 'utf8');
-  fs.writeFileSync(outDir + 'pwreset' + lang + '.txt', mailGenerator.generatePlaintext(emailPwReset), 'utf8');
+  fs.writeFileSync(outDir + 'email_signup' + lang + '.html', minify(mailGenerator.generate(emailSignup)), 'utf8');
+  fs.writeFileSync(outDir + 'email_pwreset' + lang + '.html', minify(mailGenerator.generate(emailPwReset)), 'utf8');
+  //fs.writeFileSync(outDir + 'email_signup' + lang + '.txt', mailGenerator.generatePlaintext(emailSignup), 'utf8');
+  //fs.writeFileSync(outDir + 'email_pwreset' + lang + '.txt', mailGenerator.generatePlaintext(emailPwReset), 'utf8');
 }
