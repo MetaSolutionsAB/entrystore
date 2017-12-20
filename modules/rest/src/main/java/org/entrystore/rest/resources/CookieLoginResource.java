@@ -16,12 +16,15 @@
 
 package org.entrystore.rest.resources;
 
+import org.entrystore.config.Config;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.BasicVerifier;
-import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.auth.UserInfo;
+import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.util.SimpleHTML;
-import org.restlet.data.CookieSetting;
+import org.restlet.Context;
+import org.restlet.Request;
+import org.restlet.Response;
 import org.restlet.data.Form;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
@@ -30,8 +33,9 @@ import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
+import java.util.List;
 
 /**
  * This resource checks credentials and sets a cookie.
@@ -45,6 +49,17 @@ public class CookieLoginResource extends BaseResource {
 
 	private static Logger log = LoggerFactory.getLogger(CookieLoginResource.class);
 
+	private static List<String> passwordLoginWhitelist;
+
+	@Override
+	public void init(Context c, Request request, Response response) {
+		super.init(c, request, response);
+		Config config = getRM().getConfiguration();
+		if ("whitelist".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD))) {
+			this.passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST, new ArrayList());
+		}
+	}
+
 	@Post
 	public void acceptRepresentation(Representation r) {
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
@@ -57,36 +72,28 @@ public class CookieLoginResource extends BaseResource {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
-		
-		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName.toLowerCase());
-		if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
-			// 24h default, lifetime in seconds
-			int maxAge = 24 * 3600;
-			if (maxAgeStr != null) {
-				try {
-					maxAge = Integer.parseInt(maxAgeStr);
-				} catch (NumberFormatException nfe) {}
-			}
-			
-			String token = Password.getRandomBase64(128);
-			Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
-			LoginTokenCache.getInstance().putToken(token, new UserInfo(userName, loginExpiration));
-			
-			CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
-			tokenCookieSetting.setMaxAge(maxAge);
-			tokenCookieSetting.setPath(getRM().getRepositoryURL().getPath());
-	        getResponse().getCookieSettings().add(tokenCookieSetting);
-	        getResponse().setStatus(Status.SUCCESS_OK);
 
-			log.debug("User " + userName + " received authentication token that will expire on " + loginExpiration);
-			if (html) {
-				getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
-			}
-		} else {
+		if (passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(userName.toLowerCase())) {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 			if (html) {
 				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 			}
+			return;
+		}
+
+		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName.toLowerCase());
+		if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
+			new CookieVerifier(getRM()).createAuthToken(userName, maxAgeStr, getResponse());
+	        getResponse().setStatus(Status.SUCCESS_OK);
+			if (html) {
+				getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
+			}
+			return;
+		}
+
+		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+		if (html) {
+			getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 		}
 	}
 

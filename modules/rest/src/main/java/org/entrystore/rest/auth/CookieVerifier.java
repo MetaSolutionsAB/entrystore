@@ -18,6 +18,9 @@ package org.entrystore.rest.auth;
 
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
+import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Cookie;
@@ -40,10 +43,13 @@ public class CookieVerifier implements Verifier {
 
 	private PrincipalManager pm;
 
+	private RepositoryManager rm;
+
 	private Logger log = LoggerFactory.getLogger(CookieVerifier.class);
 
-	public CookieVerifier(PrincipalManager pm) {
-		this.pm = pm;
+	public CookieVerifier(RepositoryManager rm) {
+		this.rm = rm;
+		this.pm = rm.getPrincipalManager();
 	}
 
 	public int verify(Request request, Response response) {
@@ -88,7 +94,21 @@ public class CookieVerifier implements Verifier {
 			pm.setAuthenticatedUserURI(userURI);
 		}
 	}
-	
+
+	public boolean userExists(String userName) {
+		URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			Entry userEntry = pm.getPrincipalEntry(userName);
+			if (userEntry != null) {
+				return true;
+			}
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
+		return false;
+	}
+
 	public static void cleanCookies(String cookieName, Request request, Response response) {
 		response.getCookieSettings().removeAll(cookieName);
 		Series<Cookie> cookies = request.getCookies();		
@@ -172,6 +192,27 @@ public class CookieVerifier implements Verifier {
 		}
 
 		return result.toString();
+	}
+
+	public void createAuthToken(String userName, String maxAgeStr, Response response) {
+		// 24h default, lifetime in seconds
+		int maxAge = rm.getConfiguration().getInt(Settings.AUTH_TOKEN_MAX_AGE, 24 * 3600);
+		if (maxAgeStr != null) {
+			try {
+				maxAge = Integer.parseInt(maxAgeStr);
+			} catch (NumberFormatException nfe) {}
+		}
+
+		String token = Password.getRandomBase64(128);
+		Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
+		LoginTokenCache.getInstance().putToken(token, new UserInfo(userName, loginExpiration));
+
+		log.debug("User " + userName + " receives authentication token that will expire on " + loginExpiration);
+
+		CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
+		tokenCookieSetting.setMaxAge(maxAge);
+		tokenCookieSetting.setPath(rm.getRepositoryURL().getPath());
+		response.getCookieSettings().add(tokenCookieSetting);
 	}
 
 }

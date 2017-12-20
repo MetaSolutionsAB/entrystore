@@ -36,13 +36,13 @@ import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
-import org.entrystore.repository.util.DataCorrection;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.ExistingUserRedirectAuthenticator;
 import org.entrystore.rest.auth.NewUserRedirectAuthenticator;
 import org.entrystore.rest.auth.SimpleAuthenticator;
 import org.entrystore.rest.filter.CORSFilter;
+import org.entrystore.rest.filter.IgnoreAuthFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
 import org.entrystore.rest.resources.*;
@@ -220,12 +220,6 @@ public class EntryStoreApplication extends Application {
 			} else {
 				log.warn("Backup is disabled in configuration");
 			}
-
-			boolean correct = config.getBoolean("entrystore.repository.store.correct-metadata", false);
-			if (correct) {
-				DataCorrection mc = new DataCorrection(rm);
-				mc.fixMetadataGlobally();
-			}
 		}
 	}
 
@@ -242,6 +236,8 @@ public class EntryStoreApplication extends Application {
 		Config config = rm.getConfiguration();
 		Router router = new Router(getContext());
 		//router.setDefaultMatchingMode(Template.MODE_STARTS_WITH);
+
+		boolean passwordAuthOff = "off".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD, "on"));
 
 		reservedNames.add("favicon.ico");
 		
@@ -267,11 +263,20 @@ public class EntryStoreApplication extends Application {
 
 		// authentication resources
 		reservedNames.add("auth");
+		if (!passwordAuthOff) {
+			// we allow login with username/password
+			router.attach("/auth/cookie", CookieLoginResource.class);
+			router.attach("/auth/login", LoginResource.class);
+		}
 		router.attach("/auth/user", UserResource.class);
-		router.attach("/auth/cookie", CookieLoginResource.class);
 		router.attach("/auth/basic", UserResource.class);
-		router.attach("/auth/login", LoginResource.class);
 		router.attach("/auth/logout", LogoutResource.class);
+
+		// CAS
+		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_CAS, "off"))) {
+			router.attach("/auth/cas", CasLoginResource.class);
+			log.info("CAS authentication enabled");
+		}
 
 		// signup
 		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP, "off"))) {
@@ -335,14 +340,24 @@ public class EntryStoreApplication extends Application {
 
 		router.attachDefault(DefaultResource.class);
 
-		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(pm), pm);
-		ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm), pm);
-		
+		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm), pm);
+
+		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
-		
-		cookieAuth.setNext(basicAuth);
-		basicAuth.setNext(jsCallback);
+
+		ignoreAuth.setNext(cookieAuth);
+
+		// if password authentication is disabled we only allow cookie verification (as this may verify auth_tokens
+		// generated through a CAS-login), but not basic authentication (as this always requires username/password)
+		if (passwordAuthOff) {
+			cookieAuth.setNext(jsCallback);
+		} else {
+			ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm, config), pm);
+			cookieAuth.setNext(basicAuth);
+			basicAuth.setNext(jsCallback);
+		}
+
 		jsCallback.setNext(modLockOut);
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
@@ -372,11 +387,11 @@ public class EntryStoreApplication extends Application {
 					return super.beforeHandle(request, response);
 				}
 			};
-			referenceFix.setNext(cookieAuth);
+			referenceFix.setNext(ignoreAuth);
 			return referenceFix;
 		} else {
 			log.warn("Rewriting of base reference has been manually disabled");
-			return cookieAuth;
+			return ignoreAuth;
 		}
 	}
 	

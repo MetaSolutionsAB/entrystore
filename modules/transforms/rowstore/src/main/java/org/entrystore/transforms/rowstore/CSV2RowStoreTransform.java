@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URL;
 import java.util.Set;
 
 /**

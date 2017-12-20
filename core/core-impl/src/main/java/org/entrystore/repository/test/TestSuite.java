@@ -87,14 +87,14 @@ public class TestSuite {
 			Entry donaldE = pm.createResource(null, GraphType.User, null, null);
 			pm.setPrincipalName(donaldE.getResourceURI(), "Donald");
 			//donaldE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
-			setMetadata(donaldE, "Donald Duck", "I am easily provoked and have an occasionally explosive temper, so thread carefully around me.", null, null, null);
+			setMetadata(donaldE, "Donald Duck", "I am easily provoked and have an occasionally explosive temper, so thread carefully around me.", "duck", null, null);
 			User donald = (User) donaldE.getResource();
 			donald.setSecret("donalddonald");
 
 			//Daisy Duck user
 			Entry daisyE = pm.createResource(null, GraphType.User, null, null);
 			pm.setPrincipalName(daisyE.getResourceURI(), "Daisy");
-			setMetadata(daisyE, "Daisy Duck", "I am Donald's girlfriend, but I am far more sophisticated!", null, null, null);
+			setMetadata(daisyE, "Daisy Duck", "I am Donald's girlfriend, but I am far more sophisticated!", "duck", null, null);
 			//daisyE.addAllowedPrinccontextipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			User daisy = (User) daisyE.getResource();
 			daisy.setSecret("daisydaisy");
@@ -102,7 +102,7 @@ public class TestSuite {
 			//Mickey Mouse user
 			Entry mickeyE = pm.createResource(null, GraphType.User, null, null);
 			pm.setPrincipalName(mickeyE.getResourceURI(), "Mickey");
-			setMetadata(mickeyE, "Mickey Mouse", "I am older than I look although I still speek in a famously shy, falsetto voice.", null, null, null);		
+			setMetadata(mickeyE, "Mickey Mouse", "I am older than I look although I still speek in a famously shy, falsetto voice.", "mouse", null, null);
 			//mickeyE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			User mickey = (User) mickeyE.getResource();
 			mickey.setSecret("mickeymickey");
@@ -130,7 +130,7 @@ public class TestSuite {
 
 			//The mouse context.
 			Entry mouseE = cm.createResource(null, GraphType.Context, null, null);
-			setMetadata(mouseE, "Mickey Mouse's place", "Mickey's creephole with old cheese and other goodies.", null, null, null);
+			setMetadata(mouseE, "Mickey Mouse's place", "Mickey's creephole with old cheese and other goodies.", "mouse", null, null);
 			mouseE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			Context mouse = (Context) mouseE.getResource();
 			cm.setName(mouseE.getResource().getURI(), "mouse");
@@ -182,7 +182,7 @@ public class TestSuite {
 
 			//A plain Link to Daisy at wikipedia.
 			Entry linkToDaisyEntry = mouse.createLink(null, URI.create("http://en.wikipedia.org/wiki/Daisy_Duck"), null);
-			setMetadata(linkToDaisyEntry, "Donalds girlfriend", "Seriously Donald, you have been dating this girl for ages, isn't it time to make the move soon?", null, null, null);
+			setMetadata(linkToDaisyEntry, "Donalds girlfriend", "Seriously Donald, you have been dating this girl for ages, isn't it time to make the move soon?", "duck", null, null);
 
 
 			//A plain Link to Daisy at wikipedia.
@@ -190,7 +190,7 @@ public class TestSuite {
 			HashSet<URI> mdRead = new HashSet<URI>();
 			mdRead.add(pm.getPrincipalEntry("Daisy").getResourceURI());
 			linkToDonaldEntry.setAllowedPrincipalsFor(AccessProperty.ReadMetadata, mdRead);
-			setMetadata(linkToDonaldEntry, "Donald the man", "Daisy, Donald is a really nice chap, maybe you two should get married soon?", null, null, null);
+			setMetadata(linkToDonaldEntry, "Donald the man", "Daisy, Donald is a really nice chap, maybe you two should get married soon?", "duck", null, null);
 
 
 			//The duck context
@@ -207,15 +207,15 @@ public class TestSuite {
 
 			//A link to the wikipedia page on the nephews.
 			Entry nephews = duck.createLink(null, URI.create("http://en.wikipedia.org/wiki/Huey%2C_Dewey%2C_and_Louie"), subListEntry.getResourceURI());
-			setMetadata(nephews, "Huey, Dewey, and Louie", "These are Donalds sister Dumbellas children.", null, null, null);
+			setMetadata(nephews, "Huey, Dewey, and Louie", "These are Donalds sister Dumbellas children.", "nephew", null, null);
 
 			//A link to the wikipedia page on the family tree :-).
 			Entry familyTree = duck.createLink(null, URI.create("http://en.wikipedia.org/wiki/Duck_Family_Tree"), subListEntry.getResourceURI());
-			setMetadata(familyTree, "Family tree", "The duck family from Dingus to Donald, Daisy is not in there yet...", null, null, null);
+			setMetadata(familyTree, "Family tree", "The duck family from Dingus to Donald, Daisy is not in there yet...", "family", null, null);
 
 			//A picture of the fourth nephew that sometimes appears.
 			Entry phooey = duck.createResource(null, GraphType.None, ResourceType.NamedResource, null);
-			setMetadata(phooey, "Phooey Duck", "A mysterius fourth nephew, a freak of nature. Drawn by accident?", null, null, null);
+			setMetadata(phooey, "Phooey Duck", "A mysterius fourth nephew, a freak of nature. Drawn by accident?", "nephew", null, null);
 
 			//A picture of the fourth nephew that sometimes appears.
 			//TODO upload jpeg as well.

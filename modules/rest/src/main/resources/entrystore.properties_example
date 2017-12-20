@@ -72,6 +72,7 @@ entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
 entrystore.solr.url=http://localhost:8080/solr/entrystore-core1
 #entrystore.solr.url=/srv/entrystore/files/solr/
+entrystore.solr.ngram-all-literals=off
 entrystore.solr.extract-fulltext=off
 
 ## OAI-PMH harvester (not to confuse with the OAI-PMH target which is an own WebApp
@@ -81,6 +82,11 @@ entrystore.solr.extract-fulltext=off
 ## Cache for metadata instances produced by the harvesting target
 # entrystore.repository.cache=on|off (default: off)
 # entrystore.repository.cache.path=/srv/entrystore/files/cache/
+
+## Tracking of deleted entries (needed for deleted records in OAI-PMH)
+# entrystore.repository.track-deleted-entries=false
+## Cleanup of all triples that track deleted entries
+# entrystore.repository.track-deleted-entries.cleanup=false
 
 ## Temporary override of the admin-password
 # entrystore.auth.adminpw=newtempadminpw

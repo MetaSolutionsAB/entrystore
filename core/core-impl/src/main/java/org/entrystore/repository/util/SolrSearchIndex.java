@@ -18,13 +18,13 @@ package org.entrystore.repository.util;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.collect.Queues;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
-import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
 import org.apache.solr.client.solrj.request.UpdateRequest;
+import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.client.solrj.response.QueryResponse;
-import org.apache.solr.client.solrj.response.UpdateResponse;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
@@ -51,15 +51,22 @@ import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.xml.datatype.DatatypeConstants;
+import javax.xml.datatype.XMLGregorianCalendar;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.concurrent.ConcurrentMap;
 
 
@@ -76,6 +83,8 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private boolean extractFulltext = false;
 
+	private boolean ngramAllLiterals = false;
+
 	private RepositoryManager rm;
 
 	private final SolrServer solrServer;
@@ -84,43 +93,83 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
 
+	private final Queue<URI> deleteQueue = Queues.newConcurrentLinkedQueue();
+
+	private SimpleDateFormat solrDateFormatter;
+
 	public class SolrInputDocumentSubmitter extends Thread {
 
 		@Override
 		public void run() {
 			while (!interrupted()) {
 				postQueue.cleanUp();
-				if (postQueue.estimatedSize() > 0) {
-					UpdateRequest req = new UpdateRequest();
-					req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
+				int batchCount = 0;
 
-					synchronized (postQueue) {
-						ConcurrentMap<URI, SolrInputDocument> postQueueMap = postQueue.asMap();
-						Iterator<URI> it = postQueueMap.keySet().iterator();
-						for (int i = 0; i < BATCH_SIZE && it.hasNext(); i++) {
-							URI key = it.next();
-							SolrInputDocument doc = postQueueMap.get(key);
-							postQueueMap.remove(key, doc);
-							if (doc == null) {
-								log.warn("Value for key " + key + " is null in Solr submit queue");
+				if (postQueue.estimatedSize() > 0 || deleteQueue.size() > 0) {
+
+					if (deleteQueue.size() > 0) {
+						StringBuilder deleteQuery = new StringBuilder("uri:(");
+						synchronized (deleteQueue) {
+							while (batchCount < BATCH_SIZE) {
+								URI uri = deleteQueue.poll();
+								if (uri == null) {
+									break;
+								}
+								if (batchCount > 0) {
+									deleteQuery.append(" OR ");
+								}
+								deleteQuery.append(StringUtils.replace(uri.toString(), ":", "\\:"));
+								batchCount++;
 							}
-							req.add(doc);
+						}
+						deleteQuery.append(")");
+
+						if (batchCount > 0) {
+							UpdateRequest delReq = new UpdateRequest();
+							String deleteQueryStr = deleteQuery.toString();
+							delReq.deleteByQuery(deleteQueryStr);
+							try {
+								log.info("Sending request to delete " + batchCount + " entries from Solr, " + deleteQueue.size() + " entries remaining in delete queue");
+								delReq.process(solrServer);
+							} catch (SolrServerException sse) {
+								log.error(sse.getMessage(), sse);
+							} catch (IOException ioe) {
+								log.error(ioe.getMessage(), ioe);
+							}
 						}
 					}
 
-					try {
-						postQueue.cleanUp();
-						log.info("Sending commit with " + req.getDocuments().size() + " entries to Solr, "
-								+ postQueue.estimatedSize() + " documents remaining in post queue");
-						req.process(solrServer);
-					} catch (SolrServerException sse) {
-						log.error(sse.getMessage(), sse);
-					} catch (IOException ioe) {
-						log.error(ioe.getMessage(), ioe);
+					if (postQueue.estimatedSize() > 0) {
+						UpdateRequest addReq = new UpdateRequest();
+						synchronized (postQueue) {
+							ConcurrentMap<URI, SolrInputDocument> postQueueMap = postQueue.asMap();
+							Iterator<URI> it = postQueueMap.keySet().iterator();
+							while (batchCount < BATCH_SIZE && it.hasNext()) {
+								URI key = it.next();
+								SolrInputDocument doc = postQueueMap.get(key);
+								postQueueMap.remove(key, doc);
+								if (doc == null) {
+									log.warn("Value for key " + key + " is null in Solr submit queue");
+								}
+								addReq.add(doc);
+								batchCount++;
+							}
+						}
+
+						try {
+							postQueue.cleanUp();
+							log.info("Sending " + addReq.getDocuments().size() + " entries to Solr, " + postQueue.estimatedSize() + " entries remaining in post queue");
+							addReq.process(solrServer);
+						} catch (SolrServerException sse) {
+							log.error(sse.getMessage(), sse);
+						} catch (IOException ioe) {
+							log.error(ioe.getMessage(), ioe);
+						}
 					}
+
 				} else {
 					try {
-						Thread.sleep(2000);
+						Thread.sleep(1000);
 					} catch (InterruptedException ie) {
 						log.info("Solr document submitter got interrupted, shutting down submitter thread");
 						return;
@@ -132,10 +181,12 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public SolrSearchIndex(RepositoryManager rm, SolrServer solrServer) {
+		solrDateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+		solrDateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"));
 		this.rm = rm;
 		this.solrServer = solrServer;
-		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(
-				Settings.SOLR_EXTRACT_FULLTEXT, "off"));
+		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_EXTRACT_FULLTEXT, "off"));
+		this.ngramAllLiterals = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_NGRAM_ALL_LITERALS, "off"));
 		documentSubmitter = new SolrInputDocumentSubmitter();
 		documentSubmitter.start();
 	}
@@ -148,7 +199,6 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public void clearSolrIndex(SolrServer solrServer) {
 		UpdateRequest req = new UpdateRequest();
-		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
 		req.deleteByQuery("*:*");
 		try {
 			req.process(solrServer);
@@ -161,8 +211,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public void clearSolrIndexFromContextEntries(SolrServer solrServer, Entry contextEntry) {
 		UpdateRequest req = new UpdateRequest();
-		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
-		req.deleteByQuery("context:"+contextEntry.getResourceURI().toString().replace(":", "\\:"));
+		req.deleteByQuery("context:" + StringUtils.replace(contextEntry.getResourceURI().toString(), ":", "\\:"));
 		try {
 			req.process(solrServer);
 		} catch (SolrServerException sse) {
@@ -171,6 +220,7 @@ public class SolrSearchIndex implements SearchIndex {
 			log.error(ioe.getMessage(), ioe);
 		}
 	}
+
 	/**
 	 * Reindexes the Solr index. Does not return before the process is
 	 * completed. All subsequent calls to this method are ignored until other
@@ -226,7 +276,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	public static SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
+	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
 		Graph mdGraph = entry.getMetadataGraph();
 		URI resourceURI = entry.getResourceURI();
 
@@ -429,10 +479,26 @@ public class SolrSearchIndex implements SearchIndex {
 					// predicate value is included in the parameter name, the object value is the field value
 					doc.addField("metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
 
+					if (this.ngramAllLiterals) {
+						doc.addField("metadata.predicate.literal_ng." + predMD5Trunc8, l.getLabel());
+					}
+
 					// special handling of integer values, to be used for e.g. sorting
 					if (MetadataUtil.isIntegerLiteral(l)) {
-						// it's a single-value field so we call setField instead of addField just in case there should be
-						doc.setField("metadata.predicate.integer." + predMD5Trunc8, l.longValue());
+						try {
+							// it's a single-value field so we call setField instead of addField just in case there should be
+							doc.setField("metadata.predicate.integer." + predMD5Trunc8, l.longValue());
+						} catch (NumberFormatException nfe) {
+							log.debug("Unable to index integer literal: " + nfe.getMessage() + ". (Subject: " + s.getSubject() + ", Predicate: " + predString + ", Object: " + l.getLabel() + ")");
+						}
+					}
+
+					if (MetadataUtil.isDateLiteral(l)) {
+						try {
+							doc.addField("metadata.predicate.date." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
+						} catch (IllegalArgumentException iae) {
+							log.debug("Unable to index date literal: " + iae.getMessage() + ". (Subject: " + s.getSubject() + ", Predicate: " + predString + ", Object: " + l.getLabel() + ")");
+						}
 					}
 				}
 			}
@@ -455,14 +521,22 @@ public class SolrSearchIndex implements SearchIndex {
 		return doc;
 	}
 
+	private String dateToSolrDateString(XMLGregorianCalendar c) {
+		if (c.getTimezone() == DatatypeConstants.FIELD_UNDEFINED) {
+			c.setTimezone(0);
+		}
+		return solrDateFormatter.format(c.toGregorianCalendar().getTime());
+	}
+
 	public void postEntry(Entry entry) {
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
+			URI entryURI = entry.getEntryURI();
 			synchronized (postQueue) {
-				log.info("Adding document to Solr post queue: " + entry.getEntryURI());
-				postQueue.put(entry.getEntryURI(), constructSolrInputDocument(entry, extractFulltext));
+				log.info("Adding document to Solr post queue: " + entryURI);
+				postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
@@ -470,20 +544,10 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public void removeEntry(Entry entry) {
-		UpdateRequest req = new UpdateRequest();
-		req.setAction(AbstractUpdateRequest.ACTION.COMMIT, false, false);
-		String escapedURI = StringUtils.replace(entry.getEntryURI().toString(), ":", "\\:");
-		req.deleteByQuery("uri:" + escapedURI);
-		try {
-			log.info("Removing document from Solr: " + entry.getEntryURI());
-			UpdateResponse res = req.process(solrServer);
-			if (res.getStatus() > 0) {
-				log.error("Removal request was unsuccessful with status " + res.getStatus());
-			}
-		} catch (SolrServerException sse) {
-			log.error(sse.getMessage(), sse);
-		} catch (IOException ioe) {
-			log.error(ioe.getMessage(), ioe);
+		URI entryURI = entry.getEntryURI();
+		synchronized (deleteQueue) {
+			log.info("Adding entry to Solr delete queue: " + entryURI);
+			deleteQueue.add(entryURI);
 		}
 		//If entry is a context, also remove all entries inside
 		if (entry.getGraphType() == GraphType.Context) {
@@ -491,7 +555,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, SolrServer solrServer, int offset, int limit) throws SolrException {
+	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrServer solrServer, int offset, int limit) {
 		if (query == null) {
 			throw new IllegalArgumentException("Query object must not be null");
 		}
@@ -513,6 +577,9 @@ public class SolrSearchIndex implements SearchIndex {
 		QueryResponse r = null;
 		try {
 			r = solrServer.query(query);
+			if (r.getFacetFields() != null) {
+				facetFields.addAll(r.getFacetFields());
+			}
 			SolrDocumentList docs = r.getResults();
 			hits = docs.getNumFound();
 			for (SolrDocument solrDocument : docs) {
@@ -537,6 +604,7 @@ public class SolrSearchIndex implements SearchIndex {
 		long hits = -1;
 		int limit = query.getRows();
 		int offset = query.getStart();
+		List<FacetField> facetFields = new ArrayList();
 		query.setIncludeScore(true);
 		query.setRequestHandler("dismax");
 		int resultFillIteration = 0;
@@ -549,7 +617,7 @@ public class SolrSearchIndex implements SearchIndex {
 				offset += 10;
 				log.warn("Increasing offset to fill the result limit");
 			}
-			hits = sendQueryForEntryURIs(query, entries, solrServer, offset, -1);
+			hits = sendQueryForEntryURIs(query, entries, facetFields, solrServer, offset, -1);
 			Date before = new Date();
 			for (URI uri : entries) {
 				try {
@@ -582,7 +650,7 @@ public class SolrSearchIndex implements SearchIndex {
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");
 		} while ((limit > result.size()) && (hits > (offset + limit)));
 
-		return new QueryResult(result, hits);
+		return new QueryResult(result, hits, facetFields);
 	}
 
 	public static String extractFulltext(File f) {

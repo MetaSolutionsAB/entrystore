@@ -11,3 +11,6 @@ build.log
 entrystore.properties
 release-update-versions.sh
 _testdata
+package-lock.json
+templates/out/
+templates/node_modules/

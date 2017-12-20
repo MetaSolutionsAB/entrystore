@@ -1023,9 +1023,11 @@ public class ResourceResource extends BaseResource {
 				try {
 					((Data) entry.getResource()).setData(req.getEntity().getStream());
 					entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
-					String mimeType = req.getEntity().getMediaType().toString();
+					String mimeType = MediaType.APPLICATION_OCTET_STREAM.toString();
 					if (parameters.containsKey("mimeType")) {
 						mimeType = parameters.get("mimeType");
+					} else if (req.getEntity().getMediaType() != null) {
+						mimeType = req.getEntity().getMediaType().toString();
 					}
 					entry.setMimetype(mimeType);
 					Disposition disp = req.getEntity().getDisposition();
@@ -1046,7 +1048,7 @@ public class ResourceResource extends BaseResource {
 			
 			if (error != null) {
 				if (textarea) {
-					getResponse().setEntity("<textarea>" + error + "</textarea>", MediaType.TEXT_HTML);
+					getResponse().setEntity("<textarea>{\"error\":\"" + error + "\"}</textarea>", MediaType.TEXT_HTML);
 				} else {
 					JSONObject jsonError = new JSONObject();
 					try {

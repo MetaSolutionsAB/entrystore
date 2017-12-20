@@ -172,7 +172,7 @@
          IndexWriter to write its info stream to solr's log. By default,
          this is enabled here, and controlled through log4j.properties.
       -->
-     <infoStream>true</infoStream>
+     <infoStream>false</infoStream>
   </indexConfig>
 
   <!-- the default high-performance update handler -->
@@ -210,7 +210,7 @@
          have some sort of hard autoCommit to limit the log size.
       -->
      <autoCommit> 
-       <maxTime>${solr.autoCommit.maxTime:15000}</maxTime>
+       <maxTime>${solr.autoCommit.maxTime:6000}</maxTime>
        <maxDocs>${solr.autoCommit.maxDocs:5000}</maxDocs>
        <openSearcher>false</openSearcher>
      </autoCommit>
@@ -536,7 +536,7 @@
     -->
   </admin>
   
-  <requestHandler name="/update" class="solr.XmlUpdateRequestHandler">
+  <requestHandler name="/update" class="solr.UpdateRequestHandler">
     <lst name="defaults">
       <str name="update.processor">dedupe</str>
     </lst>

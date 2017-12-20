@@ -22,14 +22,22 @@ package org.entrystore.repository.config;
  * @author Hannes Ebner
  */
 public class Settings {
-	
-	public static String AUTH_SCHEME = "entrystore.auth.scheme";
 	public static String AUTH_ADMIN_SECRET = "entrystore.auth.adminpw";
 	
 	public static String AUTH_OPENID = "entrystore.auth.openid";
 	public static String AUTH_OPENID_GOOGLE = "entrystore.auth.openid.google";
 	public static String AUTH_OPENID_YAHOO = "entrystore.auth.openid.yahoo";
 	public static String AUTH_OPENID_MYOPENID = "entrystore.auth.openid.myopenid";
+
+	public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.token.max-age";
+
+	public static String AUTH_CAS = "entrystore.auth.cas";
+	public static String AUTH_CAS_VERSION = "entrystore.auth.cas.version";
+	public static String AUTH_CAS_SERVER_URL = "entrystore.auth.cas.server.url";
+	public static String AUTH_CAS_SERVER_LOGIN_URL = "entrystore.auth.cas.server.url.login";
+
+	public static String AUTH_PASSWORD = "entrystore.auth.password";
+	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
 	
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
@@ -76,6 +84,7 @@ public class Settings {
 	public static String SOLR_URL = "entrystore.solr.url";
 	public static String SOLR_REINDEX_ON_STARTUP = "entrystore.solr.reindex-on-startup";
 	public static String SOLR_EXTRACT_FULLTEXT = "entrystore.solr.extract-fulltext";
+	public static String SOLR_NGRAM_ALL_LITERALS = "entrystore.solr.ngram-all-literals";
 
 	public static String REPOSITORY_REWRITE_BASEREFERENCE = "entrystore.repository.rewrite-basereference";
 	
@@ -93,6 +102,9 @@ public class Settings {
 	public static String REPOSITORY_PROVENANCE_INDEXES = "entrystore.repository.provenance.indexes";
 	public static String REPOSITORY_PROVENANCE_TYPE = "entrystore.repository.provenance.type";
 	public static String REPOSITORY_PROVENANCE_REBUILD_ON_STARTUP = "entrystore.repository.provenance.rebuild-on-startup";
+
+	public static String REPOSITORY_TRACK_DELETED = "entrystore.repository.track-deleted-entries";
+	public static String REPOSITORY_TRACK_DELETED_CLEANUP = "entrystore.repository.track-deleted-entries.cleanup";
 
 	public static String SMTP_HOST = "entrystore.smtp.host";
 	public static String SMTP_PORT = "entrystore.smtp.port";
@@ -125,6 +137,8 @@ public class Settings {
 	public static String TRAVERSAL_PROFILE = "entrystore.traversal";
 
 	public static String ROWSTORE_URL = "entrystore.rowstore.url";
+
+	public static String HTTPS_DISABLE_VERIFICATION = "entrystore.https.disable-verification";
 	
 	private Settings() {
 	}

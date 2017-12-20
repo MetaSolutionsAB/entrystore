@@ -60,7 +60,7 @@ import java.util.Set;
  */
 public abstract class BaseResource extends ServerResource {
 	
-	protected HashMap<String,String> parameters;
+	protected HashMap<String, String> parameters;
 	
 	MediaType format;
 	

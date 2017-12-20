@@ -18,6 +18,7 @@ package org.entrystore.rest.auth;
 
 import org.entrystore.Entry;
 import org.entrystore.config.Config;
+import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.NS;
 import org.openrdf.model.Graph;
@@ -32,6 +33,7 @@ import javax.mail.Session;
 import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
+import javax.security.auth.login.Configuration;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -71,8 +73,14 @@ public class Signup {
 		String templatePath = null;
 		if (resetPassword) {
 			templatePath = config.getString(Settings.PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+			if (templatePath == null) {
+				templatePath = new File(ConfigurationManager.getConfigurationURI("email_pwreset.html")).getAbsolutePath();
+			}
 		} else {
 			templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+			if (templatePath == null) {
+				templatePath = new File(ConfigurationManager.getConfigurationURI("email_signup.html")).getAbsolutePath();
+			}
 		}
 
 		if (host == null) {
@@ -130,9 +138,11 @@ public class Signup {
 
 			String templateHTML = null;
 			if (templatePath != null) {
+				log.debug("Loading email template from " + templatePath);
 				templateHTML = readFile(templatePath, Charset.defaultCharset());
 			}
 			if (templateHTML == null) {
+				log.debug("Unable to load email template, falling back to inline creation");
 				StringBuilder sb = new StringBuilder();
 				sb.append("<html><body style=\"font-family:verdana;font-size:10pt;\"><div><br/>");
 				sb.append("<h3>Email address confirmation necessary</h3>");

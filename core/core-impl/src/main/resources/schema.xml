@@ -78,10 +78,10 @@ lexicographic ordering isn't equal to the numeric ordering) -->
   a string value that isn't human-readable in its internal form,
   but with a lexicographic ordering the same as the numeric ordering,
   so that range queries work correctly. -->
-        <fieldtype name="sint" class="solr.SortableIntField" sortMissingLast="true" omitNorms="true"/>
-        <fieldtype name="slong" class="solr.SortableLongField" sortMissingLast="true" omitNorms="true"/>
-        <fieldtype name="sfloat" class="solr.SortableFloatField" sortMissingLast="true" omitNorms="true"/>
-        <fieldtype name="sdouble" class="solr.SortableDoubleField" sortMissingLast="true" omitNorms="true"/>
+        <fieldtype name="sint" class="solr.TrieIntField" sortMissingLast="true" omitNorms="true"/>
+        <fieldtype name="slong" class="solr.TrieLongField" sortMissingLast="true" omitNorms="true"/>
+        <fieldtype name="sfloat" class="solr.TrieFloatField" sortMissingLast="true" omitNorms="true"/>
+        <fieldtype name="sdouble" class="solr.TrieDoubleField" sortMissingLast="true" omitNorms="true"/>
 
 
         <!-- The format for this date field is of the form 1995-12-31T23:59:59Z, and
@@ -217,6 +217,8 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <dynamicField name="metadata.predicate.uri.*" type="string" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.literal.*" type="text" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.literal_s.*" type="string" indexed="true" multiValued="true"/>
+        <dynamicField name="metadata.predicate.literal_ng.*" type="text_ngram" indexed="true" multiValued="true"/>
+        <dynamicField name="metadata.predicate.date.*" type="date" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.integer.*" type="slong" indexed="true" multiValued="false"/>
         <field name="metadata.object.uri" type="string" indexed="true" multiValued="true"/>
         <field name="metadata.object.literal" type="text" indexed="true" multiValued="true"/>

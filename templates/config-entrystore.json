@@ -1,0 +1,16 @@
+{
+  "en": {
+    "productName": "EntryStore",
+    "productURL": "http://entrystore.org",
+    "productLogoURL": "http://entrystore.org/logo.png",
+    "supportText": "Need help, or have questions? Just reply to this email, we'd love to help.",
+    "copyright": "Copyright © __YEAR__ MetaSolutions AB. All rights reserved.",
+    "signupIntro": "Welcome to EntryStore!",
+    "signupInstructions": "To get started with your EntryStore account, please click here:",
+    "signupButton": "Confirm your account",
+    "pwresetIntro": "You have received this email because a password reset request for your EntryStore account was received.",
+    "pwresetInstructions": "Click the button below to reset your password:",
+    "pwresetButton": "Reset your password",
+    "pwresetOutro": "If you did not request a password reset, no further action is required on your part."
+  }
+}

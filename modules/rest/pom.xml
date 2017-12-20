@@ -7,12 +7,12 @@
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-modules</artifactId>
-        <version>4.4.1</version>
+        <version>4.5</version>
     </parent>
     <groupId>org.entrystore</groupId>
     <artifactId>entrystore-rest</artifactId>
     <packaging>war</packaging>
-    <version>4.4.1</version>
+    <version>4.5</version>
     <name>EntryStore REST</name>
 
     <build>
@@ -168,7 +168,7 @@
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20131018</version>
+            <version>20170516</version>
         </dependency>
         <dependency>
             <groupId>org.codehaus.jackson</groupId>
@@ -221,5 +221,16 @@
             <artifactId>recaptcha4j</artifactId>
             <version>0.0.7</version>
         </dependency>
+        <dependency>
+            <groupId>org.jasig.cas.client</groupId>
+            <artifactId>cas-client-core</artifactId>
+            <version>3.4.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jasig.cas.client</groupId>
+            <artifactId>cas-client-support-saml</artifactId>
+            <version>3.4.1</version>
+        </dependency>
     </dependencies>
+
 </project>
