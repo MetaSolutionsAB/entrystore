@@ -346,7 +346,7 @@ public class SolrSearchIndex implements SearchIndex {
 		// titles
 		Map<String, String> titles = EntryUtil.getTitles(entry);
 		if (titles != null && titles.size() > 0) {
-			Set<String> langs = new HashSet<String>();
+			Set<String> langs = new HashSet<>();
 			for (String title : titles.keySet()) {
 				doc.addField("title", title, 10);
 				// we also store title.{lang} as dynamic field to be able to

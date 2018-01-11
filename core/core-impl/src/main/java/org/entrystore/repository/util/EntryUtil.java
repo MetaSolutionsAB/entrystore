@@ -43,9 +43,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -480,13 +480,14 @@ public class EntryUtil {
 	 */
 	public static Map<String, String> getTitles(Entry entry) {
 		ValueFactory vf = new ValueFactoryImpl();
-		Set<URI> titlePredicates = new HashSet<URI>();
-		titlePredicates.add(new URIImpl(NS.dcterms + "title"));
-		titlePredicates.add(new URIImpl(NS.dc + "title"));
-		titlePredicates.add(new URIImpl(NS.skos + "prefLabel"));
-		titlePredicates.add(new URIImpl(NS.skos + "altLabel"));
-		titlePredicates.add(new URIImpl(NS.skos + "hiddenLabel"));
-		titlePredicates.add(new URIImpl(NS.rdfs + "label"));
+		List<URI> titlePredicates = new ArrayList<>();
+		titlePredicates.add(vf.createURI(NS.foaf, "name"));
+		titlePredicates.add(vf.createURI(NS.dcterms, "title"));
+		titlePredicates.add(vf.createURI(NS.dc, "title"));
+		titlePredicates.add(vf.createURI(NS.skos, "prefLabel"));
+		titlePredicates.add(vf.createURI(NS.skos, "altLabel"));
+		titlePredicates.add(vf.createURI(NS.skos, "hiddenLabel"));
+		titlePredicates.add(vf.createURI(NS.rdfs, "label"));
 		return getLiteralValues(entry, titlePredicates);
 	}
 	
@@ -501,7 +502,7 @@ public class EntryUtil {
 	 */
 	public static Map<String, String> getDescriptions(Entry entry) {
 		ValueFactory vf = new ValueFactoryImpl();
-		Set<URI> descPreds = new HashSet<URI>();
+		List<URI> descPreds = new ArrayList<>();
 		descPreds.add(vf.createURI(NS.dcterms, "description"));
 		descPreds.add(vf.createURI(NS.dc, "description"));
 		return getLiteralValues(entry, descPreds);
@@ -517,9 +518,9 @@ public class EntryUtil {
 	 */
 	public static Map<String, String> getTagLiterals(Entry entry) {
 		ValueFactory vf = new ValueFactoryImpl();
-		Set<URI> preds = new HashSet<URI>();
-		preds.add(vf.createURI(NS.dc, "subject"));
+		List<URI> preds = new ArrayList<>();
 		preds.add(vf.createURI(NS.dcterms, "subject"));
+		preds.add(vf.createURI(NS.dc, "subject"));
 		preds.add(vf.createURI(NS.dcat, "keyword"));
 		preds.add(vf.createURI(NS.lom, "keyword"));
 		return getLiteralValues(entry, preds);
@@ -547,7 +548,7 @@ public class EntryUtil {
 	 * @param predicates A list of predicates to use for statement matching.
 	 * @return Returns all matching literal-language pairs.
 	 */
-	public static Map<String, String> getLiteralValues(Entry entry, Set<URI> predicates) {
+	public static Map<String, String> getLiteralValues(Entry entry, List<URI> predicates) {
 		if (entry == null || predicates == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
@@ -561,7 +562,7 @@ public class EntryUtil {
 
 		if (graph != null) {
 			URI resourceURI = new URIImpl(entry.getResourceURI().toString());
-			Map<String, String> result = new HashMap<String, String>();
+			Map<String, String> result = new LinkedHashMap<String, String>();
 			for (URI pred : predicates) {
 				Iterator<Statement> stmnts = graph.match(resourceURI, pred, null);
 				while (stmnts.hasNext()) {
