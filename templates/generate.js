@@ -49,6 +49,7 @@ for (var lang in conf) {
 
   var emailSignup = {
     body: {
+      greeting: langStr.greeting,
       name: '__NAME__',
       intro: langStr.signupIntro,
       action: {
@@ -65,6 +66,7 @@ for (var lang in conf) {
 
   var emailPwReset = {
     body: {
+      greeting: langStr.greeting,
       intro: langStr.pwresetIntro,
       action: {
         instructions: langStr.pwresetInstructions,
