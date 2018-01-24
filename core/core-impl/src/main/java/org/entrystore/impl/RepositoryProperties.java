@@ -42,6 +42,8 @@ public class RepositoryProperties {
 	public static final String NAME_PATH = "resource";
 	public static final String MD_PATH_STUB = "metadata_stub";
 	public static final String RELATION = "relations";
+	public static final String INFERRED = "inferred";
+
 
 	public static String getResourcePath(GraphType bt) {
 		switch (bt) {
@@ -101,7 +103,9 @@ public class RepositoryProperties {
 	public static final URI Pipeline;
 	public static final URI PipelineResult;
 	public static final URI None;	
-	public static final URI String;	
+	public static final URI String;
+
+	public static final URI reasoningFacts;
 
 	public static final URI homeContext;
 	public static final URI secret;
@@ -144,7 +148,6 @@ public class RepositoryProperties {
 	public static final URI generatedAtTime;
 	public static final URI wasRevisionOf;
 
-
 	static {
 		ValueFactory vf = ValueFactoryImpl.getInstance();
 		counter = vf.createURI(NSbase + "counter");
@@ -183,7 +186,9 @@ public class RepositoryProperties {
 		None = vf.createURI(NSbase + "None");
 		String = vf.createURI(NSbase + "String");
 		Graph = vf.createURI(NSbase + "Graph");
-		
+
+		reasoningFacts = vf.createURI(NSbase + "reasoningFacts");
+
 		secret = vf.createURI(NSbase + "secret");
 		saltedHashedSecret = vf.createURI(NSbase + "saltedHashedSecret");
 		homeContext = vf.createURI(NSbase + "homeContext");

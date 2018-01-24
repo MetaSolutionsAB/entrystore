@@ -341,6 +341,22 @@ public class EntryResource extends BaseResource {
 			}
 
 			/*
+			 * Inferred Metadata
+			 */
+		    JSONObject inferredMdObj = null;
+		    Metadata inferred = entry.getInferredMetadata();
+		    if (inferred != null) {
+				try {
+					Graph infG = inferred.getGraph();
+					if (infG != null) {
+						inferredMdObj = new JSONObject(RDFJSON.graphToRdfJson(infG));
+						jdilObj.accumulate(RepositoryProperties.INFERRED, inferredMdObj);
+					}
+				} catch (AuthorizationException ae) {
+				}
+			}
+
+			/*
 			 * Local Metadata
 			 */
 			JSONObject localMdObj = null;
@@ -525,7 +541,21 @@ public class EntryResource extends BaseResource {
 										}
 									}
 								}
-								
+
+								/*
+			                     * Inferred Metadata
+			                     */
+								JSONObject inferredChildMdObj = null;
+								Metadata childInferred = entry.getInferredMetadata();
+								if (childInferred != null) {
+									Graph childInfG = childInferred.getGraph();
+									if (childInfG != null) {
+										inferredChildMdObj = new JSONObject(RDFJSON.graphToRdfJson(childInfG));
+										childJSON.accumulate(RepositoryProperties.INFERRED, inferredChildMdObj);
+									}
+								}
+
+
 								if (EntryType.Link.equals(ltC) || EntryType.Local.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 									// get the local metadata
 									Metadata localMD = childEntry.getLocalMetadata();

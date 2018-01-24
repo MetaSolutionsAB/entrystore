@@ -29,6 +29,8 @@ import org.entrystore.Quota;
 import org.entrystore.SearchIndex;
 import org.entrystore.config.Config;
 import org.entrystore.impl.converters.ConverterUtil;
+import org.entrystore.impl.reasoning.ReasoningManagerImpl;
+import org.entrystore.reasoning.ReasoningManager;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryListener;
@@ -81,6 +83,8 @@ import java.util.zip.GZIPOutputStream;
 public class RepositoryManagerImpl implements RepositoryManager {
 
 	private static Logger log = LoggerFactory.getLogger(RepositoryManagerImpl.class);
+
+	private ReasoningManagerImpl reasoningManager = null;
 
 	private Repository repository;
 
@@ -274,9 +278,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PROVENANCE, "off"))) {
 				initializeProvenanceRepository();
 			}
-			
+
+
 			this.initialize();
-			
+
+			if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_REASONING, "off"))) {
+				this.reasoningManager = new ReasoningManagerImpl(this);
+			}
 			String baseURI = config.getString(Settings.BASE_URL);
 			if (instances.containsKey(baseURI) || instances.containsValue(this)) {
 				log.warn("This RepositoryManager instance has already been created, something is wrong");
@@ -376,7 +384,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		
 		return rm;
 	}
-	
+
+	public Repository getRepository() {
+		return this.repository;
+	}
+
+	public ReasoningManager getReasoningManager() {
+		return this.reasoningManager;
+	}
+
 	public PublicRepository getPublicRepository() {
 		return this.publicRepository;
 	}
@@ -479,6 +495,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					} catch (RepositoryException re) {
 						log.error("Error when shutting down Sesame provenance repository: " + re.getMessage());
 					}
+				}
+				if (reasoningManager != null) {
+					log.info("Shutting down reasoning manager");
+					reasoningManager.shutdown();
 				}
 
 				shutdown = true;
@@ -675,6 +695,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			registerListener(updater, RepositoryEvent.EntryUpdated);
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
+			registerListener(updater, RepositoryEvent.InferredMetadataUpdated);
 			registerListener(updater, RepositoryEvent.ResourceUpdated);
 			
 			RepositoryListener remover = new RepositoryListener() {

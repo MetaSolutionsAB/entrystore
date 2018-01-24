@@ -103,6 +103,14 @@ public class Settings {
 	public static String REPOSITORY_PROVENANCE_TYPE = "entrystore.repository.provenance.type";
 	public static String REPOSITORY_PROVENANCE_REBUILD_ON_STARTUP = "entrystore.repository.provenance.rebuild-on-startup";
 
+
+	public static String REPOSITORY_REASONING = "entrystore.repository.reasoning";
+	public static String REPOSITORY_REASONING_PATH = "entrystore.repository.reasoning.path";
+	public static String REPOSITORY_REASONING_INDEXES = "entrystore.repository.reasoning.indexes";
+	public static String REPOSITORY_REASONING_TYPE = "entrystore.repository.reasoning.type";
+	public static String REPOSITORY_REASONING_REBUILD_ON_STARTUP = "entrystore.repository.reasoning.rebuild-on-startup";
+
+
 	public static String REPOSITORY_TRACK_DELETED = "entrystore.repository.track-deleted-entries";
 	public static String REPOSITORY_TRACK_DELETED_CLEANUP = "entrystore.repository.track-deleted-entries.cleanup";
 

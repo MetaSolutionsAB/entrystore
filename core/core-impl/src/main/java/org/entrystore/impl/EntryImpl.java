@@ -31,6 +31,10 @@ import org.entrystore.Provenance;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
+import org.entrystore.impl.reasoning.InferredMetadataImpl;
+import org.entrystore.impl.reasoning.ReasoningManagerImpl;
+import org.entrystore.reasoning.InferredMetadata;
+import org.entrystore.reasoning.ReasoningManager;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
@@ -101,6 +105,7 @@ public class EntryImpl implements Entry {
 	private Boolean readOrWrite;
 	private String originalList;
 	private ProvenanceImpl provenance;
+	private InferredMetadataImpl inferredGraph;
 
 	//A ugly hack to be able to initialize the ContextManager itself.
 	EntryImpl(RepositoryManagerImpl repositoryManager, Repository repository) {
@@ -1509,6 +1514,19 @@ public class EntryImpl implements Entry {
 		return this.provenance;
 	}
 
+	@Override
+	public Metadata getInferredMetadata() {
+		ReasoningManagerImpl rm = (ReasoningManagerImpl) repositoryManager.getReasoningManager();
+		if (rm != null) {
+			if (inferredGraph == null) {
+				inferredGraph = new InferredMetadataImpl(rm, this.repositoryManager, this);
+			}
+			return inferredGraph;
+		} else {
+			return null;
+		}
+	}
+
 	public Resource getResource() {
 		if(resource == null) {
 			ContextImpl contextImpl = ((ContextImpl)this.getContext()); 
@@ -1553,8 +1571,21 @@ public class EntryImpl implements Entry {
 
 		return localMetadata;
 	}
-
 	public Graph getMetadataGraph() {
+		Graph md = this.getMetadataGraphExceptInferred();
+		Graph inf = null;
+		Metadata im = this.getInferredMetadata();
+		if (im != null) {
+			inf = im.getGraph();
+			if (inf != null) {
+				inf.addAll(md);
+				return inf;
+			}
+		}
+		return md;
+	}
+
+	public Graph getMetadataGraphExceptInferred() {
 		if (getEntryType().equals(EntryType.Local) || getEntryType().equals(EntryType.Link)) {
 			if (getLocalMetadata() != null && getLocalMetadata().getGraph() != null) {
 				return getLocalMetadata().getGraph();

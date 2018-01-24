@@ -77,12 +77,19 @@ public interface Entry {
 	 * <li>ExternalMetadata if {@link EntryType#Reference}</li>
 	 * <li>A merge between LocalMetadata and ExternalMetadata if {@link EntryType#LinkReference}.</li></ul>
 	 * 
-	 * The above requires that the ExternalMetadata is cahced locally, if not an empty graph is returned.
-	 * 
+	 * The above requires that the ExternalMetadata is cached locally, if not an empty graph is returned.
+	 * The returned graph will also include all inferred statements if there are any (see
+	 * InferredMetadata).
 	 * 
 	 * @return {@link Graph}, never null.
 	 */
 	Graph getMetadataGraph();
+
+	/**
+	 * Similar to getMetadataGraph, only difference is that it does not include inferred statements.
+	 * @return  {@link Graph}, never null.
+	 */
+	Graph getMetadataGraphExceptInferred();
 
 	/**
 	 * @return the URI for retrieving the metadata from the repository, if the {@link EntryType}
@@ -200,6 +207,15 @@ public interface Entry {
 	 * @return a provenance instance for this entry, may be null.
 	 */
 	Provenance getProvenance();
+
+	/**
+	 * The a graph of inferred statements for this entry.
+	 * Null if nothing is inferred for this entry
+	 * (or if reasoning is not enabled).
+	 *
+	 * @return a graph of inferred statements for this entry, may be null.
+	 */
+	Metadata getInferredMetadata();
 
 	//***************Utility methods************************************//
 	// The functionality below for accessing and updating information   //

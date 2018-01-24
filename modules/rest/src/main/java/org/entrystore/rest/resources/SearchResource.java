@@ -289,7 +289,20 @@ public class SearchResource extends BaseResource {
 										}
 									}
 								}
-								
+
+								/*
+			                     * Inferred Metadata
+			                    */
+								JSONObject inferredMdObj = null;
+								Metadata inferred = e.getInferredMetadata();
+								if (inferred != null) {
+									Graph infG = inferred.getGraph();
+									if (infG != null) {
+										inferredMdObj = new JSONObject(RDFJSON.graphToRdfJson(infG));
+										childJSON.accumulate(RepositoryProperties.INFERRED, inferredMdObj);
+									}
+								}
+
 								if (EntryType.Link.equals(ltC) || EntryType.Local.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 									// get the local metadata
 									Metadata localMD = e.getLocalMetadata();

@@ -14,22 +14,27 @@
  * limitations under the License.
  */
 
-package org.entrystore.repository;
+package org.entrystore.rest.resources;
+
+import org.entrystore.Metadata;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 /**
- * @author Hannes Ebner
+ * Access to inferred metadata.
+ * 
+ * @author Matthias Palmer
  */
-public enum RepositoryEvent {
+public class InferredMetadataResource extends AbstractMetadataResource {
 
-	All,
-	EntryCreated,
-	EntryUpdated, // TODO event firing only implemented for EntryImpl.setGraph()
-	EntryDeleted,
-	MetadataUpdated,
-	ExternalMetadataUpdated,
-	InferredMetadataUpdated,
-	ExtractedMetadataUpdated, // TODO event firing not implemented yet
-	ResourceUpdated, // TODO partially implemented for ListImpl, fully implemented for DataImpl
-	ResourceDeleted // TODO partially implemented for ListImpl, fully implemented for DataImpl
+	static Logger log = LoggerFactory.getLogger(InferredMetadataResource.class);
+
+	protected Metadata getMetadata() {
+		if (entry != null) {
+			return entry.getInferredMetadata();
+		}
+		return null;
+	}
 
 }
