@@ -54,6 +54,8 @@ class TreeIndexContext{
     TreeChange remove(String node) {
         this.top.remove(node);
         this.toParent.remove(node);
+        ChangeType ct = ChangeType.Remove;
+
         //Handle weird case (not supposed to remove non-leaves (top are a kind of leaves))
         if (this.toParent.values().contains(node)) {
             for (Map.Entry<String, String> entry : this.toParent.entrySet()) {
@@ -62,9 +64,11 @@ class TreeIndexContext{
                     this.top.add(entry.getKey());
                 }
             }
+            // Hack, to indicate that a more serious update is needed.
+            ct = ChangeType.RemoveAll;
         }
         if (this.enabled) {
-            return new TreeChangeImpl(ChangeType.Remove, node);
+            return new TreeChangeImpl(ct, node);
         } else {
             return null;
         }

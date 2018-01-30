@@ -33,8 +33,6 @@ import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.impl.reasoning.InferredMetadataImpl;
 import org.entrystore.impl.reasoning.ReasoningManagerImpl;
-import org.entrystore.reasoning.InferredMetadata;
-import org.entrystore.reasoning.ReasoningManager;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;

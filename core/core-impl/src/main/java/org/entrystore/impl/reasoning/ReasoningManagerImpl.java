@@ -50,6 +50,8 @@ public class ReasoningManagerImpl implements ReasoningManager {
     private RepositoryManagerImpl rm;
     private Repository repository;
 
+
+    private RepositoryListener factContextListener = null;
     private RepositoryListener updateListener = null;
     private RepositoryListener removeListener = null;
 
@@ -72,17 +74,19 @@ public class ReasoningManagerImpl implements ReasoningManager {
                 HashSet<String> inferredURIs = new HashSet<>();
                 HashSet<String> origURIs = new HashSet<>();
                 if (changeQueue.size() > 0) {
-
+                    //Make sure we are running indexing as admin.
+                    PrincipalManager pm = this.rm.rm.getPrincipalManager();
+                    pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
                     synchronized (changeQueue) {
-                        while (batchCount < BATCH_SIZE) {
+                        while (batchCount < BATCH_SIZE && changeQueue.size() > 0) {
                             TreeChange ce = changeQueue.poll();
                             switch (ce.getType()) {
                                 case AddTo:
                                 case AddAll:
                                 case RemoveFrom:
+                                case Remove:
                                     origURIs.addAll(ce.getNodes());
                                     break;
-                                case Remove:
                                 case RemoveAll:
                                     inferredURIs.addAll(ce.getNodes());
                             }
@@ -237,11 +241,19 @@ public class ReasoningManagerImpl implements ReasoningManager {
                 RepositoryProperties.reasoningFacts, null, false);
         while(rr.hasNext()) {
             Statement stmt = rr.next();
-            contexts.add(new URISplit((URI) stmt.getContext(), rm.getRepositoryURL()).getContextID());
+            contexts.add(new URISplit((URI) stmt.getContext(), rm.getRepositoryURL()).getID());
         }
     }
 
     private void initListeners() {
+        this.factContextListener = new RepositoryListener() {
+            @Override
+            public void repositoryUpdated(RepositoryEventObject eventObject) {
+                if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
+                    contextUpdated((Entry) eventObject.getSource());
+                }
+            }
+        };
         this.updateListener = new RepositoryListener() {
             @Override
             public void repositoryUpdated(RepositoryEventObject eventObject) {
@@ -261,12 +273,14 @@ public class ReasoningManagerImpl implements ReasoningManager {
     }
 
     private void addListeners() {
+        rm.registerListener(this.factContextListener, RepositoryEvent.EntryUpdated);
         rm.registerListener(this.updateListener, RepositoryEvent.MetadataUpdated);
         rm.registerListener(this.updateListener, RepositoryEvent.ExternalMetadataUpdated);
         rm.registerListener(this.removeListener, RepositoryEvent.EntryDeleted);
     }
 
     private void removeListeners() {
+        rm.unregisterListener(this.factContextListener, RepositoryEvent.EntryUpdated);
         rm.unregisterListener(this.updateListener, RepositoryEvent.MetadataUpdated);
         rm.unregisterListener(this.updateListener, RepositoryEvent.ExternalMetadataUpdated);
         rm.unregisterListener(this.removeListener, RepositoryEvent.EntryDeleted);
@@ -305,8 +319,8 @@ public class ReasoningManagerImpl implements ReasoningManager {
                 property, null, false);
         while(rr.hasNext()) {
             Statement stmt = rr.next();
-            String to = stmt.getSubject().toString();
-            String from = stmt.getObject().toString();
+            String from = stmt.getSubject().toString();
+            String to = stmt.getObject().toString();
             String contextId = getContextId((URI) stmt.getContext());
             if (contexts.contains(contextId)) {
                 tii.initAddTo(from, to, contextId);
@@ -400,7 +414,7 @@ public class ReasoningManagerImpl implements ReasoningManager {
         // Assumes all individuals therein has already been removed
         // as there is no removal of those here (from repository)
         if (source.getGraphType() == GraphType.Context) {
-            tii.removeAllIn(contextId);
+            addToQueue(tii.removeAllIn(source.getId()));
         }
     }
 
@@ -409,23 +423,25 @@ public class ReasoningManagerImpl implements ReasoningManager {
         addToQueue(tii.remove(entry.getResourceURI().toString(), contextId));
     }
 
-
-    private void entryUpdated(Entry source) {
-        InferredMetadataImpl im = (InferredMetadataImpl) source.getInferredMetadata();
-        if (im != null) {
-            im.update();
-        }
-
-        // If entry is inside "fact enabled" context
-        String contextId = source.getContext().getEntry().getId();
-        if (contexts.contains(contextId)) {
-            updatePossibleFactEntry(source);
-        }
-
+    private void contextUpdated(Entry source) {
         // If entry corresponds to an entire context and it is not already
         // marked as a "fact enabled" context
         if (source.getGraphType() == GraphType.Context) {
             checkContext(source);
+        }
+    }
+
+    private void entryUpdated(Entry source) {
+        // If entry is inside "fact enabled" context, i.e. update treeIndex
+        String contextId = source.getContext().getEntry().getId();
+        if (contexts.contains(contextId)) {
+            updatePossibleFactEntry(source);
+        } else {
+            // Update entry with inferred metadata from treeIndex
+            InferredMetadataImpl im = (InferredMetadataImpl) source.getInferredMetadata();
+            if (im != null) {
+                im.update();
+            }
         }
     }
 
@@ -475,6 +491,7 @@ public class ReasoningManagerImpl implements ReasoningManager {
                             }
                         }
                     }
+                    contexts.add(contextId);
                     addToQueue(tic.initDone());
                 }
             } else {
@@ -495,7 +512,9 @@ public class ReasoningManagerImpl implements ReasoningManager {
     }
     private void addToQueue(TreeChange tc) {
         synchronized (changeQueue) {
-            this.changeQueue.add(tc);
+            if (tc != null) {
+                this.changeQueue.add(tc);
+            }
         }
     }
 }

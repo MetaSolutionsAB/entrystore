@@ -58,8 +58,11 @@ public class TreeIndexImpl implements TreeIndex {
     @Override
     public TreeChange removeAllIn(String contextId) {
         TreeIndexContext tic = indexes.get(contextId);
-        indexes.remove(contextId);
-        return tic.removeAll();
+        if (tic != null) {
+            indexes.remove(contextId);
+            return tic.removeAll();
+        }
+        return null;
     }
 
     @Override

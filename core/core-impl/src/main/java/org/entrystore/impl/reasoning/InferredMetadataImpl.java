@@ -6,7 +6,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.impl.EntryImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.reasoning.InferredMetadata;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.util.URISplit;
