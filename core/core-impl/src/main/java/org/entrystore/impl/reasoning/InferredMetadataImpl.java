@@ -30,11 +30,12 @@ import java.util.Set;
 public class InferredMetadataImpl implements Metadata {
     private static Logger log = LoggerFactory.getLogger(InferredMetadataImpl.class);
 
-    private final Entry entry;
+    private final EntryImpl entry;
     private final ReasoningManagerImpl manager;
     private final RepositoryManagerImpl rm;
 
-    public InferredMetadataImpl(ReasoningManagerImpl manager, RepositoryManagerImpl rm, Entry entry) {
+    public InferredMetadataImpl(ReasoningManagerImpl manager, RepositoryManagerImpl rm, EntryImpl
+            entry) {
         this.manager = manager;
         this.rm = rm;
         this.entry = entry;

@@ -86,12 +86,6 @@ public interface Entry {
 	Graph getMetadataGraph();
 
 	/**
-	 * Similar to getMetadataGraph, only difference is that it does not include inferred statements.
-	 * @return  {@link Graph}, never null.
-	 */
-	Graph getMetadataGraphExceptInferred();
-
-	/**
 	 * @return the URI for retrieving the metadata from the repository, if the {@link EntryType}
 	 * is {@link EntryType#Reference} it is the URI to the cached metadata within the repository
 	 * that is returned.

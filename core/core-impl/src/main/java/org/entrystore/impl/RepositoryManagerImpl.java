@@ -693,9 +693,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			};
 			// registerListener(updater, RepositoryEvent.EntryCreated); // to react on created is not needed, as creation implies update
 			registerListener(updater, RepositoryEvent.EntryUpdated);
-			registerListener(updater, RepositoryEvent.MetadataUpdated);
+			if (this.reasoningManager == null) {
+				registerListener(updater, RepositoryEvent.MetadataUpdated);
+			} else {
+				// Inferred metadata is always updated after a metadata update,
+				// so metadataUpdated is unneccessary if reasoning is enabled.
+				registerListener(updater, RepositoryEvent.InferredMetadataUpdated);
+			}
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
-			registerListener(updater, RepositoryEvent.InferredMetadataUpdated);
 			registerListener(updater, RepositoryEvent.ResourceUpdated);
 			
 			RepositoryListener remover = new RepositoryListener() {
