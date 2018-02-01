@@ -599,8 +599,8 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public QueryResult sendQuery(SolrQuery query) throws SolrException {
-		Set<URI> entries = new LinkedHashSet<URI>();
-		Set<Entry> result = new LinkedHashSet<Entry>();
+		Set<URI> entries = new LinkedHashSet<>();
+		Set<Entry> result = new LinkedHashSet<>();
 		long hits = -1;
 		int limit = query.getRows();
 		int offset = query.getStart();
@@ -610,14 +610,21 @@ public class SolrSearchIndex implements SearchIndex {
 		int resultFillIteration = 0;
 		do {
 			if (resultFillIteration++ > 0) {
+				// We have a small limit and we don't get enough results with permissive ACL per iteration,
+				// so we need to increase the result size windows, but not the result limit itself
+				// (i.e., we only change the rows towards Solr, but not the query limit of EntryStore.
+				// We only need to do this once when resultFillIteration equals 1.
+				if (resultFillIteration == 1 && limit <= 10) {
+					query.setRows(100);
+				}
 				if (resultFillIteration > 10) {
 					log.warn("Breaking after 10 result fill interations to prevent too many loops");
 					break;
 				}
-				if (limit <= 100) {
+				if (limit <= 50) {
 					offset += limit;
 				} else {
-					offset += 100;
+					offset += 50;
 				}
 				log.warn("Increasing offset to " + offset + " in an attempt to fill the result limit");
 			}
