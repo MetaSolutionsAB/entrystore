@@ -614,8 +614,12 @@ public class SolrSearchIndex implements SearchIndex {
 					log.warn("Breaking after 10 result fill interations to prevent too many loops");
 					break;
 				}
-				offset += 10;
-				log.warn("Increasing offset to fill the result limit");
+				if (limit <= 100) {
+					offset += limit;
+				} else {
+					offset += 100;
+				}
+				log.warn("Increasing offset to " + offset + " in an attempt to fill the result limit");
 			}
 			hits = sendQueryForEntryURIs(query, entries, facetFields, solrServer, offset, -1);
 			Date before = new Date();
