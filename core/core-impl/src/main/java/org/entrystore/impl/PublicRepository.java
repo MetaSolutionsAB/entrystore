@@ -323,11 +323,11 @@ public class PublicRepository {
 	}
 	
 	private boolean isAdministrative(Entry e) {
-		EntryType et = e.getEntryType();
-		if (GraphType.Graph.equals(et) ||
-				GraphType.String.equals(et) ||
-				GraphType.None.equals(et) ||
-				GraphType.List.equals(et)) {
+		GraphType gt = e.getGraphType();
+		if (GraphType.Graph.equals(gt) ||
+				GraphType.String.equals(gt) ||
+				GraphType.None.equals(gt) ||
+				GraphType.List.equals(gt)) {
 			return false;
 		}
 		return true;
