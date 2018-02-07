@@ -122,75 +122,82 @@ public class PublicRepository {
 		if (isAdministrative(e)) {
 			return;
 		}
-		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+		java.net.URI currentUser = pm.getAuthenticatedUserURI();
 		try {
-			ValueFactory vf = repository.getValueFactory();
-			URI contextURI = vf.createURI(e.getContext().getURI().toString());
+			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+			try {
+				ValueFactory vf = repository.getValueFactory();
+				URI contextURI = vf.createURI(e.getContext().getURI().toString());
 
-			// entry
-			Graph entryGraph = e.getGraph();
-			URI entryNG = vf.createURI(e.getEntryURI().toString());
+				// entry
+				Graph entryGraph = e.getGraph();
+				URI entryNG = vf.createURI(e.getEntryURI().toString());
 
-			// metadata
-			Graph mdGraph = null;
-			URI mdNG = null;
-			if (e.getLocalMetadata() != null) {
-				mdGraph = e.getLocalMetadata().getGraph();
-				mdNG = vf.createURI(e.getLocalMetadataURI().toString());
-			}
+				// metadata
+				Graph mdGraph = null;
+				URI mdNG = null;
+				if (e.getLocalMetadata() != null) {
+					mdGraph = e.getLocalMetadata().getGraph();
+					mdNG = vf.createURI(e.getLocalMetadataURI().toString());
+				}
 
-			// ext metadata
-			Graph extMdGraph = null;
-			URI extMdNG = null;
-			if (e.getCachedExternalMetadata() != null) {
-				extMdGraph = e.getCachedExternalMetadata().getGraph();
-				extMdNG = vf.createURI(e.getCachedExternalMetadataURI().toString()); 
-			}
+				// ext metadata
+				Graph extMdGraph = null;
+				URI extMdNG = null;
+				if (e.getCachedExternalMetadata() != null) {
+					extMdGraph = e.getCachedExternalMetadata().getGraph();
+					extMdNG = vf.createURI(e.getCachedExternalMetadataURI().toString());
+				}
 
-			// resource
-			Graph resGraph = null;
-			URI resNG = null;
-			if (GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
-				resGraph = (Graph) e.getResource();
-				resNG = vf.createURI(e.getResourceURI().toString());
-			}
+				// resource
+				Graph resGraph = null;
+				URI resNG = null;
+				if (GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
+					resGraph = (Graph) e.getResource();
+					resNG = vf.createURI(e.getResourceURI().toString());
+				}
 
-			synchronized (repository) {
-				RepositoryConnection rc = null;
-				try {
-					rc = repository.getConnection();
-					rc.begin();
-					if (entryGraph != null) {
-						rc.add(entryGraph, entryNG, contextURI);
-					}
-					if (mdGraph != null) {
-						rc.add(mdGraph, mdNG, contextURI);
-					}
-					if (extMdGraph != null) {
-						rc.add(extMdGraph, extMdNG, contextURI);
-					}
-					if (resGraph != null) {
-						rc.add(resGraph, resNG, contextURI);
-					}
-					rc.commit();
-				} catch (RepositoryException re) {
+				synchronized (repository) {
+					RepositoryConnection rc = null;
 					try {
-						rc.rollback();
-					} catch (RepositoryException re1) {
-						log.error(re1.getMessage());
-					}
-					log.error(re.getMessage());
-				} finally {
-					if (rc != null) {
+						rc = repository.getConnection();
+						rc.begin();
+						if (entryGraph != null) {
+							rc.add(entryGraph, entryNG, contextURI);
+						}
+						if (mdGraph != null) {
+							rc.add(mdGraph, mdNG, contextURI);
+						}
+						if (extMdGraph != null) {
+							rc.add(extMdGraph, extMdNG, contextURI);
+						}
+						if (resGraph != null) {
+							rc.add(resGraph, resNG, contextURI);
+						}
+						rc.commit();
+					} catch (RepositoryException re) {
 						try {
-							rc.close();
-						} catch (RepositoryException re2) {
-							log.error(re2.getMessage());
+							rc.rollback();
+						} catch (RepositoryException re1) {
+							log.error(re1.getMessage());
+						}
+						log.error(re.getMessage());
+					} finally {
+						if (rc != null) {
+							try {
+								rc.close();
+							} catch (RepositoryException re2) {
+								log.error(re2.getMessage());
+							}
 						}
 					}
 				}
+			} catch (AuthorizationException ae) {
+
 			}
-		} catch (AuthorizationException ae) {}
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
 	}
 	
 	public void updateEntry(Entry e) {
@@ -228,8 +235,8 @@ public class PublicRepository {
 	public void removeEntry(Entry e) {
 		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
 		java.net.URI currentUser = pm.getAuthenticatedUserURI();
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			ValueFactory vf = repository.getValueFactory();
 			URI contextURI = vf.createURI(e.getContext().getURI().toString());
 
@@ -336,12 +343,16 @@ public class PublicRepository {
 	private boolean isPublic(Entry e) {
 		boolean result = false;
 		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
-		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+		java.net.URI currentUser = pm.getAuthenticatedUserURI();
 		try {
+			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			pm.checkAuthenticatedUserAuthorized(e, AccessProperty.ReadMetadata);
 			result = true;
-		} catch (AuthorizationException ae) {}
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		} catch (AuthorizationException ae) {
+
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
 		return result;
 	}
 
