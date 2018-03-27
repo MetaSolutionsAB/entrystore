@@ -23,10 +23,12 @@ import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
 import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.rio.RDFFormat;
+import org.openrdf.rio.RDFHandler;
 import org.openrdf.rio.RDFHandlerException;
 import org.openrdf.rio.RDFParseException;
 import org.openrdf.rio.RDFParser;
 import org.openrdf.rio.RDFWriter;
+import org.openrdf.rio.helpers.RDFHandlerBase;
 import org.openrdf.rio.helpers.StatementCollector;
 import org.openrdf.rio.n3.N3ParserFactory;
 import org.openrdf.rio.n3.N3Writer;
@@ -49,6 +51,8 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.lang.reflect.Constructor;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -59,6 +63,20 @@ import java.util.Map;
 public class GraphUtil {
 
 	private static Logger log = LoggerFactory.getLogger(GraphUtil.class);
+
+	private static List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+
+	static {
+		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
+		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
+		supportedMediaTypes.add(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType("application/rdf+json"));
+	}
 
 	/**
 	 * @param graph  The Graph to be serialized.
@@ -192,6 +210,67 @@ public class GraphUtil {
 			serializedGraph = serializeGraph(graph, TurtleWriter.class);
 		}
 		return serializedGraph;
+	}
+
+	public static boolean isSupported(MediaType mediaType) {
+		for (MediaType mt : supportedMediaTypes) {
+			if (mt.equals(mediaType, false)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Detects whether an RDF payload can be parsed by RDF4J.
+	 *
+	 * @param rdf The RDF to validate.
+	 * @param mediaType The media type of the RDF.
+	 * @return Returns null if successful or an error message if there was an error when parsing the payload.
+	 */
+	public static String validateRdf(String rdf, MediaType mediaType) {
+		if (!isSupported(mediaType)) {
+			return "Unsupported media type: " + mediaType;
+		}
+
+		StringReader reader = new StringReader(rdf);
+		RDFHandler nullHandler = new RDFHandlerBase(); // doesn't do anything
+		RDFParser parser = new RDFXMLParser();
+		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
+			// we have special treatment of RDF/JSON here because it does not implement the Parser interface
+			Graph g = RDFJSON.rdfJsonToGraph(rdf);
+			if (g != null) {
+				return "There was an error parsing the RDF/JSON payload";
+			} else {
+				return null;
+			}
+		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
+			parser = new N3ParserFactory().getParser();
+		} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
+			parser = new TurtleParser();
+		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
+			parser = new TriXParser();
+		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
+			parser = new NTriplesParser();
+		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
+			parser = new TriGParser();
+		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
+			parser = new SesameJSONLDParser();
+		}
+
+		String error = null;
+		try {
+			parser.setRDFHandler(nullHandler);
+			parser.parse(reader, "");
+		} catch (RDFHandlerException | RDFParseException | IOException rdfe) {
+			error = rdfe.getMessage();
+		}
+
+		if (error != null) {
+			return error;
+		}
+
+		return null;
 	}
 
 }
