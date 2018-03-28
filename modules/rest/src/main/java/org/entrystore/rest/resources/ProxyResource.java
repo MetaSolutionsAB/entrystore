@@ -19,6 +19,7 @@ package org.entrystore.rest.resources;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.RDFJSON;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
@@ -34,14 +35,15 @@ import org.restlet.Client;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.Uniform;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
 import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
+import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,11 +70,11 @@ import java.util.regex.Pattern;
 public class ProxyResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(ProxyResource.class);
-	
+
 	private Client client;
 
 	private Response clientResponse;
-	
+
 	Representation representation;
 
 	@Override
@@ -89,7 +91,7 @@ public class ProxyResource extends BaseResource {
 				log.error(e.getMessage());
 			}
 		}
-		
+
 		if (extResourceURL == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return null;
@@ -100,22 +102,20 @@ public class ProxyResource extends BaseResource {
 			getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 			return null;
 		}
-		
+
 		log.info("Received proxy request for " + extResourceURL);
-		
+
 		clientResponse = getResourceFromURL(extResourceURL, 0);
 		representation = null;
 		if (clientResponse != null) {
 			representation = clientResponse.getEntity();
-			getResponse().setOnSent(new Uniform() {
-				public void handle(Request request, Response response) {
-					try {
-						clientResponse.release();
-						client.stop();
-						client = null;
-					} catch (Exception e) {
-						log.error(e.getMessage());
-					}
+			getResponse().setOnSent((request, response) -> {
+				try {
+					clientResponse.release();
+					client.stop();
+					client = null;
+				} catch (Exception e) {
+					log.error(e.getMessage());
 				}
 			});
 			if (Status.isConnectorError(clientResponse.getStatus().getCode())) {
@@ -184,6 +184,30 @@ public class ProxyResource extends BaseResource {
 							return new JsonRepresentation(RDFJSON.graphToRdfJsonObject(deserializedGraph));
 						}
 					}
+				}
+			} else if (parameters.containsKey("validate")) {
+				String validateMime = parameters.get("validate");
+				if (validateMime == null || validateMime.isEmpty()) {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					return new EmptyRepresentation();
+				} else if (!GraphUtil.isSupported(new MediaType(validateMime))) {
+					getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
+					return new EmptyRepresentation();
+				}
+				MediaType origMT = representation.getMediaType();
+				String payload = null;
+				try {
+					payload = representation.getText();
+				} catch (IOException e) {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					return new StringRepresentation(e.getMessage());
+				}
+				String validationError = GraphUtil.validateRdf(payload, new MediaType(validateMime));
+				if (validationError != null) {
+					getResponse().setStatus(Status.CLIENT_ERROR_UNPROCESSABLE_ENTITY);
+					return new StringRepresentation(validationError, origMT);
+				} else {
+					return new StringRepresentation(payload, origMT);
 				}
 			}
 		}
