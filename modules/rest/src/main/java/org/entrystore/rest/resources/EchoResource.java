@@ -57,10 +57,11 @@ public class EchoResource extends BaseResource {
 				String validateMime = null;
 				if (parameters.containsKey("validate")) {
 					validateMime = parameters.get("validate");
-					if (validateMime == null) {
+					if (validateMime == null || validateMime.isEmpty()) {
 						respondWith(Status.CLIENT_ERROR_BAD_REQUEST);
 						return;
-					} else if (!GraphUtil.isSupported(new MediaType(validateMime))) {
+					}
+					if (!GraphUtil.isSupported(new MediaType(validateMime))) {
 						respondWith(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
 						return;
 					}

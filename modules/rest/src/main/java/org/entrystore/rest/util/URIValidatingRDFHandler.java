@@ -36,7 +36,7 @@ public class URIValidatingRDFHandler extends RDFHandlerBase {
 		try {
 			new URI(uri);
 		} catch (URISyntaxException e) {
-			throw new RDFHandlerException(e);
+			throw new RDFHandlerException(e.getMessage());
 		}
 	}
 
@@ -51,7 +51,7 @@ public class URIValidatingRDFHandler extends RDFHandlerBase {
 				new URI(st.getObject().stringValue());
 			}
 		} catch (URISyntaxException e) {
-			throw new RDFHandlerException(e);
+			throw new RDFHandlerException(e.getMessage());
 		}
 	}
 

@@ -187,7 +187,7 @@ public class ProxyResource extends BaseResource {
 				}
 			} else if (parameters.containsKey("validate")) {
 				String validateMime = parameters.get("validate");
-				if (validateMime == null) {
+				if (validateMime == null || validateMime.isEmpty()) {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					return new EmptyRepresentation();
 				} else if (!GraphUtil.isSupported(new MediaType(validateMime))) {
@@ -199,7 +199,8 @@ public class ProxyResource extends BaseResource {
 				try {
 					payload = representation.getText();
 				} catch (IOException e) {
-					log.error(e.getMessage());
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					return new StringRepresentation(e.getMessage());
 				}
 				String validationError = GraphUtil.validateRdf(payload, new MediaType(validateMime));
 				if (validationError != null) {
