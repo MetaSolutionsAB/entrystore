@@ -83,8 +83,6 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private boolean extractFulltext = false;
 
-	private boolean ngramAllLiterals = false;
-
 	private RepositoryManager rm;
 
 	private final SolrServer solrServer;
@@ -186,7 +184,6 @@ public class SolrSearchIndex implements SearchIndex {
 		this.rm = rm;
 		this.solrServer = solrServer;
 		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_EXTRACT_FULLTEXT, "off"));
-		this.ngramAllLiterals = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_NGRAM_ALL_LITERALS, "off"));
 		documentSubmitter = new SolrInputDocumentSubmitter();
 		documentSubmitter.start();
 	}
@@ -202,10 +199,8 @@ public class SolrSearchIndex implements SearchIndex {
 		req.deleteByQuery("*:*");
 		try {
 			req.process(solrServer);
-		} catch (SolrServerException sse) {
-			log.error(sse.getMessage(), sse);
-		} catch (IOException ioe) {
-			log.error(ioe.getMessage(), ioe);
+		} catch (SolrServerException | IOException e) {
+			log.error(e.getMessage(), e);
 		}
 	}
 
@@ -214,10 +209,8 @@ public class SolrSearchIndex implements SearchIndex {
 		req.deleteByQuery("context:" + StringUtils.replace(contextEntry.getResourceURI().toString(), ":", "\\:"));
 		try {
 			req.process(solrServer);
-		} catch (SolrServerException sse) {
-			log.error(sse.getMessage(), sse);
-		} catch (IOException ioe) {
-			log.error(ioe.getMessage(), ioe);
+		} catch (SolrServerException | IOException e) {
+			log.error(e.getMessage(), e);
 		}
 	}
 
@@ -478,10 +471,6 @@ public class SolrSearchIndex implements SearchIndex {
 
 					// predicate value is included in the parameter name, the object value is the field value
 					doc.addField("metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
-
-					if (this.ngramAllLiterals) {
-						doc.addField("metadata.predicate.literal_ng." + predMD5Trunc8, l.getLabel());
-					}
 
 					// special handling of integer values, to be used for e.g. sorting
 					if (MetadataUtil.isIntegerLiteral(l)) {
