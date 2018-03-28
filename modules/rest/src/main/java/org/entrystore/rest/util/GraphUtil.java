@@ -234,7 +234,7 @@ public class GraphUtil {
 		}
 
 		StringReader reader = new StringReader(rdf);
-		RDFHandler nullHandler = new RDFHandlerBase(); // doesn't do anything
+		RDFHandler nullHandler = new URIValidatingRDFHandler();
 		RDFParser parser = new RDFXMLParser();
 		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
 			// we have special treatment of RDF/JSON here because it does not implement the Parser interface
