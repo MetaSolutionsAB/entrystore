@@ -482,6 +482,7 @@ public class EntryUtil {
 		ValueFactory vf = new ValueFactoryImpl();
 		List<URI> titlePredicates = new ArrayList<>();
 		titlePredicates.add(vf.createURI(NS.foaf, "name"));
+		titlePredicates.add(vf.createURI(NS.vcard, "fn"));
 		titlePredicates.add(vf.createURI(NS.dcterms, "title"));
 		titlePredicates.add(vf.createURI(NS.dc, "title"));
 		titlePredicates.add(vf.createURI(NS.skos, "prefLabel"));

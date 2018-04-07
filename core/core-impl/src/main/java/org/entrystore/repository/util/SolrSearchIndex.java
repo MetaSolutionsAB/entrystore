@@ -368,16 +368,6 @@ public class SolrSearchIndex implements SearchIndex {
 			doc.addField("title", name, 10);
 		}
 
-		String foafName = EntryUtil.getLabel(mdGraph, resourceURI, mdGraph.getValueFactory().createURI(NS.foaf, "name"), null);
-		if (foafName != null && foafName.trim().length() > 0) {
-			doc.addField("title", foafName, 10);
-		}
-
-		String vcardFn = EntryUtil.getLabel(mdGraph, resourceURI, mdGraph.getValueFactory().createURI(NS.vcard, "fn"), null);
-		if (vcardFn != null && vcardFn.trim().length() > 0) {
-			doc.addField("title", vcardFn, 10);
-		}
-
 		// description
 		Map<String, String> descriptions = EntryUtil.getDescriptions(entry);
 		if (descriptions != null && descriptions.size() > 0) {
