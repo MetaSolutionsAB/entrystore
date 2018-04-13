@@ -431,33 +431,25 @@ public class SolrSearchIndex implements SearchIndex {
 		//
 		// We also provide an index for all predicate-object tuples, stored in dynamic fields.
 		// Perhaps all fuzzy matches for object values (the ones that do not take predicates into
-		// consideration) should be removed in the future (marked with a TODO as comment below).
+		// consideration) should be removed in the future.
 		Graph metadata = entry.getMetadataGraph();
 		if (metadata != null) {
 			for (Statement s : metadata) {
-				// subject
-				if (s.getSubject() instanceof org.openrdf.model.URI) {
-					if (!resourceURI.equals(s.getSubject())) {
-						doc.addField("metadata.subject", s.getSubject().stringValue());
-					}
-				}
-
 				// predicate
 				String predString = s.getPredicate().stringValue();
 				String predMD5Trunc8 = Hashing.md5(predString).substring(0, 8);
-				doc.addField("metadata.predicate", predString);
 
 				// object
 				if (s.getObject() instanceof org.openrdf.model.URI) {
 					String objString = s.getObject().stringValue();
-					doc.addField("metadata.object.uri", objString); // TODO remove?
+					doc.addField("metadata.object.uri", objString);
 
 					// predicate value is included in the parameter name, the object value is the field value
 					doc.addField("metadata.predicate.uri." + predMD5Trunc8, objString);
 				} else if (s.getObject() instanceof Literal) {
 					Literal l = (Literal) s.getObject();
 					if (l.getDatatype() == null) { // we only index plain literals (human-readable text)
-						doc.addField("metadata.object.literal", l.getLabel()); // TODO remove?
+						doc.addField("metadata.object.literal", l.getLabel());
 					}
 
 					// predicate value is included in the parameter name, the object value is the field value
