@@ -29,6 +29,7 @@ import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
+import org.apache.solr.client.solrj.util.ClientUtils;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
@@ -551,7 +552,7 @@ public class ResourceResource extends BaseResource {
 		feed.setDescription("A syndication feed containing the 50 most recent items from \"" + alias + "\"");
 		feed.setLink(entry.getResourceURI().toString());
 		
-		solrQueryValue += entry.getResourceURI().toString().replaceAll(":", "\\\\:");
+		solrQueryValue += ClientUtils.escapeQueryChars(entry.getResourceURI().toString());
 		SolrQuery solrQuery = new SolrQuery(solrQueryValue);
 		solrQuery.setStart(0);
 		solrQuery.setRows(1000);

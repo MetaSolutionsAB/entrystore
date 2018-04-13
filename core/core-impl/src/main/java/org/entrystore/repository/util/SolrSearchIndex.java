@@ -25,6 +25,7 @@ import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.client.solrj.response.QueryResponse;
+import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
@@ -116,7 +117,7 @@ public class SolrSearchIndex implements SearchIndex {
 								if (batchCount > 0) {
 									deleteQuery.append(" OR ");
 								}
-								deleteQuery.append(StringUtils.replace(uri.toString(), ":", "\\:"));
+								deleteQuery.append(ClientUtils.escapeQueryChars(uri.toString()));
 								batchCount++;
 							}
 						}
@@ -206,7 +207,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public void clearSolrIndexFromContextEntries(SolrServer solrServer, Entry contextEntry) {
 		UpdateRequest req = new UpdateRequest();
-		req.deleteByQuery("context:" + StringUtils.replace(contextEntry.getResourceURI().toString(), ":", "\\:"));
+		req.deleteByQuery("context:" + ClientUtils.escapeQueryChars(contextEntry.getResourceURI().toString()));
 		try {
 			req.process(solrServer);
 		} catch (SolrServerException | IOException e) {
@@ -641,6 +642,22 @@ public class SolrSearchIndex implements SearchIndex {
 		} while ((limit > result.size()) && (hits > (offset + limit)));
 
 		return new QueryResult(result, hits, facetFields);
+	}
+
+	public SolrDocument fetchDocument(String uri) {
+		try {
+			SolrQuery q = new SolrQuery("uri:" + ClientUtils.escapeQueryChars(uri));
+			q.setStart(0);
+			q.setRows(1);
+			QueryResponse r = solrServer.query(q);
+			SolrDocumentList docs = r.getResults();
+			if (!docs.isEmpty()) {
+				return docs.get(0);
+			}
+		} catch (SolrServerException e) {
+			log.error(e.getMessage());
+		}
+		return null;
 	}
 
 	public static String extractFulltext(File f) {

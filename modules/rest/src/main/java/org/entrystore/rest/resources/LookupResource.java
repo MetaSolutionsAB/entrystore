@@ -17,6 +17,7 @@
 package org.entrystore.rest.resources;
 
 import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
@@ -108,7 +109,7 @@ public class LookupResource extends BaseResource {
 				return null;
 			}
 
-			String solrEscapedURI = resourceURI.toString().replaceAll(":", "\\\\:");
+			String solrEscapedURI = ClientUtils.escapeQueryChars(resourceURI.toString());
 			SolrQuery q = new SolrQuery("resource:" + solrEscapedURI + " AND public:true");
 			q.setStart(0);
 			q.setRows(1);
