@@ -166,7 +166,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
 
         <fieldType name="text_ngram" class="solr.TextField">
             <analyzer type="index">
-                <tokenizer class="solr.NGramTokenizerFactory" minGramSize="3" maxGramSize="15"/>
+                <tokenizer class="solr.NGramTokenizerFactory" minGramSize="3" maxGramSize="25"/>
                 <filter class="solr.LowerCaseFilterFactory"/>
             </analyzer>
             <analyzer type="query">
