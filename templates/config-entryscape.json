@@ -39,9 +39,9 @@
     "signupIntro": "Willkommen zu ENTRYSCAPE!",
     "signupInstructions": "Klicken Sie hier um mit ENTRYSCAPE zu beginnen:",
     "signupButton": "Bestätigen Sie ihr Konto",
-    "pwresetIntro": "Sie haben diese E-Mail erhalten weil wir eine Aufforderung zum Zurücksetzen des Passworts für Ihr ENTRYSCAPE-Konto erhalten haben.",
-    "pwresetInstructions": "Klicken Sie auf die Schaltfläche unten, um Ihr Passwort zurückzusetzen:",
-    "pwresetButton": "Setze Passwort zurück",
+    "pwresetIntro": "Sie haben diese E-Mail erhalten weil wir eine Aufforderung zum Zurücksetzen des Kennworts für Ihr ENTRYSCAPE-Konto erhalten haben.",
+    "pwresetInstructions": "Klicken Sie auf die Schaltfläche unten, um Ihr Kennwort zurückzusetzen:",
+    "pwresetButton": "Setze Kennwort zurück",
     "pwresetOutro": "Falls Sie kein Zurücksetzen des Kennworts angefordert haben sind keine weiteren Maßnahmen ihrerseits erforderlich."
   }
 }
