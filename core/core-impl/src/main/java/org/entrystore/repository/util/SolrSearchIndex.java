@@ -563,7 +563,11 @@ public class SolrSearchIndex implements SearchIndex {
 				}
 			}
 		} catch (SolrServerException e) {
-			log.error(e.getMessage());
+			if (e.getRootCause() instanceof IllegalArgumentException) {
+				log.info(e.getMessage());
+			} else {
+				log.error(e.getMessage());
+			}
 		}
 		log.info("Solr query took " + (new Date().getTime() - before.getTime()) + " ms");
 
