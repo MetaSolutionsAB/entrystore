@@ -862,6 +862,10 @@ public class ResourceResource extends BaseResource {
 						jsonUserObj.put("language", prefLang);
 					}
 
+					if (user.isDisabled()) {
+						jsonUserObj.put("disabled", true);
+					}
+
 					JSONObject customProperties = new JSONObject();
 					for (java.util.Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
 						customProperties.put(propEntry.getKey(), propEntry.getValue());
@@ -1160,6 +1164,14 @@ public class ResourceResource extends BaseResource {
 							getResponse().setEntity(new JsonRepresentation("{\"error\":\"Given homecontext is not a context.\"}"));
 							return;						
 						}
+					}
+				}
+				if (entityJSON.has("disabled")) {
+					boolean disabled = entityJSON.optBoolean("disabled", false);
+					resourceUser.setDisabled(disabled);
+					if (disabled) {
+						String userName = getPM().getPrincipalName(this.entry.getResourceURI());
+						LoginTokenCache.getInstance().removeTokens(userName);
 					}
 				}
 				if (entityJSON.has("customProperties")) {

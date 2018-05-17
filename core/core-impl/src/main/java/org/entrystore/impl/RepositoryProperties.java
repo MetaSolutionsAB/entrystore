@@ -109,6 +109,7 @@ public class RepositoryProperties {
 	public static final URI language;
 	public static final URI originallyCreatedIn;
 	public static final URI externalID;
+	public static final URI disabled;
 
 	public static final URI Graph;
 	
@@ -189,6 +190,7 @@ public class RepositoryProperties {
 		homeContext = vf.createURI(NSbase + "homeContext");
 		language = vf.createURI(NSbase + "language");
 		externalID = vf.createURI(NSbase, "externalID");
+		disabled = vf.createURI(NSbase, "disabled");
 		
 		originallyCreatedIn = vf.createURI(NSbase + "originallyCreatedIn");
 

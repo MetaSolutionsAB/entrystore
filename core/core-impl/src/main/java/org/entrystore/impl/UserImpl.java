@@ -16,32 +16,36 @@
 
 package org.entrystore.impl;
 
-import java.net.*;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.User;
+import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
+import org.entrystore.repository.test.TestSuite;
+import org.entrystore.repository.util.NS;
+import org.openrdf.model.BNode;
+import org.openrdf.model.Graph;
+import org.openrdf.model.Literal;
+import org.openrdf.model.Statement;
+import org.openrdf.model.URI;
+import org.openrdf.model.Value;
+import org.openrdf.model.ValueFactory;
+import org.openrdf.model.impl.ValueFactoryImpl;
+import org.openrdf.repository.RepositoryConnection;
+import org.openrdf.repository.RepositoryResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import org.entrystore.Context;
-import org.entrystore.Entry;
-import org.entrystore.PrincipalManager;
-import org.entrystore.repository.RepositoryException;
-import org.entrystore.repository.RepositoryManager;
-import org.entrystore.User;
-import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.security.Password;
-import org.entrystore.repository.test.TestSuite;
-import org.entrystore.repository.util.NS;
-import org.openrdf.model.*;
-import org.openrdf.model.URI;
-import org.openrdf.model.impl.ValueFactoryImpl;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryResult;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 public class UserImpl extends RDFResource implements User {
@@ -520,6 +524,59 @@ public class UserImpl extends RDFResource implements User {
 			throw new RepositoryException("Failed to connect to repository", e);
 		}
 		return false;
+	}
+
+	public boolean isDisabled() {
+		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
+		RepositoryConnection rc = null;
+		try {
+			rc = this.entry.repository.getConnection();
+			List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.disabled, null, false, resourceURI).asList();
+			if (!matches.isEmpty()) {
+				Literal l = (Literal) matches.get(0).getObject();
+				return l.booleanValue();
+			}
+		} catch (org.openrdf.repository.RepositoryException e) {
+			log.error(e.getMessage());
+			throw new RepositoryException("Failed to connect to repository", e);
+		} finally {
+			try {
+				if (rc != null) {
+					rc.close();
+				}
+			} catch (org.openrdf.repository.RepositoryException e) {
+				log.error(e.getMessage());
+			}
+		}
+		return false;
+	}
+
+	public void setDisabled(boolean disabled) {
+		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
+		try {
+			synchronized (this.entry.repository) {
+				RepositoryConnection rc = this.entry.repository.getConnection();
+				ValueFactory vf = this.entry.repository.getValueFactory();
+				try {
+					rc.begin();
+					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.disabled, null, false, resourceURI), resourceURI);
+					if (disabled) {
+						rc.add(resourceURI, RepositoryProperties.disabled, vf.createLiteral(disabled), resourceURI);
+					}
+					rc.commit();
+				} catch (Exception e) {
+					log.error(e.getMessage(), e);
+					rc.rollback();
+				} finally {
+					if (rc != null) {
+						rc.close();
+					}
+				}
+			}
+		} catch (org.openrdf.repository.RepositoryException e) {
+			log.error(e.getMessage());
+			throw new RepositoryException("Failed to connect to repository", e);
+		}
 	}
 
 }

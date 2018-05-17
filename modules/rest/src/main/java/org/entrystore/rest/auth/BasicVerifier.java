@@ -81,6 +81,34 @@ public class BasicVerifier implements Verifier {
 		return null;
 	}
 
+	public static boolean userExists(PrincipalManager pm, String userName) {
+		URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			Entry userEntry = pm.getPrincipalEntry(userName);
+			if (userEntry != null) {
+				return true;
+			}
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
+		return false;
+	}
+
+	public static boolean isUserDisabled(PrincipalManager pm, String userName) {
+		URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			Entry userEntry = pm.getPrincipalEntry(userName);
+			if (userEntry != null) {
+				return ((User) userEntry.getResource()).isDisabled();
+			}
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
+		return false;
+	}
+
 	public int verify(Request request, Response response) {
 		// to avoid an override of an already existing authentication, e.g. from CookieVerifier
 		URI authUser = pm.getAuthenticatedUserURI();
@@ -120,9 +148,10 @@ public class BasicVerifier implements Verifier {
 			} else if ("_guest".equals(identifier)) {
 				userURI = pm.getGuestUser().getURI();
 				return RESULT_VALID;
-			} else if (identifier != null && secret == null) { 
+			} else if (secret == null) {
 				return RESULT_MISSING;
 			} else {
+				identifier = identifier.toLowerCase();
 				if (passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(identifier)) {
 					response.setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 					return RESULT_INVALID;
@@ -132,13 +161,16 @@ public class BasicVerifier implements Verifier {
 				if (userEntry == null) {
 					return RESULT_UNKNOWN;
 				}
+
 				// check whether login is cached, setting max age to 1 hour (3600 seconds)
 				if (isLoginCached(userEntry.getEntryURI().toString(), secret, 3600)) {
 					userURI = userEntry.getResourceURI();
 					return RESULT_VALID;
 				}
-				String saltedHashedSecret = getSaltedHashedSecret(pm, identifier);
-				if (secret != null && Password.check(secret, saltedHashedSecret)) {
+
+				if (secret != null &&
+						!isUserDisabled(pm, identifier) &&
+						Password.check(secret, getSaltedHashedSecret(pm, identifier))) {
 					userURI = userEntry.getResourceURI();
 					addLoginToCache(userEntry.getEntryURI().toString(), secret);
 					return RESULT_VALID;

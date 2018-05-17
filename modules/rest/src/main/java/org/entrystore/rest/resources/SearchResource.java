@@ -254,16 +254,19 @@ public class SearchResource extends BaseResource {
 							if (btChild == GraphType.Context || btChild == GraphType.SystemContext) {
 								childJSON.put("alias", getCM().getName(e.getResourceURI()));
 							} else if (btChild == GraphType.User && locChild == EntryType.Local) {
-								childJSON.put("name", ((User) e.getResource()).getName());
+								User u = (User) e.getResource();
+								childJSON.put("name", u.getName());
+								if (u.isDisabled()) {
+									childJSON.put("disabled", true);
+								}
 							} else if (btChild == GraphType.Group && locChild == EntryType.Local) {
 								childJSON.put("name", ((Group) e.getResource()).getName());								
 							}
 							PrincipalManager PM = this.getPM();
 							Set<AccessProperty> rights =PM.getRights(e);
-							if(rights.size() >0){
-								JSONArray ja = new JSONArray();
+							if (rights.size() > 0) {
 								for(AccessProperty ap : rights){
-									if(ap == PrincipalManager.AccessProperty.Administer)
+									if (ap == PrincipalManager.AccessProperty.Administer)
 										childJSON.append("rights", "administer");
 									else if (ap == PrincipalManager.AccessProperty.WriteMetadata)
 										childJSON.append("rights", "writemetadata");

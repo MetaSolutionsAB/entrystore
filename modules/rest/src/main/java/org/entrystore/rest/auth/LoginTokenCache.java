@@ -16,9 +16,7 @@
 
 package org.entrystore.rest.auth;
 
-import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -41,6 +39,19 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 		synchronized (tokenCache) {
 			for (Map.Entry<String, UserInfo> e : tokenCache.entrySet()) {
 				if (e.getValue().getLoginExpiration().before(new Date())) {
+					tokenCache.remove(e.getKey());
+				}
+			}
+		}
+	}
+
+	public void removeTokens(String userName) {
+		if (userName == null) {
+			throw new IllegalArgumentException("Username must not be null");
+		}
+		synchronized (tokenCache) {
+			for (Map.Entry<String, UserInfo> e : tokenCache.entrySet()) {
+				if (userName.equals(e.getValue().userName)) {
 					tokenCache.remove(e.getKey());
 				}
 			}

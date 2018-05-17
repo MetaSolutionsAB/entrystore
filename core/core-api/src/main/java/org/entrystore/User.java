@@ -69,4 +69,16 @@ public interface User extends Resource, java.security.Principal {
 	 */
 	boolean setCustomProperties(Map<String, String> properties);
 
+	/**
+	 * @return True if the user has been disabled, i.e., should not be able to login.
+	 */
+	boolean isDisabled();
+
+	/**
+	 * Sets the disabled status of a user.
+	 *
+	 * @param disabled
+	 */
+	void setDisabled(boolean disabled);
+
 }

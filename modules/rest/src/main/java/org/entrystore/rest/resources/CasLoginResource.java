@@ -18,6 +18,7 @@ package org.entrystore.rest.resources;
 
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.util.SimpleHTML;
 import org.jasig.cas.client.Protocol;
@@ -150,7 +151,8 @@ public class CasLoginResource extends BaseResource {
 				String userName = assertion.getPrincipal().getName();
 				CookieVerifier verifier = new CookieVerifier(getRM());
 
-				if (verifier.userExists(userName)) {
+				if (BasicVerifier.userExists(getPM(), userName) &&
+						!BasicVerifier.isUserDisabled(getPM(), userName)) {
 					verifier.createAuthToken(userName, null, getResponse());
 
 					// TODO cache CAS ticket together with auth_token
