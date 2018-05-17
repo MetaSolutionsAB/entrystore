@@ -51,8 +51,6 @@ import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.auth.TokenCache;
-import org.entrystore.rest.auth.UserInfo;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
@@ -69,7 +67,6 @@ import org.restlet.Client;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.Uniform;
-import org.restlet.data.Cookie;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
@@ -1116,20 +1113,12 @@ public class ResourceResource extends BaseResource {
 
 				User resourceUser = (User) entry.getResource();
 				if (entityJSON.has("name")) {
-					String name = entityJSON.getString("name");
-					if (resourceUser.setName(name)) {
-						// the username was successfully changed, so we need to update the
-						// UserInfo object to not invalidate logged in user sessions
-						Cookie authTokenCookie = getRequest().getCookies().getFirst("auth_token");
-						if (authTokenCookie != null) {
-							TokenCache<String, UserInfo> tc = LoginTokenCache.getInstance();
-							String authToken = authTokenCookie.getValue();
-							UserInfo ui = tc.getTokenValue(authToken);
-							if (ui != null) {
-								ui.setUserName(name);
-								tc.putToken(authToken, ui);
-							}
-						}
+					String oldName = resourceUser.getName();
+					String newName = entityJSON.getString("name");
+					if (resourceUser.setName(newName)) {
+						// the username was successfully changed, so we need to update the UserInfo
+						// objects in the LoginTokenCache to not invalidate logged in user sessions
+						LoginTokenCache.getInstance().renameUser(oldName, newName);
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Name already taken.\"}"));
