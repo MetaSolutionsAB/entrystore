@@ -1167,6 +1167,11 @@ public class ResourceResource extends BaseResource {
 					}
 				}
 				if (entityJSON.has("disabled")) {
+					if (this.entry.getResourceURI().equals(getPM().getAuthenticatedUserURI())) {
+						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Users cannot set their own disabled status\"}"));
+						return;
+					}
 					boolean disabled = entityJSON.optBoolean("disabled", false);
 					resourceUser.setDisabled(disabled);
 					if (disabled) {
