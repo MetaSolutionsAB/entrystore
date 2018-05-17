@@ -200,7 +200,7 @@ public class SearchResource extends BaseResource {
 						if (fieldAndOrder.length == 2) {
 							String field = fieldAndOrder[0];
 							if (field.startsWith("title.")) {
-								field = field.replace("title.", "title_s.");
+								field = field.replace("title.", "title_sort.");
 							}
 							ORDER order = ORDER.asc;
 							try {
