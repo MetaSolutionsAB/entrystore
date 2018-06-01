@@ -410,8 +410,10 @@ public class EntryUtil {
 			Set<URI> foafFirstName = new HashSet<URI>();
 			Set<URI> foafSurname = new HashSet<URI>();
 			foafFirstName.add(new URIImpl(NS.foaf + "firstName"));
+			foafFirstName.add(new URIImpl(NS.foaf + "givenName"));
 			foafSurname.add(new URIImpl(NS.foaf + "surname"));
 			foafSurname.add(new URIImpl(NS.foaf + "lastName"));
+			foafSurname.add(new URIImpl(NS.foaf + "familyName"));
 			String firstName = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafFirstName, null);
 			String surname = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafSurname, null); 
 			if (surname != null) {
@@ -443,6 +445,7 @@ public class EntryUtil {
 			Set<URI> foafLN = new HashSet<URI>();
 			foafLN.add(new URIImpl(NS.foaf + "surname"));
 			foafLN.add(new URIImpl(NS.foaf + "lastName"));
+			foafLN.add(new URIImpl(NS.foaf + "familyName"));
 			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafLN, null);
 		}
 		return null;
