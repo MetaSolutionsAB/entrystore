@@ -30,10 +30,9 @@ import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.PasswordAuthentication;
 import javax.mail.Session;
-import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
-import javax.security.auth.login.Configuration;
+import javax.mail.internet.MimeUtility;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -42,7 +41,6 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.Properties;
 
 /**
@@ -90,6 +88,8 @@ public class Signup {
 
 		Session session = null;
 		Properties props = new Properties();
+
+		props.put("mail.transport.protocol", "smtp");
 		props.put("mail.smtp.host", host);
 		props.put("mail.smtp.port", port);
 
@@ -118,13 +118,13 @@ public class Signup {
 		// Authentication
 		if (username != null && password != null) {
 			props.put("mail.smtp.auth", "true");
-			session = Session.getDefaultInstance(props, new javax.mail.Authenticator() {
+			session = Session.getInstance(props, new javax.mail.Authenticator() {
 				protected PasswordAuthentication getPasswordAuthentication() {
 					return new PasswordAuthentication(username, password);
 				}
 			});
 		} else {
-			session = Session.getDefaultInstance(props);
+			session = Session.getInstance(props);
 		}
 
 		try {
@@ -134,7 +134,11 @@ public class Signup {
 				message.addRecipients(Message.RecipientType.BCC, InternetAddress.parse(bcc));
 			}
 			message.addRecipients(Message.RecipientType.TO, InternetAddress.parse(recipientEmail));
-			message.setSubject(subject);
+			if (subject.toLowerCase().startsWith("=?utf-8?")) {
+				message.setHeader("Subject", MimeUtility.fold(9, subject));
+			} else {
+				message.setSubject(subject, "UTF-8");
+			}
 
 			String templateHTML = null;
 			if (templatePath != null) {
@@ -184,7 +188,7 @@ public class Signup {
 			}
 			message.setText(messageText, "utf-8", "html");
 
-			Transport.send(message);
+			session.getTransport().send(message);
 		} catch (MessagingException e) {
 			log.error(e.getMessage());
 			return false;
