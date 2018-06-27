@@ -49,6 +49,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.net.URL;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Date;
@@ -108,7 +109,15 @@ public class SignupResource extends BaseResource {
 		SignupInfo ci = tc.getTokenValue(token);
 		if (ci == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			return html.representation("Invalid confirmation token.");
+			URL bURL = getRM().getRepositoryURL();
+			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + ((bURL.getPort() == 80 || bURL.getPort() == 443 ) ? "" : ":" + bURL.getPort());
+			return html.representation("<h4>Invalid confirmation link.</h4>" +
+					"This may be due to one of the following reasons:<br/>" +
+					"<ul><li>You have clicked the link twice and you already have an account.</li>" +
+					"<li>The confirmation link has expired.</li>" +
+					"<li>The link's confirmation token has never existed.</li></ul>" +
+					"Click here to sign up again and to receive a new confirmation link:<br/>" +
+					"<a href=\"" + appURL + "\"><pre>" + appURL + "</pre></a>");
 		}
 		tc.removeToken(token);
 
