@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.resources;
 
+import com.google.common.base.Joiner;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.config.Settings;
@@ -53,6 +54,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -84,7 +86,21 @@ public class ProxyResource extends BaseResource {
 	@Override
 	public void doInit() {
 		if (whitelistAnon == null) {
-			whitelistAnon = getRM().getConfiguration().getStringList(Settings.PROXY_WHITELIST_ANONYMOUS);
+			whitelistAnon = new ArrayList();
+			List<String> tmpWhitelistAnon = getRM().getConfiguration().getStringList(Settings.PROXY_WHITELIST_ANONYMOUS);
+			// we normalize the list to lower case and to not contain null
+			for (String domain : tmpWhitelistAnon) {
+				if (domain != null) {
+					whitelistAnon.add(domain.toLowerCase());
+				}
+			}
+			if (whitelistAnon.size() > 0) {
+				log.info("Proxy whitelist for guest users initialized with following domains: " +
+						Joiner.on(", ").join(whitelistAnon)+
+						"; Requests to other domains require authentication");
+			} else {
+				log.info("No domains provided for proxy whitelist; only authenticated users are allowed to perform proxy requests");
+			}
 		}
 	}
 
