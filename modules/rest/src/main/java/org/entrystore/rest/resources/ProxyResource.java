@@ -18,6 +18,7 @@ package org.entrystore.rest.resources;
 
 import org.apache.commons.lang.StringEscapeUtils;
 import org.entrystore.impl.converters.ConverterUtil;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.RDFJSON;
@@ -53,6 +54,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -77,8 +79,13 @@ public class ProxyResource extends BaseResource {
 
 	Representation representation;
 
+	private static List whitelistAnon;
+
 	@Override
 	public void doInit() {
+		if (whitelistAnon == null) {
+			whitelistAnon = getRM().getConfiguration().getStringList(Settings.PROXY_WHITELIST_ANONYMOUS);
+		}
 	}
 
 	@Get
@@ -97,8 +104,10 @@ public class ProxyResource extends BaseResource {
 			return null;
 		}
 
+		String host = URI.create(extResourceURL).getHost().toLowerCase();
+
 		URI authUser = getPM().getAuthenticatedUserURI();
-		if (authUser == null || getPM().getGuestUser().getURI().equals(authUser)) {
+		if (!whitelistAnon.contains(host) && (authUser == null || getPM().getGuestUser().getURI().equals(authUser))) {
 			getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 			return null;
 		}
