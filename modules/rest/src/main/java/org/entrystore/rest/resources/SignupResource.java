@@ -159,15 +159,17 @@ public class SignupResource extends BaseResource {
 			}
 			log.info("Created user " + u.getURI());
 
-			// Create context and set ACL and alias
-			Entry homeContext = getCM().createResource(null, GraphType.Context, null, null);
-			homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
-			getCM().setName(homeContext.getEntryURI(), ci.email);
-			log.info("Created context " + homeContext.getResourceURI());
+			if ("on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.SIGNUP_CREATE_HOME_CONTEXT, "off"))) {
+				// Create context and set ACL and alias
+				Entry homeContext = getCM().createResource(null, GraphType.Context, null, null);
+				homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
+				getCM().setName(homeContext.getEntryURI(), ci.email);
+				log.info("Created context " + homeContext.getResourceURI());
 
-			// Set home context of user
-			u.setHomeContext((Context) homeContext.getResource());
-			log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
+				// Set home context of user
+				u.setHomeContext((Context) homeContext.getResource());
+				log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
+			}
 		} finally {
 			pm.setAuthenticatedUserURI(authUser);
 		}
