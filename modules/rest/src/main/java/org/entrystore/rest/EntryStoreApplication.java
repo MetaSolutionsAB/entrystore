@@ -104,6 +104,8 @@ public class EntryStoreApplication extends Application {
 
 	private static String VERSION = null;
 
+	private static Date startupDate = null;
+
 	protected static String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
 
 	URI configURI;
@@ -116,6 +118,7 @@ public class EntryStoreApplication extends Application {
 
 	public EntryStoreApplication(URI configPath, Context parentContext) {
 		super(parentContext);
+		Date startupBegin = new Date();
 		this.configURI = configPath;
 		getContext().getAttributes().put(KEY, this);
 
@@ -220,6 +223,9 @@ public class EntryStoreApplication extends Application {
 			} else {
 				log.warn("Backup is disabled in configuration");
 			}
+
+			this.startupDate = new Date();
+			log.info("EntryStore startup completed in " + (startupDate.getTime() - startupBegin.getTime()) + " ms");
 		}
 	}
 
@@ -493,6 +499,10 @@ public class EntryStoreApplication extends Application {
 			}
 		}
 		return VERSION;
+	}
+
+	public static Date getStartupDate() {
+		return startupDate;
 	}
 
 	@Override

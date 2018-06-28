@@ -22,6 +22,7 @@ import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.EntryStoreApplication;
+import org.entrystore.rest.auth.LoginTokenCache;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.MediaType;
@@ -107,6 +108,8 @@ public class StatusResource extends BaseResource  {
 					result.put("solrReindexOnStartup", settingToBoolean(Settings.SOLR_REINDEX_ON_STARTUP));
 					result.put("signup", settingToBoolean(Settings.SIGNUP));
 					result.put("version", EntryStoreApplication.getVersion());
+					result.put("startupTime", EntryStoreApplication.getStartupDate());
+					result.put("authTokenCount", LoginTokenCache.getInstance().size());
 
 					if (parameters.containsKey("includeStats")) {
 						try {
