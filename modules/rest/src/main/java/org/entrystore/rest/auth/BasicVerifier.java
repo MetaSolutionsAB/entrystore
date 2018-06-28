@@ -82,6 +82,10 @@ public class BasicVerifier implements Verifier {
 	}
 
 	public static boolean userExists(PrincipalManager pm, String userName) {
+		if (userName == null) {
+			return false;
+		}
+
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());

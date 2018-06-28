@@ -35,6 +35,7 @@ public class Settings {
 	public static String AUTH_CAS_VERSION = "entrystore.auth.cas.version";
 	public static String AUTH_CAS_SERVER_URL = "entrystore.auth.cas.server.url";
 	public static String AUTH_CAS_SERVER_LOGIN_URL = "entrystore.auth.cas.server.url.login";
+	public static String AUTH_CAS_USER_AUTO_PROVISIONING = "entrystore.auth.cas.user-auto-provisioning";
 
 	public static String AUTH_PASSWORD = "entrystore.auth.password";
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
