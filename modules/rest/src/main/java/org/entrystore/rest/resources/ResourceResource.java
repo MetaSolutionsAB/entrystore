@@ -51,6 +51,7 @@ import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.auth.LoginTokenCache;
+import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
@@ -1127,7 +1128,10 @@ public class ResourceResource extends BaseResource {
 				}
 				if (entityJSON.has("password")) {
 					String passwd =  entityJSON.getString("password");
-					if (!resourceUser.setSecret(passwd)) {
+					if (resourceUser.setSecret(passwd)) {
+						Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
+						return;
+					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Password needs to be at least 8 characters long.\"}"));
 						return;

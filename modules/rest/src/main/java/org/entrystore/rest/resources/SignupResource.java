@@ -30,6 +30,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
+import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.EmailValidator;
 import org.entrystore.rest.util.RecaptchaVerifier;
 import org.entrystore.rest.util.SimpleHTML;
@@ -335,7 +336,7 @@ public class SignupResource extends BaseResource {
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
 		log.info("Generated sign-up token " + token + " for " + ci.email);
 
-		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), ci.firstName + " " + ci.lastName, ci.email, confirmationLink, false);
+		boolean sendSuccessful = Email.sendSignupConfirmation(getRM().getConfiguration(), ci.firstName + " " + ci.lastName, ci.email, confirmationLink);
 		if (sendSuccessful) {
 			SignupTokenCache.getInstance().putToken(token, ci);
 			log.info("Sent confirmation request to " + ci.email);

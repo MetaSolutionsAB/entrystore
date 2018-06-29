@@ -24,9 +24,9 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
+import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.EmailValidator;
 import org.entrystore.rest.util.RecaptchaVerifier;
 import org.entrystore.rest.util.SimpleHTML;
@@ -107,6 +107,7 @@ public class PasswordResetResource extends BaseResource {
 
 			// Reset password
 			if (u.setSecret(ci.password)) {
+				Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), userEntry);
 				log.info("Reset password for user " + u.getURI());
 			} else {
 				log.error("Error when resetting password for user " + u.getURI());
@@ -266,7 +267,7 @@ public class PasswordResetResource extends BaseResource {
 				String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
 				log.info("Generated password reset token " + token + " for " + ci.email);
 
-				boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), null, ci.email, confirmationLink, true);
+				boolean sendSuccessful = Email.sendPasswordResetConfirmation(getRM().getConfiguration(), ci.email, confirmationLink);
 				if (sendSuccessful) {
 					SignupTokenCache.getInstance().putToken(token, ci);
 					log.info("Sent confirmation request to " + ci.email);
@@ -283,7 +284,7 @@ public class PasswordResetResource extends BaseResource {
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);
-		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.email + " if the user exists"));
+		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.email + " if the user exists."));
 	}
 
 	private String constructHtmlForm(boolean reCaptcha) {
