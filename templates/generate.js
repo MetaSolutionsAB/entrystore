@@ -83,6 +83,15 @@ for (var lang in conf) {
     }
   };
 
+  var emailPwChange = {
+    body: {
+      greeting: langStr.greeting,
+      name: '__NAME__',
+      intro: langStr.pwchangeIntro,
+      outro: langStr.supportText
+    }
+  };
+
   if (lang == 'en') {
     lang = '';
   } else {
@@ -91,6 +100,7 @@ for (var lang in conf) {
 
   fs.writeFileSync(outDir + 'email_signup' + lang + '.html', minify(mailGenerator.generate(emailSignup)), 'utf8');
   fs.writeFileSync(outDir + 'email_pwreset' + lang + '.html', minify(mailGenerator.generate(emailPwReset)), 'utf8');
-  //fs.writeFileSync(outDir + 'email_signup' + lang + '.txt', mailGenerator.generatePlaintext(emailSignup), 'utf8');
-  //fs.writeFileSync(outDir + 'email_pwreset' + lang + '.txt', mailGenerator.generatePlaintext(emailPwReset), 'utf8');
+  fs.writeFileSync(outDir + 'email_pwchange' + lang + '.html', minify(mailGenerator.generate(emailPwChange)), 'utf8');
+
+  //fs.writeFileSync(outDir + 'email_signup' + lang + '.txt', mailGenerator.generatePlaintext(...), 'utf8');
 }

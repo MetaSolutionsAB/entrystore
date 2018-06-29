@@ -12,7 +12,8 @@
     "pwresetIntro": "You have received this email because a password reset request for your ENTRYSCAPE account was received.",
     "pwresetInstructions": "Click the button below to reset your password:",
     "pwresetButton": "Reset your password",
-    "pwresetOutro": "If you did not request a password reset, no further action is required on your part."
+    "pwresetOutro": "If you did not request a password reset, no further action is required on your part.",
+    "pwchangeIntro": "Your password has been successfully changed."
   },
   "sv": {
     "productName": "ENTRYSCAPE",
@@ -27,7 +28,8 @@
     "pwresetIntro": "Du har fått det här meddelandet eftersom vi har tagit emot en begäran om återställning av lösenord för ditt ENTRYSCAPE-konto.",
     "pwresetInstructions": "Klicka på knappen nedan för att återställa ditt lösenord:",
     "pwresetButton": "Återställ ditt lösenord",
-    "pwresetOutro": "Om du inte begärt återställning av lösenord krävs det ingen åtgärd från din sida."
+    "pwresetOutro": "Om du inte begärt återställning av lösenord krävs det ingen åtgärd från din sida.",
+    "pwchangeIntro": "Ditt lösenord har ändrats."
   },
   "de": {
     "productName": "ENTRYSCAPE",
@@ -42,6 +44,7 @@
     "pwresetIntro": "Sie haben diese E-Mail erhalten weil wir eine Aufforderung zum Zurücksetzen des Kennworts für Ihr ENTRYSCAPE-Konto erhalten haben.",
     "pwresetInstructions": "Klicken Sie auf die Schaltfläche unten, um Ihr Kennwort zurückzusetzen:",
     "pwresetButton": "Setze Kennwort zurück",
-    "pwresetOutro": "Falls Sie kein Zurücksetzen des Kennworts angefordert haben sind keine weiteren Maßnahmen ihrerseits erforderlich."
+    "pwresetOutro": "Falls Sie kein Zurücksetzen des Kennworts angefordert haben sind keine weiteren Maßnahmen ihrerseits erforderlich.",
+    "pwchangeIntro": "Ihr Kennwort wurde erfolgreich geändert."
   }
 }
