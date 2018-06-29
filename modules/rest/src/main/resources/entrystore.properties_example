@@ -61,6 +61,10 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.password-reset.email.subject=Password reset request
 # entrystore.auth.password-reset.email.template=/path/to/template.html
 
+## Information about changed password
+# entrystore.auth.password-change.email.subject=Your password has been changed
+# entrystore.auth.password-change.email.template=/path/to/template.html
+
 ## OpenID (deprecated)
 # entrystore.auth.openid=on|off (default: off)
 # entrystore.auth.openid.google=on
