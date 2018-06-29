@@ -130,6 +130,9 @@ public class Settings {
 	public static String PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-reset.email.template";
 	public static String PASSWORD_RESET_SUBJECT = "entrystore.auth.password-reset.email.subject";
 
+	public static String PASSWORD_CHANGE_SUBJECT = "entrystore.auth.password-change.email.subject";
+	public static String PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-change.email.template";
+
 	public static String CORS = "entrystore.cors";
 	public static String CORS_ORIGINS = "entrystore.cors.origins";
 	public static String CORS_HEADERS = "entrystore.cors.headers";
