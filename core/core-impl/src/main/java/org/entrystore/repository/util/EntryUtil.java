@@ -388,16 +388,16 @@ public class EntryUtil {
 			if (name != null) {
 				return name;
 			}
-			String firstName = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl(NS.foaf + "firstName"), null);
-			String surname = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl(NS.foaf + "surname"), null);
-			if (firstName != null) {
-				result = firstName;
+			String givenName = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl(NS.foaf + "givenName"), null);
+			String familyName = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl(NS.foaf + "familyName"), null);
+			if (givenName != null) {
+				result = givenName;
 			}
-			if (surname != null) {
+			if (familyName != null) {
 				if (result != null) {
-					result += " " + surname;
+					result += " " + familyName;
 				} else {
-					result = surname;
+					result = familyName;
 				}
 			}
 		}
