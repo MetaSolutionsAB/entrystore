@@ -256,8 +256,12 @@ public class SearchResource extends BaseResource {
 							} else if (btChild == GraphType.User && locChild == EntryType.Local) {
 								User u = (User) e.getResource();
 								childJSON.put("name", u.getName());
-								if (u.isDisabled()) {
-									childJSON.put("disabled", true);
+								try {
+									if (u.isDisabled()) {
+										childJSON.put("disabled", true);
+									}
+								} catch (AuthorizationException ae) {
+									log.debug("Not allowed to read disabled status of " + e.getEntryURI());
 								}
 							} else if (btChild == GraphType.Group && locChild == EntryType.Local) {
 								childJSON.put("name", ((Group) e.getResource()).getName());								
@@ -308,18 +312,27 @@ public class SearchResource extends BaseResource {
 								childJSON.accumulate("noAccessToMetadata", true);
 							}
 
-							JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(e.getGraph()));
-							if (childInfo != null) {
-								childJSON.accumulate("info", childInfo);   
-							} else {
-								childJSON.accumulate("info", new JSONObject());
+							try {
+								JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(e.getGraph()));
+								if (childInfo != null) {
+									childJSON.accumulate("info", childInfo);
+								} else {
+									childJSON.accumulate("info", new JSONObject());
+								}
+							} catch (AuthorizationException ae) {
+								childJSON.accumulate("noAccessToEntryInfo", true);
 							}
-							
-							if (e.getRelations() != null) {
-								Graph childRelationsGraph = new LinkedHashModel(e.getRelations());
-								JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
-								childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
+
+							try {
+								if (e.getRelations() != null) {
+									Graph childRelationsGraph = new LinkedHashModel(e.getRelations());
+									JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
+									childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
+								}
+							} catch (AuthorizationException ae) {
+								childJSON.accumulate("noAccessToRelations", true);
 							}
+
 							children.put(childJSON);
 						}
 					}
