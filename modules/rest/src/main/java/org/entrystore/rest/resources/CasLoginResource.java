@@ -16,8 +16,13 @@
 
 package org.entrystore.rest.resources;
 
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.util.SimpleHTML;
 import org.jasig.cas.client.Protocol;
@@ -148,12 +153,43 @@ public class CasLoginResource extends BaseResource {
 					log.info(k + ": " + attr.get(k));
 				}
 				String userName = assertion.getPrincipal().getName();
-				CookieVerifier verifier = new CookieVerifier(getRM());
+				if ("admin".equalsIgnoreCase(userName)) {
+					userName = null;
+				}
+				boolean autoProvisioning = "on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.AUTH_CAS_USER_AUTO_PROVISIONING, "off"));
 
-				if (verifier.userExists(userName)) {
-					verifier.createAuthToken(userName, null, getResponse());
+				if (userName != null && !BasicVerifier.userExists(getPM(), userName)) {
+					if (!autoProvisioning) {
+						log.warn("User auto-provisioning is deactivated");
+					} else {
+						PrincipalManager pm = getPM();
+						URI authUser = pm.getAuthenticatedUserURI();
+						try {
+							pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
-					// TODO cache CAS ticket together with auth_token
+							// Create user
+							Entry entry = pm.createResource(null, GraphType.User, null, null);
+							if (entry != null) {
+								User u = (User) entry.getResource();
+								log.info("Created user " + u.getURI());
+								pm.setPrincipalName(entry.getResourceURI(), userName);
+								// TODO set some basic metadata, if we can get it from the CAS server
+								// (does not seem to be possible until at least CAS2)
+								// Signup.setFoafMetadata(entry, new org.restlet.security.User(...));
+							} else {
+								log.error("An error occured when creating the new user");
+							}
+						} finally {
+							pm.setAuthenticatedUserURI(authUser);
+						}
+					}
+				}
+
+				if (userName != null && BasicVerifier.userExists(getPM(), userName) && !BasicVerifier.isUserDisabled(getPM(), userName)) {
+					new CookieVerifier(getRM()).createAuthToken(userName, null, getResponse());
+
+					// TODO cache CAS ticket together with auth_token (probably
+					// necessary for logouts originating from CAS)
 
 					if (redirSuccess != null) {
 						try {

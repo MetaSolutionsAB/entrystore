@@ -589,8 +589,6 @@ public class EntryResource extends BaseResource {
 						User user = (User) entry.getResource();
 						resourceObj.put("name", user.getName());
 
-						// resourceObj.put("password", user.getSecret());
-
 						Context homeContext = user.getHomeContext();
 						if (homeContext != null) {
 							resourceObj.put("homecontext", homeContext.getEntry().getId());
@@ -599,6 +597,11 @@ public class EntryResource extends BaseResource {
 						String prefLang = user.getLanguage();
 						if (prefLang != null) {
 							resourceObj.put("language", prefLang);
+						}
+
+						boolean disabled = user.isDisabled();
+						if (disabled) {
+							resourceObj.put("disabled", disabled);
 						}
 
 						JSONObject customProperties = new JSONObject();

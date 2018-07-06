@@ -35,6 +35,7 @@ public class Settings {
 	public static String AUTH_CAS_VERSION = "entrystore.auth.cas.version";
 	public static String AUTH_CAS_SERVER_URL = "entrystore.auth.cas.server.url";
 	public static String AUTH_CAS_SERVER_LOGIN_URL = "entrystore.auth.cas.server.url.login";
+	public static String AUTH_CAS_USER_AUTO_PROVISIONING = "entrystore.auth.cas.user-auto-provisioning";
 
 	public static String AUTH_PASSWORD = "entrystore.auth.password";
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
@@ -84,7 +85,6 @@ public class Settings {
 	public static String SOLR_URL = "entrystore.solr.url";
 	public static String SOLR_REINDEX_ON_STARTUP = "entrystore.solr.reindex-on-startup";
 	public static String SOLR_EXTRACT_FULLTEXT = "entrystore.solr.extract-fulltext";
-	public static String SOLR_NGRAM_ALL_LITERALS = "entrystore.solr.ngram-all-literals";
 
 	public static String REPOSITORY_REWRITE_BASEREFERENCE = "entrystore.repository.rewrite-basereference";
 	
@@ -106,6 +106,8 @@ public class Settings {
 	public static String REPOSITORY_TRACK_DELETED = "entrystore.repository.track-deleted-entries";
 	public static String REPOSITORY_TRACK_DELETED_CLEANUP = "entrystore.repository.track-deleted-entries.cleanup";
 
+	public static String PROXY_WHITELIST_ANONYMOUS = "entrystore.proxy.whitelist.anonymous";
+
 	public static String SMTP_HOST = "entrystore.smtp.host";
 	public static String SMTP_PORT = "entrystore.smtp.port";
 	public static String SMTP_SECURITY = "entrystore.smtp.security";
@@ -122,10 +124,14 @@ public class Settings {
 	public static String SIGNUP_SUBJECT = "entrystore.auth.signup.email.subject";
 	public static String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.signup.email.template";
 	public static String SIGNUP_WHITELIST = "entrystore.auth.signup.whitelist";
+	public static String SIGNUP_CREATE_HOME_CONTEXT = "entrystore.auth.signup.create-home-context";
 
 	public static String PASSWORD_RESET = "entrystore.auth.password-reset";
 	public static String PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-reset.email.template";
 	public static String PASSWORD_RESET_SUBJECT = "entrystore.auth.password-reset.email.subject";
+
+	public static String PASSWORD_CHANGE_SUBJECT = "entrystore.auth.password-change.email.subject";
+	public static String PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-change.email.template";
 
 	public static String CORS = "entrystore.cors";
 	public static String CORS_ORIGINS = "entrystore.cors.origins";

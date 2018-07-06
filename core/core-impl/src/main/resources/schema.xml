@@ -166,12 +166,24 @@ lexicographic ordering isn't equal to the numeric ordering) -->
 
         <fieldType name="text_ngram" class="solr.TextField">
             <analyzer type="index">
-                <tokenizer class="solr.NGramTokenizerFactory" minGramSize="3" maxGramSize="15"/>
+                <tokenizer class="solr.NGramTokenizerFactory" minGramSize="3" maxGramSize="25"/>
                 <filter class="solr.LowerCaseFilterFactory"/>
             </analyzer>
             <analyzer type="query">
                 <tokenizer class="solr.WhitespaceTokenizerFactory"/>
                 <filter class="solr.LowerCaseFilterFactory"/>
+            </analyzer>
+        </fieldType>
+
+        <!-- A text field intended for sorting -->
+        <fieldType name="text_sort" class="solr.TextField" sortMissingLast="true" omitNorms="true">
+            <analyzer>
+                <!-- KeywordTokenizer preserves the entire input string as a single token -->
+                <tokenizer class="solr.KeywordTokenizerFactory"/>
+                <!-- Sorting should be case insensitive -->
+                <filter class="solr.LowerCaseFilterFactory" />
+                <!-- TrimFilter removes any leading or trailing whitespace -->
+                <filter class="solr.TrimFilterFactory" />
             </analyzer>
         </fieldType>
 
@@ -212,12 +224,9 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="entryType" type="string" indexed="true"/>
         <field name="resourceType" type="string" indexed="true"/>
 
-        <field name="metadata.subject" type="string" indexed="true" multiValued="true"/>
-        <field name="metadata.predicate" type="string" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.uri.*" type="string" indexed="true" multiValued="true"/>
-        <dynamicField name="metadata.predicate.literal.*" type="text" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.literal_s.*" type="string" indexed="true" multiValued="true"/>
-        <dynamicField name="metadata.predicate.literal_ng.*" type="text_ngram" indexed="true" multiValued="true"/>
+        <dynamicField name="metadata.predicate.literal.*" type="text_ngram" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.date.*" type="date" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.integer.*" type="slong" indexed="true" multiValued="false"/>
         <field name="metadata.object.uri" type="string" indexed="true" multiValued="true"/>
@@ -242,7 +251,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
 
         <!-- title needs to be single-valued in order be sortable, desc and tag can be text and multi value -->
         <dynamicField name="title.*" type="text_ngram" indexed="true" multiValued="false"/>
-        <dynamicField name="title_s.*" type="string" indexed="true" multiValued="false"/>
+        <dynamicField name="title_sort.*" type="text_sort" indexed="true" multiValued="false"/>
         <dynamicField name="description.*" type="text" indexed="true" multiValued="true"/>
         <dynamicField name="tag.literal.*" type="text_ngram" indexed="true" multiValued="true"/>
 
@@ -283,7 +292,7 @@ both match, the first appearing in the schema will be used.  -->
 is added to the index.  It's used either to index the same field differently,
 or to add multiple fields to the same field for easier/faster searching.  -->
     <copyField source="title" dest="all"/>
-    <copyField source="title.*" dest="title_s.*"/>
+    <copyField source="title.*" dest="title_sort.*"/>
     <copyField source="description" dest="all"/>
     <copyField source="tag.literal" dest="all"/>
     <copyField source="metadata.predicate.literal_s.*" dest="metadata.predicate.literal.*"/>

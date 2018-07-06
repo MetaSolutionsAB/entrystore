@@ -51,4 +51,9 @@ public abstract class TokenCache<K, V> {
 
 	abstract void cleanup();
 
+	public int size() {
+		cleanup();
+		return tokenCache.size();
+	}
+
 }

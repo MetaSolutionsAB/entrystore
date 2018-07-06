@@ -50,6 +50,7 @@ public class ProvenanceImpl implements Provenance {
     Log log = LogFactory.getLog(ProvenanceImpl.class);
 
     private EntryImpl entry;
+
     public ProvenanceImpl(EntryImpl entry) {
         this.entry = entry;
     }
@@ -59,33 +60,56 @@ public class ProvenanceImpl implements Provenance {
         RepositoryConnection rc = null;
         try {
             rc = this.entry.repository.getConnection();
-            return getEntities(type, rc);
+            rc.begin();
+            List<Entity> result = getEntities(type, rc);
+            rc.commit();
+            return result;
         } catch (RepositoryException e) {
+            if (rc != null) {
+                try {
+                    rc.rollback();
+                } catch (RepositoryException e1) {
+                    log.error(e1.getMessage());
+                }
+            }
             log.error(e.getMessage());
-            return new ArrayList<Entity>();
         } finally {
-            try {
-                rc.close();
-            } catch (RepositoryException e) {
-                log.error(e.getMessage());
+            if (rc != null) {
+                try {
+                    rc.close();
+                } catch (RepositoryException e) {
+                    log.error(e.getMessage());
+                }
             }
         }
+        return new ArrayList<Entity>();
     }
 
     public List<Entity> getEntities(ProvenanceType type, RepositoryConnection rc) throws RepositoryException {
         List<Entity> entities = new ArrayList<Entity>();
-        RepositoryResult<Statement> latestStmt = rc.getStatements(null, OWL.SAMEAS, this.entry.getSesameLocalMetadataURI(), false, this.entry.entryURI);
-        org.openrdf.model.URI latestURI = latestStmt.hasNext() ? (org.openrdf.model.URI) latestStmt.next().getSubject() : null;
-		if (!latestStmt.isClosed()) {
-			latestStmt.close();
-		}
-		RepositoryResult<Statement> rr = rc.getStatements(null, RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
-		while (rr.hasNext()) {
-            entities.add(new MetadataEntityImpl(this.entry, rr.next(), latestURI));
+        RepositoryResult<Statement> latestStmt = null;
+        org.openrdf.model.URI latestURI = null;
+        try {
+            latestStmt = rc.getStatements(null, OWL.SAMEAS, this.entry.getSesameLocalMetadataURI(), false, this.entry.entryURI);
+            latestURI = latestStmt.hasNext() ? (org.openrdf.model.URI) latestStmt.next().getSubject() : null;
+        } finally {
+            if (latestStmt != null && !latestStmt.isClosed()) {
+                latestStmt.close();
+            }
         }
-        if (!rr.isClosed()) {
-			rr.close();
-		}
+
+		RepositoryResult<Statement> rr = null;
+        try {
+            rr = rc.getStatements(null, RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
+            while (rr.hasNext()) {
+                entities.add(new MetadataEntityImpl(this.entry, rr.next(), latestURI));
+            }
+        } finally {
+            if (rr != null && !rr.isClosed()) {
+                rr.close();
+            }
+        }
+
         entities.sort(new Comparator<Entity>() {
             public int compare(Entity t1, Entity t2) {
                 Date d1 = t1.getGeneratedDate();
@@ -118,10 +142,11 @@ public class ProvenanceImpl implements Provenance {
     public Entity getEntityFor(URI uri) {
         RepositoryConnection rc = null;
         RepositoryResult<Statement> rr = null;
-        try {
+		RepositoryResult<Statement> latestStmt = null;
+		try {
             rc = this.entry.repository.getConnection();
             rr = rc.getStatements(rc.getValueFactory().createURI(uri.toString()), RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
-            RepositoryResult<Statement> latestStmt = rc.getStatements(null, OWL.SAMEAS, this.entry.getSesameLocalMetadataURI(), false, this.entry.entryURI);
+            latestStmt = rc.getStatements(null, OWL.SAMEAS, this.entry.getSesameLocalMetadataURI(), false, this.entry.entryURI);
             org.openrdf.model.URI latestURI = latestStmt.hasNext() ? (org.openrdf.model.URI) latestStmt.next().getSubject() : null;
 			if (latestStmt != null && !latestStmt.isClosed()) {
 				latestStmt.close();
@@ -133,23 +158,30 @@ public class ProvenanceImpl implements Provenance {
             return entity;
         } catch (RepositoryException e) {
             log.error(e.getMessage());
-            return null;
         } finally {
-			try {
-				if (rr != null && !rr.isClosed()) {
-					rr.close();
+            if (rr != null && !rr.isClosed()) {
+                try {
+                    rr.close();
+                } catch (RepositoryException e) {
+                    log.error(e.getMessage());
+                }
+            }
+            if (latestStmt != null && !latestStmt.isClosed()) {
+            	try {
+            		latestStmt.close();
+				} catch (RepositoryException e) {
+            		log.error(e.getMessage());
 				}
-			} catch (RepositoryException e) {
-				log.error(e.getMessage());
 			}
-            try {
-                if (rc != null) {
-					rc.close();
-				}
-            } catch (RepositoryException e) {
-                log.error(e.getMessage());
+            if (rc != null) {
+                try {
+                    rc.close();
+                } catch (RepositoryException e) {
+                    log.error(e.getMessage());
+                }
             }
         }
+        return null;
     }
 
     @Override
@@ -176,17 +208,29 @@ public class ProvenanceImpl implements Provenance {
         RepositoryConnection rc = null;
         try {
             rc = this.entry.repository.getConnection();
-            return addMetadataEntity(oldgraph, rc);
+            rc.begin();
+            GraphEntity result = addMetadataEntity(oldgraph, rc);
+            rc.commit();
+            return result;
         } catch (RepositoryException e) {
+            if (rc != null) {
+                try {
+                    rc.rollback();
+                } catch (RepositoryException e1) {
+                    log.error(e1.getMessage());
+                }
+            }
             log.error(e.getMessage());
-            return null;
         } finally {
-            try {
-                rc.close();
-            } catch (RepositoryException e) {
-                log.error(e.getMessage());
+            if (rc != null) {
+                try {
+                    rc.close();
+                } catch (RepositoryException e) {
+                    log.error(e.getMessage());
+                }
             }
         }
+        return null;
     }
 
     private org.openrdf.model.URI getUserURI(ValueFactory vf) {
@@ -199,11 +243,29 @@ public class ProvenanceImpl implements Provenance {
     }
 
     protected void storeProvenanceGraph(org.openrdf.model.URI ng, Graph graph) {
+        RepositoryConnection rc = null;
         try {
-            RepositoryConnection rc = this.entry.repositoryManager.getProvenanceRepository().getConnection();
+            rc = this.entry.repositoryManager.getProvenanceRepository().getConnection();
+            rc.begin();
             rc.add(graph, ng);
+            rc.commit();
         } catch (RepositoryException e) {
+            if (rc != null) {
+                try {
+                    rc.rollback();
+                } catch (RepositoryException e1) {
+                    log.error(e.getMessage());
+                }
+            }
             log.error(e.getMessage());
+        } finally {
+            if (rc != null) {
+                try {
+                    rc.close();
+                } catch (RepositoryException e) {
+                    log.error(e.getMessage());
+                }
+            }
         }
     }
 
@@ -244,16 +306,27 @@ public class ProvenanceImpl implements Provenance {
         RepositoryConnection rc = null;
         try {
             rc = this.entry.repositoryManager.getProvenanceRepository().getConnection();
+            rc.begin();
             for (Entity e : entities) {
                 ((MetadataEntityImpl) e).remove(rc);
             }
+            rc.commit();
         } catch (RepositoryException e) {
+            if (rc != null) {
+                try {
+                    rc.rollback();
+                } catch (RepositoryException e1) {
+                    log.error(e1.getMessage());
+                }
+            }
             log.error(e.getMessage());
         } finally {
-            try {
-                rc.close();
-            } catch (RepositoryException e) {
-                log.error(e.getMessage());
+            if (rc != null) {
+                try {
+                    rc.close();
+                } catch (RepositoryException e) {
+                    log.error(e.getMessage());
+                }
             }
         }
     }
@@ -277,4 +350,5 @@ public class ProvenanceImpl implements Provenance {
         }
         return result;
     }
+
 }

@@ -16,17 +16,19 @@
 
 package org.entrystore.repository.config;
 
-import java.awt.Color;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.entrystore.config.Config;
+
+import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -34,10 +36,6 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.entrystore.config.Config;
 
 /**
  * Wrapper around Java's Properties.
@@ -217,7 +215,7 @@ public class PropertiesConfiguration implements Config {
 			String escapedURL = configURL.toString().replaceAll(" ", "%20");
 			URI url = new URI(escapedURL);
 			File file = new File(url);
-			InputStream input = new BufferedInputStream(new FileInputStream(file));
+			InputStreamReader input = new InputStreamReader(new FileInputStream(file), "UTF-8");
 			config.load(input);
 			input.close();
 		} catch (URISyntaxException e) {
@@ -230,7 +228,7 @@ public class PropertiesConfiguration implements Config {
 			String escapedURL = configURL.toString().replaceAll(" ", "%20");
 			URI url = new URI(escapedURL.toString());
 			File file = new File(url);
-			OutputStream output = new BufferedOutputStream(new FileOutputStream(file));
+			OutputStreamWriter output = new OutputStreamWriter(new FileOutputStream(file), "UTF-8");
 			config.store(output, configName);
 			output.close();
 		} catch (URISyntaxException e) {

@@ -30,6 +30,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
+import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.EmailValidator;
 import org.entrystore.rest.util.RecaptchaVerifier;
 import org.entrystore.rest.util.SimpleHTML;
@@ -49,6 +50,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.net.URL;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Date;
@@ -108,7 +110,15 @@ public class SignupResource extends BaseResource {
 		SignupInfo ci = tc.getTokenValue(token);
 		if (ci == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			return html.representation("Invalid confirmation token.");
+			URL bURL = getRM().getRepositoryURL();
+			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + ((bURL.getPort() == 80 || bURL.getPort() == 443 ) ? "" : ":" + bURL.getPort());
+			return html.representation("<h4>Invalid confirmation link.</h4>" +
+					"This may be due to one of the following reasons:<br/>" +
+					"<ul><li>You have clicked the link twice and you already have an account.</li>" +
+					"<li>The confirmation link has expired.</li>" +
+					"<li>The link's confirmation token has never existed.</li></ul>" +
+					"Click here to sign up again and to receive a new confirmation link:<br/>" +
+					"<a href=\"" + appURL + "\"><pre>" + appURL + "</pre></a>");
 		}
 		tc.removeToken(token);
 
@@ -150,15 +160,17 @@ public class SignupResource extends BaseResource {
 			}
 			log.info("Created user " + u.getURI());
 
-			// Create context and set ACL and alias
-			Entry homeContext = getCM().createResource(null, GraphType.Context, null, null);
-			homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
-			getCM().setName(homeContext.getEntryURI(), ci.email);
-			log.info("Created context " + homeContext.getResourceURI());
+			if ("on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.SIGNUP_CREATE_HOME_CONTEXT, "off"))) {
+				// Create context and set ACL and alias
+				Entry homeContext = getCM().createResource(null, GraphType.Context, null, null);
+				homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
+				getCM().setName(homeContext.getEntryURI(), ci.email);
+				log.info("Created context " + homeContext.getResourceURI());
 
-			// Set home context of user
-			u.setHomeContext((Context) homeContext.getResource());
-			log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
+				// Set home context of user
+				u.setHomeContext((Context) homeContext.getResource());
+				log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
+			}
 		} finally {
 			pm.setAuthenticatedUserURI(authUser);
 		}
@@ -324,7 +336,7 @@ public class SignupResource extends BaseResource {
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
 		log.info("Generated sign-up token " + token + " for " + ci.email);
 
-		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), ci.firstName + " " + ci.lastName, ci.email, confirmationLink, false);
+		boolean sendSuccessful = Email.sendSignupConfirmation(getRM().getConfiguration(), ci.firstName + " " + ci.lastName, ci.email, confirmationLink);
 		if (sendSuccessful) {
 			SignupTokenCache.getInstance().putToken(token, ci);
 			log.info("Sent confirmation request to " + ci.email);

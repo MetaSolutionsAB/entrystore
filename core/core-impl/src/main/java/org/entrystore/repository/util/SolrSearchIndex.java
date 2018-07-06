@@ -25,6 +25,7 @@ import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.client.solrj.response.QueryResponse;
+import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
@@ -83,8 +84,6 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private boolean extractFulltext = false;
 
-	private boolean ngramAllLiterals = false;
-
 	private RepositoryManager rm;
 
 	private final SolrServer solrServer;
@@ -118,7 +117,7 @@ public class SolrSearchIndex implements SearchIndex {
 								if (batchCount > 0) {
 									deleteQuery.append(" OR ");
 								}
-								deleteQuery.append(StringUtils.replace(uri.toString(), ":", "\\:"));
+								deleteQuery.append(ClientUtils.escapeQueryChars(uri.toString()));
 								batchCount++;
 							}
 						}
@@ -186,7 +185,6 @@ public class SolrSearchIndex implements SearchIndex {
 		this.rm = rm;
 		this.solrServer = solrServer;
 		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_EXTRACT_FULLTEXT, "off"));
-		this.ngramAllLiterals = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_NGRAM_ALL_LITERALS, "off"));
 		documentSubmitter = new SolrInputDocumentSubmitter();
 		documentSubmitter.start();
 	}
@@ -202,22 +200,18 @@ public class SolrSearchIndex implements SearchIndex {
 		req.deleteByQuery("*:*");
 		try {
 			req.process(solrServer);
-		} catch (SolrServerException sse) {
-			log.error(sse.getMessage(), sse);
-		} catch (IOException ioe) {
-			log.error(ioe.getMessage(), ioe);
+		} catch (SolrServerException | IOException e) {
+			log.error(e.getMessage(), e);
 		}
 	}
 
 	public void clearSolrIndexFromContextEntries(SolrServer solrServer, Entry contextEntry) {
 		UpdateRequest req = new UpdateRequest();
-		req.deleteByQuery("context:" + StringUtils.replace(contextEntry.getResourceURI().toString(), ":", "\\:"));
+		req.deleteByQuery("context:" + ClientUtils.escapeQueryChars(contextEntry.getResourceURI().toString()));
 		try {
 			req.process(solrServer);
-		} catch (SolrServerException sse) {
-			log.error(sse.getMessage(), sse);
-		} catch (IOException ioe) {
-			log.error(ioe.getMessage(), ioe);
+		} catch (SolrServerException | IOException e) {
+			log.error(e.getMessage(), e);
 		}
 	}
 
@@ -346,7 +340,7 @@ public class SolrSearchIndex implements SearchIndex {
 		// titles
 		Map<String, String> titles = EntryUtil.getTitles(entry);
 		if (titles != null && titles.size() > 0) {
-			Set<String> langs = new HashSet<String>();
+			Set<String> langs = new HashSet<>();
 			for (String title : titles.keySet()) {
 				doc.addField("title", title, 10);
 				// we also store title.{lang} as dynamic field to be able to
@@ -373,16 +367,6 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 		if (name.length() > 0) {
 			doc.addField("title", name, 10);
-		}
-
-		String foafName = EntryUtil.getLabel(mdGraph, resourceURI, mdGraph.getValueFactory().createURI(NS.foaf, "name"), null);
-		if (foafName != null && foafName.trim().length() > 0) {
-			doc.addField("title", foafName, 10);
-		}
-
-		String vcardFn = EntryUtil.getLabel(mdGraph, resourceURI, mdGraph.getValueFactory().createURI(NS.vcard, "fn"), null);
-		if (vcardFn != null && vcardFn.trim().length() > 0) {
-			doc.addField("title", vcardFn, 10);
 		}
 
 		// description
@@ -447,41 +431,29 @@ public class SolrSearchIndex implements SearchIndex {
 		//
 		// We also provide an index for all predicate-object tuples, stored in dynamic fields.
 		// Perhaps all fuzzy matches for object values (the ones that do not take predicates into
-		// consideration) should be removed in the future (marked with a TODO as comment below).
+		// consideration) should be removed in the future.
 		Graph metadata = entry.getMetadataGraph();
 		if (metadata != null) {
 			for (Statement s : metadata) {
-				// subject
-				if (s.getSubject() instanceof org.openrdf.model.URI) {
-					if (!resourceURI.equals(s.getSubject())) {
-						doc.addField("metadata.subject", s.getSubject().stringValue());
-					}
-				}
-
 				// predicate
 				String predString = s.getPredicate().stringValue();
 				String predMD5Trunc8 = Hashing.md5(predString).substring(0, 8);
-				doc.addField("metadata.predicate", predString);
 
 				// object
 				if (s.getObject() instanceof org.openrdf.model.URI) {
 					String objString = s.getObject().stringValue();
-					doc.addField("metadata.object.uri", objString); // TODO remove?
+					doc.addField("metadata.object.uri", objString);
 
 					// predicate value is included in the parameter name, the object value is the field value
 					doc.addField("metadata.predicate.uri." + predMD5Trunc8, objString);
 				} else if (s.getObject() instanceof Literal) {
 					Literal l = (Literal) s.getObject();
 					if (l.getDatatype() == null) { // we only index plain literals (human-readable text)
-						doc.addField("metadata.object.literal", l.getLabel()); // TODO remove?
+						doc.addField("metadata.object.literal", l.getLabel());
 					}
 
 					// predicate value is included in the parameter name, the object value is the field value
 					doc.addField("metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
-
-					if (this.ngramAllLiterals) {
-						doc.addField("metadata.predicate.literal_ng." + predMD5Trunc8, l.getLabel());
-					}
 
 					// special handling of integer values, to be used for e.g. sorting
 					if (MetadataUtil.isIntegerLiteral(l)) {
@@ -591,7 +563,11 @@ public class SolrSearchIndex implements SearchIndex {
 				}
 			}
 		} catch (SolrServerException e) {
-			log.error(e.getMessage());
+			if (e.getRootCause() instanceof IllegalArgumentException) {
+				log.info(e.getMessage());
+			} else {
+				log.error(e.getMessage());
+			}
 		}
 		log.info("Solr query took " + (new Date().getTime() - before.getTime()) + " ms");
 
@@ -599,8 +575,8 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public QueryResult sendQuery(SolrQuery query) throws SolrException {
-		Set<URI> entries = new LinkedHashSet<URI>();
-		Set<Entry> result = new LinkedHashSet<Entry>();
+		Set<URI> entries = new LinkedHashSet<>();
+		Set<Entry> result = new LinkedHashSet<>();
 		long hits = -1;
 		int limit = query.getRows();
 		int offset = query.getStart();
@@ -610,12 +586,23 @@ public class SolrSearchIndex implements SearchIndex {
 		int resultFillIteration = 0;
 		do {
 			if (resultFillIteration++ > 0) {
+				// We have a small limit and we don't get enough results with permissive ACL per iteration,
+				// so we need to increase the result size windows, but not the result limit itself
+				// (i.e., we only change the rows towards Solr, but not the query limit of EntryStore.
+				// We only need to do this once when resultFillIteration equals 1.
+				if (resultFillIteration == 1 && limit <= 10) {
+					query.setRows(100);
+				}
 				if (resultFillIteration > 10) {
 					log.warn("Breaking after 10 result fill interations to prevent too many loops");
 					break;
 				}
-				offset += 10;
-				log.warn("Increasing offset to fill the result limit");
+				if (limit <= 50) {
+					offset += limit;
+				} else {
+					offset += 50;
+				}
+				log.warn("Increasing offset to " + offset + " in an attempt to fill the result limit");
 			}
 			hits = sendQueryForEntryURIs(query, entries, facetFields, solrServer, offset, -1);
 			Date before = new Date();
@@ -651,6 +638,22 @@ public class SolrSearchIndex implements SearchIndex {
 		} while ((limit > result.size()) && (hits > (offset + limit)));
 
 		return new QueryResult(result, hits, facetFields);
+	}
+
+	public SolrDocument fetchDocument(String uri) {
+		try {
+			SolrQuery q = new SolrQuery("uri:" + ClientUtils.escapeQueryChars(uri));
+			q.setStart(0);
+			q.setRows(1);
+			QueryResponse r = solrServer.query(q);
+			SolrDocumentList docs = r.getResults();
+			if (!docs.isEmpty()) {
+				return docs.get(0);
+			}
+		} catch (SolrServerException e) {
+			log.error(e.getMessage());
+		}
+		return null;
 	}
 
 	public static String extractFulltext(File f) {

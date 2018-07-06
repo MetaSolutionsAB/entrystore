@@ -73,7 +73,9 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
-		if (passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(userName.toLowerCase())) {
+		userName = userName.toLowerCase();
+
+		if (passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(userName)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 			if (html) {
 				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
@@ -81,8 +83,10 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
-		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName.toLowerCase());
-		if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
+		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName);
+		boolean userExists = BasicVerifier.userExists(getPM(), userName);
+		boolean userIsEnabled = !BasicVerifier.isUserDisabled(getPM(), userName);
+		if (saltedHashedSecret != null && userIsEnabled && Password.check(password, saltedHashedSecret)) {
 			new CookieVerifier(getRM()).createAuthToken(userName, maxAgeStr, getResponse());
 	        getResponse().setStatus(Status.SUCCESS_OK);
 			if (html) {
@@ -91,9 +95,16 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
-		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		if (html) {
-			getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
+		if (userExists && !userIsEnabled) {
+			getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+			if (html) {
+				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed. The account is disabled."));
+			}
+		} else {
+			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+			if (html) {
+				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
+			}
 		}
 	}
 

@@ -33,10 +33,10 @@ import java.net.URI;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.LinkedList;
 import java.util.List;
 
 
@@ -159,7 +159,7 @@ public class BackupJob implements Job, InterruptableJob {
 			File backupFolder = new File(exportPath);
 			DateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
 
-			List<Date> backupFolders = new ArrayList<Date>();
+			List<Date> backupFolders = new LinkedList<>();
 			for (File file : backupFolder.listFiles()) {
 				if (!file.isDirectory() || file.isHidden()) {
 					log.info("Ignoring: " + file);
@@ -181,15 +181,13 @@ public class BackupJob implements Job, InterruptableJob {
 				return;
 			}
 
-			Collections.sort(backupFolders, new Comparator<Date>() {
-				public int compare(Date a, Date b) {
-					if (a.after(b)) {
-						return 1;
-					} else if (a.before(b)) {
-						return -1;
-					} else {
-						return 0;
-					}
+			Collections.sort(backupFolders, (a, b) -> {
+				if (a.after(b)) {
+					return 1;
+				} else if (a.before(b)) {
+					return -1;
+				} else {
+					return 0;
 				}
 			});
 
@@ -208,7 +206,7 @@ public class BackupJob implements Job, InterruptableJob {
 				}
 			}
 
-			Date oldestDate = backupFolders.get(0); 
+			Date oldestDate = backupFolders.get(0);
 			
 			if (daysBetween(oldestDate, today) > expiresAfterDays) {
 				for (int size = backupFolders.size(), i = 0; lowerLimit < size; size--) {

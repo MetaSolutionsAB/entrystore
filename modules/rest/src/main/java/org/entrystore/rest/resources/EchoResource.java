@@ -19,6 +19,7 @@ package org.entrystore.rest.resources;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.Util;
 import org.restlet.Response;
 import org.restlet.data.MediaType;
@@ -42,7 +43,7 @@ public class EchoResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(EchoResource.class);
 
-	public static long MAX_ENTITY_SIZE = 10*1024*1024; // in bytes
+	public static long MAX_ENTITY_SIZE = 10*1024*1024; // 10MB, in bytes
 
 	@Post
 	public void acceptRepresentation(Representation r) {
@@ -51,6 +52,19 @@ public class EchoResource extends BaseResource {
 				if (getRequest().getEntity().getSize() > MAX_ENTITY_SIZE) {
 					respondWith(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 					return;
+				}
+
+				String validateMime = null;
+				if (parameters.containsKey("validate")) {
+					validateMime = parameters.get("validate");
+					if (validateMime == null || validateMime.isEmpty()) {
+						respondWith(Status.CLIENT_ERROR_BAD_REQUEST);
+						return;
+					}
+					if (!GraphUtil.isSupported(new MediaType(validateMime))) {
+						respondWith(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
+						return;
+					}
 				}
 
 				List<FileItem> items = Util.createRestletFileUpload(getContext()).parseRepresentation(getRequest().getEntity());
@@ -64,11 +78,24 @@ public class EchoResource extends BaseResource {
 					}
 					StringBuffer escapedContent = new StringBuffer();
 					escapedContent.append("<textarea>");
+					String payload;
 					try {
-						escapedContent.append("status:"+Status.SUCCESS_OK.getCode()+"\n");
-						escapedContent.append(StringEscapeUtils.escapeHtml(item.getString("UTF-8")));
+						payload = item.getString("UTF-8");
 					} catch (UnsupportedEncodingException e) {
 						log.error(e.getMessage());
+						respondWith(Status.SERVER_ERROR_INTERNAL);
+						return;
+					}
+					String validationError = null;
+					if (validateMime != null) {
+						validationError = GraphUtil.validateRdf(payload, new MediaType(validateMime));
+					}
+					if (validationError != null) {
+						escapedContent.append("status:"+Status.CLIENT_ERROR_UNPROCESSABLE_ENTITY.getCode()+"\n");
+						escapedContent.append(StringEscapeUtils.escapeHtml(validationError));
+					} else {
+						escapedContent.append("status:"+Status.SUCCESS_OK.getCode()+"\n");
+						escapedContent.append(StringEscapeUtils.escapeHtml(payload));
 					}
 					escapedContent.append("</textarea>");
 					getResponse().setEntity(escapedContent.toString(), MediaType.TEXT_HTML);
@@ -86,4 +113,5 @@ public class EchoResource extends BaseResource {
 		resp.setStatus(status);
 		resp.setEntity("<textarea>status:"+status.getCode()+"\n</textarea>", MediaType.TEXT_HTML);
 	}
+
 }

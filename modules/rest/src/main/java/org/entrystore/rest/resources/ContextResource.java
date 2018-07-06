@@ -269,7 +269,7 @@ public class ContextResource extends BaseResource {
 				// Success, return 201 and the new entry id in the response.
 				getResponse().setStatus(Status.SUCCESS_CREATED);
 				getResponse().setLocationRef(entry.getEntryURI().toString());
-				getResponse().setEntity("{\"entryId\":"+entry.getId()+"}", MediaType.APPLICATION_JSON);
+				getResponse().setEntity("{\"entryId\":\""+entry.getId()+"\"}", MediaType.APPLICATION_JSON);
 			}
 		} catch (AuthorizationException e) {
 			unauthorizedPOST();

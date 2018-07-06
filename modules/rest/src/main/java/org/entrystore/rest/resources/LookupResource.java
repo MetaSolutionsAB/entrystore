@@ -17,6 +17,7 @@
 package org.entrystore.rest.resources;
 
 import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
@@ -37,7 +38,6 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.util.ArrayList;
@@ -73,13 +73,14 @@ public class LookupResource extends BaseResource {
 
 	@Get
 	public Representation represent() {
-		String resourceURI = null;
+		URI resourceURI = null;
 		
 		if (parameters.containsKey("uri")) {
 			try {
-				resourceURI = URLDecoder.decode(parameters.get("uri"), "UTF-8");
-			} catch (UnsupportedEncodingException e) {
-				log.error(e.getMessage());
+				resourceURI = new URI(URLDecoder.decode(parameters.get("uri"), "UTF-8"));
+			} catch (Exception e) {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return null;
 			}
 		}
 		
@@ -100,7 +101,7 @@ public class LookupResource extends BaseResource {
 		Set<Entry> entries = null;
 		if (context != null) {
 			// get entry based on uri
-			entries = context.getByResourceURI(URI.create(resourceURI));
+			entries = context.getByResourceURI(resourceURI);
 		} else {
 			// we perform a global lookup using Solr instead
 			if (getRM().getIndex() == null) {
@@ -108,7 +109,7 @@ public class LookupResource extends BaseResource {
 				return null;
 			}
 
-			String solrEscapedURI = resourceURI.replaceAll(":", "\\\\:");
+			String solrEscapedURI = ClientUtils.escapeQueryChars(resourceURI.toString());
 			SolrQuery q = new SolrQuery("resource:" + solrEscapedURI + " AND public:true");
 			q.setStart(0);
 			q.setRows(1);

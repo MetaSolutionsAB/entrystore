@@ -336,7 +336,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 					} else {
 						if (hasAccess(currentUser, contextEntry, AccessProperty.WriteResource)) {
 							return;
-						}	
+						}
 					}
 				}
 			}

@@ -29,6 +29,7 @@ import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
+import org.apache.solr.client.solrj.util.ClientUtils;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
@@ -50,8 +51,7 @@ import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.auth.TokenCache;
-import org.entrystore.rest.auth.UserInfo;
+import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
@@ -68,7 +68,6 @@ import org.restlet.Client;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.Uniform;
-import org.restlet.data.Cookie;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
@@ -551,7 +550,7 @@ public class ResourceResource extends BaseResource {
 		feed.setDescription("A syndication feed containing the 50 most recent items from \"" + alias + "\"");
 		feed.setLink(entry.getResourceURI().toString());
 		
-		solrQueryValue += entry.getResourceURI().toString().replaceAll(":", "\\\\:");
+		solrQueryValue += ClientUtils.escapeQueryChars(entry.getResourceURI().toString());
 		SolrQuery solrQuery = new SolrQuery(solrQueryValue);
 		solrQuery.setStart(0);
 		solrQuery.setRows(1000);
@@ -861,6 +860,10 @@ public class ResourceResource extends BaseResource {
 						jsonUserObj.put("language", prefLang);
 					}
 
+					if (user.isDisabled()) {
+						jsonUserObj.put("disabled", true);
+					}
+
 					JSONObject customProperties = new JSONObject();
 					for (java.util.Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
 						customProperties.put(propEntry.getKey(), propEntry.getValue());
@@ -1111,20 +1114,12 @@ public class ResourceResource extends BaseResource {
 
 				User resourceUser = (User) entry.getResource();
 				if (entityJSON.has("name")) {
-					String name = entityJSON.getString("name");
-					if (resourceUser.setName(name)) {
-						// the username was successfully changed, so we need to update the
-						// UserInfo object to not invalidate logged in user sessions
-						Cookie authTokenCookie = getRequest().getCookies().getFirst("auth_token");
-						if (authTokenCookie != null) {
-							TokenCache<String, UserInfo> tc = LoginTokenCache.getInstance();
-							String authToken = authTokenCookie.getValue();
-							UserInfo ui = tc.getTokenValue(authToken);
-							if (ui != null) {
-								ui.setUserName(name);
-								tc.putToken(authToken, ui);
-							}
-						}
+					String oldName = resourceUser.getName();
+					String newName = entityJSON.getString("name");
+					if (resourceUser.setName(newName)) {
+						// the username was successfully changed, so we need to update the UserInfo
+						// objects in the LoginTokenCache to not invalidate logged in user sessions
+						LoginTokenCache.getInstance().renameUser(oldName, newName);
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Name already taken.\"}"));
@@ -1133,7 +1128,10 @@ public class ResourceResource extends BaseResource {
 				}
 				if (entityJSON.has("password")) {
 					String passwd =  entityJSON.getString("password");
-					if (!resourceUser.setSecret(passwd)) {
+					if (resourceUser.setSecret(passwd)) {
+						Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
+						return;
+					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Password needs to be at least 8 characters long.\"}"));
 						return;
@@ -1159,6 +1157,19 @@ public class ResourceResource extends BaseResource {
 							getResponse().setEntity(new JsonRepresentation("{\"error\":\"Given homecontext is not a context.\"}"));
 							return;						
 						}
+					}
+				}
+				if (entityJSON.has("disabled")) {
+					if (this.entry.getResourceURI().equals(getPM().getAuthenticatedUserURI())) {
+						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Users cannot set their own disabled status\"}"));
+						return;
+					}
+					boolean disabled = entityJSON.optBoolean("disabled", false);
+					resourceUser.setDisabled(disabled);
+					if (disabled) {
+						String userName = getPM().getPrincipalName(this.entry.getResourceURI());
+						LoginTokenCache.getInstance().removeTokens(userName);
 					}
 				}
 				if (entityJSON.has("customProperties")) {

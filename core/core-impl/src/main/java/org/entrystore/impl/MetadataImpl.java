@@ -17,16 +17,12 @@
 
 package org.entrystore.impl;
 
-import java.net.URI;
-import java.util.Iterator;
-
-import javax.xml.datatype.DatatypeConfigurationException;
-
+import org.entrystore.AuthorizationException;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
-import org.entrystore.PrincipalManager.AccessProperty;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;
 import org.openrdf.model.Statement;
@@ -37,6 +33,10 @@ import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.xml.datatype.DatatypeConfigurationException;
+import java.net.URI;
+import java.util.Iterator;
 
 
 public class MetadataImpl implements Metadata {
@@ -123,7 +123,10 @@ public class MetadataImpl implements Metadata {
 					} else {
 						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.MetadataUpdated, graph));
 					}
-				
+				} catch (AuthorizationException ae) {
+					rc.rollback();
+					log.warn(ae.getMessage());
+					throw ae;
 				} catch (Exception e) {
 					rc.rollback();
 					log.error(e.getMessage());
@@ -181,16 +184,16 @@ public class MetadataImpl implements Metadata {
 		// If it is, then add them to the source entry's relation graph.
 		//Old graph, remove from target entry relation index.
 		if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.
-			Iterator<Statement> iter = graph.iterator(); 
+			Iterator<Statement> iter = graph.iterator();
 			while(iter.hasNext()) {
 				Statement statement = iter.next();
 				Value obj = statement.getObject();
 				Resource subj = statement.getSubject();
 				//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-				if (obj instanceof org.openrdf.model.URI 
+				if (obj instanceof org.openrdf.model.URI
 					&& obj.stringValue().startsWith(base)
 					&& subj.stringValue().startsWith(base)) {
-					URI entryURI = URI.create(statement.getObject().stringValue()); 
+					URI entryURI = URI.create(statement.getObject().stringValue());
 
 					EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(entryURI);
                     if (sourceEntry != null) {

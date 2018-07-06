@@ -24,9 +24,9 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
+import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.EmailValidator;
 import org.entrystore.rest.util.RecaptchaVerifier;
 import org.entrystore.rest.util.SimpleHTML;
@@ -107,6 +107,7 @@ public class PasswordResetResource extends BaseResource {
 
 			// Reset password
 			if (u.setSecret(ci.password)) {
+				Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), userEntry);
 				log.info("Reset password for user " + u.getURI());
 			} else {
 				log.error("Error when resetting password for user " + u.getURI());
@@ -245,22 +246,45 @@ public class PasswordResetResource extends BaseResource {
 			}
 		}
 
-		String token = RandomStringUtils.randomAlphanumeric(16);
-		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
-		log.info("Generated password reset token " + token + " for " + ci.email);
+		PrincipalManager pm = getPM();
+		URI authUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
-		boolean sendSuccessful = Signup.sendRequestForConfirmation(getRM().getConfiguration(), null, ci.email, confirmationLink, true);
-		if (sendSuccessful) {
-			SignupTokenCache.getInstance().putToken(token, ci);
-			log.info("Sent confirmation request to " + ci.email);
-		} else {
-			log.info("Failed to send confirmation request to " + ci.email);
-			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
-			return;
+			Entry userEntry = pm.getPrincipalEntry(ci.email);
+			User u = null;
+			if (userEntry != null) {
+				log.debug("Loaded user entry via email adress");
+				u = (User) userEntry.getResource();
+			} else {
+				log.debug("Trying to load user entry via external ID");
+				u = pm.getUserByExternalID(ci.email);
+			}
+
+			// to avoid spamming etc we only send emails to users that exist
+			if (u != null) {
+				String token = RandomStringUtils.randomAlphanumeric(16);
+				String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
+				log.info("Generated password reset token " + token + " for " + ci.email);
+
+				boolean sendSuccessful = Email.sendPasswordResetConfirmation(getRM().getConfiguration(), ci.email, confirmationLink);
+				if (sendSuccessful) {
+					SignupTokenCache.getInstance().putToken(token, ci);
+					log.info("Sent confirmation request to " + ci.email);
+				} else {
+					log.info("Failed to send confirmation request to " + ci.email);
+					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+					return;
+				}
+			} else {
+				log.info("Ignoring password reset attempt for non-existing user " + ci.email);
+			}
+		} finally {
+			pm.setAuthenticatedUserURI(authUser);
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);
-		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.email));
+		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.email + " if the user exists."));
 	}
 
 	private String constructHtmlForm(boolean reCaptcha) {

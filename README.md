@@ -8,11 +8,11 @@ EntryStore is the new name for the SCAM (Standardized Contextualized Access to M
 
 ## Documentation
 
-The documentation can be found at the [EntryStore web page](http://entrystore.org).
+The documentation can be found at the [EntryStore web page](https://entrystore.org).
 
 ## Commercial support
 
-The company [MetaSolutions AB](http://www.metasolutions.se) provides professional support and services around [EntryScape](http://www.entryscape.com), [EntryStore](http://www.entrystore.org) and [RDForms](http://rdforms.org).
+The company [MetaSolutions AB](https://www.metasolutions.se) provides professional support and services around [EntryScape](http://www.entryscape.com), [EntryStore](https://www.entrystore.org) and [RDForms](https://rdforms.org).
 
 ## Contributing organizations
 
@@ -26,4 +26,8 @@ The following organizations have contributed to the development of earlier versi
 
 ## License
 
-MetaSolutions AB licenses this work under the terms of the Apache License 2.0 (the "License"); you may not use this file except in compliance with the License. See the LICENSE.txt file distributed with this work for the full License.
+MetaSolutions AB licenses this work under the terms of the Apache License 2.0 (the "License"); you may not use this file except in compliance with the License
+
+See LICENSE.txt distributed with this work for the full License.
+
+See NOTICE.txt for a list of dependencies and their licenses.
