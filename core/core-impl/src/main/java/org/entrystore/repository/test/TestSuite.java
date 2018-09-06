@@ -32,12 +32,16 @@ import org.entrystore.repository.RepositoryManager;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.ValueFactoryImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.HashSet;
 
 
 public class TestSuite {
+
+	static Logger log = LoggerFactory.getLogger(TestSuite.class);
 
 	public static final String NSDCTERMS = "http://purl.org/dc/terms/";
 	public static final String NSbase = "http://entrystore.org/terms/";
@@ -138,6 +142,10 @@ public class TestSuite {
 			mouseE.addAllowedPrincipalsFor(AccessProperty.ReadResource, friendsOfMickey.getURI());
 			mouseE.addAllowedPrincipalsFor(AccessProperty.WriteResource, friendsOfMickey.getURI());
 			mickey.setHomeContext(mouse);
+
+			// User entry without metadata
+			Entry emptyMd = pm.createResource(null, GraphType.User, null, null);
+			log.info("Created user without metadata: " + emptyMd.getEntryURI().toString());
 		} finally {
 			pm.setAuthenticatedUserURI(currentUserURI);
 		}

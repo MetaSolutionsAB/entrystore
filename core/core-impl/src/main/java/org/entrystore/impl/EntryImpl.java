@@ -1253,6 +1253,8 @@ public class EntryImpl implements Entry {
 					// we reload the internal cache
 					loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
 					initMetadataObjects();
+
+					getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
 				} catch (Exception e) {
 					rc.rollback();
 					// Reset to previous saved values, just in case we saved the types above halfway through.

@@ -671,7 +671,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					}
 				}
 			};
-			// registerListener(updater, RepositoryEvent.EntryCreated); // to react on created is not needed, as creation implies update
+			registerListener(updater, RepositoryEvent.EntryCreated);
 			registerListener(updater, RepositoryEvent.EntryUpdated);
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
