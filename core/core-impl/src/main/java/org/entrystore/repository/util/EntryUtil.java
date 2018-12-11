@@ -331,16 +331,24 @@ public class EntryUtil {
 		return getLabel(graph, resourceURI, predicates, language);
 	}
 	
-	public static String getResource(Graph graph, java.net.URI resourceURI, URI predicate) {
+	public static org.openrdf.model.URI getResourceAsURI(Graph graph, java.net.URI resourceURI, URI predicate) {
 		if (graph != null && resourceURI != null) {
 			URI resURI = new URIImpl(resourceURI.toString());
 			Iterator<Statement> stmnts = graph.match(resURI, predicate, null);
 			while (stmnts.hasNext()) {
 				Value value = stmnts.next().getObject();
-				if (value instanceof org.openrdf.model.Resource) {
-					return value.stringValue();
+				if (value instanceof org.openrdf.model.URI) {
+					return (org.openrdf.model.URI) value;
 				}
 			}
+		}
+		return null;
+	}
+
+	public static String getResource(Graph graph, java.net.URI resourceURI, URI predicate) {
+		URI result = getResourceAsURI(graph, resourceURI, predicate);
+		if (result != null) {
+			return result.stringValue();
 		}
 		return null;
 	}
@@ -617,7 +625,7 @@ public class EntryUtil {
                 Iterator<Statement> subjects = graph.match(resourceURI, pred, null);
                 while (subjects.hasNext()) {
                     Value value = subjects.next().getObject();
-                    if (value instanceof org.openrdf.model.Resource) {
+                    if (value instanceof org.openrdf.model.URI) {
                         org.openrdf.model.Resource res = (org.openrdf.model.Resource) value;
                         result.add(res.stringValue());
                     }
