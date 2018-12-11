@@ -153,9 +153,9 @@ public class PropertiesConfiguration implements Config {
 		}
 	}
 	
-	private synchronized List getPropertyValues(String key) {
+	private synchronized List<String> getPropertyValues(String key) {
 		int valueCount = getPropertyValueCount(key);
-		List<String> result = new ArrayList<String>();
+		List<String> result = new ArrayList<>();
 		if (valueCount == 1) {
 			String value = config.getProperty(key);
 			if (value == null) {
@@ -299,14 +299,14 @@ public class PropertiesConfiguration implements Config {
 	}
 
 	public void setProperties(String key, List values) {
-		List oldValues = getStringList(key);
+		List<String> oldValues = getStringList(key);
 		setPropertyValues(key, values);
 		setModified(true);
 		checkFirePropertyChange(key, oldValues, values);
 	}
 	
 	public void setProperties(String key, Iterator values) {
-		List oldValues = getStringList(key);
+		List<String> oldValues = getStringList(key);
 		setPropertyValues(key, values);
 		setModified(true);
 		checkFirePropertyChange(key, oldValues, values);
@@ -318,11 +318,11 @@ public class PropertiesConfiguration implements Config {
 		return config.containsKey(key);
 	}
 
-	public List getKeyList() {
+	public List<String> getKeyList() {
 		return getKeyList(null);
 	}
 
-	public List getKeyList(String prefix) {
+	public List<String> getKeyList(String prefix) {
 		Enumeration keyIterator = config.propertyNames();
 		ArrayList<String> result = new ArrayList<String>();
 		
@@ -346,12 +346,12 @@ public class PropertiesConfiguration implements Config {
 		return config.getProperty(key, defaultValue);
 	}
 
-	public List getStringList(String key) {
+	public List<String> getStringList(String key) {
 		return getPropertyValues(key);
 	}
 
-	public List getStringList(String key, List defaultValues) {
-		List result = getPropertyValues(key);
+	public List<String> getStringList(String key, List<String> defaultValues) {
+		List<String> result = getPropertyValues(key);
 		if (result == null) {
 			result = defaultValues;
 		}
