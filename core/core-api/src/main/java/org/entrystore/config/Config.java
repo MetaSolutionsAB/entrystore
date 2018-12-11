@@ -207,7 +207,7 @@ public interface Config {
 	 * 
 	 * @return List of keys as string values.
 	 */
-	List getKeyList();
+	List<String> getKeyList();
 
 	/**
 	 * Returns a list of all set configuration keys under a given key.
@@ -217,7 +217,7 @@ public interface Config {
 	 *            tree.
 	 * @return List of keys as string values.
 	 */
-	List getKeyList(String prefix);
+	List<String> getKeyList(String prefix);
 
 	/* Get Values */
 
@@ -242,7 +242,7 @@ public interface Config {
 	 *            Property key.
 	 * @return Returns property values as a List of strings.
 	 */
-	List getStringList(String key);
+	List<String> getStringList(String key);
 
 	/**
 	 * @param key
@@ -251,7 +251,7 @@ public interface Config {
 	 *            Default values if the given property does not exist.
 	 * @return Returns a property value as a List of strings.
 	 */
-	List getStringList(String key, List defaultValues);
+	List<String> getStringList(String key, List<String> defaultValues);
 
 	/**
 	 * @param key
