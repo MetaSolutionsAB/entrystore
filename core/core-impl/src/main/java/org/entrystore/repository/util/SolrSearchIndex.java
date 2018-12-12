@@ -59,6 +59,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -83,6 +84,10 @@ public class SolrSearchIndex implements SearchIndex {
 	private volatile boolean reindexing = false;
 
 	private boolean extractFulltext = false;
+
+	private boolean related = false;
+
+	private List<org.openrdf.model.URI> relatedProperties = null;
 
 	private RepositoryManager rm;
 
@@ -184,7 +189,20 @@ public class SolrSearchIndex implements SearchIndex {
 		solrDateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"));
 		this.rm = rm;
 		this.solrServer = solrServer;
-		this.extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_EXTRACT_FULLTEXT, "off"));
+		extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_EXTRACT_FULLTEXT, "off"));
+		related = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_RELATED, "off"));
+		if (related) {
+			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>());
+			if (relPropsSetting.isEmpty()) {
+				related = false;
+			} else {
+				relatedProperties = new ArrayList<>();
+				for (String relProp : rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>())) {
+					relatedProperties.add(rm.getValueFactory().createURI(relProp));
+				}
+			}
+		}
+
 		documentSubmitter = new SolrInputDocumentSubmitter();
 		documentSubmitter.start();
 	}
@@ -427,53 +445,10 @@ public class SolrSearchIndex implements SearchIndex {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		doc.setField("public", guestReadable);
 
-		// All subject, predicates and objects in the metadata graph
-		//
-		// We also provide an index for all predicate-object tuples, stored in dynamic fields.
-		// Perhaps all fuzzy matches for object values (the ones that do not take predicates into
-		// consideration) should be removed in the future.
-		Graph metadata = entry.getMetadataGraph();
-		if (metadata != null) {
-			for (Statement s : metadata) {
-				// predicate
-				String predString = s.getPredicate().stringValue();
-				String predMD5Trunc8 = Hashing.md5(predString).substring(0, 8);
+		addGenericMetadataFields(doc, mdGraph, false);
 
-				// object
-				if (s.getObject() instanceof org.openrdf.model.URI) {
-					String objString = s.getObject().stringValue();
-					doc.addField("metadata.object.uri", objString);
-
-					// predicate value is included in the parameter name, the object value is the field value
-					doc.addField("metadata.predicate.uri." + predMD5Trunc8, objString);
-				} else if (s.getObject() instanceof Literal) {
-					Literal l = (Literal) s.getObject();
-					if (l.getDatatype() == null) { // we only index plain literals (human-readable text)
-						doc.addField("metadata.object.literal", l.getLabel());
-					}
-
-					// predicate value is included in the parameter name, the object value is the field value
-					doc.addField("metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
-
-					// special handling of integer values, to be used for e.g. sorting
-					if (MetadataUtil.isIntegerLiteral(l)) {
-						try {
-							// it's a single-value field so we call setField instead of addField just in case there should be
-							doc.setField("metadata.predicate.integer." + predMD5Trunc8, l.longValue());
-						} catch (NumberFormatException nfe) {
-							log.debug("Unable to index integer literal: " + nfe.getMessage() + ". (Subject: " + s.getSubject() + ", Predicate: " + predString + ", Object: " + l.getLabel() + ")");
-						}
-					}
-
-					if (MetadataUtil.isDateLiteral(l)) {
-						try {
-							doc.addField("metadata.predicate.date." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
-						} catch (IllegalArgumentException iae) {
-							log.debug("Unable to index date literal: " + iae.getMessage() + ". (Subject: " + s.getSubject() + ", Predicate: " + predString + ", Object: " + l.getLabel() + ")");
-						}
-					}
-				}
-			}
+		if (related) {
+			addRelatedFields(doc, entry);
 		}
 
 		// Full text extraction using Apache Tika
@@ -491,6 +466,98 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		return doc;
+	}
+
+	private void addGenericMetadataFields(SolrInputDocument doc, Graph metadata, boolean related) {
+		if (doc == null || metadata == null) {
+			throw new IllegalArgumentException("Neither SolrInputDocument nor Graph must be null");
+		}
+
+		String prefix = new String();
+		if (related) {
+			prefix = "related.";
+		}
+
+		// All subject, predicates and objects in the metadata graph
+		//
+		// We also provide an index for all predicate-object tuples, stored in dynamic fields.
+		for (Statement s : metadata) {
+			// predicate
+			String predString = s.getPredicate().stringValue();
+			String predMD5Trunc8 = Hashing.md5(predString).substring(0, 8);
+
+			// object
+			if (s.getObject() instanceof org.openrdf.model.URI) {
+				String objString = s.getObject().stringValue();
+				if (!related) {
+					addFieldValueOnce(doc,prefix + "metadata.object.uri", objString);
+				}
+
+				// predicate value is included in the parameter name, the object value is the field value
+				addFieldValueOnce(doc,prefix + "metadata.predicate.uri." + predMD5Trunc8, objString);
+			} else if (s.getObject() instanceof Literal) {
+				Literal l = (Literal) s.getObject();
+				if (!related) {
+					if (l.getDatatype() == null) { // we only index plain literals (human-readable text)
+						addFieldValueOnce(doc,prefix + "metadata.object.literal", l.getLabel());
+					}
+				}
+
+				// predicate value is included in the parameter name, the object value is the field value
+				addFieldValueOnce(doc,prefix + "metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
+
+				// special handling of integer values, to be used for e.g. sorting
+				if (MetadataUtil.isIntegerLiteral(l)) {
+					try {
+						// it's a single-value field so we call setField instead of addField just in case there should be
+						doc.setField(prefix + "metadata.predicate.integer." + predMD5Trunc8, l.longValue());
+					} catch (NumberFormatException nfe) {
+						log.debug("Unable to index integer literal: " + nfe.getMessage() + ". (Subject: " + s.getSubject() + ", Predicate: " + predString + ", Object: " + l.getLabel() + ")");
+					}
+				}
+
+				if (MetadataUtil.isDateLiteral(l)) {
+					try {
+						doc.setField(prefix + "metadata.predicate.date." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
+					} catch (IllegalArgumentException iae) {
+						log.debug("Unable to index date literal: " + iae.getMessage() + ". (Subject: " + s.getSubject() + ", Predicate: " + predString + ", Object: " + l.getLabel() + ")");
+					}
+				}
+			}
+		}
+	}
+
+	private void addRelatedFields(SolrInputDocument doc, Entry entry) {
+		if (doc == null || entry == null) {
+			throw new IllegalArgumentException("Neither SolrInputDocument nor Entry must be null");
+		}
+
+		Context c = entry.getContext();
+		Set mainEntryACL = entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata);
+		List<String> relatedURIs = EntryUtil.getResourceValues(entry, new HashSet(relatedProperties));
+
+		// we remove all resources that are outside of this instance
+		// relatedURIs.removeIf(e -> !e.startsWith(rm.getRepositoryURL().toString()));
+		Set<Entry> relatedEntries = new HashSet();
+		for (String relEntURI : relatedURIs) {
+			relatedEntries.addAll(c.getByResourceURI(URI.create(relEntURI)));
+		}
+
+		for (Entry relE : relatedEntries) {
+			if (mainEntryACL.equals(relE.getAllowedPrincipalsFor(AccessProperty.ReadMetadata))) {
+				log.debug("Adding " + relE.getEntryURI() + " to related property index of " + entry.getEntryURI());
+				addGenericMetadataFields(doc, relE.getMetadataGraph(), true);
+			} else {
+				log.debug("ACLs of " + entry.getEntryURI() + " and " + relE.getEntryURI() + " do not match, not adding to related property index");
+			}
+		}
+	}
+
+	private void addFieldValueOnce(SolrInputDocument doc, String name, Object value) {
+		Collection fieldValues = doc.getFieldValues(name);
+		if (fieldValues == null || !fieldValues.contains(value)) {
+			doc.addField(name, value);
+		}
 	}
 
 	private String dateToSolrDateString(XMLGregorianCalendar c) {

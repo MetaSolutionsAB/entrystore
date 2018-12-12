@@ -232,6 +232,12 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="metadata.object.uri" type="string" indexed="true" multiValued="true"/>
         <field name="metadata.object.literal" type="text" indexed="true" multiValued="true"/>
 
+        <dynamicField name="related.metadata.predicate.uri.*" type="string" indexed="true" multiValued="true"/>
+        <dynamicField name="related.metadata.predicate.literal_s.*" type="string" indexed="true" multiValued="true"/>
+        <dynamicField name="related.metadata.predicate.literal.*" type="text_ngram" indexed="true" multiValued="true"/>
+        <dynamicField name="related.metadata.predicate.date.*" type="date" indexed="true" multiValued="false"/>
+        <dynamicField name="related.metadata.predicate.integer.*" type="slong" indexed="true" multiValued="false"/>
+
         <field name="acl.admin" type="string" indexed="true" multiValued="true"/>
         <field name="acl.metadata.r" type="string" indexed="true" multiValued="true"/>
         <field name="acl.metadata.rw" type="string" indexed="true" multiValued="true"/>
