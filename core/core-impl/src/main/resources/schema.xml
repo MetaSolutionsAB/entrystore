@@ -226,6 +226,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
 
         <dynamicField name="metadata.predicate.uri.*" type="string" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.literal_s.*" type="string" indexed="true" multiValued="true"/>
+        <dynamicField name="metadata.predicate.literal_t.*" type="text" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.literal.*" type="text_ngram" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.date.*" type="date" indexed="true" multiValued="false"/>
         <dynamicField name="metadata.predicate.integer.*" type="slong" indexed="true" multiValued="false"/>
@@ -234,6 +235,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
 
         <dynamicField name="related.metadata.predicate.uri.*" type="string" indexed="true" multiValued="true"/>
         <dynamicField name="related.metadata.predicate.literal_s.*" type="string" indexed="true" multiValued="true"/>
+        <dynamicField name="related.metadata.predicate.literal_t.*" type="string" indexed="true" multiValued="true"/>
         <dynamicField name="related.metadata.predicate.literal.*" type="text_ngram" indexed="true" multiValued="true"/>
         <dynamicField name="related.metadata.predicate.date.*" type="date" indexed="true" multiValued="false"/>
         <dynamicField name="related.metadata.predicate.integer.*" type="slong" indexed="true" multiValued="false"/>
@@ -301,7 +303,11 @@ or to add multiple fields to the same field for easier/faster searching.  -->
     <copyField source="title.*" dest="title_sort.*"/>
     <copyField source="description" dest="all"/>
     <copyField source="tag.literal" dest="all"/>
+
     <copyField source="metadata.predicate.literal_s.*" dest="metadata.predicate.literal.*"/>
+    <copyField source="metadata.predicate.literal_s.*" dest="metadata.predicate.literal_t.*"/>
+    <copyField source="related.metadata.predicate.literal_s.*" dest="related.metadata.predicate.literal.*"/>
+    <copyField source="related.metadata.predicate.literal_s.*" dest="related.metadata.predicate.literal_t.*"/>
 
     <!-- Similarity is the scoring routine for each document vs. a query.
 A custom similarity may be specified here, but the default is fine
