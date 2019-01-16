@@ -42,6 +42,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.util.Date;
 import java.util.Set;
 
 
@@ -102,7 +103,7 @@ public class PublicRepository {
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 		}
-		
+
 		if (getTripleCount() == 0 ||
 				"on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PUBLIC_REBUILD_ON_STARTUP, "off"))) {
 			rebuildRepository();
@@ -118,7 +119,7 @@ public class PublicRepository {
 		return null;
 	}
 
-	public void addEntry(Entry e) {
+	private void addEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
 		if (isAdministrative(e)) {
 			return;
 		}
@@ -157,43 +158,52 @@ public class PublicRepository {
 					resNG = vf.createURI(e.getResourceURI().toString());
 				}
 
-				synchronized (repository) {
-					RepositoryConnection rc = null;
+				if (entryGraph != null) {
+					rc.add(entryGraph, entryNG, contextURI);
+				}
+				if (mdGraph != null) {
+					rc.add(mdGraph, mdNG, contextURI);
+				}
+				if (extMdGraph != null) {
+					rc.add(extMdGraph, extMdNG, contextURI);
+				}
+				if (resGraph != null) {
+					rc.add(resGraph, resNG, contextURI);
+				}
+			} catch (AuthorizationException ae) {
+			}
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
+	}
+
+	public void addEntry(Entry e) {
+		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+			synchronized (repository) {
+				RepositoryConnection rc = null;
+				try {
+					rc = repository.getConnection();
+					rc.begin();
+					addEntry(e, rc);
+					rc.commit();
+				} catch (RepositoryException re) {
 					try {
-						rc = repository.getConnection();
-						rc.begin();
-						if (entryGraph != null) {
-							rc.add(entryGraph, entryNG, contextURI);
-						}
-						if (mdGraph != null) {
-							rc.add(mdGraph, mdNG, contextURI);
-						}
-						if (extMdGraph != null) {
-							rc.add(extMdGraph, extMdNG, contextURI);
-						}
-						if (resGraph != null) {
-							rc.add(resGraph, resNG, contextURI);
-						}
-						rc.commit();
-					} catch (RepositoryException re) {
+						rc.rollback();
+					} catch (RepositoryException re1) {
+						log.error(re1.getMessage());
+					}
+					log.error(re.getMessage());
+				} finally {
+					if (rc != null) {
 						try {
-							rc.rollback();
-						} catch (RepositoryException re1) {
-							log.error(re1.getMessage());
-						}
-						log.error(re.getMessage());
-					} finally {
-						if (rc != null) {
-							try {
-								rc.close();
-							} catch (RepositoryException re2) {
-								log.error(re2.getMessage());
-							}
+							rc.close();
+						} catch (RepositoryException re2) {
+							log.error(re2.getMessage());
 						}
 					}
 				}
-			} catch (AuthorizationException ae) {
-
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
@@ -231,7 +241,7 @@ public class PublicRepository {
 			addEntry(e);
 		}
 	}
-	
+
 	public void removeEntry(Entry e) {
 		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
 		java.net.URI currentUser = pm.getAuthenticatedUserURI();
@@ -260,6 +270,11 @@ public class PublicRepository {
 					}
 					rc.commit();
 				} catch (RepositoryException re) {
+					try {
+						rc.rollback();
+					} catch (RepositoryException re1) {
+						log.error(re1.getMessage());
+					}
 					log.error(re.getMessage());
 				} finally {
 					if (rc != null) {
@@ -288,47 +303,80 @@ public class PublicRepository {
 
 		log.info("Rebuilding public repository");
 
-		try {
-			RepositoryConnection rc = repository.getConnection();
-			rc.begin();
-			rc.clear();
-			rc.commit();
-			rc.close();
+		synchronized (repository) {
+			RepositoryConnection rc = null;
+			try {
+				rc = repository.getConnection();
+				Date before = new Date();
+				rc.begin();
+				rc.clear();
+				log.info("Clearing public repository took " + (new Date().getTime() - before.getTime()) + " ms");
 
-			ContextManager cm = rm.getContextManager();
-			Set<java.net.URI> contexts = cm.getEntries();
+				ContextManager cm = rm.getContextManager();
+				Set<java.net.URI> contexts = cm.getEntries();
 
-			for (java.net.URI contextURI : contexts) {
-				String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
-				Context context = cm.getContext(id);
-				if (context != null) {
-					log.info("Adding context " + contextURI + " to public repository");
-					Set<java.net.URI> entries = context.getEntries();
-					for (java.net.URI entryURI : entries) {
-						if (entryURI != null) {
-							try {
-								Entry entry = cm.getEntry(entryURI);
-								if (entry == null) {
+				for (java.net.URI contextURI : contexts) {
+					String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
+					Context context = cm.getContext(id);
+					if (context != null) {
+						log.info("Adding context " + contextURI + " to public repository");
+						before = new Date();
+						Set<java.net.URI> entries = context.getEntries();
+						log.info("Fetching entries took " + (new Date().getTime() - before.getTime()) + " ms");
+						before = new Date();
+						Date timeTracker = new Date();
+						long publicEntryCount = 0;
+						long processedCount = 0;
+						for (java.net.URI entryURI : entries) {
+							if (entryURI != null) {
+								processedCount++;
+								if ((new Date().getTime() - timeTracker.getTime()) > 60000) {
+									if (processedCount > 0) {
+										log.debug("Average time per entry after " + (new Date().getTime() - before.getTime()) + " ms: " + ((new Date().getTime() - before.getTime()) / processedCount) + " ms");
+										timeTracker = new Date();
+									}
+								}
+								try {
+									Entry entry = cm.getEntry(entryURI);
+									if (entry == null) {
+										continue;
+									}
+									addEntry(entry, rc);
+									publicEntryCount++;
+								} catch (AuthorizationException ae) {
 									continue;
 								}
-								addEntry(entry);
-							} catch (AuthorizationException ae) {
-								continue;
 							}
 						}
+						log.info("Added " + publicEntryCount + " entries to public repository");
+						log.info("Total time for context: " + (new Date().getTime() - before.getTime()) + " ms");
+						if (entries.size() > 0) {
+							log.debug("Final average time per entry: " + ((new Date().getTime() - before.getTime()) / entries.size()) + " ms");
+						}
+						log.info("Done adding context " + contextURI);
 					}
-					log.info("Done adding context " + contextURI);
 				}
+				rc.commit();
+			} catch (RepositoryException re) {
+				try {
+					rc.rollback();
+				} catch (RepositoryException re1) {
+					log.error(re1.getMessage());
+				}
+				log.error(re.getMessage());
+			} finally {
+				try {
+					rc.close();
+				} catch (RepositoryException re) {
+					log.error(re.getMessage());
+				}
+				log.info("Rebuild of public repository complete");
+				log.info("Number of triples in public repository: " + getTripleCount());
+				rebuilding = false;
 			}
-		} catch (RepositoryException re) {
-			log.error(re.getMessage());
-		} finally {
-			log.info("Rebuild of public repository complete");
-			log.info("Number of triples in public repository: " + getTripleCount());
-			rebuilding = false;
 		}
 	}
-	
+
 	private boolean isAdministrative(Entry e) {
 		GraphType gt = e.getGraphType();
 		if (GraphType.Graph.equals(gt) ||
@@ -375,7 +423,7 @@ public class PublicRepository {
 		}
 		return amountTriples;
 	}
-	
+
 	public void shutdown() {
 		try {
 			repository.shutDown();
