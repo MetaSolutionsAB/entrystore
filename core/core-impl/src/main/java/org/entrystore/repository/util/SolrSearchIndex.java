@@ -588,8 +588,8 @@ public class SolrSearchIndex implements SearchIndex {
 			log.info("Adding entry to Solr delete queue: " + entryURI);
 			deleteQueue.add(entryURI);
 		}
-		//If entry is a context, also remove all entries inside
-		if (entry.getGraphType() == GraphType.Context) {
+		// if entry is a context, also remove all entries inside
+		if (GraphType.Context.equals(entry.getGraphType())) {
 			clearSolrIndexFromContextEntries(solrServer, entry);
 		}
 	}
