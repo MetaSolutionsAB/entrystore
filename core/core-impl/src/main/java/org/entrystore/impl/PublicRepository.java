@@ -237,37 +237,13 @@ public class PublicRepository {
 				}
 			}			
 		} else {
-			removeEntry(e);
-			addEntry(e);
-		}
-	}
-
-	public void removeEntry(Entry e) {
-		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			ValueFactory vf = repository.getValueFactory();
-			URI contextURI = vf.createURI(e.getContext().getURI().toString());
-
-			URI entryNG = vf.createURI(e.getEntryURI().toString());
-			URI mdNG = vf.createURI(e.getLocalMetadataURI().toString());
-			URI resNG = vf.createURI(e.getResourceURI().toString());
-			URI extMdNG = null;
-			if (e.getExternalMetadataURI() != null) {
-				extMdNG = vf.createURI(e.getCachedExternalMetadataURI().toString());
-			}
-
 			synchronized (repository) {
 				RepositoryConnection rc = null;
 				try {
 					rc = repository.getConnection();
 					rc.begin();
-					if (extMdNG != null) {
-						rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
-					} else {
-						rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, resNG);
-					}
+					removeEntry(e, rc);
+					addEntry(e, rc);
 					rc.commit();
 				} catch (RepositoryException re) {
 					try {
@@ -280,8 +256,68 @@ public class PublicRepository {
 					if (rc != null) {
 						try {
 							rc.close();
-						} catch (RepositoryException re) {
-							log.error(re.getMessage());
+						} catch (RepositoryException re2) {
+							log.error(re2.getMessage());
+						}
+					}
+				}
+			}
+		}
+	}
+
+	private void removeEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
+		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
+		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			// we need to be admin, in case the ACL has become
+			// more restrictive since adding the entry
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			ValueFactory vf = repository.getValueFactory();
+			URI contextURI = vf.createURI(e.getContext().getURI().toString());
+
+			URI entryNG = vf.createURI(e.getEntryURI().toString());
+			URI mdNG = vf.createURI(e.getLocalMetadataURI().toString());
+			URI resNG = vf.createURI(e.getResourceURI().toString());
+			URI extMdNG = null;
+
+			if (e.getExternalMetadataURI() != null) {
+				extMdNG = vf.createURI(e.getCachedExternalMetadataURI().toString());
+			}
+
+			if (extMdNG != null) {
+				rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
+			} else {
+				rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, resNG);
+			}
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
+	}
+
+	public void removeEntry(Entry e) {
+		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			synchronized (repository) {
+				RepositoryConnection rc = null;
+				try {
+					rc = repository.getConnection();
+					rc.begin();
+					removeEntry(e, rc);
+					rc.commit();
+				} catch (RepositoryException re) {
+					try {
+						rc.rollback();
+					} catch (RepositoryException re1) {
+						log.error(re1.getMessage());
+					}
+					log.error(re.getMessage());
+				} finally {
+					if (rc != null) {
+						try {
+							rc.close();
+						} catch (RepositoryException re2) {
+							log.error(re2.getMessage());
 						}
 					}
 				}
@@ -388,22 +424,6 @@ public class PublicRepository {
 		return true;
 	}
 
-	private boolean isPublic(Entry e) {
-		boolean result = false;
-		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
-		try {
-			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
-			pm.checkAuthenticatedUserAuthorized(e, AccessProperty.ReadMetadata);
-			result = true;
-		} catch (AuthorizationException ae) {
-
-		} finally {
-			pm.setAuthenticatedUserURI(currentUser);
-		}
-		return result;
-	}
-
 	public long getTripleCount() {
 		long amountTriples = 0;
 		RepositoryConnection rc = null;
@@ -427,7 +447,9 @@ public class PublicRepository {
 	public void shutdown() {
 		try {
 			repository.shutDown();
-		} catch (RepositoryException e) {}
+		} catch (RepositoryException e) {
+			log.error("Error when shutting down public repository: " + e.getMessage());
+		}
 	}
 
 }
