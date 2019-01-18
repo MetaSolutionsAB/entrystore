@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import info.aduna.iteration.Iterations;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.GraphEntity;
@@ -23,7 +24,7 @@ import org.entrystore.ProvenanceType;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;
-import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
@@ -111,8 +112,7 @@ public class MetadataEntityImpl implements GraphEntity {
             RepositoryConnection rc = null;
             try {
                 rc = this.entry.repositoryManager.getProvenanceRepository().getConnection();
-                RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, uri);
-                return new GraphImpl(rc.getValueFactory(), rr.asList());
+                return Iterations.addAll(rc.getStatements(null, null, null, false, uri), new LinkedHashModel());
             } catch (RepositoryException e) {
                 log.error(e.getMessage());
                 return null;

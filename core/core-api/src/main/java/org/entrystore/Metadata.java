@@ -16,9 +16,9 @@
 
 package org.entrystore;
 
-import java.net.URI;
-
 import org.openrdf.model.Graph;
+
+import java.net.URI;
 
 /**
  * Represents an RDF graph (Sesame {@link Graph}) for the metadata.
