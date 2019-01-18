@@ -228,8 +228,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 				try {
 					res2entry = new HashMap<URI, Object>();
 					extMdUri2entry = new HashMap<URI, Object>();
-					List<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI).asList();
-					for (Statement statement : statements) {
+					RepositoryResult<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI);
+					while (statements.hasNext()) {
+						Statement statement = statements.next();
 						try {
 							org.openrdf.model.URI predicate = statement.getPredicate();
 							if (predicate.equals(RepositoryProperties.mdHasEntry)) {
@@ -247,6 +248,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							log.error(e.getMessage());
 						}
 					}
+					statements.close();
 				} finally {
 					rc.close();
 				}
