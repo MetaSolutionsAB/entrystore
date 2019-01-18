@@ -16,6 +16,9 @@
 
 package org.entrystore.impl;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.collect.Queues;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -23,7 +26,6 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
-import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
@@ -43,8 +45,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Queue;
 import java.util.Set;
-
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * @author Hannes Ebner
@@ -60,7 +65,74 @@ public class PublicRepository {
 	private RepositoryManager rm;
 	
 	private PrincipalManager pm;
-	
+
+	private Thread entrySubmitter;
+
+	private final Cache<java.net.URI, Entry> postQueue = Caffeine.newBuilder().build();
+
+	private final Queue<Entry> deleteQueue = Queues.newConcurrentLinkedQueue();
+
+	private static final int BATCH_SIZE = 1000;
+
+	public class EntrySubmitter extends Thread {
+
+		@Override
+		public void run() {
+			while (!interrupted()) {
+				postQueue.cleanUp();
+				int batchCount = 0;
+
+				if (postQueue.estimatedSize() > 0 || deleteQueue.size() > 0) {
+					if (deleteQueue.size() > 0) {
+						Set<Entry> entriesToRemove = new HashSet();
+						synchronized (deleteQueue) {
+							while (batchCount < BATCH_SIZE) {
+								Entry e = deleteQueue.poll();
+								if (e == null) {
+									break;
+								}
+								entriesToRemove.add(e);
+								batchCount++;
+							}
+						}
+						if (batchCount > 0) {
+							log.info("Removing " + batchCount + " entries from Public Repository, " + deleteQueue.size() + " entries remaining in removal queue");
+							removeEntries(entriesToRemove);
+						}
+					}
+					if (postQueue.estimatedSize() > 0) {
+						Set<Entry> entriesToUpdate = new HashSet();
+						synchronized (postQueue) {
+							ConcurrentMap<java.net.URI, Entry> postQueueMap = postQueue.asMap();
+							Iterator<java.net.URI> it = postQueueMap.keySet().iterator();
+							while (batchCount < BATCH_SIZE && it.hasNext()) {
+								java.net.URI key = it.next();
+								Entry entry = postQueueMap.get(key);
+								postQueueMap.remove(key, entry);
+								if (entry == null) {
+									log.warn("Value for key " + key + " is null in Public Repository submit queue");
+								}
+								entriesToUpdate.add(entry);
+								batchCount++;
+							}
+						}
+						postQueue.cleanUp();
+						log.info("Sending " + entriesToUpdate.size() + " entries for update in Public Repository, " + postQueue.estimatedSize() + " entries remaining in post queue");
+						updateEntries(entriesToUpdate);
+					}
+				} else {
+					try {
+						Thread.sleep(10000);
+					} catch (InterruptedException ie) {
+						log.info("Public Repository submitter got interrupted, shutting down submitter thread");
+						return;
+					}
+				}
+			}
+		}
+
+	}
+
 	public PublicRepository(RepositoryManager rm) {
 		this.rm = rm;
 		this.pm = rm.getPrincipalManager();
@@ -108,6 +180,9 @@ public class PublicRepository {
 				"on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PUBLIC_REBUILD_ON_STARTUP, "off"))) {
 			rebuildRepository();
 		}
+
+		entrySubmitter = new PublicRepository.EntrySubmitter();
+		entrySubmitter.start();
 	}
 	
 	public RepositoryConnection getConnection() {
@@ -117,6 +192,22 @@ public class PublicRepository {
 			log.error(e.getMessage());
 		}
 		return null;
+	}
+
+	public void enqueue(Entry entry) {
+		java.net.URI entryURI = entry.getEntryURI();
+		synchronized (postQueue) {
+			log.info("Adding document to update queue: " + entryURI);
+			postQueue.put(entryURI, entry);
+		}
+	}
+
+	public void remove(Entry entry) {
+		java.net.URI entryURI = entry.getEntryURI();
+		synchronized (deleteQueue) {
+			log.info("Adding entry to delete queue: " + entryURI);
+			deleteQueue.add(entry);
+		}
 	}
 
 	private void addEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
@@ -177,7 +268,7 @@ public class PublicRepository {
 		}
 	}
 
-	public void addEntry(Entry e) {
+	private void updateEntries(Set<Entry> entries) {
 		java.net.URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
@@ -186,7 +277,9 @@ public class PublicRepository {
 				try {
 					rc = repository.getConnection();
 					rc.begin();
-					addEntry(e, rc);
+					for (Entry e : entries) {
+						updateEntry(e, rc);
+					}
 					rc.commit();
 				} catch (RepositoryException re) {
 					try {
@@ -209,8 +302,8 @@ public class PublicRepository {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
 	}
-	
-	public void updateEntry(Entry e) {
+
+	private void updateEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
 		if (e == null) {
 			return;
 		}
@@ -218,9 +311,6 @@ public class PublicRepository {
 		// If entry is ResourceType.Context we update all its
 		// entries, just in case the ACL has changed
 		if (GraphType.Context.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
-			
-			// TODO needs to be tested
-			
 			String contextURI = e.getResourceURI().toString();
 			String id = contextURI.substring(contextURI.lastIndexOf("/") + 1);
 			Context context = rm.getContextManager().getContext(id);
@@ -229,21 +319,32 @@ public class PublicRepository {
 				for (java.net.URI entryURI : entries) {
 					if (entryURI != null) {
 						try {
-							updateEntry(rm.getContextManager().getEntry(entryURI));
+							updateEntry(rm.getContextManager().getEntry(entryURI), rc);
 						} catch (AuthorizationException ae) {
 							continue;
 						}
 					}
 				}
-			}			
+			}
 		} else {
+			log.debug("Updating entry: " + e.getEntryURI());
+			removeEntry(e, rc);
+			addEntry(e, rc);
+		}
+	}
+
+	private void removeEntries(Set<Entry> entries) {
+		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			synchronized (repository) {
 				RepositoryConnection rc = null;
 				try {
 					rc = repository.getConnection();
 					rc.begin();
-					removeEntry(e, rc);
-					addEntry(e, rc);
+					for (Entry e : entries) {
+						removeEntry(e, rc);
+					}
 					rc.commit();
 				} catch (RepositoryException re) {
 					try {
@@ -262,6 +363,8 @@ public class PublicRepository {
 					}
 				}
 			}
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
 		}
 	}
 
@@ -288,39 +391,6 @@ public class PublicRepository {
 				rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
 			} else {
 				rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, resNG);
-			}
-		} finally {
-			pm.setAuthenticatedUserURI(currentUser);
-		}
-	}
-
-	public void removeEntry(Entry e) {
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			synchronized (repository) {
-				RepositoryConnection rc = null;
-				try {
-					rc = repository.getConnection();
-					rc.begin();
-					removeEntry(e, rc);
-					rc.commit();
-				} catch (RepositoryException re) {
-					try {
-						rc.rollback();
-					} catch (RepositoryException re1) {
-						log.error(re1.getMessage());
-					}
-					log.error(re.getMessage());
-				} finally {
-					if (rc != null) {
-						try {
-							rc.close();
-						} catch (RepositoryException re2) {
-							log.error(re2.getMessage());
-						}
-					}
-				}
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
@@ -445,6 +515,10 @@ public class PublicRepository {
 	}
 
 	public void shutdown() {
+		if (entrySubmitter != null) {
+			entrySubmitter.interrupt();
+		}
+
 		try {
 			repository.shutDown();
 		} catch (RepositoryException e) {

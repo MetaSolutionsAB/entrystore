@@ -695,26 +695,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	private void registerPublicRepositoryListeners() {
 		if (publicRepository != null) {
-			// add
-			RepositoryListener adder = new RepositoryListener() {
-				@Override
-				public void repositoryUpdated(RepositoryEventObject eventObject) {
-					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
-						publicRepository.addEntry((Entry) eventObject.getSource());
-					}
-				}
-			};
-			registerListener(adder, RepositoryEvent.EntryCreated);
-			
-			// update
 			RepositoryListener updater = new RepositoryListener() {
 				@Override
 				public void repositoryUpdated(RepositoryEventObject eventObject) {
 					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
-						publicRepository.updateEntry((Entry) eventObject.getSource());
+						publicRepository.enqueue((Entry) eventObject.getSource());
 					}
 				}
 			};
+			registerListener(updater, RepositoryEvent.EntryCreated);
 			registerListener(updater, RepositoryEvent.EntryUpdated);
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
@@ -725,7 +714,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				@Override
 				public void repositoryUpdated(RepositoryEventObject eventObject) {
 					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
-						publicRepository.removeEntry((Entry) eventObject.getSource());
+						publicRepository.remove((Entry) eventObject.getSource());
 					}
 				}
 			};
