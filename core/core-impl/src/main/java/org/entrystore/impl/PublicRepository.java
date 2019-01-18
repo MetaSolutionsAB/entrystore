@@ -222,8 +222,13 @@ public class PublicRepository {
 				URI contextURI = vf.createURI(e.getContext().getURI().toString());
 
 				// entry
+				/* DEACTIVATED
 				Graph entryGraph = e.getGraph();
 				URI entryNG = vf.createURI(e.getEntryURI().toString());
+				if (entryGraph != null) {
+					rc.add(entryGraph, entryNG, contextURI);
+				}
+				*/
 
 				// metadata
 				Graph mdGraph = null;
@@ -249,9 +254,6 @@ public class PublicRepository {
 					resNG = vf.createURI(e.getResourceURI().toString());
 				}
 
-				if (entryGraph != null) {
-					rc.add(entryGraph, entryNG, contextURI);
-				}
 				if (mdGraph != null) {
 					rc.add(mdGraph, mdNG, contextURI);
 				}
@@ -327,7 +329,7 @@ public class PublicRepository {
 				}
 			}
 		} else {
-			log.debug("Updating entry: " + e.getEntryURI());
+			log.debug("Processing entry: " + e.getEntryURI());
 			removeEntry(e, rc);
 			addEntry(e, rc);
 		}
@@ -457,9 +459,9 @@ public class PublicRepository {
 						log.info("Added " + publicEntryCount + " entries to public repository");
 						log.info("Total time for context: " + (new Date().getTime() - before.getTime()) + " ms");
 						if (entries.size() > 0) {
-							log.debug("Final average time per entry: " + ((new Date().getTime() - before.getTime()) / entries.size()) + " ms");
+							log.debug("Total average time per entry: " + ((new Date().getTime() - before.getTime()) / entries.size()) + " ms");
 						}
-						log.info("Done adding context " + contextURI);
+						log.info("Done processing context " + contextURI);
 					}
 				}
 				rc.commit();
