@@ -202,16 +202,5 @@ public interface ContextManager extends Context{
 	public void exportContext(Entry contextEntry, File destFile, Set<URI> users, boolean metadataOnly, Class<? extends RDFWriter> writer) throws RepositoryException;
 	
 	public void importContext(Entry contextEntry, File srcFile) throws RepositoryException, IOException;
-	
-	/**
-	 * Removes all triples in this context (i.e. all triples within all named
-	 * graphs which start with the given parameter). Removes even all local
-	 * files which belong to this context.
-	 * 
-	 * @param contextURI
-	 *            The URI of the context to be deleted. E.g. http://baseuri/512
-	 * @throws RepositoryException
-	 */
-	public void deleteContext(URI contextURI) throws RepositoryException;
-	
+
 }

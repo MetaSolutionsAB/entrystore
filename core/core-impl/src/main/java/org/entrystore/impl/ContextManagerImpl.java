@@ -109,6 +109,17 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		loadIndex();
 	}
 
+	/**
+	 * Removes all triples in this context (i.e. all triples within all named
+	 * graphs which start with the given parameter). Removes even all local
+	 * files which belong to this context.
+	 *
+	 * @param contextURI
+	 *            The resource URI of the context to be deleted. E.g. http://baseuri/512
+	 * @throws RepositoryException
+	 *
+	 * @deprecated Use Context.remove(RepositoryConnection) instead.
+	 */
 	public void deleteContext(URI contextURI) throws RepositoryException {
 		if (contextURI == null) {
 			throw new IllegalArgumentException("Context URI must not be null");
