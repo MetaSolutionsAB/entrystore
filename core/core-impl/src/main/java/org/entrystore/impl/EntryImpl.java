@@ -1574,10 +1574,11 @@ public class EntryImpl implements Entry {
 			}
 			return mergedMd;
 		}
-		return new GraphImpl();
+		return new LinkedHashModel();
 	}
 
 	public void remove(RepositoryConnection rc) throws Exception {
+		log.debug("Removing entry " + entryURI);
         removeInverseRelations(rc);
 		rc.clear(entryURI);
 		if (locType == EntryType.Local || locType == EntryType.Link || locType == EntryType.LinkReference) {
