@@ -17,6 +17,7 @@
 
 package org.entrystore.impl;
 
+import info.aduna.iteration.Iterations;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.Context;
@@ -42,6 +43,7 @@ import org.openrdf.model.URI;
 import org.openrdf.model.Value;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.vocabulary.RDF;
 import org.openrdf.repository.Repository;
 import org.openrdf.repository.RepositoryConnection;
@@ -589,10 +591,7 @@ public class EntryImpl implements Entry {
 		RepositoryConnection rc = null; 
 		try {
 			rc = this.repository.getConnection();
-			RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, entryURI);
-			List<Statement> stmnts = rr.asList();
-			ValueFactory vf = this.repository.getValueFactory();
-			Graph graph = new GraphImpl(vf, stmnts);
+			Graph graph = Iterations.addAll(rc.getStatements(null, null, null, false, entryURI), new LinkedHashModel());
 			//TODO following is a fix for backwards compatability where homeContext is set on user object rather than in the entryinfo.
 			if (this.resource instanceof User && ((User) this.resource).getHomeContext() != null) {
 				Context context = ((User) this.resource).getHomeContext();
@@ -608,7 +607,7 @@ public class EntryImpl implements Entry {
 				rc.close();
 			} catch (RepositoryException e) {
 				log.error(e.getMessage());
-			} 
+			}
 		}
 	}
 
