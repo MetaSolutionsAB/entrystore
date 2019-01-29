@@ -74,8 +74,7 @@ import java.util.Set;
 public class EntryResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(EntryResource.class);
-	public static Config config;
-	
+
 	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
 	@Override
