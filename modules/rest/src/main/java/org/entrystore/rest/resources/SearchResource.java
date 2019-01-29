@@ -30,6 +30,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.RDFJSON;
@@ -66,10 +67,16 @@ import java.util.Set;
 public class SearchResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(SearchResource.class);
+
+	static int DEFAULT_LIMIT = 50;
+
+	static int MAX_LIMIT = -1;
 	
 	@Override
 	public void doInit() {
-		
+		if (MAX_LIMIT == -1) {
+			MAX_LIMIT = getRM().getConfiguration().getInt(Settings.SOLR_MAX_LIMIT, 100);
+		}
 	}
 
 	@Get
@@ -101,7 +108,7 @@ public class SearchResource extends BaseResource {
 			}
 			
 			int offset = 0;
-			int limit = 50;
+			int limit = DEFAULT_LIMIT;
 			long results = 0;
 			List<FacetField> responseFacetFields = null;
 			
@@ -109,9 +116,10 @@ public class SearchResource extends BaseResource {
 			if (parameters.containsKey("limit")) {
 				try {
 					limit = Integer.valueOf(parameters.get("limit"));
-					// we don't support more than 100 results per page for now
-					if (limit > 100) {
-						limit = 100;
+					if (limit > MAX_LIMIT) {
+						limit = MAX_LIMIT;
+					} else if (limit < 0) { // we allow 0 on purpose, this enables requests for the purpose of getting a result count only
+						limit = DEFAULT_LIMIT;
 					}
 				} catch (NumberFormatException ignored) {}
 			}

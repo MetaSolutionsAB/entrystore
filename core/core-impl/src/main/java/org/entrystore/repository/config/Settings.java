@@ -87,6 +87,7 @@ public class Settings {
 	public static String SOLR_URL = "entrystore.solr.url";
 	public static String SOLR_REINDEX_ON_STARTUP = "entrystore.solr.reindex-on-startup";
 	public static String SOLR_EXTRACT_FULLTEXT = "entrystore.solr.extract-fulltext";
+	public static String SOLR_MAX_LIMIT = "entrystore.solr.max-limit";
 
 	public static String SOLR_RELATED = "entrystore.solr.related";
 	public static String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";
