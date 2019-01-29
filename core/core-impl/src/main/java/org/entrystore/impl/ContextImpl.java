@@ -636,17 +636,15 @@ public class ContextImpl extends ResourceImpl implements Context {
 			if (GraphType.Context.equals(buiType)) {
 				((Context) entry.getResource()).initializeSystemEntries();
 			} else if (GraphType.User.equals(buiType)) {
-                entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, entry.getResourceURI());
-                entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, entry.getResourceURI());
-                entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, ((PrincipalManager) this).getGuestUser().getURI());
-                entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getGuestUser().getURI());
+				entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, entry.getResourceURI());
+				entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, entry.getResourceURI());
+				entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
 			} else if (GraphType.Group.equals(buiType)) {
-                entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, ((PrincipalManager) this).getGuestUser().getURI());
-                entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getGuestUser().getURI());
-                //TODO: not obvious that the following two are good defaults for group.
-                entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, ((PrincipalManager) this).getAuthenticatedUserURI());
-                entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, ((PrincipalManager) this).getAuthenticatedUserURI());
+				entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, entry.getResourceURI());
+				entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, entry.getResourceURI());
+				entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
             }
+
 			return entry;
 		}
 	}
