@@ -621,6 +621,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 			isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		}
 
+		// TODO externalize this into a setting
+		boolean allowUserGroupToReadMetadata = true;
+
 		synchronized (this.entry.repository) {
 			EntryImpl entry = createNewMinimalItem(null, null, EntryType.Local, buiType, repType, entryId);
 			if (list != null) {
@@ -641,8 +644,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 				entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
 			} else if (GraphType.Group.equals(buiType)) {
 				entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, entry.getResourceURI());
-				entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, entry.getResourceURI());
-				entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
+				if (allowUserGroupToReadMetadata) {
+					entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
+				} else {
+					entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, entry.getResourceURI());
+				}
             }
 
 			return entry;
