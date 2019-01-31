@@ -86,6 +86,7 @@ public class MetadataEntityImpl implements GraphEntity {
                 if (attr.hasNext()) {
                     this.attributedURI = (org.openrdf.model.URI) attr.next().getObject();
                 }
+                attr.close();
             } catch (RepositoryException e) {
                 log.error(e.getMessage());
             } finally {

@@ -1476,6 +1476,7 @@ public class EntryImpl implements Entry {
                     }
                 }
             }
+            rr.close();
             invRelations = false;
         }
     }
@@ -1751,11 +1752,14 @@ public class EntryImpl implements Entry {
 					matches.close();
 					return result;
 				}
+				if (!matches.isClosed()) {
+					matches.close();
+				}
 				rc.close();				
 				return null;
 			} catch (org.openrdf.repository.RepositoryException e) {
 				rc.close();
-				e.printStackTrace();
+				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				rc.close();
@@ -1780,11 +1784,14 @@ public class EntryImpl implements Entry {
 					matches.close();
 					return result;
 				}
+				if (!matches.isClosed()) {
+					matches.close();
+				}
 				rc.close();				
 				return null;
 			} catch (org.openrdf.repository.RepositoryException e) {
 				rc.close();
-				e.printStackTrace();
+				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				rc.close();
@@ -1855,10 +1862,9 @@ public class EntryImpl implements Entry {
 			RepositoryConnection rc = null;
 			try {
 				rc = this.repository.getConnection();
-				RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, this.relationURI);
-				this.relations = rr.asList();
+				return Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
 			} catch (RepositoryException e) {
-				e.printStackTrace();
+				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				try {

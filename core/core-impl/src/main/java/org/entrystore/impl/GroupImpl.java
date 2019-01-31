@@ -111,7 +111,7 @@ public class GroupImpl extends ListImpl implements Group {
             RepositoryConnection rc = null;
             try {
                 rc = this.entry.repository.getConnection();
-                rc.setAutoCommit(false);
+                rc.begin();
                 ValueFactory vf = this.entry.repository.getValueFactory();
 
                 //Remove homecontext and remove inverse relation cache.
@@ -125,6 +125,7 @@ public class GroupImpl extends ListImpl implements Group {
                     }
                     rc.remove(statement, entry.getSesameEntryURI());
                 }
+                iter.close();
 
                 //Add new homecontext and add inverse relational cache
                 if (context != null) {

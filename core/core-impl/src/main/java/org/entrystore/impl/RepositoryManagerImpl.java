@@ -738,6 +738,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			for (; contextResult.hasNext(); contextResult.next()) {
 				amountNGs++;
 			}
+			contextResult.close();
 		} catch (RepositoryException re) {
 			log.error(re.getMessage());
 		} finally {

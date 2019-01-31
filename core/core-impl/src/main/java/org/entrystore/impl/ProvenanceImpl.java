@@ -28,6 +28,7 @@ import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.vocabulary.OWL;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
@@ -148,9 +149,6 @@ public class ProvenanceImpl implements Provenance {
             rr = rc.getStatements(rc.getValueFactory().createURI(uri.toString()), RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
             latestStmt = rc.getStatements(null, OWL.SAMEAS, this.entry.getSesameLocalMetadataURI(), false, this.entry.entryURI);
             org.openrdf.model.URI latestURI = latestStmt.hasNext() ? (org.openrdf.model.URI) latestStmt.next().getSubject() : null;
-			if (latestStmt != null && !latestStmt.isClosed()) {
-				latestStmt.close();
-			}
             Entity entity = null;
             if (rr.hasNext()) {
                 entity = new MetadataEntityImpl(this.entry, rr.next(), latestURI);
@@ -341,13 +339,14 @@ public class ProvenanceImpl implements Provenance {
 
     protected Graph getMinimalGraph(RepositoryConnection rc) throws RepositoryException {
         RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, this.entry.entryURI);
-        Graph result = new GraphImpl(this.entry.repository.getValueFactory());
+        Graph result = new LinkedHashModel();
         while (rr.hasNext()) {
             Statement st = rr.next();
             if (hasProvenanceCharacter(st)) {
                 result.add(st);
             }
         }
+        rr.close();
         return result;
     }
 

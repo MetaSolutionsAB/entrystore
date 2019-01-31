@@ -153,6 +153,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						filteredNGs.add(ng);
 					}
 				}
+				availableNGs.close();
 
 				org.openrdf.model.Resource[] filteredNGsArray = filteredNGs.toArray(new org.openrdf.model.Resource[filteredNGs.size()]);
 				if (filteredNGsArray == null || filteredNGsArray.length == 0) {
@@ -247,6 +248,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						}
 					}
 				}
+				availableNGs.close();
 
 				RDFHandler rdfWriter = null;
 				try {
@@ -282,6 +284,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						}
 					}
 				}
+				rr.close();
 				rdfWriter.endRDF();
 			} catch (RepositoryException e) {
 				log.error("Error when exporting context", e);
@@ -907,6 +910,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						} catch (AuthorizationException ae) {
 						}
 					}
+					resources.close();
 				} else {
 					RepositoryResult<Statement> resources = rc.getStatements(resource, RepositoryProperties.mdHasEntry, null, false);
 					while (resources.hasNext()) {
@@ -919,6 +923,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						} catch (AuthorizationException ae) {
 						}
 					}
+					resources.close();
 				}
 			} finally {
 				rc.close();

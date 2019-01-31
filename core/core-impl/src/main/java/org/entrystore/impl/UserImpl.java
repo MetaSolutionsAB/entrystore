@@ -290,6 +290,7 @@ public class UserImpl extends RDFResource implements User {
 						}
 						rc.remove(statement, entry.getSesameEntryURI());
 					}
+					iter.close();
 
 					//TODO Remove the following line in future as it corresponds to backward compatability where homecontext where saved in resource graph instead of entry graph.
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, resourceURI), resourceURI);

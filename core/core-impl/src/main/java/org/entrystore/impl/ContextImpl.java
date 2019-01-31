@@ -148,6 +148,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							}
 						}
 					}
+					resources.close();
 					
 					RepositoryResult<Statement> externalMD = rc.getStatements(null, RepositoryProperties.externalMetadata, null, false);
 					while (externalMD.hasNext()) {
@@ -160,6 +161,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							}
 						}
 					}
+					externalMD.close();
 					
 					rc.add(stmntsToAdd, this.resourceURI);
 					rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(maxIndex), this.resourceURI);					
@@ -969,7 +971,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			RepositoryConnection rc = null;
 			try {
 				rc = entry.repository.getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				rc.remove(rc.getStatements(this.resourceURI, RepositoryProperties.Quota, null, false, this.resourceURI), this.resourceURI);
 				rc.add(this.resourceURI, RepositoryProperties.Quota, rc.getValueFactory().createLiteral(quotaInBytes), this.resourceURI);
 				rc.commit();
