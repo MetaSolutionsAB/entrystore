@@ -63,7 +63,15 @@ public class CookieLoginResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
-		Form query = new Form(r);
+		Form query;
+		try {
+			query = new Form(r);
+		} catch (IllegalArgumentException iae) {
+			log.warn(iae.getMessage());
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			return;
+		}
+
 		String userName = query.getFirstValue("auth_username");
 		String password = query.getFirstValue("auth_password");
 		String maxAgeStr = query.getFirstValue("auth_maxage");
