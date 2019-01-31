@@ -28,7 +28,6 @@ import org.openrdf.rio.RDFHandlerException;
 import org.openrdf.rio.RDFParseException;
 import org.openrdf.rio.RDFParser;
 import org.openrdf.rio.RDFWriter;
-import org.openrdf.rio.helpers.RDFHandlerBase;
 import org.openrdf.rio.helpers.StatementCollector;
 import org.openrdf.rio.n3.N3ParserFactory;
 import org.openrdf.rio.n3.N3Writer;
@@ -156,10 +155,13 @@ public class GraphUtil {
 			parser.parse(reader, "");
 		} catch (RDFHandlerException rdfe) {
 			log.error(rdfe.getMessage());
+			return null;
 		} catch (RDFParseException rdfpe) {
 			log.error(rdfpe.getMessage());
+			return null;
 		} catch (IOException ioe) {
 			log.error(ioe.getMessage());
+			return null;
 		}
 
 		return new LinkedHashModel(collector.getStatements());
