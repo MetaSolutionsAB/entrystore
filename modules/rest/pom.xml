@@ -95,11 +95,6 @@
         </dependency>
         <dependency>
             <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-transforms-pcaxis</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.entrystore</groupId>
             <artifactId>entrystore-transforms-rowstore</artifactId>
             <version>${project.version}</version>
         </dependency>
