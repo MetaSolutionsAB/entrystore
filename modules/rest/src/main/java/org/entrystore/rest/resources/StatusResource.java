@@ -75,10 +75,10 @@ public class StatusResource extends BaseResource  {
 					PrincipalManager pm = getRM().getPrincipalManager();
 					URI currentUser = pm.getAuthenticatedUserURI();
 
-					if (pm.getGuestUser().getURI().equals(currentUser)) {
-						result.put("error", "You have to be logged in to see the requested information");
+					if (!pm.getAdminUser().getURI().equals(currentUser) &&
+							!pm.getAdminGroup().isMember(pm.getUser(currentUser))) {
 						getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
-						return new JsonRepresentation(result);
+						return new EmptyRepresentation();
 					}
 
 					result.put("backup", settingToBoolean(Settings.BACKUP_SCHEDULER));
@@ -117,11 +117,9 @@ public class StatusResource extends BaseResource  {
 							result.put("contextCount", getRM().getContextManager().getEntries().size());
 							result.put("groupCount", pm.getGroupUris().size());
 							result.put("userCount", pm.getUsersAsUris().size());
-							if (pm.getAdminUser().getURI().equals(currentUser) || pm.getAdminGroup().isMember(pm.getUser(currentUser))) {
-								if (getRM() instanceof RepositoryManagerImpl) {
-									result.put("namedGraphCount", ((RepositoryManagerImpl) getRM()).getNamedGraphCount());
-									result.put("tripleCount", ((RepositoryManagerImpl) getRM()).getTripleCount());
-								}
+							if (getRM() instanceof RepositoryManagerImpl) {
+								result.put("namedGraphCount", ((RepositoryManagerImpl) getRM()).getNamedGraphCount());
+								result.put("tripleCount", ((RepositoryManagerImpl) getRM()).getTripleCount());
 							}
 						} finally {
 							pm.setAuthenticatedUserURI(currentUser);
