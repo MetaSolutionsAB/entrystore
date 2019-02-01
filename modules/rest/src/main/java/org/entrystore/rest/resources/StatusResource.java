@@ -36,6 +36,7 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -111,6 +112,18 @@ public class StatusResource extends BaseResource  {
 					result.put("startupTime", EntryStoreApplication.getStartupDate());
 					result.put("authTokenCount", LoginTokenCache.getInstance().size());
 
+					// JVM
+					JSONObject jvm = new JSONObject();
+					jvm.put("totalMemory", Runtime.getRuntime().totalMemory());
+					jvm.put("freeMemory", Runtime.getRuntime().freeMemory());
+					jvm.put("maxMemory", Runtime.getRuntime().maxMemory());
+					jvm.put("availableProcessors", Runtime.getRuntime().availableProcessors());
+					jvm.put("totalCommittedMemory", getTotalCommittedMemory());
+					jvm.put("committedHeap", ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getCommitted());
+					jvm.put("totalUsedMemory", getTotalUsedMemory());
+					jvm.put("usedHeap", ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed());
+					result.put("jvm", jvm);
+
 					if (parameters.containsKey("includeStats")) {
 						try {
 							pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
@@ -159,6 +172,16 @@ public class StatusResource extends BaseResource  {
 
 	private boolean settingToBoolean(String key) {
 		return "on".equalsIgnoreCase(config.getString(key, "off")) ? true : false;
+	}
+
+	long getTotalCommittedMemory() {
+		return ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getCommitted() +
+				ManagementFactory.getMemoryMXBean().getNonHeapMemoryUsage().getCommitted();
+	}
+
+	long getTotalUsedMemory() {
+		return ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed() +
+				ManagementFactory.getMemoryMXBean().getNonHeapMemoryUsage().getUsed();
 	}
 
 }
