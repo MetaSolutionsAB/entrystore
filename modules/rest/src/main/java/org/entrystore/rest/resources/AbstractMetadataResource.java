@@ -62,8 +62,10 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 
@@ -138,7 +140,8 @@ public abstract class AbstractMetadataResource extends BaseResource {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						return null;
 					}
-					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), predicatesToFollow, parameters.containsKey("repository"));
+					Map<String, String> blacklist = loadBlacklist(traversalParam);
+					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), predicatesToFollow, blacklist, parameters.containsKey("repository"));
 					if (graphQuery != null) {
 						Model graphQueryResult = applyGraphQuery(graphQuery, travResult.getGraph());
 						if (graphQueryResult != null) {
@@ -344,10 +347,11 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @return Returns a Graph consisting of merged metadata graphs. Contains
 	 * 			all metadata, including e.g. cached external.
 	 */
-	private EntryUtil.TraversalResult traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow, boolean repository) {
+	private EntryUtil.TraversalResult traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow, Map<String, String> blacklist, boolean repository) {
 		return EntryUtil.traverseAndLoadEntryMetadata(
 				ImmutableSet.of((URI) new URIImpl(entryURI.toString())),
 				predToFollow,
+				blacklist,
 				0,
 				10,
 				HashMultimap.<URI, Integer>create(),
@@ -381,8 +385,16 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		return result;
 	}
 
+	private Map<String, String> loadBlacklist(String traversalParam) {
+		Map<String, String> result = new HashMap();
+		for (String s : traversalParam.split(",")) {
+			result.putAll(loadTraversalBlacklistForProfile(s));
+		}
+		return result;
+	}
+
 	/**
-	 * Load a traversal profile from configuration.
+	 * Loads a traversal profile from configuration.
 	 * @param profileName The name of the traversal profile.
 	 * @return A set of URIs.
 	 */
@@ -391,6 +403,25 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		Set<java.net.URI> result = new HashSet<>();
 		for (String s : predicates) {
 			result.add(java.net.URI.create(s));
+		}
+		return result;
+	}
+
+	/**
+	 * Loads a blacklist for a traversal profile from configuration.
+	 * @param profileName The name of the traversal profile.
+	 * @return A map containing the tuples of the blacklist.
+	 */
+	private Map<String, String> loadTraversalBlacklistForProfile(String profileName) {
+		List<String> blacklist = getRM().getConfiguration().getStringList(Settings.TRAVERSAL_PROFILE + "." + profileName + ".blacklist", new ArrayList<>());
+		Map<String, String> result = new HashMap<>();
+		for (String tuple : blacklist) {
+			String[] tupleArr = tuple.split(",");
+			if (tupleArr.length != 2) {
+				log.warn("Invalid blacklist configuration in traversal profile " + profileName + ": " + tuple);
+				continue;
+			}
+			result.put(NS.expand(tupleArr[0]).toString(), NS.expand(tupleArr[1]).toString());
 		}
 		return result;
 	}
