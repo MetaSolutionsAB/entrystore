@@ -645,6 +645,7 @@ public class SolrSearchIndex implements SearchIndex {
 		Set<URI> entries = new LinkedHashSet<>();
 		Set<Entry> result = new LinkedHashSet<>();
 		long hits = -1;
+		long resultHits = -1;
 		int limit = query.getRows();
 		int offset = query.getStart();
 		List<FacetField> facetFields = new ArrayList();
@@ -672,6 +673,7 @@ public class SolrSearchIndex implements SearchIndex {
 				log.warn("Increasing offset to " + offset + " in an attempt to fill the result limit");
 			}
 			hits = sendQueryForEntryURIs(query, entries, facetFields, solrServer, offset, -1);
+			resultHits = hits;
 			Date before = new Date();
 			for (URI uri : entries) {
 				try {
@@ -697,14 +699,14 @@ public class SolrSearchIndex implements SearchIndex {
 						}
 					}
 				} catch (AuthorizationException ae) {
-					hits--;
+					resultHits--;
 					continue;
 				}
 			}
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");
 		} while ((limit > result.size()) && (hits > (offset + limit)));
 
-		return new QueryResult(result, hits, facetFields);
+		return new QueryResult(result, resultHits, facetFields);
 	}
 
 	public SolrDocument fetchDocument(String uri) {
