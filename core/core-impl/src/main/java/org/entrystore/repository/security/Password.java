@@ -148,7 +148,7 @@ public class Password {
 
 	private static void checkAgainstRules(String password) {
 		if (password == null || password.length() == 0) {
-			throw new illegalargumentexception("empty passwords are not supported");
+			throw new IllegalArgumentException("Empty passwords are not supported");
 		}
 		if (password.length() > PASSWORD_MAX_LENGTH) {
 			throw new IllegalArgumentException("The length of the password must not exceed " + PASSWORD_MAX_LENGTH + " characters");
