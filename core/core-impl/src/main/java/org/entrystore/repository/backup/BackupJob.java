@@ -34,7 +34,6 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
@@ -109,22 +108,27 @@ public class BackupJob implements Job, InterruptableJob {
 			String fileDate = sdf.format(new Date());
 
 			File newBackupDirectory = new File(exportPath+"/"+fileDate); 
-			if(newBackupDirectory.exists()==false){
+			if (!newBackupDirectory.exists()){
 				newBackupDirectory.mkdir(); 
 			}
 
-			String fileName = "repository_backup_" + fileDate + ".rdf";
-			if (gzip) {
-				fileName += ".gz";
+			// Main repo
+			log.info("Exporting main repository");
+			String fileName = "repo_" + fileDate + ".rdf" + (gzip ? ".gz" : "");
+			rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, fileName).toURI(), gzip);
+
+			// Provenance repo
+			if (rm.getProvenanceRepository() != null) {
+				log.info("Exporting provenance repository");
+				fileName = "repo_prov_" + fileDate + ".rdf" + (gzip ? ".gz" : "");
+				rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, fileName).toURI(), gzip);
 			}
-			File exportFile = new File(newBackupDirectory, fileName);
-			rm.exportToFile(exportFile.toURI(), gzip);
 			// -- end triG --
 
 			// -- start to backup files/binary data --
 			String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
 			if (dataPath == null) {
-				log.error("Unknown data path, please check the following setting: " + Settings.DATA_FOLDER);			
+				log.error("Unknown data path, please check the following setting: " + Settings.DATA_FOLDER);
 			} else {
 				File dataPathFile = new File(dataPath);
 				log.info("Copying data folder from " + dataPathFile + " to " + newBackupDirectory);

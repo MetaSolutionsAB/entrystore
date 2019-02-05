@@ -376,6 +376,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		
 		return rm;
 	}
+
+	public Repository getRepository() {
+		return this.repository;
+	}
 	
 	public PublicRepository getPublicRepository() {
 		return this.publicRepository;
@@ -388,15 +392,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	/**
 	 * Export the whole repository.
 	 * 
-	 * @param file File where to export repository to.
+	 * @param file File to export repository to.
 	 */
-	public void exportToFile(URI file, boolean gzip) {
+	public void exportToFile(Repository repo, URI file, boolean gzip) {
 		RepositoryConnection con = null;
 		OutputStream out = null;
 		Date before = new Date();
 		log.info("Exporting repository to " + file);
 		try {
-			con = this.repository.getConnection();
+			con = repo.getConnection();
 			out = new FileOutputStream(new File(file));
 			if (gzip) {
 				out = new GZIPOutputStream(out);

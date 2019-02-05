@@ -16,11 +16,12 @@
 
 package org.entrystore.repository;
 
-import org.entrystore.config.Config;
 import org.entrystore.ContextManager;
-import org.entrystore.SearchIndex;
 import org.entrystore.PrincipalManager;
+import org.entrystore.SearchIndex;
+import org.entrystore.config.Config;
 import org.openrdf.model.ValueFactory;
+import org.openrdf.repository.Repository;
 
 import java.net.URL;
 
@@ -72,6 +73,16 @@ public interface RepositoryManager {
 	 * @return the Repository URL from which this system is accessed.
 	 */
 	URL getRepositoryURL();
+
+	/**
+	 * @return The main repository.
+	 */
+	Repository getRepository();
+
+	/**
+	 * @return The provenance repository. May be null if instance is configured without provenance.
+	 */
+	Repository getProvenanceRepository();
 
 	public boolean isCheckForAuthorization();
 	
