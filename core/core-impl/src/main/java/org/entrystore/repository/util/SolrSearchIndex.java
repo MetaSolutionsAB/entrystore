@@ -575,6 +575,9 @@ public class SolrSearchIndex implements SearchIndex {
 			URI entryURI = entry.getEntryURI();
 			synchronized (postQueue) {
 				log.info("Adding document to Solr post queue: " + entryURI);
+				if (postQueue.getIfPresent(entryURI) != null) {
+					log.debug("Entry " + entryURI + " already exists in post queue");
+				}
 				postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
 			}
 		} finally {
