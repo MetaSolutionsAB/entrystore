@@ -182,8 +182,15 @@ public class UserImpl extends RDFResource implements User {
 		if (!entry.getRepositoryManager().getPrincipalManager().isValidSecret(secret)) {
 			return false;
 		}
-		
-		String shSecret = Password.getSaltedHash(secret);
+
+		String shSecret = null;
+		try {
+			shSecret = Password.getSaltedHash(secret);
+		} catch (IllegalArgumentException iae) {
+			log.info(iae.getMessage());
+			return false;
+		}
+
 		if (shSecret == null) {
 			return false;
 		}
@@ -192,9 +199,8 @@ public class UserImpl extends RDFResource implements User {
 			synchronized (this.entry.repository) {
 				RepositoryConnection rc = this.entry.repository.getConnection();
 				ValueFactory vf = this.entry.repository.getValueFactory();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
-
 					// remove an eventually existing plaintext password and store only a salted hash
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.secret, null, false, resourceURI), resourceURI);
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.saltedHashedSecret, null, false, resourceURI), resourceURI);

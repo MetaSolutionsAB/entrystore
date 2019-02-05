@@ -21,6 +21,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.json.JSONException;
@@ -105,6 +106,7 @@ public class StatusResource extends BaseResource  {
 					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));
 					result.put("rowstoreURL", config.getString(Settings.ROWSTORE_URL, "unconfigured"));
 					result.put("passwordReset", settingToBoolean(Settings.PASSWORD_RESET));
+					result.put("passwordMaxLength", Password.PASSWORD_MAX_LENGTH);
 					result.put("solr", settingToBoolean(Settings.SOLR));
 					result.put("solrReindexOnStartup", settingToBoolean(Settings.SOLR_REINDEX_ON_STARTUP));
 					result.put("signup", settingToBoolean(Settings.SIGNUP));

@@ -81,6 +81,11 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
+		if (password.length() > Password.PASSWORD_MAX_LENGTH) {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			return;
+		}
+
 		userName = userName.toLowerCase();
 
 		if (passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(userName)) {

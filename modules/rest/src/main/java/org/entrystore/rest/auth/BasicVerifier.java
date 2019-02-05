@@ -149,42 +149,50 @@ public class BasicVerifier implements Verifier {
 
 			if (identifier == null) {
 				return RESULT_MISSING;
-			} else if ("_guest".equals(identifier)) {
+			}
+
+			if ("_guest".equals(identifier)) {
 				userURI = pm.getGuestUser().getURI();
 				return RESULT_VALID;
-			} else if (secret == null) {
+			}
+
+			if (secret == null) {
 				return RESULT_MISSING;
+			}
+
+			if (secret.length() > Password.PASSWORD_MAX_LENGTH) {
+				return RESULT_UNSUPPORTED;
+			}
+
+			identifier = identifier.toLowerCase();
+			if (passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(identifier)) {
+				response.setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+				return RESULT_INVALID;
+			}
+
+			Entry userEntry = pm.getPrincipalEntry(identifier);
+			if (userEntry == null) {
+				return RESULT_UNKNOWN;
+			}
+
+			// check whether login is cached, setting max age to 1 hour (3600 seconds)
+			if (isLoginCached(userEntry.getEntryURI().toString(), secret, 3600)) {
+				userURI = userEntry.getResourceURI();
+				return RESULT_VALID;
+			}
+
+			if (secret != null &&
+					!isUserDisabled(pm, identifier) &&
+					Password.check(secret, getSaltedHashedSecret(pm, identifier))) {
+				userURI = userEntry.getResourceURI();
+				addLoginToCache(userEntry.getEntryURI().toString(), secret);
+				return RESULT_VALID;
 			} else {
-				identifier = identifier.toLowerCase();
-				if (passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(identifier)) {
+				// workaround to avoid challenge response window in browsers
+				if (!challenge) {
+					userURI = pm.getGuestUser().getURI();
 					response.setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-					return RESULT_INVALID;
-				}
-
-				Entry userEntry = pm.getPrincipalEntry(identifier);
-				if (userEntry == null) {
-					return RESULT_UNKNOWN;
-				}
-
-				// check whether login is cached, setting max age to 1 hour (3600 seconds)
-				if (isLoginCached(userEntry.getEntryURI().toString(), secret, 3600)) {
-					userURI = userEntry.getResourceURI();
 					return RESULT_VALID;
-				}
-
-				if (secret != null &&
-						!isUserDisabled(pm, identifier) &&
-						Password.check(secret, getSaltedHashedSecret(pm, identifier))) {
-					userURI = userEntry.getResourceURI();
-					addLoginToCache(userEntry.getEntryURI().toString(), secret);
-					return RESULT_VALID;
-				} else {
-					// workaround to avoid challenge response window in browsers
-					if (!challenge) {
-						userURI = pm.getGuestUser().getURI();
-						response.setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-						return RESULT_VALID;
-					}
 				}
 			}
 
