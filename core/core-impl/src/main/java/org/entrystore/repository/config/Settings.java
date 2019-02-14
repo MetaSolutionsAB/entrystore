@@ -37,6 +37,8 @@ public class Settings {
 	public static String AUTH_CAS_SERVER_LOGIN_URL = "entrystore.auth.cas.server.url.login";
 	public static String AUTH_CAS_USER_AUTO_PROVISIONING = "entrystore.auth.cas.user-auto-provisioning";
 
+	public static String AUTH_COOKIE_PATH = "entrystore.auth.cookie.path";
+
 	public static String AUTH_PASSWORD = "entrystore.auth.password";
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
 	
@@ -85,6 +87,10 @@ public class Settings {
 	public static String SOLR_URL = "entrystore.solr.url";
 	public static String SOLR_REINDEX_ON_STARTUP = "entrystore.solr.reindex-on-startup";
 	public static String SOLR_EXTRACT_FULLTEXT = "entrystore.solr.extract-fulltext";
+	public static String SOLR_MAX_LIMIT = "entrystore.solr.max-limit";
+
+	public static String SOLR_RELATED = "entrystore.solr.related";
+	public static String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";
 
 	public static String REPOSITORY_REWRITE_BASEREFERENCE = "entrystore.repository.rewrite-basereference";
 	

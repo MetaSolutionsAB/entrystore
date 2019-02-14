@@ -17,6 +17,7 @@
 
 package org.entrystore.impl;
 
+import info.aduna.iteration.Iterations;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.AuthorizationException;
@@ -75,7 +76,7 @@ public class ListImpl extends RDFResource implements List {
 		try {
 			rc = entry.repository.getConnection();
 			RepositoryResult<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI);
-			result = new LinkedHashModel(statements.asList());
+			result = new LinkedHashModel(Iterations.asList(statements));
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 		} finally {

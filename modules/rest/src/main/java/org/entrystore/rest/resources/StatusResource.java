@@ -21,6 +21,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.json.JSONException;
@@ -36,6 +37,7 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -75,10 +77,10 @@ public class StatusResource extends BaseResource  {
 					PrincipalManager pm = getRM().getPrincipalManager();
 					URI currentUser = pm.getAuthenticatedUserURI();
 
-					if (pm.getGuestUser().getURI().equals(currentUser)) {
-						result.put("error", "You have to be logged in to see the requested information");
+					if (!pm.getAdminUser().getURI().equals(currentUser) &&
+							!pm.getAdminGroup().isMember(pm.getUser(currentUser))) {
 						getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
-						return new JsonRepresentation(result);
+						return new EmptyRepresentation();
 					}
 
 					result.put("backup", settingToBoolean(Settings.BACKUP_SCHEDULER));
@@ -104,6 +106,7 @@ public class StatusResource extends BaseResource  {
 					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));
 					result.put("rowstoreURL", config.getString(Settings.ROWSTORE_URL, "unconfigured"));
 					result.put("passwordReset", settingToBoolean(Settings.PASSWORD_RESET));
+					result.put("passwordMaxLength", Password.PASSWORD_MAX_LENGTH);
 					result.put("solr", settingToBoolean(Settings.SOLR));
 					result.put("solrReindexOnStartup", settingToBoolean(Settings.SOLR_REINDEX_ON_STARTUP));
 					result.put("signup", settingToBoolean(Settings.SIGNUP));
@@ -111,17 +114,27 @@ public class StatusResource extends BaseResource  {
 					result.put("startupTime", EntryStoreApplication.getStartupDate());
 					result.put("authTokenCount", LoginTokenCache.getInstance().size());
 
+					// JVM
+					JSONObject jvm = new JSONObject();
+					jvm.put("totalMemory", Runtime.getRuntime().totalMemory());
+					jvm.put("freeMemory", Runtime.getRuntime().freeMemory());
+					jvm.put("maxMemory", Runtime.getRuntime().maxMemory());
+					jvm.put("availableProcessors", Runtime.getRuntime().availableProcessors());
+					jvm.put("totalCommittedMemory", getTotalCommittedMemory());
+					jvm.put("committedHeap", ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getCommitted());
+					jvm.put("totalUsedMemory", getTotalUsedMemory());
+					jvm.put("usedHeap", ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed());
+					result.put("jvm", jvm);
+
 					if (parameters.containsKey("includeStats")) {
 						try {
 							pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 							result.put("contextCount", getRM().getContextManager().getEntries().size());
 							result.put("groupCount", pm.getGroupUris().size());
 							result.put("userCount", pm.getUsersAsUris().size());
-							if (pm.getAdminUser().getURI().equals(currentUser) || pm.getAdminGroup().isMember(pm.getUser(currentUser))) {
-								if (getRM() instanceof RepositoryManagerImpl) {
-									result.put("namedGraphCount", ((RepositoryManagerImpl) getRM()).getNamedGraphCount());
-									result.put("tripleCount", ((RepositoryManagerImpl) getRM()).getTripleCount());
-								}
+							if (getRM() instanceof RepositoryManagerImpl) {
+								result.put("namedGraphCount", ((RepositoryManagerImpl) getRM()).getNamedGraphCount());
+								result.put("tripleCount", ((RepositoryManagerImpl) getRM()).getTripleCount());
 							}
 						} finally {
 							pm.setAuthenticatedUserURI(currentUser);
@@ -161,6 +174,16 @@ public class StatusResource extends BaseResource  {
 
 	private boolean settingToBoolean(String key) {
 		return "on".equalsIgnoreCase(config.getString(key, "off")) ? true : false;
+	}
+
+	long getTotalCommittedMemory() {
+		return ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getCommitted() +
+				ManagementFactory.getMemoryMXBean().getNonHeapMemoryUsage().getCommitted();
+	}
+
+	long getTotalUsedMemory() {
+		return ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed() +
+				ManagementFactory.getMemoryMXBean().getNonHeapMemoryUsage().getUsed();
 	}
 
 }

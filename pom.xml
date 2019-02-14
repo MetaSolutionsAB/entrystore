@@ -7,7 +7,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.entrystore</groupId>
     <artifactId>entrystore-parent</artifactId>
-    <version>4.6</version>
+    <version>4.7</version>
     <packaging>pom</packaging>
     <name>EntryStore</name>
     <url>http://entrystore.org</url>
@@ -237,12 +237,17 @@
             <dependency>
                 <groupId>org.apache.httpcomponents</groupId>
                 <artifactId>httpclient</artifactId>
-                <version>4.2.6</version>
+                <version>4.3.6</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents</groupId>
+                <artifactId>httpclient-cache</artifactId>
+                <version>4.3.6</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.httpcomponents</groupId>
                 <artifactId>httpcore</artifactId>
-                <version>4.2.5</version>
+                <version>4.3.3</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

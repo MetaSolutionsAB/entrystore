@@ -41,7 +41,6 @@ import org.openrdf.model.Statement;
 import org.openrdf.model.Value;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.repository.RepositoryException;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -708,18 +707,13 @@ public class ContextResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
 				return;
 			}
-			
-			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
-				throw new AuthorizationException(getPM().getUser(getPM().getAuthenticatedUserURI()), context.getEntry(), AccessProperty.Administer);
-			}
-			
-			try {
-				getCM().deleteContext(context.getURI());
-				this.context = null;
-			} catch (RepositoryException re) {
-				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL, re.getMessage());
-				log.error(re.getMessage(), re);
-			}
+
+			getPM().checkAuthenticatedUserAuthorized(context.getEntry(), AccessProperty.Administer);
+
+			getResponse().setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
+
+			// TODO implement the removal of all entries contained by
+			//  this context, but not the context itself
 		} catch(AuthorizationException e) {
 			unauthorizedDELETE();
 		}

@@ -180,7 +180,6 @@ public class EntryStoreApplication extends Application {
 			}
 		
 			Config config = confManager.getConfiguration();
-			EntryResource.config = config;
 		
 			baseURI = config.getString(Settings.BASE_URL);
 

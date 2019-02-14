@@ -331,16 +331,24 @@ public class EntryUtil {
 		return getLabel(graph, resourceURI, predicates, language);
 	}
 	
-	public static String getResource(Graph graph, java.net.URI resourceURI, URI predicate) {
+	public static org.openrdf.model.URI getResourceAsURI(Graph graph, java.net.URI resourceURI, URI predicate) {
 		if (graph != null && resourceURI != null) {
 			URI resURI = new URIImpl(resourceURI.toString());
 			Iterator<Statement> stmnts = graph.match(resURI, predicate, null);
 			while (stmnts.hasNext()) {
 				Value value = stmnts.next().getObject();
-				if (value instanceof org.openrdf.model.Resource) {
-					return value.stringValue();
+				if (value instanceof org.openrdf.model.URI) {
+					return (org.openrdf.model.URI) value;
 				}
 			}
+		}
+		return null;
+	}
+
+	public static String getResource(Graph graph, java.net.URI resourceURI, URI predicate) {
+		URI result = getResourceAsURI(graph, resourceURI, predicate);
+		if (result != null) {
+			return result.stringValue();
 		}
 		return null;
 	}
@@ -617,7 +625,7 @@ public class EntryUtil {
                 Iterator<Statement> subjects = graph.match(resourceURI, pred, null);
                 while (subjects.hasNext()) {
                     Value value = subjects.next().getObject();
-                    if (value instanceof org.openrdf.model.Resource) {
+                    if (value instanceof org.openrdf.model.URI) {
                         org.openrdf.model.Resource res = (org.openrdf.model.Resource) value;
                         result.add(res.stringValue());
                     }
@@ -649,6 +657,9 @@ public class EntryUtil {
 	 * @param entries A set of entries to start from.
 	 * @param propertiesToFollow A set of predicate URIs that point to objects (entries)
 	 *                           that are to be fetched during traversal.
+	 * @param blacklist A map containing key/value pairs of predicate/object combinations that,
+	 *                     if contained in the graph of the currently processed entry,
+	 *                     trigger a stop of the traversal excluding the matching entry.
 	 * @param level Current traversal level. Used for recursion, should be 0 if called manually.
 	 * @param depth Maximum traversal depth of the graph.
 	 * @param visited Contains URIs that have been visited during traversal.
@@ -657,7 +668,7 @@ public class EntryUtil {
 	 * @param rm A RepositoryManager instance.
 	 * @return Returns the merged metadata graphs of all matching entries.
 	 */
-	public static TraversalResult traverseAndLoadEntryMetadata(Set<URI> entries, Set<java.net.URI> propertiesToFollow, int level, int depth, Multimap<URI, Integer> visited, Context context, RepositoryManager rm) {
+	public static TraversalResult traverseAndLoadEntryMetadata(Set<URI> entries, Set<java.net.URI> propertiesToFollow, Map<String, String> blacklist, int level, int depth, Multimap<URI, Integer> visited, Context context, RepositoryManager rm) {
 		Model resultGraph = new LinkedHashModel();
 		Date latestModified = null;
 		for (URI r : entries) {
@@ -728,36 +739,66 @@ public class EntryUtil {
 
 			if (graph != null) {
 				visited.put((URI) r, level);
-				resultGraph.addAll(graph);
-				if (propertiesToFollow != null && level < depth) {
-					Set<URI> objects = new HashSet<>();
-					for (java.net.URI prop : propertiesToFollow) {
-						objects.addAll(valueToURI(graph.filter(null, new URIImpl(prop.toString()), null).objects()));
-					}
-					objects.remove(r);
-					if (objects.size() > 0) {
-						log.debug("Fetching " + objects.size() + " entr" + (objects.size() == 1 ? "y" : "ies") + " linked from <" + r + ">: " + objects);
-						TraversalResult nextLevel = traverseAndLoadEntryMetadata(
-								objects,
-								propertiesToFollow,
-								level + 1,
-								depth,
-								visited,
-								context,
-								rm);
-						resultGraph.addAll(nextLevel.getGraph());
-						if (nextLevel.getLatestModified() != null) {
-							if (latestModified == null || latestModified.before(nextLevel.getLatestModified())) {
-								latestModified = nextLevel.getLatestModified();
+				if (graphContainsPredicateObjectTuple(graph, blacklist)) {
+					log.debug("Found blacklisted predicate/object tuple in graph, excluding " + r);
+				} else {
+					resultGraph.addAll(graph);
+					if (propertiesToFollow != null && level < depth) {
+						Set<URI> objects = new HashSet<>();
+						for (java.net.URI prop : propertiesToFollow) {
+							objects.addAll(valueToURI(graph.filter(null, new URIImpl(prop.toString()), null).objects()));
+						}
+						objects.remove(r);
+						if (objects.size() > 0) {
+							log.debug("Fetching " + objects.size() + " entr" + (objects.size() == 1 ? "y" : "ies") + " linked from <" + r + ">: " + objects);
+							TraversalResult nextLevel = traverseAndLoadEntryMetadata(
+									objects,
+									propertiesToFollow,
+									blacklist,
+									level + 1,
+									depth,
+									visited,
+									context,
+									rm);
+							resultGraph.addAll(nextLevel.getGraph());
+							if (nextLevel.getLatestModified() != null) {
+								if (latestModified == null || latestModified.before(nextLevel.getLatestModified())) {
+									latestModified = nextLevel.getLatestModified();
+								}
+							} else {
+								log.warn("No latest modification date on traversal level " + (level + 1));
 							}
-						} else {
-							log.warn("No latest modification date on traversal level " + (level + 1));
 						}
 					}
 				}
 			}
 		}
 		return new TraversalResult(resultGraph, latestModified);
+	}
+
+	/**
+	 * Checks whether a graph contains a predicate/object tuple. A simple String
+	 * comparison is performed, therefore it does not matter of which type
+	 * (Literal, Resource) the object is.
+	 * @param graph
+	 * @param tuples
+	 * @return
+	 */
+	private static boolean graphContainsPredicateObjectTuple(Model graph, Map<String, String> tuples) {
+		if (tuples != null && !tuples.isEmpty()) {
+			for (Statement s : graph) {
+				String predicate = s.getPredicate().stringValue();
+				String object = s.getObject().stringValue();
+				for (String key : tuples.keySet()) {
+					if (predicate.equals(key)) {
+						if (object.equals(tuples.get(key))) {
+							return true;
+						}
+					}
+				}
+			}
+		}
+		return false;
 	}
 
 	/**

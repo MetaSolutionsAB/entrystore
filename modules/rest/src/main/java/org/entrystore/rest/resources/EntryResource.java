@@ -27,7 +27,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Resource;
 import org.entrystore.User;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
@@ -74,8 +73,7 @@ import java.util.Set;
 public class EntryResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(EntryResource.class);
-	public static Config config;
-	
+
 	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
 	@Override
@@ -720,7 +718,7 @@ public class EntryResource extends BaseResource {
 		}
 
 		if (deserializedGraph == null) {
-			getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
 

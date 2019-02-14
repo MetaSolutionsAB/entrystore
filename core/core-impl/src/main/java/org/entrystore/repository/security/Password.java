@@ -16,21 +16,20 @@
 
 package org.entrystore.repository.security;
 
+import org.apache.commons.codec.binary.Base64;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.UnsupportedEncodingException;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Date;
-
-import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
-import javax.crypto.spec.SecretKeySpec;
-
-import org.apache.commons.codec.binary.Base64;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Helper methods for handling hashed and salted passwords, using PBKDF2.
@@ -61,6 +60,8 @@ public class Password {
 
 	private static final int desiredKeyLen = 192;
 	
+	public static final int PASSWORD_MAX_LENGTH = 2048;
+
 	private static SecureRandom random;
 	
 	private static SecretKeyFactory secretKeyFactory;
@@ -82,10 +83,8 @@ public class Password {
 	 * Computes a salted PBKDF2. Empty passwords are not supported.
 	 */
 	public static String getSaltedHash(String password) {
-		if (password == null || password.length() == 0) {
-			throw new IllegalArgumentException("Empty passwords are not supported");
-		}
-		
+		checkAgainstRules(password);
+
 		byte[] salt = new byte[saltLen];
 		random.nextBytes(salt);
 		
@@ -98,9 +97,8 @@ public class Password {
 	 * hash of the password.
 	 */
 	public static boolean check(String password, String stored) {
-		if (password == null || password.length() == 0) {
-			throw new IllegalArgumentException("Empty passwords are not supported");
-		}
+		checkAgainstRules(password);
+
 		if (stored == null) {
 			throw new IllegalArgumentException("Stored password must not be null");
 		}
@@ -113,9 +111,8 @@ public class Password {
 	}
 
 	private static String hash(String password, byte[] salt) {
-		if (password == null || password.length() == 0) {
-			throw new IllegalArgumentException("Empty passwords are not supported");
-		}
+		checkAgainstRules(password);
+
 		try {
 			long before = new Date().getTime();
 			SecretKey key = secretKeyFactory.generateSecret(new PBEKeySpec(password.toCharArray(), salt, iterations, desiredKeyLen));
@@ -147,6 +144,15 @@ public class Password {
 			log.error(uee.getMessage());
 		}
 		return null;
+	}
+
+	private static void checkAgainstRules(String password) {
+		if (password == null || password.length() == 0) {
+			throw new IllegalArgumentException("Empty passwords are not supported");
+		}
+		if (password.length() > PASSWORD_MAX_LENGTH) {
+			throw new IllegalArgumentException("The length of the password must not exceed " + PASSWORD_MAX_LENGTH + " characters");
+		}
 	}
 
 }

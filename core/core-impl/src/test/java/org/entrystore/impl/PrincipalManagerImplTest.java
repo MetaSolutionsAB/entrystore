@@ -154,7 +154,7 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 	public void usersCheck() {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		Group userGroup = pm.getUserGroup();
-		assertTrue(userGroup.members().size() == 5);
+		assertTrue(userGroup.members().size() == 6);
 		try {
 			userGroup.removeMember(userGroup.members().get(0));
 			fail("UserGroup contains more than three users.");

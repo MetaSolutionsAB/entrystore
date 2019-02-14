@@ -376,6 +376,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		
 		return rm;
 	}
+
+	public Repository getRepository() {
+		return this.repository;
+	}
 	
 	public PublicRepository getPublicRepository() {
 		return this.publicRepository;
@@ -388,15 +392,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	/**
 	 * Export the whole repository.
 	 * 
-	 * @param file File where to export repository to.
+	 * @param file File to export repository to.
 	 */
-	public void exportToFile(URI file, boolean gzip) {
+	public void exportToFile(Repository repo, URI file, boolean gzip) {
 		RepositoryConnection con = null;
 		OutputStream out = null;
 		Date before = new Date();
 		log.info("Exporting repository to " + file);
 		try {
-			con = this.repository.getConnection();
+			con = repo.getConnection();
 			out = new FileOutputStream(new File(file));
 			if (gzip) {
 				out = new GZIPOutputStream(out);
@@ -671,7 +675,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					}
 				}
 			};
-			// registerListener(updater, RepositoryEvent.EntryCreated); // to react on created is not needed, as creation implies update
+			registerListener(updater, RepositoryEvent.EntryCreated);
 			registerListener(updater, RepositoryEvent.EntryUpdated);
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
@@ -695,26 +699,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	private void registerPublicRepositoryListeners() {
 		if (publicRepository != null) {
-			// add
-			RepositoryListener adder = new RepositoryListener() {
-				@Override
-				public void repositoryUpdated(RepositoryEventObject eventObject) {
-					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
-						publicRepository.addEntry((Entry) eventObject.getSource());
-					}
-				}
-			};
-			registerListener(adder, RepositoryEvent.EntryCreated);
-			
-			// update
 			RepositoryListener updater = new RepositoryListener() {
 				@Override
 				public void repositoryUpdated(RepositoryEventObject eventObject) {
 					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
-						publicRepository.updateEntry((Entry) eventObject.getSource());
+						publicRepository.enqueue((Entry) eventObject.getSource());
 					}
 				}
 			};
+			registerListener(updater, RepositoryEvent.EntryCreated);
 			registerListener(updater, RepositoryEvent.EntryUpdated);
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
@@ -725,7 +718,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				@Override
 				public void repositoryUpdated(RepositoryEventObject eventObject) {
 					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
-						publicRepository.removeEntry((Entry) eventObject.getSource());
+						publicRepository.remove((Entry) eventObject.getSource());
 					}
 				}
 			};
@@ -749,6 +742,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			for (; contextResult.hasNext(); contextResult.next()) {
 				amountNGs++;
 			}
+			contextResult.close();
 		} catch (RepositoryException re) {
 			log.error(re.getMessage());
 		} finally {

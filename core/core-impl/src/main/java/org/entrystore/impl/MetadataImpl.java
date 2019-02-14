@@ -17,6 +17,7 @@
 
 package org.entrystore.impl;
 
+import info.aduna.iteration.Iterations;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
@@ -27,10 +28,9 @@ import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;
 import org.openrdf.model.Statement;
 import org.openrdf.model.Value;
-import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,9 +72,7 @@ public class MetadataImpl implements Metadata {
 		RepositoryConnection rc = null; 
 		try {
 			rc = this.entry.repository.getConnection();
-			RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, mdContext);
-			Graph result = new GraphImpl(this.entry.repository.getValueFactory(), rr.asList());
-			return result;
+			return Iterations.addAll(rc.getStatements(null, null, null, false, mdContext), new LinkedHashModel());
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
@@ -109,7 +107,7 @@ public class MetadataImpl implements Metadata {
 		try {
 			synchronized (this.entry.repository) {
 				RepositoryConnection rc = this.entry.repository.getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
 					Graph oldGraph = removeGraphSynchronized(rc);
 					addGraphSynchronized(rc, graph);
@@ -143,8 +141,7 @@ public class MetadataImpl implements Metadata {
 	public Graph removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {
 		String base = this.entry.repositoryManager.getRepositoryURL().toString();
 		//Fetch old graph
-		RepositoryResult<Statement> iter = rc.getStatements(null, null, null, false, mdContext);
-		GraphImpl graph = new GraphImpl(rc.getValueFactory(), iter.asList());
+		Graph graph = Iterations.addAll(rc.getStatements(null, null, null, false, mdContext), new LinkedHashModel());
 
 		// Remove relations in other entries inverse relational cache if entry has repository URL.
 		if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.

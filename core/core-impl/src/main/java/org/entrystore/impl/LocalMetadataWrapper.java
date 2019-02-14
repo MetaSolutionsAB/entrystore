@@ -16,14 +16,14 @@
 
 package org.entrystore.impl;
 
-import java.net.URI;
-
 import org.entrystore.Entry;
 import org.entrystore.Metadata;
 import org.openrdf.model.Graph;
-import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
 
 
 public class LocalMetadataWrapper implements Metadata {
@@ -56,7 +56,7 @@ public class LocalMetadataWrapper implements Metadata {
 			return e.getLocalMetadata().getGraph();
 		} else {
 			log.warn("Entry is null, returning an empty graph");
-			return new GraphImpl();
+			return new LinkedHashModel();
 		}
 	}
 

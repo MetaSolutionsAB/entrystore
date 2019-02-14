@@ -17,6 +17,7 @@
 
 package org.entrystore.impl;
 
+import info.aduna.iteration.Iterations;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.Context;
@@ -42,6 +43,7 @@ import org.openrdf.model.URI;
 import org.openrdf.model.Value;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.vocabulary.RDF;
 import org.openrdf.repository.Repository;
 import org.openrdf.repository.RepositoryConnection;
@@ -589,10 +591,7 @@ public class EntryImpl implements Entry {
 		RepositoryConnection rc = null; 
 		try {
 			rc = this.repository.getConnection();
-			RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, entryURI);
-			List<Statement> stmnts = rr.asList();
-			ValueFactory vf = this.repository.getValueFactory();
-			Graph graph = new GraphImpl(vf, stmnts);
+			Graph graph = Iterations.addAll(rc.getStatements(null, null, null, false, entryURI), new LinkedHashModel());
 			//TODO following is a fix for backwards compatability where homeContext is set on user object rather than in the entryinfo.
 			if (this.resource instanceof User && ((User) this.resource).getHomeContext() != null) {
 				Context context = ((User) this.resource).getHomeContext();
@@ -608,7 +607,7 @@ public class EntryImpl implements Entry {
 				rc.close();
 			} catch (RepositoryException e) {
 				log.error(e.getMessage());
-			} 
+			}
 		}
 	}
 
@@ -1253,6 +1252,8 @@ public class EntryImpl implements Entry {
 					// we reload the internal cache
 					loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
 					initMetadataObjects();
+
+					getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
 				} catch (Exception e) {
 					rc.rollback();
 					// Reset to previous saved values, just in case we saved the types above halfway through.
@@ -1475,6 +1476,7 @@ public class EntryImpl implements Entry {
                     }
                 }
             }
+            rr.close();
             invRelations = false;
         }
     }
@@ -1573,10 +1575,11 @@ public class EntryImpl implements Entry {
 			}
 			return mergedMd;
 		}
-		return new GraphImpl();
+		return new LinkedHashModel();
 	}
 
 	public void remove(RepositoryConnection rc) throws Exception {
+		log.debug("Removing entry " + entryURI);
         removeInverseRelations(rc);
 		rc.clear(entryURI);
 		if (locType == EntryType.Local || locType == EntryType.Link || locType == EntryType.LinkReference) {
@@ -1749,11 +1752,14 @@ public class EntryImpl implements Entry {
 					matches.close();
 					return result;
 				}
+				if (!matches.isClosed()) {
+					matches.close();
+				}
 				rc.close();				
 				return null;
 			} catch (org.openrdf.repository.RepositoryException e) {
 				rc.close();
-				e.printStackTrace();
+				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				rc.close();
@@ -1778,11 +1784,14 @@ public class EntryImpl implements Entry {
 					matches.close();
 					return result;
 				}
+				if (!matches.isClosed()) {
+					matches.close();
+				}
 				rc.close();				
 				return null;
 			} catch (org.openrdf.repository.RepositoryException e) {
 				rc.close();
-				e.printStackTrace();
+				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				rc.close();
@@ -1853,10 +1862,9 @@ public class EntryImpl implements Entry {
 			RepositoryConnection rc = null;
 			try {
 				rc = this.repository.getConnection();
-				RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, this.relationURI);
-				this.relations = rr.asList();
+				return Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
 			} catch (RepositoryException e) {
-				e.printStackTrace();
+				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				try {

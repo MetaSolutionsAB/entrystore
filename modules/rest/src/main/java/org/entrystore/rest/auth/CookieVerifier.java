@@ -18,7 +18,6 @@ package org.entrystore.rest.auth;
 
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.User;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
@@ -198,7 +197,12 @@ public class CookieVerifier implements Verifier {
 
 		CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 		tokenCookieSetting.setMaxAge(maxAge);
-		tokenCookieSetting.setPath(rm.getRepositoryURL().getPath());
+		String cookiePath = rm.getConfiguration().getString(Settings.AUTH_COOKIE_PATH, "auto");
+		if ("auto".equalsIgnoreCase(cookiePath)) {
+			tokenCookieSetting.setPath(rm.getRepositoryURL().getPath());
+		} else {
+			tokenCookieSetting.setPath(cookiePath);
+		}
 		response.getCookieSettings().add(tokenCookieSetting);
 	}
 

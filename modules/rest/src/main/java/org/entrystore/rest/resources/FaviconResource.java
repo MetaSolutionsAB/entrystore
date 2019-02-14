@@ -16,20 +16,17 @@
 
 package org.entrystore.rest.resources;
 
+import org.apache.commons.io.FileUtils;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
-import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.FileRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,7 +45,7 @@ public class FaviconResource extends BaseResource {
 
 	boolean loadingFailed = false;
 
-	File favicon = null;
+	Representation faviconRep = null;
 	
 	@Override
 	public void doInit() {
@@ -57,27 +54,29 @@ public class FaviconResource extends BaseResource {
 
 	@Get
 	public Representation represent() throws ResourceException {
-		if (favicon == null && !loadingFailed) {
-			favicon = getFavicon("favicon.ico");
+		if (faviconRep == null && !loadingFailed) {
+			File favicon = getFavicon("favicon.ico");
 			if (favicon != null) {
-				return new FileRepresentation(favicon, MediaType.IMAGE_ICON);
+				faviconRep = new FileRepresentation(favicon, MediaType.IMAGE_ICON);
+			} else {
+				loadingFailed = true;
 			}
 		}
+
+		if (faviconRep != null) {
+			return faviconRep;
+		}
+
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-		loadingFailed = true;
 		return null;
 	}
 
 	private File getFavicon(String fileName) {
 		URL resURL = Thread.currentThread().getContextClassLoader().getResource(fileName);
 		if (resURL != null) {
-			try {
-				return new File(resURL.toURI());
-			} catch (URISyntaxException e) {
-				log.error(e.getMessage());
-			}
+			return FileUtils.toFile(resURL);
 		}
-		log.error("Unable to find " + fileName + " in classpath");
+		log.warn("Unable to find " + fileName + " in classpath");
 		return null;
 	}
 

@@ -34,7 +34,6 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
@@ -93,6 +92,7 @@ public class BackupJob implements Job, InterruptableJob {
 			return;
 		}
 
+		Date beforeTotal = new Date();
 		log.info("Starting backup job");
 
 		JobDataMap dataMap = jobContext.getJobDetail().getJobDataMap();
@@ -104,34 +104,43 @@ public class BackupJob implements Job, InterruptableJob {
 		if (exportPath == null) {
 			log.error("Unknown backup path, please check the following setting: " + Settings.BACKUP_FOLDER);			
 		} else {
-			// -- make the triG backup -- 
 			SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
 			String fileDate = sdf.format(new Date());
 
 			File newBackupDirectory = new File(exportPath+"/"+fileDate); 
-			if(newBackupDirectory.exists()==false){
+			if (!newBackupDirectory.exists()){
 				newBackupDirectory.mkdir(); 
 			}
+			Date before = new Date();
 
-			String fileName = "repository_backup_" + fileDate + ".rdf";
-			if (gzip) {
-				fileName += ".gz";
+			// Main repo
+			log.info("Exporting main repository");
+			String fileName = "repo_" + fileDate + ".rdf" + (gzip ? ".gz" : "");
+			rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, fileName).toURI(), gzip);
+			log.info("Exporting main repository took " + (new Date().getTime() - before.getTime()) + " ms");
+
+			// Provenance repo
+			if (rm.getProvenanceRepository() != null) {
+				before = new Date();
+				log.info("Exporting provenance repository");
+				fileName = "repo_prov_" + fileDate + ".rdf" + (gzip ? ".gz" : "");
+				rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, fileName).toURI(), gzip);
+				log.info("Exporting provenance repository took " + (new Date().getTime() - before.getTime()) + " ms");
 			}
-			File exportFile = new File(newBackupDirectory, fileName);
-			rm.exportToFile(exportFile.toURI(), gzip);
-			// -- end triG --
 
-			// -- start to backup files/binary data --
+			// Files/binary data
 			String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
 			if (dataPath == null) {
-				log.error("Unknown data path, please check the following setting: " + Settings.DATA_FOLDER);			
+				log.error("Unknown data path, please check the following setting: " + Settings.DATA_FOLDER);
 			} else {
+				before = new Date();
 				File dataPathFile = new File(dataPath);
 				log.info("Copying data folder from " + dataPathFile + " to " + newBackupDirectory);
 				FileOperations.copyDirectory(dataPathFile, newBackupDirectory);
+				log.info("Copying data folder took " + (new Date().getTime() - before.getTime()) + " ms");
 			}
 		}
-		log.info("Backup job done with execution");
+		log.info("Backup job done with execution, took " + (new Date().getTime() - beforeTotal.getTime()) + " ms in total");
 	}
 	
 	synchronized public static void runBackupMaintenance(JobExecutionContext jobContext) throws Exception {

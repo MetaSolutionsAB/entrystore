@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-modules</artifactId>
-		<version>4.6</version>
+		<version>4.7</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-transforms</artifactId>
@@ -17,7 +17,6 @@
 	<modules>
 		<module>common</module>
 		<module>tabular</module>
-		<module>pcaxis</module>
 		<module>rowstore</module>
 		<module>empty</module>
 	</modules>

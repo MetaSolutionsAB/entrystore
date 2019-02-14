@@ -148,6 +148,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							}
 						}
 					}
+					resources.close();
 					
 					RepositoryResult<Statement> externalMD = rc.getStatements(null, RepositoryProperties.externalMetadata, null, false);
 					while (externalMD.hasNext()) {
@@ -160,6 +161,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							}
 						}
 					}
+					externalMD.close();
 					
 					rc.add(stmntsToAdd, this.resourceURI);
 					rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(maxIndex), this.resourceURI);					
@@ -228,8 +230,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 				try {
 					res2entry = new HashMap<URI, Object>();
 					extMdUri2entry = new HashMap<URI, Object>();
-					List<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI).asList();
-					for (Statement statement : statements) {
+					RepositoryResult<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI);
+					while (statements.hasNext()) {
+						Statement statement = statements.next();
 						try {
 							org.openrdf.model.URI predicate = statement.getPredicate();
 							if (predicate.equals(RepositoryProperties.mdHasEntry)) {
@@ -247,6 +250,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							log.error(e.getMessage());
 						}
 					}
+					statements.close();
 				} finally {
 					rc.close();
 				}
@@ -619,6 +623,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 			isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 		}
 
+		// TODO externalize this into a setting
+		boolean allowUserGroupToReadMetadata = true;
+
 		synchronized (this.entry.repository) {
 			EntryImpl entry = createNewMinimalItem(null, null, EntryType.Local, buiType, repType, entryId);
 			if (list != null) {
@@ -634,17 +641,18 @@ public class ContextImpl extends ResourceImpl implements Context {
 			if (GraphType.Context.equals(buiType)) {
 				((Context) entry.getResource()).initializeSystemEntries();
 			} else if (GraphType.User.equals(buiType)) {
-                entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, entry.getResourceURI());
-                entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, entry.getResourceURI());
-                entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, ((PrincipalManager) this).getGuestUser().getURI());
-                entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getGuestUser().getURI());
+				entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, entry.getResourceURI());
+				entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, entry.getResourceURI());
+				entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
 			} else if (GraphType.Group.equals(buiType)) {
-                entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, ((PrincipalManager) this).getGuestUser().getURI());
-                entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getGuestUser().getURI());
-                //TODO: not obvious that the following two are good defaults for group.
-                entry.addAllowedPrincipalsFor(AccessProperty.WriteResource, ((PrincipalManager) this).getAuthenticatedUserURI());
-                entry.addAllowedPrincipalsFor(AccessProperty.WriteMetadata, ((PrincipalManager) this).getAuthenticatedUserURI());
+				entry.addAllowedPrincipalsFor(AccessProperty.ReadResource, entry.getResourceURI());
+				if (allowUserGroupToReadMetadata) {
+					entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, ((PrincipalManager) this).getUserGroup().getURI());
+				} else {
+					entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, entry.getResourceURI());
+				}
             }
+
 			return entry;
 		}
 	}
@@ -963,7 +971,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			RepositoryConnection rc = null;
 			try {
 				rc = entry.repository.getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				rc.remove(rc.getStatements(this.resourceURI, RepositoryProperties.Quota, null, false, this.resourceURI), this.resourceURI);
 				rc.add(this.resourceURI, RepositoryProperties.Quota, rc.getValueFactory().createLiteral(quotaInBytes), this.resourceURI);
 				rc.commit();
