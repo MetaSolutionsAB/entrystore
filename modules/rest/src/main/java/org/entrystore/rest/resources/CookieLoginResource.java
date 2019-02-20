@@ -99,11 +99,20 @@ public class CookieLoginResource extends BaseResource {
 		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName);
 		boolean userExists = BasicVerifier.userExists(getPM(), userName);
 		boolean userIsEnabled = !BasicVerifier.isUserDisabled(getPM(), userName);
-		if (saltedHashedSecret != null && userIsEnabled && Password.check(password, saltedHashedSecret)) {
-			new CookieVerifier(getRM()).createAuthToken(userName, maxAgeStr, getResponse());
-	        getResponse().setStatus(Status.SUCCESS_OK);
+		try {
+			if (saltedHashedSecret != null && userIsEnabled && Password.check(password, saltedHashedSecret)) {
+				new CookieVerifier(getRM()).createAuthToken(userName, maxAgeStr, getResponse());
+				getResponse().setStatus(Status.SUCCESS_OK);
+				if (html) {
+					getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
+				}
+				return;
+			}
+		} catch (IllegalArgumentException iae) {
+			log.warn(iae.getMessage());
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			if (html) {
-				getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
+				getResponse().setEntity(new SimpleHTML("Login").representation(iae.getMessage()));
 			}
 			return;
 		}
@@ -113,11 +122,13 @@ public class CookieLoginResource extends BaseResource {
 			if (html) {
 				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed. The account is disabled."));
 			}
+			return;
 		} else {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 			if (html) {
 				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 			}
+			return;
 		}
 	}
 
