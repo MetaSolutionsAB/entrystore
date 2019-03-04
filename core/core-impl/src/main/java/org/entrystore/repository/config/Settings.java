@@ -119,9 +119,13 @@ public class Settings {
 	public static String SMTP_SECURITY = "entrystore.smtp.security";
 	public static String SMTP_USERNAME = "entrystore.smtp.username";
 	public static String SMTP_PASSWORD = "entrystore.smtp.password";
+	public static String SMTP_EMAIL_FROM = "entrystore.smtp.email.from";
+	public static String SMTP_EMAIL_BCC = "entrystore.smtp.email.bcc";
+	public static String SMTP_EMAIL_REPLYTO = "entrystore.smtp.email.reply-to";
 
-	public static String AUTH_FROM_EMAIL = "entrystore.auth.email.from";
-	public static String AUTH_BCC_EMAIL = "entrystore.auth.email.bcc";
+	public static String AUTH_FROM_EMAIL_DEPRECATED = "entrystore.auth.email.from";
+	public static String AUTH_BCC_EMAIL_DEPRECATED = "entrystore.auth.email.bcc";
+
 	public static String AUTH_RECAPTCHA = "entrystore.auth.recaptcha";
 	public static String AUTH_RECAPTCHA_PRIVATE_KEY = "entrystore.auth.recaptcha.private-key";
 	public static String AUTH_RECAPTCHA_PUBLIC_KEY = "entrystore.auth.recaptcha.public-key";
