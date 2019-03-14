@@ -44,11 +44,12 @@ public class Settings {
 	
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
-	public static String BACKUP_TIMEREGEXP = "entrystore.backup.timeregexp";
+	public static String BACKUP_TIMEREGEXP_DEPRECATED = "entrystore.backup.timeregexp";
+	public static String BACKUP_CRONEXP = "entrystore.backup.cronexp";
 	public static String BACKUP_GZIP = "entrystore.backup.gzip";
 	public static String BACKUP_FORMAT = "entrystore.backup.format";
 	
-	public static String BACKUP_MAINTENANCE = "entrystore.backup.maintenance";						 
+	public static String BACKUP_MAINTENANCE = "entrystore.backup.maintenance";
 	public static String BACKUP_MAINTENANCE_UPPER_LIMIT = "entrystore.backup.maintenance.upper-limit";
 	public static String BACKUP_MAINTENANCE_LOWER_LIMIT = "entrystore.backup.maintenance.lower-limit";
 	public static String BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS = "entrystore.backup.maintenance.expires-after-days";

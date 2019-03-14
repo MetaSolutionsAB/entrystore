@@ -52,7 +52,7 @@ public class BackupScheduler {
 
 	boolean gzip;
 
-	String timeRegularExpression;
+	String cronExpression;
 
 	boolean maintenance;
 
@@ -66,7 +66,7 @@ public class BackupScheduler {
 
 	public static BackupScheduler instance;
 
-	private BackupScheduler(RepositoryManager rm, String timeRegExp, boolean gzip, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays, RDFFormat format) {
+	private BackupScheduler(RepositoryManager rm, String cronExp, boolean gzip, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays, RDFFormat format) {
 		try {
 			scheduler = StdSchedulerFactory.getDefaultScheduler();
 		} catch (SchedulerException e) {
@@ -74,7 +74,7 @@ public class BackupScheduler {
 		}
 		this.rm = rm;
 		this.gzip = gzip;
-		this.timeRegularExpression = timeRegExp;
+		this.cronExpression = cronExp;
 		this.maintenance = maintenance;
 		this.upperLimit = upperLimit;
 		this.lowerLimit = lowerLimit;
@@ -91,8 +91,8 @@ public class BackupScheduler {
 		if (instance == null) {
 			log.info("Loading backup configuration");
 			Config config = rm.getConfiguration();
-			String timeRegExp = config.getString(Settings.BACKUP_TIMEREGEXP);
-			if (timeRegExp == null) {
+			String cronExp = config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED));
+			if (cronExp == null) {
 				return null;
 			}
 			boolean gzip = "on".equalsIgnoreCase(config.getString(Settings.BACKUP_GZIP, "off"));
@@ -106,29 +106,29 @@ public class BackupScheduler {
 				format = RDFFormat.NQUADS;
 			}
 
-			if (timeRegExp.toLowerCase().contains("rnd")) {
-				timeRegExp = randomizeCronString(timeRegExp);
+			if (cronExp.toLowerCase().contains("rnd")) {
+				cronExp = randomizeCronString(cronExp);
 			}
 
-			log.info("Cron expression: " + timeRegExp);
+			log.info("Cron expression: " + cronExp);
 			log.info("GZIP: " + gzip);
 			log.info("Maintenance: " + maintenance);
 			log.info("Maintenance upper limit: " + upperLimit);
 			log.info("Maintenance lower limit: " + lowerLimit);
 			log.info("Maintenance expires after days: " + expiresAfterDays);
 
-			instance = new BackupScheduler(rm, timeRegExp, gzip, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
+			instance = new BackupScheduler(rm, cronExp, gzip, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
 		}
 
 		return instance;
 	}
 
-	private static String randomizeCronString(String timeRegExp) {
-		String[] parts = timeRegExp.split("\\s+");
+	private static String randomizeCronString(String cronExp) {
+		String[] parts = cronExp.split("\\s+");
 
 		if (parts.length < 6) {
-			log.warn("Cron expression seems to be incorrect and cannot be parsed correctly: " + timeRegExp);
-			return timeRegExp;
+			log.warn("Cron expression seems to be incorrect and cannot be parsed correctly: " + cronExp);
+			return cronExp;
 		}
 
 		LinkedList result = new LinkedList();
@@ -210,7 +210,7 @@ public class BackupScheduler {
 			job.getJobDataMap().put("expiresAfterDays", this.expiresAfterDays);
 			job.getJobDataMap().put("format", this.format);
 			
-			CronTrigger trigger = new CronTrigger("trigger" + jobIndex, "backupGroup", jobIndex, "backupGroup", this.timeRegularExpression);
+			CronTrigger trigger = new CronTrigger("trigger" + jobIndex, "backupGroup", jobIndex, "backupGroup", this.cronExpression);
 			scheduler.addJob(job, true);
 			scheduler.scheduleJob(trigger);
 			scheduler.start();
