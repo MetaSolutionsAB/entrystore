@@ -29,6 +29,10 @@ import org.quartz.SchedulerException;
 import org.quartz.impl.StdSchedulerFactory;
 
 import java.text.ParseException;
+import java.util.LinkedList;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 /**
@@ -102,7 +106,11 @@ public class BackupScheduler {
 				format = RDFFormat.TRIG;
 			}
 
-			log.info("Time regular expression: " + timeRegExp);
+			if (timeRegExp.toLowerCase().contains("rnd")) {
+				timeRegExp = randomizeCronString(timeRegExp);
+			}
+
+			log.info("Cron expression: " + timeRegExp);
 			log.info("GZIP: " + gzip);
 			log.info("Maintenance: " + maintenance);
 			log.info("Maintenance upper limit: " + upperLimit);
@@ -113,6 +121,66 @@ public class BackupScheduler {
 		}
 
 		return instance;
+	}
+
+	private static String randomizeCronString(String timeRegExp) {
+		String[] parts = timeRegExp.split("\\s+");
+
+		if (parts.length < 6) {
+			log.warn("Cron expression seems to be incorrect and cannot be parsed correctly: " + timeRegExp);
+			return timeRegExp;
+		}
+
+		LinkedList result = new LinkedList();
+		Pattern pattern = Pattern.compile("rnd\\(([\\*0-9]+)[\\-]?([0-9]*)\\)", Pattern.CASE_INSENSITIVE);
+
+		for (int i = 0; i < parts.length; i++) {
+			String p = parts[i];
+			Matcher matcher = pattern.matcher(p);
+			if (!matcher.matches()) {
+				result.add(p);
+				continue;
+			} else {
+				String first = matcher.group(1);
+				String second = matcher.group(2);
+				if ("*".equals(first)) {
+					if (i == 0 || i == 1) {
+						// second or minute
+						result.add(Integer.toString(ThreadLocalRandom.current().ints(0, 60).limit(1).findFirst().getAsInt()));
+					} else if (i == 2) {
+						// hour
+						result.add(Integer.toString(ThreadLocalRandom.current().ints(0, 24).limit(1).findFirst().getAsInt()));
+					} else {
+						result.add(first);
+					}
+				} else if (isInt(first) && isInt(second)) {
+						int i1 = Integer.parseInt(first);
+						int i2 = Integer.parseInt(second);
+						if (i == 0 || i == 1) {
+							// second or minute
+							result.add(Integer.toString(ThreadLocalRandom.current().ints(i1, i2 + 1).limit(1).findFirst().getAsInt()));
+						} else if (i == 2) {
+							// hour
+							result.add(Integer.toString(ThreadLocalRandom.current().ints(i1, i2 + 1).limit(1).findFirst().getAsInt()));
+						} else {
+							result.add(first);
+						}
+				} else {
+					result.add(p);
+				}
+			}
+		}
+
+		return String.join(" ", result);
+	}
+
+	private static boolean isInt(String s) {
+		try {
+			Integer.parseInt(s);
+		} catch (NumberFormatException nfe) {
+			return false;
+		}
+		return true;
 	}
 
 	public void run() {
@@ -142,7 +210,7 @@ public class BackupScheduler {
 			job.getJobDataMap().put("expiresAfterDays", this.expiresAfterDays);
 			job.getJobDataMap().put("format", this.format);
 			
-			CronTrigger trigger = new CronTrigger("trigger" + jobIndex, "backupGroup", jobIndex, "backupGroup", this.timeRegularExpression); 
+			CronTrigger trigger = new CronTrigger("trigger" + jobIndex, "backupGroup", jobIndex, "backupGroup", this.timeRegularExpression);
 			scheduler.addJob(job, true);
 			scheduler.scheduleJob(trigger);
 			scheduler.start();
