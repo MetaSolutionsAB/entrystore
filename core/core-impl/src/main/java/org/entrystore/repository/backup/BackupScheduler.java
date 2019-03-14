@@ -252,4 +252,8 @@ public class BackupScheduler {
 		return true;
 	}
 
+	public String getCronExpression() {
+		return this.cronExpression;
+	}
+
 }
