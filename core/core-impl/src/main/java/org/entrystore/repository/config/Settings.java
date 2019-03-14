@@ -46,6 +46,7 @@ public class Settings {
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
 	public static String BACKUP_TIMEREGEXP = "entrystore.backup.timeregexp";
 	public static String BACKUP_GZIP = "entrystore.backup.gzip";
+	public static String BACKUP_FORMAT = "entrystore.backup.format";
 	
 	public static String BACKUP_MAINTENANCE = "entrystore.backup.maintenance";						 
 	public static String BACKUP_MAINTENANCE_UPPER_LIMIT = "entrystore.backup.maintenance.upper-limit";

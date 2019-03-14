@@ -48,9 +48,14 @@ import org.openrdf.repository.RepositoryResult;
 import org.openrdf.repository.http.HTTPRepository;
 import org.openrdf.repository.sail.SailRepository;
 import org.openrdf.repository.sparql.SPARQLRepository;
+import org.openrdf.rio.RDFFormat;
 import org.openrdf.rio.RDFHandlerException;
 import org.openrdf.rio.RDFWriter;
+import org.openrdf.rio.RDFWriterFactory;
+import org.openrdf.rio.binary.BinaryRDFWriterFactory;
+import org.openrdf.rio.nquads.NQuadsWriterFactory;
 import org.openrdf.rio.trig.TriGWriterFactory;
+import org.openrdf.rio.trix.TriXWriterFactory;
 import org.openrdf.sail.memory.MemoryStore;
 import org.openrdf.sail.nativerdf.NativeStore;
 import org.quartz.SchedulerException;
@@ -394,10 +399,25 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	 * 
 	 * @param file File to export repository to.
 	 */
-	public void exportToFile(Repository repo, URI file, boolean gzip) {
+	public void exportToFile(Repository repo, URI file, boolean gzip, RDFFormat format) {
 		RepositoryConnection con = null;
 		OutputStream out = null;
 		Date before = new Date();
+		RDFWriterFactory rdfWriterFactory = null;
+
+		if (RDFFormat.TRIG.equals(format)) {
+			rdfWriterFactory = new TriGWriterFactory();
+		} else if (RDFFormat.TRIX.equals(format)) {
+			rdfWriterFactory = new TriXWriterFactory();
+		} else if (RDFFormat.NQUADS.equals(format)) {
+			rdfWriterFactory = new NQuadsWriterFactory();
+		} else if (RDFFormat.BINARY.equals(format)) {
+			rdfWriterFactory = new BinaryRDFWriterFactory();
+		} else {
+			log.error("RDF format is not supported for backups: " + format);
+			return;
+		}
+
 		log.info("Exporting repository to " + file);
 		try {
 			con = repo.getConnection();
@@ -406,7 +426,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				out = new GZIPOutputStream(out);
 			}
 			out = new BufferedOutputStream(out);
-			RDFWriter writer = new TriGWriterFactory().getWriter(out);
+			RDFWriter writer = rdfWriterFactory.getWriter(out);
 			con.export(writer);
 		} catch (RepositoryException re) {
 			log.error(re.getMessage());

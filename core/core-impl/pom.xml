@@ -88,6 +88,21 @@
 		</dependency>
 		<dependency>
 			<groupId>org.openrdf.sesame</groupId>
+			<artifactId>sesame-rio-nquads</artifactId>
+			<version>${sesame.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openrdf.sesame</groupId>
+			<artifactId>sesame-rio-rdfjson</artifactId>
+			<version>${sesame.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openrdf.sesame</groupId>
+			<artifactId>sesame-rio-binary</artifactId>
+			<version>${sesame.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openrdf.sesame</groupId>
 			<artifactId>sesame-sail-nativerdf</artifactId>
 			<version>${sesame.version}</version>
 		</dependency>

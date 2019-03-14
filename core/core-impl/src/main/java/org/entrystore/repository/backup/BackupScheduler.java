@@ -21,6 +21,7 @@ import org.apache.commons.logging.LogFactory;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
+import org.openrdf.rio.RDFFormat;
 import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
@@ -57,9 +58,11 @@ public class BackupScheduler {
 
 	int expiresAfterDays;
 
+	RDFFormat format;
+
 	public static BackupScheduler instance;
 
-	private BackupScheduler(RepositoryManager rm, String timeRegExp, boolean gzip, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays) {
+	private BackupScheduler(RepositoryManager rm, String timeRegExp, boolean gzip, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays, RDFFormat format) {
 		try {
 			scheduler = StdSchedulerFactory.getDefaultScheduler();
 		} catch (SchedulerException e) {
@@ -72,6 +75,7 @@ public class BackupScheduler {
 		this.upperLimit = upperLimit;
 		this.lowerLimit = lowerLimit;
 		this.expiresAfterDays = expiresAfterDays;
+		this.format = format;
 		
 		if (upperLimit == -1 || lowerLimit == -1 || expiresAfterDays == -1) {
 			this.maintenance = false;
@@ -92,6 +96,11 @@ public class BackupScheduler {
 			int upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
 			int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
 			int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
+			RDFFormat format = RDFFormat.valueOf(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIG.getName()));
+			if (format == null) {
+				log.warn("Invalid backup format " + config.getString(Settings.BACKUP_FORMAT + ", falling back to TriG"));
+				format = RDFFormat.TRIG;
+			}
 
 			log.info("Time regular expression: " + timeRegExp);
 			log.info("GZIP: " + gzip);
@@ -100,7 +109,7 @@ public class BackupScheduler {
 			log.info("Maintenance lower limit: " + lowerLimit);
 			log.info("Maintenance expires after days: " + expiresAfterDays);
 
-			instance = new BackupScheduler(rm, timeRegExp, gzip, maintenance, upperLimit, lowerLimit, expiresAfterDays);
+			instance = new BackupScheduler(rm, timeRegExp, gzip, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
 		}
 
 		return instance;
@@ -131,6 +140,7 @@ public class BackupScheduler {
 			job.getJobDataMap().put("upperLimit", this.upperLimit);
 			job.getJobDataMap().put("lowerLimit", this.lowerLimit);
 			job.getJobDataMap().put("expiresAfterDays", this.expiresAfterDays);
+			job.getJobDataMap().put("format", this.format);
 			
 			CronTrigger trigger = new CronTrigger("trigger" + jobIndex, "backupGroup", jobIndex, "backupGroup", this.timeRegularExpression); 
 			scheduler.addJob(job, true);
