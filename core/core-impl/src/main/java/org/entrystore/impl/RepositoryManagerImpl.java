@@ -103,39 +103,39 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private Map<String, Class> alias2Class = new HashMap<String, Class>();
 
-	boolean modificationLockout = false;
+	private boolean modificationLockout = false;
 	
-	boolean shutdown = false;
+	private boolean shutdown = false;
 	
-	final Object mutex = new Object();
+	private final Object mutex = new Object();
 	
-	SoftCache softCache;
+	private SoftCache softCache;
 
-	Config config;
+	private Config config;
 	
-	CacheManager cacheManager;
+	private CacheManager cacheManager;
 	
-	boolean quotaEnabled = false;
+	private boolean quotaEnabled = false;
 	
-	long defaultQuota = Quota.VALUE_UNLIMITED;
+	private long defaultQuota = Quota.VALUE_UNLIMITED;
 
-	long maximumFileSize = Quota.VALUE_UNLIMITED;
+	private long maximumFileSize = Quota.VALUE_UNLIMITED;
 	
 	//ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
 	
 	private Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = new EnumMap<RepositoryEvent, Set<RepositoryListener>>(RepositoryEvent.class);
 	
-	SolrServer solrServer;
+	private SolrServer solrServer;
 	
-	CoreContainer solrCoreContainer;
+	private CoreContainer solrCoreContainer;
 	
-	SolrSearchIndex solrIndex;
+	private SolrSearchIndex solrIndex;
 	
-	PublicRepository publicRepository;
+	private PublicRepository publicRepository;
 
 	private Repository provenanceRepository;
 
-	public static boolean trackDeletedEntries;
+	static boolean trackDeletedEntries;
 
 	public RepositoryManagerImpl(String baseURL, Config config) {
 		System.setProperty("org.openrdf.repository.debug", "true");
