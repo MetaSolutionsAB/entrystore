@@ -118,7 +118,7 @@ public class BackupJob implements Job, InterruptableJob {
 			// Main repo
 			log.info("Exporting main repository");
 
-			String fileName = "repo_" + fileDate + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+			String fileName = "repo_" + fileDate + "." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
 			rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, fileName).toURI(), gzip, format);
 			log.info("Exporting main repository took " + (new Date().getTime() - before.getTime()) + " ms");
 
@@ -126,7 +126,7 @@ public class BackupJob implements Job, InterruptableJob {
 			if (rm.getProvenanceRepository() != null) {
 				before = new Date();
 				log.info("Exporting provenance repository");
-				fileName = "repo_prov_" + fileDate + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+				fileName = "repo_prov_" + fileDate + "." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
 				rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, fileName).toURI(), gzip, format);
 				log.info("Exporting provenance repository took " + (new Date().getTime() - before.getTime()) + " ms");
 			}
