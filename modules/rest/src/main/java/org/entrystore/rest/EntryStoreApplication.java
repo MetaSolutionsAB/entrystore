@@ -338,6 +338,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/quota", QuotaResource.class);
 		router.attach("/{context-id}/lookup", LookupResource.class);
 		router.attach("/{context-id}/execute", ExecutionResource.class);
+		router.attach("/{context-id}/proxy", ProxyResource.class);
 
 		// principals scope
 		if ("on".equalsIgnoreCase(config.getString(Settings.NONADMIN_GROUPCONTEXT_CREATION, "off"))) {

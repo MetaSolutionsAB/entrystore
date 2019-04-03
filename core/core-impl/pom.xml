@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-core</artifactId>
-		<version>4.7</version>
+		<version>4.8</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-core-impl</artifactId>
@@ -84,6 +84,21 @@
 		<dependency>
 			<groupId>org.openrdf.sesame</groupId>
 			<artifactId>sesame-rio-trix</artifactId>
+			<version>${sesame.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openrdf.sesame</groupId>
+			<artifactId>sesame-rio-nquads</artifactId>
+			<version>${sesame.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openrdf.sesame</groupId>
+			<artifactId>sesame-rio-rdfjson</artifactId>
+			<version>${sesame.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openrdf.sesame</groupId>
+			<artifactId>sesame-rio-binary</artifactId>
 			<version>${sesame.version}</version>
 		</dependency>
 		<dependency>

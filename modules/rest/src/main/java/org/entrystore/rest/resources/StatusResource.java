@@ -20,6 +20,7 @@ import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.EntryStoreApplication;
@@ -85,7 +86,10 @@ public class StatusResource extends BaseResource  {
 
 					result.put("backup", settingToBoolean(Settings.BACKUP_SCHEDULER));
 					result.put("backupMaintenance", settingToBoolean(Settings.BACKUP_MAINTENANCE));
-					result.put("backupTimeRegExp", config.getString(Settings.BACKUP_TIMEREGEXP, "unconfigured"));
+					result.put("backupCronExpression", config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED, "unconfigured")));
+					if (BackupScheduler.getInstance(getRM()) != null) {
+						result.put("backupCronExpressionResolved", BackupScheduler.getInstance(getRM()).getCronExpression());
+					}
 					result.put("backupMaintenanceExpiresAfterDays", config.getString(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, "unconfigured"));
 					result.put("backupMaintenanceLowerLimit", config.getString(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, "unconfigured"));
 					result.put("backupMaintenanceUpperLimit", config.getString(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, "unconfigured"));

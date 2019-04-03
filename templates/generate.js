@@ -92,11 +92,12 @@ for (var lang in conf) {
     }
   };
 
-  if (lang == 'en') {
+  /*if (lang == 'en') {
     lang = '';
   } else {
     lang = '_' + lang;
-  }
+  }*/
+  lang = '_' + lang;
 
   fs.writeFileSync(outDir + 'email_signup' + lang + '.html', minify(mailGenerator.generate(emailSignup)), 'utf8');
   fs.writeFileSync(outDir + 'email_pwreset' + lang + '.html', minify(mailGenerator.generate(emailPwReset)), 'utf8');

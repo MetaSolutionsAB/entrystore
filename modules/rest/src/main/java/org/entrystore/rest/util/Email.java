@@ -51,8 +51,15 @@ public class Email {
 	private static Logger log = LoggerFactory.getLogger(Email.class);
 
 	public static boolean sendMessage(Config config, String msgTo, String msgSubject, String msgBody) {
-		String msgFrom = config.getString(Settings.AUTH_FROM_EMAIL);
-		String msgBcc = config.getString(Settings.AUTH_BCC_EMAIL);
+		String msgFrom = config.getString(Settings.SMTP_EMAIL_FROM);
+		if (msgFrom == null) {
+			msgFrom = config.getString(Settings.AUTH_FROM_EMAIL_DEPRECATED); // fallback to deprecated setting
+		}
+		String msgBcc = config.getString(Settings.SMTP_EMAIL_BCC);
+		if (msgBcc == null) {
+			msgBcc = config.getString(Settings.AUTH_BCC_EMAIL_DEPRECATED); // fallback to deprecated setting
+		}
+		String msgReplyTo = config.getString(Settings.SMTP_EMAIL_REPLYTO);
 		String host = config.getString(Settings.SMTP_HOST);
 		int port = config.getInt(Settings.SMTP_PORT, 25);
 		boolean ssl = "ssl".equalsIgnoreCase(config.getString(Settings.SMTP_SECURITY));
@@ -105,6 +112,9 @@ public class Email {
 		try {
 			MimeMessage message = new MimeMessage(session);
 			message.setFrom(new InternetAddress(msgFrom));
+			if (msgReplyTo != null) {
+				message.setReplyTo(InternetAddress.parse(msgReplyTo));
+			}
 			if (msgBcc != null) {
 				message.addRecipients(Message.RecipientType.BCC, InternetAddress.parse(msgBcc));
 			}

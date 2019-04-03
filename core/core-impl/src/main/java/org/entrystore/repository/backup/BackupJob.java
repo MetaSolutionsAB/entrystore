@@ -21,6 +21,7 @@ import org.apache.commons.logging.LogFactory;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
+import org.openrdf.rio.RDFFormat;
 import org.quartz.InterruptableJob;
 import org.quartz.Job;
 import org.quartz.JobDataMap;
@@ -98,6 +99,7 @@ public class BackupJob implements Job, InterruptableJob {
 		JobDataMap dataMap = jobContext.getJobDetail().getJobDataMap();
 		RepositoryManagerImpl rm = (RepositoryManagerImpl) dataMap.get("rm");
 		boolean gzip = dataMap.getBoolean("gzip");
+		RDFFormat format = (RDFFormat) dataMap.getOrDefault("format", RDFFormat.NQUADS);
 		log.info("Backup gzip: " + gzip);
 
 		String exportPath = rm.getConfiguration().getString(Settings.BACKUP_FOLDER);
@@ -115,16 +117,17 @@ public class BackupJob implements Job, InterruptableJob {
 
 			// Main repo
 			log.info("Exporting main repository");
-			String fileName = "repo_" + fileDate + ".rdf" + (gzip ? ".gz" : "");
-			rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, fileName).toURI(), gzip);
+
+			String fileName = "repo_" + fileDate + "." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+			rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, fileName).toURI(), gzip, format);
 			log.info("Exporting main repository took " + (new Date().getTime() - before.getTime()) + " ms");
 
 			// Provenance repo
 			if (rm.getProvenanceRepository() != null) {
 				before = new Date();
 				log.info("Exporting provenance repository");
-				fileName = "repo_prov_" + fileDate + ".rdf" + (gzip ? ".gz" : "");
-				rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, fileName).toURI(), gzip);
+				fileName = "repo_prov_" + fileDate + "." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+				rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, fileName).toURI(), gzip, format);
 				log.info("Exporting provenance repository took " + (new Date().getTime() - before.getTime()) + " ms");
 			}
 

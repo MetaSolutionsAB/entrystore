@@ -18,6 +18,9 @@ package org.entrystore.rest.resources;
 
 import com.google.common.base.Joiner;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
 import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.NS;
@@ -120,12 +123,24 @@ public class ProxyResource extends BaseResource {
 			return null;
 		}
 
-		String host = URI.create(extResourceURL).getHost().toLowerCase();
+		if (contextId != null && context == null) {
+			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+			return null;
+		}
 
-		URI authUser = getPM().getAuthenticatedUserURI();
-		if (!whitelistAnon.contains(host) && (authUser == null || getPM().getGuestUser().getURI().equals(authUser))) {
+		// for /{context-id}/proxy only principals with read access may access the context's proxy resource
+		if (context != null && !canReadContextResource(context.getEntry())) {
 			getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 			return null;
+		} else {
+			// for /proxy in general: any user, including _guest may access hosts that are whitelisted,
+			// otherwise access is restricted to logged in users
+			String host = URI.create(extResourceURL).getHost().toLowerCase();
+			URI authUser = getPM().getAuthenticatedUserURI();
+			if (!whitelistAnon.contains(host) && (authUser == null || getPM().getGuestUser().getURI().equals(authUser))) {
+				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+				return null;
+			}
 		}
 
 		log.info("Received proxy request for " + extResourceURL);
@@ -243,6 +258,15 @@ public class ProxyResource extends BaseResource {
 		
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 		return null;
+	}
+
+	private boolean canReadContextResource(Entry contextEntry) {
+		try {
+			getPM().checkAuthenticatedUserAuthorized(contextEntry, PrincipalManager.AccessProperty.ReadResource);
+		} catch (AuthorizationException ae) {
+			return false;
+		}
+		return true;
 	}
 	
 	private Response getResourceFromURL(String url, int loopCount) {

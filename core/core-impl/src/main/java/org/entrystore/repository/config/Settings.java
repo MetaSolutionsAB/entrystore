@@ -44,10 +44,12 @@ public class Settings {
 	
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
-	public static String BACKUP_TIMEREGEXP = "entrystore.backup.timeregexp";
+	public static String BACKUP_TIMEREGEXP_DEPRECATED = "entrystore.backup.timeregexp";
+	public static String BACKUP_CRONEXP = "entrystore.backup.cronexp";
 	public static String BACKUP_GZIP = "entrystore.backup.gzip";
+	public static String BACKUP_FORMAT = "entrystore.backup.format";
 	
-	public static String BACKUP_MAINTENANCE = "entrystore.backup.maintenance";						 
+	public static String BACKUP_MAINTENANCE = "entrystore.backup.maintenance";
 	public static String BACKUP_MAINTENANCE_UPPER_LIMIT = "entrystore.backup.maintenance.upper-limit";
 	public static String BACKUP_MAINTENANCE_LOWER_LIMIT = "entrystore.backup.maintenance.lower-limit";
 	public static String BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS = "entrystore.backup.maintenance.expires-after-days";
@@ -119,9 +121,13 @@ public class Settings {
 	public static String SMTP_SECURITY = "entrystore.smtp.security";
 	public static String SMTP_USERNAME = "entrystore.smtp.username";
 	public static String SMTP_PASSWORD = "entrystore.smtp.password";
+	public static String SMTP_EMAIL_FROM = "entrystore.smtp.email.from";
+	public static String SMTP_EMAIL_BCC = "entrystore.smtp.email.bcc";
+	public static String SMTP_EMAIL_REPLYTO = "entrystore.smtp.email.reply-to";
 
-	public static String AUTH_FROM_EMAIL = "entrystore.auth.email.from";
-	public static String AUTH_BCC_EMAIL = "entrystore.auth.email.bcc";
+	public static String AUTH_FROM_EMAIL_DEPRECATED = "entrystore.auth.email.from";
+	public static String AUTH_BCC_EMAIL_DEPRECATED = "entrystore.auth.email.bcc";
+
 	public static String AUTH_RECAPTCHA = "entrystore.auth.recaptcha";
 	public static String AUTH_RECAPTCHA_PRIVATE_KEY = "entrystore.auth.recaptcha.private-key";
 	public static String AUTH_RECAPTCHA_PUBLIC_KEY = "entrystore.auth.recaptcha.public-key";
