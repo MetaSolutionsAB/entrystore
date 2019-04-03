@@ -7,12 +7,12 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-transforms</artifactId>
-		<version>4.8</version>
+		<version>4.9-SNAPSHOT</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-transforms-tabular</artifactId>
 	<packaging>jar</packaging>
-	<version>4.8</version>
+	<version>4.9-SNAPSHOT</version>
 	<name>EntryStore Transforms Tabular</name>
     
 	<dependencies>
