@@ -84,15 +84,6 @@ public class StatusResource extends BaseResource  {
 						return new EmptyRepresentation();
 					}
 
-					result.put("backup", settingToBoolean(Settings.BACKUP_SCHEDULER));
-					result.put("backupMaintenance", settingToBoolean(Settings.BACKUP_MAINTENANCE));
-					result.put("backupCronExpression", config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED, "unconfigured")));
-					if (BackupScheduler.getInstance(getRM()) != null) {
-						result.put("backupCronExpressionResolved", BackupScheduler.getInstance(getRM()).getCronExpression());
-					}
-					result.put("backupMaintenanceExpiresAfterDays", config.getString(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, "unconfigured"));
-					result.put("backupMaintenanceLowerLimit", config.getString(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, "unconfigured"));
-					result.put("backupMaintenanceUpperLimit", config.getString(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, "unconfigured"));
 					result.put("baseURI", getRM().getRepositoryURL().toString());
 					result.put("cors", settingToBoolean(Settings.CORS));
 					result.put("corsHeaders", config.getString(Settings.CORS_HEADERS, "unconfigured"));
@@ -117,6 +108,20 @@ public class StatusResource extends BaseResource  {
 					result.put("version", EntryStoreApplication.getVersion());
 					result.put("startupTime", EntryStoreApplication.getStartupDate());
 					result.put("authTokenCount", LoginTokenCache.getInstance().size());
+
+					// Backup
+					JSONObject backup = new JSONObject();
+					backup.put("active", settingToBoolean(Settings.BACKUP_SCHEDULER));
+					backup.put("format", config.getString(Settings.BACKUP_FORMAT, "unconfigured"));
+					backup.put("maintenance", settingToBoolean(Settings.BACKUP_MAINTENANCE));
+					backup.put("cronExpression", config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED, "unconfigured")));
+					if (BackupScheduler.getInstance(getRM()) != null) {
+						backup.put("cronExpressionResolved", BackupScheduler.getInstance(getRM()).getCronExpression());
+					}
+					backup.put("maintenanceExpiresAfterDays", config.getString(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, "unconfigured"));
+					backup.put("maintenanceLowerLimit", config.getString(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, "unconfigured"));
+					backup.put("maintenanceUpperLimit", config.getString(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, "unconfigured"));
+					result.put("backup", backup);
 
 					// JVM
 					JSONObject jvm = new JSONObject();
