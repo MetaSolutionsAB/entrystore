@@ -100,10 +100,10 @@ public class BackupScheduler {
 			int upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
 			int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
 			int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
-			RDFFormat format = RDFFormat.valueOf(config.getString(Settings.BACKUP_FORMAT, RDFFormat.NQUADS.getName()));
+			RDFFormat format = RDFFormat.valueOf(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
 			if (format == null) {
-				log.warn("Invalid backup format " + config.getString(Settings.BACKUP_FORMAT + ", falling back to N-Quads"));
-				format = RDFFormat.NQUADS;
+				log.warn("Invalid backup format " + config.getString(Settings.BACKUP_FORMAT + ", falling back to TriX"));
+				format = RDFFormat.TRIX;
 			}
 
 			if (cronExp.toLowerCase().contains("rnd")) {

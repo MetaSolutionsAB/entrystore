@@ -99,7 +99,7 @@ public class BackupJob implements Job, InterruptableJob {
 		JobDataMap dataMap = jobContext.getJobDetail().getJobDataMap();
 		RepositoryManagerImpl rm = (RepositoryManagerImpl) dataMap.get("rm");
 		boolean gzip = dataMap.getBoolean("gzip");
-		RDFFormat format = (RDFFormat) dataMap.getOrDefault("format", RDFFormat.NQUADS);
+		RDFFormat format = (RDFFormat) dataMap.getOrDefault("format", RDFFormat.TRIX);
 		log.info("Backup gzip: " + gzip);
 
 		String exportPath = rm.getConfiguration().getString(Settings.BACKUP_FOLDER);
