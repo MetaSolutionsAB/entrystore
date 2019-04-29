@@ -1,10 +1,16 @@
-image: maven:3.3.9-jdk-8
+image: maven:3.6-jdk-8
+
+options:
+  max-time: 10
 
 pipelines:
   default:
     - step:
+        caches:
+          - maven
         script:
           - mvn --version
           - mvn clean install
           - ( cd modules/rest-standalone/target/dist && tar czf entrystore-rest-`cat ../../../../VERSION.txt`.tar.gz * )
           - scp -v modules/rest/target/*.war modules/rest-standalone/target/dist/*.tar.gz deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
+          - rm -rf ~/.m2/repository/org/entrystore/
