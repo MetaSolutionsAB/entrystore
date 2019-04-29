@@ -10,7 +10,7 @@
     <version>4.9-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>EntryStore</name>
-    <url>http://entrystore.org</url>
+    <url>https://entrystore.org</url>
     <description>
         EntryStore is a Linked Data-based resource and metadata management framework. It provides a reference
         implementation of the Resource and Metadata Management Model (ReM3).
@@ -28,9 +28,9 @@
         <sesame.version>2.7.16</sesame.version>
         <slf4j.version>1.7.25</slf4j.version>
         <servlet.version>3.0.1</servlet.version>
-        <site.url>http://entrystore.org</site.url>
-        <distribution.snapshot.url>http://entrystore.org</distribution.snapshot.url>
-        <distribution.url>http://entrystore.org</distribution.url>
+        <site.url>https://entrystore.org</site.url>
+        <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
+        <distribution.url>https://entrystore.org</distribution.url>
         <license.licenseName>apache_v2</license.licenseName>
     </properties>
 
@@ -96,7 +96,7 @@
     <!-- ================= Organization ================= -->
     <organization>
         <name>MetaSolutions AB</name>
-        <url>http://www.metasolutions.se</url>
+        <url>https://www.metasolutions.se</url>
     </organization>
 
     <!-- ================= Build ================= -->
@@ -164,18 +164,18 @@
     <repositories>
         <repository>
             <id>EntryStore</id>
-            <url>http://maven.entrystore.org</url>
+            <url>https://maven.entrystore.org</url>
         </repository>
         <repository>
             <id>Restlet</id>
             <name>Restlet Framework repository</name>
-            <url>http://maven.restlet.com</url>
+            <url>https://maven.restlet.com</url>
         </repository>
     </repositories>
     <pluginRepositories>
         <pluginRepository>
             <id>EntryStore</id>
-            <url>http://maven.entrystore.org</url>
+            <url>https://maven.entrystore.org</url>
         </pluginRepository>
     </pluginRepositories>
 
