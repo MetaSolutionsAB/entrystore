@@ -220,6 +220,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
+	protected void updateResource2EntryIndex(URI oldResourceURI, URI newResourceURI, URI entryURI) {
+		log.debug("Removing res2entry mapping: " + oldResourceURI + " -> " + entryURI);
+		pop(oldResourceURI, entryURI, res2entry);
+		log.debug("Adding res2entry mapping: " + newResourceURI + " -> " + entryURI);
+		push(newResourceURI, entryURI, res2entry);
+	}
+
 	protected void loadIndex() {
 		try {
 			synchronized (this.entry.repository) {

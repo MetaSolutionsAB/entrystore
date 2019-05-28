@@ -1271,6 +1271,8 @@ public class EntryImpl implements Entry {
 
 	public void setGraph(Graph metametadata) {
 		checkAdministerRights();
+
+		URI oldResourceURI = this.resURI;
 		
 		Iterator<Statement> resourceURIStmnts = metametadata.match(this.entryURI, RepositoryProperties.resource, null);
 		if (resourceURIStmnts.hasNext()) {
@@ -1419,6 +1421,13 @@ public class EntryImpl implements Entry {
 
 					// we reload the internal cache
 					loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
+					if (!this.resURI.equals(oldResourceURI)) {
+						context.updateResource2EntryIndex(
+								java.net.URI.create(oldResourceURI.stringValue()),
+								java.net.URI.create(this.resURI.stringValue()),
+								java.net.URI.create(this.entryURI.stringValue())
+						);
+					}
 					initMetadataObjects();
 					
 					getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
