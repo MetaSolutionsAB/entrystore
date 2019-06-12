@@ -269,7 +269,9 @@ public class ResourceResource extends BaseResource {
 				}
 				getResponse().setEntity(new JsonRepresentation(result));
 				getResponse().setStatus(Status.SUCCESS_OK);
-			} 
+			} else {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			}
 		} catch(AuthorizationException e) {
 			unauthorizedPOST();
 		}
