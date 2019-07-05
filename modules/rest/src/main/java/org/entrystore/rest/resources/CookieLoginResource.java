@@ -56,7 +56,7 @@ public class CookieLoginResource extends BaseResource {
 		super.init(c, request, response);
 		Config config = getRM().getConfiguration();
 		if ("whitelist".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD))) {
-			this.passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST, new ArrayList());
+			passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST, new ArrayList<>());
 		}
 	}
 
@@ -97,16 +97,23 @@ public class CookieLoginResource extends BaseResource {
 		}
 
 		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName);
-		boolean userExists = BasicVerifier.userExists(getPM(), userName);
 		boolean userIsEnabled = !BasicVerifier.isUserDisabled(getPM(), userName);
 		try {
-			if (saltedHashedSecret != null && userIsEnabled && Password.check(password, saltedHashedSecret)) {
-				new CookieVerifier(getRM()).createAuthToken(userName, maxAgeStr, getResponse());
-				getResponse().setStatus(Status.SUCCESS_OK);
-				if (html) {
-					getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
+			if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
+				if (userIsEnabled) {
+					new CookieVerifier(getRM()).createAuthToken(userName, maxAgeStr, getResponse());
+					getResponse().setStatus(Status.SUCCESS_OK);
+					if (html) {
+						getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
+					}
+					return;
+				} else {
+					getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+					if (html) {
+						getResponse().setEntity(new SimpleHTML("Login").representation("Login failed. The account is disabled."));
+					}
+					return;
 				}
-				return;
 			}
 		} catch (IllegalArgumentException iae) {
 			log.warn(iae.getMessage());
@@ -117,19 +124,11 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
-		if (userExists && !userIsEnabled) {
-			getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
-			if (html) {
-				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed. The account is disabled."));
-			}
-			return;
-		} else {
-			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-			if (html) {
-				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
-			}
-			return;
+		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+		if (html) {
+			getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 		}
+		return;
 	}
 
 }
