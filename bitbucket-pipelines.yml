@@ -17,6 +17,6 @@ pipelines:
           - export FILE_BASE="entrystore-rest-`cat VERSION.txt`"
           - echo $FILE_BASE
           - ( cd modules/rest-standalone/target/dist/ && tar czf ${FILE_BASE}.tar.gz * && sha256sum ${FILE_BASE}.tar.gz > ${FILE_BASE}.tar.gz.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE}.tar.gz.sha256 )
-          - ( cd modules/rest/target/ && sha256sum ${FILE_BASE}.war > modules/rest/target/${FILE_BASE}.war.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE}.war.sha256 )
+          - ( cd modules/rest/target/ && sha256sum ${FILE_BASE}.war > ${FILE_BASE}.war.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE}.war.sha256 )
           - scp -v modules/rest/target/{*.war,*.sha256.asc} modules/rest-standalone/target/dist/{*.tar.gz,*.sha256.asc} deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
           - rm -rf ~/.m2/repository/org/entrystore/
