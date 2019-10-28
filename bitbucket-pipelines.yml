@@ -10,7 +10,18 @@ pipelines:
           - maven
         script:
           - mvn --version
+          - gpg --version
+          - echo $GPG_SIGN_KEY | base64 -d | gpg --import
+          - gpg --list-secret-keys
           - mvn clean install
-          - ( cd modules/rest-standalone/target/dist && tar czf entrystore-rest-`cat ../../../../VERSION.txt`.tar.gz * )
-          - scp -v modules/rest/target/*.war modules/rest-standalone/target/dist/*.tar.gz deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
+          - export FILE_BASE="entrystore-rest-`cat VERSION.txt`"
+          - echo $FILE_BASE
+          - ( cd modules/rest-standalone/target/dist && tar czf ${FILE_BASE}.tar.gz * )
+          - sha256sum modules/rest-standalone/target/dist/${FILE_BASE}.tar.gz > modules/rest-standalone/target/dist/${FILE_BASE}.tar.gz.sha256
+          - sha256sum modules/rest/target/${FILE_BASE}.war > modules/rest/target/${FILE_BASE}.war.sha256
+          - cat modules/rest-standalone/target/dist/${FILE_BASE}.tar.gz.sha256
+          - cat modules/rest/target/${FILE_BASE}.war.sha256
+          - gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 modules/rest-standalone/target/dist/${FILE_BASE}.tar.gz.sha256
+          - gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 modules/rest/target/${FILE_BASE}.war.sha256
+          - scp -v modules/rest/target/{*.war,*.sha256.asc} modules/rest-standalone/target/dist/{*.tar.gz,*.sha256.asc} deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
           - rm -rf ~/.m2/repository/org/entrystore/
