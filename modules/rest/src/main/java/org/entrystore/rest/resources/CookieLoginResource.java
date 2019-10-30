@@ -88,6 +88,8 @@ public class CookieLoginResource extends BaseResource {
 
 		userName = userName.toLowerCase();
 
+		// Use case for whitelisting: enforced SSO with some users that should be able to login
+		// with their local credentials, see https://entrystore.org/#!KB/Authentication.md
 		if (passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(userName)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 			if (html) {
