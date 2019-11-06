@@ -308,18 +308,20 @@ public class GraphUtil {
 		if (customXmlReader != null) {
 			pc.set(XMLParserSettings.CUSTOM_XML_READER, customXmlReader);
 			try {
-				// TODO check whether this causes problems when importing arbitrary XML
-				customXmlReader.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true); // Disallow DOCTYPE declaration
+				// Disallow DOCTYPE declaration
+				customXmlReader.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
 			} catch (SAXException se) {
 				log.warn(se.getMessage());
 			}
 			try {
-				customXmlReader.setFeature("http://xml.org/sax/features/external-general-entities", false); // External text entities
+				// External text entities
+				customXmlReader.setFeature("http://xml.org/sax/features/external-general-entities", false);
 			} catch (SAXException se) {
 				log.warn(se.getMessage());
 			}
 			try {
-				customXmlReader.setFeature("http://xml.org/sax/features/external-parameter-entities", false); // External parameter entities
+				// External parameter entities
+				customXmlReader.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
 			} catch (SAXException se) {
 				log.warn(se.getMessage());
 			}
