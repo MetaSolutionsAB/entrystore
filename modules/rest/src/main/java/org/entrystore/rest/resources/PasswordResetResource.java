@@ -47,6 +47,7 @@ import org.slf4j.LoggerFactory;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.security.SecureRandom;
 import java.util.Date;
 
 /**
@@ -263,7 +264,7 @@ public class PasswordResetResource extends BaseResource {
 
 			// to avoid spamming etc we only send emails to users that exist
 			if (u != null) {
-				String token = RandomStringUtils.randomAlphanumeric(16);
+				String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 				String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
 				log.info("Generated password reset token " + token + " for " + ci.email);
 
