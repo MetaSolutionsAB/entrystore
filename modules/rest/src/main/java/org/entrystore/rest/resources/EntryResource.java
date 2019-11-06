@@ -162,30 +162,6 @@ public class EntryResource extends BaseResource {
 		}
 	}
 
-	@Post
-	public void acceptRepresentation(Representation r) {
-		try {
-			if (entry == null || context == null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				return;
-			}
-
-			if (parameters.containsKey("method")) {
-				if ("delete".equalsIgnoreCase(parameters.get("method"))) {
-					removeRepresentations();
-					return;
-				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
-					storeRepresentation(r);
-					return;
-				}
-			}
-
-			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		} catch (AuthorizationException e) {
-			unauthorizedPOST();
-		}
-	}
-
 	@Delete
 	public void removeRepresentations() {
 		try {

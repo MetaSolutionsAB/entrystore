@@ -204,13 +204,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		try {
-			if (parameters.containsKey("method")) {
-				if ("delete".equalsIgnoreCase(parameters.get("method"))) {
-					removeRepresentation();
-				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
-					storeRepresentation(r);
-				}
-			} else if (entry.getGraphType().equals(GraphType.List) &&
+			if (entry.getGraphType().equals(GraphType.List) &&
 					parameters.containsKey("import") &&
 					MediaType.APPLICATION_ZIP.equals(getRequestEntity().getMediaType())) {
 				getResponse().setStatus(importFromZIP(getRequestEntity()));
@@ -1066,10 +1060,15 @@ public class ResourceResource extends BaseResource {
 				return;
 			}
 
+			JSONObject result = new JSONObject();
+			result.put("success", "The file is uploaded");
+			result.put("format", entry.getMimetype());
 			if (textarea) {
-				getResponse().setEntity("<textarea>{\"success\":\"The file is uploaded\", \"format\": \""+entry.getMimetype()+"\"}</textarea>",MediaType.TEXT_HTML);
+				// TODO investigate whether textarea is still needed
+				// if yes: make sure the mime type is properly escaped
+				getResponse().setEntity("<textarea>" + result.toString() + "</textarea>", MediaType.TEXT_HTML);
 			} else {
-				getResponse().setEntity(new JsonRepresentation("{\"success\":\"The file is uploaded\", \"format\": \""+entry.getMimetype()+"\"}"));				
+				getResponse().setEntity(new JsonRepresentation(result));
 			}
 			getResponse().setStatus(Status.SUCCESS_CREATED);
 		}
