@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.resources;
 
+import com.google.common.html.HtmlEscapers;
 import com.sun.syndication.feed.synd.SyndContent;
 import com.sun.syndication.feed.synd.SyndContentImpl;
 import com.sun.syndication.feed.synd.SyndEntry;
@@ -1061,11 +1062,9 @@ public class ResourceResource extends BaseResource {
 			}
 
 			JSONObject result = new JSONObject();
-			result.put("success", "The file is uploaded");
-			result.put("format", entry.getMimetype());
+			result.put("success", "The file was uploaded");
+			result.put("format", HtmlEscapers.htmlEscaper().escape(entry.getMimetype()));
 			if (textarea) {
-				// TODO investigate whether textarea is still needed
-				// if yes: make sure the mime type is properly escaped
 				getResponse().setEntity("<textarea>" + result.toString() + "</textarea>", MediaType.TEXT_HTML);
 			} else {
 				getResponse().setEntity(new JsonRepresentation(result));
