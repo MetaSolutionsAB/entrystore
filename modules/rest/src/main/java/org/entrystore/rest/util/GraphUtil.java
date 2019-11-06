@@ -18,10 +18,12 @@ package org.entrystore.rest.util;
 
 import com.github.jsonldjava.sesame.SesameJSONLDParser;
 import com.github.jsonldjava.sesame.SesameJSONLDWriter;
+import info.aduna.xml.XMLReaderFactory;
 import org.entrystore.repository.util.NS;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
 import org.openrdf.model.impl.LinkedHashModel;
+import org.openrdf.rio.ParserConfig;
 import org.openrdf.rio.RDFFormat;
 import org.openrdf.rio.RDFHandler;
 import org.openrdf.rio.RDFHandlerException;
@@ -29,6 +31,7 @@ import org.openrdf.rio.RDFParseException;
 import org.openrdf.rio.RDFParser;
 import org.openrdf.rio.RDFWriter;
 import org.openrdf.rio.helpers.StatementCollector;
+import org.openrdf.rio.helpers.XMLParserSettings;
 import org.openrdf.rio.n3.N3ParserFactory;
 import org.openrdf.rio.n3.N3Writer;
 import org.openrdf.rio.ntriples.NTriplesParser;
@@ -44,6 +47,8 @@ import org.openrdf.rio.turtle.TurtleWriter;
 import org.restlet.data.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.xml.sax.SAXException;
+import org.xml.sax.XMLReader;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -65,6 +70,8 @@ public class GraphUtil {
 
 	private static List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
+	private static ParserConfig safeXmlParserConfig;
+
 	static {
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
@@ -75,6 +82,7 @@ public class GraphUtil {
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType("application/rdf+json"));
+		safeXmlParserConfig = constructSafeXmlParserConfig();
 	}
 
 	/**
@@ -172,13 +180,17 @@ public class GraphUtil {
 		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
 			deserializedGraph = RDFJSON.rdfJsonToGraph(graphString);
 		} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
-			deserializedGraph = deserializeGraph(graphString, new RDFXMLParser());
+			RDFXMLParser rdfXmlParser = new RDFXMLParser();
+			rdfXmlParser.setParserConfig(safeXmlParserConfig);
+			deserializedGraph = deserializeGraph(graphString, rdfXmlParser);
 		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
 			deserializedGraph = deserializeGraph(graphString, new N3ParserFactory().getParser());
 		} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
 			deserializedGraph = deserializeGraph(graphString, new TurtleParser());
 		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-			deserializedGraph = deserializeGraph(graphString, new TriXParser());
+			TriXParser trixParser = new TriXParser();
+			trixParser.setParserConfig(safeXmlParserConfig);
+			deserializedGraph = deserializeGraph(graphString, trixParser);
 		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
 			deserializedGraph = deserializeGraph(graphString, new NTriplesParser());
 		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
@@ -273,6 +285,47 @@ public class GraphUtil {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Builds a custom and safe XML parser configuration to prevent XXE attacks. Creates a custom
+	 * XML reader to be able to set features that are not supported by the reader which is initialized by Sesame.
+	 *
+	 * @return Returns a custom XML parser configuration including a custom XML reader.
+	 */
+	private static ParserConfig constructSafeXmlParserConfig() {
+		ParserConfig pc = new ParserConfig();
+		pc.set(XMLParserSettings.LOAD_EXTERNAL_DTD, false);
+		pc.set(XMLParserSettings.SECURE_PROCESSING, true);
+
+		XMLReader customXmlReader = null;
+		try {
+			customXmlReader = XMLReaderFactory.createXMLReader();
+		} catch (SAXException e) {
+			log.error(e.getMessage());
+		}
+
+		if (customXmlReader != null) {
+			pc.set(XMLParserSettings.CUSTOM_XML_READER, customXmlReader);
+			try {
+				// TODO check whether this causes problems when importing arbitrary XML
+				customXmlReader.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true); // Disallow DOCTYPE declaration
+			} catch (SAXException se) {
+				log.warn(se.getMessage());
+			}
+			try {
+				customXmlReader.setFeature("http://xml.org/sax/features/external-general-entities", false); // External text entities
+			} catch (SAXException se) {
+				log.warn(se.getMessage());
+			}
+			try {
+				customXmlReader.setFeature("http://xml.org/sax/features/external-parameter-entities", false); // External parameter entities
+			} catch (SAXException se) {
+				log.warn(se.getMessage());
+			}
+		}
+
+		return pc;
 	}
 
 }
