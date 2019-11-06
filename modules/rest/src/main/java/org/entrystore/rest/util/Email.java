@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.util;
 
+import com.google.common.html.HtmlEscapers;
 import org.entrystore.Entry;
 import org.entrystore.User;
 import org.entrystore.config.Config;
@@ -156,10 +157,12 @@ public class Email {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
 		if (recipientName != null) {
-			messageText = messageText.replaceAll("__NAME__", recipientName);
+			// we escape the name because it could contain content (e.g. HTML) that cause trouble if displayed in e-mails
+			messageText = messageText.replaceAll("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
 		}
 		if (recipientEmail != null) {
-			messageText = messageText.replaceAll("__EMAIL__", recipientEmail);
+			// we escape the name because it could contain content (e.g. HTML) that cause trouble if displayed in e-mails
+			messageText = messageText.replaceAll("__EMAIL__", HtmlEscapers.htmlEscaper().escape(recipientEmail));
 		}
 
 		return sendMessage(config, recipientEmail, subject, messageText);
@@ -187,7 +190,7 @@ public class Email {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
 		if (recipientEmail != null) {
-			messageText = messageText.replaceAll("__EMAIL__", recipientEmail);
+			messageText = messageText.replaceAll("__EMAIL__", HtmlEscapers.htmlEscaper().escape(recipientEmail));
 		}
 
 		return sendMessage(config, recipientEmail, subject, messageText);
@@ -224,7 +227,7 @@ public class Email {
 		if (recipientName == null) {
 			recipientName = "";
 		}
-		messageText = messageText.replaceAll("__NAME__", recipientName);
+		messageText = messageText.replaceAll("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
 
 		return sendMessage(config, msgTo, msgSubject, messageText);
 	}
