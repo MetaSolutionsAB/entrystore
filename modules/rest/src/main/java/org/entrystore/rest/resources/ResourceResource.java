@@ -48,6 +48,7 @@ import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
@@ -818,7 +819,7 @@ public class ResourceResource extends BaseResource {
 						}
 						Disposition disp = rep.getDisposition();
 						disp.setFilename(fileName);
-						if (parameters.containsKey("download")) {
+						if (!getRM().getConfiguration().getBoolean(Settings.HTTP_ALLOW_CONTENT_DISPOSITION_INLINE, true) || parameters.containsKey("download")) {
 							disp.setType(Disposition.TYPE_ATTACHMENT);
 						} else {
 							disp.setType(Disposition.TYPE_INLINE);
