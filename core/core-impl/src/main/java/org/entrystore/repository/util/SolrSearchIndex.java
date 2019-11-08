@@ -79,7 +79,9 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static Logger log = LoggerFactory.getLogger(SolrSearchIndex.class);
 
-	private static final int BATCH_SIZE = 1000;
+	private static final int BATCH_SIZE_ADD = 500;
+
+	private static final int BATCH_SIZE_DELETE = 100;
 
 	private volatile boolean reindexing = false;
 
@@ -114,7 +116,7 @@ public class SolrSearchIndex implements SearchIndex {
 					if (deleteQueue.size() > 0) {
 						StringBuilder deleteQuery = new StringBuilder("uri:(");
 						synchronized (deleteQueue) {
-							while (batchCount < BATCH_SIZE) {
+							while (batchCount < BATCH_SIZE_DELETE) {
 								URI uri = deleteQueue.poll();
 								if (uri == null) {
 									break;
@@ -148,7 +150,7 @@ public class SolrSearchIndex implements SearchIndex {
 						synchronized (postQueue) {
 							ConcurrentMap<URI, SolrInputDocument> postQueueMap = postQueue.asMap();
 							Iterator<URI> it = postQueueMap.keySet().iterator();
-							while (batchCount < BATCH_SIZE && it.hasNext()) {
+							while (batchCount < BATCH_SIZE_ADD && it.hasNext()) {
 								URI key = it.next();
 								SolrInputDocument doc = postQueueMap.get(key);
 								postQueueMap.remove(key, doc);
@@ -173,7 +175,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 				} else {
 					try {
-						Thread.sleep(1000);
+						Thread.sleep(500);
 					} catch (InterruptedException ie) {
 						log.info("Solr document submitter got interrupted, shutting down submitter thread");
 						return;
