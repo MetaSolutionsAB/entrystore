@@ -187,6 +187,45 @@ lexicographic ordering isn't equal to the numeric ordering) -->
             </analyzer>
         </fieldType>
 
+        <fieldType name="text_sort_en" class="solr.TextField" sortMissingLast="true" omitNorms="true">
+            <analyzer>
+                <!-- KeywordTokenizer preserves the entire input string as a single token -->
+                <tokenizer class="solr.KeywordTokenizerFactory"/>
+                <!-- Sorting should be case insensitive -->
+                <filter class="solr.LowerCaseFilterFactory" />
+                <!-- TrimFilter removes any leading or trailing whitespace -->
+                <filter class="solr.TrimFilterFactory" />
+                <!-- We use a specific language collation to sort -->
+                <filter class="solr.CollationKeyFilterFactory" language="en" strength="primary" />
+            </analyzer>
+        </fieldType>
+
+        <fieldType name="text_sort_de" class="solr.TextField" sortMissingLast="true" omitNorms="true">
+            <analyzer>
+                <!-- KeywordTokenizer preserves the entire input string as a single token -->
+                <tokenizer class="solr.KeywordTokenizerFactory"/>
+                <!-- Sorting should be case insensitive -->
+                <filter class="solr.LowerCaseFilterFactory" />
+                <!-- TrimFilter removes any leading or trailing whitespace -->
+                <filter class="solr.TrimFilterFactory" />
+                <!-- We use a specific language collation to sort -->
+                <filter class="solr.CollationKeyFilterFactory" language="de" strength="primary" />
+            </analyzer>
+        </fieldType>
+
+        <fieldType name="text_sort_sv" class="solr.TextField" sortMissingLast="true" omitNorms="true">
+            <analyzer>
+                <!-- KeywordTokenizer preserves the entire input string as a single token -->
+                <tokenizer class="solr.KeywordTokenizerFactory"/>
+                <!-- Sorting should be case insensitive -->
+                <filter class="solr.LowerCaseFilterFactory" />
+                <!-- TrimFilter removes any leading or trailing whitespace -->
+                <filter class="solr.TrimFilterFactory" />
+                <!-- We use a specific language collation to sort -->
+                <filter class="solr.CollationKeyFilterFactory" language="sv" strength="primary" />
+            </analyzer>
+        </fieldType>
+
     </types>
 
     <fields>
@@ -259,6 +298,9 @@ lexicographic ordering isn't equal to the numeric ordering) -->
 
         <!-- title needs to be single-valued in order be sortable, desc and tag can be text and multi value -->
         <dynamicField name="title.*" type="text_ngram" indexed="true" multiValued="false"/>
+        <field name="title_sort.en" type="text_sort_en" indexed="true" multiValued="false"/>
+        <field name="title_sort.de" type="text_sort_de" indexed="true" multiValued="false"/>
+        <field name="title_sort.sv" type="text_sort_sv" indexed="true" multiValued="false"/>
         <dynamicField name="title_sort.*" type="text_sort" indexed="true" multiValued="false"/>
         <dynamicField name="description.*" type="text" indexed="true" multiValued="true"/>
         <dynamicField name="tag.literal.*" type="text_ngram" indexed="true" multiValued="true"/>
