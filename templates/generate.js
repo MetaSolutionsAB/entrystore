@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 if (process.argv.length > 2) {
     var confPath = process.argv[2];
 }
