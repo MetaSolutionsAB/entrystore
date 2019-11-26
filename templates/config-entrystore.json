@@ -4,7 +4,7 @@
     "productURL": "http://entrystore.org",
     "productLogoURL": "http://entrystore.org/logo.png",
     "supportText": "Need help, or have questions? Just reply to this email, we'd love to help.",
-    "copyright": "Copyright © __YEAR__ MetaSolutions AB. All rights reserved.",
+    "copyright": "Sent by <a href=\"https://__DOMAIN__\">__DOMAIN__</a>. Copyright © __YEAR__ MetaSolutions AB. All rights reserved.",
     "greeting": "Hi",
     "signupIntro": "Welcome to EntryStore!",
     "signupInstructions": "To get started with your EntryStore account, please click here:",

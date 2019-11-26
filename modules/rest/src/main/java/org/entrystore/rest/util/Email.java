@@ -35,6 +35,7 @@ import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeUtility;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -153,6 +154,7 @@ public class Email {
 		}
 
 		String messageText = templateHTML.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
+		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
@@ -186,6 +188,7 @@ public class Email {
 		}
 
 		String messageText = templateHTML.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
+		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
@@ -222,6 +225,7 @@ public class Email {
 		}
 
 		String messageText = templateHTML.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
+		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
 		String msgSubject = config.getString(Settings.PASSWORD_CHANGE_SUBJECT, "Your password has been changed");
 		String recipientName = EntryUtil.getName(userEntry);
 		if (recipientName == null) {
