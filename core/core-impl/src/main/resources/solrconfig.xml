@@ -18,7 +18,7 @@
 
 <config>
 
-  <luceneMatchVersion>4.3</luceneMatchVersion>
+  <luceneMatchVersion>8.3.0</luceneMatchVersion>
 
   <!-- Used to specify an alternate directory to hold all index data
        other than the default ./data under the Solr home.
@@ -125,13 +125,6 @@
     <!--
     <unlockOnStartup>false</unlockOnStartup>
       -->
-
-    <!-- If true, IndexReaders will be opened/reopened from the IndexWriter
-         instead of from the Directory. Hosts in a master/slave setup
-         should have this set to false while those in a SolrCloud
-         cluster need to be set to true. Default: true
-      -->
-    <nrtMode>true</nrtMode>
 
     <!-- Commit Deletion Policy
          Custom deletion policies can be specified here. The class must
@@ -384,7 +377,6 @@
 
   </query>
 
-
   <!-- requestHandler plugins... incoming queries will be dispatched to the
      correct handler based on the qt (query type) param matching the
      name of registered handlers.
@@ -394,6 +386,8 @@
   <requestHandler name="standard" class="solr.StandardRequestHandler">
     <!-- default values for query parameters -->
      <lst name="defaults">
+       <str name="df">all</str>
+       <str name="q.op">OR</str>
        <str name="echoParams">explicit</str>
        <!-- 
        <int name="rows">10</int>
@@ -409,6 +403,8 @@
    -->
   <requestHandler name="dismax" class="solr.SearchHandler" >
     <lst name="defaults">
+     <str name="df">all</str>
+     <str name="q.op">OR</str>
      <str name="echoParams">explicit</str>
      <float name="tie">0.01</float>
      <str name="qf">
@@ -435,6 +431,8 @@
     -->
   <requestHandler name="partitioned" class="solr.SearchHandler" >
     <lst name="defaults">
+     <str name="df">all</str>
+     <str name="q.op">OR</str>
      <str name="echoParams">explicit</str>
      <str name="qf">text^0.5 features^1.0 name^1.2 sku^1.5 id^10.0</str>
      <str name="mm">2&lt;-1 5&lt;-2 6&lt;90%</str>
