@@ -655,7 +655,6 @@ public class SolrSearchIndex implements SearchIndex {
 		int offset = query.getStart();
 		List<FacetField> facetFields = new ArrayList();
 		query.setIncludeScore(true);
-		query.setRequestHandler("dismax");
 		int resultFillIteration = 0;
 		do {
 			if (resultFillIteration++ > 0) {
