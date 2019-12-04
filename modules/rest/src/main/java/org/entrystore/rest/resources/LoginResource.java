@@ -16,40 +16,17 @@
 
 package org.entrystore.rest.resources;
 
-import net.tanesha.recaptcha.ReCaptcha;
-import net.tanesha.recaptcha.ReCaptchaFactory;
-import net.tanesha.recaptcha.ReCaptchaImpl;
-import net.tanesha.recaptcha.ReCaptchaResponse;
-import org.apache.commons.lang.RandomStringUtils;
-import org.apache.commons.validator.routines.EmailValidator;
-import org.entrystore.Context;
-import org.entrystore.Entry;
-import org.entrystore.GraphType;
-import org.entrystore.PrincipalManager;
-import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.rest.auth.Signup;
-import org.entrystore.rest.auth.SignupInfo;
-import org.entrystore.rest.auth.SignupTokenCache;
-import org.entrystore.rest.auth.TokenCache;
 import org.entrystore.rest.util.SimpleHTML;
-import org.restlet.data.Form;
 import org.restlet.data.Language;
 import org.restlet.data.MediaType;
-import org.restlet.data.Status;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
-import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.UnsupportedEncodingException;
-import java.net.URI;
-import java.net.URLDecoder;
-import java.util.Date;
 
 
 /**

@@ -7,12 +7,12 @@
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-modules</artifactId>
-        <version>4.8</version>
+        <version>4.9</version>
     </parent>
     <groupId>org.entrystore</groupId>
     <artifactId>entrystore-rest</artifactId>
     <packaging>war</packaging>
-    <version>4.8</version>
+    <version>4.9</version>
     <name>EntryStore REST</name>
 
     <build>
@@ -220,6 +220,11 @@
             <groupId>org.jasig.cas.client</groupId>
             <artifactId>cas-client-support-saml</artifactId>
             <version>3.4.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>28.1-jre</version>
         </dependency>
     </dependencies>
 

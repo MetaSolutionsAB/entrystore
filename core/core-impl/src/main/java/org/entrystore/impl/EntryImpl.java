@@ -801,9 +801,20 @@ public class EntryImpl implements Entry {
 
 		// update local variable with new URI
 		this.resURI = newResourceURI;
+
+		// update index
+		this.context.updateResource2EntryIndex(
+				java.net.URI.create(oldResourceURI.stringValue()),
+				java.net.URI.create(this.resURI.stringValue()),
+				java.net.URI.create(this.entryURI.stringValue())
+		);
 	}
 
 	public void setExternalMetadataURI(java.net.URI externalMetadataURI) {
+		if (this.externalMdURI != null && externalMetadataURI.toString().equals(this.externalMdURI.toString())) {
+			return;
+		}
+
 		checkAdministerRights();
 
 		ValueFactory vf = new GraphImpl().getValueFactory();
@@ -855,6 +866,13 @@ public class EntryImpl implements Entry {
 
 		// update local variable with new URI
 		this.externalMdURI = newExternalMetadataURI;
+
+		// update index
+		this.context.updateExternalMetadata2EntryIndex(
+				java.net.URI.create(oldExternalMetadataURI.stringValue()),
+				java.net.URI.create(this.externalMdURI.stringValue()),
+				java.net.URI.create(this.entryURI.stringValue())
+		);
 	}
 
 	/**

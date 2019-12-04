@@ -157,6 +157,8 @@ public class Settings {
 	public static String ROWSTORE_URL = "entrystore.rowstore.url";
 
 	public static String HTTPS_DISABLE_VERIFICATION = "entrystore.https.disable-verification";
+
+	public static String HTTP_ALLOW_CONTENT_DISPOSITION_INLINE = "entrystore.http.allow-content-disposition-inline";
 	
 	private Settings() {
 	}

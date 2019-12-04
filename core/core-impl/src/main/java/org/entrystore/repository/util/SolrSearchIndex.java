@@ -79,7 +79,9 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static Logger log = LoggerFactory.getLogger(SolrSearchIndex.class);
 
-	private static final int BATCH_SIZE = 1000;
+	private static final int BATCH_SIZE_ADD = 500;
+
+	private static final int BATCH_SIZE_DELETE = 100;
 
 	private volatile boolean reindexing = false;
 
@@ -114,7 +116,7 @@ public class SolrSearchIndex implements SearchIndex {
 					if (deleteQueue.size() > 0) {
 						StringBuilder deleteQuery = new StringBuilder("uri:(");
 						synchronized (deleteQueue) {
-							while (batchCount < BATCH_SIZE) {
+							while (batchCount < BATCH_SIZE_DELETE) {
 								URI uri = deleteQueue.poll();
 								if (uri == null) {
 									break;
@@ -148,7 +150,7 @@ public class SolrSearchIndex implements SearchIndex {
 						synchronized (postQueue) {
 							ConcurrentMap<URI, SolrInputDocument> postQueueMap = postQueue.asMap();
 							Iterator<URI> it = postQueueMap.keySet().iterator();
-							while (batchCount < BATCH_SIZE && it.hasNext()) {
+							while (batchCount < BATCH_SIZE_ADD && it.hasNext()) {
 								URI key = it.next();
 								SolrInputDocument doc = postQueueMap.get(key);
 								postQueueMap.remove(key, doc);
@@ -173,7 +175,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 				} else {
 					try {
-						Thread.sleep(1000);
+						Thread.sleep(500);
 					} catch (InterruptedException ie) {
 						log.info("Solr document submitter got interrupted, shutting down submitter thread");
 						return;
@@ -648,7 +650,7 @@ public class SolrSearchIndex implements SearchIndex {
 		Set<URI> entries = new LinkedHashSet<>();
 		Set<Entry> result = new LinkedHashSet<>();
 		long hits = -1;
-		long resultHits = -1;
+		long inaccessibleHits = 0;
 		int limit = query.getRows();
 		int offset = query.getStart();
 		List<FacetField> facetFields = new ArrayList();
@@ -676,7 +678,6 @@ public class SolrSearchIndex implements SearchIndex {
 				log.warn("Increasing offset to " + offset + " in an attempt to fill the result limit");
 			}
 			hits = sendQueryForEntryURIs(query, entries, facetFields, solrServer, offset, -1);
-			resultHits = hits;
 			Date before = new Date();
 			for (URI uri : entries) {
 				try {
@@ -702,14 +703,14 @@ public class SolrSearchIndex implements SearchIndex {
 						}
 					}
 				} catch (AuthorizationException ae) {
-					resultHits--;
+					inaccessibleHits++;
 					continue;
 				}
 			}
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");
 		} while ((limit > result.size()) && (hits > (offset + limit)));
 
-		return new QueryResult(result, resultHits, facetFields);
+		return new QueryResult(result, (hits - inaccessibleHits), facetFields);
 	}
 
 	public SolrDocument fetchDocument(String uri) {

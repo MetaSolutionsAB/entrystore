@@ -7,12 +7,12 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-apps</artifactId>
-		<version>4.8</version>
+		<version>4.9</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-harvesting-target</artifactId>
 	<packaging>war</packaging>
-	<version>4.8</version>
+	<version>4.9</version>
 	<name>EntryStore Harvesting Target WebApp</name>
 	
 	<build>

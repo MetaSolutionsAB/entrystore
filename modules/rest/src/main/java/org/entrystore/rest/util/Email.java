@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.util;
 
+import com.google.common.html.HtmlEscapers;
 import org.entrystore.Entry;
 import org.entrystore.User;
 import org.entrystore.config.Config;
@@ -34,6 +35,7 @@ import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeUtility;
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -152,14 +154,17 @@ public class Email {
 		}
 
 		String messageText = templateHTML.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
+		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
 		if (recipientName != null) {
-			messageText = messageText.replaceAll("__NAME__", recipientName);
+			// we escape the name because it could contain content (e.g. HTML) that cause trouble if displayed in e-mails
+			messageText = messageText.replaceAll("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
 		}
 		if (recipientEmail != null) {
-			messageText = messageText.replaceAll("__EMAIL__", recipientEmail);
+			// we escape the name because it could contain content (e.g. HTML) that cause trouble if displayed in e-mails
+			messageText = messageText.replaceAll("__EMAIL__", HtmlEscapers.htmlEscaper().escape(recipientEmail));
 		}
 
 		return sendMessage(config, recipientEmail, subject, messageText);
@@ -183,11 +188,12 @@ public class Email {
 		}
 
 		String messageText = templateHTML.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
+		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
 		if (recipientEmail != null) {
-			messageText = messageText.replaceAll("__EMAIL__", recipientEmail);
+			messageText = messageText.replaceAll("__EMAIL__", HtmlEscapers.htmlEscaper().escape(recipientEmail));
 		}
 
 		return sendMessage(config, recipientEmail, subject, messageText);
@@ -219,12 +225,13 @@ public class Email {
 		}
 
 		String messageText = templateHTML.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
+		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
 		String msgSubject = config.getString(Settings.PASSWORD_CHANGE_SUBJECT, "Your password has been changed");
 		String recipientName = EntryUtil.getName(userEntry);
 		if (recipientName == null) {
 			recipientName = "";
 		}
-		messageText = messageText.replaceAll("__NAME__", recipientName);
+		messageText = messageText.replaceAll("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
 
 		return sendMessage(config, msgTo, msgSubject, messageText);
 	}

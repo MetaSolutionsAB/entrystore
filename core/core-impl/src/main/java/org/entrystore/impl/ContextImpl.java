@@ -189,6 +189,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (from == null || to == null) {
 			return;
 		}
+		if (map == null) {
+			log.warn("Map to be pushed to is not initialized");
+			return;
+		}
 		Object existingTo = map.get(from); 
 		if (existingTo == null) {
 			map.put(from, to);
@@ -207,7 +211,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (from == null || to == null) {
 			return;
 		}
-		Object existingTo = map.get(from); 
+		if (map == null) {
+			log.warn("Map to be popped from is not initialized");
+			return;
+		}
+		Object existingTo = map.get(from);
 		if (existingTo != null) {
 			if (existingTo instanceof Set) {
 				((Set) existingTo).remove(to);
@@ -220,7 +228,27 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	protected void loadIndex() {
+	void updateResource2EntryIndex(URI oldResourceURI, URI newResourceURI, URI entryURI) {
+		if (oldResourceURI == null || newResourceURI == null || entryURI == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
+		log.debug("Removing resource to entry mapping: " + oldResourceURI + " -> " + entryURI);
+		pop(oldResourceURI, entryURI, res2entry);
+		log.debug("Adding resource to entry mapping: " + newResourceURI + " -> " + entryURI);
+		push(newResourceURI, entryURI, res2entry);
+	}
+
+	void updateExternalMetadata2EntryIndex(URI oldExtMdURI, URI newExtMdURI, URI entryURI) {
+		if (oldExtMdURI == null || newExtMdURI == null || entryURI == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
+		log.debug("Removing external metadata to entry mapping: " + oldExtMdURI + " -> " + entryURI);
+		pop(oldExtMdURI, entryURI, extMdUri2entry);
+		log.debug("Adding external metadata to entry mapping: " + newExtMdURI + " -> " + entryURI);
+		push(newExtMdURI, entryURI, extMdUri2entry);
+	}
+
+	void loadIndex() {
 		try {
 			synchronized (this.entry.repository) {
 				if (res2entry != null) {

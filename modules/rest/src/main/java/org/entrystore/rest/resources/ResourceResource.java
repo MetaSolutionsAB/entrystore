@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.resources;
 
+import com.google.common.html.HtmlEscapers;
 import com.sun.syndication.feed.synd.SyndContent;
 import com.sun.syndication.feed.synd.SyndContentImpl;
 import com.sun.syndication.feed.synd.SyndEntry;
@@ -47,6 +48,7 @@ import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
@@ -204,13 +206,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		try {
-			if (parameters.containsKey("method")) {
-				if ("delete".equalsIgnoreCase(parameters.get("method"))) {
-					removeRepresentation();
-				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
-					storeRepresentation(r);
-				}
-			} else if (entry.getGraphType().equals(GraphType.List) &&
+			if (entry.getGraphType().equals(GraphType.List) &&
 					parameters.containsKey("import") &&
 					MediaType.APPLICATION_ZIP.equals(getRequestEntity().getMediaType())) {
 				getResponse().setStatus(importFromZIP(getRequestEntity()));
@@ -269,7 +265,9 @@ public class ResourceResource extends BaseResource {
 				}
 				getResponse().setEntity(new JsonRepresentation(result));
 				getResponse().setStatus(Status.SUCCESS_OK);
-			} 
+			} else {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			}
 		} catch(AuthorizationException e) {
 			unauthorizedPOST();
 		}
@@ -821,7 +819,7 @@ public class ResourceResource extends BaseResource {
 						}
 						Disposition disp = rep.getDisposition();
 						disp.setFilename(fileName);
-						if (parameters.containsKey("download")) {
+						if (!getRM().getConfiguration().getBoolean(Settings.HTTP_ALLOW_CONTENT_DISPOSITION_INLINE, true) || parameters.containsKey("download")) {
 							disp.setType(Disposition.TYPE_ATTACHMENT);
 						} else {
 							disp.setType(Disposition.TYPE_INLINE);
@@ -1064,10 +1062,13 @@ public class ResourceResource extends BaseResource {
 				return;
 			}
 
+			JSONObject result = new JSONObject();
+			result.put("success", "The file was uploaded");
+			result.put("format", HtmlEscapers.htmlEscaper().escape(entry.getMimetype()));
 			if (textarea) {
-				getResponse().setEntity("<textarea>{\"success\":\"The file is uploaded\", \"format\": \""+entry.getMimetype()+"\"}</textarea>",MediaType.TEXT_HTML);
+				getResponse().setEntity("<textarea>" + result.toString() + "</textarea>", MediaType.TEXT_HTML);
 			} else {
-				getResponse().setEntity(new JsonRepresentation("{\"success\":\"The file is uploaded\", \"format\": \""+entry.getMimetype()+"\"}"));				
+				getResponse().setEntity(new JsonRepresentation(result));
 			}
 			getResponse().setStatus(Status.SUCCESS_CREATED);
 		}

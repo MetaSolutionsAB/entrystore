@@ -52,7 +52,9 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
+import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -111,7 +113,7 @@ public class SignupResource extends BaseResource {
 		if (ci == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			URL bURL = getRM().getRepositoryURL();
-			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + ((bURL.getPort() == 80 || bURL.getPort() == 443 ) ? "" : ":" + bURL.getPort());
+			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + (Arrays.asList(-1, 80, 443).contains(bURL.getPort()) ? "" : ":" + bURL.getPort());
 			return html.representation("<h4>Invalid confirmation link.</h4>" +
 					"This may be due to one of the following reasons:<br/>" +
 					"<ul><li>You have clicked the link twice and you already have an account.</li>" +
@@ -332,7 +334,7 @@ public class SignupResource extends BaseResource {
 			}
 		}
 
-		String token = RandomStringUtils.randomAlphanumeric(16);
+		String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
 		log.info("Generated sign-up token " + token + " for " + ci.email);
 

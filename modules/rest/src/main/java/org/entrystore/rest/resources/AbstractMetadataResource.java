@@ -230,32 +230,6 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		}
 	}
 
-	@Post
-	public void acceptRepresentation(Representation r) {
-		try {
-			if (entry == null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorEntryNotFound));
-				return;
-			}
-
-			if (getMetadata() == null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				return;
-			}
-
-			if (parameters.containsKey("method")) {
-				if ("delete".equalsIgnoreCase(parameters.get("method"))) {
-					removeRepresentations();
-				} else if ("put".equalsIgnoreCase(parameters.get("method"))) {
-					storeRepresentation(r);
-				}
-			}
-		} catch (AuthorizationException e) {
-			unauthorizedPOST();
-		}
-	}
-
 	@Delete
 	public void removeRepresentations() {
 		try {
