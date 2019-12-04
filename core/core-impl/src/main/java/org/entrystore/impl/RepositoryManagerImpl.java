@@ -675,13 +675,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					// we need this to test for the core's existence
 					status.getCoreStartTime();
 				} catch (Exception e) {
-					log.error("Core does not exist");
+					log.info("Creating Solr core");
+					CoreAdminRequest.Create createRequest = new CoreAdminRequest.Create();
+					createRequest.setCoreName("core1");
+					createRequest.setConfigSet("");
+					createRequest.process(solrServer);
 				}
-
-				CoreAdminRequest.Create createRequest = new CoreAdminRequest.Create();
-				createRequest.setCoreName("core1");
-				createRequest.setConfigSet("");
-				createRequest.process(solrServer);
 			} catch (Exception e) {
 				log.error("Failed to initialize Solr: " + e.getMessage());
 			}
