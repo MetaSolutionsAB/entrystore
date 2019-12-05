@@ -1,5 +1,5 @@
 EntryStore
-Copyright 2007-2018 MetaSolutions AB, info@metasolutions.se
+Copyright 2007-2020 MetaSolutions AB, info@metasolutions.se
 
 This product includes software developed by MetaSolutions AB (https://www.metasolutions.se/) licensed under
 the Apache License Version 2.0 (License: http://www.apache.org/licenses/LICENSE-2.0).
