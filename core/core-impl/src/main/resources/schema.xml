@@ -68,10 +68,10 @@
         <!-- numeric field types that store and index the text
 value verbatim (and hence don't support range queries, since the
 lexicographic ordering isn't equal to the numeric ordering) -->
-        <fieldtype name="integer" class="solr.IntField" omitNorms="true"/>
-        <fieldtype name="long" class="solr.LongField" omitNorms="true"/>
-        <fieldtype name="float" class="solr.FloatField" omitNorms="true"/>
-        <fieldtype name="double" class="solr.DoubleField" omitNorms="true"/>
+        <fieldtype name="integer" class="solr.TrieIntField" omitNorms="true"/>
+        <fieldtype name="long" class="solr.TrieLongField" omitNorms="true"/>
+        <fieldtype name="float" class="solr.TrieFloatField" omitNorms="true"/>
+        <fieldtype name="double" class="solr.TrieDoubleField" omitNorms="true"/>
 
 
         <!-- Numeric field types that manipulate the value into
@@ -104,7 +104,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
 
            Consult the DateField javadocs for more information.
         -->
-        <fieldtype name="date" class="solr.DateField" sortMissingLast="true" omitNorms="true"/>
+        <fieldtype name="date" class="solr.TrieDateField" sortMissingLast="true" omitNorms="true"/>
 
         <!-- solr.TextField allows the specification of custom text analyzers
             specified as a tokenizer and a list of token filters. Different
@@ -187,44 +187,9 @@ lexicographic ordering isn't equal to the numeric ordering) -->
             </analyzer>
         </fieldType>
 
-        <fieldType name="text_sort_en" class="solr.TextField" sortMissingLast="true" omitNorms="true">
-            <analyzer>
-                <!-- KeywordTokenizer preserves the entire input string as a single token -->
-                <tokenizer class="solr.KeywordTokenizerFactory"/>
-                <!-- Sorting should be case insensitive -->
-                <filter class="solr.LowerCaseFilterFactory" />
-                <!-- TrimFilter removes any leading or trailing whitespace -->
-                <filter class="solr.TrimFilterFactory" />
-                <!-- We use a specific language collation to sort -->
-                <filter class="solr.CollationKeyFilterFactory" language="en" strength="primary" />
-            </analyzer>
-        </fieldType>
-
-        <fieldType name="text_sort_de" class="solr.TextField" sortMissingLast="true" omitNorms="true">
-            <analyzer>
-                <!-- KeywordTokenizer preserves the entire input string as a single token -->
-                <tokenizer class="solr.KeywordTokenizerFactory"/>
-                <!-- Sorting should be case insensitive -->
-                <filter class="solr.LowerCaseFilterFactory" />
-                <!-- TrimFilter removes any leading or trailing whitespace -->
-                <filter class="solr.TrimFilterFactory" />
-                <!-- We use a specific language collation to sort -->
-                <filter class="solr.CollationKeyFilterFactory" language="de" strength="primary" />
-            </analyzer>
-        </fieldType>
-
-        <fieldType name="text_sort_sv" class="solr.TextField" sortMissingLast="true" omitNorms="true">
-            <analyzer>
-                <!-- KeywordTokenizer preserves the entire input string as a single token -->
-                <tokenizer class="solr.KeywordTokenizerFactory"/>
-                <!-- Sorting should be case insensitive -->
-                <filter class="solr.LowerCaseFilterFactory" />
-                <!-- TrimFilter removes any leading or trailing whitespace -->
-                <filter class="solr.TrimFilterFactory" />
-                <!-- We use a specific language collation to sort -->
-                <filter class="solr.CollationKeyFilterFactory" language="sv" strength="primary" />
-            </analyzer>
-        </fieldType>
+        <fieldType name="text_sort_en" class="solr.ICUCollationField" locale="en" strength="primary" numeric="true" />
+        <fieldType name="text_sort_de" class="solr.ICUCollationField" locale="de" strength="primary" numeric="true" />
+        <fieldType name="text_sort_sv" class="solr.ICUCollationField" locale="sv" strength="primary" numeric="true" />
 
     </types>
 
@@ -331,12 +296,6 @@ both match, the first appearing in the schema will be used.  -->
 
     <!-- field to use to determine and enforce document uniqueness. -->
     <uniqueKey>uri</uniqueKey>
-
-    <!-- field for the QueryParser to use when an explicit fieldname is absent -->
-    <defaultSearchField>all</defaultSearchField>
-
-    <!-- SolrQueryParser configuration: defaultOperator="AND|OR" -->
-    <solrQueryParser defaultOperator="OR"/>
 
     <!-- copyField commands copy one field to another at the time a document
 is added to the index.  It's used either to index the same field differently,

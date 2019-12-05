@@ -552,7 +552,7 @@ public class ResourceResource extends BaseResource {
 		SolrQuery solrQuery = new SolrQuery(solrQueryValue);
 		solrQuery.setStart(0);
 		solrQuery.setRows(1000);
-		solrQuery.setSortField("modified", ORDER.desc);
+		solrQuery.setSort("modified", ORDER.desc);
 
 		List<SyndEntry> syndEntries = new ArrayList<SyndEntry>();
 		Set<Entry> searchEntries = ((SolrSearchIndex) getRM().getIndex()).sendQuery(solrQuery).getEntries();

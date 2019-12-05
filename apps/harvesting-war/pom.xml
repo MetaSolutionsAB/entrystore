@@ -43,12 +43,6 @@
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-core-impl</artifactId>
 			<version>${project.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>javax.xml.bind</groupId>
-					<artifactId>jaxb-impl</artifactId>
-				</exclusion>
-			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.entrystore</groupId>
@@ -58,10 +52,6 @@
 				<exclusion>
 					<groupId>org.entrystore</groupId>
 					<artifactId>entrystore-core</artifactId>
-				</exclusion>
-				<exclusion>
-					<groupId>javax.xml.bind</groupId>
-					<artifactId>jaxb-impl</artifactId>
 				</exclusion>
 			</exclusions>
 		</dependency>
@@ -96,14 +86,14 @@
 		<dependency>
 			<groupId>javax.xml.bind</groupId>
 			<artifactId>jaxb-api</artifactId>
-			<version>2.1</version>
+			<version>${jaxb.version}</version>
 		</dependency> 
 		
 		<!-- try scope provided, might be AbstractMethodError when loading wsdl when provided and not there -->
 		<dependency>
 		    <groupId>xerces</groupId>
 		    <artifactId>xercesImpl</artifactId>
-		    <version>2.9.1</version>
+		    <version>${xerces.version}</version>
 		</dependency>  
 	</dependencies>
 	

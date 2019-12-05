@@ -93,7 +93,7 @@
 		<dependency>
 			<groupId>javax.xml.bind</groupId>
 			<artifactId>jaxb-api</artifactId>
-			<version>2.1</version>
+			<version>${jaxb.version}</version>
 		</dependency>
 		<!-- Jetty is needed if you're are not using the CXFServlet -->
 		<!--<dependency>

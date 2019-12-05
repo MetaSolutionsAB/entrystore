@@ -19,8 +19,8 @@ package org.entrystore.repository.util;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
-import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.FacetField;
@@ -93,7 +93,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private RepositoryManager rm;
 
-	private final SolrServer solrServer;
+	private final SolrClient solrServer;
 
 	private Thread documentSubmitter;
 
@@ -186,7 +186,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	}
 
-	public SolrSearchIndex(RepositoryManager rm, SolrServer solrServer) {
+	public SolrSearchIndex(RepositoryManager rm, SolrClient solrServer) {
 		solrDateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 		solrDateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"));
 		this.rm = rm;
@@ -215,7 +215,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	public void clearSolrIndex(SolrServer solrServer) {
+	public void clearSolrIndex(SolrClient solrServer) {
 		UpdateRequest req = new UpdateRequest();
 		req.deleteByQuery("*:*");
 		try {
@@ -225,7 +225,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	public void clearSolrIndexFromContextEntries(SolrServer solrServer, Entry contextEntry) {
+	public void clearSolrIndexFromContextEntries(SolrClient solrServer, Entry contextEntry) {
 		UpdateRequest req = new UpdateRequest();
 		req.deleteByQuery("context:" + ClientUtils.escapeQueryChars(contextEntry.getResourceURI().toString()));
 		try {
@@ -362,7 +362,7 @@ public class SolrSearchIndex implements SearchIndex {
 		if (titles != null && titles.size() > 0) {
 			Set<String> langs = new HashSet<>();
 			for (String title : titles.keySet()) {
-				doc.addField("title", title, 10);
+				doc.addField("title", title);
 				// we also store title.{lang} as dynamic field to be able to
 				// sort after titles in a specific language
 				String lang = titles.get(title);
@@ -371,7 +371,7 @@ public class SolrSearchIndex implements SearchIndex {
 				}
 				// we only want one title per language, otherwise sorting will not work
 				if (!langs.contains(lang)) {
-					doc.addField("title." + lang, title, 10);
+					doc.addField("title." + lang, title);
 					langs.add(lang);
 				}
 			}
@@ -386,7 +386,7 @@ public class SolrSearchIndex implements SearchIndex {
 			name += " " + lastName;
 		}
 		if (name.length() > 0) {
-			doc.addField("title", name, 10);
+			doc.addField("title", name);
 		}
 
 		// description
@@ -405,10 +405,10 @@ public class SolrSearchIndex implements SearchIndex {
 		Map<String, String> tagLiterals = EntryUtil.getTagLiterals(entry);
 		if (tagLiterals != null) {
 			for (String tag : tagLiterals.keySet()) {
-				doc.addField("tag.literal", tag, 20);
+				doc.addField("tag.literal", tag);
 				String lang = tagLiterals.get(tag);
 				if (lang != null) {
-					doc.addField("tag.literal." + lang, tag, 20);
+					doc.addField("tag.literal." + lang, tag);
 				}
 			}
 		}
@@ -599,7 +599,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrServer solrServer, int offset, int limit) {
+	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrClient solrServer, int offset, int limit) {
 		if (query == null) {
 			throw new IllegalArgumentException("Query object must not be null");
 		}
@@ -634,8 +634,8 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 				}
 			}
-		} catch (SolrServerException e) {
-			if (e.getRootCause() instanceof IllegalArgumentException) {
+		} catch (SolrServerException | IOException e) {
+			if (e instanceof SolrServerException && ((SolrServerException) e).getRootCause() instanceof IllegalArgumentException) {
 				log.info(e.getMessage());
 			} else {
 				log.error(e.getMessage());
@@ -655,7 +655,6 @@ public class SolrSearchIndex implements SearchIndex {
 		int offset = query.getStart();
 		List<FacetField> facetFields = new ArrayList();
 		query.setIncludeScore(true);
-		query.setRequestHandler("dismax");
 		int resultFillIteration = 0;
 		do {
 			if (resultFillIteration++ > 0) {
@@ -723,7 +722,7 @@ public class SolrSearchIndex implements SearchIndex {
 			if (!docs.isEmpty()) {
 				return docs.get(0);
 			}
-		} catch (SolrServerException e) {
+		} catch (SolrServerException | IOException e) {
 			log.error(e.getMessage());
 		}
 		return null;

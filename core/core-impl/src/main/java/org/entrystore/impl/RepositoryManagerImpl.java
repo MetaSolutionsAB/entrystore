@@ -18,10 +18,14 @@
 package org.entrystore.impl;
 
 import net.sf.ehcache.CacheManager;
-import org.apache.solr.client.solrj.SolrServer;
+import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
-import org.apache.solr.client.solrj.impl.HttpSolrServer;
+import org.apache.solr.client.solrj.impl.HttpSolrClient;
+import org.apache.solr.client.solrj.request.CoreAdminRequest;
+import org.apache.solr.client.solrj.request.CoreStatus;
 import org.apache.solr.core.CoreContainer;
+import org.apache.solr.core.NodeConfig;
+import org.apache.solr.core.SolrResourceLoader;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -125,8 +129,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	private Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = new EnumMap<RepositoryEvent, Set<RepositoryListener>>(RepositoryEvent.class);
 	
-	private SolrServer solrServer;
-	
+	private SolrClient solrServer;
+
 	private CoreContainer solrCoreContainer;
 	
 	private SolrSearchIndex solrIndex;
@@ -212,7 +216,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		// create soft cache
 		softCache = new SoftCache();
-		
+
 		if (config.getString(Settings.REPOSITORY_CACHE, "off").equalsIgnoreCase("on")) {
 			String cachePath = config.getString(Settings.REPOSITORY_CACHE_PATH);
 			if (cachePath != null) {
@@ -305,7 +309,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			initSolr();
 			registerSolrListeners();
 		}
-		
+
 		if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PUBLIC, "off"))) {
 			log.info("Initializing public repository");
 			publicRepository = new PublicRepository(this);
@@ -640,12 +644,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		String solrURL = config.getString(Settings.SOLR_URL);
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at " + solrURL);
-			HttpSolrServer httpSolrServer = new HttpSolrServer(solrURL);
-			httpSolrServer.setAllowCompression(true);
-			httpSolrServer.setFollowRedirects(true);
-			httpSolrServer.setMaxRetries(1);
-			httpSolrServer.setConnectionTimeout(5000); // 5 seconds
-			solrServer = httpSolrServer;
+
+			HttpSolrClient httpSolrClient = new HttpSolrClient.Builder(solrURL).
+					withConnectionTimeout(5000).
+					withSocketTimeout(5000).
+					allowCompression(true).
+					build();
+			httpSolrClient.setFollowRedirects(true);
+			solrServer = httpSolrClient;
 		} else {
 			log.info("Using embedded Solr server");
 			File solrDir = new File(solrURL);
@@ -655,22 +661,26 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 			try {
 				System.setProperty("solr.solr.home", solrURL);
-				log.info("solr.solr.home set to " + solrURL);
+				log.info("Solr Home (solr.solr.home) set to " + solrURL);
 				URL solrConfig = ConverterUtil.findResource("solrconfig.xml");
+				SolrResourceLoader loader = new SolrResourceLoader(new File(solrURL).toPath());
+				NodeConfig config = new NodeConfig.NodeConfigBuilder("embeddedSolrServerNode", loader)
+						.setConfigSetBaseDirectory(solrConfig.getPath())
+						.build();
+				this.solrServer = new EmbeddedSolrServer(config, "core1");
 
-				/* pre-Solr 4.4.0
-				CoreContainer.Initializer initializer = new CoreContainer.Initializer();
-				CoreContainer coreContainer = initializer.initialize();
-				solrServer = new EmbeddedSolrServer(coreContainer, "");
-				 */
-
-				// the following should be run with a custom Solr-config
-				//CoreContainer.createAndLoad(solrURL, new File(solrConfig.getPath()));
-
-				// we create a container with the default configuration
-				CoreContainer coreContainer = new CoreContainer(solrURL);
-				coreContainer.load();
-				solrServer = new EmbeddedSolrServer(coreContainer, "");
+				try {
+					CoreStatus status = CoreAdminRequest.getCoreStatus("core1", solrServer);
+					// This following triggers an exception if core1 does not exist,
+					// we need this to test for the core's existence
+					status.getCoreStartTime();
+				} catch (Exception e) {
+					log.info("Creating Solr core");
+					CoreAdminRequest.Create createRequest = new CoreAdminRequest.Create();
+					createRequest.setCoreName("core1");
+					createRequest.setConfigSet("");
+					createRequest.process(solrServer);
+				}
 			} catch (Exception e) {
 				log.error("Failed to initialize Solr: " + e.getMessage());
 			}
@@ -681,7 +691,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				solrIndex.reindex();
 			}
 		} else {
-			log.error("Unable to initialize Solr, check settings in scam.properties");
+			log.error("Unable to initialize Solr");
+			this.shutdown();
 		}
 	}
 	
