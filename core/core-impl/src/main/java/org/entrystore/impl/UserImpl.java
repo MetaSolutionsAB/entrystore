@@ -144,8 +144,12 @@ public class UserImpl extends RDFResource implements User {
 			if (rm.getPrincipalManager().getAdminUser().getEntry().getId().equals(entry.getId())) {
 				if (rm.getConfiguration().containsKey(Settings.AUTH_ADMIN_SECRET)) {
 					log.warn("Admin secret override in config file");
-					this.saltedHashedSecret = Password.getSaltedHash(rm.getConfiguration().getString(Settings.AUTH_ADMIN_SECRET));
-					return this.saltedHashedSecret;
+					try {
+						this.saltedHashedSecret = Password.getSaltedHash(rm.getConfiguration().getString(Settings.AUTH_ADMIN_SECRET));
+						return this.saltedHashedSecret;
+					} catch (IllegalArgumentException iae) {
+						log.error("Admin secret override was not successful due to password rule violation");
+					}
 				}
 			}
 
