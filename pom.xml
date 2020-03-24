@@ -23,7 +23,7 @@
 
     <!-- ================= Default Properties ================= -->
     <properties>
-        <restlet.version>2.3.12</restlet.version>
+        <restlet.version>2.4.3</restlet.version>
         <solr.version>8.3.0</solr.version>
         <sesame.version>2.7.16</sesame.version>
         <slf4j.version>1.7.26</slf4j.version>
