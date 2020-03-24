@@ -46,6 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -237,5 +238,12 @@ public abstract class BaseResource extends ServerResource {
 			getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedPUT));
 		}
 	}
-	
+
+
+	protected Representation createEmptyRepresentationWithLastModified(Date modificationDate) {
+		Representation result = new EmptyRepresentation();
+		result.setModificationDate(modificationDate);
+		return result;
+	}
+
 }

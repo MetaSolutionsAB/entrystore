@@ -52,7 +52,6 @@ import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
-import org.restlet.resource.Post;
 import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -225,6 +224,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 			MediaType mt = (format != null) ? format : getRequestEntity().getMediaType();
 			copyRepresentationToMetadata(r, getMetadata(), mt);
+			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
 		} catch (AuthorizationException e) {
 			unauthorizedPUT();
 		}

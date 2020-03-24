@@ -113,6 +113,8 @@ public class NameResource extends BaseResource {
 
 		if (!success) {
 			getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
+		} else {
+			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
 		}
 	}
 	

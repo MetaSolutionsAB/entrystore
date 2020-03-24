@@ -194,6 +194,7 @@ public class ResourceResource extends BaseResource {
 
 		try {
 			modifyResource(preferredMediaType);
+			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
 		} catch(AuthorizationException e) {
 			unauthorizedPUT();
 		}
