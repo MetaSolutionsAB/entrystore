@@ -69,12 +69,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -425,7 +425,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		log.info("Exporting repository to " + file);
 		try {
 			con = repo.getConnection();
-			out = new FileOutputStream(new File(file));
+			out = Files.newOutputStream(new File(file).toPath());
 			if (gzip) {
 				out = new GZIPOutputStream(out);
 			}

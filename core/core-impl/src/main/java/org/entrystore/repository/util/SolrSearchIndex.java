@@ -739,7 +739,7 @@ public class SolrSearchIndex implements SearchIndex {
 		/*
 		 * InputStream stream = null; String textContent = null; String mimeType
 		 * = null; try { TikaConfig tc = TikaConfig.getDefaultConfig();
-		 * InputStream mimeIS = null; try { mimeIS = new FileInputStream(f);
+		 * InputStream mimeIS = null; try { mimeIS = Files.newInputStream(f.toPath());
 		 * mimeType = tc.getMimeRepository().getMimeType(mimeIS).getName(); }
 		 * finally { if (mimeIS != null) { mimeIS.close(); } }
 		 * 

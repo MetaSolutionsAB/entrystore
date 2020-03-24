@@ -16,6 +16,9 @@
 
 package org.entrystore.repository.util;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -28,6 +31,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -37,9 +41,6 @@ import java.util.zip.CheckedOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Commonly used file operations.
@@ -118,7 +119,7 @@ public class FileOperations {
 		
 		if (!copied) {
 			log.warn("File copying failed using NIO, performing traditional copy using streams instead");
-			copyFile(new FileInputStream(src), new FileOutputStream(dst));
+			copyFile(Files.newInputStream(src.toPath()), Files.newOutputStream(dst.toPath()));
 		}
 	}
 	
@@ -295,13 +296,13 @@ public class FileOperations {
 	 * @throws IOException
 	 */
 	public static long zipFiles(File zipFile, List<File> files, File base) throws IOException {
-		FileOutputStream fos = new FileOutputStream(zipFile);
+		OutputStream fos = Files.newOutputStream(zipFile.toPath());
 		CheckedOutputStream cos = new CheckedOutputStream(fos, new CRC32());
 		BufferedOutputStream bos = new BufferedOutputStream(cos, BUFFER_SIZE);
 		ZipOutputStream zos = new ZipOutputStream(bos);
 		byte data[] = new byte[BUFFER_SIZE];
 		for (File file : files) {
-			FileInputStream fis = new FileInputStream(file);
+			InputStream fis = Files.newInputStream(file.toPath());
 			BufferedInputStream source = new BufferedInputStream(fis);
 			String entryPath = file.getPath();
 			if (base != null) {
@@ -338,7 +339,7 @@ public class FileOperations {
 			throw new IllegalArgumentException("Destination is not a folder");
 		}
 
-		FileInputStream fis = new FileInputStream(zipFile);
+		InputStream fis = Files.newInputStream(zipFile.toPath());
 		CheckedInputStream cis = new CheckedInputStream(fis, new CRC32());
 		BufferedInputStream bis = new BufferedInputStream(cis, BUFFER_SIZE);
 		ZipInputStream zis = new ZipInputStream(bis);
@@ -353,7 +354,7 @@ public class FileOperations {
 				log.debug("Creating directory: " + parentDir);
 				parentDir.mkdirs();
 			}
-			FileOutputStream fos = new FileOutputStream(unzippedFile);
+			OutputStream fos = Files.newOutputStream(unzippedFile.toPath());
 			BufferedOutputStream bos = new BufferedOutputStream(fos, BUFFER_SIZE);
 			while ((count = zis.read(data, 0, BUFFER_SIZE)) != -1) {
 				bos.write(data, 0, count);
@@ -408,8 +409,8 @@ public class FileOperations {
 				InputStream in = null;
 				OutputStream out = null;
 				try {
-					in = new FileInputStream(srcPath);
-					out = new FileOutputStream(dstPath);
+					in = Files.newInputStream(srcPath.toPath());
+					out = Files.newOutputStream(dstPath.toPath());
 					// Transfer bytes from in to out
 					byte[] buf = new byte[1024];
 					int len;

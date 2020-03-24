@@ -30,10 +30,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 
 
 /**
@@ -79,7 +78,7 @@ public class DataImpl extends ResourceImpl implements Data {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 		try {
 			if (getFile() != null) {
-				return new FileInputStream(getFile());
+				return Files.newInputStream(getFile().toPath());
 			}
 		} catch (IOException e) {
 			log.error(e.getMessage());
@@ -90,7 +89,7 @@ public class DataImpl extends ResourceImpl implements Data {
 	public void setData(InputStream is) throws QuotaException, IOException {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 
-		long bytes = FileOperations.copyFile(is, new FileOutputStream(getFile()));
+		long bytes = FileOperations.copyFile(is, Files.newOutputStream(getFile().toPath()));
 
 		if (entry.getRepositoryManager().hasQuotas()) {
 			try {

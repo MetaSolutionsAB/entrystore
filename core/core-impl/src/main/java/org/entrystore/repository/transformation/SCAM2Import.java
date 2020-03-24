@@ -16,24 +16,14 @@
 
 package org.entrystore.repository.transformation;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Vector;
-
-import org.entrystore.GraphType;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.QuotaException;
-import org.entrystore.repository.RepositoryException;
 import org.entrystore.ResourceType;
 import org.entrystore.impl.EntryImpl;
+import org.entrystore.repository.RepositoryException;
 import org.openrdf.model.BNode;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Resource;
@@ -53,6 +43,17 @@ import org.openrdf.rio.n3.N3ParserFactory;
 import org.openrdf.sail.memory.MemoryStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
 
 
 public class SCAM2Import {
@@ -126,7 +127,7 @@ public class SCAM2Import {
 		StatementCollector collector = new StatementCollector();
 		parser.setRDFHandler(collector);
 		try {
-			FileInputStream fileOut = new FileInputStream(new File(this.backup, "manifest.n3"));
+			InputStream fileOut = Files.newInputStream(new File(this.backup, "manifest.n3").toPath());
 			parser.parse(fileOut, "");
 			fileOut.close();
 			Graph graph = new GraphImpl(collector.getStatements());
@@ -273,7 +274,7 @@ public class SCAM2Import {
 			try {
 				File file = new File(files, locStr);
 				if (file.exists()) {
-					data.setData(new FileInputStream(file));
+					data.setData(Files.newInputStream(file.toPath()));
 				}
 			} catch (IOException e) {
 				e.printStackTrace();

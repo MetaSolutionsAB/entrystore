@@ -24,14 +24,13 @@ import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Iterator;
@@ -215,7 +214,7 @@ public class PropertiesConfiguration implements Config {
 			String escapedURL = configURL.toString().replaceAll(" ", "%20");
 			URI url = new URI(escapedURL);
 			File file = new File(url);
-			InputStreamReader input = new InputStreamReader(new FileInputStream(file), "UTF-8");
+			InputStreamReader input = new InputStreamReader(Files.newInputStream(file.toPath()), "UTF-8");
 			config.load(input);
 			input.close();
 		} catch (URISyntaxException e) {
@@ -228,7 +227,7 @@ public class PropertiesConfiguration implements Config {
 			String escapedURL = configURL.toString().replaceAll(" ", "%20");
 			URI url = new URI(escapedURL.toString());
 			File file = new File(url);
-			OutputStreamWriter output = new OutputStreamWriter(new FileOutputStream(file), "UTF-8");
+			OutputStreamWriter output = new OutputStreamWriter(Files.newOutputStream(file.toPath()), "UTF-8");
 			config.store(output, configName);
 			output.close();
 		} catch (URISyntaxException e) {

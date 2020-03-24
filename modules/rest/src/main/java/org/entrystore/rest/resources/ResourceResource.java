@@ -89,15 +89,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Enumeration;
@@ -441,7 +442,7 @@ public class ResourceResource extends BaseResource {
 	public File writeStreamToTmpFile(InputStream is) throws IOException {
 		File tmpFile = File.createTempFile("scam_import_", ".zip");
 		log.info("[IMPORT] Created temporary file: " + tmpFile);
-		FileOutputStream fos = new FileOutputStream(tmpFile);
+		OutputStream fos = Files.newOutputStream(tmpFile.toPath());
 		FileOperations.copyFile(is, fos);
 		return tmpFile;
 	}
