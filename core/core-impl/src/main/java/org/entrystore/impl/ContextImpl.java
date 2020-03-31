@@ -122,7 +122,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					
 					List<Statement> stmntsToAdd = new ArrayList<Statement>();
 
-					// create new index by finding all sesame contexts which belong to this SCAM context
+					// create new index by finding all sesame contexts which belong to this context
 					int maxIndex = 0;
 					RepositoryResult<Statement> resources = rc.getStatements(null, RepositoryProperties.resource, null, false);
 					while (resources.hasNext()) {
