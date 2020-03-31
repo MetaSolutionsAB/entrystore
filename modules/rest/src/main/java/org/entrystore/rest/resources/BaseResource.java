@@ -242,7 +242,11 @@ public abstract class BaseResource extends ServerResource {
 
 	protected Representation createEmptyRepresentationWithLastModified(Date modificationDate) {
 		Representation result = new EmptyRepresentation();
-		result.setModificationDate(modificationDate);
+		if (modificationDate != null) {
+			result.setModificationDate(modificationDate);
+		} else {
+			log.warn("Last-Modified header could not be set because the entry does not have a modification date: " + entry.getEntryURI());
+		}
 		return result;
 	}
 

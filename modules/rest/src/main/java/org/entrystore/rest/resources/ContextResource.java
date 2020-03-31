@@ -90,7 +90,7 @@ public class ContextResource extends BaseResource {
 	 * This URL can be requested from a Web browser etc. This method will 
 	 * execute a requests and deliver a response.
 	 * <ul>
-	 * <li>GET {base-uri}/{portfolio-id}</li>
+	 * <li>GET {base-uri}/{context-id}</li>
 	 * </ul>
 	 * 
 	 * return {@link Representation}
@@ -99,9 +99,10 @@ public class ContextResource extends BaseResource {
 	public Representation represent() throws ResourceException {	
 		if (context == null) {
 			log.debug("The given context id does not exist.");
-			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
-			return new JsonRepresentation(JSONErrorMessages.errorWrongContextIDmsg); 
+			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+			return new JsonRepresentation(JSONErrorMessages.errorWrongContextIDmsg);
 		}
+
         if (!getPM().isUserAdminOrAdminGroup(null)) {
             return unauthorizedGET();
         }
@@ -265,10 +266,11 @@ public class ContextResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(JSONErrorMessages.errorCantCreateEntry, MediaType.APPLICATION_JSON);
 			} else {
-				// Success, return 201 and the new entry id in the response.
+				// Success, return 201 and the new entry ID/URI in response and header
 				getResponse().setStatus(Status.SUCCESS_CREATED);
 				getResponse().setLocationRef(entry.getEntryURI().toString());
-				getResponse().setEntity("{\"entryId\":\""+entry.getId()+"\"}", MediaType.APPLICATION_JSON);
+				getResponse().setEntity(new JsonRepresentation("{\"entryId\":\"" + entry.getId() + "\"}"));
+				getResponse().getEntity().setModificationDate(entry.getModifiedDate());
 			}
 		} catch (AuthorizationException e) {
 			unauthorizedPOST();

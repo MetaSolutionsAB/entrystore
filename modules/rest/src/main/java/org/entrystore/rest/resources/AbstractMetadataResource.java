@@ -197,7 +197,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 			// set modification date only in case it has not been
 			// set before (e.g. when handling recursive-requests)
-			Date lastMod = entry.getModifiedDate();
+			Date lastMod = getModificationDate();
 			if (lastMod != null && result.getModificationDate() == null) {
 				result.setModificationDate(lastMod);
 			}
@@ -224,7 +224,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 			MediaType mt = (format != null) ? format : getRequestEntity().getMediaType();
 			copyRepresentationToMetadata(r, getMetadata(), mt);
-			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
+			getResponse().setEntity(createEmptyRepresentationWithLastModified(getModificationDate()));
 		} catch (AuthorizationException e) {
 			unauthorizedPUT();
 		}
@@ -304,9 +304,15 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	}
 
 	/**
-	 * @return the relevant metadata graph. May be null.
+	 * @return Returns the relevant metadata graph. May be null.
 	 */
 	protected abstract Metadata getMetadata();
+
+	/**
+	 * @return Returns the modification date of the metadata graph. Only external metadata has its own date;
+	 * local metadata has the same modification date as the entry itself
+	 */
+	protected abstract Date getModificationDate();
 
 	/**
 	 * Performs a traversal of the metadata graphs of the entries to
