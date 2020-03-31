@@ -82,6 +82,7 @@ public class CookieVerifier implements Verifier {
 				} else {
 					log.debug("Auth token not found in token cache: " + authToken);
 					cleanCookies("auth_token", request, response);
+					return RESULT_INVALID;
 				}
 			}
 
