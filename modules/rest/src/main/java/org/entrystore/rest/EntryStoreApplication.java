@@ -245,8 +245,6 @@ public class EntryStoreApplication extends Application {
 
 		boolean passwordAuthOff = "off".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD, "on"));
 
-		reservedNames.add("favicon.ico");
-		
 		// to prevent unnecessary context-id lookups we route favicon.ico to a real icon
 		reservedNames.add("favicon.ico");
 		router.attach("/favicon.ico", FaviconResource.class);
