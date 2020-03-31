@@ -42,6 +42,7 @@ import org.entrystore.rest.auth.ExistingUserRedirectAuthenticator;
 import org.entrystore.rest.auth.NewUserRedirectAuthenticator;
 import org.entrystore.rest.auth.SimpleAuthenticator;
 import org.entrystore.rest.filter.CORSFilter;
+import org.entrystore.rest.filter.CacheControlFilter;
 import org.entrystore.rest.filter.IgnoreAuthFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
@@ -352,6 +353,7 @@ public class EntryStoreApplication extends Application {
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
+		CacheControlFilter cacheControl = new CacheControlFilter();
 
 		ignoreAuth.setNext(cookieAuth);
 
@@ -365,7 +367,8 @@ public class EntryStoreApplication extends Application {
 			basicAuth.setNext(jsCallback);
 		}
 
-		jsCallback.setNext(modLockOut);
+		jsCallback.setNext(cacheControl);
+		cacheControl.setNext(modLockOut);
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
 			log.info("Enabling CORS");
