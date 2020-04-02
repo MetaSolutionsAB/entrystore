@@ -34,8 +34,8 @@
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
                     <compilerArgument></compilerArgument>
                 </configuration>
             </plugin>
@@ -76,4 +76,5 @@
             <version>${servlet.version}</version>
         </dependency>
     </dependencies>
+
 </project>

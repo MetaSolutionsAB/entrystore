@@ -23,18 +23,20 @@
 
     <!-- ================= Default Properties ================= -->
     <properties>
-        <restlet.version>2.4.3</restlet.version>
-        <solr.version>8.3.0</solr.version>
-        <sesame.version>2.7.16</sesame.version>
-        <slf4j.version>1.7.26</slf4j.version>
+	<restlet.version>2.4.3</restlet.version>
+	<solr.version>8.3.0</solr.version>
+	<sesame.version>2.7.16</sesame.version>
+	<slf4j.version>1.7.26</slf4j.version>
 	<servlet.version>3.1.0</servlet.version>
 	<xerces.version>2.9.1</xerces.version>
 	<jaxb.version>2.3.1</jaxb.version>
 	<guava.version>28.1-jre</guava.version>
-        <site.url>https://entrystore.org</site.url>
-        <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
-        <distribution.url>https://entrystore.org</distribution.url>
-        <license.licenseName>apache_v2</license.licenseName>
+	<site.url>https://entrystore.org</site.url>
+	<distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
+	<distribution.url>https://entrystore.org</distribution.url>
+	<license.licenseName>apache_v2</license.licenseName>
+	<maven.compiler.source>1.8</maven.compiler.source>
+	<maven.compiler.target>1.8</maven.compiler.target>
     </properties>
 
     <!-- ================= Developers ================= -->
@@ -133,8 +135,8 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.7.0</version>
                     <configuration>
-                        <source>1.8</source>
-                        <target>1.8</target>
+			<source>${maven.compiler.source}</source>
+			<target>${maven.compiler.target}</target>
                         <encoding>UTF-8</encoding>
                     </configuration>
                 </plugin>
