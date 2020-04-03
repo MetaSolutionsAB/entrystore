@@ -50,11 +50,11 @@ public class LogoutResource extends BaseResource {
 		}
 		
 		// remove all auth_token cookies
-		CookieVerifier.cleanCookies("auth_token", getRequest(), getResponse());
+		CookieVerifier.cleanCookies(getRM(), "auth_token", getRequest(), getResponse());
 		
 		// remove also eventually existing OpenID-related cookies
-		CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_IDENTIFIER_COOKIE, getRequest(), getResponse());
-		CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, getRequest(), getResponse());
+		CookieVerifier.cleanCookies(getRM(), RedirectAuthenticator.DEFAULT_IDENTIFIER_COOKIE, getRequest(), getResponse());
+		CookieVerifier.cleanCookies(getRM(), RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, getRequest(), getResponse());
 		
 		getResponse().setStatus(Status.SUCCESS_OK);
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));

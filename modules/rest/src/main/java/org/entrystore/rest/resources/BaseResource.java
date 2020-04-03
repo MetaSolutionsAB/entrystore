@@ -117,6 +117,7 @@ public abstract class BaseResource extends ServerResource {
 		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
 
+	// TODO move this into a ServerInfoFilter that processes before the authentication mechanism
 	@Override
 	public ServerInfo getServerInfo() {
 		if (serverInfo == null) {

@@ -16,9 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
-
 import org.entrystore.rest.auth.CookieVerifier;
 import org.restlet.data.Status;
 import org.restlet.ext.openid.RedirectAuthenticator;
@@ -28,6 +25,9 @@ import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 
 
 /**
@@ -45,8 +45,8 @@ public class OpenIdResource extends BaseResource {
 		// without getting some cached session from which we cannot get user
 		// information such as email address. A cached session would require us
 		// to keep track of OpenID logins mapped to internal users.
-		CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_IDENTIFIER_COOKIE, getRequest(), getResponse());
-		CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, getRequest(), getResponse());
+		CookieVerifier.cleanCookies(getRM(), RedirectAuthenticator.DEFAULT_IDENTIFIER_COOKIE, getRequest(), getResponse());
+		CookieVerifier.cleanCookies(getRM(), RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, getRequest(), getResponse());
 
 		if (!getPM().getGuestUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
 			if (parameters.containsKey("redirectOnSuccess")) {

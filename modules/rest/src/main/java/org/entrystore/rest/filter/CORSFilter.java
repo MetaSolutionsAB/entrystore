@@ -45,32 +45,36 @@ public class CORSFilter extends Filter {
 	@Override
 	protected void afterHandle(Request request, Response response) {
 		if (request != null && response != null) {
-			// we only support GET, PUT, POST, DELETE and HEAD
-			// OPTIONS for CORS preflight requests is handled in BaseResource
-			Method m = request.getMethod();
-			if (Method.GET.equals(m) || Method.PUT.equals(m) ||	Method.POST.equals(m) || Method.DELETE.equals(m) ||	Method.HEAD.equals(m)) {
-				Series reqHeaders = (Series) request.getAttributes().get("org.restlet.http.headers");
-				String origin = reqHeaders.getFirstValue("Origin", true);
-				if (origin != null) {
-					if (!cors.isValidOrigin(origin)) {
-						// logging this only on debug-level because some browsers send an
-						// Origin-header even on same-origin PUT/POST/DELETE (Chrome e.g.)
-						log.debug("Received CORS request with disallowed origin");
-						return;
-					}
+			addCorsHeader(request, response);
+		}
+	}
 
-					response.setAccessControlAllowOrigin(origin);
-					response.setAccessControlAllowCredentials(true);
-					if (cors.getMaxAge() > -1) {
-						response.setAccessControlMaxAge(cors.getMaxAge());
-					}
-					if (cors.getAllowedHeaders() != null) {
-						response.setAccessControlAllowHeaders(cors.getAllowedHeaders());
-						response.setAccessControlExposeHeaders(cors.getAllowedHeaders());
-					}
+	public void addCorsHeader(Request request, Response response) {
+		// we only support GET, PUT, POST, DELETE and HEAD
+		// OPTIONS for CORS preflight requests is handled in BaseResource
+		Method m = request.getMethod();
+		if (Method.GET.equals(m) || Method.PUT.equals(m) ||	Method.POST.equals(m) || Method.DELETE.equals(m) ||	Method.HEAD.equals(m)) {
+			Series reqHeaders = (Series) request.getAttributes().get("org.restlet.http.headers");
+			String origin = reqHeaders.getFirstValue("Origin", true);
+			if (origin != null) {
+				if (!cors.isValidOrigin(origin)) {
+					// logging this only on debug-level because some browsers send an
+					// Origin-header even on same-origin PUT/POST/DELETE (Chrome e.g.)
+					log.debug("Received CORS request with disallowed origin");
+					return;
+				}
+
+				response.setAccessControlAllowOrigin(origin);
+				response.setAccessControlAllowCredentials(true);
+				if (cors.getMaxAge() > -1) {
+					response.setAccessControlMaxAge(cors.getMaxAge());
+				}
+				if (cors.getAllowedHeaders() != null) {
+					response.setAccessControlAllowHeaders(cors.getAllowedHeaders());
+					response.setAccessControlExposeHeaders(cors.getAllowedHeaders());
 				}
 			}
 		}
 	}
-	
+
 }

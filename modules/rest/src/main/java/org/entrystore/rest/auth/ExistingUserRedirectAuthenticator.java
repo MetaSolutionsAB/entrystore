@@ -80,14 +80,14 @@ public class ExistingUserRedirectAuthenticator extends RedirectAuthenticator {
 	protected int authenticated(Request request, Response response) {
 		User u = pm.getUser(pm.getAuthenticatedUserURI());
 		if (u == null || pm.getGuestUser().getURI().equals(u.getURI())) {
-			CookieVerifier.cleanCookies("auth_token", request, response);
-			CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_IDENTIFIER_COOKIE, request, response);
-			CookieVerifier.cleanCookies(RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, request, response);
+			CookieVerifier.cleanCookies(rm,"auth_token", request, response);
+			CookieVerifier.cleanCookies(rm, RedirectAuthenticator.DEFAULT_IDENTIFIER_COOKIE, request, response);
+			CookieVerifier.cleanCookies(rm, RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, request, response);
 			response.setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 			return SKIP;
 		}
 		
-		CookieVerifier.cleanCookies("auth_token", request, response);
+		CookieVerifier.cleanCookies(rm,"auth_token", request, response);
 
 		int maxAge = 7 * 24 * 3600;
 		String token = Password.getRandomBase64(128);

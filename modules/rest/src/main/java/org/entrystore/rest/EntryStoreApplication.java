@@ -346,7 +346,8 @@ public class EntryStoreApplication extends Application {
 
 		router.attachDefault(DefaultResource.class);
 
-		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm), pm);
+		CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
+		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm, corsFilter), pm);
 
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
@@ -370,7 +371,6 @@ public class EntryStoreApplication extends Application {
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
 			log.info("Enabling CORS");
-			CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
 			modLockOut.setNext(corsFilter);
 			corsFilter.setNext(router);
 		} else {
