@@ -31,14 +31,19 @@ stepdefinitions:
   - dockerhub: &dockerhub
       name: Docker Hub
       script:
+        - docker version
         - export VERSION=`cat VERSION.txt`
+        - echo $VERSION
         - git clone git@bitbucket.org:metasolutions/docker.git
         - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
         - cd docker/entrystore
         - ls -l
-#        - docker build --build-arg ENTRYSTORE_VERSION=$VERSION -t metasolutions/entrystore:$VERSION .
-#        - docker push metasolutions/entrystore:$VERSION
+        - docker build --build-arg ENTRYSTORE_VERSION=$VERSION -t metasolutions/entrystore:$VERSION .
+        - docker push metasolutions/entrystore:$VERSION
+        - if [ $BITBUCKET_BRANCH == "develop" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:develop ; docker push metasolutions/entrystore:develop ; fi
       services:
+        - docker
+      caches:
         - docker
 
 pipelines:
