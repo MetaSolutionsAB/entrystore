@@ -10,9 +10,6 @@ stepdefinitions:
         - maven
       script:
         - mvn --version
-        - gpg --version
-        - echo $GPG_SIGN_KEY | base64 -d | gpg --import
-        - gpg --list-secret-keys
         - mvn clean install
         - rm -rf ~/.m2/repository/org/entrystore/
       artifacts:
@@ -20,6 +17,9 @@ stepdefinitions:
   - deploy: &deploy
       name: Deploy
       script:
+        - gpg --version
+        - echo $GPG_SIGN_KEY | base64 -d | gpg --import
+        - gpg --list-secret-keys
         - export VERSION=`cat VERSION.txt`
         - echo $VERSION
         - export FILE_BASE="entrystore-rest-$VERSION"
