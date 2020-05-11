@@ -50,7 +50,7 @@
                         </program>
                     </programs>
                     <assembleDirectory>${project.build.directory}/dist</assembleDirectory>
-                    <extraJvmArguments>-Xms512m</extraJvmArguments>
+                    <extraJvmArguments></extraJvmArguments>
                 </configuration>
                 <executions>
                     <execution>
