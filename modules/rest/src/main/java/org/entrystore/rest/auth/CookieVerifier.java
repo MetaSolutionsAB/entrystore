@@ -93,7 +93,7 @@ public class CookieVerifier implements Verifier {
 					if (corsFilter != null) {
 						corsFilter.addCorsHeader(request, response);
 					}
-					return RESULT_INVALID;
+					// return RESULT_INVALID;
 				}
 			}
 
