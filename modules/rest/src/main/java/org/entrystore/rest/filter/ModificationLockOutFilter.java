@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.filter;
 
+import org.entrystore.repository.RepositoryManager;
 import org.entrystore.rest.EntryStoreApplication;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -32,18 +33,23 @@ import org.slf4j.LoggerFactory;
 public class ModificationLockOutFilter extends Filter {
 	
 	static private Logger log = LoggerFactory.getLogger(ModificationLockOutFilter.class);
+
+	static private RepositoryManager rm = null;
 	
 	@Override
 	protected int beforeHandle(Request request, Response response) {
+		String path = request.getResourceRef().getPath();
 		if (request.getMethod().equals(Method.GET)) {
 			return CONTINUE;
+		} else if (path != null && (path.startsWith("/auth/login") || path.startsWith("/auth/cookie") || path.startsWith("/auth/logout"))) {
+			return CONTINUE;
 		} else {
-			EntryStoreApplication esa = (EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY);
-			boolean lockout = esa.getRM().hasModificationLockOut();
-			if (lockout) {
+			if (rm == null) {
+				rm = ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getRM();
+			}
+			if (rm.hasModificationLockOut()) {
 				String maintMsg = "The service is being maintained and does not accept modification requests right now, please check back later";
 				response.setStatus(Status.SERVER_ERROR_SERVICE_UNAVAILABLE, maintMsg);
-				log.warn(maintMsg);
 				return STOP;
 			}
 		}
