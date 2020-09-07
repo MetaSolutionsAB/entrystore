@@ -184,25 +184,32 @@ public class ContextResource extends BaseResource {
 			
 			Entry entry = null; // A variable to store the new entry in.
 
-			// Local
-			if (!parameters.containsKey("entrytype") || parameters.get("entrytype").equalsIgnoreCase("local")) {
-				entry = createLocalEntry(entry); 
-			} else {
-				String lT = parameters.get("entrytype"); 
-				// Link
-				if (lT.equalsIgnoreCase("link") && parameters.containsKey("resource")) {
-					entry = createLinkEntry(entry); 
-				} 
-				// Reference
-				else if (lT.equalsIgnoreCase("reference") && parameters.containsKey("resource") 
-						&& parameters.containsKey("cached-external-metadata")) {
-					entry = createReferenceEntry(entry);
+			try {
+				// Local
+				if (!parameters.containsKey("entrytype") || parameters.get("entrytype").equalsIgnoreCase("local")) {
+					entry = createLocalEntry(entry);
+				} else {
+					String lT = parameters.get("entrytype");
+					// Link
+					if (lT.equalsIgnoreCase("link") && parameters.containsKey("resource")) {
+						entry = createLinkEntry(entry);
+					}
+					// Reference
+					else if (lT.equalsIgnoreCase("reference") && parameters.containsKey("resource")
+							&& parameters.containsKey("cached-external-metadata")) {
+						entry = createReferenceEntry(entry);
+					}
+					// LinkReference
+					else if (lT.equalsIgnoreCase("linkreference") && parameters.containsKey("resource")
+							&& parameters.containsKey("cached-external-metadata")) {
+						entry = createLinkReferenceEntry(entry);
+					}
 				}
-				// LinkReference 
-				else if (lT.equalsIgnoreCase("linkreference") && parameters.containsKey("resource") 
-						&& parameters.containsKey("cached-external-metadata")) {
-					entry = createLinkReferenceEntry(entry);
-				}
+			} catch (IllegalArgumentException iae) {
+				log.debug(iae.getMessage());
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				getResponse().setEntity(new JsonRepresentation(new JSONObject().put("error", iae.getMessage())));
+				return;
 			}
 			
 			if (entry != null) {
