@@ -35,8 +35,7 @@
 	<distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
 	<distribution.url>https://entrystore.org</distribution.url>
 	<license.licenseName>apache_v2</license.licenseName>
-	<maven.compiler.source>1.8</maven.compiler.source>
-	<maven.compiler.target>1.8</maven.compiler.target>
+	<maven.compiler.release>11</maven.compiler.release>
     </properties>
 
     <!-- ================= Developers ================= -->
@@ -133,10 +132,9 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.7.0</version>
+                    <version>3.8.0</version>
                     <configuration>
-			<source>${maven.compiler.source}</source>
-			<target>${maven.compiler.target}</target>
+			<release>${maven.compiler.release}</release>
                         <encoding>UTF-8</encoding>
                     </configuration>
                 </plugin>
