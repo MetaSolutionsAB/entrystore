@@ -49,6 +49,7 @@ import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.vocabulary.RDF;
+import org.openrdf.query.Update;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -225,6 +226,19 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
+	public void clearSolrIndexFromExpiredEntries(SolrClient solrServer, Date expirationDate) {
+		UpdateRequest req = new UpdateRequest();
+		SimpleDateFormat dateFormatUTC = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
+		dateFormatUTC.setTimeZone(TimeZone.getTimeZone("UTC"));
+		String solrExpirationDate = ClientUtils.escapeQueryChars(dateFormatUTC.format(expirationDate));
+		req.deleteByQuery("indexed:[* TO " + solrExpirationDate + "}");
+		try {
+			req.process(solrServer);
+		} catch (SolrServerException | IOException e) {
+			log.error(e.getMessage(), e);
+		}
+	}
+
 	public void clearSolrIndexFromContextEntries(SolrClient solrServer, Entry contextEntry) {
 		UpdateRequest req = new UpdateRequest();
 		req.deleteByQuery("context:" + ClientUtils.escapeQueryChars(contextEntry.getResourceURI().toString()));
@@ -254,7 +268,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		try {
-			clearSolrIndex(solrServer);
+			Date reindexStart = new Date();
 
 			PrincipalManager pm = rm.getPrincipalManager();
 			URI currentUser = pm.getAuthenticatedUserURI();
@@ -282,6 +296,8 @@ public class SolrSearchIndex implements SearchIndex {
 						}
 					}
 				}
+
+				clearSolrIndexFromExpiredEntries(solrServer, reindexStart);
 			} finally {
 				pm.setAuthenticatedUserURI(currentUser);
 			}
