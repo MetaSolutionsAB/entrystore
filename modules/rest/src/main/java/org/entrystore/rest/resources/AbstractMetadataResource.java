@@ -179,7 +179,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				if (fileName == null) {
 					fileName = entry.getId();
 				}
-				fileName += ".rdf";
+				fileName += "." + getFileExtensionForMediaType(prefFormat);
 
 				// offer download in case client requested this
 				Disposition disp = new Disposition();
@@ -441,6 +441,14 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			}
 		}
 		return result;
+	}
+
+	private String getFileExtensionForMediaType(MediaType mt) {
+		RDFFormat rdfFormat = RDFFormat.forMIMEType(mt.getName());
+		if (rdfFormat != null && rdfFormat.getDefaultFileExtension() != null) {
+			return rdfFormat.getDefaultFileExtension();
+		}
+		return "rdf";
 	}
 
 }
