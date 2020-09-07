@@ -38,7 +38,7 @@ public class ModificationLockOutFilter extends Filter {
 	
 	@Override
 	protected int beforeHandle(Request request, Response response) {
-		String path = request.getResourceRef().getPath();
+		String path = request.getResourceRef().getRemainingPart();
 		if (request.getMethod().equals(Method.GET)) {
 			return CONTINUE;
 		} else if (path != null && (path.startsWith("/auth/login") || path.startsWith("/auth/cookie") || path.startsWith("/auth/logout"))) {
