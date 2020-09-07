@@ -214,6 +214,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <!-- id is needed for duplicate detection, configured in solrconfig.xml -->
         <field name="id" type="string" indexed="true"/>
 
+        <field name="indexed" type="date" indexed="true" stored="true" default="NOW" multiValued="false"/>
         <field name="uri" type="string" indexed="true" stored="true"/>
         <field name="resource" type="string" indexed="true" stored="true"/>
         <field name="context" type="string" indexed="true"/>
