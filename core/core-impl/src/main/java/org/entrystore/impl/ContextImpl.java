@@ -250,7 +250,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	void loadIndex() {
 		try {
-			synchronized (this.entry.repository) {
+			synchronized (this.entry) {
 				if (res2entry != null) {
 					return;
 				}
