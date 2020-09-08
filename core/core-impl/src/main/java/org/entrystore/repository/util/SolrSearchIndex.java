@@ -231,7 +231,7 @@ public class SolrSearchIndex implements SearchIndex {
 		SimpleDateFormat dateFormatUTC = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
 		dateFormatUTC.setTimeZone(TimeZone.getTimeZone("UTC"));
 		String solrExpirationDate = ClientUtils.escapeQueryChars(dateFormatUTC.format(expirationDate));
-		req.deleteByQuery("indexed:[* TO " + solrExpirationDate + "}");
+		req.deleteByQuery("indexedAt:[* TO " + solrExpirationDate + "}");
 		try {
 			req.process(solrServer);
 		} catch (SolrServerException | IOException e) {
