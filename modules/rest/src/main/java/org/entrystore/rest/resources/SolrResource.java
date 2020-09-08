@@ -57,12 +57,7 @@ public class SolrResource extends BaseResource {
 				String command = parameters.get("cmd");
 				if ("reindex".equals(command)) {
 					if (getRM().getIndex() != null) {
-						Runnable reindexThread = new Runnable() {
-							public void run() {
-								getRM().getIndex().reindex();
-							}
-						};
-						new Thread(reindexThread).start();
+						new Thread(() -> getRM().getIndex().reindex(false)).start();
 						log.info("Started reindexing thread");
 						getResponse().setStatus(Status.SUCCESS_ACCEPTED);
 						return new JsonRepresentation(Util.createResponseObject(Status.SUCCESS_ACCEPTED.getCode(), "Started reindexing"));

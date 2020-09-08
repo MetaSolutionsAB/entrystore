@@ -27,7 +27,7 @@ public interface SearchIndex {
 
 	public void shutdown();
 
-	public void reindex();
+	public void reindex(boolean purgeAllBeforeReindex);
 
 	public void postEntry(Entry entry);
 

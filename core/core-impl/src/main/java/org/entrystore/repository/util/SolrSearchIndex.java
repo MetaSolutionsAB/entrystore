@@ -49,7 +49,6 @@ import org.openrdf.model.Literal;
 import org.openrdf.model.Statement;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.vocabulary.RDF;
-import org.openrdf.query.Update;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -228,9 +227,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public void clearSolrIndexFromExpiredEntries(SolrClient solrServer, Date expirationDate) {
 		UpdateRequest req = new UpdateRequest();
-		SimpleDateFormat dateFormatUTC = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
-		dateFormatUTC.setTimeZone(TimeZone.getTimeZone("UTC"));
-		String solrExpirationDate = ClientUtils.escapeQueryChars(dateFormatUTC.format(expirationDate));
+		String solrExpirationDate = ClientUtils.escapeQueryChars(solrDateFormatter.format(expirationDate));
 		req.deleteByQuery("indexedAt:[* TO " + solrExpirationDate + "}");
 		try {
 			req.process(solrServer);
@@ -253,8 +250,27 @@ public class SolrSearchIndex implements SearchIndex {
 	 * Reindexes the Solr index. Does not return before the process is
 	 * completed. All subsequent calls to this method are ignored until other
 	 * eventually running reindexing processes are completed.
+	 *
+	 * @param purgeAllBeforeReindex If true, the index will be emptied before re-indexation
+	 *                                 starts. If false, expired entries will be removed after
+	 *                                 re-indexation is finished.
 	 */
-	public void reindex() {
+	public void reindex(boolean purgeAllBeforeReindex) {
+		reindex(null, purgeAllBeforeReindex);
+	}
+
+	/**
+	 * Re-indexes a context and all of its entries in Solr. Does not return before the
+	 * process is completed. All subsequent calls to this method with the same context URI
+	 * are ignored if another eventually running re-indexing process of the same
+	 * context exists.
+	 *
+	 * @param contextURI The URI of the context to be re-indexed.
+	 * @param purgeAllBeforeReindex If true, the index will be emptied before re-indexation
+	 *                                 starts. If false, expired entries will be removed after
+	 *                                 re-indexation is finished.
+	 */
+	public void reindex(URI contextURI, boolean purgeAllBeforeReindex) {
 		if (solrServer == null) {
 			log.warn("Ignoring request as Solr is not used by this instance");
 			return;
@@ -267,42 +283,60 @@ public class SolrSearchIndex implements SearchIndex {
 			reindexing = true;
 		}
 
+		log.info("Starting reindexing of Solr");
+
 		try {
+			if (purgeAllBeforeReindex) {
+				clearSolrIndex(solrServer);
+			}
+
 			Date reindexStart = new Date();
 
 			PrincipalManager pm = rm.getPrincipalManager();
 			URI currentUser = pm.getAuthenticatedUserURI();
 			try {
 				pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-				ContextManager cm = rm.getContextManager();
-				Set<URI> contexts = cm.getEntries();
+				Set<URI> contexts = rm.getContextManager().getEntries();
 
-				for (URI contextURI : contexts) {
-					String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
-					Context context = cm.getContext(id);
-					if (context != null) {
-						Set<URI> entries = context.getEntries();
-						for (URI entryURI : entries) {
-							if (entryURI != null) {
-								Entry entry = cm.getEntry(entryURI);
-								if (entry == null) {
-									continue;
-								}
-								synchronized (postQueue) {
-									log.info("Adding document to Solr post queue: " + entryURI);
-									postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
-								}
-							}
-						}
+				if (contextURI != null) {
+					for (URI cUri : contexts) {
+						postContextEntriesToQueue(cUri);
 					}
+				} else {
+					postContextEntriesToQueue(contextURI);
 				}
 
-				clearSolrIndexFromExpiredEntries(solrServer, reindexStart);
+				if (!purgeAllBeforeReindex) {
+					clearSolrIndexFromExpiredEntries(solrServer, reindexStart);
+				}
 			} finally {
 				pm.setAuthenticatedUserURI(currentUser);
 			}
+
+			log.info("Reindexing of Solr is finished, took " + (new Date().getTime() - reindexStart.getTime()) + " ms");
 		} finally {
 			reindexing = false;
+		}
+	}
+
+	private void postContextEntriesToQueue(URI contextURI) {
+		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
+		ContextManager cm = rm.getContextManager();
+		Context context = cm.getContext(id);
+		if (context != null) {
+			Set<URI> entries = context.getEntries();
+			for (URI entryURI : entries) {
+				if (entryURI != null) {
+					Entry entry = cm.getEntry(entryURI);
+					if (entry == null) {
+						continue;
+					}
+					synchronized (postQueue) {
+						log.info("Adding document to Solr post queue: " + entryURI);
+						postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+					}
+				}
+			}
 		}
 	}
 
