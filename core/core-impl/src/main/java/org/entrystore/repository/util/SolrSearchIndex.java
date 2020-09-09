@@ -334,6 +334,14 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
+	public boolean isIndexing() {
+		return isIndexing(null);
+	}
+
+	public boolean isIndexing(URI contextURI) {
+		return reindexing.contains(contextURI);
+	}
+
 	private void postContextEntriesToQueue(URI contextURI) {
 		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
 		ContextManager cm = rm.getContextManager();
