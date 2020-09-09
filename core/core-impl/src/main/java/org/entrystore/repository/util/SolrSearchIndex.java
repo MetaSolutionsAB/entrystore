@@ -60,6 +60,7 @@ import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -83,8 +84,6 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final int BATCH_SIZE_DELETE = 100;
 
-	private volatile boolean reindexing = false;
-
 	private boolean extractFulltext = false;
 
 	private boolean related = false;
@@ -100,6 +99,8 @@ public class SolrSearchIndex implements SearchIndex {
 	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
 
 	private final Queue<URI> deleteQueue = Queues.newConcurrentLinkedQueue();
+
+	private final Set<URI> reindexing = Collections.synchronizedSet(new HashSet<>());
 
 	private SimpleDateFormat solrDateFormatter;
 
@@ -276,11 +277,18 @@ public class SolrSearchIndex implements SearchIndex {
 			return;
 		}
 
-		if (reindexing) {
-			log.warn("Solr is already being reindexed: ignoring additional reindexing request");
-			return;
-		} else {
-			reindexing = true;
+		synchronized (reindexing) {
+			if (reindexing.contains(contextURI)) {
+				log.warn("Solr is already being reindexed: ignoring additional reindexing request");
+				return;
+			} else {
+				if (contextURI != null) {
+					log.debug("Locking context " + contextURI + " to prevent additional reindexing");
+				} else {
+					log.debug("Locking global repository to prevent additional reindexing");
+				}
+				reindexing.add(contextURI);
+			}
 		}
 
 		log.info("Starting reindexing of Solr");
@@ -315,7 +323,14 @@ public class SolrSearchIndex implements SearchIndex {
 
 			log.info("Reindexing of Solr is finished, took " + (new Date().getTime() - reindexStart.getTime()) + " ms");
 		} finally {
-			reindexing = false;
+			synchronized (reindexing) {
+				if (contextURI != null) {
+					log.debug("Unlocking context " + contextURI + " for future reindexing");
+				} else {
+					log.debug("Unlocking global repository for future reindexing");
+				}
+				reindexing.remove(contextURI);
+			}
 		}
 	}
 
