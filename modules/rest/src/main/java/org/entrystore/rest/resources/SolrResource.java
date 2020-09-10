@@ -69,10 +69,10 @@ public class SolrResource extends BaseResource {
 		}
 
 		// JSON for reindexing request: { "command": "reindex", "context": "uri or null" }
-		if ("reindex".equalsIgnoreCase(request.getString("command"))) {
+		if (request.has("command") && "reindex".equalsIgnoreCase(request.getString("command"))) {
 			PrincipalManager pm = getRM().getPrincipalManager();
 			URI authUser = pm.getAuthenticatedUserURI();
-			String contextURIStr = request.getString("context");
+			String contextURIStr = request.has("context") ? request.getString("context") : null;
 			if (contextURIStr == null) {
 				if (!pm.getAdminUser().getURI().equals(authUser) && !pm.getAdminGroup().isMember(pm.getUser(authUser))) {
 					unauthorizedPOST();
