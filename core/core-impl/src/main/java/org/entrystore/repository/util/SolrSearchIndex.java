@@ -476,7 +476,7 @@ public class SolrSearchIndex implements SearchIndex {
 			User user = (org.entrystore.User) entry.getResource();
 			String username = user.getName();
 			if (username != null) {
-				doc.addField("username", user.getName());
+				doc.addField("username", username);
 			}
 		}
 
