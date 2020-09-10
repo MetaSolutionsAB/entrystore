@@ -41,6 +41,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.SearchIndex;
+import org.entrystore.User;
 import org.entrystore.impl.LocalMetadataWrapper;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
@@ -432,7 +433,7 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.addField("acl.resource.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
 		doc.addField("acl.resource.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteResource));
 
-		//Status
+		// status
 		URI status = entry.getStatus();
 		if (status != null) {
 			doc.setField("status", status.toString());
@@ -468,6 +469,15 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 		if (name.length() > 0) {
 			doc.addField("title", name);
+		}
+
+		// user name
+		if (GraphType.User.equals(entry.getGraphType())) {
+			User user = (org.entrystore.User) entry.getResource();
+			String username = user.getName();
+			if (username != null) {
+				doc.addField("username", user.getName());
+			}
 		}
 
 		// description
