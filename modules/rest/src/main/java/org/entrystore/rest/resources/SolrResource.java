@@ -78,13 +78,7 @@ public class SolrResource extends BaseResource {
 					unauthorizedPOST();
 					return;
 				} else {
-					if (getRM().getIndex().isIndexing()) {
-						getResponse().setStatus(Status.CLIENT_ERROR_LOCKED);
-						return;
-					}
-
-					new Thread(() -> getRM().getIndex().reindex(false)).start();
-					log.info("Started reindexing thread for global repository");
+					getRM().getIndex().reindex(false);
 					getResponse().setStatus(Status.SUCCESS_ACCEPTED);
 					return;
 				}
@@ -98,13 +92,7 @@ public class SolrResource extends BaseResource {
 					return;
 				}
 
-				if (getRM().getIndex().isIndexing(contextURI)) {
-					getResponse().setStatus(Status.CLIENT_ERROR_LOCKED);
-					return;
-				}
-
-				new Thread(() -> getRM().getIndex().reindex(contextURI, false)).start();
-				log.info("Started reindexing thread for context " + contextURI);
+				getRM().getIndex().reindex(contextURI, false);
 				getResponse().setStatus(Status.SUCCESS_ACCEPTED);
 				return;
 			}

@@ -694,10 +694,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			solrIndex = new SolrSearchIndex(this, solrServer);
 			if (reindex) {
 				if (reindexWait) {
-					solrIndex.reindex(true);
+					solrIndex.reindexSync(true);
 				} else {
-					log.info("Starting new thread to reindex Solr in the background");
-					new Thread(() -> solrIndex.reindex(false)).start();
+					solrIndex.reindex(false);
 				}
 			}
 		} else {

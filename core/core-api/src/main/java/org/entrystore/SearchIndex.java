@@ -31,7 +31,11 @@ public interface SearchIndex {
 
 	public void reindex(boolean purgeAllBeforeReindex);
 
+	public void reindexSync(boolean purgeAllBeforeReindex);
+
 	public void reindex(URI contextURI, boolean purgeAllBeforeReindex);
+
+	public void reindexSync(URI contextURI, boolean purgeAllBeforeReindex);
 
 	public void postEntry(Entry entry);
 
