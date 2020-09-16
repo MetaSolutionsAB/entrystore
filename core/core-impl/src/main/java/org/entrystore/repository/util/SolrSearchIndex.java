@@ -73,6 +73,9 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 
 /**
@@ -102,9 +105,11 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private final Queue<URI> deleteQueue = Queues.newConcurrentLinkedQueue();
 
-	private final Map<URI, Thread> reindexing = Collections.synchronizedMap(new HashMap<>());
+	private final Map<URI, Future> reindexing = Collections.synchronizedMap(new HashMap<>());
 
 	private SimpleDateFormat solrDateFormatter;
+
+	private final ExecutorService reindexExecutor = Executors.newSingleThreadExecutor();
 
 	public class SolrInputDocumentSubmitter extends Thread {
 
@@ -212,6 +217,9 @@ public class SolrSearchIndex implements SearchIndex {
 		if (documentSubmitter != null) {
 			documentSubmitter.interrupt();
 		}
+		if (reindexExecutor != null) {
+			reindexExecutor.shutdown();
+		}
 	}
 
 	public void clearSolrIndex(SolrClient solrServer) {
@@ -257,7 +265,7 @@ public class SolrSearchIndex implements SearchIndex {
 	 *                                 re-indexation is finished.
 	 */
 	public void reindex(boolean purgeAllBeforeReindex) {
-		reindex(null, purgeAllBeforeReindex);
+		reindex(purgeAllBeforeReindex, false);
 	}
 
 	/**
@@ -270,42 +278,59 @@ public class SolrSearchIndex implements SearchIndex {
 	 *                                 re-indexation is finished.
 	 */
 	public void reindex(URI contextURI, boolean purgeAllBeforeReindex) {
-		Thread indexer = new Thread(() -> reindexSync(contextURI, false, Thread.currentThread()));
-
 		synchronized (reindexing) {
 			if (reindexing.containsKey(contextURI)) {
-				Thread existingIndexer = reindexing.get(contextURI);
-				if (!existingIndexer.isInterrupted()) {
-					log.info("Indexer thread exists for Solr, calling interrupt() on thread");
-					existingIndexer.interrupt();
+				Future existingIndexer = reindexing.get(contextURI);
+				if (!existingIndexer.isDone()) {
+					log.info("Cancelling existing indexer thread for " + contextURI);
+					existingIndexer.cancel(true);
 				}
 				reindexing.remove(contextURI);
 			}
+			Future indexer = reindexExecutor.submit(() -> {
+				reindexSync(contextURI, false);
+				reindexing.remove(contextURI);
+			});
 			reindexing.put(contextURI, indexer);
-			indexer.start();
 		}
 	}
 
 	public void reindexSync(boolean purgeAllBeforeReindex) {
-		reindexSync(null, purgeAllBeforeReindex);
+		reindex(purgeAllBeforeReindex, true);
+	}
+
+	private void reindex(boolean purgeAllBeforeReindex, boolean sync) {
+		Set<URI> contexts = new HashSet<>();
+		PrincipalManager pm = rm.getPrincipalManager();
+		URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			contexts = rm.getContextManager().getEntries();
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
+
+		for (URI contextURI : contexts) {
+			if (sync) {
+				reindexSync(contextURI, purgeAllBeforeReindex);
+			} else {
+				reindex(contextURI, purgeAllBeforeReindex);
+			}
+		}
 	}
 
 	public void reindexSync(URI contextURI, boolean purgeAllBeforeReindex) {
-		reindexSync(contextURI, purgeAllBeforeReindex, null);
-	}
-
-	private void reindexSync(URI contextURI, boolean purgeAllBeforeReindex, Thread indexer) {
 		if (solrServer == null) {
 			log.warn("Ignoring request as Solr is not used by this instance");
 			return;
 		}
-
-		log.info("Starting reindexing of Solr" + (contextURI == null ? "" : " for context " + contextURI));
-
-		Entry contextEntry = null;
-		if (contextURI != null) {
-			contextEntry = rm.getContextManager().getByEntryURI(contextURI);
+		if (contextURI == null) {
+			throw new IllegalArgumentException("Context URI must not be null");
 		}
+
+		log.info("Starting Solr reindexing of context " + contextURI);
+
+		Entry contextEntry = rm.getContextManager().getByEntryURI(contextURI);
 
 		if (purgeAllBeforeReindex) {
 			clearSolrIndex(solrServer, null, contextEntry);
@@ -317,16 +342,7 @@ public class SolrSearchIndex implements SearchIndex {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-
-			if (contextURI != null) {
-				postContextEntriesToQueue(contextURI, indexer);
-			} else {
-				Set<URI> contexts = rm.getContextManager().getEntries();
-				for (URI cUri : contexts) {
-					postContextEntriesToQueue(cUri, indexer);
-				}
-			}
-
+			postContextEntriesToQueue(contextURI);
 			if (!purgeAllBeforeReindex) {
 				clearSolrIndex(solrServer, reindexStart, contextEntry);
 			}
@@ -334,9 +350,8 @@ public class SolrSearchIndex implements SearchIndex {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
 
-		log.info("Finished reindexing of Solr" + (contextURI == null ? "" : " for context " + contextURI) + ", took " + (new Date().getTime() - reindexStart.getTime()) + " ms; the Solr submission queue may still contain yet to be processed documents");
+		log.info("Finished Solr reindexing of context " + contextURI + ", took " + (new Date().getTime() - reindexStart.getTime()) + " ms; the Solr submission queue may still contain yet to be processed documents");
 	}
-
 
 	public boolean isIndexing() {
 		return isIndexing(null);
@@ -346,15 +361,14 @@ public class SolrSearchIndex implements SearchIndex {
 		return reindexing.containsKey(contextURI);
 	}
 
-	private void postContextEntriesToQueue(URI contextURI, Thread indexer) {
+	private void postContextEntriesToQueue(URI contextURI) {
 		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
 		ContextManager cm = rm.getContextManager();
 		Context context = cm.getContext(id);
 		if (context != null) {
-			Set<URI> entries = context.getEntries();
-			for (URI entryURI : entries) {
-				if (indexer != null && indexer.isInterrupted()) {
-					log.info("Indexer thread received interrupt, stopping reindexing in this thread");
+			for (URI entryURI : context.getEntries()) {
+				if (Thread.currentThread().isInterrupted()) {
+					log.info("Indexer thread received interrupt, stopping reindexing of " + contextURI);
 					return;
 				}
 				if (entryURI != null) {
