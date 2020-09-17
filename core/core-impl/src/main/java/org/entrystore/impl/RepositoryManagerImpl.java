@@ -28,6 +28,7 @@ import org.apache.solr.core.NodeConfig;
 import org.apache.solr.core.SolrResourceLoader;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.Quota;
 import org.entrystore.SearchIndex;
@@ -730,6 +731,19 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			};
 			registerListener(remover, RepositoryEvent.EntryDeleted);
+
+			RepositoryListener contextIndexer = new RepositoryListener() {
+				@Override
+				public void repositoryUpdated(RepositoryEventObject eventObject) {
+					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
+						Entry e = (Entry) eventObject.getSource();
+						if (GraphType.Context.equals(e.getGraphType())) {
+							solrIndex.reindex(e.getEntryURI(), false);
+						}
+					}
+				}
+			};
+			registerListener(contextIndexer, RepositoryEvent.EntryAclGuestUpdated);
 		}
 	}
 	

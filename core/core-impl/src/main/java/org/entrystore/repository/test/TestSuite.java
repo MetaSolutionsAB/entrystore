@@ -27,10 +27,15 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryManager;
 import org.openrdf.model.Graph;
+import org.openrdf.model.Model;
 import org.openrdf.model.ValueFactory;
+import org.openrdf.model.impl.GraphImpl;
+import org.openrdf.model.impl.LinkedHashModel;
+import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.impl.ValueFactoryImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -229,6 +234,9 @@ public class TestSuite {
 			//TODO upload jpeg as well.
 			Entry image = duck.createResource(null, GraphType.None, ResourceType.InformationResource, null);
 			setMetadata(image, "An image", "A image, remains to be uploaded.", null, "image/jpeg", null);
+
+			// addGuestToMetadataACL(duck.getEntry());
+			removeGuestFromMetadataACL(duck.getEntry()); // mostly to test the repository listener for ACL changes
 		} finally {
 			pm.setAuthenticatedUserURI(currentUserURI);
 		}
@@ -256,6 +264,24 @@ public class TestSuite {
 		} catch (RepositoryException e) {
 			e.printStackTrace();
 		}
+	}
+
+	public static void addGuestToMetadataACL(Entry entry) {
+		Graph g = entry.getGraph();
+		g.add(new URIImpl(entry.getLocalMetadataURI().toString()),
+				RepositoryProperties.Read,
+				new URIImpl(entry.getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString()),
+				new URIImpl(entry.getEntryURI().toString()));
+		entry.setGraph(g);
+	}
+
+	public static void removeGuestFromMetadataACL(Entry entry) {
+		Model m = new LinkedHashModel(entry.getGraph());
+		m.remove(new URIImpl(entry.getLocalMetadataURI().toString()),
+				RepositoryProperties.Read,
+				new URIImpl(entry.getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString()),
+				new URIImpl(entry.getEntryURI().toString()));
+		entry.setGraph(new GraphImpl(m));
 	}
 
 	public static void HarvesterTestSuite(RepositoryManagerImpl rm,
