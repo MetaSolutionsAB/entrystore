@@ -235,8 +235,19 @@ public class TestSuite {
 			Entry image = duck.createResource(null, GraphType.None, ResourceType.InformationResource, null);
 			setMetadata(image, "An image", "A image, remains to be uploaded.", null, "image/jpeg", null);
 
-			// addGuestToMetadataACL(duck.getEntry());
+			/*
 			removeGuestFromMetadataACL(duck.getEntry()); // mostly to test the repository listener for ACL changes
+			Thread.sleep(12000);
+			addGuestToMetadataACL(duck.getEntry());
+			Thread.sleep(4000);
+			removeGuestFromMetadataACL(duck.getEntry());
+			Thread.sleep(4000);
+			addGuestToMetadataACL(duck.getEntry());
+			Thread.sleep(4000);
+			removeGuestFromMetadataACL(duck.getEntry());
+			*/
+		} catch (Exception e) {
+			log.error(e.getMessage());
 		} finally {
 			pm.setAuthenticatedUserURI(currentUserURI);
 		}
