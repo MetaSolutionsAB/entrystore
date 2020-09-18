@@ -28,6 +28,7 @@ import org.apache.solr.core.NodeConfig;
 import org.apache.solr.core.SolrResourceLoader;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.Quota;
 import org.entrystore.SearchIndex;
@@ -634,6 +635,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
 
 		boolean reindex = "on".equalsIgnoreCase(config.getString(Settings.SOLR_REINDEX_ON_STARTUP, "off"));
+		boolean reindexWait = "on".equalsIgnoreCase(config.getString(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, "off"));
 
 		// Check whether memory store is configured without persistence and enforce
 		// reindexing to avoid inconsistencies between memory store and Solr index
@@ -658,7 +660,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			if (solrDir.list() != null && solrDir.list().length == 0) {
 				log.info("Solr directory is empty, scheduling conditional reindexing of repository");
 				reindex = true;
+				reindexWait = true;
 			}
+
 			try {
 				System.setProperty("solr.solr.home", solrURL);
 				log.info("Solr Home (solr.solr.home) set to " + solrURL);
@@ -680,6 +684,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					createRequest.setCoreName("core1");
 					createRequest.setConfigSet("");
 					createRequest.process(solrServer);
+					reindex = true;
+					reindexWait = true;
 				}
 			} catch (Exception e) {
 				log.error("Failed to initialize Solr: " + e.getMessage());
@@ -688,7 +694,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (solrServer != null) {
 			solrIndex = new SolrSearchIndex(this, solrServer);
 			if (reindex) {
-				solrIndex.reindex();
+				if (reindexWait) {
+					solrIndex.reindexSync(true);
+				} else {
+					solrIndex.reindex(false);
+				}
 			}
 		} else {
 			log.error("Unable to initialize Solr");
@@ -721,6 +731,19 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			};
 			registerListener(remover, RepositoryEvent.EntryDeleted);
+
+			RepositoryListener contextIndexer = new RepositoryListener() {
+				@Override
+				public void repositoryUpdated(RepositoryEventObject eventObject) {
+					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
+						Entry e = (Entry) eventObject.getSource();
+						if (GraphType.Context.equals(e.getGraphType())) {
+							solrIndex.submitContextForDelayedReindex(e, eventObject.getUpdatedGraph());
+						}
+					}
+				}
+			};
+			registerListener(contextIndexer, RepositoryEvent.EntryAclGuestUpdated);
 		}
 	}
 	
