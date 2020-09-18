@@ -43,11 +43,14 @@ import org.entrystore.ResourceType;
 import org.entrystore.SearchIndex;
 import org.entrystore.User;
 import org.entrystore.impl.LocalMetadataWrapper;
+import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
+import org.openrdf.model.Model;
 import org.openrdf.model.Statement;
+import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
@@ -59,6 +62,8 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -77,13 +82,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import static java.lang.Thread.interrupted;
+
 
 /**
  * @author Hannes Ebner
  */
 public class SolrSearchIndex implements SearchIndex {
 
-	private static Logger log = LoggerFactory.getLogger(SolrSearchIndex.class);
+	private static final Logger log = LoggerFactory.getLogger(SolrSearchIndex.class);
 
 	private static final int BATCH_SIZE_ADD = 500;
 
@@ -95,11 +102,13 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private List<org.openrdf.model.URI> relatedProperties = null;
 
-	private RepositoryManager rm;
+	private final RepositoryManager rm;
 
 	private final SolrClient solrServer;
 
-	private Thread documentSubmitter;
+	private final Thread documentSubmitter;
+
+	private final Thread delayedContextIndexer;
 
 	private final Cache<URI, SolrInputDocument> postQueue = Caffeine.newBuilder().build();
 
@@ -107,9 +116,11 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private final Map<URI, Future> reindexing = Collections.synchronizedMap(new HashMap<>());
 
-	private SimpleDateFormat solrDateFormatter;
+	private final SimpleDateFormat solrDateFormatter;
 
 	private final ExecutorService reindexExecutor = Executors.newSingleThreadExecutor();
+
+	private final Map<URI, DelayedContextIndexerInfo> delayedReindex = Collections.synchronizedMap(new HashMap<>());
 
 	public class SolrInputDocumentSubmitter extends Thread {
 
@@ -190,6 +201,43 @@ public class SolrSearchIndex implements SearchIndex {
 
 	}
 
+	public class DelayedContextIndexerInfo {
+
+		LocalDateTime submitted;
+
+		boolean guestReadable;
+
+	}
+
+	public class DelayedContextIndexer extends Thread {
+
+		@Override
+		public void run() {
+			while (!interrupted()) {
+				synchronized (delayedReindex) {
+					Iterator<URI> it = delayedReindex.keySet().iterator();
+					while (it.hasNext()) {
+						URI contextURI = it.next();
+						DelayedContextIndexerInfo info = delayedReindex.get(contextURI);
+						if (info.submitted.until(LocalDateTime.now(), ChronoUnit.SECONDS) >= 10) {
+							log.info("Submitting context for reindexing after 10 seconds delay");
+							reindex(contextURI, false);
+							it.remove();
+						}
+					}
+				}
+
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException ie) {
+					log.info("Solr delayed context indexer got interrupted, shutting down thread");
+					return;
+				}
+			}
+		}
+
+	}
+
 	public SolrSearchIndex(RepositoryManager rm, SolrClient solrServer) {
 		solrDateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 		solrDateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -211,11 +259,17 @@ public class SolrSearchIndex implements SearchIndex {
 
 		documentSubmitter = new SolrInputDocumentSubmitter();
 		documentSubmitter.start();
+
+		delayedContextIndexer = new DelayedContextIndexer();
+		delayedContextIndexer.start();
 	}
 
 	public void shutdown() {
 		if (documentSubmitter != null) {
 			documentSubmitter.interrupt();
+		}
+		if (delayedContextIndexer != null) {
+			delayedContextIndexer.interrupt();
 		}
 		if (reindexExecutor != null) {
 			reindexExecutor.shutdown();
@@ -342,15 +396,18 @@ public class SolrSearchIndex implements SearchIndex {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			postContextEntriesToQueue(contextURI);
-			if (!purgeAllBeforeReindex) {
-				clearSolrIndex(solrServer, reindexStart, contextEntry);
+			boolean success = postContextEntriesToQueue(contextURI);
+			if (success) {
+				if (!purgeAllBeforeReindex){
+					clearSolrIndex(solrServer, reindexStart, contextEntry);
+				}
+				log.info("Finished Solr reindexing of context " + contextURI + ", took " + (new Date().getTime() - reindexStart.getTime()) + " ms; the Solr submission queue may still contain yet to be processed documents");
+			} else {
+				log.debug("Solr reindexing of context " + contextURI + " could not be completed, either the context could not be loaded or (most likely) another process started reindexing the same context before the ongoing process was complete");
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
-
-		log.info("Finished Solr reindexing of context " + contextURI + ", took " + (new Date().getTime() - reindexStart.getTime()) + " ms; the Solr submission queue may still contain yet to be processed documents");
 	}
 
 	public boolean isIndexing() {
@@ -361,15 +418,37 @@ public class SolrSearchIndex implements SearchIndex {
 		return reindexing.containsKey(contextURI);
 	}
 
-	private void postContextEntriesToQueue(URI contextURI) {
+	public void submitContextForDelayedReindex(Entry contextEntry, Graph entryGraph) {
+		synchronized (delayedReindex) {
+			org.openrdf.model.URI guestURI = new URIImpl(rm.getPrincipalManager().getGuestUser().getURI().toString());
+			URI contextURI = contextEntry.getEntryURI();
+			Model m = new LinkedHashModel(entryGraph);
+			boolean newGuestReadable = m.contains(new URIImpl(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Read, guestURI) ||
+					m.contains(new URIImpl(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Write, guestURI);
+			if (delayedReindex.containsKey(contextURI) && (delayedReindex.get(contextURI).guestReadable != newGuestReadable)) {
+				// the context has been switched back to the previous
+				// status and does not need to be reindexed anymore
+				log.info("Removing context from delayed reindexing queue due to reverted ACL change within grace period");
+				delayedReindex.remove(contextURI);
+			} else {
+				log.info("Enqueueing context for delayed reindexing due to ACL change");
+				DelayedContextIndexerInfo info = new DelayedContextIndexerInfo();
+				info.submitted = LocalDateTime.now();
+				info.guestReadable = newGuestReadable;
+				delayedReindex.put(contextURI, info);
+			}
+		}
+	}
+
+	private boolean postContextEntriesToQueue(URI contextURI) {
 		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
 		ContextManager cm = rm.getContextManager();
 		Context context = cm.getContext(id);
 		if (context != null) {
 			for (URI entryURI : context.getEntries()) {
-				if (Thread.currentThread().isInterrupted()) {
+				if (interrupted()) {
 					log.info("Indexer thread received interrupt, stopping reindexing of " + contextURI);
-					return;
+					return false;
 				}
 				if (entryURI != null) {
 					Entry entry = cm.getEntry(entryURI);
@@ -382,7 +461,9 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 				}
 			}
+			return true;
 		}
+		return false;
 	}
 
 	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {

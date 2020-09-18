@@ -1446,7 +1446,7 @@ public class EntryImpl implements Entry {
 					
 					getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
 					if (hasAclChangedForGuest(oldGraph, metametadata)) {
-						getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryAclGuestUpdated));
+						getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryAclGuestUpdated, metametadata));
 					}
 				} catch (Exception e) {
 					rc.rollback();

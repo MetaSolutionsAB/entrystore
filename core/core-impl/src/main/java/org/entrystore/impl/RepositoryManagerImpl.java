@@ -738,7 +738,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
 						Entry e = (Entry) eventObject.getSource();
 						if (GraphType.Context.equals(e.getGraphType())) {
-							solrIndex.reindex(e.getEntryURI(), false);
+							solrIndex.submitContextForDelayedReindex(e, eventObject.getUpdatedGraph());
 						}
 					}
 				}
