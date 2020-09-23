@@ -77,8 +77,6 @@ public class CasLoginResource extends BaseResource {
 
 	// TODO support logout
 
-	// TODO support auto-provisioning of users (an authenticated CAS user does not exist in EntryStore yet)
-
 	private static boolean sslVerificationInitialized;
 
 	@Override
