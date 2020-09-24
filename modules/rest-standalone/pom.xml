@@ -9,7 +9,6 @@
         <artifactId>entrystore-modules</artifactId>
         <version>4.10-SNAPSHOT</version>
     </parent>
-    <groupId>org.entrystore</groupId>
     <artifactId>entrystore-rest-standalone</artifactId>
     <packaging>jar</packaging>
     <version>4.10-SNAPSHOT</version>
