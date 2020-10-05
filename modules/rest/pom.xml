@@ -226,6 +226,11 @@
             <artifactId>guava</artifactId>
             <version>28.1-jre</version>
         </dependency>
+        <dependency>
+            <groupId>com.coveo</groupId>
+            <artifactId>saml-client</artifactId>
+            <version>4.0.0</version>
+        </dependency>
     </dependencies>
 
 </project>
