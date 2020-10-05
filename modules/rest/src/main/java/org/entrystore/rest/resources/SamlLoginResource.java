@@ -20,6 +20,7 @@ import com.coveo.saml.SamlClient;
 import com.coveo.saml.SamlException;
 import com.coveo.saml.SamlResponse;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
@@ -52,6 +53,7 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -59,9 +61,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * TODO document for Google
- *
- * TODO support logout
+ * TODO Support logout via IdP
  *
  * @author Hannes Ebner
  */
@@ -70,6 +70,10 @@ public class SamlLoginResource extends BaseResource {
 	private static Logger log = LoggerFactory.getLogger(SamlLoginResource.class);
 
 	private static SamlClient samlClient;
+
+	static {
+		Security.addProvider(new BouncyCastleProvider());
+	}
 
 	@Override
 	public void init(Context c, Request request, Response response) {
