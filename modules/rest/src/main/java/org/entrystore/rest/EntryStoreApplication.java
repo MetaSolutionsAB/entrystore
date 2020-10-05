@@ -46,7 +46,41 @@ import org.entrystore.rest.filter.CacheControlFilter;
 import org.entrystore.rest.filter.IgnoreAuthFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
-import org.entrystore.rest.resources.*;
+import org.entrystore.rest.resources.CasLoginResource;
+import org.entrystore.rest.resources.ContextResource;
+import org.entrystore.rest.resources.CookieLoginResource;
+import org.entrystore.rest.resources.DefaultResource;
+import org.entrystore.rest.resources.EchoResource;
+import org.entrystore.rest.resources.EntryResource;
+import org.entrystore.rest.resources.ExecutionResource;
+import org.entrystore.rest.resources.ExportResource;
+import org.entrystore.rest.resources.ExternalMetadataResource;
+import org.entrystore.rest.resources.FaviconResource;
+import org.entrystore.rest.resources.GroupResource;
+import org.entrystore.rest.resources.HarvesterResource;
+import org.entrystore.rest.resources.ImportResource;
+import org.entrystore.rest.resources.IndexResource;
+import org.entrystore.rest.resources.LocalMetadataResource;
+import org.entrystore.rest.resources.LoginResource;
+import org.entrystore.rest.resources.LogoutResource;
+import org.entrystore.rest.resources.LookupResource;
+import org.entrystore.rest.resources.MergeResource;
+import org.entrystore.rest.resources.NameResource;
+import org.entrystore.rest.resources.OpenIdResource;
+import org.entrystore.rest.resources.PasswordResetResource;
+import org.entrystore.rest.resources.ProxyResource;
+import org.entrystore.rest.resources.QuotaResource;
+import org.entrystore.rest.resources.RelationResource;
+import org.entrystore.rest.resources.ResourceResource;
+import org.entrystore.rest.resources.SamlLoginResource;
+import org.entrystore.rest.resources.SearchResource;
+import org.entrystore.rest.resources.SignupResource;
+import org.entrystore.rest.resources.SignupWhitelistResource;
+import org.entrystore.rest.resources.SolrResource;
+import org.entrystore.rest.resources.SparqlResource;
+import org.entrystore.rest.resources.StatisticsResource;
+import org.entrystore.rest.resources.StatusResource;
+import org.entrystore.rest.resources.UserResource;
 import org.entrystore.rest.util.CORSUtil;
 import org.entrystore.rest.util.HttpUtil;
 import org.restlet.Application;
@@ -280,6 +314,12 @@ public class EntryStoreApplication extends Application {
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_CAS, "off"))) {
 			router.attach("/auth/cas", CasLoginResource.class);
 			log.info("CAS authentication enabled");
+		}
+
+		// SAML
+		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_SAML, "off"))) {
+			router.attach("/auth/saml", SamlLoginResource.class);
+			log.info("SAML authentication enabled");
 		}
 
 		// signup

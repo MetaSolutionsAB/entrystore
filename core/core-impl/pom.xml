@@ -9,7 +9,6 @@
 		<artifactId>entrystore-core</artifactId>
 		<version>4.10-SNAPSHOT</version>
 	</parent>
-	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-core-impl</artifactId>
 	<packaging>jar</packaging>
 	<name>EntryStore Core Implementation</name>
@@ -128,17 +127,6 @@
 			<type>jar</type>
 		</dependency>
 		<dependency>
-			<groupId>commons-dbcp</groupId>
-			<artifactId>commons-dbcp</artifactId>
-			<version>1.4</version>
-			<exclusions>
-				<exclusion>
-					<groupId>xml-apis</groupId>
-					<artifactId>xml-apis</artifactId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-		<dependency>
 			<groupId>quartz</groupId>
 			<artifactId>quartz</artifactId>
 			<version>1.5.2</version>
@@ -245,11 +233,11 @@
 			<groupId>org.apache.solr</groupId>
 			<version>${solr.version}</version>
 			<exclusions>
-                                <exclusion>
-                                        <groupId>org.restlet.jee</groupId>
-                                        <artifactId>org.restlet.ext.servlet</artifactId>
-                                </exclusion>
-                        </exclusions>
+				<exclusion>
+					<groupId>org.restlet.jee</groupId>
+					<artifactId>org.restlet.ext.servlet</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<artifactId>solr-core</artifactId>
