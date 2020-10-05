@@ -85,9 +85,7 @@ public class SamlLoginResource extends BaseResource {
 				log.info("SAML Relying Party Identifier: " + relyingPartyId);
 			}
 
-			String assertionConsumerService = config.getString(Settings.AUTH_SAML_ASSERTION_CONSUMER_SERVICE_URL); // TODO use this setting only to override the automatic construction
-			// String assertionConsumerService = constructServiceUrl(parameters.get("redirectOnSuccess"), parameters.get("redirectOnFailure"));
-			// TODO get success and failure URLs from configuration
+			String assertionConsumerService = config.getString(Settings.AUTH_SAML_ASSERTION_CONSUMER_SERVICE_URL);
 			if (assertionConsumerService == null) {
 				log.warn("No SAML Assertion Consumer Service URL configured");
 			} else {
@@ -246,7 +244,11 @@ public class SamlLoginResource extends BaseResource {
 	private void redirectToIdentityProvider(Response response) throws SamlException {
 		Map<String, String> values = new HashMap<>();
 		values.put("SAMLRequest", samlClient.getSamlRequest());
-		redirectWithGet(samlClient.getIdentityProviderUrl(), response, values);
+		if ("post".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.AUTH_SAML_REDIRECT_METHOD, "get"))) {
+			redirectWithPost(samlClient.getIdentityProviderUrl(), response, values);
+		} else {
+			redirectWithGet(samlClient.getIdentityProviderUrl(), response, values);
+		}
 	}
 
 	private void redirectWithPost(String url, Response response, Map<String, String> values) {
