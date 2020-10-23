@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
+import java.util.Locale;
 
 
 /**
@@ -75,7 +76,8 @@ public class UserResource extends BaseResource {
 		JSONObject clientAcceptLanguage = new JSONObject();
 		// we need the hack with DecimalFormat and Float.valueOf
 		// due to ugly numbers in the JSON representation otherwise
-		DecimalFormat decFormat= new DecimalFormat("#.##");
+		DecimalFormat decFormat = (DecimalFormat) DecimalFormat.getInstance(Locale.ENGLISH);
+		decFormat.applyPattern("#.##");
 		decFormat.setRoundingMode(RoundingMode.FLOOR);
 		for (Preference<Language> lang : getRequest ().getClientInfo().getAcceptedLanguages()) {
 			clientAcceptLanguage.put(lang.getMetadata().toString(), Float.valueOf(decFormat.format(lang.getQuality())));
