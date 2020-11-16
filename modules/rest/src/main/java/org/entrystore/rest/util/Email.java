@@ -91,9 +91,9 @@ public class Email {
 
 		// other options, to be made configurable at some later point
 		props.put("mail.smtp.ssl.checkserveridentity", "true"); // default false
-		props.put("mail.smtp.connectiontimeout", "30000"); // default infinite
-		props.put("mail.smtp.timeout", "30000"); // default infinite
-		props.put("mail.smtp.writetimeout", "30000"); // default infinite
+		props.put("mail.smtp.connectiontimeout", "5000"); // default infinite
+		props.put("mail.smtp.timeout", "5000"); // default infinite
+		props.put("mail.smtp.writetimeout", "5000"); // default infinite
 
 		//props.put("mail.debug", "true");
 
@@ -127,13 +127,23 @@ public class Email {
 				message.setSubject(msgSubject, "UTF-8");
 			}
 			message.setText(msgBody, "UTF-8", "html");
-			session.getTransport().send(message);
+
+			int failure = 0;
+			while (failure < 3) { // we try three times
+				try {
+					session.getTransport().send(message);
+					return true;
+				} catch (MessagingException me) {
+					log.error(me.getMessage());
+					failure++;
+				}
+			}
 		} catch (MessagingException e) {
 			log.error(e.getMessage());
 			return false;
 		}
 
-		return true;
+		return false;
 	}
 
 	public static boolean sendSignupConfirmation(Config config, String recipientName, String recipientEmail, String confirmationLink) {
