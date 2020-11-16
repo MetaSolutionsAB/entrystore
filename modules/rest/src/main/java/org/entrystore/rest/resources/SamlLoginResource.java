@@ -56,6 +56,7 @@ import java.net.URLEncoder;
 import java.security.Security;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -71,9 +72,19 @@ public class SamlLoginResource extends BaseResource {
 
 	private static SamlClient samlClient;
 
+	private static String relyingPartyId;
+
+	private static String assertionConsumerService;
+
+	private static String idpMetadataUrl;
+
 	private static String redirSuccess;
 
 	private static String redirFailure;
+
+	private static Date metadataLoaded = new Date();
+
+	private static long metadataMaxAge;
 
 	static {
 		Security.addProvider(new BouncyCastleProvider());
@@ -86,45 +97,61 @@ public class SamlLoginResource extends BaseResource {
 		if (samlClient == null) {
 			Config config = getRM().getConfiguration();
 
-			String relyingPartyId = config.getString(Settings.AUTH_SAML_RELYING_PARTY_ID);
+			relyingPartyId = config.getString(Settings.AUTH_SAML_RELYING_PARTY_ID);
 			if (relyingPartyId == null) {
 				log.warn("No SAML Relying Party Identifier configured");
 			} else {
 				log.info("SAML Relying Party Identifier: " + relyingPartyId);
 			}
 
-			String assertionConsumerService = config.getString(Settings.AUTH_SAML_ASSERTION_CONSUMER_SERVICE_URL);
+			assertionConsumerService = config.getString(Settings.AUTH_SAML_ASSERTION_CONSUMER_SERVICE_URL);
 			if (assertionConsumerService == null) {
 				log.warn("No SAML Assertion Consumer Service URL configured");
 			} else {
 				log.info("SAML Assertion Consumer Service URL: " + assertionConsumerService);
 			}
 
-			String idpMetadata = config.getString(Settings.AUTH_SAML_IDP_METADATA_URL);
-			if (idpMetadata == null) {
+			idpMetadataUrl = config.getString(Settings.AUTH_SAML_IDP_METADATA_URL);
+			if (idpMetadataUrl == null) {
 				log.warn("No SAML IDP Metadata URL configured");
 			} else {
-				log.info("SAML IDP Metadata URL: " + idpMetadata);
+				log.info("SAML IDP Metadata URL: " + idpMetadataUrl);
 			}
+
+			metadataMaxAge = config.getLong(Settings.AUTH_SAML_IDP_METADATA_MAXAGE, 604800) * 1000;
 
 			redirSuccess = config.getString(Settings.AUTH_SAML_REDIRECT_SUCCESS_URL);
 			redirFailure = config.getString(Settings.AUTH_SAML_REDIRECT_FAILURE_URL);
 
-			if (relyingPartyId != null && assertionConsumerService != null && idpMetadata != null) {
-				try {
-					Reader idpMetadataReader = new BufferedReader(new InputStreamReader(new URL(idpMetadata).openStream()));
-					samlClient = SamlClient.fromMetadata(relyingPartyId, assertionConsumerService, idpMetadataReader);
-				} catch (IOException | SamlException e) {
-					log.error(e.getMessage());
-				}
+			if (relyingPartyId != null && assertionConsumerService != null && idpMetadataUrl != null) {
+				loadMetadataAndInitSamlClient();
 			} else {
 				log.error("SAML authentication could not be initialized properly");
 			}
 		}
 	}
 
+	private void loadMetadataAndInitSamlClient() {
+		try {
+			Reader idpMetadataReader = new BufferedReader(new InputStreamReader(new URL(idpMetadataUrl).openStream()));
+			samlClient = SamlClient.fromMetadata(relyingPartyId, assertionConsumerService, idpMetadataReader);
+			metadataLoaded = new Date();
+			log.info("Reloaded SAML metadata from " + idpMetadataUrl);
+		} catch (IOException | SamlException e) {
+			log.error(e.getMessage());
+		}
+	}
+
+	private void checkAndInitSamlClient() {
+		if ((new Date().getTime() - metadataLoaded.getTime()) > metadataMaxAge) {
+			log.info("Reloading SAML metadata");
+			loadMetadataAndInitSamlClient();
+		}
+	}
+
 	@Get
 	public Representation represent() {
+		checkAndInitSamlClient();
 		try {
 			redirectToIdentityProvider(getResponse());
 		} catch (SamlException e) {
@@ -137,8 +164,9 @@ public class SamlLoginResource extends BaseResource {
 
 	@Post
 	public void store(Representation r) {
-		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
+		checkAndInitSamlClient();
 
+		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
 		boolean authSuccess = false;
 
 		String encodedResponse = new Form(r).getFirstValue("SAMLResponse");
