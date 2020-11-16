@@ -217,6 +217,10 @@ public class EntryStoreApplication extends Application {
 			Config config = confManager.getConfiguration();
 		
 			baseURI = config.getString(Settings.BASE_URL);
+			if (baseURI == null) {
+				log.error("No Base URI specified, exiting");
+				System.exit(1);
+			}
 
 			Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
 			ConverterManagerImpl.register("oai_dc", oaiDcRdfConverter);
