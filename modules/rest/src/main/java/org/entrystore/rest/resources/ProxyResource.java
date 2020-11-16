@@ -58,6 +58,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -276,7 +277,7 @@ public class ProxyResource extends BaseResource {
 		}
 
 		if (client == null) {
-			client = new Client(Protocol.HTTP);
+			client = new Client(Arrays.asList(Protocol.HTTP, Protocol.HTTPS));
 			client.setContext(new Context());
 			client.getContext().getParameters().set("connectTimeout", "30000");
 			client.getContext().getParameters().set("socketConnectTimeoutMs", "30000");
