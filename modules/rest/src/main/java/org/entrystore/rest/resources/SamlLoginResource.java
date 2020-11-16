@@ -71,6 +71,10 @@ public class SamlLoginResource extends BaseResource {
 
 	private static SamlClient samlClient;
 
+	private static String redirSuccess;
+
+	private static String redirFailure;
+
 	static {
 		Security.addProvider(new BouncyCastleProvider());
 	}
@@ -103,6 +107,9 @@ public class SamlLoginResource extends BaseResource {
 				log.info("SAML IDP Metadata URL: " + idpMetadata);
 			}
 
+			redirSuccess = config.getString(Settings.AUTH_SAML_REDIRECT_SUCCESS_URL);
+			redirFailure = config.getString(Settings.AUTH_SAML_REDIRECT_FAILURE_URL);
+
 			if (relyingPartyId != null && assertionConsumerService != null && idpMetadata != null) {
 				try {
 					Reader idpMetadataReader = new BufferedReader(new InputStreamReader(new URL(idpMetadata).openStream()));
@@ -130,9 +137,6 @@ public class SamlLoginResource extends BaseResource {
 
 	@Post
 	public void store(Representation r) {
-		String redirSuccess = parameters.get("redirectOnSuccess");
-		String redirFailure = parameters.get("redirectOnFailure");
-
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
 
 		boolean authSuccess = false;
@@ -221,28 +225,6 @@ public class SamlLoginResource extends BaseResource {
 				log.error(e.getMessage());
 			}
 		}
-	}
-
-	private String constructServiceUrl(String redirSuccess, String redirFailure) {
-		String result = getBaseUrl() + "auth/saml";
-		if (redirSuccess != null) {
-			result += "?redirectOnSuccess=";
-			result += redirSuccess;
-		}
-		if (redirFailure != null) {
-			result += (redirSuccess == null ? "?" : "&");
-			result += "redirectOnFailure=";
-			result += redirFailure;
-		}
-		return result;
-	}
-
-	private String getBaseUrl() {
-		String baseUrl = getRM().getConfiguration().getString(Settings.BASE_URL);
-		if (!baseUrl.endsWith("/")) {
-			baseUrl += "/";
-		}
-		return baseUrl;
 	}
 
 	private void redirectToIdentityProvider(Response response) throws SamlException {

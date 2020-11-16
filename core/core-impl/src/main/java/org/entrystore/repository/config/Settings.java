@@ -43,6 +43,8 @@ public class Settings {
 	public static String AUTH_SAML_IDP_METADATA_URL = "entrystore.auth.saml.idp-metadata.url";
 	public static String AUTH_SAML_USER_AUTO_PROVISIONING = "entrystore.auth.saml.user-auto-provisioning";
 	public static String AUTH_SAML_REDIRECT_METHOD = "entrystore.auth.saml.redirect-method";
+	public static String AUTH_SAML_REDIRECT_SUCCESS_URL = "entrystore.auth.saml.redirect-success.url";
+	public static String AUTH_SAML_REDIRECT_FAILURE_URL = "entrystore.auth.saml.redirect-failure.url";
 
 	public static String AUTH_COOKIE_PATH = "entrystore.auth.cookie.path";
 
