@@ -16,7 +16,9 @@
 
 package org.entrystore.rest.util;
 
+import com.google.common.base.Charsets;
 import com.google.common.html.HtmlEscapers;
+import org.apache.commons.io.IOUtils;
 import org.entrystore.Entry;
 import org.entrystore.User;
 import org.entrystore.config.Config;
@@ -35,11 +37,10 @@ import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeUtility;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
+import java.net.URL;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Calendar;
 import java.util.Properties;
 
@@ -51,6 +52,12 @@ import java.util.Properties;
 public class Email {
 
 	private static Logger log = LoggerFactory.getLogger(Email.class);
+
+	private static String messageBodySignup;
+
+	private static String messageBodyPasswordReset;
+
+	private static String messageBodyPasswordChanged;
 
 	public static boolean sendMessage(Config config, String msgTo, String msgSubject, String msgBody) {
 		String msgFrom = config.getString(Settings.SMTP_EMAIL_FROM);
@@ -148,22 +155,23 @@ public class Email {
 
 	public static boolean sendSignupConfirmation(Config config, String recipientName, String recipientEmail, String confirmationLink) {
 		String subject = config.getString(Settings.SIGNUP_SUBJECT, "User sign-up request");
+
 		String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
-		if (templatePath == null) {
-			templatePath = new File(ConfigurationManager.getConfigurationURI("email_signup.html")).getAbsolutePath();
+		if (messageBodySignup == null) {
+			if (templatePath == null) {
+				templatePath = new File(ConfigurationManager.getConfigurationURI("email_signup.html")).getAbsolutePath();
+			}
+			if (templatePath != null) {
+				messageBodySignup = loadTemplate(templatePath);
+			}
 		}
 
-		String templateHTML = null;
-		if (templatePath != null) {
-			templateHTML = loadTemplate(templatePath, Charset.defaultCharset());
-		}
-
-		if (templateHTML == null) {
+		if (messageBodySignup == null) {
 			log.error("Unable to load email template for sign-up confirmation");
 			return false;
 		}
 
-		String messageText = templateHTML.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
+		String messageText = messageBodySignup.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
 		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
@@ -182,22 +190,23 @@ public class Email {
 
 	public static boolean sendPasswordResetConfirmation(Config config, String recipientEmail, String confirmationLink) {
 		String subject = config.getString(Settings.PASSWORD_RESET_SUBJECT, "Password reset request");
-		String templatePath = config.getString(Settings.PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
-		if (templatePath == null) {
-			templatePath = new File(ConfigurationManager.getConfigurationURI("email_pwreset.html")).getAbsolutePath();
+
+		if (messageBodyPasswordReset == null) {
+			String templatePath = config.getString(Settings.PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+			if (templatePath == null) {
+				templatePath = new File(ConfigurationManager.getConfigurationURI("email_pwreset.html")).getAbsolutePath();
+			}
+			if (templatePath != null) {
+				messageBodyPasswordReset = loadTemplate(templatePath);
+			}
 		}
 
-		String templateHTML = null;
-		if (templatePath != null) {
-			templateHTML = loadTemplate(templatePath, Charset.defaultCharset());
-		}
-
-		if (templateHTML == null) {
+		if (messageBodyPasswordReset == null) {
 			log.error("Unable to load email template for sign-up confirmation");
 			return false;
 		}
 
-		String messageText = templateHTML.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
+		String messageText = messageBodyPasswordReset.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
 		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
@@ -215,26 +224,27 @@ public class Email {
 			msgTo = EntryUtil.getEmail(userEntry);
 		}
 
-		if (msgTo == null || !msgTo.contains("@")){
+		if (msgTo == null || !msgTo.contains("@")) {
 			log.warn("Unable to send email, invalid email address of recipient: " + msgTo);
 			return false;
 		}
 
-		String templatePath = config.getString(Settings.PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
-		if (templatePath == null) {
-			templatePath = new File(ConfigurationManager.getConfigurationURI("email_pwchange.html")).getAbsolutePath();
-		}
-		String templateHTML = null;
-		if (templatePath != null) {
-			templateHTML = loadTemplate(templatePath, Charset.defaultCharset());
+		if (messageBodyPasswordChanged == null) {
+			String templatePath = config.getString(Settings.PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+			if (templatePath == null) {
+				templatePath = new File(ConfigurationManager.getConfigurationURI("email_pwchange.html")).getAbsolutePath();
+			}
+			if (templatePath != null) {
+				messageBodyPasswordChanged = loadTemplate(templatePath);
+			}
 		}
 
-		if (templateHTML == null) {
+		if (messageBodyPasswordChanged == null) {
 			log.error("Unable to load email template for password change confirmation");
 			return false;
 		}
 
-		String messageText = templateHTML.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
+		String messageText = messageBodyPasswordChanged.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
 		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
 		String msgSubject = config.getString(Settings.PASSWORD_CHANGE_SUBJECT, "Your password has been changed");
 		String recipientName = EntryUtil.getName(userEntry);
@@ -246,19 +256,32 @@ public class Email {
 		return sendMessage(config, msgTo, msgSubject, messageText);
 	}
 
-	private static String loadTemplate(String path, Charset encoding) {
-		log.debug("Loading template from " + path);
-		if (path == null || !new File(path).exists()) {
+	private static String loadTemplate(String url) {
+		if (url == null) {
 			return null;
 		}
-		byte[] encoded = new byte[0];
+		log.debug("Loading template from " + url);
+		InputStream is = null;
 		try {
-			encoded = Files.readAllBytes(Paths.get(path));
+			if (url.startsWith("http://") || url.startsWith("https://")) {
+				is = new URL(url).openStream();
+			} else {
+				is = Files.newInputStream(new File(url).toPath());
+			}
+			return IOUtils.toString(is, Charsets.UTF_8);
 		} catch (IOException e) {
 			log.error(e.getMessage());
-			return null;
+		} finally {
+			if (is != null) {
+				try {
+					is.close();
+				} catch (IOException e) {
+					log.warn(e.getMessage());
+				}
+			}
 		}
-		return encoding.decode(ByteBuffer.wrap(encoded)).toString();
+
+		return null;
 	}
 
 }
