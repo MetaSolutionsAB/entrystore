@@ -92,7 +92,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final Logger log = LoggerFactory.getLogger(SolrSearchIndex.class);
 
-	private static final int BATCH_SIZE_ADD = 500;
+	private static final int BATCH_SIZE_ADD = 100;
 
 	private static final int BATCH_SIZE_DELETE = 100;
 
