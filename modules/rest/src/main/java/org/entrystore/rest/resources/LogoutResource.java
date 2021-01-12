@@ -21,7 +21,6 @@ import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.util.SimpleHTML;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
-import org.restlet.ext.openid.RedirectAuthenticator;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
@@ -51,11 +50,7 @@ public class LogoutResource extends BaseResource {
 		
 		// remove all auth_token cookies
 		CookieVerifier.cleanCookies(getRM(), "auth_token", getRequest(), getResponse());
-		
-		// remove also eventually existing OpenID-related cookies
-		CookieVerifier.cleanCookies(getRM(), RedirectAuthenticator.DEFAULT_IDENTIFIER_COOKIE, getRequest(), getResponse());
-		CookieVerifier.cleanCookies(getRM(), RedirectAuthenticator.DEFAULT_ORIGINAL_REF_COOKIE, getRequest(), getResponse());
-		
+
 		getResponse().setStatus(Status.SUCCESS_OK);
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
 		if (html) {
