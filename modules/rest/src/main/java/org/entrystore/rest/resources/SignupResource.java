@@ -336,7 +336,7 @@ public class SignupResource extends BaseResource {
 
 		String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
-		log.info("Generated sign-up token " + token + " for " + ci.email);
+		log.info("Generated sign-up token for " + ci.email);
 
 		boolean sendSuccessful = Email.sendSignupConfirmation(getRM().getConfiguration(), ci.firstName + " " + ci.lastName, ci.email, confirmationLink);
 		if (sendSuccessful) {

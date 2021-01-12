@@ -266,7 +266,7 @@ public class PasswordResetResource extends BaseResource {
 			if (u != null) {
 				String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 				String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
-				log.info("Generated password reset token " + token + " for " + ci.email);
+				log.info("Generated password reset token for " + ci.email);
 
 				boolean sendSuccessful = Email.sendPasswordResetConfirmation(getRM().getConfiguration(), ci.email, confirmationLink);
 				if (sendSuccessful) {

@@ -148,7 +148,7 @@ public class CasLoginResource extends BaseResource {
 				log.info("Successfully authenticated via CAS: " + assertion.getPrincipal());
 				Map<String, Object> attr = assertion.getPrincipal().getAttributes();
 				for (String k : attr.keySet()) {
-					log.info(k + ": " + attr.get(k));
+					log.debug(k + ": " + attr.get(k));
 				}
 				String userName = assertion.getPrincipal().getName();
 				if ("admin".equalsIgnoreCase(userName)) {
