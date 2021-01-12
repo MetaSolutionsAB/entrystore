@@ -17,7 +17,6 @@
 package org.entrystore.rest.resources;
 
 import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.util.SimpleHTML;
 import org.restlet.data.Language;
 import org.restlet.data.MediaType;
@@ -49,24 +48,6 @@ public class LoginResource extends BaseResource {
 		sb.append("Password<br/><input type=\"password\" name=\"auth_password\"><br/>\n");
 		sb.append("<br/>\n<input type=\"submit\" value=\"Login\" />\n");
 		sb.append("</form>\n");
-		boolean openid = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"));
-		if (openid) {
-			boolean google = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_GOOGLE, "off"));
-			boolean yahoo = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_YAHOO, "off"));
-			if (google || yahoo) {
-				sb.append("<br/>\n");
-				sb.append("Login with: ");
-				if (google) {
-					sb.append("<a href=\"openid/google\">Google</a>\n");
-				}
-				if (yahoo) {
-					if (google) {
-						sb.append(" | ");
-					}
-					sb.append("<a href=\"openid/yahoo\">Yahoo!</a>\n");
-				}
-			}
-		}
 		sb.append(html.footer());
 
 		return new StringRepresentation(sb.toString(), MediaType.TEXT_HTML, Language.ENGLISH);

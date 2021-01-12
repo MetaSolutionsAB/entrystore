@@ -24,11 +24,6 @@ package org.entrystore.repository.config;
 public class Settings {
 	public static String AUTH_ADMIN_SECRET = "entrystore.auth.adminpw";
 	
-	public static String AUTH_OPENID = "entrystore.auth.openid";
-	public static String AUTH_OPENID_GOOGLE = "entrystore.auth.openid.google";
-	public static String AUTH_OPENID_YAHOO = "entrystore.auth.openid.yahoo";
-	public static String AUTH_OPENID_MYOPENID = "entrystore.auth.openid.myopenid";
-
 	public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.token.max-age";
 
 	public static String AUTH_CAS = "entrystore.auth.cas";

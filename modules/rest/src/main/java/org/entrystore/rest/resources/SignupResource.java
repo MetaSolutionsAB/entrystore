@@ -62,7 +62,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
-
 /**
  * Resource to handle manual sign-ups.
  * 
@@ -367,12 +366,6 @@ public class SignupResource extends BaseResource {
 			if (siteKey == null) {
 				log.warn("reCaptcha keys must be configured; rendering form without reCaptcha");
 			} else {
-				/* reCaptcha 1.0 (deprecated)
-				String publicKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
-				ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
-				reCaptchaHtml = c.createRecaptchaHtml(null, null);
-				*/
-
 				// reCaptcha 2.0
 				sb.append("<script src=\"https://www.google.com/recaptcha/api.js\" async defer></script>\n");
 				sb.append("<p>\n<div class=\"g-recaptcha\" data-sitekey=\"").append(siteKey).append("\"></div>\n</p>\n");
@@ -380,27 +373,8 @@ public class SignupResource extends BaseResource {
 		}
 		sb.append("<br/>\n<input type=\"submit\" value=\"Sign-up\" />\n");
 		sb.append("</form>\n");
-
-		boolean openid = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"));
-		if (openid) {
-			boolean google = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_GOOGLE, "off"));
-			boolean yahoo = "on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_YAHOO, "off"));
-			if (google || yahoo) {
-				sb.append("<br/>\n");
-				sb.append("Sign-up with: ");
-				if (google) {
-					sb.append("<a href=\"openid/google/signup\">Google</a>\n");
-				}
-				if (yahoo) {
-					if (google) {
-						sb.append(" | ");
-					}
-					sb.append("<a href=\"openid/yahoo/signup\">Yahoo!</a>\n");
-				}
-			}
-		}
-
 		sb.append(html.footer());
+
 		return sb.toString();
 	}
 
