@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.resources;
 
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.GraphType;
 import org.entrystore.Group;
@@ -46,16 +47,21 @@ public class NameResource extends BaseResource {
 	@Get
 	public Representation represent() {
 		String name = null;
-		if (this.context != null && this.entry != null) {
-			GraphType bt = entry.getGraphType();
-			if (GraphType.Group.equals(bt)) {
-				name = ((Group) entry.getResource()).getName();
-			} else if (GraphType.User.equals(bt)) {
-				name = ((User) entry.getResource()).getName();
-			} else if (GraphType.Context.equals(bt)) {
-				Context c = getCM().getContext(entryId);
-				name = getCM().getName(c.getURI());
+		try {
+			if (this.context != null && this.entry != null) {
+				GraphType bt = entry.getGraphType();
+				if (GraphType.Group.equals(bt)) {
+					name = ((Group) entry.getResource()).getName();
+				} else if (GraphType.User.equals(bt)) {
+					name = ((User) entry.getResource()).getName();
+				} else if (GraphType.Context.equals(bt)) {
+					Context c = getCM().getContext(entryId);
+					name = getCM().getName(c.getURI());
+				}
 			}
+		} catch (AuthorizationException ae) {
+			getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+			return new EmptyRepresentation();
 		}
 
 		if (name != null) {

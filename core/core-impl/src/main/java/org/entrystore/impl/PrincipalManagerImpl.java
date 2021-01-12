@@ -70,6 +70,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	
 
 	public String getPrincipalName(URI principal) {
+		checkAuthenticatedUserAuthorized(getUser(principal).getEntry(), AccessProperty.ReadMetadata);
+
 		URISplit us = new URISplit(principal, this.entry.getRepositoryManager().getRepositoryURL());
 		if (us.getURIType() == URIType.Resource) {
 			return getName(us.getMetaMetadataURI());
