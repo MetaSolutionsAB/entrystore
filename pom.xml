@@ -172,7 +172,7 @@
         <repository>
             <id>Restlet</id>
             <name>Restlet Framework repository</name>
-            <url>https://maven.restlet.com</url>
+            <url>https://maven.restlet.talend.com</url>
         </repository>
     </repositories>
     <pluginRepositories>
