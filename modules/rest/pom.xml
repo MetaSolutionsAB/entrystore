@@ -145,11 +145,6 @@
             <version>${restlet.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.simpleframework</groupId>
-            <artifactId>org.simpleframework</artifactId>
-            <version>4.1.1</version>
-        </dependency>
-        <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
             <version>${jsonorg.version}</version>
