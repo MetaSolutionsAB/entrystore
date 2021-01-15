@@ -39,11 +39,11 @@ public class EntryStoreApplicationStandalone extends Application {
 
 		if ((args.length < 1 && System.getenv(EntryStoreApplication.ENV_CONFIG_URI) == null) || args.length > 3) {
 			out("EntryStore standalone");
-			out("http://entrystore.org");
+			out("https://entrystore.org");
 			out("");
-			out("Usage: entrystore [path to configuration file] [listening port] [log level]");
+			out("Usage: entrystore [listening port] [log level] [path to configuration file]");
 			out("");
-			out("Path to configuration file may be omitted only if environment variable ENTRYSTORE_CONFIG_URI is set to a URI. No other parameters must be provided if the configuration file is not provided as parameter.");
+			out("Path to configuration file may be omitted if environment variable ENTRYSTORE_CONFIG_URI is set to a URI.");
 			out("Default listening port is " + port + ".");
 			out("Log level may be one of: ALL, DEBUG, INFO, WARN, ERROR, FATAL, OFF, TRACE");
 			out("");
@@ -52,20 +52,20 @@ public class EntryStoreApplicationStandalone extends Application {
 
 		URI config = null;
 		if (args.length > 0) {
-			String configStr = args[0];
-			config = new File(configStr).toURI();
-		}
-
-		if (args.length >= 2) {
 			try {
-				port = Integer.valueOf(args[1]);
+				port = Integer.valueOf(args[0]);
 			} catch (NumberFormatException nfe) {
 				out("Invalid listening port, must be an integer");
 			}
 		}
 
-		if (args.length == 3) {
-			configureLogging(args[2]);
+		if (args.length >= 2) {
+			configureLogging(args[1]);
+		}
+
+		if (args.length >= 3) {
+			String configStr = args[2];
+			config = new File(configStr).toURI();
 		}
 
 		Component component = new Component();
