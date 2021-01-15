@@ -130,11 +130,6 @@
             <version>${restlet.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.restlet.jse</groupId>
-            <artifactId>org.restlet.ext.simple</artifactId>
-            <version>${restlet.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.restlet.jee</groupId>
             <artifactId>org.restlet.ext.crypto</artifactId>
             <version>${restlet.version}</version>
