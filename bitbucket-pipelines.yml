@@ -24,9 +24,11 @@ stepdefinitions:
         # We allow semantic versioning plus x.y-z (e.g. 4.10-SNAPSHOT which does not exactly conform to semver)
         - echo $VERSION | grep -P -q '^(0|[1-9]\d*)\.(0|[1-9]\d*)(\.*)(0*|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
         - export FILE_BASE="entrystore-rest-$VERSION" && echo $FILE_BASE
+        - export FILE_BASE_JETTY="entrystore-rest-jetty-$VERSION" && echo $FILE_BASE_JETTY
         - ( cd modules/rest-standalone/target/dist/ && tar czf ${FILE_BASE}.tar.gz * && sha256sum ${FILE_BASE}.tar.gz > ${FILE_BASE}.tar.gz.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE}.tar.gz.sha256 )
+        - ( cd modules/rest-standalone-jetty/target/dist/ && tar czf ${FILE_BASE_JETTY}.tar.gz * && sha256sum ${FILE_BASE_JETTY}.tar.gz > ${FILE_BASE_JETTY}.tar.gz.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE_JETTY}.tar.gz.sha256 )
         - ( cd modules/rest/target/ && sha256sum ${FILE_BASE}.war > ${FILE_BASE}.war.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE}.war.sha256 )
-        - scp -v modules/rest/target/{*.war,*.sha256.asc} modules/rest-standalone/target/dist/{*.tar.gz,*.sha256.asc} deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
+        - scp -v modules/rest/target/{*.war,*.sha256.asc} modules/rest-standalone/target/dist/{*.tar.gz,*.sha256.asc} modules/rest-standalone-jetty/target/dist/{*.tar.gz,*.sha256.asc} deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
         - if [ $BITBUCKET_BRANCH == "develop" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/develop.version" ; elif [ $BITBUCKET_BRANCH == "master" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/latest.version" ; fi
   - dockerhub: &dockerhub
       name: Docker Hub
