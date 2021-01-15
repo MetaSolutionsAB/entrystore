@@ -32,7 +32,7 @@ import java.net.URI;
  *
  * @author Hannes Ebner
  */
-public class EntryStoreApplicationStandalone extends Application {
+public class EntryStoreApplicationStandaloneJetty extends Application {
 
 	public static void main(String[] args) {
 		int port = 8181;
