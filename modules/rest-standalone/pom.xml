@@ -12,29 +12,13 @@
     <artifactId>entrystore-rest-standalone</artifactId>
     <packaging>pom</packaging>
     <version>4.10-SNAPSHOT</version>
-    <name>EntryStore REST Standalone Common</name>
+    <name>EntryStore REST Standalone</name>
 
     <modules>
+	<module>common</module>
     	<module>jetty</module>
 	<module>simple</module>
     </modules>
-
-    <build>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-            </resource>
-        </resources>
-        <testResources>
-            <testResource>
-                <directory>src/test/resources</directory>
-                <includes>
-                    <include>**/*.xml</include>
-                    <include>**/*.properties</include>
-                </includes>
-            </testResource>
-        </testResources>
-    </build>
 
     <dependencies>
         <dependency>

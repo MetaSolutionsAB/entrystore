@@ -65,7 +65,7 @@
     <dependencies>
         <dependency>
             <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-rest-standalone</artifactId>
+            <artifactId>entrystore-rest-standalone-common</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
