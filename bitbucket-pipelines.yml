@@ -13,7 +13,8 @@ stepdefinitions:
         - mvn clean install
         - rm -rf ~/.m2/repository/org/entrystore/
       artifacts:
-        - modules/*/target/**
+        - modules/rest/target/**
+        - modules/rest-standalone/*/target/**
   - deploy: &deploy
       name: Deploy
       script:
