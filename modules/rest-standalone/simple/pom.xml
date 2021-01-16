@@ -6,13 +6,13 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>org.entrystore</groupId>
-        <artifactId>entrystore-modules</artifactId>
+        <artifactId>entrystore-rest-standalone</artifactId>
         <version>4.10-SNAPSHOT</version>
     </parent>
-    <artifactId>entrystore-rest-standalone-jetty</artifactId>
+    <artifactId>entrystore-rest-standalone-simple</artifactId>
     <packaging>jar</packaging>
     <version>4.10-SNAPSHOT</version>
-    <name>EntryStore REST standalone Jetty</name>
+    <name>EntryStore REST Standalone Simple Framework</name>
 
     <build>
         <resources>
@@ -43,7 +43,7 @@
                 <configuration>
                     <programs>
                         <program>
-                            <mainClass>org.entrystore.rest.EntryStoreApplicationStandaloneJetty</mainClass>
+                            <mainClass>org.entrystore.rest.EntryStoreApplicationStandaloneSimple</mainClass>
                             <name>entrystore</name>
                         </program>
                     </programs>
@@ -65,12 +65,12 @@
     <dependencies>
         <dependency>
             <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-rest</artifactId>
+            <artifactId>entrystore-rest-standalone</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.restlet.jse</groupId>
-            <artifactId>org.restlet.ext.jetty</artifactId>
+            <artifactId>org.restlet.ext.simple</artifactId>
             <version>${restlet.version}</version>
         </dependency>
         <dependency>

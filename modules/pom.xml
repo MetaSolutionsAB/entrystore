@@ -18,7 +18,6 @@
 		<module>harvesting</module>
 		<module>rest</module>
 		<module>rest-standalone</module>
-		<module>rest-standalone-jetty</module>
 		<module>transforms</module>
 		<!-- SQI not functional at the moment, needs refactoring -->
 		<!-- <module>sqi</module>-->

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2021 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest;
+package org.entrystore.rest.standalone;
 
 import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.entrystore.rest.EntryStoreApplication;
 import org.restlet.Application;
 import org.restlet.Component;
 import org.restlet.Context;
@@ -28,11 +29,13 @@ import java.io.File;
 import java.net.URI;
 
 /**
- * Main class to start EntryStore standalone outside a container.
+ * Class to provide common functionality for other standalone wrappers.
+ *
+ * Should not be used directly.
  *
  * @author Hannes Ebner
  */
-public class EntryStoreApplicationStandaloneJetty extends Application {
+public abstract class EntryStoreApplicationStandalone extends Application {
 
 	public static void main(String[] args) {
 		int port = 8181;

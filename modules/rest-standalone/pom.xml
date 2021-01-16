@@ -10,9 +10,14 @@
         <version>4.10-SNAPSHOT</version>
     </parent>
     <artifactId>entrystore-rest-standalone</artifactId>
-    <packaging>jar</packaging>
+    <packaging>pom</packaging>
     <version>4.10-SNAPSHOT</version>
-    <name>EntryStore REST standalone</name>
+    <name>EntryStore REST Standalone Common</name>
+
+    <modules>
+    	<module>jetty</module>
+	<module>simple</module>
+    </modules>
 
     <build>
         <resources>
@@ -29,37 +34,6 @@
                 </includes>
             </testResource>
         </testResources>
-        <plugins>
-            <plugin>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <release>${maven.compiler.release}</release>
-                    <compilerArgument></compilerArgument>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>appassembler-maven-plugin</artifactId>
-                <configuration>
-                    <programs>
-                        <program>
-                            <mainClass>org.entrystore.rest.EntryStoreApplicationStandalone</mainClass>
-                            <name>entrystore</name>
-                        </program>
-                    </programs>
-                    <assembleDirectory>${project.build.directory}/dist</assembleDirectory>
-                    <extraJvmArguments></extraJvmArguments>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>assemble</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
     </build>
 
     <dependencies>
@@ -67,16 +41,6 @@
             <groupId>org.entrystore</groupId>
             <artifactId>entrystore-rest</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.restlet.jse</groupId>
-            <artifactId>org.restlet.ext.simple</artifactId>
-            <version>${restlet.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>javax.servlet</groupId>
-            <artifactId>javax.servlet-api</artifactId>
-            <version>${servlet.version}</version>
         </dependency>
     </dependencies>
 

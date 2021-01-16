@@ -106,7 +106,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Main class to start EntryStore as a Restlet Application.
+ * Main class to start EntryStore as Restlet Application.
  *
  * @author Hannes Ebner
  */
@@ -134,7 +134,7 @@ public class EntryStoreApplication extends Application {
 
 	private static Date startupDate = null;
 
-	protected static String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
+	public static String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
 
 	URI configURI;
 
