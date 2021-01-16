@@ -15,9 +15,9 @@
     <name>EntryStore REST Standalone</name>
 
     <modules>
-	<module>common</module>
-    	<module>jetty</module>
-	<module>simple</module>
+        <module>common</module>
+        <module>jetty</module>
+        <module>simple</module>
     </modules>
 
     <dependencies>
