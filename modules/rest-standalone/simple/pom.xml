@@ -43,7 +43,7 @@
                 <configuration>
                     <programs>
                         <program>
-                            <mainClass>org.entrystore.rest.EntryStoreApplicationStandaloneSimple</mainClass>
+                            <mainClass>org.entrystore.rest.standalone.EntryStoreApplicationStandaloneSimple</mainClass>
                             <name>entrystore</name>
                         </program>
                     </programs>
