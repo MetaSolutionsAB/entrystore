@@ -16,6 +16,14 @@
 
 package org.entrystore.rest.standalone;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PatternOptionBuilder;
 import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -25,8 +33,8 @@ import org.restlet.Component;
 import org.restlet.Context;
 import org.restlet.data.Protocol;
 
-import java.io.File;
 import java.net.URI;
+import java.net.URISyntaxException;
 
 /**
  * Class to provide common functionality for other standalone wrappers.
@@ -38,38 +46,72 @@ import java.net.URI;
 public abstract class EntryStoreApplicationStandalone extends Application {
 
 	public static void main(String[] args) {
-		int port = 8181;
+		CommandLineParser parser = new DefaultParser();
+		Options options = new Options();
+		options.addOption(Option.builder("c").
+				longOpt("config").
+				required(System.getenv(EntryStoreApplication.ENV_CONFIG_URI) == null).
+				desc("URL of configuration file, may be omitted if environment variable ENTRYSTORE_CONFIG_URI is set").
+				hasArg().
+				argName("URL").
+				optionalArg(false).
+				type(PatternOptionBuilder.URL_VALUE).
+				build());
+		options.addOption(Option.builder("p").
+				longOpt("port").
+				desc("port to listen on\ndefault: 8181").
+				hasArg().
+				argName("PORT").
+				optionalArg(false).
+				type(PatternOptionBuilder.NUMBER_VALUE).
+				build());
+		options.addOption(Option.builder().
+				longOpt("log-level").
+				desc("log level, one of: ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF\ndefault: INFO").
+				hasArg().
+				argName("LEVEL").
+				optionalArg(false).
+				build());
+		options.addOption(Option.builder("h").longOpt("help").desc("display help").build());
 
-		if ((args.length < 1 && System.getenv(EntryStoreApplication.ENV_CONFIG_URI) == null) || args.length > 3) {
-			out("EntryStore standalone");
-			out("https://entrystore.org");
-			out("");
-			out("Usage: entrystore [listening port] [log level] [path to configuration file]");
-			out("");
-			out("Path to configuration file may be omitted if environment variable ENTRYSTORE_CONFIG_URI is set to a URI.");
-			out("Default listening port is " + port + ".");
-			out("Log level may be one of: ALL, DEBUG, INFO, WARN, ERROR, FATAL, OFF, TRACE");
-			out("");
+		CommandLine cl = null;
+		try {
+			cl = parser.parse(options, args);
+		} catch (ParseException e) {
+			System.err.println(e.getMessage() + "\n");
+			printHelp(options);
+			System.exit(1);
+		}
+
+		if (cl.hasOption("help")) {
+			printHelp(options);
 			System.exit(0);
 		}
 
+		String strPort = cl.getOptionValue("p", "8181");
+		int port = 8181;
+		try {
+			port = Integer.parseInt(strPort);
+		} catch (NumberFormatException nfe) {
+			System.err.println("Invalid port number, must be integer: " + strPort + "\n");
+			printHelp(options);
+			System.exit(1);
+		}
+
 		URI config = null;
-		if (args.length > 0) {
-			try {
-				port = Integer.valueOf(args[0]);
-			} catch (NumberFormatException nfe) {
-				out("Invalid listening port, must be an integer");
+		try {
+			if (cl.hasOption("c")) {
+				config = new URI(cl.getOptionValue("c"));
+			} else {
+				config = new URI(System.getenv(EntryStoreApplication.ENV_CONFIG_URI));
 			}
+		} catch (URISyntaxException e) {
+			System.err.println("Invalid configuration URL: " + e.getMessage() + "\n");
+			printHelp(options);
+			System.exit(1);
 		}
 
-		if (args.length >= 2) {
-			configureLogging(args[1]);
-		}
-
-		if (args.length >= 3) {
-			String configStr = args[2];
-			config = new File(configStr).toURI();
-		}
+		configureLogging(cl.getOptionValue("log-level", "INFO"));
 
 		Component component = new Component();
 		component.getServers().add(Protocol.HTTP, port);
@@ -86,6 +128,13 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+
+	private static void printHelp(Options options) {
+		HelpFormatter formatter = new HelpFormatter();
+		formatter.setWidth(90);
+		formatter.setLeftPadding(2);
+		formatter.printHelp("entrystore", options,true);
 	}
 
 	private static void out(String s) {
