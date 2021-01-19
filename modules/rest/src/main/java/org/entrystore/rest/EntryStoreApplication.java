@@ -489,14 +489,16 @@ public class EntryStoreApplication extends Application {
 	public static String getVersion() {
 		if (VERSION == null) {
 			URI versionFile = ConfigurationManager.getConfigurationURI("VERSION.txt");
-			try {
-				log.debug("Reading version number from " + versionFile);
-				VERSION = HttpUtil.readFirstLine(versionFile.toURL());
-			} catch (IOException e) {
-				log.error(e.getMessage());
+			if (versionFile != null) {
+				try {
+					log.debug("Reading version number from " + versionFile);
+					VERSION = HttpUtil.readFirstLine(versionFile.toURL());
+				} catch (IOException e) {
+					log.error(e.getMessage());
+				}
 			}
 			if (VERSION == null) {
-				VERSION = new SimpleDateFormat("yyyyMMdd").format(new Date());
+				VERSION = new SimpleDateFormat("yyyyMMddHHmm").format(new Date());
 			}
 		}
 		return VERSION;
