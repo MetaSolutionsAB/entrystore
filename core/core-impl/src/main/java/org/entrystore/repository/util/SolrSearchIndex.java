@@ -25,6 +25,7 @@ import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.client.solrj.response.QueryResponse;
+import org.apache.solr.client.solrj.response.SolrPingResponse;
 import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
@@ -201,7 +202,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	}
 
-	public class DelayedContextIndexerInfo {
+	public static class DelayedContextIndexerInfo {
 
 		LocalDateTime submitted;
 
@@ -416,6 +417,19 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public boolean isIndexing(URI contextURI) {
 		return reindexing.containsKey(contextURI);
+	}
+
+	@Override
+	public boolean ping() {
+		try {
+			SolrPingResponse pingResponse = this.solrServer.ping();
+			if (pingResponse.getStatus() == 0) {
+				return true;
+			}
+		} catch (SolrServerException | IOException e) {
+			log.error(e.getMessage());
+		}
+		return false;
 	}
 
 	public void submitContextForDelayedReindex(Entry contextEntry, Graph entryGraph) {

@@ -45,4 +45,6 @@ public interface SearchIndex {
 
 	public boolean isIndexing(URI contextURI);
 
+	public boolean ping();
+
 }

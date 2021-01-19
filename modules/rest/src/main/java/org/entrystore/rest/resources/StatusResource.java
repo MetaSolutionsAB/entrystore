@@ -104,6 +104,7 @@ public class StatusResource extends BaseResource  {
 					result.put("passwordMaxLength", Password.PASSWORD_MAX_LENGTH);
 					result.put("solr", settingToBoolean(Settings.SOLR));
 					result.put("solrReindexOnStartup", settingToBoolean(Settings.SOLR_REINDEX_ON_STARTUP));
+					result.put("solrStatus", getRM().getIndex().ping() ? "online" : "offline");
 					result.put("signup", settingToBoolean(Settings.SIGNUP));
 					result.put("version", EntryStoreApplication.getVersion());
 					result.put("startupTime", EntryStoreApplication.getStartupDate());
@@ -169,7 +170,7 @@ public class StatusResource extends BaseResource  {
 						return new EmptyRepresentation();
 					}
 				} else {
-					if (getRM() != null) {
+					if (getRM() != null && getRM().getIndex() != null && getRM().getIndex().ping()) {
 						return new StringRepresentation("UP", MediaType.TEXT_PLAIN);
 					} else {
 						return new StringRepresentation("DOWN", MediaType.TEXT_PLAIN);

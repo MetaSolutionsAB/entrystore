@@ -750,7 +750,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	public SearchIndex getIndex() {
 		return this.solrIndex;
 	}
-	
+
 	private void registerPublicRepositoryListeners() {
 		if (publicRepository != null) {
 			RepositoryListener updater = new RepositoryListener() {
