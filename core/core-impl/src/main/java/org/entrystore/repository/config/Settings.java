@@ -23,8 +23,6 @@ package org.entrystore.repository.config;
  */
 public class Settings {
 	public static String AUTH_ADMIN_SECRET = "entrystore.auth.adminpw";
-	
-	public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.token.max-age";
 
 	public static String AUTH_CAS = "entrystore.auth.cas";
 	public static String AUTH_CAS_VERSION = "entrystore.auth.cas.version";
@@ -43,6 +41,11 @@ public class Settings {
 	public static String AUTH_SAML_REDIRECT_FAILURE_URL = "entrystore.auth.saml.redirect-failure.url";
 
 	public static String AUTH_COOKIE_PATH = "entrystore.auth.cookie.path";
+	public static String AUTH_COOKIE_HTTPONLY = "entrystore.auth.cookie.httponly";
+	public static String AUTH_COOKIE_SECURE = "entrystore.auth.cookie.secure";
+	public static String AUTH_COOKIE_SAMESITE = "entrystore.auth.cookie.samesite";
+	public static String AUTH_COOKIE_MAXAGE = "entrystore.auth.cookie.max-age";
+	@Deprecated public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.cookie.max-age";
 
 	public static String AUTH_PASSWORD = "entrystore.auth.password";
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";

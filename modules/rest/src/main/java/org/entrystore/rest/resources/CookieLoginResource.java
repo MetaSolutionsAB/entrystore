@@ -130,7 +130,6 @@ public class CookieLoginResource extends BaseResource {
 		if (html) {
 			getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 		}
-		return;
 	}
 
 }

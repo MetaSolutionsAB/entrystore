@@ -18,6 +18,7 @@ package org.entrystore.rest.auth;
 
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
+import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
@@ -40,13 +41,17 @@ import java.util.Date;
  */
 public class CookieVerifier implements Verifier {
 
-	private PrincipalManager pm;
+	private final PrincipalManager pm;
 
-	private RepositoryManager rm;
+	private final RepositoryManager rm;
 
-	private CORSFilter corsFilter;
+	private final CORSFilter corsFilter;
 
-	private Logger log = LoggerFactory.getLogger(CookieVerifier.class);
+	private static CustomCookieSettings cookieSettings;
+
+	private static final int DEFAULT_MAX_AGE = 24 * 3600;
+
+	private static final Logger log = LoggerFactory.getLogger(CookieVerifier.class);
 
 	public CookieVerifier(RepositoryManager rm) {
 		this(rm, null);
@@ -56,6 +61,23 @@ public class CookieVerifier implements Verifier {
 		this.rm = rm;
 		this.pm = rm.getPrincipalManager();
 		this.corsFilter = corsFilter;
+		if (cookieSettings == null) {
+			Config config = rm.getConfiguration();
+			CustomCookieSettings.SameSite sameSite = CustomCookieSettings.SameSite.Strict;
+			try {
+				String sameSiteStr = config.getString(Settings.AUTH_COOKIE_SAMESITE, CustomCookieSettings.SameSite.Strict.name()).toLowerCase();
+				if (sameSiteStr.length() > 1) {
+					sameSiteStr = sameSiteStr.substring(0, 1).toUpperCase() + sameSiteStr.substring(1);
+				}
+				sameSite = CustomCookieSettings.SameSite.valueOf(sameSiteStr);
+			} catch (IllegalArgumentException iae) {
+				log.warn("Invalid value for setting " + Settings.AUTH_COOKIE_SAMESITE + ": " + iae.getMessage());
+			}
+			cookieSettings = new CustomCookieSettings(
+					config.getBoolean(Settings.AUTH_COOKIE_SECURE, true),
+					config.getBoolean(Settings.AUTH_COOKIE_HTTPONLY, true),
+					sameSite);
+		}
 	}
 
 	public int verify(Request request, Response response) {
@@ -122,24 +144,31 @@ public class CookieVerifier implements Verifier {
 	}
 
 	public void createAuthToken(String userName, String maxAgeStr, Response response) {
+		Config config = rm.getConfiguration();
 		// 24h default, lifetime in seconds
-		int maxAge = rm.getConfiguration().getInt(Settings.AUTH_TOKEN_MAX_AGE, 24 * 3600);
+		long maxAge = config.getLong(Settings.AUTH_TOKEN_MAX_AGE, config.getLong(Settings.AUTH_COOKIE_MAXAGE, DEFAULT_MAX_AGE));
 		if (maxAgeStr != null) {
 			try {
-				maxAge = Integer.parseInt(maxAgeStr);
-			} catch (NumberFormatException nfe) {}
+				maxAge = Long.parseLong(maxAgeStr);
+			} catch (NumberFormatException ignored) {}
 		}
 
 		String token = Password.getRandomBase64(128);
-		Date loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
+		Date loginExpiration = new Date(new Date().getTime() + (DEFAULT_MAX_AGE * 1000));
+		if (maxAge >= 0) { // negative value means session cookie, see below
+			loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
+		}
 		LoginTokenCache.getInstance().putToken(token, new UserInfo(userName, loginExpiration));
-
 		log.debug("User " + userName + " receives authentication token that will expire on " + loginExpiration);
 
 		// We hack the mechanism and set additional properties as part of the Cookie value since
 		// there is no direct way to set properties such as Max-Age, SameSite, etc.
 		// This works since Restlet does not parse or process the value; this hack might break in the future.
-		token = token + "; Max-Age=" + maxAge;
+		// We only set Max-Age for positive values; omission of Max-Age and Expires makes it a session cookie.
+		if (maxAge >= 0) {
+			token += "; Max-Age=" + maxAge;
+		}
+		token += "; " + cookieSettings.toString();
 		CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 		// CookieSetting.setMaxAge() actually materializes as an "Expires" setting for some strange reason,
 		// that's why we set "Max-Age" (which takes precedent over "Expires") above instead.
