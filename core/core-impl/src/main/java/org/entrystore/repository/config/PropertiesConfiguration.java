@@ -358,27 +358,22 @@ public class PropertiesConfiguration implements Config {
 	}
 
 	public boolean getBoolean(String key) {
-		String strValue = config.getProperty(key);
-		boolean boolValue = false;
-		
-		if (strValue != null) {
-			boolValue = Boolean.valueOf(strValue).booleanValue();
-		}
-		
-		return boolValue;
+		return getBoolean(key, false);
 	}
 
 	public boolean getBoolean(String key, boolean defaultValue) {
 		String strValue = config.getProperty(key);
-		boolean boolValue = false;
-		
-		if (strValue != null) {
-			boolValue = Boolean.valueOf(strValue).booleanValue();
-		} else {
-			boolValue = defaultValue;
+		if ("on".equalsIgnoreCase(strValue)) {
+			strValue = "true";
+		} else if ("off".equalsIgnoreCase(strValue)) {
+			strValue = "false";
 		}
 		
-		return boolValue;
+		if (strValue != null) {
+			return Boolean.parseBoolean(strValue);
+		} else {
+			return defaultValue;
+		}
 	}
 
 	public byte getByte(String key) {
@@ -386,7 +381,7 @@ public class PropertiesConfiguration implements Config {
 		byte byteValue = 0;
 		
 		if (strValue != null) {
-			byteValue = Byte.valueOf(strValue).byteValue();
+			byteValue = Byte.parseByte(strValue);
 		}
 		
 		return byteValue;
@@ -397,7 +392,7 @@ public class PropertiesConfiguration implements Config {
 		byte byteValue = 0;
 		
 		if (strValue != null) {
-			byteValue = Byte.valueOf(strValue).byteValue();
+			byteValue = Byte.parseByte(strValue);
 		} else {
 			byteValue = defaultValue;
 		}
@@ -410,7 +405,7 @@ public class PropertiesConfiguration implements Config {
 		double doubleValue = 0;
 		
 		if (strValue != null) {
-			doubleValue = Double.valueOf(strValue).doubleValue();
+			doubleValue = Double.parseDouble(strValue);
 		}
 		
 		return doubleValue;
@@ -421,7 +416,7 @@ public class PropertiesConfiguration implements Config {
 		double doubleValue = 0;
 		
 		if (strValue != null) {
-			doubleValue = Double.valueOf(strValue).doubleValue();
+			doubleValue = Double.parseDouble(strValue);
 		} else {
 			doubleValue = defaultValue;
 		}
@@ -434,7 +429,7 @@ public class PropertiesConfiguration implements Config {
 		float floatValue = 0;
 		
 		if (strValue != null) {
-			floatValue = Float.valueOf(strValue).floatValue();
+			floatValue = Float.parseFloat(strValue);
 		}
 		
 		return floatValue;
@@ -445,7 +440,7 @@ public class PropertiesConfiguration implements Config {
 		float floatValue = 0;
 		
 		if (strValue != null) {
-			floatValue = Float.valueOf(strValue).floatValue();
+			floatValue = Float.parseFloat(strValue);
 		} else {
 			floatValue = defaultValue;
 		}
@@ -458,7 +453,7 @@ public class PropertiesConfiguration implements Config {
 		int intValue = 0;
 		
 		if (strValue != null) {
-			intValue = Integer.valueOf(strValue).intValue();
+			intValue = Integer.parseInt(strValue);
 		}
 		
 		return intValue;
@@ -469,7 +464,7 @@ public class PropertiesConfiguration implements Config {
 		int intValue = 0;
 		
 		if (strValue != null) {
-			intValue = Integer.valueOf(strValue).intValue();
+			intValue = Integer.parseInt(strValue);
 		} else {
 			intValue = defaultValue;
 		}
@@ -482,7 +477,7 @@ public class PropertiesConfiguration implements Config {
 		long longValue = 0;
 		
 		if (strValue != null) {
-			longValue = Long.valueOf(strValue).longValue();
+			longValue = Long.parseLong(strValue);
 		}
 		
 		return longValue;
@@ -493,7 +488,7 @@ public class PropertiesConfiguration implements Config {
 		long longValue = 0;
 		
 		if (strValue != null) {
-			longValue = Long.valueOf(strValue).longValue();
+			longValue = Long.parseLong(strValue);
 		} else {
 			longValue = defaultValue;
 		}
@@ -506,7 +501,7 @@ public class PropertiesConfiguration implements Config {
 		short shortValue = 0;
 		
 		if (strValue != null) {
-			shortValue = Short.valueOf(strValue).shortValue();
+			shortValue = Short.parseShort(strValue);
 		}
 		
 		return shortValue;
@@ -517,7 +512,7 @@ public class PropertiesConfiguration implements Config {
 		short shortValue = 0;
 		
 		if (strValue != null) {
-			shortValue = Short.valueOf(strValue).shortValue();
+			shortValue = Short.parseShort(strValue);
 		} else {
 			shortValue = defaultValue;
 		}
@@ -531,7 +526,7 @@ public class PropertiesConfiguration implements Config {
 			if (uri != null) {
 				return new URI(uri);
 			}
-		} catch (URISyntaxException e) {
+		} catch (URISyntaxException ignored) {
 		}
 		return null;
 	}
@@ -556,7 +551,7 @@ public class PropertiesConfiguration implements Config {
 					int rgb = Long.decode(value).intValue();
 					result = new Color(rgb);
 				}
-			} catch (NumberFormatException nfe) {
+			} catch (NumberFormatException ignored) {
 			}
 		}
 
