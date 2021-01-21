@@ -75,11 +75,11 @@ public class ListRecordsJob implements Job, InterruptableJob {
 	private ValueFactory vf;
 
 	public void execute(JobExecutionContext context) throws JobExecutionException {
-		if (interrupted == false ) {
+		if (!interrupted) {
 			log.info("ListRecordsJob starts: " + ((URI)context.getJobDetail().getJobDataMap().get("contextURI")).toString() + " metadataType: " + context.getJobDetail().getJobDataMap().getString("metadataType") ); 
 			OutputStream out;
 			try {
-				out = System.out; //new FileOutputStream("/home/eric/test.xml");
+				out = System.out;
 
 				JobDataMap dataMap = context.getJobDetail().getJobDataMap();
 				RepositoryManagerImpl rm = (RepositoryManagerImpl) dataMap.get("rm");

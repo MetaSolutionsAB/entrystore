@@ -89,7 +89,7 @@ public class FileOperations {
 	}
 
 	/**
-	 * Copies a File using Java NIO.
+	 * Copies a File using Java NIO Channels.
 	 * 
 	 * @param src
 	 *            Source file

@@ -956,8 +956,8 @@ public class SolrSearchIndex implements SearchIndex {
 		 * mimeType = tc.getMimeRepository().getMimeType(mimeIS).getName(); }
 		 * finally { if (mimeIS != null) { mimeIS.close(); } }
 		 * 
-		 * if (mimeType != null) { stream = new BufferedInputStream(new
-		 * FileInputStream(f)); Parser parser = tc.getParser(mimeType); if
+		 * if (mimeType != null) { stream = new BufferedInputStream(
+		 * Files.newInputStream(f.toPath())); Parser parser = tc.getParser(mimeType); if
 		 * (parser != null) { ContentHandler handler = new BodyContentHandler();
 		 * try { log.info("Parsing document with MIME type " + mimeType + ": " +
 		 * f.toString()); parser.parse(stream, handler, new Metadata(), new
