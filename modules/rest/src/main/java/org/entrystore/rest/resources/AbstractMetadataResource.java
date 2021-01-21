@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableSet;
 import info.aduna.iteration.Iterations;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Metadata;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
@@ -91,7 +90,6 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType("application/lom+xml"));
 		supportedMediaTypes.add(new MediaType("application/rdf+json"));
 	}
 	
@@ -255,13 +253,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 */
 	private Representation getRepresentation(Graph graph, MediaType mediaType) throws AuthorizationException {
 		if (graph != null) {
-			String serializedGraph = null;
-			if (mediaType.getName().equals("application/lom+xml")) {
-				serializedGraph = ConverterUtil.convertGraphToLOM(graph, graph.getValueFactory().createURI(entry.getResourceURI().toString()));
-			} else {
-				serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
-			}
-
+			String serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
 			if (serializedGraph != null) {
 				getResponse().setStatus(Status.SUCCESS_OK);
 				return new StringRepresentation(serializedGraph, mediaType);
@@ -286,13 +278,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		}
 		
 		if (metadata != null && graphString != null) {
-			Graph deserializedGraph = null;
-			if (mediaType.getName().equals("application/lom+xml")) {
-				deserializedGraph = ConverterUtil.convertLOMtoGraph(graphString, entry.getResourceURI());
-			} else {
-				deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
-			}
-
+			Graph deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
 			if (deserializedGraph != null) {
 				getResponse().setStatus(Status.SUCCESS_OK);
 				metadata.setGraph(deserializedGraph);

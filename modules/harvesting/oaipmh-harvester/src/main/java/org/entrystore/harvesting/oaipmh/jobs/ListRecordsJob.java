@@ -16,24 +16,7 @@
 
 package org.entrystore.harvesting.oaipmh.jobs;
 
-import java.io.OutputStream;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.UnknownHostException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Iterator;
-import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
-
-import javax.xml.namespace.NamespaceContext;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpression;
-import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
-
+import ORG.oclc.oai.harvester2.verb.ListRecords;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.Context;
@@ -42,9 +25,9 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.converters.ConverterManagerImpl;
+import org.entrystore.repository.config.Settings;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
 import org.quartz.InterruptableJob;
@@ -57,7 +40,22 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import ORG.oclc.oai.harvester2.verb.ListRecords;
+import javax.xml.namespace.NamespaceContext;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
+import java.io.OutputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 
 public class ListRecordsJob implements Job, InterruptableJob {
 
@@ -277,11 +275,6 @@ public class ListRecordsJob implements Job, InterruptableJob {
 			return;
 		}
 		
-		// workaround for bad installations not using oai_lom
-		if ("lom".equalsIgnoreCase(metadataType)) {
-			metadataType = "oai_lom";
-		}
-
 		// We use OpenRDF URI and Java URI, they do different validity checks,
 		// and we need it to work in both.
 		// We can create a Reference without a resource URI, but not without a
@@ -418,8 +411,6 @@ public class ListRecordsJob implements Job, InterruptableJob {
 			expr = xpath.compile("oai:metadata/oai_dc:dc");
 		} else if (metadataType.equals("rdn_dc")) {
 			expr = xpath.compile("oai:metadata/rdn_dc:rdndc");
-		} else if (metadataType.equals("oai_lom")) {
-			expr = xpath.compile("oai:metadata/lom:lom");
 		}
 		return (Node) expr.evaluate(el, XPathConstants.NODE);
 	}
@@ -451,8 +442,6 @@ public class ListRecordsJob implements Job, InterruptableJob {
 			expr = xpath.compile("oai:metadata/oai_dc:dc/dc:identifier"); 
 		} else if (metadataType.equals("rdn_dc")) {
 			expr = xpath.compile("oai:metadata/rdn_dc:rdndc/dc:identifier"); 
-		} else if (metadataType.equals("oai_lom")) {
-			expr = xpath.compile("oai:metadata/lom:lom/lom:technical/lom:location");
 		}
 		
 		// we only want URIs as identifiers and discard other strings
@@ -488,9 +477,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 					uri = "http://www.openarchives.org/OAI/2.0/oai_dc/";
 				else if (prefix.equals("rdn_dc"))
 					uri = "http://www.rdn.ac.uk/oai/rdn_dc/";
-				else if (prefix.equals("lom"))
-					uri = "http://ltsc.ieee.org/xsd/LOM";
-				else 
+				else
 					uri = null;
 				return uri;
 			}

@@ -29,9 +29,7 @@ import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.converters.ConverterManagerImpl;
-import org.entrystore.impl.converters.LOM2RDFConverter;
 import org.entrystore.impl.converters.OAI_DC2RDFGraphConverter;
-import org.entrystore.impl.converters.RDF2LOMConverter;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
@@ -218,10 +216,6 @@ public class EntryStoreApplication extends Application {
 			Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
 			ConverterManagerImpl.register("oai_dc", oaiDcRdfConverter);
 			ConverterManagerImpl.register("rdn_dc", oaiDcRdfConverter);
-			ConverterManagerImpl.register("rdf2lom", new RDF2LOMConverter());
-			Converter lomRdfConverter = new LOM2RDFConverter();
-			ConverterManagerImpl.register("lom2rdf", lomRdfConverter);
-			ConverterManagerImpl.register("oai_lom", lomRdfConverter);
 
 			rm = new RepositoryManagerImpl(baseURI, confManager.getConfiguration());
 			cm = rm.getContextManager();

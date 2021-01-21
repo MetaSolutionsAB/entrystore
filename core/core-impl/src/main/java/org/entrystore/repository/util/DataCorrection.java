@@ -24,7 +24,6 @@ import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.RepositoryManager;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
@@ -341,9 +340,6 @@ public class DataCorrection {
 		try {
 			List<Entry> entries = getEntries(getContexts());
 			for (Entry entry : entries) {
-				if (!ConverterUtil.isValidated(entry.getMetadataGraph(), entry.getResourceURI())) {
-					continue;
-				}
 				Set<Date> strangeDates = getStrangeDates(entry);
 				if (!strangeDates.isEmpty()) {
 					String datesStr = "";

@@ -16,11 +16,8 @@
 
 package org.entrystore.harvesting.oaipmh.target.crosswalk;
 
-import java.net.URI;
-import java.text.SimpleDateFormat;
-import java.util.Iterator;
-import java.util.Properties;
-
+import ORG.oclc.oai.server.crosswalk.Crosswalk;
+import ORG.oclc.oai.server.verb.CannotDisseminateFormatException;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.entrystore.Entry;
 import org.entrystore.repository.util.NS;
@@ -34,8 +31,10 @@ import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import ORG.oclc.oai.server.crosswalk.Crosswalk;
-import ORG.oclc.oai.server.verb.CannotDisseminateFormatException;
+import java.net.URI;
+import java.text.SimpleDateFormat;
+import java.util.Iterator;
+import java.util.Properties;
 
 /**
  * Converts SCAM Entry and its metadata graphs to oai_dc.
@@ -258,20 +257,7 @@ public class Crosswalk2OaiDc extends Crosswalk {
 				result.append(constructLine("dc:subject", (Literal) o));
 			}
 		}
-		stmnts = md.match(resURI, vf.createURI(NS.lom, "keyword"), null);
-		while (stmnts.hasNext()) {
-			Value o = stmnts.next().getObject();
-			if (o instanceof Resource) {
-				Iterator<Statement> rightsStmnts = md.match((Resource) o, RDF.VALUE, null);
-				while (rightsStmnts.hasNext()) {
-					Value rightsO = rightsStmnts.next().getObject();
-					if (rightsO instanceof Literal) {
-						result.append(constructLine("dc:subject", (Literal) rightsO));
-					}
-				}
-			}
-		}
-		
+
 		// <dc:type>
 		
 		stmnts = md.match(resURI, RDF.TYPE, null);

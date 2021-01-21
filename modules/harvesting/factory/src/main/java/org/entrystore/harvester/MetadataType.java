@@ -17,6 +17,5 @@
 package org.entrystore.harvester;
 
 public enum MetadataType {
-	OAI_DC,
-	OAI_LOM
+	OAI_DC
 }

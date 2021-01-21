@@ -675,9 +675,9 @@ public class SCAMOAICatalog extends AbstractCatalog {
 						}
 
 						// Check whether we have to validate and whether the resource has been validated
-						if (validate && !ConverterUtil.isValidated(entry.getMetadataGraph(), entry.getResourceURI())) {
+						/*if (validate && !ConverterUtil.isValidated(entry.getMetadataGraph(), entry.getResourceURI())) {
 							continue;
-						}
+						}*/
 
 						Date modificationDate = entry.getModifiedDate();
 						boolean inDateRangeFrom = true;
@@ -1036,9 +1036,9 @@ public class SCAMOAICatalog extends AbstractCatalog {
 						}
 
 						// Check whether we have to validate and whether the resource has been validated
-						if (validate && !ConverterUtil.isValidated(entry.getMetadataGraph(), entry.getResourceURI())) {
+						/*if (validate && !ConverterUtil.isValidated(entry.getMetadataGraph(), entry.getResourceURI())) {
 							continue;
-						}
+						}*/
 
 						Date modificationDate = entry.getModifiedDate();
 						boolean inDateRange = true;

@@ -21,7 +21,6 @@ import org.apache.commons.lang.StringEscapeUtils;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.GraphUtil;
@@ -230,16 +229,6 @@ public class ProxyResource extends BaseResource {
 							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new NTriplesParser());
 						} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TriGParser());
-						} else if (mediaType.getName().equals("application/lom+xml")) {
-							URI resURI = null;
-							try {
-								resURI = URI.create(extResourceURL);
-							} catch (IllegalArgumentException iae) {
-								log.warn(iae.getMessage());
-							}
-							if (resURI != null) {
-								deserializedGraph = ConverterUtil.convertLOMtoGraph(pageContent, resURI);
-							}
 						}
 						if (deserializedGraph != null) {
 							return new JsonRepresentation(RDFJSON.graphToRdfJsonObject(deserializedGraph));
