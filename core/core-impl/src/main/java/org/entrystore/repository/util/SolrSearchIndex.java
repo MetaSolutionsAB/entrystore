@@ -529,17 +529,31 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// contributors
-		doc.addField("contributors", entry.getContributors());
+		for (URI c : entry.getContributors()) {
+			doc.addField("contributors", c.toString());
+		}
 
 		// lists
-		doc.addField("lists", entry.getReferringListsInSameContext());
+		for (URI l : entry.getReferringListsInSameContext()) {
+			doc.addField("lists", l.toString());
+		}
 
 		// ACL: admin, metadata r/w, resource r/w
-		doc.addField("acl.admin", entry.getAllowedPrincipalsFor(AccessProperty.Administer));
-		doc.addField("acl.metadata.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
-		doc.addField("acl.metadata.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata));
-		doc.addField("acl.resource.r", entry.getAllowedPrincipalsFor(AccessProperty.ReadResource));
-		doc.addField("acl.resource.rw", entry.getAllowedPrincipalsFor(AccessProperty.WriteResource));
+		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.Administer)) {
+			doc.addField("acl.admin", p.toString());
+		}
+		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata)) {
+			doc.addField("acl.metadata.r", p.toString());
+		}
+		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata)) {
+			doc.addField("acl.metadata.rw", p.toString());
+		}
+		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadResource)) {
+			doc.addField("acl.resource.r", p.toString());
+		}
+		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteResource)) {
+			doc.addField("acl.resource.rw", p.toString());
+		}
 
 		// status
 		URI status = entry.getStatus();
@@ -734,12 +748,12 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		Context c = entry.getContext();
-		Set mainEntryACL = entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata);
-		List<String> relatedURIs = EntryUtil.getResourceValues(entry, new HashSet(relatedProperties));
+		Set<URI> mainEntryACL = entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata);
+		List<String> relatedURIs = EntryUtil.getResourceValues(entry, new HashSet<>(relatedProperties));
 
 		// we remove all resources that are outside of this instance
 		// relatedURIs.removeIf(e -> !e.startsWith(rm.getRepositoryURL().toString()));
-		Set<Entry> relatedEntries = new HashSet();
+		Set<Entry> relatedEntries = new HashSet<>();
 		for (String relEntURI : relatedURIs) {
 			relatedEntries.addAll(c.getByResourceURI(URI.create(relEntURI)));
 		}
