@@ -9,7 +9,6 @@
 		<artifactId>entrystore-transforms</artifactId>
 		<version>4.10-SNAPSHOT</version>
 	</parent>
-	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-transforms-tabular</artifactId>
 	<packaging>jar</packaging>
 	<version>4.10-SNAPSHOT</version>

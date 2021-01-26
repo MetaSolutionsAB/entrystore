@@ -9,7 +9,6 @@
 		<artifactId>entrystore-modules</artifactId>
 		<version>4.10-SNAPSHOT</version>
 	</parent>
-	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-transforms</artifactId>
 	<packaging>pom</packaging>
 	<name>EntryStore Transforms</name>
