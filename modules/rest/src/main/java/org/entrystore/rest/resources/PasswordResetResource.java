@@ -24,6 +24,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
 import org.entrystore.rest.util.Email;
@@ -108,6 +109,8 @@ public class PasswordResetResource extends BaseResource {
 
 			// Reset password
 			if (u.setSecret(ci.password)) {
+				LoginTokenCache.getInstance().removeTokens(ci.email);
+				log.debug("Removed any authentication tokens belonging to user " + u.getURI());
 				Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), userEntry);
 				log.info("Reset password for user " + u.getURI());
 			} else {
