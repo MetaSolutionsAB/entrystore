@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public abstract class TokenCache<K, V> {
 
-	protected Map<K, V> tokenCache = new ConcurrentHashMap<K, V>();
+	final protected Map<K, V> tokenCache = new ConcurrentHashMap<>();
 
 	public void putToken(K token, V value) {
 		synchronized (tokenCache) {
