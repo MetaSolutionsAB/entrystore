@@ -25,11 +25,15 @@
 			<artifactId>jena-arq</artifactId>
 			<version>2.9.4</version>
 			<exclusions>
-                                <exclusion>
-                                        <groupId>log4j</groupId>
-                                        <artifactId>log4j</artifactId>
-                                </exclusion>
-                        </exclusions>
+				<exclusion>
+					<groupId>log4j</groupId>
+					<artifactId>log4j</artifactId>
+				</exclusion>
+				<exclusion>
+					<groupId>xml-apis</groupId>
+					<artifactId>xml-apis</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>net.sf.opencsv</groupId>
@@ -45,6 +49,12 @@
 			<groupId>org.apache.poi</groupId>
 			<artifactId>poi</artifactId>
 			<version>3.17</version>
+			<exclusions>
+				<exclusion>
+					<groupId>org.apache.commons</groupId>
+					<artifactId>commons-collections4</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<!-- Causes conflicts with running the tests (potentially more), something with XML-APIs
 		<dependency>

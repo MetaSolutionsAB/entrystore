@@ -9,7 +9,6 @@
 		<artifactId>entrystore-harvesting</artifactId>
 		<version>4.10-SNAPSHOT</version>
 	</parent>
-	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-harvesting-oaipmh-target</artifactId>
 	<packaging>war</packaging>
 	<version>4.10-SNAPSHOT</version>
@@ -91,6 +90,12 @@
 			<groupId>org.apache.velocity</groupId>
 			<artifactId>velocity</artifactId>
 			<version>1.7</version>
+			<exclusions>
+				<exclusion>
+					<groupId>commons-lang</groupId>
+					<artifactId>commons-lang</artifactId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 	</dependencies>
    
