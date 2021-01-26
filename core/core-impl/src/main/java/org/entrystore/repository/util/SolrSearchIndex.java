@@ -922,7 +922,19 @@ public class SolrSearchIndex implements SearchIndex {
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");
 		} while ((limit > result.size()) && (hits > (offset + limit)));
 
-		return new QueryResult(result, (hits - inaccessibleHits), facetFields);
+		long adjustedHitCount = hits - inaccessibleHits;
+
+		// We prevent possible information leakage (i.e., "Can we get to know whether a resource
+		// with a certain name exists even though we are not allowed to access it?") by manually
+		// setting the hit count to zero in certain conditions. Should protect against malicious
+		// probing requests.
+		//
+		// Test if the condition covers to much and add "offset == 0 &&" if necessary
+		if (result.size() == 0 && hits > 0) {
+			adjustedHitCount = 0;
+		}
+
+		return new QueryResult(result, adjustedHitCount, facetFields);
 	}
 
 	public SolrDocument fetchDocument(String uri) {
