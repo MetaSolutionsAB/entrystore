@@ -25,7 +25,6 @@ import org.apache.solr.client.solrj.request.CoreAdminRequest;
 import org.apache.solr.client.solrj.request.CoreStatus;
 import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.NodeConfig;
-import org.apache.solr.core.SolrResourceLoader;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -664,11 +663,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 
 			try {
-				System.setProperty("solr.solr.home", solrURL);
-				log.info("Solr Home (solr.solr.home) set to " + solrURL);
+				// System.setProperty("solr.solr.home", solrURL);
+				// log.info("Solr Home (solr.solr.home) set to " + solrURL);
+				// Path solrHome = SolrPaths.locateSolrHome();
 				URL solrConfig = ConverterUtil.findResource("solrconfig.xml");
-				SolrResourceLoader loader = new SolrResourceLoader(new File(solrURL).toPath());
-				NodeConfig config = new NodeConfig.NodeConfigBuilder("embeddedSolrServerNode", loader)
+				NodeConfig config = new NodeConfig.NodeConfigBuilder("embeddedSolrServerNode", new File(solrURL).toPath())
 						.setConfigSetBaseDirectory(solrConfig.getPath())
 						.build();
 				this.solrServer = new EmbeddedSolrServer(config, "core1");
