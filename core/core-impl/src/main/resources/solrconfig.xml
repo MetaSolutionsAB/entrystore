@@ -203,7 +203,7 @@
          have some sort of hard autoCommit to limit the log size.
       -->
      <autoCommit> 
-       <maxTime>${solr.autoCommit.maxTime:30000}</maxTime>
+       <maxTime>${solr.autoCommit.maxTime:60000}</maxTime>
        <maxDocs>${solr.autoCommit.maxDocs:10000}</maxDocs>
        <openSearcher>false</openSearcher>
      </autoCommit>
@@ -441,10 +441,11 @@
   
   <updateRequestProcessorChain name="dedupe">
     <processor class="org.apache.solr.update.processor.SignatureUpdateProcessorFactory">
-      <bool name="enabled">true</bool>
+      <!-- we don't need it since "uri" is unique -->
+      <bool name="enabled">false</bool>
       <str name="signatureField">id</str>
       <bool name="overwriteDupes">false</bool>
-      <str name="fields">uri,title</str>
+      <str name="fields">uri</str>
       <str name="signatureClass">org.apache.solr.update.processor.Lookup3Signature</str>
     </processor>
     <processor class="solr.LogUpdateProcessorFactory" />
