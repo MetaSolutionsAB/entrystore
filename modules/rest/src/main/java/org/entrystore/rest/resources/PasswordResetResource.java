@@ -24,6 +24,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
@@ -108,10 +109,10 @@ public class PasswordResetResource extends BaseResource {
 			}
 
 			// Reset password
-			if (u.setSecret(ci.password)) {
+			if (u.setSaltedHashedSecret(ci.saltedHashedPassword)) {
 				LoginTokenCache.getInstance().removeTokens(ci.email);
 				log.debug("Removed any authentication tokens belonging to user " + u.getURI());
-				Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), userEntry);
+				Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), u.getEntry());
 				log.info("Reset password for user " + u.getURI());
 			} else {
 				log.error("Error when resetting password for user " + u.getURI());
@@ -152,6 +153,7 @@ public class PasswordResetResource extends BaseResource {
 		String rcChallenge = null;
 		String rcResponse = null;
 		String rcResponseV2 = null;
+		String password = null;
 
 		if (MediaType.APPLICATION_JSON.equals(r.getMediaType())) {
 			try {
@@ -160,7 +162,7 @@ public class PasswordResetResource extends BaseResource {
 					ci.email = siJson.getString("email");
 				}
 				if (siJson.has("password")) {
-					ci.password = siJson.getString("password");
+					password = siJson.getString("password");
 				}
 				if (siJson.has("recaptcha_challenge_field")) {
 					rcChallenge = siJson.getString("recaptcha_challenge_field");
@@ -184,7 +186,7 @@ public class PasswordResetResource extends BaseResource {
 		} else {
 			Form form = new Form(getRequest().getEntity());
 			ci.email = form.getFirstValue("email", true);
-			ci.password = form.getFirstValue("password", true);
+			password = form.getFirstValue("password", true);
 			rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
 			rcResponse = form.getFirstValue("recaptcha_response_field", true);
 			rcResponseV2 = form.getFirstValue("g-recaptcha-response", true);
@@ -192,7 +194,7 @@ public class PasswordResetResource extends BaseResource {
 			ci.urlSuccess = form.getFirstValue("urlsuccess", true);
 		}
 
-		if (ci.email == null || ci.password == null) {
+		if (ci.email == null || password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("One or more parameters are missing."));
 			return;
@@ -202,7 +204,7 @@ public class PasswordResetResource extends BaseResource {
 		// different steps of the process (if the user provides inconsistent information)
 		ci.email = ci.email.toLowerCase();
 
-		if (ci.password.trim().length() < 8) {
+		if (password.trim().length() < 8) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("The password has to consist of at least 8 characters."));
 			return;
@@ -273,6 +275,7 @@ public class PasswordResetResource extends BaseResource {
 
 				boolean sendSuccessful = Email.sendPasswordResetConfirmation(getRM().getConfiguration(), ci.email, confirmationLink);
 				if (sendSuccessful) {
+					ci.saltedHashedPassword = Password.getSaltedHash(password);
 					SignupTokenCache.getInstance().putToken(token, ci);
 					log.info("Sent confirmation request to " + ci.email);
 				} else {

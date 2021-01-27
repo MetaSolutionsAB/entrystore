@@ -27,6 +27,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.Signup;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
@@ -69,13 +70,13 @@ import java.util.Set;
  */
 public class SignupResource extends BaseResource {
 	
-	private static Logger log = LoggerFactory.getLogger(SignupResource.class);
+	private static final Logger log = LoggerFactory.getLogger(SignupResource.class);
 
 	protected SimpleHTML html = new SimpleHTML("Sign-up");
 
 	private static Set<String> domainWhitelist = null;
 
-	private static Object mutex = new Object();
+	private static final Object mutex = new Object();
 
 	@Override
 	public void doInit() {
@@ -155,7 +156,7 @@ public class SignupResource extends BaseResource {
 			pm.setPrincipalName(entry.getResourceURI(), ci.email);
 			Signup.setFoafMetadata(entry, new org.restlet.security.User("", "", ci.firstName, ci.lastName, ci.email));
 			User u = (User) entry.getResource();
-			u.setSecret(ci.password);
+			u.setSaltedHashedSecret(ci.saltedHashedPassword);
 			if (ci.customProperties != null) {
 				u.setCustomProperties(ci.customProperties);
 			}
@@ -200,6 +201,7 @@ public class SignupResource extends BaseResource {
 		String rcResponse = null;
 		String rcResponseV2 = null;
 		String customPropPrefix = "custom_";
+		String password = null;
 
 		if (MediaType.APPLICATION_JSON.equals(r.getMediaType())) {
 			try {
@@ -214,7 +216,7 @@ public class SignupResource extends BaseResource {
 					ci.email = siJson.getString("email");
 				}
 				if (siJson.has("password")) {
-					ci.password = siJson.getString("password");
+					password = siJson.getString("password");
 				}
 				if (siJson.has("recaptcha_challenge_field")) {
 					rcChallenge = siJson.getString("recaptcha_challenge_field");
@@ -249,7 +251,7 @@ public class SignupResource extends BaseResource {
 			ci.firstName = form.getFirstValue("firstname", true);
 			ci.lastName = form.getFirstValue("lastname", true);
 			ci.email = form.getFirstValue("email", true);
-			ci.password = form.getFirstValue("password", true);
+			password = form.getFirstValue("password", true);
 			rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
 			rcResponse = form.getFirstValue("recaptcha_response_field", true);
 			rcResponseV2 = form.getFirstValue("g-recaptcha-response", true);
@@ -264,7 +266,7 @@ public class SignupResource extends BaseResource {
 			}
 		}
 
-		if (ci.firstName == null || ci.lastName == null || ci.email == null || ci.password == null) {
+		if (ci.firstName == null || ci.lastName == null || ci.email == null || password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("One or more parameters are missing."));
 			return;
@@ -276,7 +278,7 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
-		if (ci.password.trim().length() < 8) {
+		if (password.trim().length() < 8) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("The password has to consist of at least 8 characters."));
 			return;
@@ -339,6 +341,7 @@ public class SignupResource extends BaseResource {
 
 		boolean sendSuccessful = Email.sendSignupConfirmation(getRM().getConfiguration(), ci.firstName + " " + ci.lastName, ci.email, confirmationLink);
 		if (sendSuccessful) {
+			ci.saltedHashedPassword = Password.getSaltedHash(password);
 			SignupTokenCache.getInstance().putToken(token, ci);
 			log.info("Sent confirmation request to " + ci.email);
 		} else {

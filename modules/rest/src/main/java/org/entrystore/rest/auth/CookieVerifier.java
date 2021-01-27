@@ -108,7 +108,7 @@ public class CookieVerifier implements Verifier {
 						cleanCookies(rm,"auth_token", request, response);
 					}
 				} else {
-					log.debug("Auth token not found in token cache: " + authToken);
+					log.debug("Auth token not found in token cache");
 					cleanCookies(rm,"auth_token", request, response);
 					// CORS needs to be handled here, because we return a RESULT_INVALID which
 					// interrupts the filter chain before the CORS filter can do its work

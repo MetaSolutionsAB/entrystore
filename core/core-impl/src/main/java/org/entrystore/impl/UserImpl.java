@@ -195,9 +195,17 @@ public class UserImpl extends RDFResource implements User {
 			return false;
 		}
 
-		if (shSecret == null) {
-			return false;
-		}
+		return setSaltedHashedSecret(shSecret);
+	}
+
+	/**
+	 * Sets the user's hashed password.
+	 *
+	 * @param shSecret The new salted and hashed password
+	 * @return True if the was successfully set, false otherwise
+	 */
+	public boolean setSaltedHashedSecret(String shSecret) {
+		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 
 		try {
 			synchronized (this.entry.repository) {

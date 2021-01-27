@@ -76,7 +76,7 @@ public class EntryImpl implements Entry {
 	protected volatile URI externalMdURI;
 	protected volatile URI cachedExternalMdURI;
 	protected ContextImpl context;
-	protected Repository repository;
+	protected final Repository repository;
 	protected RepositoryManagerImpl repositoryManager;
 
 	protected volatile URI entryURI;

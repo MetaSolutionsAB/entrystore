@@ -31,6 +31,7 @@ import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
@@ -505,7 +506,7 @@ public class ContextResource extends BaseResource {
 			User user = (User) entry.getResource();
 			
 			if (jsonObj.has("name")) {
-				if(user.setName(jsonObj.getString("name")) == false) {
+				if (!user.setName(jsonObj.getString("name"))) {
 					return false;
 				}
 			} else {
@@ -518,7 +519,11 @@ public class ContextResource extends BaseResource {
 				}
 			}
 			if (jsonObj.has("password")) {
-				user.setSecret(jsonObj.getString("password"));					
+				if (user.setSecret(jsonObj.getString("password"))) {
+					Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
+				} else {
+					log.warn("Password could not be set");
+				}
 			}
 
 			if(parameters.containsKey("groupURI")) {
@@ -542,14 +547,12 @@ public class ContextResource extends BaseResource {
 		case List:
 			JSONArray childrenArray = (JSONArray) jsonObj.get("resource");
 			List list = (List)entry.getResource();
-			if(childrenArray != null) {
-				if (childrenArray != null) {
-					for(int i = 0; i < childrenArray.length(); i++) {
-						Entry child = context.get(childrenArray.getString(i));
-						if(child != null) {
-							list.addChild(child.getEntryURI());
-						}		
-					}		
+			if (childrenArray != null) {
+				for (int i = 0; i < childrenArray.length(); i++) {
+					Entry child = context.get(childrenArray.getString(i));
+					if (child != null) {
+						list.addChild(child.getEntryURI());
+					}
 				}
 			}
 			break;

@@ -107,7 +107,10 @@ public class Password {
 			return false;
 		}
 		String hashOfInput = hash(password, Base64.decodeBase64(saltAndPass[0]));
-		return hashOfInput.equals(saltAndPass[1]);
+		if (hashOfInput != null) {
+			return hashOfInput.equals(saltAndPass[1]);
+		}
+		return false;
 	}
 
 	private static String hash(String password, byte[] salt) {
