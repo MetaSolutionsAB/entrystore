@@ -31,7 +31,9 @@ import org.entrystore.rest.EntryStoreApplication;
 import org.restlet.Application;
 import org.restlet.Component;
 import org.restlet.Context;
+import org.restlet.Server;
 import org.restlet.data.Protocol;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -44,6 +46,8 @@ import java.net.URISyntaxException;
  * @author Hannes Ebner
  */
 public abstract class EntryStoreApplicationStandalone extends Application {
+
+	private final static org.slf4j.Logger log = LoggerFactory.getLogger(EntryStoreApplicationStandalone.class);
 
 	public static void main(String[] args) {
 		CommandLineParser parser = new DefaultParser();
@@ -65,11 +69,20 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				optionalArg(false).
 				type(PatternOptionBuilder.NUMBER_VALUE).
 				build());
-		options.addOption(Option.builder().
+		options.addOption(Option.builder("l").
 				longOpt("log-level").
 				desc("log level, one of: ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF\ndefault: INFO").
 				hasArg().
 				argName("LEVEL").
+				optionalArg(false).
+				build());
+		options.addOption(Option.builder().
+				longOpt("connector-params").
+				desc("comma separated list of parameters to be used for the server connector. " +
+						"Example for Jetty: \"threadPool.minThreads=50,threadPool.maxThreads=250\"\n" +
+						"see the connectors' JavaDoc (e.g. JettyServerHelper) for available parameters").
+				hasArg().
+				argName("SETTINGS").
 				optionalArg(false).
 				build());
 		options.addOption(Option.builder("h").longOpt("help").desc("display help").build());
@@ -114,7 +127,23 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 		configureLogging(cl.getOptionValue("log-level", "INFO"));
 
 		Component component = new Component();
-		component.getServers().add(Protocol.HTTP, port);
+		Server server = component.getServers().add(Protocol.HTTP, port);
+		if (cl.hasOption("connector-params")) {
+			String conParams = cl.getOptionValue("connector-params");
+			for (String param : conParams.split(",")) {
+				if (param.length() > 0) {
+					String[] kv = param.split("=");
+					if (kv.length == 2) {
+						log.debug("Adding connector parameter: {}={}", kv[0], kv[1]);
+						server.getContext().getParameters().add(kv[0].trim(), kv[1].trim());
+					} else {
+						System.err.println("Invalid connector parameter: " + param);
+						System.exit(1);
+					}
+				}
+			}
+		}
+
 		component.getClients().add(Protocol.FILE);
 		component.getClients().add(Protocol.HTTP);
 		component.getClients().add(Protocol.HTTPS);
@@ -132,7 +161,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 
 	private static void printHelp(Options options) {
 		HelpFormatter formatter = new HelpFormatter();
-		formatter.setWidth(90);
+		formatter.setWidth(100);
 		formatter.setLeftPadding(2);
 		formatter.printHelp("entrystore", options,true);
 	}
