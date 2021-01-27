@@ -49,6 +49,8 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 
 	private final static org.slf4j.Logger log = LoggerFactory.getLogger(EntryStoreApplicationStandalone.class);
 
+	public static String ENV_CONNECTOR_PARAMS = "ENTRYSTORE_CONNECTOR_PARAMS";
+
 	public static void main(String[] args) {
 		CommandLineParser parser = new DefaultParser();
 		Options options = new Options();
@@ -63,7 +65,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				build());
 		options.addOption(Option.builder("p").
 				longOpt("port").
-				desc("port to listen on\ndefault: 8181").
+				desc("port to listen on; default: 8181").
 				hasArg().
 				argName("PORT").
 				optionalArg(false).
@@ -71,21 +73,22 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				build());
 		options.addOption(Option.builder("l").
 				longOpt("log-level").
-				desc("log level, one of: ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF\ndefault: INFO").
+				desc("log level, one of: ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF; default: INFO").
 				hasArg().
 				argName("LEVEL").
 				optionalArg(false).
 				build());
 		options.addOption(Option.builder().
 				longOpt("connector-params").
-				desc("comma separated list of parameters to be used for the server connector. " +
-						"Example for Jetty: \"threadPool.minThreads=50,threadPool.maxThreads=250\"\n" +
-						"see the connectors' JavaDoc (e.g. JettyServerHelper) for available parameters").
+				desc("comma separated list of parameters to be used for the server connector, " +
+						"the environment variable ENTRYSTORE_CONNECTOR_PARAMS may be used instead. " +
+						"Example for Jetty: \"threadPool.minThreads=50,threadPool.maxThreads=250\"; " +
+						"see the JavaDoc of JettyServerHelper for available parameters").
 				hasArg().
 				argName("SETTINGS").
 				optionalArg(false).
 				build());
-		options.addOption(Option.builder("h").longOpt("help").desc("display help").build());
+		options.addOption(Option.builder("h").longOpt("help").desc("display this help").build());
 
 		CommandLine cl = null;
 		try {
@@ -128,8 +131,14 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 
 		Component component = new Component();
 		Server server = component.getServers().add(Protocol.HTTP, port);
+
+		String conParams;
 		if (cl.hasOption("connector-params")) {
-			String conParams = cl.getOptionValue("connector-params");
+			conParams = cl.getOptionValue("connector-params");
+		} else {
+			conParams = System.getenv(ENV_CONNECTOR_PARAMS);
+		}
+		if (conParams != null) {
 			for (String param : conParams.split(",")) {
 				if (param.length() > 0) {
 					String[] kv = param.split("=");
