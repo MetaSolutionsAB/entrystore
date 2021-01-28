@@ -34,7 +34,7 @@
     <dependencies>
         <dependency>
             <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-rest-standalone</artifactId>
+            <artifactId>entrystore-rest</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

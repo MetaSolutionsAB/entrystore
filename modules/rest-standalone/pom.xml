@@ -20,12 +20,4 @@
         <module>simple</module>
     </modules>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-rest</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-    </dependencies>
-
 </project>
