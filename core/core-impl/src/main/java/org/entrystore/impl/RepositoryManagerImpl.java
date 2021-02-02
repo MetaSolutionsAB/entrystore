@@ -101,11 +101,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private boolean checkForAuthorization = true;
 
-	private ArrayList<String> systemContextAliasList = new ArrayList<String>();
+	private final ArrayList<String> systemContextAliasList = new ArrayList<>();
 	
-	private static Map<String, RepositoryManagerImpl> instances = Collections.synchronizedMap(new HashMap<String, RepositoryManagerImpl>());
+	private final static Map<String, RepositoryManagerImpl> instances = Collections.synchronizedMap(new HashMap<>());
 
-	private Map<String, Class> alias2Class = new HashMap<String, Class>();
+	private final Map<String, Class> alias2Class = new HashMap<>();
 
 	private boolean modificationLockout = false;
 	
@@ -113,9 +113,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	private final Object mutex = new Object();
 	
-	private SoftCache softCache;
+	private final SoftCache softCache;
 
-	private Config config;
+	private final Config config;
 	
 	private CacheManager cacheManager;
 	
@@ -127,7 +127,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	//ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
 	
-	private Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = new EnumMap<RepositoryEvent, Set<RepositoryListener>>(RepositoryEvent.class);
+	private final Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = new EnumMap<>(RepositoryEvent.class);
 	
 	private SolrClient solrServer;
 
