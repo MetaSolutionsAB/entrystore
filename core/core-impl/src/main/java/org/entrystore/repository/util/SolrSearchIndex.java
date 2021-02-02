@@ -269,11 +269,18 @@ public class SolrSearchIndex implements SearchIndex {
 		if (documentSubmitter != null) {
 			documentSubmitter.interrupt();
 		}
+
 		if (delayedContextIndexer != null) {
 			delayedContextIndexer.interrupt();
 		}
-		if (reindexExecutor != null) {
-			reindexExecutor.shutdown();
+
+		reindexExecutor.shutdown();
+
+		try {
+			log.debug("Sending commit to Solr");
+			solrServer.commit(true, false);
+		} catch (SolrServerException | IOException e) {
+			log.error(e.getMessage());
 		}
 	}
 
