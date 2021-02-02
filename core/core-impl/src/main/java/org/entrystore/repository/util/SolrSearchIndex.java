@@ -829,11 +829,10 @@ public class SolrSearchIndex implements SearchIndex {
 		query.setFields("uri");
 
 		long hits = -1;
-
-		Date before = new Date();
 		QueryResponse r = null;
 		try {
 			r = solrServer.query(query);
+			r.getElapsedTime();
 			if (r.getFacetFields() != null) {
 				facetFields.addAll(r.getFacetFields());
 			}
@@ -847,6 +846,7 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 				}
 			}
+			log.debug("Query time: {} ms, elapsed time: {} ms", r.getQTime(), r.getElapsedTime());
 		} catch (SolrServerException | IOException e) {
 			if (e instanceof SolrServerException && ((SolrServerException) e).getRootCause() instanceof IllegalArgumentException) {
 				log.info(e.getMessage());
@@ -854,7 +854,6 @@ public class SolrSearchIndex implements SearchIndex {
 				log.error(e.getMessage());
 			}
 		}
-		log.info("Solr query took " + (new Date().getTime() - before.getTime()) + " ms");
 
 		return hits;
 	}
@@ -882,11 +881,7 @@ public class SolrSearchIndex implements SearchIndex {
 					log.warn("Breaking after 10 result fill interations to prevent too many loops");
 					break;
 				}
-				if (limit <= 50) {
-					offset += limit;
-				} else {
-					offset += 50;
-				}
+				offset += Math.min(limit, 50);
 				log.warn("Increasing offset to " + offset + " in an attempt to fill the result limit");
 			}
 			hits = sendQueryForEntryURIs(query, entries, facetFields, solrServer, offset, -1);
