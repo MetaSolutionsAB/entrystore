@@ -34,13 +34,11 @@ import org.apache.solr.common.SolrInputDocument;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
-import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.ResourceType;
 import org.entrystore.SearchIndex;
 import org.entrystore.User;
 import org.entrystore.impl.LocalMetadataWrapper;
@@ -182,7 +180,13 @@ public class SolrSearchIndex implements SearchIndex {
 
 						try {
 							postQueue.cleanUp();
-							log.info("Sending " + addReq.getDocuments().size() + " entries to Solr, " + postQueue.estimatedSize() + " entries remaining in post queue");
+							log.info("Sending {} entries to Solr, {} entries remaining in post queue", addReq.getDocuments().size(), postQueue.estimatedSize());
+							// when BATCH_SIZE_ADD * 5 we assume we are indexing large batches
+							if (postQueue.estimatedSize() > BATCH_SIZE_ADD * 5) {
+								addReq.setCommitWithin(20000);
+							} else {
+								addReq.setCommitWithin(1000);
+							}
 							addReq.process(solrServer);
 						} catch (SolrServerException | IOException e) {
 							log.error(e.getMessage(), e);
@@ -634,9 +638,8 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// tag.uri
-		Iterator<String> tagResources = EntryUtil.getTagResources(entry).iterator();
-		while (tagResources.hasNext()) {
-			doc.addField("tag.uri", tagResources.next());
+		for (String s : EntryUtil.getTagResources(entry)) {
+			doc.addField("tag.uri", s);
 		}
 
 		// language of the resource
@@ -662,7 +665,7 @@ public class SolrSearchIndex implements SearchIndex {
 		try {
 			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
 			guestReadable = true;
-		} catch (AuthorizationException ae) {
+		} catch (AuthorizationException ignored) {
 		}
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		doc.setField("public", guestReadable);
@@ -674,7 +677,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// Full text extraction using Apache Tika
-		if (extractFulltext && EntryType.Local.equals(entry.getEntryType())
+		/* if (extractFulltext && EntryType.Local.equals(entry.getEntryType())
 				&& ResourceType.InformationResource.equals(entry.getResourceType())
 				&& entry.getResource() instanceof Data) {
 			Data d = (Data) entry.getResource();
@@ -685,7 +688,7 @@ public class SolrSearchIndex implements SearchIndex {
 					doc.addField("fulltext", textContent);
 				}
 			}
-		}
+		} */
 
 		return doc;
 	}
@@ -734,7 +737,7 @@ public class SolrSearchIndex implements SearchIndex {
 						// it's a single-value field so we call setField instead of addField just in case there should be
 						doc.setField(prefix + "metadata.predicate.integer." + predMD5Trunc8, l.longValue());
 					} catch (NumberFormatException nfe) {
-						log.debug("Unable to index integer literal: " + nfe.getMessage() + ". (Subject: " + s.getSubject() + ", Predicate: " + predString + ", Object: " + l.getLabel() + ")");
+						log.debug("Unable to index integer literal: {}. (Subject: {}, Predicate: {}, Object: {})", nfe.getMessage(), s.getSubject(), predString, l.getLabel());
 					}
 				}
 
@@ -742,7 +745,7 @@ public class SolrSearchIndex implements SearchIndex {
 					try {
 						doc.setField(prefix + "metadata.predicate.date." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
 					} catch (IllegalArgumentException iae) {
-						log.debug("Unable to index date literal: " + iae.getMessage() + ". (Subject: " + s.getSubject() + ", Predicate: " + predString + ", Object: " + l.getLabel() + ")");
+						log.debug("Unable to index date literal: {}. (Subject: {}, Predicate: {}, Object: {})", iae.getMessage(), s.getSubject(), predString, l.getLabel());
 					}
 				}
 			}
@@ -812,6 +815,11 @@ public class SolrSearchIndex implements SearchIndex {
 		synchronized (deleteQueue) {
 			log.info("Adding entry to Solr delete queue: " + entryURI);
 			deleteQueue.add(entryURI);
+		}
+		synchronized (postQueue) {
+			// we make sure that the entry is not added again after deletion
+			// if the queues are handled at different times
+			postQueue.invalidate(entryURI);
 		}
 		// if entry is a context, also remove all entries inside
 		if (GraphType.Context.equals(entry.getGraphType())) {
