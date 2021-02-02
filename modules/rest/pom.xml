@@ -145,6 +145,11 @@
             <version>${restlet.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.restlet.jee</groupId>
+            <artifactId>org.restlet.ext.slf4j</artifactId>
+            <version>${restlet.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
             <version>${jsonorg.version}</version>

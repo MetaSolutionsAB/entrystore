@@ -51,6 +51,8 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 	public static String ENV_CONNECTOR_PARAMS = "ENTRYSTORE_CONNECTOR_PARAMS";
 
 	public static void main(String[] args) {
+		System.setProperty("org.restlet.engine.loggerFacadeClass", "org.restlet.ext.slf4j.Slf4jLoggerFacade");
+
 		CommandLineParser parser = new DefaultParser();
 		Options options = new Options();
 		options.addOption(Option.builder("c").
@@ -152,6 +154,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 			}
 		}
 
+		component.getLogService().setResponseLogFormat("{ciua} \"{m} {rp} {rq}\" {S} {ES} {es} {hh} {cig} {fi}");
 		component.getClients().add(Protocol.FILE);
 		component.getClients().add(Protocol.HTTP);
 		component.getClients().add(Protocol.HTTPS);
