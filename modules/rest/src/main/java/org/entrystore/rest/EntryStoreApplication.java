@@ -57,6 +57,7 @@ import org.entrystore.rest.resources.HarvesterResource;
 import org.entrystore.rest.resources.ImportResource;
 import org.entrystore.rest.resources.IndexResource;
 import org.entrystore.rest.resources.LocalMetadataResource;
+import org.entrystore.rest.resources.LoggingResource;
 import org.entrystore.rest.resources.LoginResource;
 import org.entrystore.rest.resources.LogoutResource;
 import org.entrystore.rest.resources.LookupResource;
@@ -122,9 +123,9 @@ public class EntryStoreApplication extends Application {
 	
 	private PrincipalManager pm;
 	
-	private String baseURI; 
+	private String baseURI;
 
-	private ArrayList<Harvester> harvesters = new ArrayList<Harvester>();
+	private ArrayList<Harvester> harvesters = new ArrayList<>();
 
 	private BackupScheduler backupScheduler;
 
@@ -136,7 +137,7 @@ public class EntryStoreApplication extends Application {
 
 	URI configURI;
 
-	private Set<String> reservedNames = new HashSet<>();
+	private final Set<String> reservedNames = new HashSet<>();
 
 	public EntryStoreApplication(Context parentContext) {
 		this(null, parentContext);
@@ -326,6 +327,7 @@ public class EntryStoreApplication extends Application {
 
 		// management/configuration resources
 		reservedNames.add("management");
+		router.attach("/management/logging", LoggingResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
 		
