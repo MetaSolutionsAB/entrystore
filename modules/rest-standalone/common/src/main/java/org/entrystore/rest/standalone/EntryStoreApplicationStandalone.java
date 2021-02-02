@@ -24,9 +24,8 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PatternOptionBuilder;
-import org.apache.log4j.BasicConfigurator;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.entrystore.rest.EntryStoreApplication;
 import org.restlet.Application;
 import org.restlet.Component;
@@ -180,12 +179,8 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 	}
 
 	private static void configureLogging(String logLevel) {
-		BasicConfigurator.configure();
-		Level l = Level.INFO;
-		if (logLevel != null) {
-			l = Level.toLevel(logLevel, Level.INFO);
-		}
-		Logger.getRootLogger().setLevel(l);
+		Level l = Level.toLevel(logLevel, Level.INFO);
+		Configurator.setRootLevel(l);
 		out("Log level set to " + l);
 	}
 
