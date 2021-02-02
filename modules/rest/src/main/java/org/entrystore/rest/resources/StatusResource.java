@@ -19,7 +19,6 @@ package org.entrystore.rest.resources;
 import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
-import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
@@ -85,36 +84,36 @@ public class StatusResource extends BaseResource  {
 					}
 
 					result.put("baseURI", getRM().getRepositoryURL().toString());
-					result.put("cors", settingToBoolean(Settings.CORS));
+					result.put("cors", config.getBoolean(Settings.CORS, false));
 					result.put("corsHeaders", config.getString(Settings.CORS_HEADERS, "unconfigured"));
 					result.put("corsMaxAge", config.getString(Settings.CORS_MAX_AGE, "unconfigured"));
 					result.put("corsOrigins", config.getString(Settings.CORS_ORIGINS, "unconfigured"));
 					result.put("echoMaxEntitySize", EchoResource.MAX_ENTITY_SIZE);
-					result.put("oaiHarvester", settingToBoolean(Settings.HARVESTER_OAI));
-					result.put("oaiHarvesterMultiThreaded", settingToBoolean(Settings.HARVESTER_OAI_MULTITHREADED));
-					result.put("provenance", settingToBoolean(Settings.REPOSITORY_PROVENANCE));
-					result.put("quota", settingToBoolean(Settings.DATA_QUOTA));
+					result.put("oaiHarvester", config.getBoolean(Settings.HARVESTER_OAI, false));
+					result.put("oaiHarvesterMultiThreaded", config.getBoolean(Settings.HARVESTER_OAI_MULTITHREADED, false));
+					result.put("provenance", config.getBoolean(Settings.REPOSITORY_PROVENANCE, false));
+					result.put("quota", config.getBoolean(Settings.DATA_QUOTA, false));
 					result.put("quotaDefault", config.getString(Settings.DATA_QUOTA_DEFAULT, "unconfigured"));
-					result.put("repositoryCache", settingToBoolean(Settings.REPOSITORY_CACHE));
+					result.put("repositoryCache", config.getBoolean(Settings.REPOSITORY_CACHE, false));
 					result.put("repositoryIndices", config.getString(Settings.STORE_INDEXES, "unconfigured"));
 					result.put("repositoryStatus", getRM() != null ? "online" : "offline");
 					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));
 					result.put("rowstoreURL", config.getString(Settings.ROWSTORE_URL, "unconfigured"));
-					result.put("passwordReset", settingToBoolean(Settings.PASSWORD_RESET));
+					result.put("passwordReset", config.getBoolean(Settings.PASSWORD_RESET, false));
 					result.put("passwordMaxLength", Password.PASSWORD_MAX_LENGTH);
-					result.put("solr", settingToBoolean(Settings.SOLR));
-					result.put("solrReindexOnStartup", settingToBoolean(Settings.SOLR_REINDEX_ON_STARTUP));
+					result.put("solr", config.getBoolean(Settings.SOLR, false));
+					result.put("solrReindexOnStartup", config.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false));
 					result.put("solrStatus", getRM().getIndex().ping() ? "online" : "offline");
-					result.put("signup", settingToBoolean(Settings.SIGNUP));
+					result.put("signup", config.getBoolean(Settings.SIGNUP, false));
 					result.put("version", EntryStoreApplication.getVersion());
 					result.put("startupTime", EntryStoreApplication.getStartupDate());
 					result.put("authTokenCount", LoginTokenCache.getInstance().size());
 
 					// Backup
 					JSONObject backup = new JSONObject();
-					backup.put("active", settingToBoolean(Settings.BACKUP_SCHEDULER));
+					backup.put("active", config.getBoolean(Settings.BACKUP_SCHEDULER, false));
 					backup.put("format", config.getString(Settings.BACKUP_FORMAT, "unconfigured"));
-					backup.put("maintenance", settingToBoolean(Settings.BACKUP_MAINTENANCE));
+					backup.put("maintenance", config.getBoolean(Settings.BACKUP_MAINTENANCE, false));
 					backup.put("cronExpression", config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED, "unconfigured")));
 					if (BackupScheduler.getInstance(getRM()) != null) {
 						backup.put("cronExpressionResolved", BackupScheduler.getInstance(getRM()).getCronExpression());
@@ -142,10 +141,8 @@ public class StatusResource extends BaseResource  {
 							result.put("contextCount", getRM().getContextManager().getEntries().size());
 							result.put("groupCount", pm.getGroupUris().size());
 							result.put("userCount", pm.getUsersAsUris().size());
-							if (getRM() instanceof RepositoryManagerImpl) {
-								result.put("namedGraphCount", ((RepositoryManagerImpl) getRM()).getNamedGraphCount());
-								result.put("tripleCount", ((RepositoryManagerImpl) getRM()).getTripleCount());
-							}
+							result.put("namedGraphCount", getRM().getNamedGraphCount());
+							result.put("tripleCount", getRM().getTripleCount());
 						} finally {
 							pm.setAuthenticatedUserURI(currentUser);
 						}
@@ -180,10 +177,6 @@ public class StatusResource extends BaseResource  {
 		} catch (AuthorizationException e) {
 			return unauthorizedGET();
 		}
-	}
-
-	private boolean settingToBoolean(String key) {
-		return "on".equalsIgnoreCase(config.getString(key, "off")) ? true : false;
 	}
 
 	long getTotalCommittedMemory() {

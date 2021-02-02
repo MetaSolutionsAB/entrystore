@@ -364,9 +364,9 @@ public class PropertiesConfiguration implements Config {
 	public boolean getBoolean(String key, boolean defaultValue) {
 		String strValue = config.getProperty(key);
 		if ("on".equalsIgnoreCase(strValue)) {
-			strValue = "true";
+			return true;
 		} else if ("off".equalsIgnoreCase(strValue)) {
-			strValue = "false";
+			return false;
 		}
 		
 		if (strValue != null) {
