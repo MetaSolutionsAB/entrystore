@@ -158,6 +158,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 		component.getClients().add(Protocol.FILE);
 		component.getClients().add(Protocol.HTTP);
 		component.getClients().add(Protocol.HTTPS);
+		server.getContext().getParameters().add("useForwardedForHeader", "true");
 		Context childContext = component.getContext().createChildContext();
 		EntryStoreApplication esApp = new EntryStoreApplication(config, childContext);
 		childContext.getAttributes().put(EntryStoreApplication.KEY, esApp);
