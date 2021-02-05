@@ -254,7 +254,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="acl.resource.rw" type="string" indexed="true" multiValued="true"/>
 
         <field name="title" type="text_ngram" indexed="true" multiValued="true"/>
-        <field name="description" type="text_gram" indexed="true" multiValued="true"/>
+        <field name="description" type="text_ngram" indexed="true" multiValued="true"/>
         <field name="lang" type="string" indexed="true" multiValued="true"/>
 
         <field name="tag.literal" type="text_ngram" indexed="true" multiValued="true"/>
