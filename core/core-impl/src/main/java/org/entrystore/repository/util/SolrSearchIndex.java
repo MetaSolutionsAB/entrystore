@@ -95,6 +95,10 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final int BATCH_SIZE_DELETE = 100;
 
+	private static final int SOLR_COMMIT_WITHIN = 1000;
+
+	private static final int SOLR_COMMIT_WITHIN_MAX = 10000;
+
 	private boolean extractFulltext = false;
 
 	private boolean related = false;
@@ -152,6 +156,7 @@ public class SolrSearchIndex implements SearchIndex {
 							UpdateRequest delReq = new UpdateRequest();
 							String deleteQueryStr = deleteQuery.toString();
 							delReq.deleteByQuery(deleteQueryStr);
+							delReq.setCommitWithin(SOLR_COMMIT_WITHIN);
 							try {
 								log.info("Sending request to delete " + batchCount + " entries from Solr, " + deleteQueue.size() + " entries remaining in delete queue");
 								delReq.process(solrServer);
@@ -183,9 +188,9 @@ public class SolrSearchIndex implements SearchIndex {
 							log.info("Sending {} entries to Solr, {} entries remaining in post queue", addReq.getDocuments().size(), postQueue.estimatedSize());
 							// when BATCH_SIZE_ADD * 5 we assume we are indexing large batches
 							if (postQueue.estimatedSize() > BATCH_SIZE_ADD * 5) {
-								addReq.setCommitWithin(20000);
+								addReq.setCommitWithin(SOLR_COMMIT_WITHIN_MAX);
 							} else {
-								addReq.setCommitWithin(1000);
+								addReq.setCommitWithin(SOLR_COMMIT_WITHIN);
 							}
 							addReq.process(solrServer);
 						} catch (SolrServerException | IOException e) {
@@ -291,6 +296,7 @@ public class SolrSearchIndex implements SearchIndex {
 	public void clearSolrIndex(SolrClient solrServer) {
 		UpdateRequest req = new UpdateRequest();
 		req.deleteByQuery("*:*");
+		req.setCommitWithin(SOLR_COMMIT_WITHIN);
 		try {
 			req.process(solrServer);
 		} catch (SolrServerException | IOException e) {
@@ -315,6 +321,7 @@ public class SolrSearchIndex implements SearchIndex {
 			deleteQuery += "context:" + ClientUtils.escapeQueryChars(contextEntry.getResourceURI().toString());
 		}
 		req.deleteByQuery(deleteQuery);
+		req.setCommitWithin(SOLR_COMMIT_WITHIN);
 		try {
 			req.process(solrServer);
 		} catch (SolrServerException | IOException e) {
@@ -481,8 +488,12 @@ public class SolrSearchIndex implements SearchIndex {
 						continue;
 					}
 					synchronized (postQueue) {
-						log.info("Adding document to Solr post queue: " + entryURI);
-						postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+						if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
+							log.info("Adding entry to Solr post queue: {}", entryURI);
+							postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+						} else {
+							log.debug("Not adding deleted entry to post queue: {}", entryURI);
+						}
 					}
 				}
 			}
@@ -799,11 +810,15 @@ public class SolrSearchIndex implements SearchIndex {
 		try {
 			URI entryURI = entry.getEntryURI();
 			synchronized (postQueue) {
-				log.info("Adding document to Solr post queue: " + entryURI);
 				if (postQueue.getIfPresent(entryURI) != null) {
-					log.debug("Entry " + entryURI + " already exists in post queue");
+					log.debug("Entry {} already exists in post queue, attempting replacement", entryURI);
 				}
-				postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+				if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
+					log.info("Adding document to Solr post queue: {}", entryURI);
+					postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+				} else {
+					log.debug("Not adding deleted entry to post queue: {}", entryURI);
+				}
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);

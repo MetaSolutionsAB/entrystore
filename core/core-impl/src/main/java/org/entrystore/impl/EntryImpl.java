@@ -106,6 +106,7 @@ public class EntryImpl implements Entry {
 	private Boolean readOrWrite;
 	private String originalList;
 	private ProvenanceImpl provenance;
+	private volatile boolean deleted = false;
 
 	//A ugly hack to be able to initialize the ContextManager itself.
 	EntryImpl(RepositoryManagerImpl repositoryManager, Repository repository) {
@@ -1527,6 +1528,7 @@ public class EntryImpl implements Entry {
             invRelations = false;
         }
     }
+
     private void addInverseRelations(RepositoryConnection rc, Graph graph) {
         String base = repositoryManager.getRepositoryURL().toString();
         for (Statement statement : graph) {
@@ -1626,6 +1628,10 @@ public class EntryImpl implements Entry {
 	}
 
 	public void remove(RepositoryConnection rc) throws Exception {
+		// TODO the handling of removal is non-atomic and should be rewritten to take
+		//  failures (i.e. rollbacks of the ongoing transaction) into consideration
+		deleted = true;
+
 		log.debug("Removing entry " + entryURI);
         removeInverseRelations(rc);
 		rc.clear(entryURI);
@@ -1745,6 +1751,10 @@ public class EntryImpl implements Entry {
 		if (mtMd != null) {
 			this.format = mtMd;
 		}
+	}
+
+	public boolean isDeleted() {
+		return deleted;
 	}
 	
 	private String getMimetypeFromMetadata() {
