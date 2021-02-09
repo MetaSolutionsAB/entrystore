@@ -53,6 +53,7 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.Security;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -133,7 +134,7 @@ public class SamlLoginResource extends BaseResource {
 
 	private void loadMetadataAndInitSamlClient() {
 		try {
-			Reader idpMetadataReader = new BufferedReader(new InputStreamReader(new URL(idpMetadataUrl).openStream()));
+			Reader idpMetadataReader = new BufferedReader(new InputStreamReader(new URL(idpMetadataUrl).openStream(), StandardCharsets.UTF_8));
 			samlClient = SamlClient.fromMetadata(relyingPartyId, assertionConsumerService, idpMetadataReader);
 			metadataLoaded = new Date();
 			log.info("Reloaded SAML metadata from " + idpMetadataUrl);
