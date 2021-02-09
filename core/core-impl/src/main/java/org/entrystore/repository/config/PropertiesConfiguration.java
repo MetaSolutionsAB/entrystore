@@ -25,11 +25,12 @@ import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -210,14 +211,14 @@ public class PropertiesConfiguration implements Config {
 	}
 
 	public void load(URL configURL) throws IOException {
-		InputStream is = null;
+		InputStreamReader isr = null;
 		try {
 			URL escapedURL = new URL(configURL.toString().replaceAll(" ", "%20"));
-			is = escapedURL.openStream();
-			config.load(is);
+			isr = new InputStreamReader(escapedURL.openStream(), StandardCharsets.UTF_8);
+			config.load(isr);
 		} finally {
-			if (is != null) {
-				is.close();
+			if (isr != null) {
+				isr.close();
 			}
 		}
 	}
