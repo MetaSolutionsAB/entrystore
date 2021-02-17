@@ -58,6 +58,7 @@ pipelines:
     master:
       - step: *build
       - step: *deploy
+      - step: *dockerhub
     develop:
       - step: *build
       - step: *deploy
