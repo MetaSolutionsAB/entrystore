@@ -64,15 +64,14 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Constructor;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -222,8 +221,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 			try {
 				try {
-					out = new BufferedOutputStream(new FileOutputStream(destFile));
-				} catch (FileNotFoundException e) {
+					out = new BufferedOutputStream(Files.newOutputStream(destFile.toPath()));
+				} catch (IOException e) {
 					log.error(e.getMessage());
 					throw new RepositoryException(e);
 				}
@@ -311,7 +310,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		File propFile = new File(unzippedDir, "export.properties");
 		log.info("Loading property file from " + propFile.toString());
 		Properties props = new Properties();
-		props.load(new FileInputStream(propFile));
+		props.load(Files.newInputStream(propFile.toPath()));
 		String srcScamBaseURI = props.getProperty("scamBaseURI");
 		String srcContextEntryURI = props.getProperty("contextEntryURI");
 		String srcContextResourceURI = props.getProperty("contextResourceURI");
@@ -381,7 +380,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		long importedTriples = 0;
 		File tripleFile = new File(unzippedDir, "triples.rdf");
 		log.info("Loading quadruples from " + tripleFile.toString());
-		InputStream rdfInput = new BufferedInputStream(new FileInputStream(tripleFile));
+		InputStream rdfInput = new BufferedInputStream(Files.newInputStream(tripleFile.toPath()));
 		
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
 		
@@ -617,8 +616,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 			RDFHandler indexHandler = null;
 			try {
-				indexHandler = new TriGWriter(new FileOutputStream(new File(backupFolder, "portfolio-index.rdf")));
-			} catch (FileNotFoundException e) {
+				indexHandler = new TriGWriter(Files.newOutputStream(new File(backupFolder, "portfolio-index.rdf").toPath()));
+			} catch (IOException e) {
 				log.error(e.getMessage(), e);
 				throw new RepositoryException(e);
 			}
@@ -637,8 +636,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 			RDFHandler entryHandler;
 			try {
-				entryHandler = new TriGWriter(new FileOutputStream(new File(backupFolder, "portfolio-entries.rdf")));
-			} catch (FileNotFoundException e) {
+				entryHandler = new TriGWriter(Files.newOutputStream(new File(backupFolder, "portfolio-entries.rdf").toPath()));
+			} catch (IOException e) {
 				log.error(e.getMessage(), e);
 				throw new RepositoryException(e);
 			}
@@ -712,8 +711,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		trigParser.setRDFHandler(collector);
 		String folder = getContextBackupFolder(contexturi, fromTime); 
 		try {
-			FileInputStream fileOut = new FileInputStream( new File(folder, "portfolio-index.rdf"));
-			FileInputStream fileOut2 = new FileInputStream(new File(folder,  "portfolio-entries.rdf"));
+			InputStream fileOut = Files.newInputStream(new File(folder, "portfolio-index.rdf").toPath());
+			InputStream fileOut2 = Files.newInputStream(new File(folder,  "portfolio-entries.rdf").toPath());
 
 			String base = entry.getRepositoryManager().getConfiguration().getString(Settings.BASE_URL, "http://scam4.org");
 

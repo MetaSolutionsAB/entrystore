@@ -208,4 +208,12 @@ public interface Context extends Resource{
 	
 	public Map<URI, DeletedEntryInfo> getDeletedEntriesInRange(Date from, Date until);
 
+	/**
+	 * A context object may still exist even though the entry is removed from both repository
+	 * and cache. Necessary to keep Solr in sync.
+	 *
+	 * @return True if context is deleted or under deletion, false if not.
+	 */
+	public boolean isDeleted();
+
 }

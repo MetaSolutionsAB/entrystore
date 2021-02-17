@@ -7,73 +7,17 @@
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-modules</artifactId>
-        <version>4.9.3</version>
+        <version>4.10.0</version>
     </parent>
-    <groupId>org.entrystore</groupId>
     <artifactId>entrystore-rest-standalone</artifactId>
-    <packaging>jar</packaging>
-    <version>4.9.3</version>
-    <name>EntryStore REST standalone</name>
+    <packaging>pom</packaging>
+    <version>4.10.0</version>
+    <name>EntryStore REST Standalone</name>
 
-    <build>
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-            </resource>
-        </resources>
-        <testResources>
-            <testResource>
-                <directory>src/test/resources</directory>
-                <includes>
-                    <include>**/*.xml</include>
-                    <include>**/*.properties</include>
-                </includes>
-            </testResource>
-        </testResources>
-        <plugins>
-            <plugin>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
-                    <compilerArgument></compilerArgument>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>appassembler-maven-plugin</artifactId>
-                <configuration>
-                    <programs>
-                        <program>
-                            <mainClass>org.entrystore.rest.EntryStoreApplicationStandalone</mainClass>
-                            <name>entrystore</name>
-                        </program>
-                    </programs>
-                    <assembleDirectory>${project.build.directory}/dist</assembleDirectory>
-                    <extraJvmArguments>-Xms512m</extraJvmArguments>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>assemble</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
+    <modules>
+        <module>common</module>
+        <module>jetty</module>
+        <module>simple</module>
+    </modules>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-rest</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>javax.servlet</groupId>
-            <artifactId>javax.servlet-api</artifactId>
-            <version>${servlet.version}</version>
-        </dependency>
-    </dependencies>
 </project>

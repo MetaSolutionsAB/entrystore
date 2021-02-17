@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.entrystore</groupId>
+        <artifactId>entrystore-rest-standalone</artifactId>
+        <version>4.10.0</version>
+    </parent>
+    <artifactId>entrystore-rest-standalone-jetty</artifactId>
+    <packaging>jar</packaging>
+    <version>4.10.0</version>
+    <name>EntryStore REST Standalone Jetty</name>
+
+    <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+        </resources>
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+                <includes>
+                    <include>**/*.xml</include>
+                    <include>**/*.properties</include>
+                </includes>
+            </testResource>
+        </testResources>
+        <plugins>
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                    <compilerArgument></compilerArgument>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>appassembler-maven-plugin</artifactId>
+                <configuration>
+                    <programs>
+                        <program>
+                            <mainClass>org.entrystore.rest.standalone.EntryStoreApplicationStandaloneJetty</mainClass>
+                            <name>entrystore</name>
+                        </program>
+                    </programs>
+                    <assembleDirectory>${project.build.directory}/dist</assembleDirectory>
+                    <extraJvmArguments></extraJvmArguments>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>assemble</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.entrystore</groupId>
+            <artifactId>entrystore-rest-standalone-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.restlet.jse</groupId>
+            <artifactId>org.restlet.ext.jetty</artifactId>
+            <version>${restlet.version}</version>
+        </dependency>
+    </dependencies>
+
+</project>

@@ -46,6 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -116,6 +117,7 @@ public abstract class BaseResource extends ServerResource {
 		Util.handleIfUnmodifiedSince(entry, getRequest());
 	}
 
+	// TODO move this into a ServerInfoFilter that processes before the authentication mechanism
 	@Override
 	public ServerInfo getServerInfo() {
 		if (serverInfo == null) {
@@ -237,5 +239,16 @@ public abstract class BaseResource extends ServerResource {
 			getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.unauthorizedPUT));
 		}
 	}
-	
+
+
+	protected Representation createEmptyRepresentationWithLastModified(Date modificationDate) {
+		Representation result = new EmptyRepresentation();
+		if (modificationDate != null) {
+			result.setModificationDate(modificationDate);
+		} else {
+			log.warn("Last-Modified header could not be set because the entry does not have a modification date: " + entry.getEntryURI());
+		}
+		return result;
+	}
+
 }

@@ -37,11 +37,7 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 
 	public void cleanup() {
 		synchronized (tokenCache) {
-			for (Map.Entry<String, UserInfo> e : tokenCache.entrySet()) {
-				if (e.getValue().getLoginExpiration().before(new Date())) {
-					tokenCache.remove(e.getKey());
-				}
-			}
+			tokenCache.entrySet().removeIf(userInfo -> userInfo.getValue().getLoginExpiration().before(new Date()));
 		}
 	}
 
@@ -50,17 +46,13 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 			throw new IllegalArgumentException("Username must not be null");
 		}
 		synchronized (tokenCache) {
-			for (Map.Entry<String, UserInfo> e : tokenCache.entrySet()) {
-				if (userName.equals(e.getValue().userName)) {
-					tokenCache.remove(e.getKey());
-				}
-			}
+			tokenCache.entrySet().removeIf(userInfo -> userName.equals(userInfo.getValue().getUserName()));
 		}
 	}
 
 	public void renameUser(String oldUserName, String newUserName) {
 		if (oldUserName == null || newUserName == null) {
-			throw new IllegalArgumentException("Username must not be null");
+			throw new IllegalArgumentException("Usernames must not be null");
 		}
 		synchronized (tokenCache) {
 			for (Map.Entry<String, UserInfo> e : tokenCache.entrySet()) {

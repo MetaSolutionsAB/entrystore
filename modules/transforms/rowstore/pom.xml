@@ -7,12 +7,11 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-transforms</artifactId>
-		<version>4.9.3</version>
+		<version>4.10.0</version>
 	</parent>
-	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-transforms-rowstore</artifactId>
 	<packaging>jar</packaging>
-	<version>4.9.3</version>
+	<version>4.10.0</version>
 	<name>EntryStore Transforms RowStore</name>
     
 	<dependencies>
@@ -22,4 +21,5 @@
 			<version>${project.version}</version>
 		</dependency>
 	</dependencies>
+
 </project>

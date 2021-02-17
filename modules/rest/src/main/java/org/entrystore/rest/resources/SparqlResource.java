@@ -64,7 +64,7 @@ public class SparqlResource extends BaseResource {
 
 	@Override
 	public void doInit() {
-		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
+		supportedMediaTypes.add(MediaType.APPLICATION_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		supportedMediaTypes.add(MediaType.ALL);
 	}

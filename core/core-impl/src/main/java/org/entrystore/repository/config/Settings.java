@@ -23,13 +23,6 @@ package org.entrystore.repository.config;
  */
 public class Settings {
 	public static String AUTH_ADMIN_SECRET = "entrystore.auth.adminpw";
-	
-	public static String AUTH_OPENID = "entrystore.auth.openid";
-	public static String AUTH_OPENID_GOOGLE = "entrystore.auth.openid.google";
-	public static String AUTH_OPENID_YAHOO = "entrystore.auth.openid.yahoo";
-	public static String AUTH_OPENID_MYOPENID = "entrystore.auth.openid.myopenid";
-
-	public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.token.max-age";
 
 	public static String AUTH_CAS = "entrystore.auth.cas";
 	public static String AUTH_CAS_VERSION = "entrystore.auth.cas.version";
@@ -41,10 +34,18 @@ public class Settings {
 	public static String AUTH_SAML_RELYING_PARTY_ID = "entrystore.auth.saml.relying-party-id";
 	public static String AUTH_SAML_ASSERTION_CONSUMER_SERVICE_URL = "entrystore.auth.saml.assertion-consumer-service.url";
 	public static String AUTH_SAML_IDP_METADATA_URL = "entrystore.auth.saml.idp-metadata.url";
+	public static String AUTH_SAML_IDP_METADATA_MAXAGE = "entrystore.auth.saml.idp-metadata.max-age";
 	public static String AUTH_SAML_USER_AUTO_PROVISIONING = "entrystore.auth.saml.user-auto-provisioning";
 	public static String AUTH_SAML_REDIRECT_METHOD = "entrystore.auth.saml.redirect-method";
+	public static String AUTH_SAML_REDIRECT_SUCCESS_URL = "entrystore.auth.saml.redirect-success.url";
+	public static String AUTH_SAML_REDIRECT_FAILURE_URL = "entrystore.auth.saml.redirect-failure.url";
 
 	public static String AUTH_COOKIE_PATH = "entrystore.auth.cookie.path";
+	public static String AUTH_COOKIE_HTTPONLY = "entrystore.auth.cookie.httponly";
+	public static String AUTH_COOKIE_SECURE = "entrystore.auth.cookie.secure";
+	public static String AUTH_COOKIE_SAMESITE = "entrystore.auth.cookie.samesite";
+	public static String AUTH_COOKIE_MAXAGE = "entrystore.auth.cookie.max-age";
+	@Deprecated public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.cookie.max-age";
 
 	public static String AUTH_PASSWORD = "entrystore.auth.password";
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
@@ -95,6 +96,7 @@ public class Settings {
 	public static String SOLR = "entrystore.solr";
 	public static String SOLR_URL = "entrystore.solr.url";
 	public static String SOLR_REINDEX_ON_STARTUP = "entrystore.solr.reindex-on-startup";
+	public static String SOLR_REINDEX_ON_STARTUP_WAIT = "entrystore.solr.reindex-on-startup.wait";
 	public static String SOLR_EXTRACT_FULLTEXT = "entrystore.solr.extract-fulltext";
 	public static String SOLR_MAX_LIMIT = "entrystore.solr.max-limit";
 

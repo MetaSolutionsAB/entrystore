@@ -50,7 +50,6 @@ import org.restlet.representation.StringRepresentation;
 import org.restlet.representation.Variant;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
-import org.restlet.resource.Post;
 import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,14 +95,12 @@ public class EntryResource extends BaseResource {
 	@Override
 	public Representation head(Variant v) {
 		try {
-			Representation repr = new EmptyRepresentation();
 			if (entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-			} else {
-				getResponse().setStatus(Status.SUCCESS_OK);
-				repr.setModificationDate(entry.getModifiedDate());
+				return new EmptyRepresentation();
 			}
-			return repr;
+
+			return createEmptyRepresentationWithLastModified(entry.getModifiedDate());
 		} catch (AuthorizationException e) {
 			return unauthorizedHEAD();
 		}
@@ -157,6 +154,7 @@ public class EntryResource extends BaseResource {
 			}
 
 			modifyEntry((format != null) ? format : getRequestEntity().getMediaType());
+			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
 		} catch (AuthorizationException e) {
 			unauthorizedPUT();
 		}

@@ -16,18 +16,21 @@
 
 package org.entrystore.rest.resources;
 
-import java.net.URI;
-
-import org.entrystore.PrincipalManager;
 import org.entrystore.AuthorizationException;
-import org.entrystore.rest.util.Util;
+import org.entrystore.Entry;
+import org.entrystore.PrincipalManager;
+import org.json.JSONObject;
+import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.resource.Get;
+import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.net.URI;
 
 
 /**
@@ -44,41 +47,58 @@ public class SolrResource extends BaseResource {
 
 	}
 	
-	@Get
-	public Representation represent() throws ResourceException {
+	@Post
+	public void acceptRepresentation(Representation r) throws ResourceException {
+		if (!MediaType.APPLICATION_JSON.equals(r.getMediaType())) {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			return;
+		}
+
+		JSONObject request = null;
 		try {
+			request = new JsonRepresentation(r).getJsonObject();
+		} catch (IOException ioe) {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			return;
+		}
+
+		if (getRM().getIndex() == null) {
+			log.warn("Cannot reindex, Solr is not used");
+			getResponse().setStatus(Status.SERVER_ERROR_SERVICE_UNAVAILABLE);
+			return;
+		}
+
+		// JSON for reindexing request: { "command": "reindex", "context": "uri or null" }
+		if (request.has("command") && "reindex".equalsIgnoreCase(request.getString("command"))) {
 			PrincipalManager pm = getRM().getPrincipalManager();
 			URI authUser = pm.getAuthenticatedUserURI();
-			if (!pm.getAdminUser().getURI().equals(authUser) && !pm.getAdminGroup().isMember(pm.getUser(authUser))) {
-				return unauthorizedGET();
-			}
-			
-			if (parameters.containsKey("cmd")) {
-				String command = parameters.get("cmd");
-				if ("reindex".equals(command)) {
-					if (getRM().getIndex() != null) {
-						Runnable reindexThread = new Runnable() {
-							public void run() {
-								getRM().getIndex().reindex();
-							}
-						};
-						new Thread(reindexThread).start();
-						log.info("Started reindexing thread");
-						getResponse().setStatus(Status.SUCCESS_ACCEPTED);
-						return new JsonRepresentation(Util.createResponseObject(Status.SUCCESS_ACCEPTED.getCode(), "Started reindexing"));
-					} else {
-						log.warn("Cannot reindex, Solr is not used");
-						getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-						return new JsonRepresentation(Util.createResponseObject(Status.CLIENT_ERROR_NOT_FOUND.getCode(), "Unable to reindex, Solr is not used"));
-					}
+			String contextURIStr = request.has("context") ? request.getString("context") : null;
+			if (contextURIStr == null) {
+				if (!pm.getAdminUser().getURI().equals(authUser) && !pm.getAdminGroup().isMember(pm.getUser(authUser))) {
+					unauthorizedPOST();
+					return;
+				} else {
+					getRM().getIndex().reindex(false);
+					getResponse().setStatus(Status.SUCCESS_ACCEPTED);
+					return;
 				}
+			} else {
+				URI contextURI = URI.create(contextURIStr);
+				Entry contextEntry = getRM().getContextManager().getByEntryURI(contextURI);
+				try {
+					pm.checkAuthenticatedUserAuthorized(contextEntry, PrincipalManager.AccessProperty.Administer);
+				} catch (AuthorizationException ae) {
+					unauthorizedPOST();
+					return;
+				}
+
+				getRM().getIndex().reindex(contextURI, false);
+				getResponse().setStatus(Status.SUCCESS_ACCEPTED);
+				return;
 			}
-			 
-			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			return new JsonRepresentation(Util.createResponseObject(Status.CLIENT_ERROR_BAD_REQUEST.getCode(), "Unknown command"));
-		} catch(AuthorizationException e) {
-			return unauthorizedGET();
 		}
+
+		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 	}
 
 }

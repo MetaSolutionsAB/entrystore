@@ -16,8 +16,6 @@
 
 package org.entrystore.repository.util;
 
-import org.openrdf.model.impl.URIImpl;
-
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
@@ -30,16 +28,6 @@ public class NS {
 
 	public static String foaf = "http://xmlns.com/foaf/0.1/";
 
-	public static String lom = "http://ltsc.ieee.org/rdf/lomv1p0/lom#";
-
-	public static String lomvoc = "http://ltsc.ieee.org/rdf/lomv1p0/vocabulary#";
-	
-	public static String lomterms = "http://ltsc.ieee.org/rdf/lomv1p0/terms#";
-
-	public static String lrevoc = "http://organic-edunet.eu/LOM/rdf/voc#";
-	
-	public static String oe = "http://organic-edunet.eu/LOM/rdf/";
-
 	public static String rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 
 	public static String rdfs = "http://www.w3.org/2000/01/rdf-schema#";
@@ -48,8 +36,6 @@ public class NS {
 
 	public static String xsd = "http://www.w3.org/2001/XMLSchema#";
 	
-	public static String vcard_old = "http://www.w3.org/2001/vcard-rdf/3.0#";
-
 	public static String vcard = "http://www.w3.org/2006/vcard/ns#";
 
 	public static String adms = "http://www.w3.org/ns/adms#";

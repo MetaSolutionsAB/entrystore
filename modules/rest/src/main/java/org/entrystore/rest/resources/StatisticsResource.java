@@ -16,30 +16,17 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
-import org.entrystore.GraphType;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.impl.converters.ConverterUtil;
-import org.entrystore.repository.util.NS;
-import org.entrystore.AuthorizationException;
 import org.entrystore.repository.util.EntryUtil;
+import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -61,6 +48,18 @@ import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 
 public class StatisticsResource extends BaseResource {
@@ -218,11 +217,7 @@ public class StatisticsResource extends BaseResource {
 						propertyUsedIn.put(predStr, usedIn);
 					}
 				}
-				
-				if (ConverterUtil.isValidated(metadata, resourceURI)) {
-					validatedCount++;
-				}
-				
+
 				if (mandatoryProperties != null && hasAllPropertiesOfGroup(mandatoryProperties, entryProperties)) {
 					mandatoryCount++;
 				}
@@ -431,7 +426,6 @@ public class StatisticsResource extends BaseResource {
 				Set<org.openrdf.model.URI> allowedPredicates = new HashSet<org.openrdf.model.URI>();
 				allowedPredicates.add(new URIImpl(NS.dc + "subject"));
 				allowedPredicates.add(new URIImpl(NS.dcterms + "subject"));
-				allowedPredicates.add(new URIImpl(NS.lom + "keyword"));
 				
 				entryCount++;
 				Set<String> keywords = new HashSet<String>();

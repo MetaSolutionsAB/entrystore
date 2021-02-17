@@ -22,7 +22,6 @@ import org.apache.solr.common.SolrException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.GraphUtil;
@@ -66,8 +65,6 @@ public class LookupResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType("application/lom+xml"));
-
 		entry = null;
 	}
 
@@ -179,16 +176,7 @@ public class LookupResource extends BaseResource {
 		}
 
 		if (graph != null) {
-			String serializedGraph = null;
-			if (mediaType.getName().equals("application/lom+xml")) {
-				URI resURI = entry.getResourceURI();
-				if (resURI != null) {
-					serializedGraph = ConverterUtil.convertGraphToLOM(graph, graph.getValueFactory().createURI(resURI.toString()));
-				}
-			} else {
-				serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
-			}
-
+			String serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
 			if (serializedGraph != null) {
 				getResponse().setStatus(Status.SUCCESS_OK);
 				return new StringRepresentation(serializedGraph, mediaType);

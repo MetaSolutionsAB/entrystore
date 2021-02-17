@@ -29,19 +29,16 @@ import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.oaipmh.harvester.factory.OAIHarvesterFactory;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.converters.ConverterManagerImpl;
-import org.entrystore.impl.converters.LOM2RDFConverter;
 import org.entrystore.impl.converters.OAI_DC2RDFGraphConverter;
-import org.entrystore.impl.converters.RDF2LOMConverter;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
-import org.entrystore.rest.auth.ExistingUserRedirectAuthenticator;
-import org.entrystore.rest.auth.NewUserRedirectAuthenticator;
 import org.entrystore.rest.auth.SimpleAuthenticator;
 import org.entrystore.rest.filter.CORSFilter;
+import org.entrystore.rest.filter.CacheControlFilter;
 import org.entrystore.rest.filter.IgnoreAuthFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
@@ -60,12 +57,12 @@ import org.entrystore.rest.resources.HarvesterResource;
 import org.entrystore.rest.resources.ImportResource;
 import org.entrystore.rest.resources.IndexResource;
 import org.entrystore.rest.resources.LocalMetadataResource;
+import org.entrystore.rest.resources.LoggingResource;
 import org.entrystore.rest.resources.LoginResource;
 import org.entrystore.rest.resources.LogoutResource;
 import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
 import org.entrystore.rest.resources.NameResource;
-import org.entrystore.rest.resources.OpenIdResource;
 import org.entrystore.rest.resources.PasswordResetResource;
 import org.entrystore.rest.resources.ProxyResource;
 import org.entrystore.rest.resources.QuotaResource;
@@ -89,12 +86,8 @@ import org.restlet.Response;
 import org.restlet.Restlet;
 import org.restlet.data.ChallengeScheme;
 import org.restlet.data.Reference;
-import org.restlet.ext.openid.AttributeExchange;
-import org.restlet.ext.openid.OpenIdVerifier;
-import org.restlet.ext.openid.RedirectAuthenticator;
 import org.restlet.routing.Filter;
 import org.restlet.routing.Router;
-import org.restlet.security.Authenticator;
 import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,7 +105,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Main class to start EntryStore as a Restlet Application.
+ * Main class to start EntryStore as Restlet Application.
  *
  * @author Hannes Ebner
  */
@@ -130,9 +123,9 @@ public class EntryStoreApplication extends Application {
 	
 	private PrincipalManager pm;
 	
-	private String baseURI; 
+	private String baseURI;
 
-	private ArrayList<Harvester> harvesters = new ArrayList<Harvester>();
+	private ArrayList<Harvester> harvesters = new ArrayList<>();
 
 	private BackupScheduler backupScheduler;
 
@@ -140,11 +133,11 @@ public class EntryStoreApplication extends Application {
 
 	private static Date startupDate = null;
 
-	protected static String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
+	public static String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
 
 	URI configURI;
 
-	private Set<String> reservedNames = new HashSet<>();
+	private final Set<String> reservedNames = new HashSet<>();
 
 	public EntryStoreApplication(Context parentContext) {
 		this(null, parentContext);
@@ -216,14 +209,14 @@ public class EntryStoreApplication extends Application {
 			Config config = confManager.getConfiguration();
 		
 			baseURI = config.getString(Settings.BASE_URL);
+			if (baseURI == null) {
+				log.error("No Base URI specified, exiting");
+				System.exit(1);
+			}
 
 			Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
 			ConverterManagerImpl.register("oai_dc", oaiDcRdfConverter);
 			ConverterManagerImpl.register("rdn_dc", oaiDcRdfConverter);
-			ConverterManagerImpl.register("rdf2lom", new RDF2LOMConverter());
-			Converter lomRdfConverter = new LOM2RDFConverter();
-			ConverterManagerImpl.register("lom2rdf", lomRdfConverter);
-			ConverterManagerImpl.register("oai_lom", lomRdfConverter);
 
 			rm = new RepositoryManagerImpl(baseURI, confManager.getConfiguration());
 			cm = rm.getContextManager();
@@ -278,8 +271,6 @@ public class EntryStoreApplication extends Application {
 
 		boolean passwordAuthOff = "off".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD, "on"));
 
-		reservedNames.add("favicon.ico");
-		
 		// to prevent unnecessary context-id lookups we route favicon.ico to a real icon
 		reservedNames.add("favicon.ico");
 		router.attach("/favicon.ico", FaviconResource.class);
@@ -334,29 +325,9 @@ public class EntryStoreApplication extends Application {
 			router.attach("/auth/pwreset", PasswordResetResource.class);
 		}
 
-		// OpenID
-		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID, "off"))) {
-			if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_MYOPENID, "off"))) {
-				router.attach("/auth/openid/myopenid", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_MYOPENID, false));
-				router.attach("/auth/openid/myopenid/signup", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_MYOPENID, true));
-				log.info("Authentication via MyOpenID enabled");
-			}
-			if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_GOOGLE, "off"))) {
-				router.attach("/auth/openid/google", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_GOOGLE, false));
-				router.attach("/auth/openid/google/signup", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_GOOGLE, true));
-				log.info("Authentication via Google enabled");
-			}
-			if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_OPENID_YAHOO, "off"))) {
-				router.attach("/auth/openid/yahoo", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_YAHOO, false));
-				router.attach("/auth/openid/yahoo/signup", createRedirectAuthenticator(OpenIdVerifier.PROVIDER_YAHOO, true));
-				log.info("Authentication via Yahoo! enabled");
-			}
-			// this should work, but it doesn't... something wrong at KTH?
-			// router.attach("/auth/openid/kth", createRedirectAuthenticator("https://openid.sys.kth.se/"));
-		}
-		
 		// management/configuration resources
 		reservedNames.add("management");
+		router.attach("/management/logging", LoggingResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
 		
@@ -387,11 +358,13 @@ public class EntryStoreApplication extends Application {
 
 		router.attachDefault(DefaultResource.class);
 
-		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm), pm);
+		CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
+		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm, corsFilter), pm);
 
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
+		CacheControlFilter cacheControl = new CacheControlFilter();
 
 		ignoreAuth.setNext(cookieAuth);
 
@@ -405,11 +378,11 @@ public class EntryStoreApplication extends Application {
 			basicAuth.setNext(jsCallback);
 		}
 
-		jsCallback.setNext(modLockOut);
+		jsCallback.setNext(cacheControl);
+		cacheControl.setNext(modLockOut);
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
 			log.info("Enabling CORS");
-			CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
 			modLockOut.setNext(corsFilter);
 			corsFilter.setNext(router);
 		} else {
@@ -440,22 +413,6 @@ public class EntryStoreApplication extends Application {
 			log.warn("Rewriting of base reference has been manually disabled");
 			return ignoreAuth;
 		}
-	}
-	
-	private Authenticator createRedirectAuthenticator(String verifier, boolean createOnDemand) {
-		OpenIdVerifier oidv = new OpenIdVerifier(verifier);
-		oidv.addRequiredAttribute(AttributeExchange.EMAIL);
-		oidv.addRequiredAttribute(AttributeExchange.FIRST_NAME);
-		oidv.addRequiredAttribute(AttributeExchange.LAST_NAME);
-		RedirectAuthenticator redirAuth;
-		if (createOnDemand) {
-			redirAuth = new NewUserRedirectAuthenticator(getContext(), oidv, null, rm);
-		} else {
-			redirAuth = new ExistingUserRedirectAuthenticator(getContext(), oidv, null, rm);
-		}
-		redirAuth.setOptional(true);
-		redirAuth.setNext(OpenIdResource.class);
-		return redirAuth;
 	}
 
 	public ContextManager getCM() {
@@ -528,14 +485,16 @@ public class EntryStoreApplication extends Application {
 	public static String getVersion() {
 		if (VERSION == null) {
 			URI versionFile = ConfigurationManager.getConfigurationURI("VERSION.txt");
-			try {
-				log.debug("Reading version number from " + versionFile);
-				VERSION = HttpUtil.readFirstLine(versionFile.toURL());
-			} catch (IOException e) {
-				log.error(e.getMessage());
+			if (versionFile != null) {
+				try {
+					log.debug("Reading version number from " + versionFile);
+					VERSION = HttpUtil.readFirstLine(versionFile.toURL());
+				} catch (IOException e) {
+					log.error(e.getMessage());
+				}
 			}
 			if (VERSION == null) {
-				VERSION = new SimpleDateFormat("yyyyMMdd").format(new Date());
+				VERSION = new SimpleDateFormat("yyyyMMddHHmm").format(new Date());
 			}
 		}
 		return VERSION;

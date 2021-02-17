@@ -79,6 +79,7 @@ public class QuotaResource extends BaseResource {
 					if (context != null && quota != Quota.VALUE_UNKNOWN) {
 						context.setQuota(quota);
 					}
+					getResponse().setEntity(createEmptyRepresentationWithLastModified(context.getEntry().getModifiedDate()));
 				} catch (Exception e) {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				}

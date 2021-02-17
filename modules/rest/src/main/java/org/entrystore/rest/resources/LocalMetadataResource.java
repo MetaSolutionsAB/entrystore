@@ -25,7 +25,7 @@ import org.entrystore.ProvenanceType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
+import java.util.Date;
 
 
 /**
@@ -54,6 +54,11 @@ public class LocalMetadataResource extends AbstractMetadataResource {
 			}
 		}
 		return null;
+	}
+
+	@Override
+	protected Date getModificationDate() {
+		return entry.getModifiedDate();
 	}
 
 }

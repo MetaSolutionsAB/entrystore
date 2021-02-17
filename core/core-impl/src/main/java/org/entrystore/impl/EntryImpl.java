@@ -38,12 +38,15 @@ import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.util.URISplit;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Literal;
+import org.openrdf.model.Model;
 import org.openrdf.model.Statement;
 import org.openrdf.model.URI;
 import org.openrdf.model.Value;
 import org.openrdf.model.ValueFactory;
 import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.impl.LinkedHashModel;
+import org.openrdf.model.impl.URIImpl;
+import org.openrdf.model.util.ModelUtil;
 import org.openrdf.model.vocabulary.RDF;
 import org.openrdf.repository.Repository;
 import org.openrdf.repository.RepositoryConnection;
@@ -73,7 +76,7 @@ public class EntryImpl implements Entry {
 	protected volatile URI externalMdURI;
 	protected volatile URI cachedExternalMdURI;
 	protected ContextImpl context;
-	protected Repository repository;
+	protected final Repository repository;
 	protected RepositoryManagerImpl repositoryManager;
 
 	protected volatile URI entryURI;
@@ -103,6 +106,7 @@ public class EntryImpl implements Entry {
 	private Boolean readOrWrite;
 	private String originalList;
 	private ProvenanceImpl provenance;
+	private volatile boolean deleted = false;
 
 	//A ugly hack to be able to initialize the ContextManager itself.
 	EntryImpl(RepositoryManagerImpl repositoryManager, Repository repository) {
@@ -1289,6 +1293,8 @@ public class EntryImpl implements Entry {
 
 	public void setGraph(Graph metametadata) {
 		checkAdministerRights();
+
+		Graph oldGraph = getGraph();
 		
 		Iterator<Statement> resourceURIStmnts = metametadata.match(this.entryURI, RepositoryProperties.resource, null);
 		if (resourceURIStmnts.hasNext()) {
@@ -1440,6 +1446,9 @@ public class EntryImpl implements Entry {
 					initMetadataObjects();
 					
 					getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
+					if (hasAclChangedForGuest(oldGraph, metametadata)) {
+						getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryAclGuestUpdated, metametadata));
+					}
 				} catch (Exception e) {
 					rc.rollback();
 					// Reset to previous saved values, just in case we saved the types above halfway through.
@@ -1451,7 +1460,28 @@ public class EntryImpl implements Entry {
 			}
 		} catch (RepositoryException e) {
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
-		}		
+		}
+	}
+
+	private boolean hasAclChangedForGuest(Graph oldGraph, Graph newGraph) {
+		if (oldGraph == null || newGraph == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
+
+		Model oldModel = new LinkedHashModel(oldGraph);
+		Model newModel = new LinkedHashModel(newGraph);
+
+		URI guestURI = new URIImpl(getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString());
+
+		Model oldAcl = new LinkedHashModel();
+		oldAcl.addAll(oldModel.filter(null, RepositoryProperties.Read, guestURI));
+		oldAcl.addAll(oldModel.filter(null, RepositoryProperties.Write, guestURI));
+
+		Model newAcl = new LinkedHashModel();
+		newAcl.addAll(newModel.filter(null, RepositoryProperties.Read, guestURI));
+		newAcl.addAll(newModel.filter(null, RepositoryProperties.Write, guestURI));
+
+		return !ModelUtil.equals(oldAcl, newAcl);
 	}
 
     private boolean isStatementInvRelationCandidate(Statement statement, String base) {
@@ -1498,6 +1528,7 @@ public class EntryImpl implements Entry {
             invRelations = false;
         }
     }
+
     private void addInverseRelations(RepositoryConnection rc, Graph graph) {
         String base = repositoryManager.getRepositoryURL().toString();
         for (Statement statement : graph) {
@@ -1597,6 +1628,10 @@ public class EntryImpl implements Entry {
 	}
 
 	public void remove(RepositoryConnection rc) throws Exception {
+		// TODO the handling of removal is non-atomic and should be rewritten to take
+		//  failures (i.e. rollbacks of the ongoing transaction) into consideration
+		deleted = true;
+
 		log.debug("Removing entry " + entryURI);
         removeInverseRelations(rc);
 		rc.clear(entryURI);
@@ -1716,6 +1751,10 @@ public class EntryImpl implements Entry {
 		if (mtMd != null) {
 			this.format = mtMd;
 		}
+	}
+
+	public boolean isDeleted() {
+		return deleted;
 	}
 	
 	private String getMimetypeFromMetadata() {

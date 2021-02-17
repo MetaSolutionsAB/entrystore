@@ -26,7 +26,7 @@ public class SignupInfo {
 	public String firstName;
 	public String lastName;
 	public String email;
-	public String password;
+	public String saltedHashedPassword;
 	public Date expirationDate;
 	public String urlSuccess;
 	public String urlFailure;

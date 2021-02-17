@@ -17,52 +17,21 @@
 package org.entrystore.rest.resources;
 
 import com.google.common.collect.Sets;
-import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
-import org.entrystore.ContextManager;
 import org.entrystore.Entry;
-import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.Group;
-import org.entrystore.List;
-import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.ResourceType;
-import org.entrystore.User;
-import org.entrystore.impl.ContextImpl;
-import org.entrystore.impl.RDFResource;
-import org.entrystore.impl.StringResource;
-import org.entrystore.repository.util.NS;
-import org.entrystore.rest.util.JSONErrorMessages;
-import org.entrystore.rest.util.RDFJSON;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.repository.RepositoryException;
-import org.restlet.data.MediaType;
 import org.restlet.data.Status;
-import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.resource.Delete;
-import org.restlet.resource.Get;
 import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Set;
 
 
 /**
@@ -154,6 +123,7 @@ public class GroupResource extends BaseResource {
 			// return HTTP 201 with the newly created group as Location-header
 			getResponse().setStatus(Status.SUCCESS_CREATED);
 			getResponse().setLocationRef(newGroupEntry.getEntryURI().toString());
+			getResponse().setEntity(createEmptyRepresentationWithLastModified(newGroupEntry.getModifiedDate()));
 
 			return;
 		} finally {

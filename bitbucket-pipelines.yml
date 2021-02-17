@@ -1,22 +1,64 @@
-image: maven:3.6-jdk-8
+image: maven:3.6-jdk-11
 
 options:
-  max-time: 10
+  max-time: 12
+
+stepdefinitions:
+  - build: &build
+      name: Build
+      caches:
+        - maven
+      script:
+        - mvn --version
+        - mvn clean install
+        - rm -rf ~/.m2/repository/org/entrystore/
+      artifacts:
+        - modules/rest/target/**
+        - modules/rest-standalone/*/target/**
+  - deploy: &deploy
+      name: Deploy
+      script:
+        - gpg --version
+        - echo $GPG_SIGN_KEY | base64 -d | gpg --import
+        - gpg --list-secret-keys
+        - export VERSION=`cat VERSION.txt` && echo $VERSION
+        # We allow semantic versioning plus x.y-z (e.g. 4.10-SNAPSHOT which does not exactly conform to semver)
+        - echo $VERSION | grep -P -q '^(0|[1-9]\d*)\.(0|[1-9]\d*)(\.*)(0*|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+        - export FILE_BASE_SIMPLE="entrystore-simple-$VERSION" && echo $FILE_BASE_SIMPLE
+        - export FILE_BASE_JETTY="entrystore-jetty-$VERSION" && echo $FILE_BASE_JETTY
+        - export FILE_BASE_WEBAPP_ORIG="entrystore-rest-$VERSION" && echo $FILE_BASE_WEBAPP_ORIG
+        - export FILE_BASE_WEBAPP="entrystore-webapp-$VERSION" && echo $FILE_BASE_WEBAPP
+        - ( cd modules/rest-standalone/simple/target/dist/ && tar czf ${FILE_BASE_SIMPLE}.tar.gz * && sha256sum ${FILE_BASE_SIMPLE}.tar.gz > ${FILE_BASE_SIMPLE}.tar.gz.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE_SIMPLE}.tar.gz.sha256 )
+        - ( cd modules/rest-standalone/jetty/target/dist/ && tar czf ${FILE_BASE_JETTY}.tar.gz * && sha256sum ${FILE_BASE_JETTY}.tar.gz > ${FILE_BASE_JETTY}.tar.gz.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE_JETTY}.tar.gz.sha256 )
+        - ( cd modules/rest/target/ && mv ${FILE_BASE_WEBAPP_ORIG}.war ${FILE_BASE_WEBAPP}.war && sha256sum ${FILE_BASE_WEBAPP}.war > ${FILE_BASE_WEBAPP}.war.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE_WEBAPP}.war.sha256 )
+        - scp -v modules/rest/target/{*.war,*.sha256.asc} modules/rest-standalone/simple/target/dist/{*.tar.gz,*.sha256.asc} modules/rest-standalone/jetty/target/dist/{*.tar.gz,*.sha256.asc} deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
+        - if [ $BITBUCKET_BRANCH == "develop" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/develop.version" ; elif [ $BITBUCKET_BRANCH == "master" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/latest.version" ; fi
+  - dockerhub: &dockerhub
+      name: Docker Hub
+      script:
+        - docker version
+        - export VERSION=`cat VERSION.txt` && echo $VERSION
+        - export VERSION_MAJOR_MINOR=${VERSION%.*} && echo $VERSION_MAJOR_MINOR
+        - git clone -b master git@bitbucket.org:metasolutions/docker.git
+        - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
+        - cd docker/entrystore
+        - docker build --build-arg ENTRYSTORE_VERSION=$VERSION --pull --no-cache --tag metasolutions/entrystore:$VERSION .
+        - docker push metasolutions/entrystore:$VERSION
+        - if [ $BITBUCKET_BRANCH == "develop" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:develop ; docker push metasolutions/entrystore:develop ; fi
+        - if [ $BITBUCKET_BRANCH == "master" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:$VERSION_MAJOR_MINOR ; docker push metasolutions/entrystore:$VERSION_MAJOR_MINOR ; fi
+      services:
+        - docker
+      caches:
+        - docker
 
 pipelines:
   default:
-    - step:
-        caches:
-          - maven
-        script:
-          - mvn --version
-          - gpg --version
-          - echo $GPG_SIGN_KEY | base64 -d | gpg --import
-          - gpg --list-secret-keys
-          - mvn clean install
-          - export FILE_BASE="entrystore-rest-`cat VERSION.txt`"
-          - echo $FILE_BASE
-          - ( cd modules/rest-standalone/target/dist/ && tar czf ${FILE_BASE}.tar.gz * && sha256sum ${FILE_BASE}.tar.gz > ${FILE_BASE}.tar.gz.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE}.tar.gz.sha256 )
-          - ( cd modules/rest/target/ && sha256sum ${FILE_BASE}.war > ${FILE_BASE}.war.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE}.war.sha256 )
-          - scp -v modules/rest/target/{*.war,*.sha256.asc} modules/rest-standalone/target/dist/{*.tar.gz,*.sha256.asc} deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
-          - rm -rf ~/.m2/repository/org/entrystore/
+    - step: *build
+  branches:
+    master:
+      - step: *build
+      - step: *deploy
+    develop:
+      - step: *build
+      - step: *deploy
+      - step: *dockerhub

@@ -16,35 +16,21 @@
 
 package org.entrystore.transforms.empty;
 
-import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.NS;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.Transform;
 import org.entrystore.transforms.TransformParameters;
 import org.openrdf.model.Graph;
 import org.openrdf.model.Statement;
-import org.openrdf.model.impl.GraphImpl;
 import org.openrdf.model.impl.LinkedHashModel;
 import org.openrdf.model.impl.URIImpl;
-import org.restlet.Client;
-import org.restlet.Request;
-import org.restlet.Response;
-import org.restlet.data.MediaType;
-import org.restlet.data.Method;
-import org.restlet.data.Protocol;
-import org.restlet.data.Status;
-import org.restlet.representation.InputRepresentation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.InputStream;
-import java.net.URI;
 import java.util.Iterator;
 
 /**

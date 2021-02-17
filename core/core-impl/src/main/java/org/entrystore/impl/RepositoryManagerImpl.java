@@ -18,12 +18,16 @@
 package org.entrystore.impl;
 
 import net.sf.ehcache.CacheManager;
-import org.apache.solr.client.solrj.SolrServer;
+import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
-import org.apache.solr.client.solrj.impl.HttpSolrServer;
+import org.apache.solr.client.solrj.impl.HttpSolrClient;
+import org.apache.solr.client.solrj.request.CoreAdminRequest;
+import org.apache.solr.client.solrj.request.CoreStatus;
 import org.apache.solr.core.CoreContainer;
+import org.apache.solr.core.NodeConfig;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.Quota;
 import org.entrystore.SearchIndex;
@@ -65,12 +69,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -97,11 +101,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private boolean checkForAuthorization = true;
 
-	private ArrayList<String> systemContextAliasList = new ArrayList<String>();
+	private final ArrayList<String> systemContextAliasList = new ArrayList<>();
 	
-	private static Map<String, RepositoryManagerImpl> instances = Collections.synchronizedMap(new HashMap<String, RepositoryManagerImpl>());
+	private final static Map<String, RepositoryManagerImpl> instances = Collections.synchronizedMap(new HashMap<>());
 
-	private Map<String, Class> alias2Class = new HashMap<String, Class>();
+	private final Map<String, Class> alias2Class = new HashMap<>();
 
 	private boolean modificationLockout = false;
 	
@@ -109,9 +113,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	private final Object mutex = new Object();
 	
-	private SoftCache softCache;
+	private final SoftCache softCache;
 
-	private Config config;
+	private final Config config;
 	
 	private CacheManager cacheManager;
 	
@@ -123,10 +127,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	
 	//ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
 	
-	private Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = new EnumMap<RepositoryEvent, Set<RepositoryListener>>(RepositoryEvent.class);
+	private final Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = new EnumMap<>(RepositoryEvent.class);
 	
-	private SolrServer solrServer;
-	
+	private SolrClient solrServer;
+
 	private CoreContainer solrCoreContainer;
 	
 	private SolrSearchIndex solrIndex;
@@ -212,7 +216,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		// create soft cache
 		softCache = new SoftCache();
-		
+
 		if (config.getString(Settings.REPOSITORY_CACHE, "off").equalsIgnoreCase("on")) {
 			String cachePath = config.getString(Settings.REPOSITORY_CACHE_PATH);
 			if (cachePath != null) {
@@ -305,7 +309,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			initSolr();
 			registerSolrListeners();
 		}
-		
+
 		if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PUBLIC, "off"))) {
 			log.info("Initializing public repository");
 			publicRepository = new PublicRepository(this);
@@ -421,7 +425,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		log.info("Exporting repository to " + file);
 		try {
 			con = repo.getConnection();
-			out = new FileOutputStream(new File(file));
+			out = Files.newOutputStream(new File(file).toPath());
 			if (gzip) {
 				out = new GZIPOutputStream(out);
 			}
@@ -630,6 +634,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
 
 		boolean reindex = "on".equalsIgnoreCase(config.getString(Settings.SOLR_REINDEX_ON_STARTUP, "off"));
+		boolean reindexWait = "on".equalsIgnoreCase(config.getString(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, "off"));
 
 		// Check whether memory store is configured without persistence and enforce
 		// reindexing to avoid inconsistencies between memory store and Solr index
@@ -640,37 +645,47 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		String solrURL = config.getString(Settings.SOLR_URL);
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at " + solrURL);
-			HttpSolrServer httpSolrServer = new HttpSolrServer(solrURL);
-			httpSolrServer.setAllowCompression(true);
-			httpSolrServer.setFollowRedirects(true);
-			httpSolrServer.setMaxRetries(1);
-			httpSolrServer.setConnectionTimeout(5000); // 5 seconds
-			solrServer = httpSolrServer;
+
+			HttpSolrClient httpSolrClient = new HttpSolrClient.Builder(solrURL).
+					withConnectionTimeout(5000).
+					withSocketTimeout(5000).
+					allowCompression(true).
+					build();
+			httpSolrClient.setFollowRedirects(true);
+			solrServer = httpSolrClient;
 		} else {
 			log.info("Using embedded Solr server");
 			File solrDir = new File(solrURL);
 			if (solrDir.list() != null && solrDir.list().length == 0) {
 				log.info("Solr directory is empty, scheduling conditional reindexing of repository");
 				reindex = true;
+				reindexWait = true;
 			}
+
 			try {
-				System.setProperty("solr.solr.home", solrURL);
-				log.info("solr.solr.home set to " + solrURL);
+				// System.setProperty("solr.solr.home", solrURL);
+				// log.info("Solr Home (solr.solr.home) set to " + solrURL);
+				// Path solrHome = SolrPaths.locateSolrHome();
 				URL solrConfig = ConverterUtil.findResource("solrconfig.xml");
+				NodeConfig config = new NodeConfig.NodeConfigBuilder("embeddedSolrServerNode", new File(solrURL).toPath())
+						.setConfigSetBaseDirectory(solrConfig.getPath())
+						.build();
+				this.solrServer = new EmbeddedSolrServer(config, "core1");
 
-				/* pre-Solr 4.4.0
-				CoreContainer.Initializer initializer = new CoreContainer.Initializer();
-				CoreContainer coreContainer = initializer.initialize();
-				solrServer = new EmbeddedSolrServer(coreContainer, "");
-				 */
-
-				// the following should be run with a custom Solr-config
-				//CoreContainer.createAndLoad(solrURL, new File(solrConfig.getPath()));
-
-				// we create a container with the default configuration
-				CoreContainer coreContainer = new CoreContainer(solrURL);
-				coreContainer.load();
-				solrServer = new EmbeddedSolrServer(coreContainer, "");
+				try {
+					CoreStatus status = CoreAdminRequest.getCoreStatus("core1", solrServer);
+					// This following triggers an exception if core1 does not exist,
+					// we need this to test for the core's existence
+					status.getCoreStartTime();
+				} catch (Exception e) {
+					log.info("Creating Solr core");
+					CoreAdminRequest.Create createRequest = new CoreAdminRequest.Create();
+					createRequest.setCoreName("core1");
+					createRequest.setConfigSet("");
+					createRequest.process(solrServer);
+					reindex = true;
+					reindexWait = true;
+				}
 			} catch (Exception e) {
 				log.error("Failed to initialize Solr: " + e.getMessage());
 			}
@@ -678,10 +693,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (solrServer != null) {
 			solrIndex = new SolrSearchIndex(this, solrServer);
 			if (reindex) {
-				solrIndex.reindex();
+				if (reindexWait) {
+					solrIndex.reindexSync(true);
+				} else {
+					solrIndex.reindex(false);
+				}
 			}
 		} else {
-			log.error("Unable to initialize Solr, check settings in scam.properties");
+			log.error("Unable to initialize Solr");
+			this.shutdown();
 		}
 	}
 	
@@ -710,13 +730,26 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			};
 			registerListener(remover, RepositoryEvent.EntryDeleted);
+
+			RepositoryListener contextIndexer = new RepositoryListener() {
+				@Override
+				public void repositoryUpdated(RepositoryEventObject eventObject) {
+					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
+						Entry e = (Entry) eventObject.getSource();
+						if (GraphType.Context.equals(e.getGraphType())) {
+							solrIndex.submitContextForDelayedReindex(e, eventObject.getUpdatedGraph());
+						}
+					}
+				}
+			};
+			registerListener(contextIndexer, RepositoryEvent.EntryAclGuestUpdated);
 		}
 	}
 	
 	public SearchIndex getIndex() {
 		return this.solrIndex;
 	}
-	
+
 	private void registerPublicRepositoryListeners() {
 		if (publicRepository != null) {
 			RepositoryListener updater = new RepositoryListener() {

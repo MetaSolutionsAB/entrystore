@@ -25,6 +25,9 @@ public enum RepositoryEvent {
 	EntryCreated,
 	EntryUpdated, // TODO event firing only implemented for EntryImpl.setGraph()
 	EntryDeleted,
+	EntryAclGuestUpdated, // implemented for EntryImpl.setGraph() and changes concerning _guest,
+						  // NOT for EntryImpl.updateAllowedPrincipalsFor() which only seems to be
+						  // used during entry creation
 	MetadataUpdated,
 	ExternalMetadataUpdated,
 	ExtractedMetadataUpdated, // TODO event firing not implemented yet

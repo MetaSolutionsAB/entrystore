@@ -16,26 +16,10 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Properties;
-import java.util.Set;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
-
-import org.entrystore.User;
-import org.entrystore.PrincipalManager.AccessProperty;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.AuthorizationException;
+import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.User;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.rio.RDFFormat;
@@ -55,6 +39,22 @@ import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URI;
+import java.nio.file.Files;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Properties;
+import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 
 /**
@@ -158,12 +158,12 @@ public class ExportResource extends BaseResource {
 				userList.deleteCharAt(userList.length() - 1);
 				exportProps.put("containedUsers", userList.toString());
 			}
-			FileOutputStream fos = new FileOutputStream(tmpProperties);
+			OutputStream fos = Files.newOutputStream(tmpProperties.toPath());
 			exportProps.store(fos, "SCAM export information");
 			fos.close();
 			
 			// create zip stream			
-			ZipOutputStream zipOS = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(tmpExport)));
+			ZipOutputStream zipOS = new ZipOutputStream(new BufferedOutputStream(Files.newOutputStream(tmpExport.toPath())));
 			
 			// add triples to zip file
 			ZipEntry zeTriples = new ZipEntry("triples.rdf");
@@ -175,7 +175,7 @@ public class ExportResource extends BaseResource {
 			int bytesRead;
 			byte[] buffer = new byte[8192];
 			
-			InputStream is = new BufferedInputStream(new FileInputStream(tmpTriples), 8192);
+			InputStream is = new BufferedInputStream(Files.newInputStream(tmpTriples.toPath()), 8192);
 			while ((bytesRead = is.read(buffer)) != -1) {
                 zipOS.write(buffer, 0, bytesRead);
             }
@@ -189,7 +189,7 @@ public class ExportResource extends BaseResource {
             zipOS.putNextEntry(zeProperties);
             
             bytesRead = 0;
-            is = new FileInputStream(tmpProperties);
+            is = Files.newInputStream(tmpProperties.toPath());
             while ((bytesRead = is.read(buffer)) != -1) {
             	zipOS.write(buffer, 0, bytesRead);
             }
@@ -208,7 +208,7 @@ public class ExportResource extends BaseResource {
             			zeResource.setSize(contextFiles[i].length());
             			zeResource.setTime(contextFiles[i].lastModified());
             			zipOS.putNextEntry(zeResource);
-            			is = new BufferedInputStream(new FileInputStream(contextFiles[i]), 8192);
+            			is = new BufferedInputStream(Files.newInputStream(contextFiles[i].toPath()), 8192);
             			while ((bytesRead = is.read(buffer)) != -1) {
             				zipOS.write(buffer, 0, bytesRead);
             			}

@@ -82,6 +82,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	protected long quotaFillLevel = Quota.VALUE_UNCACHED;
 	protected long quota = Quota.VALUE_UNCACHED;
 
+	private volatile boolean deleted = false;
+
 	static {
 		ValueFactory vf = ValueFactoryImpl.getInstance();
 		DCModified = vf.createURI(NS.dc, "modified");
@@ -122,7 +124,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					
 					List<Statement> stmntsToAdd = new ArrayList<Statement>();
 
-					// create new index by finding all sesame contexts which belong to this SCAM context
+					// create new index by finding all sesame contexts which belong to this context
 					int maxIndex = 0;
 					RepositoryResult<Statement> resources = rc.getStatements(null, RepositoryProperties.resource, null, false);
 					while (resources.hasNext()) {
@@ -250,7 +252,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	void loadIndex() {
 		try {
-			synchronized (this.entry.repository) {
+			synchronized (this.entry) {
 				if (res2entry != null) {
 					return;
 				}
@@ -912,9 +914,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 			if (res2entry == null) {
 				loadIndex();
 			}
-			for (URI entryURI : getEntries()) {			
-				EntryImpl removeEntry = (EntryImpl) getByEntryURI(entryURI);
 
+			// do not move this boolean from here, this is needed to avoid adding
+			// entries to solr after they have been removed from solr (race condition)
+			deleted = true;
+
+			for (URI entryURI : getEntries()) {
+				EntryImpl removeEntry = (EntryImpl) getByEntryURI(entryURI);
 				removeFromIndex(removeEntry, rc);
 				rc.clear(removeEntry.getSesameEntryURI());
 				if (!systemEntries.contains(removeEntry.getEntryURI())) {
@@ -1198,6 +1204,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 		} catch (Exception e) {
 			log.error(e.getMessage());
 		}
+	}
+
+	public boolean isDeleted() {
+		return deleted;
 	}
 
 }

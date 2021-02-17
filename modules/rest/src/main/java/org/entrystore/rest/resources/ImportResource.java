@@ -16,18 +16,11 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Iterator;
-import java.util.List;
-
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
-import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.AuthorizationException;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.transformation.SCAM2Import;
 import org.entrystore.repository.util.FileOperations;
 import org.openrdf.repository.RepositoryException;
@@ -39,6 +32,13 @@ import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.util.Iterator;
+import java.util.List;
 
 
 /**
@@ -84,7 +84,7 @@ public class ImportResource extends BaseResource {
 						input = getRequestEntity().getStream();
 					}
 					if (input != null) {
-						FileOperations.copyFile(input, new FileOutputStream(tmpFile));
+						FileOperations.copyFile(input, Files.newOutputStream(tmpFile.toPath()));
 						getCM().importContext(context.getEntry(), tmpFile);
 						getResponse().setEntity("<textarea></textarea>", MediaType.TEXT_HTML);
 					} else {

@@ -21,6 +21,8 @@ import org.entrystore.Metadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Date;
+
 
 /**
  * Access to cached external metadata.
@@ -39,6 +41,11 @@ public class ExternalMetadataResource extends AbstractMetadataResource {
 			}
 		}
 		return null;
+	}
+
+	@Override
+	protected Date getModificationDate() {
+		return entry.getExternalMetadataCacheDate();
 	}
 
 }

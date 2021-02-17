@@ -14,9 +14,13 @@
  * limitations under the License.
  */
 
-package org.entrystore.impl.converters;
+package org.entrystore.rest.standalone;
 
-
-public class OELOM2RDFConverter extends LOM2RDFConverter {
+/**
+ * Main class to start EntryStore using Simple Framework.
+ *
+ * @author Hannes Ebner
+ */
+public class EntryStoreApplicationStandaloneSimple extends EntryStoreApplicationStandalone {
 
 }

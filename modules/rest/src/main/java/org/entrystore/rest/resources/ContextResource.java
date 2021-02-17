@@ -31,6 +31,7 @@ import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
@@ -90,7 +91,7 @@ public class ContextResource extends BaseResource {
 	 * This URL can be requested from a Web browser etc. This method will 
 	 * execute a requests and deliver a response.
 	 * <ul>
-	 * <li>GET {base-uri}/{portfolio-id}</li>
+	 * <li>GET {base-uri}/{context-id}</li>
 	 * </ul>
 	 * 
 	 * return {@link Representation}
@@ -99,9 +100,10 @@ public class ContextResource extends BaseResource {
 	public Representation represent() throws ResourceException {	
 		if (context == null) {
 			log.debug("The given context id does not exist.");
-			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
-			return new JsonRepresentation(JSONErrorMessages.errorWrongContextIDmsg); 
+			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+			return new JsonRepresentation(JSONErrorMessages.errorWrongContextIDmsg);
 		}
+
         if (!getPM().isUserAdminOrAdminGroup(null)) {
             return unauthorizedGET();
         }
@@ -183,25 +185,32 @@ public class ContextResource extends BaseResource {
 			
 			Entry entry = null; // A variable to store the new entry in.
 
-			// Local
-			if (!parameters.containsKey("entrytype") || parameters.get("entrytype").equalsIgnoreCase("local")) {
-				entry = createLocalEntry(entry); 
-			} else {
-				String lT = parameters.get("entrytype"); 
-				// Link
-				if (lT.equalsIgnoreCase("link") && parameters.containsKey("resource")) {
-					entry = createLinkEntry(entry); 
-				} 
-				// Reference
-				else if (lT.equalsIgnoreCase("reference") && parameters.containsKey("resource") 
-						&& parameters.containsKey("cached-external-metadata")) {
-					entry = createReferenceEntry(entry);
+			try {
+				// Local
+				if (!parameters.containsKey("entrytype") || parameters.get("entrytype").equalsIgnoreCase("local")) {
+					entry = createLocalEntry(entry);
+				} else {
+					String lT = parameters.get("entrytype");
+					// Link
+					if (lT.equalsIgnoreCase("link") && parameters.containsKey("resource")) {
+						entry = createLinkEntry(entry);
+					}
+					// Reference
+					else if (lT.equalsIgnoreCase("reference") && parameters.containsKey("resource")
+							&& parameters.containsKey("cached-external-metadata")) {
+						entry = createReferenceEntry(entry);
+					}
+					// LinkReference
+					else if (lT.equalsIgnoreCase("linkreference") && parameters.containsKey("resource")
+							&& parameters.containsKey("cached-external-metadata")) {
+						entry = createLinkReferenceEntry(entry);
+					}
 				}
-				// LinkReference 
-				else if (lT.equalsIgnoreCase("linkreference") && parameters.containsKey("resource") 
-						&& parameters.containsKey("cached-external-metadata")) {
-					entry = createLinkReferenceEntry(entry);
-				}
+			} catch (IllegalArgumentException iae) {
+				log.debug(iae.getMessage());
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				getResponse().setEntity(new JsonRepresentation(new JSONObject().put("error", iae.getMessage())));
+				return;
 			}
 			
 			if (entry != null) {
@@ -265,10 +274,11 @@ public class ContextResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
 				getResponse().setEntity(JSONErrorMessages.errorCantCreateEntry, MediaType.APPLICATION_JSON);
 			} else {
-				// Success, return 201 and the new entry id in the response.
+				// Success, return 201 and the new entry ID/URI in response and header
 				getResponse().setStatus(Status.SUCCESS_CREATED);
 				getResponse().setLocationRef(entry.getEntryURI().toString());
-				getResponse().setEntity("{\"entryId\":\""+entry.getId()+"\"}", MediaType.APPLICATION_JSON);
+				getResponse().setEntity(new JsonRepresentation("{\"entryId\":\"" + entry.getId() + "\"}"));
+				getResponse().getEntity().setModificationDate(entry.getModifiedDate());
 			}
 		} catch (AuthorizationException e) {
 			unauthorizedPOST();
@@ -496,7 +506,7 @@ public class ContextResource extends BaseResource {
 			User user = (User) entry.getResource();
 			
 			if (jsonObj.has("name")) {
-				if(user.setName(jsonObj.getString("name")) == false) {
+				if (!user.setName(jsonObj.getString("name"))) {
 					return false;
 				}
 			} else {
@@ -509,7 +519,11 @@ public class ContextResource extends BaseResource {
 				}
 			}
 			if (jsonObj.has("password")) {
-				user.setSecret(jsonObj.getString("password"));					
+				if (user.setSecret(jsonObj.getString("password"))) {
+					Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
+				} else {
+					log.warn("Password could not be set");
+				}
 			}
 
 			if(parameters.containsKey("groupURI")) {
@@ -533,14 +547,12 @@ public class ContextResource extends BaseResource {
 		case List:
 			JSONArray childrenArray = (JSONArray) jsonObj.get("resource");
 			List list = (List)entry.getResource();
-			if(childrenArray != null) {
-				if (childrenArray != null) {
-					for(int i = 0; i < childrenArray.length(); i++) {
-						Entry child = context.get(childrenArray.getString(i));
-						if(child != null) {
-							list.addChild(child.getEntryURI());
-						}		
-					}		
+			if (childrenArray != null) {
+				for (int i = 0; i < childrenArray.length(); i++) {
+					Entry child = context.get(childrenArray.getString(i));
+					if (child != null) {
+						list.addChild(child.getEntryURI());
+					}
 				}
 			}
 			break;

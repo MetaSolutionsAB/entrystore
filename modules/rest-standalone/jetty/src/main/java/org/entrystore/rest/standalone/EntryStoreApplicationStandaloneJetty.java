@@ -14,30 +14,13 @@
  * limitations under the License.
  */
 
-package org.entrystore.harvester.factory;
-
-import org.entrystore.harvester.MetadataType;
+package org.entrystore.rest.standalone;
 
 /**
- * 
- * @author eric
+ * Main class to start EntryStore using Jetty.
  *
+ * @author Hannes Ebner
  */
-public class MetadataFactory {
-	
-	/**
-	 * 
-	 * @param metadataType
-	 * @return a enum if success or null otherwise.
-	 */
-	public static MetadataType getMetadataType(String metadataType) {
-		
-		if(metadataType.equals("OAI_DC")) {
-			return MetadataType.OAI_DC; 
-		} else if(metadataType.equals("OAI_LOM")) {
-			return MetadataType.OAI_LOM; 
-		}
-		return null;
-	}
+public class EntryStoreApplicationStandaloneJetty extends EntryStoreApplicationStandalone {
 
 }

@@ -16,18 +16,17 @@
 
 package org.entrystore.repository.config;
 
+import org.entrystore.config.Config;
+import org.entrystore.config.Configurations;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-
-import org.entrystore.config.Config;
-import org.entrystore.config.Configurations;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * ConfigurationManager is loading, saving, and returning a configuration.
@@ -53,29 +52,19 @@ public class ConfigurationManager {
 	 * configuration file exists and loads it respectively creates a new
 	 * configuration.
 	 * 
-	 * @throws IOException 
+	 * @throws IOException
 	 */
 	public ConfigurationManager(URI configURI) throws IOException {
+		if (configURI == null) {
+			throw new IllegalArgumentException("Configuration URI must not be null");
+		}
 		try {
-			if (configURI == null) {
-				throw new IllegalArgumentException("Configuration URI must not be null");
-			}
-
-			File configFile = new File(configURI);
-			if (configFile.exists()) {
-				try {
-					log.info("Loading configuration from: " + configURI);
-					// We don't call configFile.toURL() because it doesn't escape spaces etc.
-					loadConfiguration(configURI.toURL());
-				} catch (MalformedURLException e) {
-					log.error(e.getMessage());
-				}
-			} else {
-				log.error("Could not find configuration file");
-				throw new FileNotFoundException("Configuration file does not exist");
-			}} catch (Exception e) {
-				e.printStackTrace(); 
-			}
+			log.info("Loading configuration from: " + configURI);
+			// We don't call configFile.toURL() because it doesn't escape spaces etc.
+			loadConfiguration(configURI.toURL());
+		} catch (MalformedURLException e) {
+			log.error(e.getMessage());
+		}
 	}
 
 	private void initMainConfig() {

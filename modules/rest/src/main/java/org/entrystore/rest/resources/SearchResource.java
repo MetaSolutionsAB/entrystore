@@ -28,6 +28,7 @@ import org.entrystore.Group;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.Resource;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.config.Settings;
@@ -272,7 +273,10 @@ public class SearchResource extends BaseResource {
 									log.debug("Not allowed to read disabled status of " + e.getEntryURI());
 								}
 							} else if (btChild == GraphType.Group && locChild == EntryType.Local) {
-								childJSON.put("name", ((Group) e.getResource()).getName());								
+								Resource groupResource = e.getResource();
+								if (groupResource != null ) {
+									childJSON.put("name", ((Group) groupResource).getName());
+								}
 							}
 							PrincipalManager PM = this.getPM();
 							Set<AccessProperty> rights =PM.getRights(e);

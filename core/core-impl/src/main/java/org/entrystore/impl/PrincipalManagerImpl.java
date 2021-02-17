@@ -26,7 +26,6 @@ import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.repository.util.URISplit;
-import org.entrystore.repository.util.URISplit.URIType;
 import org.openrdf.model.Resource;
 import org.openrdf.model.Statement;
 import org.openrdf.model.ValueFactory;
@@ -70,11 +69,23 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	
 
 	public String getPrincipalName(URI principal) {
-		URISplit us = new URISplit(principal, this.entry.getRepositoryManager().getRepositoryURL());
-		if (us.getURIType() == URIType.Resource) {
-			return getName(us.getMetaMetadataURI());
+		Entry principalEntry = null;
+		User u = getUser(principal);
+		if (u != null) {
+			principalEntry = u.getEntry();
+		} else {
+			Group g = getGroup(principal);
+			if (g != null) {
+				principalEntry = g.getEntry();
+			}
 		}
-		throw new org.entrystore.repository.RepositoryException("Given URI is not an existing resourceURI of a Principal.");
+
+		if (principalEntry == null) {
+			throw new org.entrystore.repository.RepositoryException("Unable to resolve URI into principal: " + principal);
+		}
+
+		checkAuthenticatedUserAuthorized(principalEntry, AccessProperty.ReadMetadata);
+		return getName(principalEntry.getEntryURI());
 	}
 
 	public Entry getPrincipalEntry(String name) {

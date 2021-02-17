@@ -38,7 +38,6 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.Group;
-import org.entrystore.Metadata;
 import org.entrystore.QuotaException;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
@@ -46,7 +45,6 @@ import org.entrystore.impl.ListImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
@@ -58,9 +56,6 @@ import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.entrystore.rest.util.Util;
-import org.ieee.ltsc.lom.LOM.Technical.Location;
-import org.ieee.ltsc.lom.LOMUtil;
-import org.ieee.ltsc.lom.impl.LOMImpl;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -89,15 +84,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.StringReader;
+import java.io.OutputStream;
 import java.io.StringWriter;
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URLDecoder;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Enumeration;
@@ -193,6 +185,7 @@ public class ResourceResource extends BaseResource {
 
 		try {
 			modifyResource(preferredMediaType);
+			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
 		} catch(AuthorizationException e) {
 			unauthorizedPUT();
 		}
@@ -416,9 +409,7 @@ public class ResourceResource extends BaseResource {
 								fileIS.close();
 							}
 						}
-						if (nameLC.endsWith(".xml")) {
-							importLOMResource(fileString);
-						} else if (nameLC.endsWith(".rdf")) {
+						if (nameLC.endsWith(".rdf")) {
 							importRDFResource(fileString);
 						}
 					}
@@ -441,51 +432,11 @@ public class ResourceResource extends BaseResource {
 	public File writeStreamToTmpFile(InputStream is) throws IOException {
 		File tmpFile = File.createTempFile("scam_import_", ".zip");
 		log.info("[IMPORT] Created temporary file: " + tmpFile);
-		FileOutputStream fos = new FileOutputStream(tmpFile);
+		OutputStream fos = Files.newOutputStream(tmpFile.toPath());
 		FileOperations.copyFile(is, fos);
 		return tmpFile;
 	}
-	
-	private void importLOMResource(String lomString) {
-		LOMImpl lom = ConverterUtil.readLOMfromReader(new StringReader(lomString));
-		Location techLoc = LOMUtil.getTechnicalLocation(lom, 0);
-		if (techLoc != null) {
-			URI resourceURI = null;
-			try {
-				try {
-					resourceURI = new URI(URLDecoder.decode(techLoc.string().trim(), "UTF-8"));
-				} catch (UnsupportedEncodingException e) {
-					resourceURI = new URI(techLoc.string().trim());
-				}
-			} catch (URISyntaxException e) {
-				log.info(e.getMessage());
-				return;
-			}
-			if (resourceURI != null) {
-				Graph metadataGraph = ConverterUtil.convertLOMtoGraph(lom, resourceURI);
-				Set<Entry> entries = context.getByResourceURI(resourceURI);
-				if (entries.isEmpty()) {
-					Entry newEntry = context.createLink(null, resourceURI, entry.getResourceURI());
-					newEntry.getLocalMetadata().setGraph(metadataGraph);
-					log.info("[IMPORT] Created new entry with URI: " + newEntry.getEntryURI());
-				} else {
-					for (Entry existingEntry : entries) {
-						if (existingEntry.getReferringListsInSameContext().isEmpty()) {
-							((ListImpl) entry).addChild(existingEntry.getEntryURI());
-						}
-						Metadata existingMetadata = existingEntry.getLocalMetadata();
-						if (existingMetadata != null) {
-							existingMetadata.setGraph(metadataGraph);
-							log.info("[IMPORT] Updated metadata of existing entry: " + existingEntry.getEntryURI());
-						}
-					}
-				}
-			}
-		} else {
-			log.info("[IMPORT] No LOM Technical Location found, unable to construct Resource URI");
-		}
-	}
-	
+
 	private void importRDFResource(String rdfString) {
 		// TODO
 	}
@@ -552,7 +503,7 @@ public class ResourceResource extends BaseResource {
 		SolrQuery solrQuery = new SolrQuery(solrQueryValue);
 		solrQuery.setStart(0);
 		solrQuery.setRows(1000);
-		solrQuery.setSortField("modified", ORDER.desc);
+		solrQuery.setSort("modified", ORDER.desc);
 
 		List<SyndEntry> syndEntries = new ArrayList<SyndEntry>();
 		Set<Entry> searchEntries = ((SolrSearchIndex) getRM().getIndex()).sendQuery(solrQuery).getEntries();

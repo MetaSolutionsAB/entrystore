@@ -40,6 +40,8 @@ public interface User extends Resource, java.security.Principal {
 	String getSaltedHashedSecret();
 	
 	boolean setSecret(String newSecret);
+
+	boolean setSaltedHashedSecret(String newSaltedHashedSecret);
 	
 	String getExternalID();
 	

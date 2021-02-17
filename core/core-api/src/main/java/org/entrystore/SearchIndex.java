@@ -16,6 +16,8 @@
 
 package org.entrystore;
 
+import java.net.URI;
+
 /**
  * FIXME
  * this interface needs some work as it was created ad-hoc to fix some refactoring problems;
@@ -27,10 +29,22 @@ public interface SearchIndex {
 
 	public void shutdown();
 
-	public void reindex();
+	public void reindex(boolean purgeAllBeforeReindex);
+
+	public void reindexSync(boolean purgeAllBeforeReindex);
+
+	public void reindex(URI contextURI, boolean purgeAllBeforeReindex);
+
+	public void reindexSync(URI contextURI, boolean purgeAllBeforeReindex);
 
 	public void postEntry(Entry entry);
 
 	public void removeEntry(Entry entry);
+
+	public boolean isIndexing();
+
+	public boolean isIndexing(URI contextURI);
+
+	public boolean ping();
 
 }

@@ -2,7 +2,7 @@
   "en": {
     "productName": "ENTRYSCAPE",
     "productURL": "https://entryscape.com",
-    "productLogoURL": "https://entryscape.com/logo.png",
+    "productLogoURL": "https://static.cdn.entryscape.com/assets/entryscape.png",
     "supportText": "Need help, or have questions? Contact us at <a href=\"mailto:support@entryscape.com\">support@entryscape.com</a>, we'd love to help.",
     "copyright": "Sent by <a href=\"https://__DOMAIN__\">__DOMAIN__</a>. Copyright © __YEAR__ MetaSolutions AB.",
     "greeting": "Hi",
@@ -18,7 +18,7 @@
   "sv": {
     "productName": "ENTRYSCAPE",
     "productURL": "https://entryscape.com",
-    "productLogoURL": "https://entryscape.com/logo.png",
+    "productLogoURL": "https://static.cdn.entryscape.com/assets/entryscape.png",
     "supportText": "Behöver du hjälp eller har du frågor? Kontakta oss på <a href=\"mailto:support@entryscape.com\">support@entryscape.com</a>, vi hjälper gärna till.",
     "copyright": "Skickat av <a href=\"https://__DOMAIN__\">__DOMAIN__</a>. Copyright © __YEAR__ MetaSolutions AB.",
     "greeting": "Hej",
@@ -34,11 +34,11 @@
   "de": {
     "productName": "ENTRYSCAPE",
     "productURL": "https://entryscape.com",
-    "productLogoURL": "https://entryscape.com/logo.png",
+    "productLogoURL": "https://static.cdn.entryscape.com/assets/entryscape.png",
     "supportText": "Brauchen Sie Hilfe oder haben Sie Fragen? Kontaktieren Sie uns unter <a href=\"mailto:support@entryscape.com\">support@entryscape.com</a>, wir helfen Ihnen gerne weiter.",
     "copyright": "Gesendet von <a href=\"https://__DOMAIN__\">__DOMAIN__</a>. Copyright © __YEAR__ MetaSolutions AB.",
     "greeting": "Hallo",
-    "signupIntro": "Willkommen zu ENTRYSCAPE!",
+    "signupIntro": "Willkommen bei ENTRYSCAPE!",
     "signupInstructions": "Klicken Sie hier um mit ENTRYSCAPE zu beginnen:",
     "signupButton": "Bestätigen Sie ihr Konto",
     "pwresetIntro": "Sie haben diese E-Mail erhalten weil wir eine Aufforderung zum Zurücksetzen des Kennworts für Ihr ENTRYSCAPE-Konto erhalten haben.",

@@ -534,7 +534,6 @@ public class EntryUtil {
 		preds.add(vf.createURI(NS.dcterms, "subject"));
 		preds.add(vf.createURI(NS.dc, "subject"));
 		preds.add(vf.createURI(NS.dcat, "keyword"));
-		preds.add(vf.createURI(NS.lom, "keyword"));
 		return getLiteralValues(entry, preds);
 	}
 

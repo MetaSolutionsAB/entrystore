@@ -7,12 +7,11 @@
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-modules</artifactId>
-        <version>4.9.3</version>
+        <version>4.10.0</version>
     </parent>
-    <groupId>org.entrystore</groupId>
     <artifactId>entrystore-rest</artifactId>
     <packaging>war</packaging>
-    <version>4.9.3</version>
+    <version>4.10.0</version>
     <name>EntryStore REST</name>
 
     <build>
@@ -132,16 +131,6 @@
         </dependency>
         <dependency>
             <groupId>org.restlet.jee</groupId>
-            <artifactId>org.restlet.ext.openid</artifactId>
-            <version>${restlet.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.restlet.jse</groupId>
-            <artifactId>org.restlet.ext.simple</artifactId>
-            <version>${restlet.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.restlet.jee</groupId>
             <artifactId>org.restlet.ext.crypto</artifactId>
             <version>${restlet.version}</version>
         </dependency>
@@ -156,30 +145,14 @@
             <version>${restlet.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.simpleframework</groupId>
-            <artifactId>org.simpleframework</artifactId>
-            <version>4.1.1</version>
+            <groupId>org.restlet.jee</groupId>
+            <artifactId>org.restlet.ext.slf4j</artifactId>
+            <version>${restlet.version}</version>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20170516</version>
-        </dependency>
-        <dependency>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-core-asl</artifactId>
-            <version>1.9.3</version>
-        </dependency>
-        <dependency>
-            <groupId>commons-dbcp</groupId>
-            <artifactId>commons-dbcp</artifactId>
-            <version>1.2</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>xml-apis</groupId>
-                    <artifactId>xml-apis</artifactId>
-                </exclusion>
-            </exclusions>
+            <version>${jsonorg.version}</version>
         </dependency>
         <dependency>
             <groupId>commons-lang</groupId>
@@ -222,14 +195,15 @@
             <version>3.4.1</version>
         </dependency>
         <dependency>
-            <groupId>com.google.guava</groupId>
-            <artifactId>guava</artifactId>
-            <version>28.1-jre</version>
-        </dependency>
-        <dependency>
             <groupId>com.coveo</groupId>
             <artifactId>saml-client</artifactId>
             <version>4.0.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.dropwizard.metrics</groupId>
+                    <artifactId>metrics-core</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 

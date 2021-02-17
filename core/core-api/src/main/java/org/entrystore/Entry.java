@@ -295,4 +295,13 @@ public interface Entry {
 	URI getStatus();
 
 	void setStatus(URI newStatus);
+
+	/**
+	 * An entry object may still exist even though the entry is removed from both repository
+	 * and cache. To avoid processing stale entries this method can be used.
+	 *
+	 * @return True if entry is deleted, false otherwise.
+	 */
+	boolean isDeleted();
+
 }

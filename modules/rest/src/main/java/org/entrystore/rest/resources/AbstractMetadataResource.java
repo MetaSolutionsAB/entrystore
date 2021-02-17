@@ -21,7 +21,6 @@ import com.google.common.collect.ImmutableSet;
 import info.aduna.iteration.Iterations;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Metadata;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
@@ -52,7 +51,6 @@ import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Delete;
 import org.restlet.resource.Get;
-import org.restlet.resource.Post;
 import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,7 +90,6 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType("application/lom+xml"));
 		supportedMediaTypes.add(new MediaType("application/rdf+json"));
 	}
 	
@@ -180,7 +177,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				if (fileName == null) {
 					fileName = entry.getId();
 				}
-				fileName += ".rdf";
+				fileName += "." + getFileExtensionForMediaType(prefFormat);
 
 				// offer download in case client requested this
 				Disposition disp = new Disposition();
@@ -198,7 +195,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 			// set modification date only in case it has not been
 			// set before (e.g. when handling recursive-requests)
-			Date lastMod = entry.getModifiedDate();
+			Date lastMod = getModificationDate();
 			if (lastMod != null && result.getModificationDate() == null) {
 				result.setModificationDate(lastMod);
 			}
@@ -225,6 +222,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 			MediaType mt = (format != null) ? format : getRequestEntity().getMediaType();
 			copyRepresentationToMetadata(r, getMetadata(), mt);
+			getResponse().setEntity(createEmptyRepresentationWithLastModified(getModificationDate()));
 		} catch (AuthorizationException e) {
 			unauthorizedPUT();
 		}
@@ -255,13 +253,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 */
 	private Representation getRepresentation(Graph graph, MediaType mediaType) throws AuthorizationException {
 		if (graph != null) {
-			String serializedGraph = null;
-			if (mediaType.getName().equals("application/lom+xml")) {
-				serializedGraph = ConverterUtil.convertGraphToLOM(graph, graph.getValueFactory().createURI(entry.getResourceURI().toString()));
-			} else {
-				serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
-			}
-
+			String serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
 			if (serializedGraph != null) {
 				getResponse().setStatus(Status.SUCCESS_OK);
 				return new StringRepresentation(serializedGraph, mediaType);
@@ -286,13 +278,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		}
 		
 		if (metadata != null && graphString != null) {
-			Graph deserializedGraph = null;
-			if (mediaType.getName().equals("application/lom+xml")) {
-				deserializedGraph = ConverterUtil.convertLOMtoGraph(graphString, entry.getResourceURI());
-			} else {
-				deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
-			}
-
+			Graph deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
 			if (deserializedGraph != null) {
 				getResponse().setStatus(Status.SUCCESS_OK);
 				metadata.setGraph(deserializedGraph);
@@ -304,9 +290,15 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	}
 
 	/**
-	 * @return the relevant metadata graph. May be null.
+	 * @return Returns the relevant metadata graph. May be null.
 	 */
 	protected abstract Metadata getMetadata();
+
+	/**
+	 * @return Returns the modification date of the metadata graph. Only external metadata has its own date;
+	 * local metadata has the same modification date as the entry itself
+	 */
+	protected abstract Date getModificationDate();
 
 	/**
 	 * Performs a traversal of the metadata graphs of the entries to
@@ -435,6 +427,14 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			}
 		}
 		return result;
+	}
+
+	private String getFileExtensionForMediaType(MediaType mt) {
+		RDFFormat rdfFormat = RDFFormat.forMIMEType(mt.getName());
+		if (rdfFormat != null && rdfFormat.getDefaultFileExtension() != null) {
+			return rdfFormat.getDefaultFileExtension();
+		}
+		return "rdf";
 	}
 
 }

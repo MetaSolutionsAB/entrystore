@@ -77,8 +77,6 @@ public class CasLoginResource extends BaseResource {
 
 	// TODO support logout
 
-	// TODO support auto-provisioning of users (an authenticated CAS user does not exist in EntryStore yet)
-
 	private static boolean sslVerificationInitialized;
 
 	@Override
@@ -150,7 +148,7 @@ public class CasLoginResource extends BaseResource {
 				log.info("Successfully authenticated via CAS: " + assertion.getPrincipal());
 				Map<String, Object> attr = assertion.getPrincipal().getAttributes();
 				for (String k : attr.keySet()) {
-					log.info(k + ": " + attr.get(k));
+					log.debug(k + ": " + attr.get(k));
 				}
 				String userName = assertion.getPrincipal().getName();
 				if ("admin".equalsIgnoreCase(userName)) {
@@ -270,7 +268,7 @@ public class CasLoginResource extends BaseResource {
 			};
 
 			// install the all-trusting trust manager
-			SSLContext sc = SSLContext.getInstance("SSL");
+			SSLContext sc = SSLContext.getInstance("TLS");
 			sc.init(null, trustAllCerts, new java.security.SecureRandom());
 			HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
 

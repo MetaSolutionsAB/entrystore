@@ -21,7 +21,6 @@ import org.apache.commons.lang.StringEscapeUtils;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.GraphUtil;
@@ -56,8 +55,10 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -84,12 +85,24 @@ public class ProxyResource extends BaseResource {
 
 	Representation representation;
 
-	private static List whitelistAnon;
+	private static List<String> whitelistAnon;
+
+	private final static List<Pattern> blacklistRegEx;
+
+	static {
+		blacklistRegEx = Arrays.asList(
+				Pattern.compile("localhost"),		// localhost
+				Pattern.compile("(.+)\\.local"),	// any local domains
+				Pattern.compile("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"),	// IPv4
+				Pattern.compile(":")				// IPv6
+		);
+		log.info("Proxy blacklist consists of following regular expressions: " + Joiner.on(", ").join(blacklistRegEx));
+	}
 
 	@Override
 	public void doInit() {
 		if (whitelistAnon == null) {
-			whitelistAnon = new ArrayList();
+			whitelistAnon = new ArrayList<>();
 			List<String> tmpWhitelistAnon = getRM().getConfiguration().getStringList(Settings.PROXY_WHITELIST_ANONYMOUS);
 			// we normalize the list to lower case and to not contain null
 			for (String domain : tmpWhitelistAnon) {
@@ -133,11 +146,18 @@ public class ProxyResource extends BaseResource {
 			getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 			return null;
 		} else {
-			// for /proxy in general: any user, including _guest may access hosts that are whitelisted,
-			// otherwise access is restricted to logged in users
-			String host = URI.create(extResourceURL).getHost().toLowerCase();
-			URI authUser = getPM().getAuthenticatedUserURI();
-			if (!whitelistAnon.contains(host) && (authUser == null || getPM().getGuestUser().getURI().equals(authUser))) {
+			// For /proxy in general: any user, including _guest may access hosts that are whitelisted,
+			// otherwise access is restricted to logged in users.
+			// If the host is blacklisted, nobody is allowed to fetch the URL via the proxy
+			String host = null;
+			try {
+				host = new URI(extResourceURL).getHost().toLowerCase();
+			} catch (URISyntaxException | NullPointerException e) {
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				return null;
+			}
+			if ((!whitelistAnon.contains(host) && getPM().getGuestUser().getURI().equals(getPM().getAuthenticatedUserURI()))
+					|| isBlacklisted(host)) {
 				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 				return null;
 			}
@@ -209,16 +229,6 @@ public class ProxyResource extends BaseResource {
 							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new NTriplesParser());
 						} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TriGParser());
-						} else if (mediaType.getName().equals("application/lom+xml")) {
-							URI resURI = null;
-							try {
-								resURI = URI.create(extResourceURL);
-							} catch (IllegalArgumentException iae) {
-								log.warn(iae.getMessage());
-							}
-							if (resURI != null) {
-								deserializedGraph = ConverterUtil.convertLOMtoGraph(pageContent, resURI);
-							}
 						}
 						if (deserializedGraph != null) {
 							return new JsonRepresentation(RDFJSON.graphToRdfJsonObject(deserializedGraph));
@@ -276,7 +286,7 @@ public class ProxyResource extends BaseResource {
 		}
 
 		if (client == null) {
-			client = new Client(Protocol.HTTP);
+			client = new Client(Arrays.asList(Protocol.HTTP, Protocol.HTTPS));
 			client.setContext(new Context());
 			client.getContext().getParameters().set("connectTimeout", "30000");
 			client.getContext().getParameters().set("socketConnectTimeoutMs", "30000");
@@ -329,7 +339,7 @@ public class ProxyResource extends BaseResource {
 	}
 	
 	private String getDescription(String htmlString) {
-		String lines[] = htmlString.split("\\r?\\n");
+		String[] lines = htmlString.split("\\r?\\n");
 		for (String s : lines) {
 			String description = getMetaValue("description", s); 
 			if (description != null) {
@@ -341,7 +351,7 @@ public class ProxyResource extends BaseResource {
 	
 	private Set<String> getKeywords(String htmlString) {
 		Set<String> result = new HashSet<String>();
-		String lines[] = htmlString.split("\\r?\\n");
+		String[] lines = htmlString.split("\\r?\\n");
 		for (String s : lines) {
 			String keywords = getMetaValue("keywords", s);
 			if (keywords != null) {
@@ -351,6 +361,15 @@ public class ProxyResource extends BaseResource {
 			}
 		}
 		return result;
+	}
+
+	private boolean isBlacklisted(String host) {
+		for (Pattern p : blacklistRegEx) {
+			if (p.matcher(host).find()) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 }
