@@ -185,7 +185,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 						try {
 							postQueue.cleanUp();
-							log.info("Sending {} entries to Solr, {} entries remaining in post queue", addReq.getDocuments().size(), postQueue.estimatedSize());
+							log.info("Sending {} entries to Solr, {} entries remaining in post queue", addReq.getDocuments() != null ? addReq.getDocuments().size() : 0, postQueue.estimatedSize());
 							// when BATCH_SIZE_ADD * 5 we assume we are indexing large batches
 							if (postQueue.estimatedSize() > BATCH_SIZE_ADD * 5) {
 								addReq.setCommitWithin(SOLR_COMMIT_WITHIN_MAX);
