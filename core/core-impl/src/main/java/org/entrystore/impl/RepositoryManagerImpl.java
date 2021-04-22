@@ -130,8 +130,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private final Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = new EnumMap<>(RepositoryEvent.class);
 	
 	private SolrClient solrServer;
-
-	private CoreContainer solrCoreContainer;
 	
 	private SolrSearchIndex solrIndex;
 	
@@ -482,10 +480,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				if (solrIndex != null) {
 					log.info("Shutting down Solr support");
 					solrIndex.shutdown();
-				}
-				if (solrCoreContainer != null) {
-					log.info("Shutting down Solr core container");
-					solrCoreContainer.shutdown();
 				}
 				if (repository != null) {
 					log.info("Shutting down Sesame repository");
