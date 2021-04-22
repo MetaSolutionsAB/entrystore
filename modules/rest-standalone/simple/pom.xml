@@ -47,6 +47,8 @@
                             <name>entrystore</name>
                         </program>
                     </programs>
+                    <repositoryLayout>flat</repositoryLayout>
+                    <useWildcardClassPath>true</useWildcardClassPath>
                     <assembleDirectory>${project.build.directory}/dist</assembleDirectory>
                     <extraJvmArguments></extraJvmArguments>
                 </configuration>
