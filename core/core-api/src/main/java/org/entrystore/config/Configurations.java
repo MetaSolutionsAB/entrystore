@@ -16,7 +16,7 @@
 
 package org.entrystore.config;
 
-import java.awt.Color;
+import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.net.URI;
@@ -33,7 +33,6 @@ import java.util.List;
  * if the collections provided to them are null.
  * 
  * @author Hannes Ebner
- * @version $Id$
  */
 public class Configurations {
 
@@ -59,9 +58,9 @@ public class Configurations {
 	 */
 	static class SynchronizedConfiguration implements Config {
 
-		private Object mutex;
+		private final Object mutex;
 
-		private Config config;
+		private final Config config;
 
 		/**
 		 * @param c Configuration to be synchronized.
@@ -87,7 +86,7 @@ public class Configurations {
 		}
 		
 		/**
-		 * @see se.kth.cid.config.Config#addPropertyChangeListener(java.beans.PropertyChangeListener)
+		 * @see org.entrystore.config.Config#addPropertyChangeListener(java.beans.PropertyChangeListener)
 		 */
 		public void addPropertyChangeListener(PropertyChangeListener listener) {
 			synchronized (mutex) {
@@ -96,7 +95,7 @@ public class Configurations {
 		}
 		
 		/**
-		 * @see se.kth.cid.config.Config#addPropertyChangeListener(java.lang.String, java.beans.PropertyChangeListener)
+		 * @see org.entrystore.config.Config#addPropertyChangeListener(java.lang.String, java.beans.PropertyChangeListener)
 		 */
 		public void addPropertyChangeListener(String key, PropertyChangeListener listener) {
 			synchronized (mutex) {
@@ -105,7 +104,7 @@ public class Configurations {
 		}
 		
 		/**
-		 * @see se.kth.cid.config.Config#removePropertyChangeListener(java.beans.PropertyChangeListener)
+		 * @see org.entrystore.config.Config#removePropertyChangeListener(java.beans.PropertyChangeListener)
 		 */
 		public void removePropertyChangeListener(PropertyChangeListener listener) {
 			synchronized (mutex) {
@@ -114,7 +113,7 @@ public class Configurations {
 		}
 		
 		/**
-		 * @see se.kth.cid.config.Config#removePropertyChangeListener(java.lang.String, java.beans.PropertyChangeListener)
+		 * @see org.entrystore.config.Config#removePropertyChangeListener(java.lang.String, java.beans.PropertyChangeListener)
 		 */
 		public void removePropertyChangeListener(String key, PropertyChangeListener listener) {
 			synchronized (mutex) {
@@ -123,7 +122,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#addProperties(java.lang.String, java.util.List)
+		 * @see org.entrystore.config.Config#addProperties(java.lang.String, java.util.List)
 		 */
 		public void addProperties(String key, List values) {
 			synchronized (mutex) {
@@ -132,7 +131,7 @@ public class Configurations {
 		}
 		
 		/**
-		 * @see se.kth.cid.config.Config#addProperties(java.lang.String, java.util.Iterator)
+		 * @see org.entrystore.config.Config#addProperties(java.lang.String, java.util.Iterator)
 		 */
 		public void addProperties(String key, Iterator values) {
 			synchronized (mutex) {
@@ -141,7 +140,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#addProperty(java.lang.String, java.lang.Object)
+		 * @see org.entrystore.config.Config#addProperty(java.lang.String, java.lang.Object)
 		 */
 		public void addProperty(String key, Object value) {
 			synchronized (mutex) {
@@ -150,7 +149,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#clear()
+		 * @see org.entrystore.config.Config#clear()
 		 */
 		public void clear() {
 			synchronized (mutex) {
@@ -159,7 +158,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#clearProperty(java.lang.String)
+		 * @see org.entrystore.config.Config#clearProperty(java.lang.String)
 		 */
 		public void clearProperty(String key) {
 			synchronized (mutex) {
@@ -168,7 +167,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#containsKey(java.lang.String)
+		 * @see org.entrystore.config.Config#containsKey(java.lang.String)
 		 */
 		public boolean containsKey(String key) {
 			synchronized (mutex) {
@@ -177,7 +176,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getBoolean(java.lang.String)
+		 * @see org.entrystore.config.Config#getBoolean(java.lang.String)
 		 */
 		public boolean getBoolean(String key) {
 			synchronized (mutex) {
@@ -186,7 +185,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getBoolean(java.lang.String, boolean)
+		 * @see org.entrystore.config.Config#getBoolean(java.lang.String, boolean)
 		 */
 		public boolean getBoolean(String key, boolean defaultValue) {
 			synchronized (mutex) {
@@ -195,7 +194,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getByte(java.lang.String)
+		 * @see org.entrystore.config.Config#getByte(java.lang.String)
 		 */
 		public byte getByte(String key) {
 			synchronized (mutex) {
@@ -204,7 +203,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getByte(java.lang.String, byte)
+		 * @see org.entrystore.config.Config#getByte(java.lang.String, byte)
 		 */
 		public byte getByte(String key, byte defaultValue) {
 			synchronized (mutex) {
@@ -213,7 +212,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getDouble(java.lang.String)
+		 * @see org.entrystore.config.Config#getDouble(java.lang.String)
 		 */
 		public double getDouble(String key) {
 			synchronized (mutex) {
@@ -222,7 +221,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getDouble(java.lang.String, double)
+		 * @see org.entrystore.config.Config#getDouble(java.lang.String, double)
 		 */
 		public double getDouble(String key, double defaultValue) {
 			synchronized (mutex) {
@@ -231,7 +230,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getFloat(java.lang.String)
+		 * @see org.entrystore.config.Config#getFloat(java.lang.String)
 		 */
 		public float getFloat(String key) {
 			synchronized (mutex) {
@@ -240,7 +239,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getFloat(java.lang.String, float)
+		 * @see org.entrystore.config.Config#getFloat(java.lang.String, float)
 		 */
 		public float getFloat(String key, float defaultValue) {
 			synchronized (mutex) {
@@ -249,7 +248,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getInt(java.lang.String)
+		 * @see org.entrystore.config.Config#getInt(java.lang.String)
 		 */
 		public int getInt(String key) {
 			synchronized (mutex) {
@@ -258,7 +257,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getInt(java.lang.String, int)
+		 * @see org.entrystore.config.Config#getInt(java.lang.String, int)
 		 */
 		public int getInt(String key, int defaultValue) {
 			synchronized (mutex) {
@@ -267,7 +266,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getKeyList()
+		 * @see org.entrystore.config.Config#getKeyList()
 		 */
 		public List getKeyList() {
 			synchronized (mutex) {
@@ -276,7 +275,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getKeyList(java.lang.String)
+		 * @see org.entrystore.config.Config#getKeyList(java.lang.String)
 		 */
 		public List getKeyList(String prefix) {
 			synchronized (mutex) {
@@ -285,7 +284,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getLong(java.lang.String)
+		 * @see org.entrystore.config.Config#getLong(java.lang.String)
 		 */
 		public long getLong(String key) {
 			synchronized (mutex) {
@@ -294,7 +293,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getLong(java.lang.String, long)
+		 * @see org.entrystore.config.Config#getLong(java.lang.String, long)
 		 */
 		public long getLong(String key, long defaultValue) {
 			synchronized (mutex) {
@@ -303,7 +302,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getShort(java.lang.String)
+		 * @see org.entrystore.config.Config#getShort(java.lang.String)
 		 */
 		public short getShort(String key) {
 			synchronized (mutex) {
@@ -312,7 +311,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getShort(java.lang.String, short)
+		 * @see org.entrystore.config.Config#getShort(java.lang.String, short)
 		 */
 		public short getShort(String key, short defaultValue) {
 			synchronized (mutex) {
@@ -321,7 +320,7 @@ public class Configurations {
 		}
 		
 		/**
-		 * @see se.kth.cid.config.Config#getURI(java.lang.String)
+		 * @see org.entrystore.config.Config#getURI(java.lang.String)
 		 */
 		public URI getURI(String key) {
 			synchronized (mutex) {
@@ -330,16 +329,34 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getURI(java.lang.String, java.net.URI)
+		 * @see org.entrystore.config.Config#getURI(java.lang.String, java.net.URI)
 		 */
 		public URI getURI(String key, URI defaultValue) {
 			synchronized (mutex) {
 				return config.getURI(key, defaultValue);
 			}
 		}
-		
+
 		/**
-		 * @see se.kth.cid.config.Config#getColor(java.lang.String)
+		 * @see org.entrystore.config.Config#getURL(String)
+		 */
+		public URL getURL(String key) {
+			synchronized (mutex) {
+				return config.getURL(key);
+			}
+        }
+
+		/**
+		 * @see org.entrystore.config.Config#getURL(String, URL) 
+		 */
+		public URL getURL(String key, URL defaultValue) {
+			synchronized (mutex) {
+				return config.getURL(key, defaultValue);
+			}
+		}
+
+        /**
+		 * @see org.entrystore.config.Config#getColor(java.lang.String)
 		 */
 		public Color getColor(String key) {
 			synchronized (mutex) {
@@ -348,7 +365,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getColor(java.lang.String, java.awt.Color)
+		 * @see org.entrystore.config.Config#getColor(java.lang.String, java.awt.Color)
 		 */
 		public Color getColor(String key, Color defaultValue) {
 			synchronized (mutex) {
@@ -357,7 +374,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getString(java.lang.String)
+		 * @see org.entrystore.config.Config#getString(java.lang.String)
 		 */
 		public String getString(String key) {
 			synchronized (mutex) {
@@ -366,7 +383,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getString(java.lang.String, java.lang.String)
+		 * @see org.entrystore.config.Config#getString(java.lang.String, java.lang.String)
 		 */
 		public String getString(String key, String defaultValue) {
 			synchronized (mutex) {
@@ -375,7 +392,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getStringList(java.lang.String)
+		 * @see org.entrystore.config.Config#getStringList(java.lang.String)
 		 */
 		public List getStringList(String key) {
 			synchronized (mutex) {
@@ -384,7 +401,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#getStringList(java.lang.String, java.util.List)
+		 * @see org.entrystore.config.Config#getStringList(java.lang.String, java.util.List)
 		 */
 		public List getStringList(String key, List defaultValues) {
 			synchronized (mutex) {
@@ -393,7 +410,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#isEmpty()
+		 * @see org.entrystore.config.Config#isEmpty()
 		 */
 		public boolean isEmpty() {
 			synchronized (mutex) {
@@ -402,7 +419,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#isModified()
+		 * @see org.entrystore.config.Config#isModified()
 		 */
 		public boolean isModified() {
 			synchronized (mutex) {
@@ -411,7 +428,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#load(java.net.URL)
+		 * @see org.entrystore.config.Config#load(java.net.URL)
 		 */
 		public void load(URL configURL) throws IOException {
 			synchronized (mutex) {
@@ -420,7 +437,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#save(java.net.URL)
+		 * @see org.entrystore.config.Config#save(java.net.URL)
 		 */
 		public void save(URL configURL) throws IOException {
 			synchronized (mutex) {
@@ -429,7 +446,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#setProperties(java.lang.String, java.util.List)
+		 * @see org.entrystore.config.Config#setProperties(java.lang.String, java.util.List)
 		 */
 		public void setProperties(String key, List values) {
 			synchronized (mutex) {
@@ -438,7 +455,7 @@ public class Configurations {
 		}
 		
 		/**
-		 * @see se.kth.cid.config.Config#setProperties(java.lang.String, java.util.Iterator)
+		 * @see org.entrystore.config.Config#setProperties(java.lang.String, java.util.Iterator)
 		 */
 		public void setProperties(String key, Iterator values) {
 			synchronized (mutex) {
@@ -447,7 +464,7 @@ public class Configurations {
 		}
 
 		/**
-		 * @see se.kth.cid.config.Config#setProperty(java.lang.String, java.lang.Object)
+		 * @see org.entrystore.config.Config#setProperty(java.lang.String, java.lang.Object)
 		 */
 		public void setProperty(String key, Object value) {
 			synchronized (mutex) {
