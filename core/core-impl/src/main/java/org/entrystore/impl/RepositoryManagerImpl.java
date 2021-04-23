@@ -23,7 +23,6 @@ import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.request.CoreAdminRequest;
 import org.apache.solr.client.solrj.request.CoreStatus;
-import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.NodeConfig;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -75,6 +74,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -89,7 +89,7 @@ import java.util.zip.GZIPOutputStream;
 
 public class RepositoryManagerImpl implements RepositoryManager {
 
-	private static Logger log = LoggerFactory.getLogger(RepositoryManagerImpl.class);
+	private static final Logger log = LoggerFactory.getLogger(RepositoryManagerImpl.class);
 
 	private Repository repository;
 
@@ -171,9 +171,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				} else {
 					store = new NativeStore(path);
 				}
-				if (store != null) {
-					this.repository = new SailRepository(store);
-				}
+				this.repository = new SailRepository(store);
 			}
 		} else if (storeType.equalsIgnoreCase("http")) {
 			if (!config.containsKey(Settings.STORE_URL)) {
@@ -344,9 +342,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				} else {
 					store = new NativeStore(path);
 				}
-				if (store != null) {
-					this.provenanceRepository = new SailRepository(store);
-				}
+				this.provenanceRepository = new SailRepository(store);
 			}
 		}
 		try {
@@ -430,12 +426,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			out = new BufferedOutputStream(out);
 			RDFWriter writer = rdfWriterFactory.getWriter(out);
 			con.export(writer);
-		} catch (RepositoryException re) {
-			log.error(re.getMessage());
-		} catch (IOException ioe) {
-			log.error(ioe.getMessage());
-		} catch (RDFHandlerException rdfhe) {
-			log.error(rdfhe.getMessage());
+		} catch (RepositoryException | IOException | RDFHandlerException e) {
+			log.error(e.getMessage());
 		} finally {
 			if (out != null) {
 				try {
@@ -649,6 +641,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			solrServer = httpSolrClient;
 		} else {
 			log.info("Using embedded Solr server");
+			String coreName = "core1";
 			File solrDir = new File(solrURL);
 			if (solrDir.list() != null && solrDir.list().length == 0) {
 				log.info("Solr directory is empty, scheduling conditional reindexing of repository");
@@ -656,25 +649,46 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				reindexWait = true;
 			}
 
+			File solrCoreConfDir = new File(new File(solrDir, coreName), "conf");
+			if (!solrCoreConfDir.exists()) {
+				if (!solrCoreConfDir.mkdirs()) {
+					log.warn("Unable to create directory {}", solrCoreConfDir);
+				}
+			}
+
+			URL solrConfigXmlSource = config.getURL(Settings.SOLR_CONFIG_URL, ConverterUtil.findResource("solrconfig.xml_default"));
+			File solrConfigXmlDest = new File(solrCoreConfDir, "solrconfig.xml");
 			try {
-				// System.setProperty("solr.solr.home", solrURL);
-				// log.info("Solr Home (solr.solr.home) set to " + solrURL);
-				// Path solrHome = SolrPaths.locateSolrHome();
-				URL solrConfig = ConverterUtil.findResource("solrconfig.xml");
-				NodeConfig config = new NodeConfig.NodeConfigBuilder("embeddedSolrServerNode", new File(solrURL).toPath())
-						.setConfigSetBaseDirectory(solrConfig.getPath())
+				log.info("Copying Solr solrconfig.xml from {} to {}", solrConfigXmlSource, solrConfigXmlDest);
+				Files.copy(solrConfigXmlSource.openStream(), solrConfigXmlDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+			} catch (IOException e) {
+				log.error(e.getMessage());
+			}
+
+			URL solrSchemaXmlSource = config.getURL(Settings.SOLR_SCHEMA_URL, ConverterUtil.findResource("schema.xml_default"));
+			File solrSchemaXmlDest = new File(solrCoreConfDir, "managed-schema");
+			try {
+				log.info("Copying Solr schema.xml from {} to {}", solrSchemaXmlSource, solrSchemaXmlDest);
+				Files.copy(solrSchemaXmlSource.openStream(), solrSchemaXmlDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+			} catch (IOException e) {
+				log.error(e.getMessage());
+			}
+
+			try {
+				NodeConfig config = new NodeConfig.NodeConfigBuilder("embeddedSolrServerNode", solrDir.toPath())
+						.setConfigSetBaseDirectory(solrURL)
 						.build();
-				this.solrServer = new EmbeddedSolrServer(config, "core1");
+				this.solrServer = new EmbeddedSolrServer(config, coreName);
 
 				try {
-					CoreStatus status = CoreAdminRequest.getCoreStatus("core1", solrServer);
-					// This following triggers an exception if core1 does not exist,
+					CoreStatus status = CoreAdminRequest.getCoreStatus(coreName, solrServer);
+					// This following triggers an exception if the core does not exist,
 					// we need this to test for the core's existence
 					status.getCoreStartTime();
 				} catch (Exception e) {
 					log.info("Creating Solr core");
 					CoreAdminRequest.Create createRequest = new CoreAdminRequest.Create();
-					createRequest.setCoreName("core1");
+					createRequest.setCoreName(coreName);
 					createRequest.setConfigSet("");
 					createRequest.process(solrServer);
 					reindex = true;

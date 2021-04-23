@@ -27,6 +27,12 @@
   <dataDir>./solr/data</dataDir>
   -->
 
+  <!--<schemaFactory class="ClassicIndexSchemaFactory"/>-->
+  <schemaFactory class="ManagedIndexSchemaFactory">
+    <bool name="mutable">false</bool>
+    <str name="managedSchemaResourceName">managed-schema</str>
+  </schemaFactory>
+
   <indexConfig>
     <!-- maxFieldLength was removed in 4.0. To get similar behavior, include a 
          LimitTokenCountFilterFactory in your fieldType definition. E.g. 
