@@ -666,7 +666,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 
 			URL solrSchemaXmlSource = config.getURL(Settings.SOLR_SCHEMA_URL, ConverterUtil.findResource("schema.xml_default"));
-			File solrSchemaXmlDest = new File(solrCoreConfDir, "managed-schema");
+			File solrSchemaXmlDest = new File(solrCoreConfDir, "schema.xml");
 			try {
 				log.info("Copying Solr schema.xml from {} to {}", solrSchemaXmlSource, solrSchemaXmlDest);
 				Files.copy(solrSchemaXmlSource.openStream(), solrSchemaXmlDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
