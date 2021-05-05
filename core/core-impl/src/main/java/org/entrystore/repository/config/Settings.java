@@ -56,6 +56,8 @@ public class Settings {
 	public static String BACKUP_CRONEXP = "entrystore.backup.cronexp";
 	public static String BACKUP_GZIP = "entrystore.backup.gzip";
 	public static String BACKUP_FORMAT = "entrystore.backup.format";
+	public static String BACKUP_DELETE_AFTER = "entrystore.backup.delete-after";
+	public static String BACKUP_INCLUDE_FILES = "entrystore.backup.include-files";
 	
 	public static String BACKUP_MAINTENANCE = "entrystore.backup.maintenance";
 	public static String BACKUP_MAINTENANCE_UPPER_LIMIT = "entrystore.backup.maintenance.upper-limit";
