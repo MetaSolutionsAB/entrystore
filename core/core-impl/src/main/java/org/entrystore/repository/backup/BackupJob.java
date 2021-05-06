@@ -30,9 +30,7 @@ import org.quartz.UnableToInterruptJobException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URI;
 import java.text.DateFormat;
@@ -160,7 +158,7 @@ public class BackupJob implements Job, InterruptableJob {
 			long before = System.currentTimeMillis();
 
 			// Writing time stamp
-			writeStringToFile(new File(newBackupDirectory, "BACKUP_DATE"), currentDateTime);
+			FileOperations.writeStringToFile(new File(newBackupDirectory, "BACKUP_DATE"), currentDateTime);
 
 			// Main repo
 			log.info("Exporting main repository");
@@ -312,14 +310,6 @@ public class BackupJob implements Job, InterruptableJob {
 
 	public void interrupt() throws UnableToInterruptJobException {
 		interrupted = true;
-	}
-
-	private static void writeStringToFile(File file, String content) {
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
-			writer.write(content);
-		} catch (IOException e) {
-			log.error(e.getMessage());
-		}
 	}
 
 }
