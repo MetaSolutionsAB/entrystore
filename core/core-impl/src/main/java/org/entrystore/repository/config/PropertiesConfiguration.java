@@ -353,7 +353,7 @@ public class PropertiesConfiguration implements Config {
 
 	public List<String> getStringList(String key, List<String> defaultValues) {
 		List<String> result = getPropertyValues(key);
-		if (result == null) {
+		if (result.isEmpty()) {
 			result = defaultValues;
 		}
 		return result;
