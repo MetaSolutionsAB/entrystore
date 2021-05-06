@@ -18,6 +18,7 @@
 package org.entrystore.impl;
 
 import net.sf.ehcache.CacheManager;
+import org.apache.commons.io.FileUtils;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
@@ -36,6 +37,7 @@ import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryListener;
 import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.DataCorrection;
 import org.entrystore.repository.util.FileOperations;
@@ -73,8 +75,10 @@ import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -138,6 +142,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private Repository provenanceRepository;
 
 	static boolean trackDeletedEntries;
+
+	private static String VERSION = null;
 
 	public RepositoryManagerImpl(String baseURL, Config config) {
 		System.setProperty("org.openrdf.repository.debug", "true");
@@ -619,8 +625,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		log.info("Manually setting property \"javax.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");
 		System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
 
-		boolean reindex = "on".equalsIgnoreCase(config.getString(Settings.SOLR_REINDEX_ON_STARTUP, "off"));
-		boolean reindexWait = "on".equalsIgnoreCase(config.getString(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, "off"));
+		boolean reindex = config.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false);
+		boolean reindexWait = config.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, false);
 
 		// Check whether memory store is configured without persistence and enforce
 		// reindexing to avoid inconsistencies between memory store and Solr index
@@ -642,11 +648,37 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		} else {
 			log.info("Using embedded Solr server");
 			String coreName = "core1";
+			String schemaFileName = "SCHEMA_VERSION";
 			File solrDir = new File(solrURL);
+			File solrSchemaVersion = new File(solrDir, schemaFileName);
+
+			if (solrSchemaVersion.isFile()) {
+				String schemaVersion = null;
+				try {
+					schemaVersion = com.google.common.io.Files.asCharSource(solrSchemaVersion, StandardCharsets.UTF_8).readFirstLine();
+				} catch (IOException e) {
+					log.error(e.getMessage());
+				}
+
+				// we remove only files if we actually find a version file in the folder (see initial if isFile())
+				// as we don't want to risk removing the wrong files because of a misconfigured Solr path
+				if (!getVersion().equals(schemaVersion)) {
+					log.warn("Solr index was created with EntryStore {}, but the running version is {}", schemaVersion, getVersion());
+					log.warn("Deleting contents of Solr directory at {} to trigger a clean reindex with current Solr schema", solrDir);
+					try {
+						FileUtils.cleanDirectory(solrDir);
+					} catch (IOException e) {
+						log.error(e.getMessage());
+					}
+				}
+			}
+
 			if (solrDir.list() != null && solrDir.list().length == 0) {
 				log.info("Solr directory is empty, scheduling conditional reindexing of repository");
 				reindex = true;
 				reindexWait = true;
+				log.info("Writing EntryStore version to schema version file at {}", solrSchemaVersion);
+				FileOperations.writeStringToFile(solrSchemaVersion, getVersion());
 			}
 
 			File solrCoreConfDir = new File(new File(solrDir, coreName), "conf");
@@ -832,6 +864,24 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		}
 		return amountTriples;
+	}
+
+	public static String getVersion() {
+		if (VERSION == null) {
+			URI versionFile = ConfigurationManager.getConfigurationURI("VERSION.txt");
+			if (versionFile != null) {
+				try {
+					log.debug("Reading version number from " + versionFile);
+					VERSION = com.google.common.io.Files.asCharSource(new File(versionFile), StandardCharsets.UTF_8).readFirstLine();
+				} catch (IOException e) {
+					log.error(e.getMessage());
+				}
+			}
+			if (VERSION == null) {
+				VERSION = new SimpleDateFormat("yyyyMMddHHmm").format(new Date());
+			}
+		}
+		return VERSION;
 	}
 
 }

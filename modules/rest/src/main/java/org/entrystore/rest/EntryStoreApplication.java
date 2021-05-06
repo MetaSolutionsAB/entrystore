@@ -78,7 +78,6 @@ import org.entrystore.rest.resources.StatisticsResource;
 import org.entrystore.rest.resources.StatusResource;
 import org.entrystore.rest.resources.UserResource;
 import org.entrystore.rest.util.CORSUtil;
-import org.entrystore.rest.util.HttpUtil;
 import org.restlet.Application;
 import org.restlet.Context;
 import org.restlet.Request;
@@ -98,7 +97,6 @@ import javax.servlet.ServletContext;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
@@ -128,8 +126,6 @@ public class EntryStoreApplication extends Application {
 	private ArrayList<Harvester> harvesters = new ArrayList<>();
 
 	private BackupScheduler backupScheduler;
-
-	private static String VERSION = null;
 
 	private static Date startupDate = null;
 
@@ -483,21 +479,7 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public static String getVersion() {
-		if (VERSION == null) {
-			URI versionFile = ConfigurationManager.getConfigurationURI("VERSION.txt");
-			if (versionFile != null) {
-				try {
-					log.debug("Reading version number from " + versionFile);
-					VERSION = HttpUtil.readFirstLine(versionFile.toURL());
-				} catch (IOException e) {
-					log.error(e.getMessage());
-				}
-			}
-			if (VERSION == null) {
-				VERSION = new SimpleDateFormat("yyyyMMddHHmm").format(new Date());
-			}
-		}
-		return VERSION;
+		return RepositoryManagerImpl.getVersion();
 	}
 
 	public static Date getStartupDate() {
