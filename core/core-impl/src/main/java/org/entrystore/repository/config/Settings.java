@@ -49,6 +49,7 @@ public class Settings {
 
 	public static String AUTH_PASSWORD = "entrystore.auth.password";
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
+	public static String AUTH_PASSWORD_BLACKLIST = "entrystore.auth.password.blacklist";
 	
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";

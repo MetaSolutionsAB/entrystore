@@ -33,7 +33,6 @@ import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -47,17 +46,20 @@ import java.util.List;
  */
 public class CookieLoginResource extends BaseResource {
 
-	private static Logger log = LoggerFactory.getLogger(CookieLoginResource.class);
+	private static final Logger log = LoggerFactory.getLogger(CookieLoginResource.class);
 
 	private static List<String> passwordLoginWhitelist;
+
+	private static List<String> passwordLoginBlacklist;
 
 	@Override
 	public void init(Context c, Request request, Response response) {
 		super.init(c, request, response);
 		Config config = getRM().getConfiguration();
 		if ("whitelist".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD))) {
-			passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST, new ArrayList<>());
+			passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST);
 		}
+		passwordLoginBlacklist = config.getStringList(Settings.AUTH_PASSWORD_BLACKLIST);
 	}
 
 	@Post
@@ -90,7 +92,8 @@ public class CookieLoginResource extends BaseResource {
 
 		// Use case for whitelisting: enforced SSO with some users that should be able to login
 		// with their local credentials, see https://entrystore.org/#!KB/Authentication.md
-		if (passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(userName)) {
+		if ((passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(userName)) ||
+				(passwordLoginBlacklist != null && passwordLoginBlacklist.contains(userName))) {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 			if (html) {
 				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
