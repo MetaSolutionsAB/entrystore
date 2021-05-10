@@ -19,6 +19,7 @@ package org.entrystore.impl;
 
 import net.sf.ehcache.CacheManager;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
@@ -655,7 +656,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			if (solrSchemaVersion.isFile()) {
 				String schemaVersion = null;
 				try {
-					schemaVersion = com.google.common.io.Files.asCharSource(solrSchemaVersion, StandardCharsets.UTF_8).readFirstLine();
+					schemaVersion = IOUtils.toString(solrSchemaVersion.toURI(), StandardCharsets.UTF_8);
 				} catch (IOException e) {
 					log.error(e.getMessage());
 				}
@@ -872,7 +873,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			if (versionFile != null) {
 				try {
 					log.debug("Reading version number from " + versionFile);
-					VERSION = com.google.common.io.Files.asCharSource(new File(versionFile), StandardCharsets.UTF_8).readFirstLine();
+					VERSION = IOUtils.toString(versionFile, StandardCharsets.UTF_8);
 				} catch (IOException e) {
 					log.error(e.getMessage());
 				}
