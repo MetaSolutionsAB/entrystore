@@ -77,6 +77,7 @@ import org.entrystore.rest.resources.SparqlResource;
 import org.entrystore.rest.resources.StatisticsResource;
 import org.entrystore.rest.resources.StatusResource;
 import org.entrystore.rest.resources.UserResource;
+import org.entrystore.rest.resources.ValidatorResource;
 import org.entrystore.rest.util.CORSUtil;
 import org.restlet.Application;
 import org.restlet.Context;
@@ -286,6 +287,9 @@ public class EntryStoreApplication extends Application {
 
 		reservedNames.add("sparql");
 		router.attach("/sparql", SparqlResource.class);
+
+		reservedNames.add("validator");
+		router.attach("/validator", ValidatorResource.class);
 
 		// authentication resources
 		reservedNames.add("auth");

@@ -160,7 +160,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				ms.setSyncDelay(5000);
 				this.repository = new SailRepository(ms);
 			} else {
-				this.repository = new SailRepository(new MemoryStore());	
+				this.repository = new SailRepository(new MemoryStore());
 			}
 		} else if (storeType.equalsIgnoreCase("native")) {
 			if (!config.containsKey(Settings.STORE_PATH)) {
