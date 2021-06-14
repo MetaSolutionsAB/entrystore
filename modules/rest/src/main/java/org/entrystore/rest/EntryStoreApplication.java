@@ -359,7 +359,8 @@ public class EntryStoreApplication extends Application {
 		router.attachDefault(DefaultResource.class);
 
 		CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
-		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm, corsFilter), pm);
+		boolean optional = !config.getBoolean(Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR, false);
+		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), optional, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm, corsFilter), pm);
 
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
