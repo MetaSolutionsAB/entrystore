@@ -140,7 +140,9 @@ public class CookieVerifier implements Verifier {
 		for (Cookie c : cookies) {
 			if (c.getName().equals(cookieName)) {
 				// The following is a hack, explained in createAuthToken() below
-				String value = c.getValue() + "; Max-Age=0";
+				String value = c.getValue();
+				value += "; Max-Age=0; ";
+				value += cookieSettings.toString();
 				CookieSetting cs = new CookieSetting(c.getVersion(), c.getName(), value, getCookiePath(rm), null);
 				cs.setMaxAge(0);
 				response.getCookieSettings().add(cs);

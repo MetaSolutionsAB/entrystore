@@ -36,7 +36,7 @@ import java.util.Arrays;
  */
 public class LogoutResource extends BaseResource {
 
-	private static Logger log = LoggerFactory.getLogger(LogoutResource.class);
+	private static final Logger log = LoggerFactory.getLogger(LogoutResource.class);
 
 	@Get
 	public Representation represent() {
