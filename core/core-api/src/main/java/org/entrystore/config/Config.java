@@ -16,7 +16,7 @@
 
 package org.entrystore.config;
 
-import java.awt.Color;
+import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.net.URI;
@@ -380,6 +380,22 @@ public interface Config {
 	 * @return Returns a property value as URI.
 	 */
 	URI getURI(String key, URI defaultValue);
+
+	/**
+	 * @param key
+	 *            Property key.
+	 * @return Returns a property value as URL.
+	 */
+	URL getURL(String key);
+
+	/**
+	 * @param key
+	 *            Property key.
+	 * @param defaultValue
+	 *            Default value if the given property does not exist.
+	 * @return Returns a property value as URL.
+	 */
+	URL getURL(String key, URL defaultValue);
 	
 	/**
 	 * @param key

@@ -51,6 +51,8 @@ public class CookieVerifier implements Verifier {
 
 	private static final int DEFAULT_MAX_AGE = 24 * 3600;
 
+	private static boolean invalidTokenError;
+
 	private static final Logger log = LoggerFactory.getLogger(CookieVerifier.class);
 
 	public CookieVerifier(RepositoryManager rm) {
@@ -61,6 +63,7 @@ public class CookieVerifier implements Verifier {
 		this.rm = rm;
 		this.pm = rm.getPrincipalManager();
 		this.corsFilter = corsFilter;
+		invalidTokenError = rm.getConfiguration().getBoolean(Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR, false);
 		if (cookieSettings == null) {
 			Config config = rm.getConfiguration();
 			CustomCookieSettings.SameSite sameSite = CustomCookieSettings.SameSite.Strict;
@@ -115,7 +118,9 @@ public class CookieVerifier implements Verifier {
 					if (corsFilter != null) {
 						corsFilter.addCorsHeader(request, response);
 					}
-					// return RESULT_INVALID;
+					if (invalidTokenError) {
+						return RESULT_INVALID;
+					}
 				}
 			}
 
@@ -135,7 +140,9 @@ public class CookieVerifier implements Verifier {
 		for (Cookie c : cookies) {
 			if (c.getName().equals(cookieName)) {
 				// The following is a hack, explained in createAuthToken() below
-				String value = c.getValue() + "; Max-Age=0";
+				String value = c.getValue();
+				value += "; Max-Age=0; ";
+				value += cookieSettings.toString();
 				CookieSetting cs = new CookieSetting(c.getVersion(), c.getName(), value, getCookiePath(rm), null);
 				cs.setMaxAge(0);
 				response.getCookieSettings().add(cs);

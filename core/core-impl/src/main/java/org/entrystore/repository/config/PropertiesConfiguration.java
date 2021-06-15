@@ -27,6 +27,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -352,7 +353,7 @@ public class PropertiesConfiguration implements Config {
 
 	public List<String> getStringList(String key, List<String> defaultValues) {
 		List<String> result = getPropertyValues(key);
-		if (result == null) {
+		if (result.isEmpty()) {
 			result = defaultValues;
 		}
 		return result;
@@ -539,8 +540,27 @@ public class PropertiesConfiguration implements Config {
 		}
 		return result;
 	}
-	
-	public Color getColor(String key) {
+
+	public URL getURL(String key) {
+		try {
+			String uri = config.getProperty(key);
+			if (uri != null) {
+				return new URL(uri);
+			}
+		} catch (MalformedURLException ignored) {
+		}
+		return null;
+	}
+
+    public URL getURL(String key, URL defaultValue) {
+		URL result = getURL(key);
+		if (result == null) {
+			return defaultValue;
+		}
+		return result;
+    }
+
+    public Color getColor(String key) {
 		Color result = null;
 		String value = getString(key);
 
@@ -555,7 +575,6 @@ public class PropertiesConfiguration implements Config {
 			} catch (NumberFormatException ignored) {
 			}
 		}
-
         return result;
 	}
 

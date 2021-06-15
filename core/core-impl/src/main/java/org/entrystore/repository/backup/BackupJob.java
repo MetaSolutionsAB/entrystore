@@ -16,8 +16,7 @@
 
 package org.entrystore.repository.backup;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.apache.commons.io.FileUtils;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
@@ -28,8 +27,11 @@ import org.quartz.JobDataMap;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 import org.quartz.UnableToInterruptJobException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.text.DateFormat;
 import java.text.ParseException;
@@ -48,12 +50,12 @@ import java.util.List;
  */
 public class BackupJob implements Job, InterruptableJob {
 
-	private static Log log = LogFactory.getLog(BackupJob.class); 
+	private static final Logger log = LoggerFactory.getLogger(BackupJob.class);
 
 	private static boolean interrupted = false; 
 
 	public void execute(JobExecutionContext context) throws JobExecutionException {
-		if (interrupted == false) {
+		if (!interrupted) {
 			try {
 				JobDataMap dataMap = context.getJobDetail().getJobDataMap();
 				RepositoryManagerImpl rm = (RepositoryManagerImpl) dataMap.get("rm");
@@ -93,12 +95,14 @@ public class BackupJob implements Job, InterruptableJob {
 			return;
 		}
 
-		Date beforeTotal = new Date();
+		long beforeTotal = System.currentTimeMillis();
 		log.info("Starting backup job");
 
+		String currentDateTime = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
 		JobDataMap dataMap = jobContext.getJobDetail().getJobDataMap();
 		RepositoryManagerImpl rm = (RepositoryManagerImpl) dataMap.get("rm");
 		boolean gzip = dataMap.getBoolean("gzip");
+		boolean includeFiles = dataMap.getBoolean("includeFiles");
 		RDFFormat format = (RDFFormat) dataMap.getOrDefault("format", RDFFormat.TRIX);
 		log.info("Backup gzip: " + gzip);
 
@@ -106,44 +110,101 @@ public class BackupJob implements Job, InterruptableJob {
 		if (exportPath == null) {
 			log.error("Unknown backup path, please check the following setting: " + Settings.BACKUP_FOLDER);			
 		} else {
-			SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
-			String fileDate = sdf.format(new Date());
+			boolean simple = dataMap.getBoolean("simple");
+			boolean deleteAfter = dataMap.getBoolean("deleteAfter");
+			File newBackupDirectory;
+			File oldBackupDirectory = new File(exportPath, "all-old");
+			if (simple) {
+				newBackupDirectory = new File(exportPath, "all");
+				if (newBackupDirectory.isDirectory()) {
+					if (oldBackupDirectory.exists()) {
+						try {
+							FileUtils.deleteDirectory(oldBackupDirectory);
+							log.info("Deleted {}", oldBackupDirectory);
+						} catch (IOException e) {
+							log.warn("Unable to delete {}: {}", oldBackupDirectory, e);
+						}
+					}
 
-			File newBackupDirectory = new File(exportPath+"/"+fileDate); 
-			if (!newBackupDirectory.exists()){
-				newBackupDirectory.mkdir(); 
+					if (deleteAfter) {
+						if (newBackupDirectory.renameTo(oldBackupDirectory)) {
+							log.info("Renamed {} to {}", newBackupDirectory, oldBackupDirectory);
+						} else {
+							log.warn("Unable to rename {} to {}", newBackupDirectory, oldBackupDirectory);
+						}
+					} else {
+						try {
+							FileUtils.deleteDirectory(newBackupDirectory);
+							log.info("Deleted {}", newBackupDirectory);
+						} catch (IOException e) {
+							log.warn("Unable to delete {}: {}", newBackupDirectory, e);
+						}
+					}
+				}
+			} else {
+				newBackupDirectory = new File(exportPath, currentDateTime);
 			}
-			Date before = new Date();
+
+			if (!newBackupDirectory.exists()) {
+				if (newBackupDirectory.mkdirs()) {
+					log.info("Created directory {}", newBackupDirectory);
+				} else {
+					log.error("Unable to create directory {}", newBackupDirectory);
+					log.info("Aborting backup due to error");
+					return;
+				}
+			}
+
+			long before = System.currentTimeMillis();
+
+			// Writing time stamp
+			FileOperations.writeStringToFile(new File(newBackupDirectory, "BACKUP_DATE"), currentDateTime);
 
 			// Main repo
 			log.info("Exporting main repository");
 
-			String fileName = "repo_" + fileDate + "." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+			String fileName = "repository." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
 			rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, fileName).toURI(), gzip, format);
-			log.info("Exporting main repository took " + (new Date().getTime() - before.getTime()) + " ms");
+			log.info("Exporting main repository took " + (System.currentTimeMillis() - before) + " ms");
 
 			// Provenance repo
 			if (rm.getProvenanceRepository() != null) {
-				before = new Date();
+				before = System.currentTimeMillis();
 				log.info("Exporting provenance repository");
-				fileName = "repo_prov_" + fileDate + "." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+				fileName = "repository_prov." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
 				rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, fileName).toURI(), gzip, format);
-				log.info("Exporting provenance repository took " + (new Date().getTime() - before.getTime()) + " ms");
+				log.info("Exporting provenance repository took " + (System.currentTimeMillis() - before) + " ms");
+			} else {
+				log.info("Provenance repository is unconfigured and is therefore not be included in the backup");
 			}
 
 			// Files/binary data
-			String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
-			if (dataPath == null) {
-				log.error("Unknown data path, please check the following setting: " + Settings.DATA_FOLDER);
+			if (includeFiles) {
+				String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
+				if (dataPath == null) {
+					log.error("Unknown data path, please check the following setting: " + Settings.DATA_FOLDER);
+				} else {
+					before = System.currentTimeMillis();
+					File dataPathFile = new File(dataPath);
+					log.info("Copying data folder from " + dataPathFile + " to " + newBackupDirectory);
+					FileOperations.copyPath(dataPathFile.toPath(), newBackupDirectory.toPath());
+					log.info("Copying data folder took " + (System.currentTimeMillis() - before) + " ms");
+				}
 			} else {
-				before = new Date();
-				File dataPathFile = new File(dataPath);
-				log.info("Copying data folder from " + dataPathFile + " to " + newBackupDirectory);
-				FileOperations.copyDirectory(dataPathFile, newBackupDirectory);
-				log.info("Copying data folder took " + (new Date().getTime() - before.getTime()) + " ms");
+				log.warn("Files not included in backup due to configuration");
+			}
+
+			// Clean-up with "delete-after"
+			if (simple && deleteAfter && oldBackupDirectory.exists()) {
+				try {
+					FileUtils.deleteDirectory(oldBackupDirectory);
+					log.info("Deleted {}", oldBackupDirectory);
+				} catch (IOException e) {
+					log.warn("Unable to delete {}: {}", oldBackupDirectory, e);
+				}
 			}
 		}
-		log.info("Backup job done with execution, took " + (new Date().getTime() - beforeTotal.getTime()) + " ms in total");
+		log.info("Backup job done with execution, took " + (System.currentTimeMillis() - beforeTotal) + " ms in total");
 	}
 	
 	synchronized public static void runBackupMaintenance(JobExecutionContext jobContext) throws Exception {

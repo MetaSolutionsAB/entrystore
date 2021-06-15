@@ -16,8 +16,6 @@
 
 package org.entrystore.repository.backup;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
@@ -27,6 +25,8 @@ import org.quartz.JobDetail;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.impl.StdSchedulerFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.text.ParseException;
 import java.util.LinkedList;
@@ -42,7 +42,7 @@ import java.util.regex.Pattern;
  */
 public class BackupScheduler {
 
-	static Log log = LogFactory.getLog(BackupScheduler.class);
+	private static final Logger log = LoggerFactory.getLogger(BackupScheduler.class);
 
 	Scheduler scheduler;
 
@@ -62,11 +62,17 @@ public class BackupScheduler {
 
 	int expiresAfterDays;
 
+	boolean simple;
+
+	boolean deleteAfter;
+
+	boolean includeFiles;
+
 	RDFFormat format;
 
 	public static BackupScheduler instance;
 
-	private BackupScheduler(RepositoryManager rm, String cronExp, boolean gzip, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays, RDFFormat format) {
+	private BackupScheduler(RepositoryManager rm, String cronExp, boolean gzip, boolean deleteAfter, boolean includeFiles, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays, RDFFormat format) {
 		try {
 			scheduler = StdSchedulerFactory.getDefaultScheduler();
 		} catch (SchedulerException e) {
@@ -74,16 +80,21 @@ public class BackupScheduler {
 		}
 		this.rm = rm;
 		this.gzip = gzip;
+		this.deleteAfter = deleteAfter;
 		this.cronExpression = cronExp;
+		this.includeFiles = includeFiles;
 		this.maintenance = maintenance;
 		this.upperLimit = upperLimit;
 		this.lowerLimit = lowerLimit;
 		this.expiresAfterDays = expiresAfterDays;
 		this.format = format;
 		
-		if (upperLimit == -1 || lowerLimit == -1 || expiresAfterDays == -1) {
+		if (upperLimit < 2 && lowerLimit < 2 && expiresAfterDays < 2) {
+			log.info("Switching to simple backup strategy with one folder without date and time in name");
+			this.simple = true;
 			this.maintenance = false;
 		}
+
 		log.info("Created backup scheduler");
 	}
 
@@ -95,8 +106,10 @@ public class BackupScheduler {
 			if (cronExp == null) {
 				return null;
 			}
-			boolean gzip = "on".equalsIgnoreCase(config.getString(Settings.BACKUP_GZIP, "off"));
-			boolean maintenance = "on".equalsIgnoreCase(config.getString(Settings.BACKUP_MAINTENANCE, "off"));
+			boolean gzip = config.getBoolean(Settings.BACKUP_GZIP, false);
+			boolean maintenance = config.getBoolean(Settings.BACKUP_MAINTENANCE, false);
+			boolean deleteAfter = config.getBoolean(Settings.BACKUP_DELETE_AFTER, false);
+			boolean includeFiles = config.getBoolean(Settings.BACKUP_INCLUDE_FILES, true);
 			int upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
 			int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
 			int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
@@ -112,12 +125,14 @@ public class BackupScheduler {
 
 			log.info("Cron expression: " + cronExp);
 			log.info("GZIP: " + gzip);
+			log.info("Include files: " + includeFiles);
+			log.info("Delete previous backup after new backup: " + deleteAfter);
 			log.info("Maintenance: " + maintenance);
 			log.info("Maintenance upper limit: " + upperLimit);
 			log.info("Maintenance lower limit: " + lowerLimit);
 			log.info("Maintenance expires after days: " + expiresAfterDays);
 
-			instance = new BackupScheduler(rm, cronExp, gzip, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
+			instance = new BackupScheduler(rm, cronExp, gzip, deleteAfter, includeFiles, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
 		}
 
 		return instance;
@@ -131,7 +146,7 @@ public class BackupScheduler {
 			return cronExp;
 		}
 
-		LinkedList result = new LinkedList();
+		LinkedList<String> result = new LinkedList<>();
 		Pattern pattern = Pattern.compile("rnd\\(([\\*0-9]+)[\\-]?([0-9]*)\\)", Pattern.CASE_INSENSITIVE);
 
 		for (int i = 0; i < parts.length; i++) {
@@ -184,8 +199,7 @@ public class BackupScheduler {
 	}
 
 	public void run() {
-		String backupStatus = rm.getConfiguration().getString(Settings.BACKUP_SCHEDULER, "off");
-		if ("off".equalsIgnoreCase(backupStatus.trim())) {
+		if (!rm.getConfiguration().getBoolean(Settings.BACKUP_SCHEDULER, false)) {
 			log.warn("Backup is disabled in configuration");
 			return;
 		}
@@ -196,7 +210,7 @@ public class BackupScheduler {
 			int index = 1;
 			if (names.length > 0) {
 				// this only works for up to 10 jobs in this group
-				index = Integer.valueOf(names[names.length-1]);
+				index = Integer.parseInt(names[names.length-1]);
 				index++;
 			}
 			String jobIndex = String.valueOf(index); 
@@ -204,19 +218,20 @@ public class BackupScheduler {
 			job = new JobDetail(jobIndex, "backupGroup", BackupJob.class);
 			job.getJobDataMap().put("rm", this.rm);
 			job.getJobDataMap().put("gzip", this.gzip);
+			job.getJobDataMap().put("includeFiles", this.includeFiles);
+			job.getJobDataMap().put("deleteAfter", this.deleteAfter);
 			job.getJobDataMap().put("maintenance", this.maintenance);
 			job.getJobDataMap().put("upperLimit", this.upperLimit);
 			job.getJobDataMap().put("lowerLimit", this.lowerLimit);
 			job.getJobDataMap().put("expiresAfterDays", this.expiresAfterDays);
 			job.getJobDataMap().put("format", this.format);
+			job.getJobDataMap().put("simple", this.simple);
 			
 			CronTrigger trigger = new CronTrigger("trigger" + jobIndex, "backupGroup", jobIndex, "backupGroup", this.cronExpression);
 			scheduler.addJob(job, true);
 			scheduler.scheduleJob(trigger);
 			scheduler.start();
-		} catch (ParseException e) {
-			log.error(e.getMessage());
-		} catch (SchedulerException e) {
+		} catch (ParseException | SchedulerException e) {
 			log.error(e.getMessage());
 		}
 	}

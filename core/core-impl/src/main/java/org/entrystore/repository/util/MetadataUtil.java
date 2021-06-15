@@ -28,21 +28,30 @@ public class MetadataUtil {
 
 	public static Set<String> integerDataTypes;
 
+	public static Set<String> dateDataTypes;
+
 	static {
-		integerDataTypes = new HashSet();
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#byte");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#int");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#integer");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#long");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#negativeInteger");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#nonNegativeInteger");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#nonPositiveInteger");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#positiveInteger");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#short");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#unsignedLong");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#unsignedInt");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#unsignedShort");
-		integerDataTypes.add("http://www.w3.org/2001/XMLSchema#unsignedByte");
+		integerDataTypes = new HashSet<>();
+		integerDataTypes.add(NS.expand("xsd:byte").toString());
+		integerDataTypes.add(NS.expand("xsd:int").toString());
+		integerDataTypes.add(NS.expand("xsd:integer").toString());
+		integerDataTypes.add(NS.expand("xsd:long").toString());
+		integerDataTypes.add(NS.expand("xsd:negativeInteger").toString());
+		integerDataTypes.add(NS.expand("xsd:nonNegativeInteger").toString());
+		integerDataTypes.add(NS.expand("xsd:nonPositiveInteger").toString());
+		integerDataTypes.add(NS.expand("xsd:positiveInteger").toString());
+		integerDataTypes.add(NS.expand("xsd:short").toString());
+		integerDataTypes.add(NS.expand("xsd:unsignedLong").toString());
+		integerDataTypes.add(NS.expand("xsd:unsignedInt").toString());
+		integerDataTypes.add(NS.expand("xsd:unsignedShort").toString());
+		integerDataTypes.add(NS.expand("xsd:unsignedByte").toString());
+		integerDataTypes.add(NS.expand("xsd:gYear").toString());
+
+		dateDataTypes = new HashSet<>();
+		dateDataTypes.add(NS.expand("xsd:date").toString());
+		dateDataTypes.add(NS.expand("xsd:dateTime").toString());
+		dateDataTypes.add(NS.expand("xsd:gYear").toString());
+		dateDataTypes.add(NS.expand("xsd:gYearMonth").toString());
 	}
 
 	/**
@@ -100,7 +109,7 @@ public class MetadataUtil {
 			return false;
 		}
 
-		return "http://www.w3.org/2001/XMLSchema#date".equals(l.getDatatype().stringValue());
+		return dateDataTypes.contains(l.getDatatype().stringValue());
 	}
 
 }

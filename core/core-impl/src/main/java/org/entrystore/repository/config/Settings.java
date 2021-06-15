@@ -45,10 +45,12 @@ public class Settings {
 	public static String AUTH_COOKIE_SECURE = "entrystore.auth.cookie.secure";
 	public static String AUTH_COOKIE_SAMESITE = "entrystore.auth.cookie.samesite";
 	public static String AUTH_COOKIE_MAXAGE = "entrystore.auth.cookie.max-age";
+	public static String AUTH_COOKIE_INVALID_TOKEN_ERROR = "entrystore.auth.cookie.invalid-token-error";
 	@Deprecated public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.cookie.max-age";
 
 	public static String AUTH_PASSWORD = "entrystore.auth.password";
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
+	public static String AUTH_PASSWORD_BLACKLIST = "entrystore.auth.password.blacklist";
 	
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
@@ -56,6 +58,8 @@ public class Settings {
 	public static String BACKUP_CRONEXP = "entrystore.backup.cronexp";
 	public static String BACKUP_GZIP = "entrystore.backup.gzip";
 	public static String BACKUP_FORMAT = "entrystore.backup.format";
+	public static String BACKUP_DELETE_AFTER = "entrystore.backup.delete-after";
+	public static String BACKUP_INCLUDE_FILES = "entrystore.backup.include-files";
 	
 	public static String BACKUP_MAINTENANCE = "entrystore.backup.maintenance";
 	public static String BACKUP_MAINTENANCE_UPPER_LIMIT = "entrystore.backup.maintenance.upper-limit";
@@ -99,6 +103,8 @@ public class Settings {
 	public static String SOLR_REINDEX_ON_STARTUP_WAIT = "entrystore.solr.reindex-on-startup.wait";
 	public static String SOLR_EXTRACT_FULLTEXT = "entrystore.solr.extract-fulltext";
 	public static String SOLR_MAX_LIMIT = "entrystore.solr.max-limit";
+	public static String SOLR_SCHEMA_URL = "entrystore.solr.schema.url";
+	public static String SOLR_CONFIG_URL = "entrystore.solr.config.url";
 
 	public static String SOLR_RELATED = "entrystore.solr.related";
 	public static String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";

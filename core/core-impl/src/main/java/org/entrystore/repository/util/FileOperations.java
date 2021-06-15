@@ -21,9 +21,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -31,7 +33,12 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -50,9 +57,9 @@ import java.util.zip.ZipOutputStream;
  */
 public class FileOperations {
 
-	private static Logger log = LoggerFactory.getLogger(FileOperations.class);
+	private final static Logger log = LoggerFactory.getLogger(FileOperations.class);
 	
-	private static int BUFFER_SIZE = 8192;
+	private final static int BUFFER_SIZE = 8192;
 	
 	// Noninstantiable utility class
 	private FileOperations() {
@@ -392,6 +399,25 @@ public class FileOperations {
 		return tempFile;
 	}
 
+	public static void copyPath(Path src, Path dst) throws IOException {
+		Files.walkFileTree(src, new SimpleFileVisitor<Path>() {
+			@Override
+			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
+					throws IOException {
+				Files.createDirectories(dst.resolve(src.relativize(dir)));
+				return FileVisitResult.CONTINUE;
+			}
+
+			@Override
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
+					throws IOException {
+				Files.copy(file, dst.resolve(src.relativize(file)), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+				return FileVisitResult.CONTINUE;
+			}
+		});
+	}
+
+	@Deprecated
 	public static void copyDirectory(File srcPath, File dstPath) throws IOException {
 		if (srcPath.isDirectory()) {
 			if (!dstPath.exists()) {
@@ -427,6 +453,14 @@ public class FileOperations {
 					}
 				}
 			}
+		}
+	}
+
+	public static void writeStringToFile(File file, String content) {
+		try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+			writer.write(content);
+		} catch (IOException e) {
+			log.error(e.getMessage());
 		}
 	}
 

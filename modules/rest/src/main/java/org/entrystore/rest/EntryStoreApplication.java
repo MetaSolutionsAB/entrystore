@@ -77,8 +77,8 @@ import org.entrystore.rest.resources.SparqlResource;
 import org.entrystore.rest.resources.StatisticsResource;
 import org.entrystore.rest.resources.StatusResource;
 import org.entrystore.rest.resources.UserResource;
+import org.entrystore.rest.resources.ValidatorResource;
 import org.entrystore.rest.util.CORSUtil;
-import org.entrystore.rest.util.HttpUtil;
 import org.restlet.Application;
 import org.restlet.Context;
 import org.restlet.Request;
@@ -98,7 +98,6 @@ import javax.servlet.ServletContext;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
@@ -128,8 +127,6 @@ public class EntryStoreApplication extends Application {
 	private ArrayList<Harvester> harvesters = new ArrayList<>();
 
 	private BackupScheduler backupScheduler;
-
-	private static String VERSION = null;
 
 	private static Date startupDate = null;
 
@@ -291,6 +288,9 @@ public class EntryStoreApplication extends Application {
 		reservedNames.add("sparql");
 		router.attach("/sparql", SparqlResource.class);
 
+		reservedNames.add("validator");
+		router.attach("/validator", ValidatorResource.class);
+
 		// authentication resources
 		reservedNames.add("auth");
 		if (!passwordAuthOff) {
@@ -359,7 +359,8 @@ public class EntryStoreApplication extends Application {
 		router.attachDefault(DefaultResource.class);
 
 		CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
-		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), true, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm, corsFilter), pm);
+		boolean optional = !config.getBoolean(Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR, false);
+		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), optional, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm, corsFilter), pm);
 
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
@@ -483,21 +484,7 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public static String getVersion() {
-		if (VERSION == null) {
-			URI versionFile = ConfigurationManager.getConfigurationURI("VERSION.txt");
-			if (versionFile != null) {
-				try {
-					log.debug("Reading version number from " + versionFile);
-					VERSION = HttpUtil.readFirstLine(versionFile.toURL());
-				} catch (IOException e) {
-					log.error(e.getMessage());
-				}
-			}
-			if (VERSION == null) {
-				VERSION = new SimpleDateFormat("yyyyMMddHHmm").format(new Date());
-			}
-		}
-		return VERSION;
+		return RepositoryManagerImpl.getVersion();
 	}
 
 	public static Date getStartupDate() {
