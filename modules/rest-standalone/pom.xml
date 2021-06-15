@@ -7,11 +7,11 @@
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-modules</artifactId>
-        <version>4.11.0</version>
+        <version>4.12-SNAPSHOT</version>
     </parent>
     <artifactId>entrystore-rest-standalone</artifactId>
     <packaging>pom</packaging>
-    <version>4.11.0</version>
+    <version>4.12-SNAPSHOT</version>
     <name>EntryStore REST Standalone</name>
 
     <modules>
