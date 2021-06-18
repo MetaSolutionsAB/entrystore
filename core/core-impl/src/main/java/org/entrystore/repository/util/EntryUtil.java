@@ -690,6 +690,9 @@ public class EntryUtil {
 					Set<Entry> resEntries = context.getByResourceURI(uri);
 					if (resEntries != null && resEntries.size() > 0) {
 						fetchedEntry = (Entry) resEntries.toArray()[0];
+						if (resEntries.size() > 1) {
+							log.warn("Resource URI {} is used by {} entries in context {}; only using first matching entry for traversal result", uri, resEntries.size(), context.getURI());
+						}
 					}
 					//Or by entry URI
 					if (fetchedEntry == null) {
