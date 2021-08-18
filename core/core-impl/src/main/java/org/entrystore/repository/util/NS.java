@@ -46,6 +46,8 @@ public class NS {
 
     public static String skos = "http://www.w3.org/2004/02/skos/core#";
 
+    public static String schema = "http://schema.org/";
+
     private static HashMap<String, String> map;
 
 	static {
