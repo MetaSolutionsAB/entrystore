@@ -500,6 +500,7 @@ public class EntryUtil {
 		titlePredicates.add(vf.createURI(NS.skos, "altLabel"));
 		titlePredicates.add(vf.createURI(NS.skos, "hiddenLabel"));
 		titlePredicates.add(vf.createURI(NS.rdfs, "label"));
+		titlePredicates.add(vf.createURI(NS.schema, "name"));
 		return getLiteralValues(entry, titlePredicates);
 	}
 	
