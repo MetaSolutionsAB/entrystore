@@ -16,6 +16,9 @@
 
 package org.entrystore;
 
+import org.openrdf.repository.RepositoryException;
+import org.openrdf.rio.RDFWriter;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -23,9 +26,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.rio.RDFWriter;
 
 /**
  * Manages all non-system Contexts by providing:
@@ -39,7 +39,7 @@ import org.openrdf.rio.RDFWriter;
  * 
  * @author matthias
  */
-public interface ContextManager extends Context{
+public interface ContextManager extends Context {
 	
 	//***********************************************************************//
 	// Alias management and access to contexts via alias.                    //
@@ -50,7 +50,7 @@ public interface ContextManager extends Context{
 	Set<String> getNames();
 
 	//***********************************************************************//
-	// Access to contexts via id, see also get(entryId) and getBtMMdUri(uri) //
+	// Access to contexts via id, see also get(entryId) and getByMMdUri(uri) //
 	//***********************************************************************//
 
 	/**
@@ -61,6 +61,8 @@ public interface ContextManager extends Context{
 	 * @return a Context
 	 */
 	Context getContext(String contextId);
+
+	Context getContext(URI contextURI);
 	
 	//***********************************************************************//
 	// Retrieval of Items independent of which Contexts they appear in.      //
