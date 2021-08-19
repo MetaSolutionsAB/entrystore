@@ -42,6 +42,7 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.SearchIndex;
 import org.entrystore.User;
 import org.entrystore.impl.LocalMetadataWrapper;
+import org.entrystore.impl.RegularContext;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
@@ -103,7 +104,9 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private boolean related = false;
 
-	private List<org.openrdf.model.URI> relatedProperties = null;
+	private Map<org.openrdf.model.URI, Boolean> relatedProperties = null;
+
+	private boolean relatedContainsGlobal = false;
 
 	private final RepositoryManager rm;
 
@@ -260,10 +263,15 @@ public class SolrSearchIndex implements SearchIndex {
 			if (relPropsSetting.isEmpty()) {
 				related = false;
 			} else {
-				relatedProperties = new ArrayList<>();
+				relatedProperties = new HashMap<>();
 				for (String relProp : rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>())) {
-					relatedProperties.add(rm.getValueFactory().createURI(relProp));
+					if (relProp.endsWith(",global")) {
+						relatedProperties.put(rm.getValueFactory().createURI(relProp.substring(0, relProp.indexOf(","))), true);
+					} else {
+						relatedProperties.put(rm.getValueFactory().createURI(relProp), false);
+					}
 				}
+				relatedContainsGlobal = relatedProperties.containsValue(true);
 			}
 		}
 
@@ -768,23 +776,49 @@ public class SolrSearchIndex implements SearchIndex {
 			throw new IllegalArgumentException("Neither SolrInputDocument nor Entry must be null");
 		}
 
-		Context c = entry.getContext();
-		Set<URI> mainEntryACL = entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata);
-		List<String> relatedURIs = EntryUtil.getResourceValues(entry, new HashSet<>(relatedProperties));
-
-		// we remove all resources that are outside of this instance
-		// relatedURIs.removeIf(e -> !e.startsWith(rm.getRepositoryURL().toString()));
-		Set<Entry> relatedEntries = new HashSet<>();
-		for (String relEntURI : relatedURIs) {
-			relatedEntries.addAll(c.getByResourceURI(URI.create(relEntURI)));
+		Set<Context> contexts = new HashSet<>();
+		if (relatedContainsGlobal) {
+			// TODO there is room for optimization, the contexts are loaded now once per indexed entry.
+			//  possible solution: provide getter method and load only if set is null; set to null when there are
+			//  relevant changes, e.g. context removed or added (ContextManager needs to tell SolrSearchIndex that
+			//  contexts have changed)
+			ContextManager cm = entry.getRepositoryManager().getContextManager();
+			for (URI contextURI : cm.getEntries()) {
+				Context c = cm.getContext(contextURI);
+				if (c instanceof RegularContext) {
+					contexts.add(c);
+				}
+			}
 		}
 
-		for (Entry relE : relatedEntries) {
-			if (mainEntryACL.equals(relE.getAllowedPrincipalsFor(AccessProperty.ReadMetadata))) {
-				log.debug("Adding " + relE.getEntryURI() + " to related property index of " + entry.getEntryURI());
-				addGenericMetadataFields(doc, relE.getMetadataGraph(), true);
+		Set<Entry> relatedEntries = new HashSet<>();
+		for (org.openrdf.model.URI relProp : relatedProperties.keySet()) {
+			List<String> relatedURIs = EntryUtil.getResourceValues(entry, Collections.singleton(relProp));
+			if (relatedURIs != null && relatedURIs.isEmpty()) {
+				continue;
+			}
+			if (relatedContainsGlobal && relatedProperties.get(relProp)) {
+				for (Context context : contexts) {
+					for (String relEntURI : relatedURIs) {
+						relatedEntries.addAll(context.getByResourceURI(URI.create(relEntURI)));
+					}
+				}
 			} else {
-				log.debug("ACLs of " + entry.getEntryURI() + " and " + relE.getEntryURI() + " do not match, not adding to related property index");
+				for (String relEntURI : relatedURIs) {
+					relatedEntries.addAll(entry.getContext().getByResourceURI(URI.create(relEntURI)));
+				}
+			}
+		}
+
+		if (!relatedEntries.isEmpty()) {
+			Set<URI> mainEntryACL = entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata);
+			for (Entry relE : relatedEntries) {
+				if (mainEntryACL.equals(relE.getAllowedPrincipalsFor(AccessProperty.ReadMetadata))) {
+					log.debug("Adding " + relE.getEntryURI() + " to related property index of " + entry.getEntryURI());
+					addGenericMetadataFields(doc, relE.getMetadataGraph(), true);
+				} else {
+					log.debug("ACLs of " + entry.getEntryURI() + " and " + relE.getEntryURI() + " do not match, not adding to related property index");
+				}
 			}
 		}
 	}
