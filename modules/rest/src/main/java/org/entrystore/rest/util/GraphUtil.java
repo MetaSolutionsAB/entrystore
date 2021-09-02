@@ -68,9 +68,7 @@ public class GraphUtil {
 
 	private static Logger log = LoggerFactory.getLogger(GraphUtil.class);
 
-	private static List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
-
-	private static ParserConfig safeXmlParserConfig;
+	private static List<MediaType> supportedMediaTypes = new ArrayList<>();
 
 	static {
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
@@ -82,7 +80,6 @@ public class GraphUtil {
 		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType("application/rdf+json"));
-		safeXmlParserConfig = constructSafeXmlParserConfig();
 	}
 
 	/**
@@ -188,7 +185,7 @@ public class GraphUtil {
 			deserializedGraph = RDFJSON.rdfJsonToGraph(graphString);
 		} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
 			RDFXMLParser rdfXmlParser = new RDFXMLParser();
-			rdfXmlParser.setParserConfig(safeXmlParserConfig);
+			rdfXmlParser.setParserConfig(constructSafeXmlParserConfig());
 			deserializedGraph = deserializeGraphUnsafe(graphString, rdfXmlParser);
 		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
 			deserializedGraph = deserializeGraphUnsafe(graphString, new N3ParserFactory().getParser());
@@ -196,7 +193,7 @@ public class GraphUtil {
 			deserializedGraph = deserializeGraphUnsafe(graphString, new TurtleParser());
 		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
 			TriXParser trixParser = new TriXParser();
-			trixParser.setParserConfig(safeXmlParserConfig);
+			trixParser.setParserConfig(constructSafeXmlParserConfig());
 			deserializedGraph = deserializeGraphUnsafe(graphString, trixParser);
 		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
 			deserializedGraph = deserializeGraphUnsafe(graphString, new NTriplesParser());
