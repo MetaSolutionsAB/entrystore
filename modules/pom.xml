@@ -15,7 +15,7 @@
 	<name>EntryStore Modules</name>
     
 	<modules>
-		<module>harvesting</module>
+		<!--<module>harvesting</module>-->
 		<module>rest</module>
 		<module>rest-standalone</module>
 		<module>transforms</module>
