@@ -16,7 +16,7 @@
 
 	<modules>
 		<module>factory</module>
-		<module>oaipmh-target</module>
+		<!--<module>oaipmh-target</module>-->
 		<module>oaipmh-harvester</module>
 	</modules>
 
