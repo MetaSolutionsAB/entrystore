@@ -22,7 +22,9 @@
     
     <!-- ================= Modules ================= -->
     <modules>
-		<module>harvesting-war</module>
+	    <!--
+		    <module>harvesting-war</module>
+	    -->
     </modules>
 	
 	<!-- ================= SCM ================= -->
