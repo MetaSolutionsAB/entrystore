@@ -187,12 +187,12 @@
         <dependency>
             <groupId>org.jasig.cas.client</groupId>
             <artifactId>cas-client-core</artifactId>
-            <version>3.4.1</version>
+            <version>3.6.2</version>
         </dependency>
         <dependency>
             <groupId>org.jasig.cas.client</groupId>
             <artifactId>cas-client-support-saml</artifactId>
-            <version>3.4.1</version>
+            <version>3.6.2</version>
         </dependency>
         <dependency>
             <groupId>com.coveo</groupId>
