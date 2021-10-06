@@ -22,6 +22,7 @@ import com.google.common.collect.Queues;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.impl.BaseHttpSolrClient;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.client.solrj.response.QueryResponse;
@@ -196,7 +197,7 @@ public class SolrSearchIndex implements SearchIndex {
 								addReq.setCommitWithin(SOLR_COMMIT_WITHIN);
 							}
 							addReq.process(solrServer);
-						} catch (SolrServerException | IOException e) {
+						} catch (BaseHttpSolrClient.RemoteSolrException | SolrServerException | IOException e) {
 							log.error(e.getMessage(), e);
 						}
 					}

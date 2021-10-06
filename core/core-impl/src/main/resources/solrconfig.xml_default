@@ -445,11 +445,15 @@
   
   <requestHandler name="/update" class="solr.UpdateRequestHandler">
     <lst name="defaults">
-      <str name="update.processor">dedupe</str>
+      <str name="update.chain">dedupe</str>
     </lst>
   </requestHandler>
   
   <updateRequestProcessorChain name="dedupe">
+    <processor class="solr.TruncateFieldUpdateProcessorFactory">
+       <str name="typeClass">solr.StrField</str>
+       <int name="maxLength">32000</int>
+    </processor>
     <processor class="org.apache.solr.update.processor.SignatureUpdateProcessorFactory">
       <!-- we don't need it since "uri" is unique -->
       <bool name="enabled">false</bool>
