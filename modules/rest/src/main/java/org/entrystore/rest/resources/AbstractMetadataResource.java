@@ -138,7 +138,21 @@ public abstract class AbstractMetadataResource extends BaseResource {
 						return null;
 					}
 					Map<String, String> blacklist = loadBlacklist(traversalParam);
-					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), predicatesToFollow, blacklist, parameters.containsKey("repository"));
+					int depth = 10; // default
+					int depthMax = getRM().getConfiguration().getInt(Settings.TRAVERSAL_MAX_DEPTH, depth);
+					try {
+						if (parameters.containsKey("depth")) {
+							int depthParam = Integer.parseInt(parameters.get("depth"));
+							if (depthParam > 0 && depthParam <= depthMax) {
+								depth = depthParam;
+							}
+						}
+					} catch (NumberFormatException e) {
+						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+						return new StringRepresentation("Error parsing depth parameter: " + e.getMessage());
+					}
+
+					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), predicatesToFollow, blacklist, parameters.containsKey("repository"), depth);
 					if (graphQuery != null) {
 						Model graphQueryResult = applyGraphQuery(graphQuery, travResult.getGraph());
 						if (graphQueryResult != null) {
@@ -303,26 +317,28 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	/**
 	 * Performs a traversal of the metadata graphs of the entries to
 	 * which the first entry links.
+	 * A maximum (default) of 10 levels is traversed. Levels can be set with depth parameter.
 	 *
-	 * A maximum of 10 levels is traversed. If other settings are needed
-	 * the method loadEntryMetadata should be called instead.
-	 *
-	 * @param entryURI Starting point for traversal.
+	 * @param entryURI     Starting point for traversal.
 	 * @param predToFollow Which predicates should be followed for
 	 *                     fetching entries further down the traversal path.
-	 * @return Returns a Graph consisting of merged metadata graphs. Contains
-	 * 			all metadata, including e.g. cached external.
+	 * @param blacklist    blacklist A map containing key/value pairs of predicate/object combinations that,
+	 *                     if contained in the graph of the currently processed entry,
+	 *                     trigger a stop of the traversal excluding the matching entry.
+	 * @param repository   Ignore context boundaries.
+	 * @param depth        Levels traversed.
+	 * @return Returns a Graph consisting of merged metadata graphs. Contains all metadata, including e.g. cached external.
 	 */
-	private EntryUtil.TraversalResult traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow, Map<String, String> blacklist, boolean repository) {
+	private EntryUtil.TraversalResult traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth) {
 		return EntryUtil.traverseAndLoadEntryMetadata(
-				ImmutableSet.of((URI) new URIImpl(entryURI.toString())),
-				predToFollow,
-				blacklist,
-				0,
-				10,
-				HashMultimap.<URI, Integer>create(),
-				repository ? null : context,
-				getRM()
+			ImmutableSet.of((URI) new URIImpl(entryURI.toString())),
+			predToFollow,
+			blacklist,
+			0,
+			depth,
+			HashMultimap.<URI, Integer>create(),
+			repository ? null : context,
+			getRM()
 		);
 	}
 

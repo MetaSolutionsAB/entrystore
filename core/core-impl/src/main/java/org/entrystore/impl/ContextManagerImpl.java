@@ -75,7 +75,21 @@ import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.TimeZone;
 
 
 /**
@@ -861,6 +875,14 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 		}
 		return null;
+	}
+
+	public Context getContext(URI contextURI) {
+		if (contextURI == null) {
+			throw new IllegalArgumentException("Parameter must not be null");
+		}
+		String contextID = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
+		return getContext(contextID);
 	}
 
 	//Retrieve functions

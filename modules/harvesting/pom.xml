@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-modules</artifactId>
-		<version>4.11.0</version>
+		<version>4.12</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-harvesting</artifactId>
@@ -16,7 +16,7 @@
 
 	<modules>
 		<module>factory</module>
-		<module>oaipmh-target</module>
+		<!--<module>oaipmh-target</module>-->
 		<module>oaipmh-harvester</module>
 	</modules>
 

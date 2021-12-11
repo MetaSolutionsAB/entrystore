@@ -300,7 +300,7 @@ both match, the first appearing in the schema will be used.  -->
 is added to the index.  It's used either to index the same field differently,
 or to add multiple fields to the same field for easier/faster searching.  -->
     <copyField source="title" dest="all"/>
-    <copyField source="title.*" dest="title_sort.*"/>
+    <copyField source="title.*" dest="title_sort.*" maxChars="50"/>
     <copyField source="description" dest="all"/>
     <copyField source="tag.literal" dest="all"/>
 

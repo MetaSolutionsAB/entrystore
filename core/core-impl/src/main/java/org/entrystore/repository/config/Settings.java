@@ -168,6 +168,7 @@ public class Settings {
 	public static String NONADMIN_GROUPCONTEXT_CREATION = "entrystore.nonadmin.group-context-creation";
 
 	public static String TRAVERSAL_PROFILE = "entrystore.traversal";
+	public static String TRAVERSAL_MAX_DEPTH = "entrystore.traversal.max-depth";
 
 	public static String ROWSTORE_URL = "entrystore.rowstore.url";
 
