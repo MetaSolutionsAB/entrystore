@@ -15,7 +15,7 @@
 
 	<modules>
 		<module>common</module>
-		<module>tabular</module>
+		<!--<module>tabular</module>-->
 		<module>rowstore</module>
 		<module>empty</module>
 	</modules>
