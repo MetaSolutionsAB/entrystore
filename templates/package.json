@@ -1,6 +1,6 @@
 {
   "dependencies": {
     "mailgen": "2.0.20",
-    "html-minifier": "3.5.7"
+    "html-minifier": "4.0.0"
   }
 }
