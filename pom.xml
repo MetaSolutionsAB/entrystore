@@ -24,7 +24,7 @@
     <!-- ================= Default Properties ================= -->
     <properties>
         <restlet.version>2.4.3</restlet.version>
-        <solr.version>8.11.0</solr.version>
+        <solr.version>8.11.1</solr.version>
         <sesame.version>2.7.16</sesame.version>
         <slf4j.version>1.7.30</slf4j.version>
         <log4j.version>2.17.1</log4j.version>
@@ -33,7 +33,7 @@
         <jaxb.version>2.3.1</jaxb.version>
         <guava.version>30.1-jre</guava.version>
         <jetty.version>9.4.44.v20210927</jetty.version>
-        <jsonorg.version>20211205</jsonorg.version>
+	<jsonorg.version>20220320</jsonorg.version>
         <site.url>https://entrystore.org</site.url>
         <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
         <distribution.url>https://entrystore.org</distribution.url>
@@ -299,12 +299,12 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-core</artifactId>
-                <version>2.11.4</version>
+		<version>2.13.2</version>
             </dependency>
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
-                <version>2.11.4</version>
+		<version>2.13.2.2</version>
             </dependency>
             <dependency>
                 <groupId>com.google.guava</groupId>
