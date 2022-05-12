@@ -254,6 +254,7 @@ public class GraphUtil {
 		StringReader reader = new StringReader(rdf);
 		RDFHandler nullHandler = new URIValidatingRDFHandler();
 		RDFParser parser = new RDFXMLParser();
+		parser.setParserConfig(constructSafeXmlParserConfig());
 		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
 			// we have special treatment of RDF/JSON here because it does not implement the Parser interface
 			Graph g = RDFJSON.rdfJsonToGraph(rdf);
@@ -268,6 +269,7 @@ public class GraphUtil {
 			parser = new TurtleParser();
 		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
 			parser = new TriXParser();
+			parser.setParserConfig(constructSafeXmlParserConfig());
 		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
 			parser = new NTriplesParser();
 		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
@@ -326,6 +328,12 @@ public class GraphUtil {
 			try {
 				// External parameter entities
 				customXmlReader.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+			} catch (SAXException se) {
+				log.warn(se.getMessage());
+			}
+			try {
+				// Disable external DTDs
+				customXmlReader.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
 			} catch (SAXException se) {
 				log.warn(se.getMessage());
 			}
