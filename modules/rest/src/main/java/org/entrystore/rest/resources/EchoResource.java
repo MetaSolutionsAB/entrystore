@@ -47,6 +47,11 @@ public class EchoResource extends BaseResource {
 
 	@Post
 	public void acceptRepresentation(Representation r) {
+		if (getPM().getGuestUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
+			respondWith(Status.CLIENT_ERROR_FORBIDDEN);
+			return;
+		}
+
 		if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 			try {
 				if (getRequest().getEntity().getSize() > MAX_ENTITY_SIZE) {
