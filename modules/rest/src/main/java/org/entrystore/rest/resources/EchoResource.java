@@ -19,7 +19,6 @@ package org.entrystore.rest.resources;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.lang.StringEscapeUtils;
-import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.Util;
 import org.restlet.Response;
 import org.restlet.data.MediaType;
@@ -54,34 +53,17 @@ public class EchoResource extends BaseResource {
 
 		if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 			try {
+				// We don't echo payloads bigger than MAX_ENTITY_SIZE
 				if (getRequest().getEntity().getSize() > MAX_ENTITY_SIZE) {
 					respondWith(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 					return;
-				}
-
-				String validateMime = null;
-				if (parameters.containsKey("validate")) {
-					validateMime = parameters.get("validate");
-					if (validateMime == null || validateMime.isEmpty()) {
-						respondWith(Status.CLIENT_ERROR_BAD_REQUEST);
-						return;
-					}
-					if (!GraphUtil.isSupported(new MediaType(validateMime))) {
-						respondWith(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-						return;
-					}
 				}
 
 				List<FileItem> items = Util.createRestletFileUpload(getContext()).parseRepresentation(getRequest().getEntity());
 				Iterator<FileItem> iter = items.iterator();
 				if (iter.hasNext()) {
 					FileItem item = iter.next();
-					// We don't echo payloads bigger than 10 MB
-					if (item.getSize() > MAX_ENTITY_SIZE) {
-						respondWith(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
-						return;
-					}
-					StringBuffer escapedContent = new StringBuffer();
+					StringBuilder escapedContent = new StringBuilder();
 					escapedContent.append("<textarea>");
 					String payload;
 					try {
@@ -91,17 +73,8 @@ public class EchoResource extends BaseResource {
 						respondWith(Status.SERVER_ERROR_INTERNAL);
 						return;
 					}
-					String validationError = null;
-					if (validateMime != null) {
-						validationError = GraphUtil.validateRdf(payload, new MediaType(validateMime));
-					}
-					if (validationError != null) {
-						escapedContent.append("status:"+Status.CLIENT_ERROR_UNPROCESSABLE_ENTITY.getCode()+"\n");
-						escapedContent.append(StringEscapeUtils.escapeHtml(validationError));
-					} else {
-						escapedContent.append("status:"+Status.SUCCESS_OK.getCode()+"\n");
-						escapedContent.append(StringEscapeUtils.escapeHtml(payload));
-					}
+					escapedContent.append("status:" + Status.SUCCESS_OK.getCode() + "\n");
+					escapedContent.append(StringEscapeUtils.escapeHtml(payload));
 					escapedContent.append("</textarea>");
 					getResponse().setEntity(escapedContent.toString(), MediaType.TEXT_HTML);
 				}
