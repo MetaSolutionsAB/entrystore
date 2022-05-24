@@ -71,7 +71,6 @@ import org.entrystore.rest.resources.ResourceResource;
 import org.entrystore.rest.resources.SamlLoginResource;
 import org.entrystore.rest.resources.SearchResource;
 import org.entrystore.rest.resources.SignupResource;
-import org.entrystore.rest.resources.SignupWhitelistResource;
 import org.entrystore.rest.resources.SolrResource;
 import org.entrystore.rest.resources.SparqlResource;
 import org.entrystore.rest.resources.StatisticsResource;
@@ -317,7 +316,6 @@ public class EntryStoreApplication extends Application {
 		// signup
 		if ("on".equalsIgnoreCase(config.getString(Settings.SIGNUP, "off"))) {
 			router.attach("/auth/signup", SignupResource.class);
-			router.attach("/auth/signup/whitelist", SignupWhitelistResource.class);
 		}
 
 		// password reset
