@@ -20,6 +20,12 @@ package org.entrystore.impl;
 import net.sf.ehcache.CacheManager;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.HttpClient;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
@@ -639,11 +645,23 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at " + solrURL);
 
-			HttpSolrClient httpSolrClient = new HttpSolrClient.Builder(solrURL).
+			HttpSolrClient.Builder solrClientBuilder = new HttpSolrClient.Builder(solrURL).
 					withConnectionTimeout(5000).
 					withSocketTimeout(5000).
-					allowCompression(true).
-					build();
+					allowCompression(true);
+
+			String solrUsername = config.getString(Settings.SOLR_AUTH_USERNAME);
+			String solrPassword = config.getString(Settings.SOLR_AUTH_PASSWORD);
+
+			if (solrUsername != null && solrPassword != null) {
+				CredentialsProvider provider = new BasicCredentialsProvider();
+				UsernamePasswordCredentials credentials = new UsernamePasswordCredentials(solrUsername, solrPassword);
+				provider.setCredentials(AuthScope.ANY, credentials);
+				HttpClient solrHttpClient = HttpClientBuilder.create().setDefaultCredentialsProvider(provider).build();
+				solrClientBuilder.withHttpClient(solrHttpClient);
+			}
+
+			HttpSolrClient httpSolrClient = solrClientBuilder.build();
 			httpSolrClient.setFollowRedirects(true);
 			solrServer = httpSolrClient;
 		} else {

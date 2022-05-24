@@ -106,6 +106,10 @@ public class Settings {
 	public static String SOLR_SCHEMA_URL = "entrystore.solr.schema.url";
 	public static String SOLR_CONFIG_URL = "entrystore.solr.config.url";
 
+	public static String SOLR_AUTH_USERNAME = "entrystore.solr.auth.username";
+
+	public static String SOLR_AUTH_PASSWORD = "entrystore.solr.auth.password";
+
 	public static String SOLR_RELATED = "entrystore.solr.related";
 	public static String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";
 
