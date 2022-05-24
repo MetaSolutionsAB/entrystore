@@ -108,10 +108,6 @@ public class ContextResource extends BaseResource {
             return unauthorizedGET();
         }
 
-		if (parameters.containsKey("reindex")) {
-			context.reIndex();
-		}
-
 		JSONArray array = new JSONArray();
 
 		if (parameters.containsKey("deleted")) {
