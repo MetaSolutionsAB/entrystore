@@ -603,7 +603,7 @@ public class EntryUtil {
 	 * Retrieves resource values from statements that match a set of predicates.
 	 *
 	 * @param entry	Entry from where the metadata graph should be used for matching.
-	 * @predicates A list of predicates to use for statement matching.
+	 * @param predicates A list of predicates to use for statement matching.
 	 * @return Returns a list of URIs.
 	 */
     public static List<String> getResourceValues(Entry entry, Set<URI> predicates) {
@@ -619,22 +619,31 @@ public class EntryUtil {
         }
 
         if (graph != null) {
-            URI resourceURI = new URIImpl(entry.getResourceURI().toString());
-            List<String> result = new ArrayList<>();
-            for (URI pred : predicates) {
-                Iterator<Statement> subjects = graph.match(resourceURI, pred, null);
-                while (subjects.hasNext()) {
-                    Value value = subjects.next().getObject();
-                    if (value instanceof org.openrdf.model.URI) {
-                        org.openrdf.model.Resource res = (org.openrdf.model.Resource) value;
-                        result.add(res.stringValue());
-                    }
-                }
-            }
-            return result;
+            return getResourceValues(graph, entry.getResourceURI(), predicates);
         }
-        return null;
+
+        return new ArrayList<>();
     }
+
+	public static List<String> getResourceValues(Graph graph, java.net.URI resourceURI, Set<URI> predicates) {
+		if (graph == null || predicates == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
+
+		List<String> result = new ArrayList<>();
+		for (URI pred : predicates) {
+			Iterator<Statement> subjects = graph.match(new URIImpl(resourceURI.toString()), pred, null);
+			while (subjects.hasNext()) {
+				Value value = subjects.next().getObject();
+				if (value instanceof org.openrdf.model.URI) {
+					org.openrdf.model.Resource res = (org.openrdf.model.Resource) value;
+					result.add(res.stringValue());
+				}
+			}
+		}
+
+		return result;
+	}
 
 	/**
 	 * FIXME this does not take entries in deleted folders into consideration 
