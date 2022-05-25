@@ -633,6 +633,14 @@ public class SolrSearchIndex implements SearchIndex {
 			}
 		}
 
+		// context name
+		if (GraphType.Context.equals(entry.getGraphType()) || GraphType.SystemContext.equals(entry.getGraphType())) {
+			String contextName = rm.getContextManager().getName(entry.getResource().getURI());
+			if (contextName != null) {
+				doc.addField("contextname", contextName);
+			}
+		}
+
 		// description
 		Map<String, String> descriptions = EntryUtil.getDescriptions(entry);
 		if (descriptions != null && descriptions.size() > 0) {

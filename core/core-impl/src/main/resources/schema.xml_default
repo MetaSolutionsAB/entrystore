@@ -226,6 +226,7 @@ lexicographic ordering isn't equal to the numeric ordering) -->
         <field name="entryType" type="string" indexed="true"/>
         <field name="resourceType" type="string" indexed="true"/>
         <field name="username" type="string" indexed="true"/>
+        <field name="contextname" type="string" indexed="true"/>
 
         <dynamicField name="metadata.predicate.uri.*" type="string" indexed="true" multiValued="true"/>
         <dynamicField name="metadata.predicate.literal_s.*" type="string" indexed="true" multiValued="true"/>
