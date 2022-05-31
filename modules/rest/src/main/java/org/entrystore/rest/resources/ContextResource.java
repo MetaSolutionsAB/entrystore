@@ -61,6 +61,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 
 /**
@@ -170,10 +171,14 @@ public class ContextResource extends BaseResource {
 
 			String entryId = parameters.get("id");
 			if (entryId != null) {
+				if (!isEntryIdValid(entryId)) {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					return;
+				}
 				Entry preExistingEntry = context.get(entryId);
 				if (preExistingEntry != null) {
 					log.debug("Entry with that ID already exists");
-					getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT); 
+					getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 					getResponse().setLocationRef(context.get(parameters.get("id")).getEntryURI().toString());
 					getResponse().setEntity(JSONErrorMessages.errorEntryWithGivenIDExists, MediaType.APPLICATION_JSON);
 					return;
@@ -735,6 +740,15 @@ public class ContextResource extends BaseResource {
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Checks whether the provided ID only contains allowed characters.
+	 *
+	 * @return True if supplied ID is valid.
+	 */
+	private boolean isEntryIdValid(String id) {
+		return Pattern.compile("^[\\w\\-]+$").matcher(id).matches();
 	}
 
 }
