@@ -29,6 +29,8 @@ public class Settings {
 	public static String AUTH_CAS_SERVER_URL = "entrystore.auth.cas.server.url";
 	public static String AUTH_CAS_SERVER_LOGIN_URL = "entrystore.auth.cas.server.url.login";
 	public static String AUTH_CAS_USER_AUTO_PROVISIONING = "entrystore.auth.cas.user-auto-provisioning";
+	public static String AUTH_CAS_REDIRECT_SUCCESS_URL = "entrystore.auth.cas.redirect-success.url";
+	public static String AUTH_CAS_REDIRECT_FAILURE_URL = "entrystore.auth.cas.redirect-failure.url";
 
 	public static String AUTH_SAML = "entrystore.auth.saml";
 	public static String AUTH_SAML_RELYING_PARTY_ID = "entrystore.auth.saml.relying-party-id";
