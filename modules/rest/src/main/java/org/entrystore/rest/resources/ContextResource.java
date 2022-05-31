@@ -58,6 +58,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Set;
 
@@ -332,7 +333,7 @@ public class ContextResource extends BaseResource {
 			}
 		} catch (Exception e) {
 			log.warn(e.getMessage());
-		} 
+		}
 
 		return null; 
 	}
@@ -392,7 +393,7 @@ public class ContextResource extends BaseResource {
 			log.warn(e.getMessage());
 		}
 
-		return null; 
+		return null;
 	}
 
 	private ResourceType getResourceType(String rt) {
@@ -476,14 +477,14 @@ public class ContextResource extends BaseResource {
 			}
 		} catch (JSONException e) {
 			return null;
-		} 
+		}
 	}
 
 	/**
 	 * Sets resource to an entry.
 	 * @param entry a reference to a entry
 	 * @return false if there is a resource provided but it cannot be interpreted.
-	 * @throws JSONException 
+	 * @throws JSONException Exception if payload is malformed
 	 */
 	private boolean setResource(Entry entry) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
@@ -580,7 +581,7 @@ public class ContextResource extends BaseResource {
 		case None:
 			break;
 		}
-		return true; 
+		return true;
 	}
 
 	/**
@@ -595,12 +596,7 @@ public class ContextResource extends BaseResource {
 
 		//check the request
 		URI resourceURI = null;
-		try {
-			resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), "UTF-8"));
-		} catch (UnsupportedEncodingException e) {
-			log.debug("The resource parameter must be encoded using UTF-8");
-			return null;
-		}
+		resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), StandardCharsets.UTF_8));
 
 		if (parameters.containsKey("list")) {
 			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("list")));
@@ -619,13 +615,12 @@ public class ContextResource extends BaseResource {
 				try {
 					URI listURI = new URI((parameters.get("list")));
 					((ContextImpl) context).copyACL(listURI, entry);
-				} catch (URISyntaxException e) {
+				} catch (URISyntaxException ignore) {
 				}
 			}
 		}
 		return entry;
 	}
-
 
 	/**
 	 * Extracts metadata from the request and sets it as the entrys local metadata graph.
@@ -652,7 +647,7 @@ public class ContextResource extends BaseResource {
 		} catch (JSONException e) {
 			log.warn(e.getMessage());
 		}
-	}	
+	}
 
 	/**
 	 * First caching of metadata.
