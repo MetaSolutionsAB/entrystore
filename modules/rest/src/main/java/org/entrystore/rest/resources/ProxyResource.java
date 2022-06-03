@@ -57,6 +57,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -82,8 +83,6 @@ public class ProxyResource extends BaseResource {
 	private Client client;
 
 	private Response clientResponse;
-
-	Representation representation;
 
 	private static List<String> whitelistAnon;
 
@@ -124,11 +123,7 @@ public class ProxyResource extends BaseResource {
 	public Representation represent() {
 		String extResourceURL = null;
 		if (parameters.containsKey("url")) {
-			try {
-				extResourceURL = URLDecoder.decode(parameters.get("url"), "UTF-8");
-			} catch (UnsupportedEncodingException e) {
-				log.error(e.getMessage());
-			}
+			extResourceURL = URLDecoder.decode(parameters.get("url"), StandardCharsets.UTF_8);
 		}
 
 		if (extResourceURL == null) {
@@ -166,9 +161,10 @@ public class ProxyResource extends BaseResource {
 		log.info("Received proxy request for " + extResourceURL);
 
 		clientResponse = getResourceFromURL(extResourceURL, 0);
-		representation = null;
+		Representation representation = null;
 		if (clientResponse != null) {
 			representation = clientResponse.getEntity();
+			getResponse().getHeaders().set("Content-Security-Policy", "script-src 'none';"); // XSS protection
 			getResponse().setOnSent((request, response) -> {
 				try {
 					clientResponse.release();
