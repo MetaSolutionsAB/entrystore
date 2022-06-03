@@ -53,10 +53,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -93,6 +94,7 @@ public class ProxyResource extends BaseResource {
 				Pattern.compile("localhost"),		// localhost
 				Pattern.compile("(.+)\\.local"),	// any local domains
 				Pattern.compile("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"),	// IPv4
+				Pattern.compile("^\\d$"),			// IPv4
 				Pattern.compile(":")				// IPv6
 		);
 		log.info("Proxy blacklist consists of following regular expressions: " + Joiner.on(", ").join(blacklistRegEx));
@@ -151,8 +153,7 @@ public class ProxyResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return null;
 			}
-			if ((!whitelistAnon.contains(host) && getPM().getGuestUser().getURI().equals(getPM().getAuthenticatedUserURI()))
-					|| isBlacklisted(host)) {
+			if (!whitelistAnon.contains(host) && getPM().getGuestUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
 				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 				return null;
 			}
@@ -276,6 +277,22 @@ public class ProxyResource extends BaseResource {
 	}
 	
 	private Response getResourceFromURL(String url, int loopCount) {
+		String host;
+		try {
+			host = new URI(url).getHost();
+		} catch (URISyntaxException e) {
+			log.debug(e.getMessage());
+			Response errorResponse = new Response(new Request());
+			errorResponse.setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			return errorResponse;
+		}
+
+		if (isBlacklisted(host)) {
+			Response errorResponse = new Response(new Request());
+			errorResponse.setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+			return errorResponse;
+		}
+
 		if (loopCount > 15) {
 			log.warn("More than 15 redirect loops detected, aborting");
 			return null;
@@ -288,7 +305,7 @@ public class ProxyResource extends BaseResource {
 			client.getContext().getParameters().set("socketConnectTimeoutMs", "30000");
 			client.getContext().getParameters().set("socketTimeout", "60000");
 			client.getContext().getParameters().set("readTimeout", "60000");
-	        log.info("Initialized HTTP client for proxy request");
+	        log.info("Initialized HTTP client for proxy requests");
 		}
 
 		Request request = new Request(Method.GET, url);
@@ -300,7 +317,7 @@ public class ProxyResource extends BaseResource {
 			response.getEntity().release();
 			if (ref != null) {
 				String refURL = ref.getIdentifier();
-				log.info("Request redirected to " + refURL);
+				log.debug("Request redirected to " + refURL);
 				return getResourceFromURL(refURL, ++loopCount);
 			}
 		}
@@ -360,11 +377,30 @@ public class ProxyResource extends BaseResource {
 	}
 
 	private boolean isBlacklisted(String host) {
+		host = host.toLowerCase();
+
 		for (Pattern p : blacklistRegEx) {
 			if (p.matcher(host).find()) {
 				return true;
 			}
 		}
+
+		// all hosts that do not resolve into a "regular" Unicast address are automatically
+		// blacklisted, among other reasons to avoid access to local networks
+		try {
+			InetAddress ia = InetAddress.getByName(host);
+			if (ia.isAnyLocalAddress() ||
+					ia.isSiteLocalAddress() ||
+					ia.isLoopbackAddress() ||
+					ia.isLinkLocalAddress() ||
+					ia.isMulticastAddress()) {
+				return true;
+			}
+		} catch (UnknownHostException e) {
+			log.warn(e.getMessage());
+			return true;
+		}
+
 		return false;
 	}
 
