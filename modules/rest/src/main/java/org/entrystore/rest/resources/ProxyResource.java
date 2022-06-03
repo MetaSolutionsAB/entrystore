@@ -23,7 +23,6 @@ import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.NS;
-import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.RDFJSON;
 import org.openrdf.model.Graph;
 import org.openrdf.model.ValueFactory;
@@ -45,9 +44,7 @@ import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -231,30 +228,6 @@ public class ProxyResource extends BaseResource {
 							return new JsonRepresentation(RDFJSON.graphToRdfJsonObject(deserializedGraph));
 						}
 					}
-				}
-			} else if (parameters.containsKey("validate")) {
-				String validateMime = parameters.get("validate");
-				if (validateMime == null || validateMime.isEmpty()) {
-					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-					return new EmptyRepresentation();
-				} else if (!GraphUtil.isSupported(new MediaType(validateMime))) {
-					getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-					return new EmptyRepresentation();
-				}
-				MediaType origMT = representation.getMediaType();
-				String payload = null;
-				try {
-					payload = representation.getText();
-				} catch (IOException e) {
-					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-					return new StringRepresentation(e.getMessage());
-				}
-				String validationError = GraphUtil.validateRdf(payload, new MediaType(validateMime));
-				if (validationError != null) {
-					getResponse().setStatus(Status.CLIENT_ERROR_UNPROCESSABLE_ENTITY);
-					return new StringRepresentation(validationError, origMT);
-				} else {
-					return new StringRepresentation(payload, origMT);
 				}
 			}
 		}
