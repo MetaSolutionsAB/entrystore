@@ -22,34 +22,19 @@ import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.util.NS;
-import org.entrystore.rest.util.RDFJSON;
-import org.openrdf.model.Graph;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.n3.N3ParserFactory;
-import org.openrdf.rio.ntriples.NTriplesParser;
-import org.openrdf.rio.rdfxml.RDFXMLParser;
-import org.openrdf.rio.trig.TriGParser;
-import org.openrdf.rio.trix.TriXParser;
-import org.openrdf.rio.turtle.TurtleParser;
 import org.restlet.Client;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.data.MediaType;
 import org.restlet.data.Method;
 import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.data.Status;
-import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -179,61 +164,10 @@ public class ProxyResource extends BaseResource {
 			} else {
 				getResponse().setStatus(clientResponse.getStatus());
 			}
-		}
 
-		if (representation != null && representation.isAvailable()) {
-			if (parameters.containsKey("fromFormat")) {
-				String fromFormat = parameters.get("fromFormat");
-				log.info("Conversion of format \"" + fromFormat + "\" to RDF/JSON requested");
-				String pageContent = null;
-				try {
-					pageContent = representation.getText();
-				} catch (IOException e) {
-					log.error(e.getMessage());
-				}
-				if (pageContent != null) {
-					if ("html".equalsIgnoreCase(fromFormat)) {
-						Graph g = new GraphImpl();
-						ValueFactory vf = g.getValueFactory();
-						String title = getTitle(pageContent);
-						if (title != null) {
-							g.add(vf.createURI(extResourceURL), vf.createURI(NS.dc, "title"), vf.createLiteral(title));
-						}
-						String description = getDescription(pageContent);
-						if (description != null) {
-							g.add(vf.createURI(extResourceURL), vf.createURI(NS.dc, "description"), vf.createLiteral(description));
-						}
-						Set<String> keywords = getKeywords(pageContent);
-						for (String k : keywords) {
-							g.add(vf.createURI(extResourceURL), vf.createURI(NS.dc, "subject"), vf.createLiteral(k));
-						}
-						return new JsonRepresentation(RDFJSON.graphToRdfJsonObject(g));
-					} else {
-						MediaType mediaType = MediaType.valueOf(fromFormat);
-						Graph deserializedGraph = null;
-						if (MediaType.APPLICATION_RDF_XML.equals(mediaType)) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new RDFXMLParser());
-						} else if (MediaType.TEXT_RDF_N3.equals(mediaType)) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new N3ParserFactory().getParser());
-						} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TurtleParser());
-						} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TriXParser());
-						} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new NTriplesParser());
-						} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TriGParser());
-						}
-						if (deserializedGraph != null) {
-							return new JsonRepresentation(RDFJSON.graphToRdfJsonObject(deserializedGraph));
-						}
-					}
-				}
+			if (representation != null) {
+				return representation;
 			}
-		}
-		
-		if (representation != null) {
-			return representation;
 		}
 		
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
