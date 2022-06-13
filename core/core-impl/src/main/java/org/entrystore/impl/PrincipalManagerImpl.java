@@ -16,8 +16,6 @@
 
 package org.entrystore.impl;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -32,6 +30,8 @@ import org.openrdf.model.ValueFactory;
 import org.openrdf.repository.RepositoryConnection;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -49,13 +49,16 @@ import java.util.Set;
  *
  */
 public class PrincipalManagerImpl extends EntryNamesContext implements PrincipalManager {
-	private static Log log = LogFactory.getLog(PrincipalManagerImpl.class);
-	private static final ThreadLocal<URI> authenticatedUserURI = new ThreadLocal<URI>();
+	private static final Logger log = LoggerFactory.getLogger(PrincipalManagerImpl.class);
+	private static final ThreadLocal<URI> authenticatedUserURI = new ThreadLocal<>();
 	public User adminUser = null;
 	public Group adminGroup = null;
 	public User guestUser = null;
 	public Group userGroup = null;
+
 	private EntryImpl allPrincipals;
+
+	private static final String ENV_ADMIN_PASSWORD = "ENTRYSTORE_ADMIN_PASSWORD";
 	
 	/**
 	 * Creates a principal manager
@@ -142,8 +145,8 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 * @return all user URIs in this principal manager
 	 */
 	public List<URI> getUsersAsUris() {
-		Iterator < URI > entryIterator = getEntries().iterator();
-		List< URI > userUris = new ArrayList<URI>();
+		Iterator <URI> entryIterator = getEntries().iterator();
+		List<URI> userUris = new ArrayList<>();
 
 		//sort out the users
 		while(entryIterator.hasNext()) {
@@ -164,7 +167,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 */
 	public List<User> getUsers() {
 		Iterator<URI> entryIterator = getEntries().iterator();
-		List<User> userUris = new ArrayList<User>();
+		List<User> userUris = new ArrayList<>();
 
 		//sort out the users
 		while(entryIterator.hasNext()) {
@@ -210,14 +213,14 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	
 	public Set <URI> getGroupUris() {
 		Iterator <URI> entryIterator = getEntries().iterator();
-		Set < URI > groupUris = new HashSet <URI> ();
+		Set <URI> groupUris = new HashSet<>();
 
 		//sort out the groups
 		while(entryIterator.hasNext()) {
 			URI nextURI = entryIterator.next();
 
 			Entry nextGroup = getByEntryURI(nextURI);
-			if(nextGroup.getGraphType() == GraphType.Group) {
+			if (GraphType.Group.equals(nextGroup.getGraphType())) {
 				groupUris.add(nextGroup.getResourceURI());
 			}
 		}
@@ -227,14 +230,14 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 	public Set <URI> getGroupUris(URI userUri) {
 		Iterator <URI> entryIterator = getEntries().iterator();
-		Set <URI> groupUris = new HashSet <URI> ();
+		Set <URI> groupUris = new HashSet<>();
 
 		User user = getUser(userUri);
 		if (user != null) {
 			while(entryIterator.hasNext()) {
 				URI nextURI = entryIterator.next();
 				Entry nextEntry = getByEntryURI(nextURI); 
-				if(nextEntry.getGraphType() == GraphType.Group) {
+				if(GraphType.Group.equals(nextEntry.getGraphType())) {
 					Group nextGroup = (Group) nextEntry.getResource();
 					if(nextGroup != null) {
 						if(nextGroup.isMember(user)) {
@@ -250,7 +253,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 	public List<URI> getGroupEntryUris() {
 		Iterator < URI > entryIterator = getEntries().iterator();
-		List<URI> groupUris = new ArrayList<URI>();
+		List<URI> groupUris = new ArrayList<>();
 
 		//sort out the groups
 		while(entryIterator.hasNext()) {
@@ -407,7 +410,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	public Set<AccessProperty> getRights(Entry entry) {
-		Set<AccessProperty> set = new HashSet<AccessProperty>();
+		Set<AccessProperty> set = new HashSet<>();
 		//is check authorization on?
 		if(!entry.getRepositoryManager().isCheckForAuthorization()) {
 			set.add(AccessProperty.Administer);
@@ -417,7 +420,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		URI currentUserURI = getAuthenticatedUserURI();
 
 		//is anyone logged in on this thread?
-		if(currentUserURI == null) {
+		if (currentUserURI == null) {
 			//TODO, should we perhaps assume guest if none set?
 			log.error("Authenticated user not set, should at least be guest.");
 			throw new AuthorizationException(null, entry, null);
@@ -489,10 +492,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 * @return true If the secret fullfils minimum requirements, currently a minimum length of 8 characters.
 	 */
 	public boolean isValidSecret(String secret) {
-		if (secret == null || secret.length() < 8) {
-			return false;
-		}
-		return true;
+		return secret != null && secret.length() >= 8;
 	}
 
 	public User getAdminUser() {
@@ -534,8 +534,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		Entry adminGroupEntry;
 		Entry userGroupEntry;
 		Entry guestUserEntry;
-		Entry top;
-		
+
 		guestUserEntry = get("_guest");
 		if (guestUserEntry != null) {
 			guestUser = (User) guestUserEntry.getResource();
@@ -558,7 +557,16 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			setMetadata(adminUserEntry, "Admin user", "Default super user, has all rights.");
 			adminUser = (User) adminUserEntry.getResource();
 			adminUser.setName("admin");
-			adminUser.setSecret("adminadmin");				
+			String adminSecret = System.getenv(ENV_ADMIN_PASSWORD);
+			if (adminSecret != null) {
+				if (adminSecret.length() < 8) {
+					log.warn("Password in environment variable {} is too short (must have at least 8 characters), initializing admin user without password", ENV_ADMIN_PASSWORD);
+				} else {
+					adminUser.setSecret(adminSecret);
+				}
+			} else {
+				log.warn("Environment variable {} not found, initializing admin user without password", ENV_ADMIN_PASSWORD);
+			}
 			adminUserEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, guestUser.getURI());
 			log.info("Successfully added the admin user");
 		}
