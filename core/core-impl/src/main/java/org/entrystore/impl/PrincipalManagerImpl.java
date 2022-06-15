@@ -562,6 +562,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 				if (adminSecret.length() < 8) {
 					log.warn("Password in environment variable {} is too short (must have at least 8 characters), initializing admin user without password", ENV_ADMIN_PASSWORD);
 				} else {
+					log.info("Setting admin password based on environment variable {}", ENV_ADMIN_PASSWORD);
 					adminUser.setSecret(adminSecret);
 				}
 			} else {
