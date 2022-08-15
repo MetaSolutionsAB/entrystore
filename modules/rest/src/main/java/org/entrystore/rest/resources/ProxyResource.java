@@ -145,7 +145,7 @@ public class ProxyResource extends BaseResource {
 
 		clientResponse = getResourceFromURL(extResourceURL, 0);
 		Representation representation = null;
-		if (clientResponse != null) {
+		if (clientResponse != null && clientResponse.getStatus().isSuccess()) {
 			representation = clientResponse.getEntity();
 			getResponse().getHeaders().set("Content-Security-Policy", "script-src 'none';"); // XSS protection
 			getResponse().setOnSent((request, response) -> {
@@ -169,8 +169,13 @@ public class ProxyResource extends BaseResource {
 				return representation;
 			}
 		}
-		
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+
+		if (clientResponse == null) {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		} else {
+			getResponse().setStatus(clientResponse.getStatus());
+		}
+
 		return null;
 	}
 
