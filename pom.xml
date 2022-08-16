@@ -32,7 +32,7 @@
         <xerces.version>2.12.2</xerces.version>
         <jaxb.version>2.3.1</jaxb.version>
         <guava.version>31.1-jre</guava.version>
-        <jetty.version>9.4.44.v20210927</jetty.version>
+        <jetty.version>9.4.48.v20220622</jetty.version>
 	<jsonorg.version>20220320</jsonorg.version>
         <site.url>https://entrystore.org</site.url>
         <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
