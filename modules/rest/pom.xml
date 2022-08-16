@@ -81,7 +81,7 @@
             <groupId>org.entrystore</groupId>
             <artifactId>entrystore-harvesting-oaipmh-harvester</artifactId>
             <version>${project.version}</version>
-        </dependency>
+	</dependency>
         <dependency>
             <groupId>org.entrystore</groupId>
             <artifactId>entrystore-transforms-common</artifactId>
