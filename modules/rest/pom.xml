@@ -198,7 +198,7 @@
         <dependency>
             <groupId>com.coveo</groupId>
             <artifactId>saml-client</artifactId>
-            <version>4.0.0</version>
+            <version>4.0.3</version>
             <exclusions>
                 <exclusion>
                     <groupId>io.dropwizard.metrics</groupId>
