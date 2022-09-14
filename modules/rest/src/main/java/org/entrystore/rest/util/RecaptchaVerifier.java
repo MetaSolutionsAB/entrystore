@@ -16,10 +16,11 @@
 
 package org.entrystore.rest.util;
 
-import org.apache.log4j.Logger;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.Response;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Verifies the validity of a reCaptcha user response token.
@@ -30,7 +31,7 @@ import org.restlet.Response;
  */
 public class RecaptchaVerifier {
 
-	private static Logger log = Logger.getLogger(RecaptchaVerifier.class);
+	private static Logger log = LoggerFactory.getLogger(RecaptchaVerifier.class);
 
 	private String secret;
 
