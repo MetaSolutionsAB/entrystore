@@ -192,4 +192,12 @@ public class CookieVerifier implements Verifier {
 		return cookiePath;
 	}
 
+	public static String getAuthToken(Request request) {
+		Cookie authTokenCookie = request.getCookies().getFirst("auth_token");
+		if (authTokenCookie != null) {
+			return authTokenCookie.getValue();
+		}
+		return null;
+	}
+
 }

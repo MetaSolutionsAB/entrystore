@@ -31,6 +31,8 @@ import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
@@ -522,6 +524,7 @@ public class ContextResource extends BaseResource {
 			}
 			if (jsonObj.has("password")) {
 				if (user.setSecret(jsonObj.getString("password"))) {
+					LoginTokenCache.getInstance().removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
 					Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
 				} else {
 					log.warn("Password could not be set");

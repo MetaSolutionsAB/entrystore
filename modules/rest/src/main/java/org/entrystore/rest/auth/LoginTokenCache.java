@@ -16,6 +16,9 @@
 
 package org.entrystore.rest.auth;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Date;
 import java.util.Map;
 
@@ -23,6 +26,8 @@ import java.util.Map;
  * @author Hannes Ebner
  */
 public class LoginTokenCache extends TokenCache<String, UserInfo> {
+
+	private static final Logger log = LoggerFactory.getLogger(LoginTokenCache.class);
 
 	private static LoginTokenCache instance;
 
@@ -47,6 +52,22 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 		}
 		synchronized (tokenCache) {
 			tokenCache.entrySet().removeIf(userInfo -> userName.equals(userInfo.getValue().getUserName()));
+		}
+	}
+
+	public void removeTokensButOne(String token) {
+		if (token == null) {
+			throw new IllegalArgumentException("Token must not be null");
+		}
+		synchronized (tokenCache) {
+			if (tokenCache.containsKey(token)) {
+				String userName = tokenCache.get(token).userName;
+				tokenCache.entrySet().removeIf(userInfo ->
+						(userName.equals(userInfo.getValue().getUserName()) && !token.equals(userInfo.getKey()))
+				);
+			} else {
+				log.warn("Token not found in cache");
+			}
 		}
 	}
 
