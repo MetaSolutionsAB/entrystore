@@ -26,6 +26,7 @@ import org.restlet.data.Method;
 import org.restlet.data.Preference;
 import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
+import org.restlet.representation.Representation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -157,6 +158,20 @@ public class HttpUtil {
 			}
 		}
 		return null;
+	}
+
+	public static boolean isLargerThan(Representation r, long maxSize) {
+		if (r == null) {
+			throw new IllegalArgumentException("Representation must not be null");
+		}
+		if (r.isEmpty()) {
+			return false;
+		}
+		long repSize = r.getSize();
+		if (repSize == Representation.UNKNOWN_SIZE) {
+			log.warn("Size of representation is unknown");
+			return true;
+		} else return repSize > maxSize;
 	}
 
 }

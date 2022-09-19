@@ -21,6 +21,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.rest.util.HttpUtil;
 import org.entrystore.rest.util.SimpleHTML;
 import org.restlet.Context;
 import org.restlet.Request;
@@ -64,6 +65,10 @@ public class CookieLoginResource extends BaseResource {
 
 	@Post
 	public void acceptRepresentation(Representation r) {
+		if (HttpUtil.isLargerThan(r, 32768)) {
+			log.warn("The size of the representation is larger than 32KB or unknown, similar requests may be blocked in future versions");
+		}
+
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
 		Form query;
 		try {

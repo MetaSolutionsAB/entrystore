@@ -30,6 +30,7 @@ import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
 import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.EmailValidator;
+import org.entrystore.rest.util.HttpUtil;
 import org.entrystore.rest.util.RecaptchaVerifier;
 import org.entrystore.rest.util.SimpleHTML;
 import org.json.JSONObject;
@@ -148,6 +149,10 @@ public class PasswordResetResource extends BaseResource {
 
 	@Post
 	public void acceptRepresentation(Representation r) {
+		if (HttpUtil.isLargerThan(r, 32768)) {
+			log.warn("The size of the representation is larger than 32KB or unknown, similar requests may be blocked in future versions");
+		}
+
 		SignupInfo ci = new SignupInfo();
 		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
 		String rcChallenge = null;

@@ -29,6 +29,7 @@ import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.rest.util.HttpUtil;
 import org.entrystore.rest.util.SimpleHTML;
 import org.restlet.Context;
 import org.restlet.Request;
@@ -164,6 +165,10 @@ public class SamlLoginResource extends BaseResource {
 
 	@Post
 	public void store(Representation r) {
+		if (HttpUtil.isLargerThan(r, 524288)) {
+			log.warn("The size of the representation is larger than 512KB or unknown, similar requests may be blocked in future versions");
+		}
+
 		checkAndInitSamlClient();
 
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
