@@ -31,6 +31,8 @@ import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
@@ -58,8 +60,10 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 
 /**
@@ -107,10 +111,6 @@ public class ContextResource extends BaseResource {
         if (!getPM().isUserAdminOrAdminGroup(null)) {
             return unauthorizedGET();
         }
-
-		if (parameters.containsKey("reindex")) {
-			context.reIndex();
-		}
 
 		JSONArray array = new JSONArray();
 
@@ -173,10 +173,14 @@ public class ContextResource extends BaseResource {
 
 			String entryId = parameters.get("id");
 			if (entryId != null) {
+				if (!isEntryIdValid(entryId)) {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					return;
+				}
 				Entry preExistingEntry = context.get(entryId);
 				if (preExistingEntry != null) {
 					log.debug("Entry with that ID already exists");
-					getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT); 
+					getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 					getResponse().setLocationRef(context.get(parameters.get("id")).getEntryURI().toString());
 					getResponse().setEntity(JSONErrorMessages.errorEntryWithGivenIDExists, MediaType.APPLICATION_JSON);
 					return;
@@ -336,7 +340,7 @@ public class ContextResource extends BaseResource {
 			}
 		} catch (Exception e) {
 			log.warn(e.getMessage());
-		} 
+		}
 
 		return null; 
 	}
@@ -396,7 +400,7 @@ public class ContextResource extends BaseResource {
 			log.warn(e.getMessage());
 		}
 
-		return null; 
+		return null;
 	}
 
 	private ResourceType getResourceType(String rt) {
@@ -480,14 +484,14 @@ public class ContextResource extends BaseResource {
 			}
 		} catch (JSONException e) {
 			return null;
-		} 
+		}
 	}
 
 	/**
 	 * Sets resource to an entry.
 	 * @param entry a reference to a entry
 	 * @return false if there is a resource provided but it cannot be interpreted.
-	 * @throws JSONException 
+	 * @throws JSONException Exception if payload is malformed
 	 */
 	private boolean setResource(Entry entry) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
@@ -520,6 +524,7 @@ public class ContextResource extends BaseResource {
 			}
 			if (jsonObj.has("password")) {
 				if (user.setSecret(jsonObj.getString("password"))) {
+					LoginTokenCache.getInstance().removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
 					Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
 				} else {
 					log.warn("Password could not be set");
@@ -584,7 +589,7 @@ public class ContextResource extends BaseResource {
 		case None:
 			break;
 		}
-		return true; 
+		return true;
 	}
 
 	/**
@@ -599,12 +604,7 @@ public class ContextResource extends BaseResource {
 
 		//check the request
 		URI resourceURI = null;
-		try {
-			resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), "UTF-8"));
-		} catch (UnsupportedEncodingException e) {
-			log.debug("The resource parameter must be encoded using UTF-8");
-			return null;
-		}
+		resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), StandardCharsets.UTF_8));
 
 		if (parameters.containsKey("list")) {
 			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("list")));
@@ -623,13 +623,12 @@ public class ContextResource extends BaseResource {
 				try {
 					URI listURI = new URI((parameters.get("list")));
 					((ContextImpl) context).copyACL(listURI, entry);
-				} catch (URISyntaxException e) {
+				} catch (URISyntaxException ignore) {
 				}
 			}
 		}
 		return entry;
 	}
-
 
 	/**
 	 * Extracts metadata from the request and sets it as the entrys local metadata graph.
@@ -656,7 +655,7 @@ public class ContextResource extends BaseResource {
 		} catch (JSONException e) {
 			log.warn(e.getMessage());
 		}
-	}	
+	}
 
 	/**
 	 * First caching of metadata.
@@ -744,6 +743,15 @@ public class ContextResource extends BaseResource {
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * Checks whether the provided ID only contains allowed characters.
+	 *
+	 * @return True if supplied ID is valid.
+	 */
+	private boolean isEntryIdValid(String id) {
+		return Pattern.compile("^[\\w\\-]+$").matcher(id).matches();
 	}
 
 }

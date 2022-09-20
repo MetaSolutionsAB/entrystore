@@ -24,6 +24,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.LoginTokenCache;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.MediaType;
@@ -99,15 +100,27 @@ public class StatusResource extends BaseResource  {
 					result.put("repositoryStatus", getRM() != null ? "online" : "offline");
 					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));
 					result.put("rowstoreURL", config.getString(Settings.ROWSTORE_URL, "unconfigured"));
-					result.put("passwordReset", config.getBoolean(Settings.PASSWORD_RESET, false));
-					result.put("passwordMaxLength", Password.PASSWORD_MAX_LENGTH);
 					result.put("solr", config.getBoolean(Settings.SOLR, false));
 					result.put("solrReindexOnStartup", config.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false));
 					result.put("solrStatus", getRM().getIndex().ping() ? "online" : "offline");
-					result.put("signup", config.getBoolean(Settings.SIGNUP, false));
 					result.put("version", EntryStoreApplication.getVersion());
 					result.put("startupTime", EntryStoreApplication.getStartupDate());
-					result.put("authTokenCount", LoginTokenCache.getInstance().size());
+
+					// Authentication
+					JSONObject auth = new JSONObject();
+					auth.put("signup", config.getBoolean(Settings.SIGNUP, false));
+					List<String> domainWhitelist = config.getStringList(Settings.SIGNUP_WHITELIST, new ArrayList<String>());
+					JSONArray signupWhitelist = new JSONArray();
+					for (String domain : domainWhitelist) {
+						if (domain != null) {
+							signupWhitelist.put(domain.toLowerCase());
+						}
+					}
+					auth.put("signupWhitelist", signupWhitelist);
+					auth.put("passwordReset", config.getBoolean(Settings.PASSWORD_RESET, false));
+					auth.put("passwordMaxLength", Password.PASSWORD_MAX_LENGTH);
+					auth.put("authTokenCount", LoginTokenCache.getInstance().size());
+					result.put("auth", auth);
 
 					// Backup
 					JSONObject backup = new JSONObject();

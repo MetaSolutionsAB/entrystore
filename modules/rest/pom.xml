@@ -7,11 +7,11 @@
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-modules</artifactId>
-        <version>4.12.2</version>
+        <version>4.13.0</version>
     </parent>
     <artifactId>entrystore-rest</artifactId>
     <packaging>war</packaging>
-    <version>4.12.2</version>
+    <version>4.13.0</version>
     <name>EntryStore REST</name>
 
     <build>
@@ -81,15 +81,10 @@
             <groupId>org.entrystore</groupId>
             <artifactId>entrystore-harvesting-oaipmh-harvester</artifactId>
             <version>${project.version}</version>
-        </dependency>
+	</dependency>
         <dependency>
             <groupId>org.entrystore</groupId>
             <artifactId>entrystore-transforms-common</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-transforms-tabular</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -187,17 +182,23 @@
         <dependency>
             <groupId>org.jasig.cas.client</groupId>
             <artifactId>cas-client-core</artifactId>
-            <version>3.6.2</version>
+            <version>3.6.4</version>
+	    <exclusions>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.jasig.cas.client</groupId>
             <artifactId>cas-client-support-saml</artifactId>
-            <version>3.6.2</version>
+            <version>3.6.3</version>
         </dependency>
         <dependency>
             <groupId>com.coveo</groupId>
             <artifactId>saml-client</artifactId>
-            <version>4.0.0</version>
+            <version>4.0.3</version>
             <exclusions>
                 <exclusion>
                     <groupId>io.dropwizard.metrics</groupId>
@@ -206,6 +207,14 @@
                 <exclusion>
                     <groupId>commons-io</groupId>
                     <artifactId>commons-io</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.code.findbugs</groupId>
+                    <artifactId>jsr305</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.woodstox</groupId>
+                    <artifactId>woodstox-core</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>

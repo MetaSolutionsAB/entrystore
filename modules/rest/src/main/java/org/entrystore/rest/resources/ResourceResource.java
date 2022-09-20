@@ -50,6 +50,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.GraphUtil;
@@ -1081,6 +1082,7 @@ public class ResourceResource extends BaseResource {
 				if (entityJSON.has("password")) {
 					String passwd =  entityJSON.getString("password");
 					if (resourceUser.setSecret(passwd)) {
+						LoginTokenCache.getInstance().removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
 						Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
 						return;
 					} else {

@@ -22,41 +22,25 @@ import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.util.NS;
-import org.entrystore.rest.util.GraphUtil;
-import org.entrystore.rest.util.RDFJSON;
-import org.openrdf.model.Graph;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.n3.N3ParserFactory;
-import org.openrdf.rio.ntriples.NTriplesParser;
-import org.openrdf.rio.rdfxml.RDFXMLParser;
-import org.openrdf.rio.trig.TriGParser;
-import org.openrdf.rio.trix.TriXParser;
-import org.openrdf.rio.turtle.TurtleParser;
 import org.restlet.Client;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.data.MediaType;
 import org.restlet.data.Method;
 import org.restlet.data.Protocol;
 import org.restlet.data.Reference;
 import org.restlet.data.Status;
-import org.restlet.ext.json.JsonRepresentation;
-import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
-import org.restlet.representation.StringRepresentation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -83,8 +67,6 @@ public class ProxyResource extends BaseResource {
 
 	private Response clientResponse;
 
-	Representation representation;
-
 	private static List<String> whitelistAnon;
 
 	private final static List<Pattern> blacklistRegEx;
@@ -94,6 +76,7 @@ public class ProxyResource extends BaseResource {
 				Pattern.compile("localhost"),		// localhost
 				Pattern.compile("(.+)\\.local"),	// any local domains
 				Pattern.compile("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"),	// IPv4
+				Pattern.compile("^\\d$"),			// IPv4
 				Pattern.compile(":")				// IPv6
 		);
 		log.info("Proxy blacklist consists of following regular expressions: " + Joiner.on(", ").join(blacklistRegEx));
@@ -124,11 +107,7 @@ public class ProxyResource extends BaseResource {
 	public Representation represent() {
 		String extResourceURL = null;
 		if (parameters.containsKey("url")) {
-			try {
-				extResourceURL = URLDecoder.decode(parameters.get("url"), "UTF-8");
-			} catch (UnsupportedEncodingException e) {
-				log.error(e.getMessage());
-			}
+			extResourceURL = URLDecoder.decode(parameters.get("url"), StandardCharsets.UTF_8);
 		}
 
 		if (extResourceURL == null) {
@@ -156,8 +135,7 @@ public class ProxyResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return null;
 			}
-			if ((!whitelistAnon.contains(host) && getPM().getGuestUser().getURI().equals(getPM().getAuthenticatedUserURI()))
-					|| isBlacklisted(host)) {
+			if (!whitelistAnon.contains(host) && getPM().getGuestUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
 				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 				return null;
 			}
@@ -166,9 +144,10 @@ public class ProxyResource extends BaseResource {
 		log.info("Received proxy request for " + extResourceURL);
 
 		clientResponse = getResourceFromURL(extResourceURL, 0);
-		representation = null;
-		if (clientResponse != null) {
+		Representation representation = null;
+		if (clientResponse != null && clientResponse.getStatus().isSuccess()) {
 			representation = clientResponse.getEntity();
+			getResponse().getHeaders().set("Content-Security-Policy", "script-src 'none';"); // XSS protection
 			getResponse().setOnSent((request, response) -> {
 				try {
 					clientResponse.release();
@@ -185,88 +164,18 @@ public class ProxyResource extends BaseResource {
 			} else {
 				getResponse().setStatus(clientResponse.getStatus());
 			}
-		}
 
-		if (representation != null && representation.isAvailable()) {
-			if (parameters.containsKey("fromFormat")) {
-				String fromFormat = parameters.get("fromFormat");
-				log.info("Conversion of format \"" + fromFormat + "\" to RDF/JSON requested");
-				String pageContent = null;
-				try {
-					pageContent = representation.getText();
-				} catch (IOException e) {
-					log.error(e.getMessage());
-				}
-				if (pageContent != null) {
-					if ("html".equalsIgnoreCase(fromFormat)) {
-						Graph g = new GraphImpl();
-						ValueFactory vf = g.getValueFactory();
-						String title = getTitle(pageContent);
-						if (title != null) {
-							g.add(vf.createURI(extResourceURL), vf.createURI(NS.dc, "title"), vf.createLiteral(title));
-						}
-						String description = getDescription(pageContent);
-						if (description != null) {
-							g.add(vf.createURI(extResourceURL), vf.createURI(NS.dc, "description"), vf.createLiteral(description));
-						}
-						Set<String> keywords = getKeywords(pageContent);
-						for (String k : keywords) {
-							g.add(vf.createURI(extResourceURL), vf.createURI(NS.dc, "subject"), vf.createLiteral(k));
-						}
-						return new JsonRepresentation(RDFJSON.graphToRdfJsonObject(g));
-					} else {
-						MediaType mediaType = MediaType.valueOf(fromFormat);
-						Graph deserializedGraph = null;
-						if (MediaType.APPLICATION_RDF_XML.equals(mediaType)) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new RDFXMLParser());
-						} else if (MediaType.TEXT_RDF_N3.equals(mediaType)) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new N3ParserFactory().getParser());
-						} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TurtleParser());
-						} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TriXParser());
-						} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new NTriplesParser());
-						} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-							deserializedGraph = org.entrystore.rest.util.GraphUtil.deserializeGraph(pageContent, new TriGParser());
-						}
-						if (deserializedGraph != null) {
-							return new JsonRepresentation(RDFJSON.graphToRdfJsonObject(deserializedGraph));
-						}
-					}
-				}
-			} else if (parameters.containsKey("validate")) {
-				String validateMime = parameters.get("validate");
-				if (validateMime == null || validateMime.isEmpty()) {
-					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-					return new EmptyRepresentation();
-				} else if (!GraphUtil.isSupported(new MediaType(validateMime))) {
-					getResponse().setStatus(Status.CLIENT_ERROR_NOT_ACCEPTABLE);
-					return new EmptyRepresentation();
-				}
-				MediaType origMT = representation.getMediaType();
-				String payload = null;
-				try {
-					payload = representation.getText();
-				} catch (IOException e) {
-					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-					return new StringRepresentation(e.getMessage());
-				}
-				String validationError = GraphUtil.validateRdf(payload, new MediaType(validateMime));
-				if (validationError != null) {
-					getResponse().setStatus(Status.CLIENT_ERROR_UNPROCESSABLE_ENTITY);
-					return new StringRepresentation(validationError, origMT);
-				} else {
-					return new StringRepresentation(payload, origMT);
-				}
+			if (representation != null) {
+				return representation;
 			}
 		}
-		
-		if (representation != null) {
-			return representation;
+
+		if (clientResponse == null) {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+		} else {
+			getResponse().setStatus(clientResponse.getStatus());
 		}
-		
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+
 		return null;
 	}
 
@@ -280,6 +189,22 @@ public class ProxyResource extends BaseResource {
 	}
 	
 	private Response getResourceFromURL(String url, int loopCount) {
+		String host;
+		try {
+			host = new URI(url).getHost();
+		} catch (URISyntaxException e) {
+			log.debug(e.getMessage());
+			Response errorResponse = new Response(new Request());
+			errorResponse.setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			return errorResponse;
+		}
+
+		if (isBlacklisted(host)) {
+			Response errorResponse = new Response(new Request());
+			errorResponse.setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+			return errorResponse;
+		}
+
 		if (loopCount > 15) {
 			log.warn("More than 15 redirect loops detected, aborting");
 			return null;
@@ -292,7 +217,7 @@ public class ProxyResource extends BaseResource {
 			client.getContext().getParameters().set("socketConnectTimeoutMs", "30000");
 			client.getContext().getParameters().set("socketTimeout", "60000");
 			client.getContext().getParameters().set("readTimeout", "60000");
-	        log.info("Initialized HTTP client for proxy request");
+	        log.info("Initialized HTTP client for proxy requests");
 		}
 
 		Request request = new Request(Method.GET, url);
@@ -304,7 +229,7 @@ public class ProxyResource extends BaseResource {
 			response.getEntity().release();
 			if (ref != null) {
 				String refURL = ref.getIdentifier();
-				log.info("Request redirected to " + refURL);
+				log.debug("Request redirected to " + refURL);
 				return getResourceFromURL(refURL, ++loopCount);
 			}
 		}
@@ -364,11 +289,30 @@ public class ProxyResource extends BaseResource {
 	}
 
 	private boolean isBlacklisted(String host) {
+		host = host.toLowerCase();
+
 		for (Pattern p : blacklistRegEx) {
 			if (p.matcher(host).find()) {
 				return true;
 			}
 		}
+
+		// all hosts that do not resolve into a "regular" Unicast address are automatically
+		// blacklisted, among other reasons to avoid access to local networks
+		try {
+			InetAddress ia = InetAddress.getByName(host);
+			if (ia.isAnyLocalAddress() ||
+					ia.isSiteLocalAddress() ||
+					ia.isLoopbackAddress() ||
+					ia.isLinkLocalAddress() ||
+					ia.isMulticastAddress()) {
+				return true;
+			}
+		} catch (UnknownHostException e) {
+			log.warn(e.getMessage());
+			return true;
+		}
+
 		return false;
 	}
 

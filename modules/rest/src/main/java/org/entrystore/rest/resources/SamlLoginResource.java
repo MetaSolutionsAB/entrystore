@@ -29,6 +29,7 @@ import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.rest.util.HttpUtil;
 import org.entrystore.rest.util.SimpleHTML;
 import org.restlet.Context;
 import org.restlet.Request;
@@ -48,7 +49,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
@@ -69,7 +69,7 @@ import java.util.Map;
  */
 public class SamlLoginResource extends BaseResource {
 
-	private static Logger log = LoggerFactory.getLogger(SamlLoginResource.class);
+	private static final Logger log = LoggerFactory.getLogger(SamlLoginResource.class);
 
 	private static SamlClient samlClient;
 
@@ -165,6 +165,10 @@ public class SamlLoginResource extends BaseResource {
 
 	@Post
 	public void store(Representation r) {
+		if (HttpUtil.isLargerThan(r, 524288)) {
+			log.warn("The size of the representation is larger than 512KB or unknown, similar requests may be blocked in future versions");
+		}
+
 		checkAndInitSamlClient();
 
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
@@ -218,11 +222,7 @@ public class SamlLoginResource extends BaseResource {
 				// TODO cache SAML ticket together with auth_token (probably necessary for logouts originating from SAML)
 
 				if (redirSuccess != null) {
-					try {
-						getResponse().redirectTemporary(URLDecoder.decode(redirSuccess, "UTF-8"));
-					} catch (UnsupportedEncodingException e) {
-						log.warn("Unable to decode URL parameter redirectOnSuccess: " + e.getMessage());
-					}
+					getResponse().redirectTemporary(URLDecoder.decode(redirSuccess, StandardCharsets.UTF_8));
 				} else {
 					getResponse().setStatus(Status.SUCCESS_OK);
 					if (html) {
@@ -235,11 +235,7 @@ public class SamlLoginResource extends BaseResource {
 
 			if (!authSuccess) {
 				if (redirFailure != null) {
-					try {
-						getResponse().redirectTemporary(URLDecoder.decode(redirFailure, "UTF-8"));
-					} catch (UnsupportedEncodingException e) {
-						log.warn("Unable to decode URL parameter redirectOnFailure: " + e.getMessage());
-					}
+					getResponse().redirectTemporary(URLDecoder.decode(redirFailure, StandardCharsets.UTF_8));
 				} else {
 					getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 					if (html) {
@@ -293,16 +289,12 @@ public class SamlLoginResource extends BaseResource {
 	private void redirectWithGet(String url, Response response, Map<String, String> values) {
 		String targetUrl = url;
 		if (values.containsKey("SAMLRequest")) {
-			try {
-				if (targetUrl.contains("?")) {
-					targetUrl += "&";
-				} else {
-					targetUrl += "?";
-				}
-				targetUrl += "SAMLRequest=" + URLEncoder.encode(values.get("SAMLRequest"), "UTF-8");
-			} catch (UnsupportedEncodingException e) {
-				log.error(e.getMessage());
+			if (targetUrl.contains("?")) {
+				targetUrl += "&";
+			} else {
+				targetUrl += "?";
 			}
+			targetUrl += "SAMLRequest=" + URLEncoder.encode(values.get("SAMLRequest"), StandardCharsets.UTF_8);
 		}
 		List<CacheDirective> cacheDirs = new ArrayList<>();
 		cacheDirs.add(CacheDirective.noCache());

@@ -283,7 +283,7 @@ public class EntryResource extends BaseResource {
 			/*
 			 * Return if the parameter includeAll is not set
 			 */
-			if ((parameters != null && parameters.containsKey("includeAll")) == false) {
+			if (!(parameters != null && parameters.containsKey("includeAll"))) {
 				return jdilObj;
 			}
 			/*
@@ -626,6 +626,7 @@ public class EntryResource extends BaseResource {
 								childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 							}
 							childJSON.put("entryId", u.getEntry().getId());
+							childJSON.put("name", u.getName());
 							userArray.put(childJSON);
 						}
 

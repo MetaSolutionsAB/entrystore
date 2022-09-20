@@ -513,6 +513,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
 		Graph mdGraph = entry.getMetadataGraph();
+		Graph entryGraph = entry.getGraph();
 		URI resourceURI = entry.getResourceURI();
 
 		SolrInputDocument doc = new SolrInputDocument();
@@ -527,7 +528,7 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.setField("context", entry.getContext().getEntry().getResourceURI().toString());
 
 		// RDF type
-		Iterator<Statement> rdfTypeE = entry.getGraph().match(new URIImpl(resourceURI.toString()), RDF.TYPE, null);
+		Iterator<Statement> rdfTypeE = entryGraph.match(new URIImpl(resourceURI.toString()), RDF.TYPE, null);
 		while (rdfTypeE.hasNext()) {
 			doc.addField("rdfType", rdfTypeE.next().getObject().stringValue());
 		}
@@ -552,6 +553,15 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.setField("graphType", entry.getGraphType().name());
 		doc.setField("entryType", entry.getEntryType().name());
 		doc.setField("resourceType", entry.getResourceType().name());
+
+		// profile
+		Set<org.openrdf.model.URI> profilePreds = new HashSet<>();
+		profilePreds.add(new URIImpl("http://entryscape.com/terms/entityType"));
+		profilePreds.add(new URIImpl("http://entrystore.org/terms/profile"));
+		for (String profileURI : EntryUtil.getResourceValues(entryGraph, entry.getResourceURI(), profilePreds)) {
+			doc.setField("profile", profileURI);
+			break; // we only need the first match
+		}
 
 		// creator
 		URI creator = entry.getCreator();
@@ -630,6 +640,14 @@ public class SolrSearchIndex implements SearchIndex {
 			String username = user.getName();
 			if (username != null) {
 				doc.addField("username", username);
+			}
+		}
+
+		// context name
+		if (GraphType.Context.equals(entry.getGraphType()) || GraphType.SystemContext.equals(entry.getGraphType())) {
+			String contextName = rm.getContextManager().getName(entry.getResource().getURI());
+			if (contextName != null) {
+				doc.addField("contextname", contextName);
 			}
 		}
 
@@ -795,7 +813,7 @@ public class SolrSearchIndex implements SearchIndex {
 		Set<Entry> relatedEntries = new HashSet<>();
 		for (org.openrdf.model.URI relProp : relatedProperties.keySet()) {
 			List<String> relatedURIs = EntryUtil.getResourceValues(entry, Collections.singleton(relProp));
-			if (relatedURIs != null && relatedURIs.isEmpty()) {
+			if (relatedURIs.isEmpty()) {
 				continue;
 			}
 			if (relatedContainsGlobal && relatedProperties.get(relProp)) {

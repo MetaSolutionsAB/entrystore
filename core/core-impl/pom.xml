@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-core</artifactId>
-		<version>4.12.2</version>
+		<version>4.13.0</version>
 	</parent>
 	<artifactId>entrystore-core-impl</artifactId>
 	<packaging>jar</packaging>
@@ -177,12 +177,22 @@
 		<dependency>
 			<groupId>com.ibm.icu</groupId>
 			<artifactId>icu4j</artifactId>
-			<version>65.1</version>
+			<version>71.1</version>
 		</dependency>
 		<dependency>
 			<groupId>com.github.ben-manes.caffeine</groupId>
 			<artifactId>caffeine</artifactId>
-			<version>2.5.2</version>
+			<version>3.1.1</version>
+		</dependency>
+		<dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
+			<version>${guava.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+			<version>${log4j.version}</version>
 		</dependency>
 		<!--
 		<dependency>

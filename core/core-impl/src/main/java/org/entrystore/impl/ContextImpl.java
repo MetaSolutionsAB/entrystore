@@ -576,13 +576,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 			return true;
 		}
 		try {
-			//			System.out.println("checkAccess: getAuthenticatedUserURI() = " + pm.getAuthenticatedUserURI());
-			//			if(pm.getAuthenticatedUserURI() != null) {
-			//				if(pm.getAuthenticatedUserURI().toString().equals("http://scam4.org/")) {
-			//					try {throw new Exception();} catch (Exception e) {e.printStackTrace();}
-			//				}
-			//			}
-	
 			pm.checkAuthenticatedUserAuthorized(this.entry, ap);
 			return true;
 		} catch (AuthorizationException ae) {
@@ -645,13 +638,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI) {
-		ListImpl list = null;
-		boolean isOwner = false;
-
-		if (listURI != null) {
-			list = getList(listURI);
-			isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
-		}
+		ListImpl list = getList(listURI);
+		boolean isOwner = checkAccess(list != null ? list.entry : null, AccessProperty.WriteResource);
 
 		// TODO externalize this into a setting
 		boolean allowUserGroupToReadMetadata = true;

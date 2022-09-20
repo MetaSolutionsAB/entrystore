@@ -73,7 +73,9 @@ public class EchoResource extends BaseResource {
 						respondWith(Status.SERVER_ERROR_INTERNAL);
 						return;
 					}
-					escapedContent.append("status:" + Status.SUCCESS_OK.getCode() + "\n");
+					escapedContent.append("status:");
+					escapedContent.append(Status.SUCCESS_OK.getCode());
+					escapedContent.append("\n");
 					escapedContent.append(StringEscapeUtils.escapeHtml(payload));
 					escapedContent.append("</textarea>");
 					getResponse().setEntity(escapedContent.toString(), MediaType.TEXT_HTML);

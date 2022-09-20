@@ -18,6 +18,7 @@ package org.entrystore.rest.resources;
 
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
+import org.entrystore.rest.util.HttpUtil;
 import org.openrdf.model.URI;
 import org.openrdf.model.impl.URIImpl;
 import org.openrdf.query.MalformedQueryException;
@@ -110,6 +111,10 @@ public class SparqlResource extends BaseResource {
 	
 	@Post
 	public void acceptRepresentation(Representation r) {
+		if (HttpUtil.isLargerThan(r, 32768)) {
+			log.warn("The size of the representation is larger than 32KB or unknown, similar requests may be blocked in future versions");
+		}
+
 		try {
 			if (this.getRM().getPublicRepository() == null) {
 				getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);

@@ -73,7 +73,7 @@ public abstract class BaseResource extends ServerResource {
 	
 	protected Entry entry;
 	
-	private static Logger log = LoggerFactory.getLogger(BaseResource.class);
+	private static final Logger log = LoggerFactory.getLogger(BaseResource.class);
 
 	private static ServerInfo serverInfo;
 	

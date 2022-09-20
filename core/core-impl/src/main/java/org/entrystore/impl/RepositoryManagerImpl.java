@@ -20,12 +20,19 @@ package org.entrystore.impl;
 import net.sf.ehcache.CacheManager;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
+import org.apache.http.client.HttpClient;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.request.CoreAdminRequest;
 import org.apache.solr.client.solrj.request.CoreStatus;
 import org.apache.solr.core.NodeConfig;
+import org.apache.solr.util.SolrVersion;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -639,32 +646,68 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at " + solrURL);
 
-			HttpSolrClient httpSolrClient = new HttpSolrClient.Builder(solrURL).
+			HttpSolrClient.Builder solrClientBuilder = new HttpSolrClient.Builder(solrURL).
 					withConnectionTimeout(5000).
 					withSocketTimeout(5000).
-					allowCompression(true).
-					build();
+					allowCompression(true);
+
+			String solrUsername = config.getString(Settings.SOLR_AUTH_USERNAME);
+			String solrPassword = config.getString(Settings.SOLR_AUTH_PASSWORD);
+
+			if (solrUsername != null && solrPassword != null) {
+				CredentialsProvider provider = new BasicCredentialsProvider();
+				UsernamePasswordCredentials credentials = new UsernamePasswordCredentials(solrUsername, solrPassword);
+				provider.setCredentials(AuthScope.ANY, credentials);
+				HttpClient solrHttpClient = HttpClientBuilder.create().setDefaultCredentialsProvider(provider).build();
+				solrClientBuilder.withHttpClient(solrHttpClient);
+			}
+
+			HttpSolrClient httpSolrClient = solrClientBuilder.build();
 			httpSolrClient.setFollowRedirects(true);
 			solrServer = httpSolrClient;
 		} else {
 			log.info("Using embedded Solr server");
 			String coreName = "core1";
 			String schemaFileName = "SCHEMA_VERSION";
+			String solrFileName = "SOLR_VERSION";
 			File solrDir = new File(solrURL);
-			File solrSchemaVersion = new File(solrDir, schemaFileName);
+			File solrSchemaVersionFile = new File(solrDir, schemaFileName);
+			File solrVersionFile = new File(solrDir, solrFileName);
 
-			if (solrSchemaVersion.isFile()) {
+			// we remove only files if we actually find a version file in the folder as we don't want
+			// to risk removing the wrong files because of a misconfigured Solr path
+			if (solrSchemaVersionFile.isFile()) {
 				String schemaVersion = null;
 				try {
-					schemaVersion = IOUtils.toString(solrSchemaVersion.toURI(), StandardCharsets.UTF_8);
+					schemaVersion = IOUtils.toString(solrSchemaVersionFile.toURI(), StandardCharsets.UTF_8);
+					schemaVersion = schemaVersion.replace("\n", "");
+					schemaVersion = schemaVersion.replace("\r", "");
+				} catch (IOException e) {
+					log.error(e.getMessage());
+				}
+				String solrVersion = null;
+				try {
+					solrVersion = IOUtils.toString(solrVersionFile.toURI(), StandardCharsets.UTF_8);
+					solrVersion = solrVersion.replace("\n", "");
+					solrVersion = solrVersion.replace("\r", "");
 				} catch (IOException e) {
 					log.error(e.getMessage());
 				}
 
-				// we remove only files if we actually find a version file in the folder (see initial if isFile())
-				// as we don't want to risk removing the wrong files because of a misconfigured Solr path
-				if (!getVersion().equals(schemaVersion)) {
-					log.warn("Solr index was created with EntryStore {}, but the running version is {}", schemaVersion, getVersion());
+				boolean solrVersionMismatch = true;
+				if (solrVersion != null) {
+					SolrVersion solrVersionOfIndex = SolrVersion.valueOf(solrVersion);
+					if (SolrVersion.LATEST.getMajorVersion() == solrVersionOfIndex.getMajorVersion() &&
+							SolrVersion.LATEST.getMinorVersion() == solrVersionOfIndex.getMinorVersion()) {
+						solrVersionMismatch = false;
+					}
+				}
+
+				if (!getVersion().equals(schemaVersion) || solrVersionMismatch) {
+					if (solrVersion == null) {
+						solrVersion = "<unknown>";
+					}
+					log.warn("Solr index was created with: EntryStore {} (running version is {}) and Solr {} (running version is {})", schemaVersion, getVersion(), solrVersion, SolrVersion.LATEST.toString());
 					log.warn("Deleting contents of Solr directory at {} to trigger a clean reindex with current Solr schema", solrDir);
 					try {
 						FileUtils.cleanDirectory(solrDir);
@@ -678,8 +721,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				log.info("Solr directory is empty, scheduling conditional reindexing of repository");
 				reindex = true;
 				reindexWait = true;
-				log.info("Writing EntryStore version to schema version file at {}", solrSchemaVersion);
-				FileOperations.writeStringToFile(solrSchemaVersion, getVersion());
+				log.info("Writing EntryStore version to schema version file at {}", solrSchemaVersionFile);
+				FileOperations.writeStringToFile(solrSchemaVersionFile, getVersion());
+				log.info("Writing Solr version to version file at {}", solrVersionFile);
+				FileOperations.writeStringToFile(solrVersionFile, SolrVersion.LATEST.toString());
 			}
 
 			File solrCoreConfDir = new File(new File(solrDir, coreName), "conf");
@@ -874,6 +919,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				try {
 					log.debug("Reading version number from " + versionFile);
 					VERSION = IOUtils.toString(versionFile, StandardCharsets.UTF_8);
+					VERSION = VERSION.replace("\n", "");
+					VERSION = VERSION.replace("\r", "");
 				} catch (IOException e) {
 					log.error(e.getMessage());
 				}

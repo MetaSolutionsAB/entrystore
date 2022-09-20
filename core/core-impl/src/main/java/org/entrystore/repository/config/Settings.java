@@ -29,6 +29,8 @@ public class Settings {
 	public static String AUTH_CAS_SERVER_URL = "entrystore.auth.cas.server.url";
 	public static String AUTH_CAS_SERVER_LOGIN_URL = "entrystore.auth.cas.server.url.login";
 	public static String AUTH_CAS_USER_AUTO_PROVISIONING = "entrystore.auth.cas.user-auto-provisioning";
+	public static String AUTH_CAS_REDIRECT_SUCCESS_URL = "entrystore.auth.cas.redirect-success.url";
+	public static String AUTH_CAS_REDIRECT_FAILURE_URL = "entrystore.auth.cas.redirect-failure.url";
 
 	public static String AUTH_SAML = "entrystore.auth.saml";
 	public static String AUTH_SAML_RELYING_PARTY_ID = "entrystore.auth.saml.relying-party-id";
@@ -105,6 +107,10 @@ public class Settings {
 	public static String SOLR_MAX_LIMIT = "entrystore.solr.max-limit";
 	public static String SOLR_SCHEMA_URL = "entrystore.solr.schema.url";
 	public static String SOLR_CONFIG_URL = "entrystore.solr.config.url";
+
+	public static String SOLR_AUTH_USERNAME = "entrystore.solr.auth.username";
+
+	public static String SOLR_AUTH_PASSWORD = "entrystore.solr.auth.password";
 
 	public static String SOLR_RELATED = "entrystore.solr.related";
 	public static String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";

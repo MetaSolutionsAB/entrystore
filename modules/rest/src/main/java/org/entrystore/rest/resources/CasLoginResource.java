@@ -51,9 +51,9 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
@@ -65,7 +65,7 @@ import java.util.Map;
  */
 public class CasLoginResource extends BaseResource {
 
-	private static Logger log = LoggerFactory.getLogger(CasLoginResource.class);
+	private static final Logger log = LoggerFactory.getLogger(CasLoginResource.class);
 
 	private static Protocol protocol;
 
@@ -78,6 +78,10 @@ public class CasLoginResource extends BaseResource {
 	// TODO support logout
 
 	private static boolean sslVerificationInitialized;
+
+	private static String redirSuccess;
+
+	private static String redirFailure;
 
 	@Override
 	public void init(Context c, Request request, Response response) {
@@ -127,13 +131,14 @@ public class CasLoginResource extends BaseResource {
 			}
 			log.info("CAS protocol: " + protocol.name());
 		}
+
+		redirSuccess = config.getString(Settings.AUTH_CAS_REDIRECT_SUCCESS_URL);
+		redirFailure = config.getString(Settings.AUTH_CAS_REDIRECT_FAILURE_URL);
 	}
 
 	@Get
 	public Representation represent() {
 		String ticket = parameters.get(protocol.getArtifactParameterName());
-		String redirSuccess = parameters.get("redirectOnSuccess");
-		String redirFailure = parameters.get("redirectOnFailure");
 
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
 
@@ -143,7 +148,7 @@ public class CasLoginResource extends BaseResource {
 
 		if (ticket != null) {
 			try {
-				final Assertion assertion = ticketValidator.validate(ticket, constructServiceUrl(redirSuccess, redirFailure));
+				final Assertion assertion = ticketValidator.validate(ticket, constructServiceUrl());
 
 				log.info("Successfully authenticated via CAS: " + assertion.getPrincipal());
 				Map<String, Object> attr = assertion.getPrincipal().getAttributes();
@@ -190,11 +195,7 @@ public class CasLoginResource extends BaseResource {
 					// necessary for logouts originating from CAS)
 
 					if (redirSuccess != null) {
-						try {
-							getResponse().redirectTemporary(URLDecoder.decode(redirSuccess, "UTF-8"));
-						} catch (UnsupportedEncodingException e) {
-							log.warn("Unable to decode URL parameter redirectOnSuccess: " + e.getMessage());
-						}
+						getResponse().redirectTemporary(URLDecoder.decode(redirSuccess, StandardCharsets.UTF_8));
 					} else {
 						getResponse().setStatus(Status.SUCCESS_OK);
 						if (html) {
@@ -210,11 +211,7 @@ public class CasLoginResource extends BaseResource {
 
 			if (!authSuccess) {
 				if (redirFailure != null) {
-					try {
-						getResponse().redirectTemporary(URLDecoder.decode(redirFailure, "UTF-8"));
-					} catch (UnsupportedEncodingException e) {
-						log.warn("Unable to decode URL parameter redirectOnFailure: " + e.getMessage());
-					}
+					getResponse().redirectTemporary(URLDecoder.decode(redirFailure, StandardCharsets.UTF_8));
 				} else {
 					getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 					if (html) {
@@ -223,24 +220,14 @@ public class CasLoginResource extends BaseResource {
 				}
 			}
 		} else {
-			getResponse().redirectTemporary(CommonUtils.constructRedirectUrl(casLoginUrl, protocol.getServiceParameterName(), constructServiceUrl(redirSuccess, redirFailure), false, false));
+			getResponse().redirectTemporary(CommonUtils.constructRedirectUrl(casLoginUrl, protocol.getServiceParameterName(), constructServiceUrl(), false, false));
 		}
 
 		return result;
 	}
 
-	private String constructServiceUrl(String redirSuccess, String redirFailure) {
-		String result = getBaseUrl() + "auth/cas";
-		if (redirSuccess != null) {
-			result += "?redirectOnSuccess=";
-			result += redirSuccess;
-		}
-		if (redirFailure != null) {
-			result += (redirSuccess == null ? "?" : "&");
-			result += "redirectOnFailure=";
-			result += redirFailure;
-		}
-		return result;
+	private String constructServiceUrl() {
+		return getBaseUrl() + "auth/cas";
 	}
 
 	private String getBaseUrl() {
@@ -281,9 +268,7 @@ public class CasLoginResource extends BaseResource {
 
 			// install the all-trusting host verifier
 			HttpsURLConnection.setDefaultHostnameVerifier(allHostsValid);
-		} catch (NoSuchAlgorithmException e) {
-			log.error(e.getMessage());
-		} catch (KeyManagementException e) {
+		} catch (NoSuchAlgorithmException | KeyManagementException e) {
 			log.error(e.getMessage());
 		}
 	}
