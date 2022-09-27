@@ -16,22 +16,29 @@
 
 package org.entrystore.transforms;
 
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.ValueFactoryImpl;
 import org.entrystore.Entry;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.converters.Graph2Entries;
 import org.entrystore.repository.util.NS;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.ValueFactoryImpl;
 import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.InputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * @author Matthias Palmér
@@ -39,28 +46,28 @@ import java.util.*;
  */
 public class Pipeline {
 
-	private static Logger log = LoggerFactory.getLogger(Pipeline.class);
+	private static final Logger log = LoggerFactory.getLogger(Pipeline.class);
 
-	public static final URI transform;
-	public static final URI transformPriority;
-	public static final URI transformType;
-	public static final URI transformArgument;
-	public static final URI transformArgumentKey;
-	public static final URI transformArgumentValue;
+	public static final IRI transform;
+	public static final IRI transformPriority;
+	public static final IRI transformType;
+	public static final IRI transformArgument;
+	public static final IRI transformArgumentKey;
+	public static final IRI transformArgumentValue;
 
-	public static final URI transformDestination;
-	public static final URI transformDetectDestination;
+	public static final IRI transformDestination;
+	public static final IRI transformDetectDestination;
 
 	static {
 		ValueFactory vf = ValueFactoryImpl.getInstance();
-		transform = vf.createURI(NS.entrystore, "transform");
-		transformPriority = vf.createURI(NS.entrystore, "transformPriority");
-		transformType = vf.createURI(NS.entrystore, "transformType");
-		transformArgument = vf.createURI(NS.entrystore, "transformArgument");
-		transformArgumentKey = vf.createURI(NS.entrystore, "transformArgumentKey");
-		transformArgumentValue = vf.createURI(NS.entrystore, "transformArgumentValue");
-		transformDestination = vf.createURI(NS.entrystore, "transformDestination");
-		transformDetectDestination = vf.createURI(NS.entrystore, "transformDetectDestination");		
+		transform = vf.createIRI(NS.entrystore, "transform");
+		transformPriority = vf.createIRI(NS.entrystore, "transformPriority");
+		transformType = vf.createIRI(NS.entrystore, "transformType");
+		transformArgument = vf.createIRI(NS.entrystore, "transformArgument");
+		transformArgumentKey = vf.createIRI(NS.entrystore, "transformArgumentKey");
+		transformArgumentValue = vf.createIRI(NS.entrystore, "transformArgumentValue");
+		transformDestination = vf.createIRI(NS.entrystore, "transformDestination");
+		transformDetectDestination = vf.createIRI(NS.entrystore, "transformDetectDestination");		
 	}
 
 	private Entry entry;
@@ -156,7 +163,7 @@ public class Pipeline {
 		return null;
 	}
 
-	public Set<Entry> run(Entry sourceEntry, java.net.URI listURI) throws TransformException {
+	public Set<Entry> run(Entry sourceEntry, java.net.URI listIRI) throws TransformException {
 		//Get the data
 		if (tsteps.size() == 0) {
 			throw new IllegalStateException("Pipeline has no recognizable transforms.");
@@ -179,7 +186,7 @@ public class Pipeline {
             if (detectDestination) {
                 return g2e.merge(graph, null, null);
             } else {
-                return g2e.merge(graph, destination, listURI);
+                return g2e.merge(graph, destination, listIRI);
             }
         } else if (result instanceof Entry) {
             return new HashSet<Entry>(Arrays.asList((Entry) result));

@@ -16,6 +16,9 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.RDFS;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -23,9 +26,6 @@ import org.entrystore.List;
 import org.entrystore.Metadata;
 import org.entrystore.User;
 import org.junit.Test;
-import org.openrdf.model.Graph;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.vocabulary.RDFS;
 
 import java.net.URI;
 

@@ -18,8 +18,8 @@ package org.entrystore.repository.util;
 
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
-import org.openrdf.query.MalformedQueryException;
-import org.openrdf.repository.RepositoryException;
+import org.eclipse.rdf4j.query.MalformedQueryException;
+import org.eclipse.rdf4j.repository.RepositoryException;
 
 
 public class CommonQueries {

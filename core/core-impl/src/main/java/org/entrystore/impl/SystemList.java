@@ -17,10 +17,11 @@
 
 package org.entrystore.impl;
 
-import java.net.URI;
-
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Entry;
-import org.openrdf.repository.RepositoryConnection;
+
+import java.net.URI;
 
 
 public class SystemList extends ListImpl {
@@ -29,7 +30,7 @@ public class SystemList extends ListImpl {
 		super(entry, uri);
 	}
 	
-	public SystemList(EntryImpl entry, org.openrdf.model.URI uri) {
+	public SystemList(EntryImpl entry, IRI uri) {
 		super(entry, uri);
 	}
 

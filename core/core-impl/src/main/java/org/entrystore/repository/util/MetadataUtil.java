@@ -16,7 +16,7 @@
 
 package org.entrystore.repository.util;
 
-import org.openrdf.model.Literal;
+import org.eclipse.rdf4j.model.Literal;
 
 import java.util.HashSet;
 import java.util.Set;

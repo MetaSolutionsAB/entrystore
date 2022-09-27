@@ -17,6 +17,11 @@
 package org.entrystore.transforms.rowstore;
 
 import org.apache.commons.io.IOUtils;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -27,10 +32,6 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.Transform;
 import org.entrystore.transforms.TransformParameters;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Model;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.model.impl.URIImpl;
 import org.restlet.Client;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -58,6 +59,7 @@ public class CSV2RowStoreTransform extends Transform {
 
 	@Override
 	public Object transform(Pipeline pipeline, Entry sourceEntry) {
+		ValueFactory vf = SimpleValueFactory.getInstance();
 		Config conf = pipeline.getEntry().getRepositoryManager().getConfiguration();
 		String action = getArguments().getOrDefault("action", "create").toLowerCase();
 		String pipelineURI = pipeline.getEntry().getEntryURI().toString();
@@ -95,8 +97,8 @@ public class CSV2RowStoreTransform extends Transform {
 				newEntry.setResourceType(ResourceType.InformationResource);
 				String newEntryURI = newEntry.getEntryURI().toString();
 				Graph newEntryGraph = newEntry.getGraph();
-				newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipeline, new URIImpl(pipelineURI));
-				newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipelineData, new URIImpl(sourceURI));
+				newEntryGraph.add(vf.createIRI(newEntryURI), RepositoryProperties.pipeline, vf.createIRI(pipelineURI));
+				newEntryGraph.add(vf.createIRI(newEntryURI), RepositoryProperties.pipelineData, vf.createIRI(sourceURI));
 				newEntry.setGraph(newEntryGraph);
 
 				result = newEntry;
@@ -118,11 +120,11 @@ public class CSV2RowStoreTransform extends Transform {
 				if ("replace".equalsIgnoreCase(action)) {
 					httpResponse = sendData(Method.PUT, datasetURL, data, MediaType.TEXT_CSV);
 					datasetEntryGraph.remove(null, RepositoryProperties.pipelineData, null);
-					datasetEntryGraph.add(new URIImpl(datasetEntry.getEntryURI().toString()), RepositoryProperties.pipelineData, new URIImpl(sourceURI));
+					datasetEntryGraph.add(vf.createIRI(datasetEntry.getEntryURI().toString()), RepositoryProperties.pipelineData, vf.createIRI(sourceURI));
 					datasetEntry.setGraph(datasetEntryGraph);
 				} else if ("append".equalsIgnoreCase(action)) {
 					httpResponse = sendData(Method.POST, datasetURL, data, MediaType.TEXT_CSV);
-					datasetEntryGraph.add(new URIImpl(datasetEntry.getEntryURI().toString()), RepositoryProperties.pipelineData, new URIImpl(sourceURI));
+					datasetEntryGraph.add(vf.createIRI(datasetEntry.getEntryURI().toString()), RepositoryProperties.pipelineData, vf.createIRI(sourceURI));
 					datasetEntry.setGraph(datasetEntryGraph);
 				} else if ("setalias".equalsIgnoreCase(action)) {
 					String datasetAliasURL = datasetURL + (datasetURL.endsWith("/") ? "" : "/") + "aliases";

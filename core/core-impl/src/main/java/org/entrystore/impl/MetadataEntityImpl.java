@@ -16,18 +16,18 @@
 
 package org.entrystore.impl;
 
-import info.aduna.iteration.Iterations;
+import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.GraphEntity;
 import org.entrystore.ProvenanceType;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Statement;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.RepositoryResult;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 
 import java.net.URI;
 import java.util.Date;
@@ -36,23 +36,23 @@ import java.util.Date;
  * @author Matthias Palmér
  */
 public class MetadataEntityImpl implements GraphEntity {
-    private org.openrdf.model.URI uri;
+    private org.eclipse.rdf4j.model.URI uri;
     private EntryImpl entry;
     private Date date;
-    private org.openrdf.model.URI attributedURI;
+    private org.eclipse.rdf4j.model.URI attributedURI;
     private boolean latest;
 
     Log log = LogFactory.getLog(MetadataEntityImpl.class);
 
-    public MetadataEntityImpl(EntryImpl entry, org.openrdf.model.URI uri, Date date, boolean isLatest) {
+    public MetadataEntityImpl(EntryImpl entry, org.eclipse.rdf4j.model.URI uri, Date date, boolean isLatest) {
         this.entry = entry;
         this.uri = uri;
         this.date = date;
         this.latest = isLatest;
     }
 
-    public MetadataEntityImpl(EntryImpl entry, Statement generatedStmt, org.openrdf.model.URI latestEntityURI) {
-        this(entry, (org.openrdf.model.URI) generatedStmt.getSubject(),
+    public MetadataEntityImpl(EntryImpl entry, Statement generatedStmt, org.eclipse.rdf4j.model.URI latestEntityURI) {
+        this(entry, (org.eclipse.rdf4j.model.URI) generatedStmt.getSubject(),
                 ((Literal) generatedStmt.getObject()).calendarValue().toGregorianCalendar().getTime(),
                 generatedStmt.getSubject().equals(latestEntityURI));
     }
@@ -67,7 +67,7 @@ public class MetadataEntityImpl implements GraphEntity {
         return URI.create(uri.stringValue());
     }
 
-    protected org.openrdf.model.URI getSesameURI() {
+    protected org.eclipse.rdf4j.model.URI getSesameURI() {
         return uri;
     }
 
@@ -84,7 +84,7 @@ public class MetadataEntityImpl implements GraphEntity {
                 rc = this.entry.repository.getConnection();
                 RepositoryResult<Statement> attr = rc.getStatements(this.uri, RepositoryProperties.wasAttributedTo, null, false, this.entry.entryURI);
                 if (attr.hasNext()) {
-                    this.attributedURI = (org.openrdf.model.URI) attr.next().getObject();
+                    this.attributedURI = (org.eclipse.rdf4j.model.URI) attr.next().getObject();
                 }
                 attr.close();
             } catch (RepositoryException e) {

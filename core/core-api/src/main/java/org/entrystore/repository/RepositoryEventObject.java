@@ -16,10 +16,10 @@
 
 package org.entrystore.repository;
 
-import java.util.EventObject;
-
+import org.eclipse.rdf4j.model.Graph;
 import org.entrystore.Entry;
-import org.openrdf.model.Graph;
+
+import java.util.EventObject;
 
 /**
  * @author Hannes Ebner

@@ -39,7 +39,7 @@ public class URISplit {
 	String base;
 	boolean isContext = false;
 
-	public URISplit(org.openrdf.model.URI anyURI, URL baseURL) {
+	public URISplit(org.eclipse.rdf4j.model.URI anyURI, URL baseURL) {
 		this(anyURI.toString(), baseURL);
 	}
 

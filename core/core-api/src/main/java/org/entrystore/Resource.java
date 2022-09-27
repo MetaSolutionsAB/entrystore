@@ -16,9 +16,10 @@
 
 package org.entrystore;
 
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+
 import java.net.URI;
 
-import org.openrdf.repository.RepositoryConnection;
 
 /**
  * This class holds a resource that have a digital representation 

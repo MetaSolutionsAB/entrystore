@@ -17,9 +17,25 @@
 
 package org.entrystore.impl;
 
-import info.aduna.iteration.Iterations;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.eclipse.rdf4j.common.iteration.Iterations;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.URIImpl;
+import org.eclipse.rdf4j.model.util.ModelUtil;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -36,22 +52,6 @@ import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.util.URISplit;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Model;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.util.ModelUtil;
-import org.openrdf.model.vocabulary.RDF;
-import org.openrdf.repository.Repository;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.RepositoryResult;
 
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
@@ -70,26 +70,26 @@ public class EntryImpl implements Entry {
 	protected volatile Resource resource;
 	protected volatile MetadataImpl localMetadata;
 	protected volatile Metadata cachedExternalMetadata;
-	protected volatile URI localMdURI;
-	protected volatile URI relationURI;
+	protected volatile IRI localMdURI;
+	protected volatile IRI relationURI;
 
-	protected volatile URI externalMdURI;
-	protected volatile URI cachedExternalMdURI;
+	protected volatile IRI externalMdURI;
+	protected volatile IRI cachedExternalMdURI;
 	protected ContextImpl context;
 	protected final Repository repository;
 	protected RepositoryManagerImpl repositoryManager;
 
-	protected volatile URI entryURI;
-	protected volatile URI resURI;
+	protected volatile IRI entryURI;
+	protected volatile IRI resURI;
 	protected volatile EntryType locType = EntryType.Local;
 	protected volatile ResourceType repType = ResourceType.InformationResource;
 	protected volatile GraphType graphType = GraphType.None;
 	protected volatile XMLGregorianCalendar created;
 	protected volatile XMLGregorianCalendar modified;
 	protected volatile XMLGregorianCalendar cachedAt;
-	protected volatile URI creator;
+	protected volatile IRI creator;
 	//protected Set<java.net.URI> referredIn = new HashSet<java.net.URI>();
-	protected volatile Set<URI> contributors = new HashSet<URI>();
+	protected volatile Set<IRI> contributors = new HashSet<>();
 	protected volatile java.net.URI status;
 
 	Log log = LogFactory.getLog(EntryImpl.class);
@@ -121,9 +121,9 @@ public class EntryImpl implements Entry {
 		this.id = id;
 		String base = repositoryManager.getRepositoryURL().toString();
 		ValueFactory vf = repository.getValueFactory();
-		this.entryURI = vf.createURI(URISplit.fabricateURI(base, context.id, RepositoryProperties.ENTRY_PATH, id).toString());
-		this.relationURI = vf.createURI(URISplit.fabricateURI(base, context.id, RepositoryProperties.RELATION, id).toString());
-		this.localMdURI = vf.createURI(URISplit.fabricateURI(base, context.id, RepositoryProperties.MD_PATH, this.id).toString());
+		this.entryURI = vf.createIRI(URISplit.fabricateURI(base, context.id, RepositoryProperties.ENTRY_PATH, id).toString());
+		this.relationURI = vf.createIRI(URISplit.fabricateURI(base, context.id, RepositoryProperties.RELATION, id).toString());
+		this.localMdURI = vf.createIRI(URISplit.fabricateURI(base, context.id, RepositoryProperties.MD_PATH, this.id).toString());
 		this.context = context;
 		this.repositoryManager = repositoryManager;
 		this.repository = repository;
@@ -200,18 +200,18 @@ public class EntryImpl implements Entry {
 	 * @throws DatatypeConfigurationException 
 	 * @throws RepositoryException 
 	 */
-	protected void create(URI resURI, URI externalMetadataURI, GraphType bType, EntryType lType, ResourceType rType, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
+	protected void create(IRI resURI, IRI externalMetadataURI, GraphType bType, EntryType lType, ResourceType rType, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
 		String base = repositoryManager.getRepositoryURL().toString();
 		ValueFactory vf = repository.getValueFactory();
 		this.resURI = resURI;
 
 		if (lType == EntryType.LinkReference) {
-			this.cachedExternalMdURI = vf.createURI(URISplit.fabricateURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
+			this.cachedExternalMdURI = vf.createIRI(URISplit.fabricateURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
 			this.externalMdURI = externalMetadataURI;
 		}
 
 		if (lType == EntryType.Reference) {
-			this.cachedExternalMdURI = vf.createURI(URISplit.fabricateURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
+			this.cachedExternalMdURI = vf.createIRI(URISplit.fabricateURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
 			this.externalMdURI = externalMetadataURI;
 		}
 
@@ -255,7 +255,7 @@ public class EntryImpl implements Entry {
 			if (pm != null) {
 				java.net.URI userURI = pm.getAuthenticatedUserURI();
 				if (userURI != null) {
-					this.creator = vf.createURI(userURI.toString());
+					this.creator = vf.createIRI(userURI.toString());
 					rc.add(entryURI, RepositoryProperties.Creator, this.creator, entryURI);				
 				}
 			}
@@ -279,16 +279,16 @@ public class EntryImpl implements Entry {
 		Set<java.net.URI> writeMetadataPrincipals = null;
 		Set<java.net.URI> readResourcePrincipals = null;
 		Set<java.net.URI> writeResourcePrincipals = null;
-		Set<URI> contributors = new HashSet<URI>();
-		URI entryURI = null;
-		URI resURI = null;
-		URI localMdURI = null;
-		URI cachedExternalMdURI = null;
-		URI relationURI = null;
+		Set<IRI> contributors = new HashSet<>();
+		IRI entryURI = null;
+		IRI resURI = null;
+		IRI localMdURI = null;
+		IRI cachedExternalMdURI = null;
+		IRI relationURI = null;
 		XMLGregorianCalendar created = null;
-		URI creator = null;
+		IRI creator = null;
 		XMLGregorianCalendar modified = null;
-		URI externalMdURI = null;
+		IRI externalMdURI = null;
 		XMLGregorianCalendar cachedAt = null;
 		EntryType locType = EntryType.Local;
 		ResourceType repType = ResourceType.InformationResource;
@@ -298,7 +298,7 @@ public class EntryImpl implements Entry {
 		String format = null;
 		long fileSize = -1;
 		String filename = null;
-		URI status = null;
+		IRI status = null;
 		boolean invRelations = false;
 
 		RepositoryConnection rc = null;
@@ -308,18 +308,18 @@ public class EntryImpl implements Entry {
 			rc = this.repository.getConnection();
 //			referredIn = new HashSet<java.net.URI>();
 			for (Statement statement : existingStatements) {
-				URI predicate = statement.getPredicate();
+				IRI predicate = statement.getPredicate();
 				if (predicate.equals(RepositoryProperties.resource)) {
-					entryURI = (org.openrdf.model.URI) statement.getSubject();
-					resURI = (org.openrdf.model.URI) statement.getObject();
+					entryURI = (IRI) statement.getSubject();
+					resURI = (IRI) statement.getObject();
 				} else if (predicate.equals(RepositoryProperties.metadata)) {
-					localMdURI = ((URI) statement.getObject());
+					localMdURI = ((IRI) statement.getObject());
 				} else if (predicate.equals(RepositoryProperties.externalMetadata)) {
-					externalMdURI = ((URI) statement.getObject());
+					externalMdURI = ((IRI) statement.getObject());
 				} else if (predicate.equals(RepositoryProperties.cachedExternalMetadata)) {
-					cachedExternalMdURI = ((URI) statement.getObject());
+					cachedExternalMdURI = ((IRI) statement.getObject());
 				} else if (predicate.equals(RepositoryProperties.relation)) {
-					relationURI = ((URI) statement.getObject());
+					relationURI = ((IRI) statement.getObject());
 				} else if (predicate.equals(RepositoryProperties.cached)) {
 					// TODO: also wrong
 					cachedAt = ((Literal) statement.getObject()).calendarValue();
@@ -328,9 +328,9 @@ public class EntryImpl implements Entry {
 				} else if (predicate.equals(RepositoryProperties.Created)) {
 					created = ((Literal) statement.getObject()).calendarValue();
 				} else if (predicate.equals(RepositoryProperties.Creator)) {
-					creator = ((URI) statement.getObject());
+					creator = ((IRI) statement.getObject());
 				} else if (predicate.equals(RepositoryProperties.Contributor)) {
-					contributors.add((URI) statement.getObject());
+					contributors.add((IRI) statement.getObject());
 				} else if (predicate.equals(RepositoryProperties.Modified)) {
 					try {
 						//log.info(statement.getObject().stringValue());
@@ -345,9 +345,9 @@ public class EntryImpl implements Entry {
 							&& !predicate.equals(RepositoryProperties.Pipeline)
 							&& !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
 						Value obj = statement.getObject();
-						org.openrdf.model.Resource subj = statement.getSubject();
+						org.eclipse.rdf4j.model.Resource subj = statement.getSubject();
 						//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-						if (obj instanceof org.openrdf.model.URI
+						if (obj instanceof org.eclipse.rdf4j.model.URI
 								&& obj.stringValue().startsWith(base)
 								&& subj.stringValue().startsWith(base)) {
 							invRelations = true;
@@ -358,7 +358,7 @@ public class EntryImpl implements Entry {
 
 			//Detect types.
 			for (Statement statement : existingStatements) {
-				org.openrdf.model.Resource subject = statement.getSubject();
+				org.eclipse.rdf4j.model.Resource subject = statement.getSubject();
 				if (statement.getPredicate().equals(RDF.TYPE)) {
 					if (resURI.equals(subject)) {
 						GraphType gt = getGraphType(statement.getObject());
@@ -471,11 +471,11 @@ public class EntryImpl implements Entry {
 		return java.net.URI.create(entryURI.toString());
 	}
 
-	public org.openrdf.model.URI getSesameEntryURI() {
+	public IRI getSesameEntryURI() {
 		return entryURI;
 	}
 
-	public URI getSesameResourceURI() {
+	public IRI getSesameResourceURI() {
 		return resURI;
 	}
 
@@ -490,7 +490,7 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	public URI getSesameLocalMetadataURI() {
+	public IRI getSesameLocalMetadataURI() {
 		return localMdURI;
 	}
 
@@ -501,7 +501,7 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	public URI getSesameExternalMetadataURI() {
+	public IRI getSesameExternalMetadataURI() {
 		return externalMdURI;
 	}
 
@@ -512,7 +512,7 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	public URI getSesameCachedExternalMetadataURI() {
+	public IRI getSesameCachedExternalMetadataURI() {
 		return cachedExternalMdURI;
 	}
 
@@ -540,7 +540,7 @@ public class EntryImpl implements Entry {
 				RepositoryConnection rc = this.repository.getConnection();
 				rc.begin();
 				try {
-					URI creatorURI = rc.getValueFactory().createURI(userURI.toString());
+					IRI creatorURI = rc.getValueFactory().createIRI(userURI.toString());
 					rc.remove(rc.getStatements(entryURI, RepositoryProperties.Creator, null, false, entryURI), entryURI);
 					rc.add(entryURI, RepositoryProperties.Creator, creatorURI, entryURI);
 					registerEntryModified(rc, this.repository.getValueFactory());
@@ -562,7 +562,7 @@ public class EntryImpl implements Entry {
 	
 	public Set<java.net.URI> getContributors() {
 		Set<java.net.URI> result = new HashSet<java.net.URI>();
-		for (URI contribURI : this.contributors) {
+		for (IRI contribURI : this.contributors) {
 			result.add(java.net.URI.create(contribURI.stringValue()));
 		}
 		return result;
@@ -685,8 +685,8 @@ public class EntryImpl implements Entry {
 		checkAdministerRights();
 
 		ValueFactory vf = new GraphImpl().getValueFactory();
-		URI oldResourceURI = vf.createURI(getResourceURI().toString());
-		URI newResourceURI = vf.createURI(resourceURI.toString());
+		IRI oldResourceURI = vf.createIRI(getResourceURI().toString());
+		IRI newResourceURI = vf.createIRI(resourceURI.toString());
 
 		// update entry graph
 //		Graph entryGraph = getGraph();
@@ -785,8 +785,8 @@ public class EntryImpl implements Entry {
 				RepositoryConnection rc = this.repository.getConnection();
 				try {
 					rc.setAutoCommit(false);
-					URI contextURI = vf.createURI(this.getContext().getEntry().getResourceURI().toString());
-					URI entryURI = vf.createURI(this.getEntryURI().toString());
+					IRI contextURI = vf.createIRI(this.getContext().getEntry().getResourceURI().toString());
+					IRI entryURI = vf.createIRI(this.getEntryURI().toString());
 					rc.remove(vf.createStatement(oldResourceURI, RepositoryProperties.resHasEntry, entryURI, contextURI));
 					rc.add(vf.createStatement(newResourceURI, RepositoryProperties.resHasEntry, entryURI, contextURI));
 					rc.commit();
@@ -822,8 +822,8 @@ public class EntryImpl implements Entry {
 		checkAdministerRights();
 
 		ValueFactory vf = new GraphImpl().getValueFactory();
-		URI oldExternalMetadataURI = vf.createURI(getExternalMetadataURI().toString());
-		URI newExternalMetadataURI = vf.createURI(externalMetadataURI.toString());
+		IRI oldExternalMetadataURI = vf.createIRI(getExternalMetadataURI().toString());
+		IRI newExternalMetadataURI = vf.createIRI(externalMetadataURI.toString());
 
 		// update entry graph
 		Graph entryGraph = getGraph();
@@ -850,8 +850,8 @@ public class EntryImpl implements Entry {
 				RepositoryConnection rc = this.repository.getConnection();
 				try {
 					rc.setAutoCommit(false);
-					URI contextURI = vf.createURI(this.getContext().getEntry().getResourceURI().toString());
-					URI entryURI = vf.createURI(this.getEntryURI().toString());
+					IRI contextURI = vf.createIRI(this.getContext().getEntry().getResourceURI().toString());
+					IRI entryURI = vf.createIRI(this.getEntryURI().toString());
 					rc.remove(vf.createStatement(oldExternalMetadataURI, RepositoryProperties.mdHasEntry, entryURI, contextURI));
 					rc.add(vf.createStatement(newExternalMetadataURI, RepositoryProperties.mdHasEntry, entryURI, contextURI));
 					rc.commit();
@@ -948,13 +948,13 @@ public class EntryImpl implements Entry {
 		RepositoryConnection rc = null;
 		try {
 			rc = this.repository.getConnection();
-			URI subject = getAccessSubject(prop);
-			URI predicate = getAccessPredicate(prop);
+			IRI subject = getAccessSubject(prop);
+			IRI predicate = getAccessPredicate(prop);
 			List<Statement> statements = rc.getStatements(subject, predicate, null, false, entryURI).asList();
 			set = new HashSet<java.net.URI>();
 			for (Statement statement : statements) {
-				if (statement.getObject() instanceof URI) {
-					set.add(java.net.URI.create(((URI) statement.getObject()).stringValue()));
+				if (statement.getObject() instanceof IRI) {
+					set.add(java.net.URI.create(((IRI) statement.getObject()).stringValue()));
 				}
 			}
 			setCachedAllowedPrincipalsFor(prop, set);
@@ -997,15 +997,15 @@ public class EntryImpl implements Entry {
 				RepositoryConnection rc = this.repository.getConnection();
 				rc.setAutoCommit(false);
 				try {
-					URI subject = getAccessSubject(prop);
-					URI predicate = getAccessPredicate(prop);
+					IRI subject = getAccessSubject(prop);
+					IRI predicate = getAccessPredicate(prop);
 
 					if (replace) {
 						rc.remove(subject, predicate, null, entryURI);
 					}
 
 					for (java.net.URI principal : principals) {
-						URI principalURI = this.repository.getValueFactory().createURI(principal.toString());
+						IRI principalURI = this.repository.getValueFactory().createIRI(principal.toString());
 						if (replace || append) {
 							rc.add(subject, predicate, principalURI, entryURI);						
 						} else {
@@ -1054,7 +1054,7 @@ public class EntryImpl implements Entry {
 		return this.readOrWrite.booleanValue();
 	}
 	
-	private URI getAccessSubject(AccessProperty prop) {
+	private IRI getAccessSubject(AccessProperty prop) {
 		switch (prop) {
 		case Administer:
 			return entryURI;
@@ -1068,7 +1068,7 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	private URI getAccessPredicate(AccessProperty prop) {
+	private IRI getAccessPredicate(AccessProperty prop) {
 		switch (prop) {
 		case Administer:
 		case WriteMetadata:
@@ -1229,7 +1229,7 @@ public class EntryImpl implements Entry {
 				this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI() != null){
 			java.net.URI contrib = this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI();
 			String contributor = contrib.toString();
-		    URI contributorURI = vf.createURI(contributor);
+			IRI contributorURI = vf.createIRI(contributor);
 		
 		    //Do not add if the contributor is the same as the creator
 		    if(contrib != null && !contrib.equals(this.getCreator()) && contributors != null && !contributors.contains(contributorURI)) {
@@ -1299,7 +1299,7 @@ public class EntryImpl implements Entry {
 		Iterator<Statement> resourceURIStmnts = metametadata.match(this.entryURI, RepositoryProperties.resource, null);
 		if (resourceURIStmnts.hasNext()) {
 			Value newResourceURI = resourceURIStmnts.next().getObject();
-			if (newResourceURI instanceof URI) {
+			if (newResourceURI instanceof IRI) {
 				setResourceURI(java.net.URI.create(newResourceURI.toString()));
 			}
 		}
@@ -1307,7 +1307,7 @@ public class EntryImpl implements Entry {
 		Iterator<Statement> externalMdURIStmnts = metametadata.match(this.entryURI, RepositoryProperties.externalMetadata, null);
 		if (externalMdURIStmnts.hasNext()) {
 			Value newResourceURI = externalMdURIStmnts.next().getObject();
-			if (newResourceURI instanceof URI) {
+			if (newResourceURI instanceof IRI) {
 				setExternalMetadataURI(java.net.URI.create(newResourceURI.toString()));
 			}
 		}
@@ -1328,7 +1328,7 @@ public class EntryImpl implements Entry {
 					rc.clear(entryURI);
 
 					for (Statement statement : metametadata) {
-						URI predicate = statement.getPredicate();
+						IRI predicate = statement.getPredicate();
 						if (predicate.stringValue().startsWith(RepositoryProperties.NSbase)) {
 							//Ignore basic structure subgraph, will be added below.
 							if (!(predicate.equals(RepositoryProperties.resource) 
@@ -1352,7 +1352,7 @@ public class EntryImpl implements Entry {
 								EntryType lt = getEntryType(statement.getObject());
 								if (lt != null && locType == EntryType.Reference && lt == EntryType.LinkReference) { //Only allowed to change from Reference to LinkReference
 									locType = lt;
-									localMdURI = vf.createURI(URISplit.fabricateURI(repositoryManager.getRepositoryURL().toString(), context.id, RepositoryProperties.MD_PATH, this.id).toString());
+									localMdURI = vf.createIRI(URISplit.fabricateURI(repositoryManager.getRepositoryURL().toString(), context.id, RepositoryProperties.MD_PATH, this.id).toString());
 								}
 							} else {
 								GraphType gt = getGraphType(statement.getObject());
@@ -1413,8 +1413,8 @@ public class EntryImpl implements Entry {
 					}
 					
 					if (contributors != null && contributors.size()>0){
-						for (Iterator<URI> iter = contributors.iterator(); iter.hasNext();) {
-							URI contrib =  iter.next();
+						for (Iterator<IRI> iter = contributors.iterator(); iter.hasNext();) {
+							IRI contrib =  iter.next();
 							rc.add(entryURI, RepositoryProperties.Contributor, contrib, entryURI);
 						}
 					}
@@ -1471,7 +1471,7 @@ public class EntryImpl implements Entry {
 		Model oldModel = new LinkedHashModel(oldGraph);
 		Model newModel = new LinkedHashModel(newGraph);
 
-		URI guestURI = new URIImpl(getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString());
+		IRI guestURI = new URIImpl(getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString());
 
 		Model oldAcl = new LinkedHashModel();
 		oldAcl.addAll(oldModel.filter(null, RepositoryProperties.Read, guestURI));
@@ -1485,7 +1485,7 @@ public class EntryImpl implements Entry {
 	}
 
     private boolean isStatementInvRelationCandidate(Statement statement, String base) {
-        URI predicate = statement.getPredicate();
+		IRI predicate = statement.getPredicate();
         if (!predicate.equals(RepositoryProperties.resource)
                 && !predicate.equals(RepositoryProperties.metadata)
                 && !predicate.equals(RepositoryProperties.externalMetadata)
@@ -1499,9 +1499,9 @@ public class EntryImpl implements Entry {
 //                && !predicate.equals(RepositoryProperties.Pipeline)
                 && !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
             Value obj = statement.getObject();
-            org.openrdf.model.Resource subj = statement.getSubject();
+            org.eclipse.rdf4j.model.Resource subj = statement.getSubject();
             //Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-            if (obj instanceof org.openrdf.model.URI
+            if (obj instanceof org.eclipse.rdf4j.model.URI
                     && obj.stringValue().startsWith(base)
                     && subj.stringValue().startsWith(base)) {
                 return true;
@@ -1665,7 +1665,7 @@ public class EntryImpl implements Entry {
 		return this.filename;
 	}
 
-	public URI getSesameRelationURI() {
+	public IRI getSesameRelationURI() {
 		return this.relationURI;
 	}
 
@@ -1765,14 +1765,14 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	public boolean replaceStatementSynchronized(URI subject, URI predicate, Value object, RepositoryConnection rc, ValueFactory vf) throws RepositoryException {
+	public boolean replaceStatementSynchronized(IRI subject, IRI predicate, Value object, RepositoryConnection rc, ValueFactory vf) throws RepositoryException {
 		rc.remove(subject, predicate, null, entryURI);
 		rc.add(subject, predicate, object, entryURI);
 		registerEntryModified(rc, vf);
 		return true;
 	}
 	
-	public boolean replaceStatementSynchronized(URI subject, URI predicate, Value object) {
+	public boolean replaceStatementSynchronized(IRI subject, IRI predicate, Value object) {
 		try {
 			RepositoryConnection rc = this.repository.getConnection();
 			rc.setAutoCommit(false);
@@ -1793,13 +1793,13 @@ public class EntryImpl implements Entry {
 		}		
 	}
 	
-	public boolean replaceStatement(URI subject, URI predicate, Value object) {
+	public boolean replaceStatement(IRI subject, IRI predicate, Value object) {
 		synchronized (this.repository) {
 			return this.replaceStatementSynchronized(subject, predicate, object);
 		}
 	}
 
-	public Statement getStatement(URI subject, URI predicate, Value object) {
+	public Statement getStatement(IRI subject, IRI predicate, Value object) {
 		try {
 			RepositoryConnection rc = this.repository.getConnection();
 			try {
@@ -1814,7 +1814,7 @@ public class EntryImpl implements Entry {
 				}
 				rc.close();				
 				return null;
-			} catch (org.openrdf.repository.RepositoryException e) {
+			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 				rc.close();
 				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
@@ -1827,7 +1827,7 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	public Statement getStatementFromLocalMetadata(URI subject, URI predicate, Value object) {
+	public Statement getStatementFromLocalMetadata(IRI subject, IRI predicate, Value object) {
 		if (localMdURI == null) {
 			return null;
 		}
@@ -1846,7 +1846,7 @@ public class EntryImpl implements Entry {
 				}
 				rc.close();				
 				return null;
-			} catch (org.openrdf.repository.RepositoryException e) {
+			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 				rc.close();
 				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
@@ -1866,7 +1866,7 @@ public class EntryImpl implements Entry {
 	public String getOriginalList () {
 		if (this.originalList == null) {
 			Statement st = this.getStatement(this.entryURI, RepositoryProperties.originallyCreatedIn, null);
-			if (st != null &&  st.getObject() instanceof URI) {
+			if (st != null &&  st.getObject() instanceof IRI) {
 				this.originalList = st.getObject().stringValue();
 			} else {
 				this.originalList = "";

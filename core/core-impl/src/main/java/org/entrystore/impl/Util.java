@@ -20,8 +20,8 @@ package org.entrystore.impl;
 import java.util.StringTokenizer;
 
 import org.entrystore.repository.RepositoryManager;
-import org.openrdf.model.URI;
-import org.openrdf.model.ValueFactory;
+import org.eclipse.rdf4j.model.URI;
+import org.eclipse.rdf4j.model.ValueFactory;
 
 
 public class Util {

@@ -16,6 +16,27 @@
 
 package org.entrystore.impl.converters;
 
+import org.eclipse.rdf4j.model.BNode;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.ResourceType;
+import org.entrystore.impl.ContextImpl;
+import org.entrystore.impl.RDFResource;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.util.NS;
+import org.entrystore.repository.util.URISplit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
@@ -23,27 +44,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-
-import org.entrystore.GraphType;
-import org.entrystore.Context;
-import org.entrystore.Entry;
-import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.ResourceType;
-import org.entrystore.impl.ContextImpl;
-import org.entrystore.impl.RDFResource;
-import org.entrystore.repository.util.NS;
-import org.entrystore.repository.util.URISplit;
-import org.openrdf.model.BNode;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.impl.ValueFactoryImpl;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -53,9 +53,9 @@ import org.slf4j.LoggerFactory;
  */
 public class Graph2Entries {
 	
-	private static ValueFactory vf = ValueFactoryImpl.getInstance();
-	private static URI mergeResourceId = vf.createURI(NS.entrystore, "mergeResourceId");
-	private static URI referenceResourceId = vf.createURI(NS.entrystore, "referenceResourceId");
+	private static ValueFactory vf = SimpleValueFactory.getInstance();
+	private static IRI mergeResourceId = vf.createIRI(NS.entrystore, "mergeResourceId");
+	private static IRI referenceResourceId = vf.createIRI(NS.entrystore, "referenceResourceId");
 
 	private static Logger log = LoggerFactory.getLogger(Graph2Entries.class);
 	private Context context;
@@ -98,7 +98,7 @@ public class Graph2Entries {
 				java.net.URI uri = URISplit.fabricateURI(
 						context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
 						context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
-				re = vf.createURI(uri.toString());
+				re = vf.createIRI(uri.toString());
 			}
 			translate.put(statement.getSubject(), re);
 		}
@@ -108,7 +108,7 @@ public class Graph2Entries {
 			java.net.URI uri = URISplit.fabricateURI(
 					context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
 					context.getEntry().getId(), RepositoryProperties.DATA_PATH, destinationEntryId);
-			Resource newRe = vf.createURI(uri.toString());
+			Resource newRe = vf.createIRI(uri.toString());
 
 			stmts = graph.match(null, mergeResourceId, null);
 			while (stmts.hasNext()) {
@@ -150,7 +150,7 @@ public class Graph2Entries {
 			java.net.URI uri = URISplit.fabricateURI(
 					context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
 					context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
-			Resource newRe = vf.createURI(uri.toString());
+			Resource newRe = vf.createIRI(uri.toString());
 			newResources.put(entryId, newRe);
 			oldResources.put(entryId, statement.getSubject());
 			translate.put(statement.getSubject(), newRe);
@@ -201,7 +201,7 @@ public class Graph2Entries {
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			Resource subj = statement.getSubject();
-			URI pred = statement.getPredicate();
+			IRI pred = statement.getPredicate();
 			Value obj = statement.getObject();
 			//Recursive step.
 			if (obj instanceof BNode && !collected.contains(obj)) {
@@ -228,7 +228,7 @@ public class Graph2Entries {
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			Resource subj = statement.getSubject();
-			URI pred = statement.getPredicate();
+			IRI pred = statement.getPredicate();
 			Value obj = statement.getObject();
 			if (pred.equals(mergeResourceId) || pred.equals(referenceResourceId)) {
 				continue;

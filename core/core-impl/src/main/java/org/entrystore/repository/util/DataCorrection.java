@@ -16,6 +16,19 @@
 
 package org.entrystore.repository.util;
 
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -25,18 +38,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.vocabulary.RDF;
-import org.openrdf.repository.Repository;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,7 +64,7 @@ import java.util.Set;
  */
 public class DataCorrection {
 	
-	private static Logger log = LoggerFactory.getLogger(DataCorrection.class);
+	private static final Logger log = LoggerFactory.getLogger(DataCorrection.class);
 	
 	private PrincipalManager pm;
 	
@@ -79,12 +80,12 @@ public class DataCorrection {
 		return W3CDTF.format(date);
 	}
 	
-	public static org.openrdf.model.URI createURI(String namespace, String uri) {
+	public static IRI createURI(String namespace, String uri) {
 		ValueFactory vf = new GraphImpl().getValueFactory();
 		if (namespace != null) {
-			return vf.createURI(namespace, uri);
+			return vf.createIRI(namespace, uri);
 		}
-		return vf.createURI(uri);
+		return vf.createIRI(uri);
 	}
 	
 	private Set<URI> getContexts() {
@@ -132,8 +133,8 @@ public class DataCorrection {
 		if (metadata != null) {
 			ValueFactory vf = new GraphImpl().getValueFactory();
 			
-			org.openrdf.model.URI resourceURI = vf.createURI(entry.getResourceURI().toString());
-			org.openrdf.model.URI metadataURI = vf.createURI(entry.getLocalMetadata().getURI().toString());
+			IRI resourceURI = vf.createIRI(entry.getResourceURI().toString());
+			IRI metadataURI = vf.createIRI(entry.getLocalMetadata().getURI().toString());
 			
 			Statement resourceRights = vf.createStatement(resourceURI, createURI(NS.entrystore, "write"), resourceURI);
 			Statement metadataRights = vf.createStatement(metadataURI, createURI(NS.entrystore, "write"), resourceURI);
@@ -163,12 +164,12 @@ public class DataCorrection {
 					log.error("Resource URI is null!");
 					return;
 				}
-				org.openrdf.model.URI resURI = vf.createURI(rURI.toString());
+				IRI resURI = vf.createIRI(rURI.toString());
 				
 				List<Statement> toRemove = new ArrayList<Statement>();
 				List<Statement> toAdd = new ArrayList<Statement>();
 
-				Iterator<Statement> rdfsTypeStmnts = metadata.match(null, vf.createURI("http://www.w3.org/TR/rdf-schema/type"), null);
+				Iterator<Statement> rdfsTypeStmnts = metadata.match(null, vf.createIRI("http://www.w3.org/TR/rdf-schema/type"), null);
 				while (rdfsTypeStmnts.hasNext()) {
 					Statement rdfsTypeStmnt = rdfsTypeStmnts.next();
 					if (rdfsTypeStmnt.getObject() instanceof Resource) {
@@ -217,12 +218,13 @@ public class DataCorrection {
 	}
 	
 	private static Set<Date> getStrangeDates(Entry entry) {
-		Set<Date> result = new HashSet<Date>();
+		Set<Date> result = new HashSet<>();
+		ValueFactory vf = SimpleValueFactory.getInstance();
 		
 		Date from = parseDateFromStringStrict("1910-01-01");
 		Date until = parseDateFromStringStrict("2009-12-01");
-		org.openrdf.model.URI dctermsDate = new URIImpl(NS.dcterms + "date");
-		org.openrdf.model.URI w3cdtf = new URIImpl("http://purl.org/dc/terms/W3CDTF");
+		IRI dctermsDate = vf.createIRI(NS.dcterms + "date");
+		IRI w3cdtf = vf.createIRI("http://purl.org/dc/terms/W3CDTF");
 		
 		Metadata localMd = entry.getLocalMetadata();
 		if (localMd != null) {

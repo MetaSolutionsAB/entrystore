@@ -27,11 +27,11 @@ import org.apache.commons.logging.LogFactory;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Statement;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
 
 
 /**
@@ -80,7 +80,7 @@ public class EntryNamesContext extends ContextImpl {
         }
 
         URI entryURI = entry.getEntryURI();
-        org.openrdf.model.URI cURI = rc.getValueFactory().createURI(entryURI.toString());
+        org.eclipse.rdf4j.model.URI cURI = rc.getValueFactory().createURI(entryURI.toString());
 
         if (entryURI2Name.containsKey(entryURI)) {
             String oldName = entryURI2Name.get(entryURI);
@@ -125,7 +125,7 @@ public class EntryNamesContext extends ContextImpl {
 				try {
 					ValueFactory vf = entry.repository.getValueFactory();
 					rc.setAutoCommit(false);
-					org.openrdf.model.URI cURI = vf.createURI(entryURI.toString());
+					org.eclipse.rdf4j.model.URI cURI = vf.createURI(entryURI.toString());
 					if (entryURI2Name.containsKey(entryURI)) {
 						String oldName = entryURI2Name.get(entryURI);
 						entryURI2Name.remove(entryURI);

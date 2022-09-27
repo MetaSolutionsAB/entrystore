@@ -23,10 +23,10 @@ import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.Converter;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.GraphImpl;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -72,7 +72,7 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 
 		Graph graph = new GraphImpl();
 		ValueFactory vf = graph.getValueFactory();
-		org.openrdf.model.URI root = vf.createURI(resourceURI.toString());
+		org.eclipse.rdf4j.model.URI root = vf.createURI(resourceURI.toString());
 
 		for (int i = 0; i < metadataList.getLength(); i++) {
 			Node n = metadataList.item(i);
@@ -130,7 +130,7 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 				lit = vf.createLiteral(nodeContent);
 			}
 			
-			graph.add(root, new org.openrdf.model.impl.URIImpl(predicate), lit);
+			graph.add(root, new org.eclipse.rdf4j.model.impl.URIImpl(predicate), lit);
 		}
 
 		return graph;

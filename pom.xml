@@ -20,7 +20,7 @@
     <!-- ================= Default Properties ================= -->
     <properties>
         <restlet.version>2.4.3</restlet.version>
-        <rdf4j.version>4.1.3</rdf4j.version>
+        <rdf4j.version>2.5.4<!--4.1.3--></rdf4j.version>
         <solr.version>9.0.0</solr.version>
         <slf4j.version>1.7.36</slf4j.version>
         <log4j.version>2.19.0</log4j.version>

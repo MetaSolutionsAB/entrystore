@@ -17,14 +17,15 @@
 
 package org.entrystore.impl;
 
-import java.net.URI;
-import java.util.List;
-import java.util.Vector;
-
+import org.eclipse.rdf4j.model.IRI;
 import org.entrystore.Context;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+
+import java.net.URI;
+import java.util.List;
+import java.util.Vector;
 
 
 public class SystemGroup extends SystemList implements Group {
@@ -33,7 +34,7 @@ public class SystemGroup extends SystemList implements Group {
 		super(entry, uri);
 	}
 	
-	public SystemGroup(EntryImpl entry, org.openrdf.model.URI uri) {
+	public SystemGroup(EntryImpl entry, IRI uri) {
 		super(entry, uri);
 	}
 

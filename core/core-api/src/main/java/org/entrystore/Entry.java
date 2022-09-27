@@ -16,9 +16,9 @@
 
 package org.entrystore;
 
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Statement;
 import org.entrystore.repository.RepositoryManager;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
 
 import java.net.URI;
 import java.util.Date;
@@ -135,7 +135,7 @@ public interface Entry {
 	Graph getGraph();
 	
 	// TODO need comments
-	List<Statement> getRelations(); 
+	List<Statement> getRelations();
 	
 	/**
 	 * @param entryInfo the new graph, should not violate any restriction

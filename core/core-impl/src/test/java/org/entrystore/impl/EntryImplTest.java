@@ -16,6 +16,11 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -24,11 +29,6 @@ import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryException;
 import org.junit.Before;
 import org.junit.Test;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.vocabulary.RDF;
 
 import java.io.File;
 import java.net.URI;
@@ -185,7 +185,7 @@ public class EntryImplTest extends AbstractCoreTest {
         EntryImpl sourceEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
         EntryImpl targetEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
         ValueFactory vf = sourceEntry.getRepository().getValueFactory();
-        org.openrdf.model.URI pred = vf.createURI("http://example.com/related");
+        org.eclipse.rdf4j.model.URI pred = vf.createURI("http://example.com/related");
         Statement stm = vf.createStatement(sourceEntry.getSesameResourceURI(), pred, targetEntry.getSesameResourceURI());
         EntryImpl guestE = (EntryImpl) pm.getGuestUser().getEntry();
         Statement readStm = vf.createStatement(sourceEntry.getSesameResourceURI(), RepositoryProperties.Read, guestE.getSesameResourceURI());

@@ -19,6 +19,17 @@ package org.entrystore.impl;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.sail.SailRepository;
+import org.eclipse.rdf4j.sail.memory.MemoryStore;
+import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -29,17 +40,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Resource;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.repository.Repository;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.sail.SailRepository;
-import org.openrdf.sail.memory.MemoryStore;
-import org.openrdf.sail.nativerdf.NativeStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -219,12 +219,12 @@ public class PublicRepository {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			try {
 				ValueFactory vf = repository.getValueFactory();
-				URI contextURI = vf.createURI(e.getContext().getURI().toString());
+				IRI contextURI = vf.createIRI(e.getContext().getURI().toString());
 
 				// entry
 				/* DEACTIVATED
 				Graph entryGraph = e.getGraph();
-				URI entryNG = vf.createURI(e.getEntryURI().toString());
+				URI entryNG = vf.createIRI(e.getEntryURI().toString());
 				if (entryGraph != null) {
 					rc.add(entryGraph, entryNG, contextURI);
 				}
@@ -232,26 +232,26 @@ public class PublicRepository {
 
 				// metadata
 				Graph mdGraph = null;
-				URI mdNG = null;
+				IRI mdNG = null;
 				if (e.getLocalMetadata() != null) {
 					mdGraph = e.getLocalMetadata().getGraph();
-					mdNG = vf.createURI(e.getLocalMetadataURI().toString());
+					mdNG = vf.createIRI(e.getLocalMetadataURI().toString());
 				}
 
 				// ext metadata
 				Graph extMdGraph = null;
-				URI extMdNG = null;
+				IRI extMdNG = null;
 				if (e.getCachedExternalMetadata() != null) {
 					extMdGraph = e.getCachedExternalMetadata().getGraph();
-					extMdNG = vf.createURI(e.getCachedExternalMetadataURI().toString());
+					extMdNG = vf.createIRI(e.getCachedExternalMetadataURI().toString());
 				}
 
 				// resource
 				Graph resGraph = null;
-				URI resNG = null;
+				IRI resNG = null;
 				if (GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
 					resGraph = (Graph) e.getResource();
-					resNG = vf.createURI(e.getResourceURI().toString());
+					resNG = vf.createIRI(e.getResourceURI().toString());
 				}
 
 				if (mdGraph != null) {
@@ -378,21 +378,21 @@ public class PublicRepository {
 			// more restrictive since adding the entry
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			ValueFactory vf = repository.getValueFactory();
-			URI contextURI = vf.createURI(e.getContext().getURI().toString());
+			IRI contextURI = vf.createIRI(e.getContext().getURI().toString());
 
-			URI entryNG = vf.createURI(e.getEntryURI().toString());
-			URI mdNG = vf.createURI(e.getLocalMetadataURI().toString());
-			URI resNG = vf.createURI(e.getResourceURI().toString());
-			URI extMdNG = null;
+			IRI entryNG = vf.createIRI(e.getEntryURI().toString());
+			IRI mdNG = vf.createIRI(e.getLocalMetadataURI().toString());
+			IRI resNG = vf.createIRI(e.getResourceURI().toString());
+			IRI extMdNG = null;
 
 			if (e.getExternalMetadataURI() != null) {
-				extMdNG = vf.createURI(e.getCachedExternalMetadataURI().toString());
+				extMdNG = vf.createIRI(e.getCachedExternalMetadataURI().toString());
 			}
 
 			if (extMdNG != null) {
-				rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
+				rc.remove(rc.getStatements((Resource) null, (IRI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
 			} else {
-				rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, resNG);
+				rc.remove(rc.getStatements((Resource) null, (IRI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, resNG);
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);

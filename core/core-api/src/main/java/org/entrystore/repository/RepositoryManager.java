@@ -16,12 +16,12 @@
 
 package org.entrystore.repository;
 
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.repository.Repository;
 import org.entrystore.ContextManager;
 import org.entrystore.PrincipalManager;
 import org.entrystore.SearchIndex;
 import org.entrystore.config.Config;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.repository.Repository;
 
 import java.net.URL;
 

@@ -17,20 +17,20 @@
 
 package org.entrystore.impl;
 
-import info.aduna.iteration.Iterations;
+import org.eclipse.rdf4j.common.iteration.Iterations;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,14 +42,14 @@ import java.util.Iterator;
 public class MetadataImpl implements Metadata {
 
 	private EntryImpl entry;
-	private org.openrdf.model.URI uri;
-	private org.openrdf.model.URI resourceUri;
-	private org.openrdf.model.Resource mdContext;
+	private org.eclipse.rdf4j.model.URI uri;
+	private org.eclipse.rdf4j.model.URI resourceUri;
+	private org.eclipse.rdf4j.model.Resource mdContext;
 	private boolean cached;
 	private boolean localCache;
 	Logger log = LoggerFactory.getLogger(MetadataImpl.class);
 
-	public MetadataImpl(EntryImpl entry, org.openrdf.model.URI uri, org.openrdf.model.URI resourceUri, boolean cached) {
+	public MetadataImpl(EntryImpl entry, org.eclipse.rdf4j.model.URI uri, org.eclipse.rdf4j.model.URI resourceUri, boolean cached) {
 		this.entry = entry;
 		this.uri = uri;
 		this.resourceUri = resourceUri;
@@ -69,7 +69,7 @@ public class MetadataImpl implements Metadata {
 				return cachedFrom.getMetadataGraph();
 			}
 		}*/
-		RepositoryConnection rc = null; 
+		RepositoryConnection rc = null;
 		try {
 			rc = this.entry.repository.getConnection();
 			return Iterations.addAll(rc.getStatements(null, null, null, false, mdContext), new LinkedHashModel());
@@ -151,7 +151,7 @@ public class MetadataImpl implements Metadata {
 				Value obj = statement.getObject();
 				Resource subj = statement.getSubject();
 				//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-				if (obj instanceof org.openrdf.model.URI 
+				if (obj instanceof org.eclipse.rdf4j.model.URI
 					&& obj.stringValue().startsWith(base)
 					&& subj.stringValue().startsWith(base)) {
 					URI entryURI = URI.create(statement.getObject().stringValue()); 
@@ -187,7 +187,7 @@ public class MetadataImpl implements Metadata {
 				Value obj = statement.getObject();
 				Resource subj = statement.getSubject();
 				//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-				if (obj instanceof org.openrdf.model.URI
+				if (obj instanceof org.eclipse.rdf4j.model.URI
 					&& obj.stringValue().startsWith(base)
 					&& subj.stringValue().startsWith(base)) {
 					URI entryURI = URI.create(statement.getObject().stringValue());

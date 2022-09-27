@@ -16,6 +16,10 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.query.MalformedQueryException;
+import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -24,10 +28,6 @@ import org.entrystore.repository.util.CommonQueries;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.openrdf.model.Graph;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.query.MalformedQueryException;
-import org.openrdf.repository.RepositoryException;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -58,12 +58,12 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 
 		Graph graph = listEntry.getLocalMetadata().getGraph();
 		ValueFactory vf = graph.getValueFactory();
-		org.openrdf.model.URI root = vf.createURI(listEntry.getResource().getURI().toString());
+		org.eclipse.rdf4j.model.URI root = vf.createURI(listEntry.getResource().getURI().toString());
 
 
-		graph.add(root, new org.openrdf.model.impl.URIImpl("http://purl.org/dc/terms/title"), vf.createLiteral("Folder 1", "en"));
-		graph.add(root, new org.openrdf.model.impl.URIImpl("dc:description"), vf.createLiteral("A top level folder", "en"));
-		graph.add(root, new org.openrdf.model.impl.URIImpl("dc:subject"), vf.createLiteral("mainFolder"));
+		graph.add(root, vf.createIRI("http://purl.org/dc/terms/title"), vf.createLiteral("Folder 1", "en"));
+		graph.add(root, vf.createIRI("dc:description"), vf.createLiteral("A top level folder", "en"));
+		graph.add(root, vf.createIRI("dc:subject"), vf.createLiteral("mainFolder"));
 		listEntry.getLocalMetadata().setGraph(graph);
 
 
@@ -71,9 +71,9 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		vf = graph.getValueFactory();
 		root = vf.createURI(linkEntry.getResourceURI().toString());
 
-		graph.add(root, new org.openrdf.model.impl.URIImpl("http://purl.org/dc/terms/title"), vf.createLiteral("Dagens Nyheter"));
-		graph.add(root, new org.openrdf.model.impl.URIImpl("dc:description"), vf.createLiteral("A widely spread morning newspaper in sweden."));
-		graph.add(root, new org.openrdf.model.impl.URIImpl("dc:format"), vf.createLiteral("text/html"));
+		graph.add(root, vf.createIRI("http://purl.org/dc/terms/title"), vf.createLiteral("Dagens Nyheter"));
+		graph.add(root, vf.createIRI("dc:description"), vf.createLiteral("A widely spread morning newspaper in sweden."));
+		graph.add(root, vf.createIRI("dc:format"), vf.createLiteral("text/html"));
 		linkEntry.getLocalMetadata().setGraph(graph);
 
 		String from = "2008-06-01";

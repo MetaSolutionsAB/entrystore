@@ -16,7 +16,7 @@
 
 package org.entrystore;
 
-import org.openrdf.model.Graph;
+import org.eclipse.rdf4j.model.Graph;
 
 import java.io.IOException;
 import java.net.URI;

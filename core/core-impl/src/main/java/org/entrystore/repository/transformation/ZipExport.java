@@ -16,38 +16,38 @@
 
 package org.entrystore.repository.transformation;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.Context;
+import org.entrystore.Data;
+import org.entrystore.Entry;
+import org.entrystore.EntryType;
+import org.entrystore.GraphType;
+import org.entrystore.List;
+import org.entrystore.ResourceType;
+import org.entrystore.repository.util.FileOperations;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
-import org.entrystore.Context;
-import org.entrystore.Data;
-import org.entrystore.Entry;
-import org.entrystore.List;
-import org.entrystore.ResourceType;
-import org.entrystore.repository.util.FileOperations;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.ValueFactoryImpl;
-
 
 public class ZipExport {
-	public static final URI DCtitle;
-	public static final URI DCTermstitle;
+	public static final IRI DCtitle;
+	public static final IRI DCTermstitle;
 
 	public static final String DCbase = "http://purl.org/dc/elements/1.1/";
 	public static final String DCTermsbase = "http://purl.org/dc/terms/";
 
 
 	static {
-		ValueFactory vf = ValueFactoryImpl.getInstance();
-		DCtitle = vf.createURI(DCbase + "title");
-		DCTermstitle = vf.createURI(DCTermsbase + "title");
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		DCtitle = vf.createIRI(DCbase + "title");
+		DCTermstitle = vf.createIRI(DCTermsbase + "title");
 	}
 
 	private Context context;

@@ -17,6 +17,16 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.ValueFactoryImpl;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
@@ -35,15 +45,6 @@ import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.URISplit;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.ValueFactoryImpl;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -75,8 +76,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	protected ArrayList<URI> systemEntries = new ArrayList<URI>();
 	private static Logger log = LoggerFactory.getLogger(ContextImpl.class);
 
-	public static final org.openrdf.model.URI DCModified;
-	public static final org.openrdf.model.URI DCTermsModified;
+	public static final org.eclipse.rdf4j.model.URI DCModified;
+	public static final org.eclipse.rdf4j.model.URI DCTermsModified;
 	
 	private Object quotaMutex = new Object();
 	protected long quotaFillLevel = Quota.VALUE_UNCACHED;
@@ -96,7 +97,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		this.id = uri.substring(uri.lastIndexOf('/')+1);
 	}
 
-	public ContextImpl(EntryImpl entry, org.openrdf.model.URI contextUri, SoftCache cache)  {
+	public ContextImpl(EntryImpl entry, org.eclipse.rdf4j.model.URI contextUri, SoftCache cache)  {
 		super(entry, contextUri);
 		this.cache = cache;
 		this.id = resourceURI.toString().substring(resourceURI.toString().lastIndexOf('/') + 1);
@@ -130,13 +131,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 					while (resources.hasNext()) {
 						Statement statement = resources.next();
 						Resource mmd = statement.getContext();
-						if (mmd instanceof org.openrdf.model.URI) {
+						if (mmd instanceof org.eclipse.rdf4j.model.URI) {
 							if (!mmd.stringValue().startsWith(entry.getRepositoryManager().getRepositoryURL().toString())) {
 								log.warn("This Entry URI does not belong to this repository: " + mmd.stringValue());
 								continue;
 							}
 							
-							StringTokenizer stok = Util.extractParameters(entry.repositoryManager, (org.openrdf.model.URI) mmd);
+							StringTokenizer stok = Util.extractParameters(entry.repositoryManager, (org.eclipse.rdf4j.model.URI) mmd);
 							if (stok.countTokens() == 3 && stok.nextToken().equals(this.id)) { //Belongs to this context.
 								try {
 									stok.nextToken(); //Ignoring the M
@@ -156,8 +157,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 					while (externalMD.hasNext()) {
 						Statement statement = externalMD.next();
 						Resource mmd = statement.getContext();
-						if (mmd instanceof org.openrdf.model.URI) {
-							StringTokenizer stok = Util.extractParameters(entry.repositoryManager, (org.openrdf.model.URI) mmd);
+						if (mmd instanceof org.eclipse.rdf4j.model.URI) {
+							StringTokenizer stok = Util.extractParameters(entry.repositoryManager, (org.eclipse.rdf4j.model.URI) mmd);
 							if (stok.countTokens() == 3 && stok.nextToken().equals(this.id)) { //Belongs to this context.
 								stmntsToAdd.add(vf.createStatement((Resource) statement.getObject(), RepositoryProperties.mdHasEntry, statement.getContext(), this.resourceURI));
 							}
@@ -264,7 +265,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					while (statements.hasNext()) {
 						Statement statement = statements.next();
 						try {
-							org.openrdf.model.URI predicate = statement.getPredicate();
+							org.eclipse.rdf4j.model.URI predicate = statement.getPredicate();
 							if (predicate.equals(RepositoryProperties.mdHasEntry)) {
 								URI mdURI = URI.create(statement.getSubject().toString());
 								URI entryURI = URI.create(statement.getObject().toString());
@@ -291,7 +292,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 	}
 
-	private void addToIndex(org.openrdf.model.URI entryURI, org.openrdf.model.URI resURI, org.openrdf.model.URI extMdURI, RepositoryConnection rc) throws RepositoryException {		
+	private void addToIndex(org.eclipse.rdf4j.model.URI entryURI, org.eclipse.rdf4j.model.URI resURI, org.eclipse.rdf4j.model.URI extMdURI, RepositoryConnection rc) throws RepositoryException {
 		rc.add(resURI, RepositoryProperties.resHasEntry, entryURI, this.resourceURI);							
 		URI euri = URI.create(entryURI.toString());
 
@@ -309,9 +310,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	protected void removeFromIndex(EntryImpl entry, RepositoryConnection rc) throws RepositoryException {
-		org.openrdf.model.URI entryURI = entry.getSesameEntryURI();
-		org.openrdf.model.URI resURI = entry.getSesameResourceURI();
-		org.openrdf.model.URI mdURI = entry.getSesameExternalMetadataURI();
+		org.eclipse.rdf4j.model.URI entryURI = entry.getSesameEntryURI();
+		org.eclipse.rdf4j.model.URI resURI = entry.getSesameResourceURI();
+		org.eclipse.rdf4j.model.URI mdURI = entry.getSesameExternalMetadataURI();
 
 		rc.remove(resURI, RepositoryProperties.resHasEntry, entryURI, this.resourceURI);
 
@@ -455,23 +456,23 @@ public class ContextImpl extends ResourceImpl implements Context {
 					do {
 						counter++;
 						identity = Long.toString(counter);
-						org.openrdf.model.URI entryUri = vf.createURI(base 
+						org.eclipse.rdf4j.model.URI entryUri = vf.createURI(base
 								+ this.id + "/" + RepositoryProperties.ENTRY_PATH + "/" + Long.toString(counter));
 						infoRecord = rc.getStatements(null, null, null, false, entryUri).asList();
 					} while (!infoRecord.isEmpty()); //keep counting if candidate is taken
 				}
 
 				//resURI - resourceURI
-				org.openrdf.model.URI resURI = null;
+				IRI resURI = null;
 				if (resourceURI != null) {
 					String resourceURIStr = resourceURI.toString().replace("_newId", identity);
-					resURI = vf.createURI(resourceURIStr);
+					resURI = vf.createIRI(resourceURIStr);
 				} else {
 					if (bType == GraphType.Context ||
 							bType == GraphType.SystemContext) {
-						resURI = vf.createURI(URISplit.fabricateContextURI(base, identity).toString());					
+						resURI = vf.createIRI(URISplit.fabricateContextURI(base, identity).toString());
 					} else {
-						resURI = vf.createURI(URISplit.fabricateURI(base, this.id, RepositoryProperties.getResourcePath(bType), identity).toString());
+						resURI = vf.createIRI(URISplit.fabricateURI(base, this.id, RepositoryProperties.getResourcePath(bType), identity).toString());
 					}
 				}
 
@@ -482,7 +483,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 					//Initialize a new information object.
 					if (lType == EntryType.Reference || lType == EntryType.LinkReference) {
-						newEntry.create(resURI, vf.createURI(metadataURI.toString()), bType, lType, rType, rc);
+						newEntry.create(resURI, vf.createIRI(metadataURI.toString()), bType, lType, rType, rc);
 					} else {
 						newEntry.create(resURI, null, bType, lType, rType, rc);					
 					}
@@ -1183,7 +1184,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		try {
 			Graph graph = entry.getLocalMetadata().getGraph();
 			ValueFactory vf = graph.getValueFactory(); 
-			org.openrdf.model.URI root = vf.createURI(entry.getResourceURI().toString());
+			org.eclipse.rdf4j.model.URI root = vf.createURI(entry.getResourceURI().toString());
 			graph.add(root, TestSuite.dc_title, vf.createLiteral(title, "en"));
 			if (desc != null) {
 				graph.add(root, TestSuite.dc_description, vf.createLiteral(desc, "en"));

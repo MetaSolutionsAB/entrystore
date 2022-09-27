@@ -16,10 +16,10 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.Entry;
 import org.entrystore.Metadata;
-import org.openrdf.model.Graph;
-import org.openrdf.model.impl.LinkedHashModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
