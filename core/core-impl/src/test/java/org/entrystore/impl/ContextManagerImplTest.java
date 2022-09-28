@@ -139,7 +139,8 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 
 		//Remove success?
 		try {
-			cm.remove(URI.create("http://exampls.com/nonexistingMMDURI")); //Should go wrong.
+			// should go wrong and will produce an ugly stack trace in the testing output, even though we catch it below
+			cm.remove(URI.create("http://exampls.com/nonexistingMMDURI"));
 			assertTrue(false);
 		} catch (Exception e) {
 		}

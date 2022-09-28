@@ -300,9 +300,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			alias2Class.put("_principals", PrincipalManagerImpl.class);
 
 			try {
-				repository.initialize();
+				repository.init();
 			} catch (RepositoryException e) {
-                log.error(e.getMessage());
+				log.error(e.getMessage());
 			}
 
 			if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PROVENANCE, "off"))) {
