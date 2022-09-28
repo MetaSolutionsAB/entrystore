@@ -16,18 +16,19 @@
 
 package org.entrystore.impl;
 
-import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.GraphEntity;
-import org.entrystore.ProvenanceType;
+import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.RepositoryResult;
+import org.entrystore.GraphEntity;
+import org.entrystore.ProvenanceType;
 
 import java.net.URI;
 import java.util.Date;
@@ -36,23 +37,23 @@ import java.util.Date;
  * @author Matthias Palmér
  */
 public class MetadataEntityImpl implements GraphEntity {
-    private org.eclipse.rdf4j.model.URI uri;
+    private IRI uri;
     private EntryImpl entry;
     private Date date;
-    private org.eclipse.rdf4j.model.URI attributedURI;
+    private IRI attributedURI;
     private boolean latest;
 
     Log log = LogFactory.getLog(MetadataEntityImpl.class);
 
-    public MetadataEntityImpl(EntryImpl entry, org.eclipse.rdf4j.model.URI uri, Date date, boolean isLatest) {
+    public MetadataEntityImpl(EntryImpl entry, IRI uri, Date date, boolean isLatest) {
         this.entry = entry;
         this.uri = uri;
         this.date = date;
         this.latest = isLatest;
     }
 
-    public MetadataEntityImpl(EntryImpl entry, Statement generatedStmt, org.eclipse.rdf4j.model.URI latestEntityURI) {
-        this(entry, (org.eclipse.rdf4j.model.URI) generatedStmt.getSubject(),
+    public MetadataEntityImpl(EntryImpl entry, Statement generatedStmt, IRI latestEntityURI) {
+        this(entry, (IRI) generatedStmt.getSubject(),
                 ((Literal) generatedStmt.getObject()).calendarValue().toGregorianCalendar().getTime(),
                 generatedStmt.getSubject().equals(latestEntityURI));
     }
@@ -67,7 +68,7 @@ public class MetadataEntityImpl implements GraphEntity {
         return URI.create(uri.stringValue());
     }
 
-    protected org.eclipse.rdf4j.model.URI getSesameURI() {
+    protected IRI getSesameURI() {
         return uri;
     }
 
@@ -84,7 +85,7 @@ public class MetadataEntityImpl implements GraphEntity {
                 rc = this.entry.repository.getConnection();
                 RepositoryResult<Statement> attr = rc.getStatements(this.uri, RepositoryProperties.wasAttributedTo, null, false, this.entry.entryURI);
                 if (attr.hasNext()) {
-                    this.attributedURI = (org.eclipse.rdf4j.model.URI) attr.next().getObject();
+                    this.attributedURI = (IRI) attr.next().getObject();
                 }
                 attr.close();
             } catch (RepositoryException e) {

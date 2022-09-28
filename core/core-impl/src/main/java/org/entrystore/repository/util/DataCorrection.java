@@ -80,7 +80,7 @@ public class DataCorrection {
 		return W3CDTF.format(date);
 	}
 	
-	public static IRI createURI(String namespace, String uri) {
+	public static IRI createIRI(String namespace, String uri) {
 		ValueFactory vf = new GraphImpl().getValueFactory();
 		if (namespace != null) {
 			return vf.createIRI(namespace, uri);
@@ -136,8 +136,8 @@ public class DataCorrection {
 			IRI resourceURI = vf.createIRI(entry.getResourceURI().toString());
 			IRI metadataURI = vf.createIRI(entry.getLocalMetadata().getURI().toString());
 			
-			Statement resourceRights = vf.createStatement(resourceURI, createURI(NS.entrystore, "write"), resourceURI);
-			Statement metadataRights = vf.createStatement(metadataURI, createURI(NS.entrystore, "write"), resourceURI);
+			Statement resourceRights = vf.createStatement(resourceURI, createIRI(NS.entrystore, "write"), resourceURI);
+			Statement metadataRights = vf.createStatement(metadataURI, createIRI(NS.entrystore, "write"), resourceURI);
 			
 			if (!metadata.match(resourceRights.getSubject(), resourceRights.getPredicate(), resourceRights.getObject()).hasNext()) {
 				metadata.add(resourceRights);

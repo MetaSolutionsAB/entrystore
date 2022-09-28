@@ -654,7 +654,7 @@ public class ListImpl extends RDFResource implements List {
 		if (childEntry == null) {
 			return false;
 		}
-		Set<java.net.URI> refLists = childEntry.getReferringListsInSameContext();
+		Set<URI> refLists = childEntry.getReferringListsInSameContext();
 		if ((refLists != null) && checkOrphaned && refLists.size() == 1) {
 			if (isOwnerOfContext) {
 				return true;

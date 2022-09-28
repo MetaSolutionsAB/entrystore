@@ -19,6 +19,7 @@ package org.entrystore.impl;
 
 import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
@@ -42,14 +43,14 @@ import java.util.Iterator;
 public class MetadataImpl implements Metadata {
 
 	private EntryImpl entry;
-	private org.eclipse.rdf4j.model.URI uri;
-	private org.eclipse.rdf4j.model.URI resourceUri;
+	private IRI uri;
+	private IRI resourceUri;
 	private org.eclipse.rdf4j.model.Resource mdContext;
 	private boolean cached;
 	private boolean localCache;
 	Logger log = LoggerFactory.getLogger(MetadataImpl.class);
 
-	public MetadataImpl(EntryImpl entry, org.eclipse.rdf4j.model.URI uri, org.eclipse.rdf4j.model.URI resourceUri, boolean cached) {
+	public MetadataImpl(EntryImpl entry, IRI uri, IRI resourceUri, boolean cached) {
 		this.entry = entry;
 		this.uri = uri;
 		this.resourceUri = resourceUri;
@@ -151,7 +152,7 @@ public class MetadataImpl implements Metadata {
 				Value obj = statement.getObject();
 				Resource subj = statement.getSubject();
 				//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-				if (obj instanceof org.eclipse.rdf4j.model.URI
+				if (obj instanceof IRI
 					&& obj.stringValue().startsWith(base)
 					&& subj.stringValue().startsWith(base)) {
 					URI entryURI = URI.create(statement.getObject().stringValue()); 
@@ -187,7 +188,7 @@ public class MetadataImpl implements Metadata {
 				Value obj = statement.getObject();
 				Resource subj = statement.getSubject();
 				//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-				if (obj instanceof org.eclipse.rdf4j.model.URI
+				if (obj instanceof IRI
 					&& obj.stringValue().startsWith(base)
 					&& subj.stringValue().startsWith(base)) {
 					URI entryURI = URI.create(statement.getObject().stringValue());

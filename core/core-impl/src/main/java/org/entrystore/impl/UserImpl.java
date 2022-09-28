@@ -40,6 +40,7 @@ import org.entrystore.repository.util.NS;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -57,7 +58,7 @@ public class UserImpl extends RDFResource implements User {
 
 	private String language;
 
-	private java.net.URI homeContext;
+	private URI homeContext;
 	
 	private String externalID;
 	
@@ -239,7 +240,7 @@ public class UserImpl extends RDFResource implements User {
 		try {
 			Graph graph = entry.getLocalMetadata().getGraph();
 			ValueFactory vf = graph.getValueFactory(); 
-			org.eclipse.rdf4j.model.URI root = vf.createIRI(entry.getResourceURI().toString());
+			IRI root = vf.createIRI(entry.getResourceURI().toString());
 			graph.add(root, TestSuite.dc_title, vf.createLiteral(title, "en"));
 			if (desc != null) {
 				graph.add(root, TestSuite.dc_description, vf.createLiteral(desc, "en"));
@@ -259,11 +260,11 @@ public class UserImpl extends RDFResource implements User {
 				rc = this.entry.repository.getConnection();
                 List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, entry.getSesameEntryURI()).asList();
                 if (!matches.isEmpty()) {
-                    this.homeContext = java.net.URI.create(matches.get(0).getObject().stringValue());
+                    this.homeContext = URI.create(matches.get(0).getObject().stringValue());
                 } else { //TODO else case is backwards compatible code, remove in future.
                     matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, resourceURI).asList();
                     if (!matches.isEmpty()) {
-                        this.homeContext = java.net.URI.create(matches.get(0).getObject().stringValue());
+                        this.homeContext = URI.create(matches.get(0).getObject().stringValue());
                     }
                 }
 				
@@ -301,7 +302,7 @@ public class UserImpl extends RDFResource implements User {
 					RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
 					while (iter.hasNext()) {
 						Statement statement = iter.next();
-						java.net.URI sourceEntryURI = java.net.URI.create(statement.getObject().stringValue());
+						URI sourceEntryURI = URI.create(statement.getObject().stringValue());
 						EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
 						if (sourceEntry != null) {
 							sourceEntry.removeRelationSynchronized(statement, rc, vf);
@@ -460,12 +461,12 @@ public class UserImpl extends RDFResource implements User {
 		return false;
 	}
 
-	public Set<java.net.URI> getGroups() {
-		HashSet<java.net.URI> set = new HashSet<java.net.URI>();
+	public Set<URI> getGroups() {
+		HashSet<URI> set = new HashSet<URI>();
 		List<Statement> relations = this.entry.getRelations();
 		for (Statement statement : relations) {
 			if (statement.getPredicate().equals(RepositoryProperties.hasGroupMember)) {
-				set.add(java.net.URI.create(statement.getSubject().toString()));
+				set.add(URI.create(statement.getSubject().toString()));
 			}
 		}
 		return set;

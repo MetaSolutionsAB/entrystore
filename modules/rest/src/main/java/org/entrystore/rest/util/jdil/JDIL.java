@@ -77,7 +77,7 @@ public class JDIL {
 
 	private void JDILtoGraph(JSONObject jsonObject, Graph graph, Resource subject, Map<String, BNode> bnodeResolver) throws JSONException {
 		if (subject == null) { //Assume there is a @id.
-			subject = graph.getValueFactory().createURI(namespaces.expand(jsonObject.getString("@id")));
+			subject = graph.getValueFactory().createIRI(namespaces.expand(jsonObject.getString("@id")));
 		}
 
 		Iterator keyIt = jsonObject.keys();

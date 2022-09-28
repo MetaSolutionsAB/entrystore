@@ -465,7 +465,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public void submitContextForDelayedReindex(Entry contextEntry, Graph entryGraph) {
 		synchronized (delayedReindex) {
-			org.eclipse.rdf4j.model.URI guestURI = valueFactory.createIRI(rm.getPrincipalManager().getGuestUser().getURI().toString());
+			IRI guestURI = valueFactory.createIRI(rm.getPrincipalManager().getGuestUser().getURI().toString());
 			URI contextURI = contextEntry.getEntryURI();
 			Model m = new LinkedHashModel(entryGraph);
 			boolean newGuestReadable = m.contains(valueFactory.createIRI(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Read, guestURI) ||
@@ -754,7 +754,7 @@ public class SolrSearchIndex implements SearchIndex {
 			String predMD5Trunc8 = Hashing.md5(predString).substring(0, 8);
 
 			// object
-			if (s.getObject() instanceof org.eclipse.rdf4j.model.URI) {
+			if (s.getObject() instanceof IRI) {
 				String objString = s.getObject().stringValue();
 				if (!related) {
 					addFieldValueOnce(doc,prefix + "metadata.object.uri", objString);

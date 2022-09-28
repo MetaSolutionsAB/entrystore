@@ -16,20 +16,22 @@
 
 package org.entrystore.impl.converters;
 
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.entrystore.Converter;
 import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.entrystore.Converter;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+
+import java.net.URI;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 
 
 public class OAI_DC2RDFGraphConverter implements Converter {
@@ -58,7 +60,7 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 	 * 
 	 * @return the new metadata graph.
 	 */
-	public Object convert(Object from, java.net.URI resourceURI, java.net.URI metadataURI) {
+	public Object convert(Object from, URI resourceURI, URI metadataURI) {
 		NodeList metadataList = null;
 
 		if (from instanceof NodeList) {
@@ -72,7 +74,7 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 
 		Graph graph = new GraphImpl();
 		ValueFactory vf = graph.getValueFactory();
-		org.eclipse.rdf4j.model.URI root = vf.createURI(resourceURI.toString());
+		IRI root = vf.createIRI(resourceURI.toString());
 
 		for (int i = 0; i < metadataList.getLength(); i++) {
 			Node n = metadataList.item(i);
@@ -130,7 +132,7 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 				lit = vf.createLiteral(nodeContent);
 			}
 			
-			graph.add(root, new org.eclipse.rdf4j.model.impl.URIImpl(predicate), lit);
+			graph.add(root, vf.createIRI(predicate), lit);
 		}
 
 		return graph;

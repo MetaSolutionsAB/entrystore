@@ -31,6 +31,7 @@ import org.entrystore.repository.util.FileOperations;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
@@ -78,7 +79,7 @@ public class ZipExport {
 		File folderFile = new File(parentFile, getLabel(folderEntry));
 		folderFile.mkdirs();
 		List folderList = (List) folderEntry.getResource();
-		for (java.net.URI child : folderList.getChildren()) {
+		for (URI child : folderList.getChildren()) {
 			Entry childEntry = context.getByEntryURI(child);
 			if (childEntry != null) {
 				if (visited.contains(childEntry)) {

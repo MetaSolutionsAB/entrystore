@@ -18,6 +18,7 @@
 package org.entrystore.impl;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
@@ -174,8 +175,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					return;
 				}
 
-				org.eclipse.rdf4j.model.URI contextURISesame = vf.createURI(contextURI.toString());
-				org.eclipse.rdf4j.model.URI baseURI = vf.createURI(entry.getRepositoryManager().getRepositoryURL().toString());
+				IRI contextURISesame = vf.createIRI(contextURI.toString());
+				IRI baseURI = vf.createIRI(entry.getRepositoryManager().getRepositoryURL().toString());
 				String baseURIStr = baseURI.toString();
 
 				// remove all triples belonging to the context
@@ -186,10 +187,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				
 				// remove all triples in named graphs which look like: http://base/_contexts/{kind}/{context-id}
 				log.info("Removing references to context " + contextURI);
-				rc.remove(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString())));
-				rc.remove(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId).toString())));
-				rc.remove(rc.getStatements(null, null, null, false, vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.DATA_PATH, contextId).toString())));
-				rc.remove(rc.getStatements(vf.createURI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString()), null, null, false));
+				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.DATA_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(vf.createIRI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString()), null, null, false));
 				
 				rc.commit();
 				
@@ -285,7 +286,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, filteredNGs.toArray(new org.eclipse.rdf4j.model.Resource[filteredNGs.size()]));
 				while (rr.hasNext()) {
 					Statement s = rr.next();
-					org.eclipse.rdf4j.model.URI p = s.getPredicate();
+					IRI p = s.getPredicate();
 					rdfWriter.handleStatement(s);
 					if (!metadataOnly) {
 						if (p.equals(RepositoryProperties.Creator) ||
@@ -458,7 +459,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					}
 
 					org.eclipse.rdf4j.model.Resource subject = s.getSubject();
-					org.eclipse.rdf4j.model.URI predicate = s.getPredicate();
+					IRI predicate = s.getPredicate();
 					Value object = s.getObject();
 
 					if (predicate.equals(RepositoryProperties.Creator) ||
@@ -484,41 +485,41 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 							log.info("Unable to detect principal for ID " + oldUserID + ", skipping");
 							continue;
 						}
-						object = vf.createURI(newUserURI.toString());
+						object = vf.createIRI(newUserURI.toString());
 						log.info("Created principal URI for user " + oldUserID + ":" + oldUserName + ": " + object.stringValue());
 					}
 
-					if (subject instanceof org.eclipse.rdf4j.model.URI) {
+					if (subject instanceof IRI) {
 						String sS = subject.stringValue();
 						if (sS.startsWith(oldContextNS)) {
-							subject = vf.createURI(sS.replace(oldContextNS, newContextNS));
+							subject = vf.createIRI(sS.replace(oldContextNS, newContextNS));
 						} else if (sS.equals(oldContextEntryURI)) {
-							subject = vf.createURI(contextEntry.getEntryURI().toString());
+							subject = vf.createIRI(contextEntry.getEntryURI().toString());
 						} else if (sS.equals(oldContextResourceURI)) {
-							subject = vf.createURI(contextEntry.getResourceURI().toString());
+							subject = vf.createIRI(contextEntry.getResourceURI().toString());
 						} else if (sS.equals(oldContextMetadataURI)) {
-							subject = vf.createURI(contextEntry.getLocalMetadataURI().toString());
+							subject = vf.createIRI(contextEntry.getLocalMetadataURI().toString());
 						} else if (sS.equals(oldContextRelationURI)) {
-							subject = vf.createURI(contextEntry.getRelationURI().toString());
+							subject = vf.createIRI(contextEntry.getRelationURI().toString());
 						}
 					}
 
-					if (object instanceof org.eclipse.rdf4j.model.URI) {
+					if (object instanceof IRI) {
 						String oS = object.stringValue();
 						if (oS.startsWith(oldContextNS)) {
-							object = vf.createURI(oS.replace(oldContextNS, newContextNS));
+							object = vf.createIRI(oS.replace(oldContextNS, newContextNS));
 						} else if (oS.equals(oldContextEntryURI)) {
-							object = vf.createURI(contextEntry.getEntryURI().toString());
+							object = vf.createIRI(contextEntry.getEntryURI().toString());
 						} else if (oS.equals(oldContextResourceURI)) {
-							object = vf.createURI(contextEntry.getResourceURI().toString());
+							object = vf.createIRI(contextEntry.getResourceURI().toString());
 						} else if (oS.equals(oldContextMetadataURI)) {
-							object = vf.createURI(contextEntry.getLocalMetadataURI().toString());
+							object = vf.createIRI(contextEntry.getLocalMetadataURI().toString());
 						} else if (oS.equals(oldContextRelationURI)) {
-							object = vf.createURI(contextEntry.getRelationURI().toString());
+							object = vf.createIRI(contextEntry.getRelationURI().toString());
 						}
 					}
 
-					if (context instanceof org.eclipse.rdf4j.model.URI) {
+					if (context instanceof IRI) {
 						String cS = context.stringValue();
 						
 //						// dirty hack to skip metadata on portfolio
@@ -528,15 +529,15 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 //						}
 						
 						if (cS.startsWith(oldContextNS)) {
-							context = vf.createURI(cS.replace(oldContextNS, newContextNS));
+							context = vf.createIRI(cS.replace(oldContextNS, newContextNS));
 						} else if (cS.equals(oldContextEntryURI)) {
-							context = vf.createURI(contextEntry.getEntryURI().toString());
+							context = vf.createIRI(contextEntry.getEntryURI().toString());
 						} else if (cS.equals(oldContextResourceURI)) {
-							context = vf.createURI(contextEntry.getResourceURI().toString());
+							context = vf.createIRI(contextEntry.getResourceURI().toString());
 						} else if (cS.equals(oldContextMetadataURI)) {
-							context = vf.createURI(contextEntry.getLocalMetadataURI().toString());
+							context = vf.createIRI(contextEntry.getLocalMetadataURI().toString());
 						} else if (cS.equals(oldContextRelationURI)) {
-							context = vf.createURI(contextEntry.getRelationURI().toString());
+							context = vf.createIRI(contextEntry.getRelationURI().toString());
 						}
 					}
 
@@ -638,9 +639,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 			ValueFactory f = entry.getRepository().getValueFactory();
 			try {
-				conn.export(indexHandler, f.createURI(portfolio.getEntryURI().toString()));
-				conn.export(indexHandler, f.createURI(portfolio.getLocalMetadataURI().toString()));
-				conn.export(indexHandler, f.createURI(portfolio.getResourceURI().toString()));
+				conn.export(indexHandler, f.createIRI(portfolio.getEntryURI().toString()));
+				conn.export(indexHandler, f.createIRI(portfolio.getLocalMetadataURI().toString()));
+				conn.export(indexHandler, f.createIRI(portfolio.getResourceURI().toString()));
 			} catch (RDFHandlerException e) {
 				log.error(e.getMessage(), e);
 				throw new RepositoryException(e);
@@ -660,13 +661,13 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				Set<URI> portfolioResources = pfContext.getEntries();
 				for (URI uri : portfolioResources) {
 					Entry e = pfContext.getByEntryURI(uri);
-					conn.export(entryHandler, f.createURI(e.getEntryURI().toString()));
+					conn.export(entryHandler, f.createIRI(e.getEntryURI().toString()));
 					if (e.getEntryType() == EntryType.Local || e.getEntryType() == EntryType.Link
 							|| e.getEntryType() == EntryType.LinkReference) {
-						conn.export(entryHandler, f.createURI(e.getLocalMetadata().getURI().toString()));
+						conn.export(entryHandler, f.createIRI(e.getLocalMetadata().getURI().toString()));
 					}
 					if (e.getEntryType() == EntryType.Local && e.getGraphType() != GraphType.None) {
-						conn.export(entryHandler, f.createURI(e.getResourceURI().toString()));
+						conn.export(entryHandler, f.createIRI(e.getResourceURI().toString()));
 					} else if (e.getEntryType() == EntryType.Local && e.getGraphType() == GraphType.None
 							&& e.getResourceType() == ResourceType.InformationResource) {
 						// File dataFolder = new
@@ -918,7 +919,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			RepositoryConnection rc = entry.repository.getConnection();
 			try {
 				ValueFactory vf = entry.repository.getValueFactory();
-				org.eclipse.rdf4j.model.URI resource = vf.createURI(uri.toString());
+				IRI resource = vf.createIRI(uri.toString());
 				if (findLinks) {
 					RepositoryResult<Statement> resources = rc.getStatements(resource, RepositoryProperties.resHasEntry, null, false);
 					while (resources.hasNext()) {
@@ -1070,12 +1071,12 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		return result;
 	}
 	
-	public Map<Entry, Integer> searchLiterals(Set<org.eclipse.rdf4j.model.URI> predicates, String[] terms, String lang, List<URI> context, boolean andOperation) {
+	public Map<Entry, Integer> searchLiterals(Set<IRI> predicates, String[] terms, String lang, List<URI> context, boolean andOperation) {
 		Map<org.eclipse.rdf4j.model.Resource, Integer> matches = new HashMap<org.eclipse.rdf4j.model.Resource, Integer>();
 		RepositoryConnection rc = null;
 		try {
 			rc = entry.getRepository().getConnection();
-			for (org.eclipse.rdf4j.model.URI p : predicates) {
+			for (IRI p : predicates) {
 				RepositoryResult<Statement> rr = rc.getStatements(null, p, null, false);
 				while (rr.hasNext()) {
 					Statement s = rr.next();
@@ -1243,7 +1244,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				Iterator<Binding> itr = set.iterator();
 				while(itr.hasNext())  {
 					Binding obj = itr.next();
-					if(obj.getValue() instanceof org.eclipse.rdf4j.model.URI) {
+					if(obj.getValue() instanceof IRI) {
 						String mdURI = obj.getValue().toString();
 						if(!mdURIs.contains(mdURI)) {
 							mdURIs.add(mdURI);
@@ -1334,7 +1335,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				Iterator<Binding> itr = set.iterator(); 	 
 				while(itr.hasNext())  {
 					Binding obj = itr.next(); 
-					if(obj.getValue() instanceof org.eclipse.rdf4j.model.URI) {
+					if(obj.getValue() instanceof IRI) {
 						Entry entry = this.getEntry(new URI(obj.getValue().toString())); 
 						if (!entries.contains(entry))
 							entries.add(entry);

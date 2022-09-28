@@ -78,7 +78,7 @@ public class RDFJSON {
 							id2bnode.put(subjStr, (BNode) subject);
 						}
 					} else {
-						subject = vf.createURI(subjStr);
+						subject = vf.createIRI(subjStr);
 					}
 				} catch (IllegalArgumentException iae) {
 					subject = vf.createBNode();
@@ -124,7 +124,7 @@ public class RDFJSON {
 								id2bnode.put(value, (BNode) object);
 							}
 						} else if ("uri".equals(type)) {
-							object = vf.createURI(value);
+							object = vf.createIRI(value);
 						}
 						result.add(subject, predicate, object);
 					}

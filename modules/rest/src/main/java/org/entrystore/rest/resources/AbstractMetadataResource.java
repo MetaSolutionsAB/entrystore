@@ -56,6 +56,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -133,7 +134,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 					} catch (UnsupportedEncodingException e) {
 						log.error(e.getMessage());
 					}
-					Set<java.net.URI> predicatesToFollow = resolvePredicates(traversalParam);
+					Set<URI> predicatesToFollow = resolvePredicates(traversalParam);
 					if (predicatesToFollow.isEmpty()) {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						return null;
@@ -330,7 +331,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @param depth        Levels traversed.
 	 * @return Returns a Graph consisting of merged metadata graphs. Contains all metadata, including e.g. cached external.
 	 */
-	private EntryUtil.TraversalResult traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth) {
+	private EntryUtil.TraversalResult traverse(URI entryURI, Set<URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth) {
 		return EntryUtil.traverseAndLoadEntryMetadata(
 			ImmutableSet.of((IRI) getRM().getValueFactory().createIRI(entryURI.toString())),
 			predToFollow,
@@ -351,15 +352,15 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @return Returns a set of URIs. Traversal profile names are resolved
 	 * in their member URIs and namespaces URIs are expanded.
 	 */
-	private Set<java.net.URI> resolvePredicates(String predCSV) {
-		Set<java.net.URI> result = new HashSet<>();
+	private Set<URI> resolvePredicates(String predCSV) {
+		Set<URI> result = new HashSet<>();
 		for (String s : predCSV.split(",")) {
-			Set<java.net.URI> pSet = loadTraversalProfile(s);
+			Set<URI> pSet = loadTraversalProfile(s);
 			if (pSet.isEmpty()) {
-				java.net.URI expanded = NS.expand(s);
+				URI expanded = NS.expand(s);
 				// we add it to the result if it could be expanded
 				if (!s.equals(expanded.toString())) {
-					result.add(java.net.URI.create(NS.expand(s).toString()));
+					result.add(URI.create(NS.expand(s).toString()));
 				}
 			} else {
 				result.addAll(pSet);
@@ -381,11 +382,11 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @param profileName The name of the traversal profile.
 	 * @return A set of URIs.
 	 */
-	private Set<java.net.URI> loadTraversalProfile(String profileName) {
+	private Set<URI> loadTraversalProfile(String profileName) {
 		List<String> predicates = getRM().getConfiguration().getStringList(Settings.TRAVERSAL_PROFILE + "." + profileName, new ArrayList<String>());
-		Set<java.net.URI> result = new HashSet<>();
+		Set<URI> result = new HashSet<>();
 		for (String s : predicates) {
-			result.add(java.net.URI.create(s));
+			result.add(URI.create(s));
 		}
 		return result;
 	}

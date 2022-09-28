@@ -49,6 +49,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -197,7 +198,7 @@ public class SCAM2Import {
 	
 	void handleFolder(Graph graph, IRI parent, IRI folder) {
 		Graph closure = getAnonymousClosure(graph, folder);
-		java.net.URI parentList = parent == null ? null : uri2Entry.get(parent).getResourceURI();
+		URI parentList = parent == null ? null : uri2Entry.get(parent).getResourceURI();
 		Entry folderEntry = context.createResource(null, GraphType.List, ResourceType.InformationResource, parentList);
 		handleItem((EntryImpl) folderEntry, closure, parent, folder);
 	}
@@ -205,10 +206,10 @@ public class SCAM2Import {
 	void handleLeaf(Graph graph, IRI parent, IRI leaf) {
 		log.warn("Working with \""+leaf.stringValue()+"\"");
 		Graph closure = getAnonymousClosure(graph, leaf);
-		java.net.URI parentList = parent == null ? null : uri2Entry.get(parent).getResourceURI();
+		URI parentList = parent == null ? null : uri2Entry.get(parent).getResourceURI();
 		Entry leafEntry = null;
 		if(isURL(closure, leaf)) {
-			leafEntry = context.createLink(null, java.net.URI.create(leaf.stringValue()), parentList);
+			leafEntry = context.createLink(null, URI.create(leaf.stringValue()), parentList);
 		} else if (isFile(closure, leaf)) {
 			leafEntry = context.createResource(null, GraphType.None, ResourceType.InformationResource, parentList);
 			setFile((Data) leafEntry.getResource(), closure, leaf);

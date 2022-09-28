@@ -32,6 +32,7 @@ import org.entrystore.transforms.TransformParameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.util.Iterator;
 
 /**
@@ -50,7 +51,7 @@ public class EmptyTransform extends Transform {
 		String pipelineURI = pipeline.getEntry().getEntryURI().toString();
 
 		Entry newEntry = pipeline.getEntry().getContext().createResource(null, GraphType.PipelineResult, ResourceType.InformationResource, null);
-		newEntry.setStatus(java.net.URI.create(RepositoryProperties.Pending.toString()));
+		newEntry.setStatus(URI.create(RepositoryProperties.Pending.toString()));
 		String newEntryURI = newEntry.getEntryURI().toString();
 		Graph newEntryGraph = newEntry.getGraph();
 		newEntryGraph.add(vf.createIRI(newEntryURI), RepositoryProperties.pipeline, vf.createIRI(pipelineURI));

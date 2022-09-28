@@ -16,24 +16,24 @@
 
 package org.entrystore.impl;
 
-import java.util.Iterator;
-
 import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Statement;
-import org.eclipse.rdf4j.model.URI;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.StatementImpl;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.XMLSchema;
 
+import java.util.Iterator;
+
 
 public class StringResource extends RDFResource{
 
-	public StringResource(EntryImpl entry, URI resourceURI) {
+	public StringResource(EntryImpl entry, IRI resourceURI) {
 		super(entry, resourceURI);
 	}
 
-	public StringResource(EntryImpl entry, URI resourceURI, String str) {
+	public StringResource(EntryImpl entry, IRI resourceURI, String str) {
 		super(entry, resourceURI);
 		setString(str); 
 	}

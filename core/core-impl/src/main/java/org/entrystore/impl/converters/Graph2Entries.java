@@ -37,6 +37,7 @@ import org.entrystore.repository.util.URISplit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
@@ -81,7 +82,7 @@ public class Graph2Entries {
 	 * @param destinationListURI a list where the destinationEntryId will be created if a new entry is to be created.
 	 * @return a collection of the merged entries (updated or created), the referenced entries are not included in the collection.
 	 */
-	public Set<Entry> merge(Graph graph, String destinationEntryId, java.net.URI destinationListURI) {
+	public Set<Entry> merge(Graph graph, String destinationEntryId, URI destinationListURI) {
 		log.info("About to update/create entries in context "+this.context.getEntry().getId()+".");
 		Set<Entry> entries = new HashSet<Entry>();
 		
@@ -95,7 +96,7 @@ public class Graph2Entries {
 			String entryId = statement.getObject().stringValue();
 			Resource re = newResources.get(entryId);
 			if (re == null) {
-				java.net.URI uri = URISplit.fabricateURI(
+				URI uri = URISplit.fabricateURI(
 						context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
 						context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
 				re = vf.createIRI(uri.toString());
@@ -105,7 +106,7 @@ public class Graph2Entries {
 
 		
 		if (destinationEntryId != null) {
-			java.net.URI uri = URISplit.fabricateURI(
+			URI uri = URISplit.fabricateURI(
 					context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
 					context.getEntry().getId(), RepositoryProperties.DATA_PATH, destinationEntryId);
 			Resource newRe = vf.createIRI(uri.toString());
@@ -147,7 +148,7 @@ public class Graph2Entries {
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			String entryId = statement.getObject().stringValue();
-			java.net.URI uri = URISplit.fabricateURI(
+			URI uri = URISplit.fabricateURI(
 					context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
 					context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
 			Resource newRe = vf.createIRI(uri.toString());

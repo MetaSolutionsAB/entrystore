@@ -44,6 +44,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.net.URI;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -68,7 +69,7 @@ public class PublicRepository {
 
 	private Thread entrySubmitter;
 
-	private final Cache<java.net.URI, Entry> postQueue = Caffeine.newBuilder().build();
+	private final Cache<URI, Entry> postQueue = Caffeine.newBuilder().build();
 
 	private final Queue<Entry> deleteQueue = Queues.newConcurrentLinkedQueue();
 
@@ -103,10 +104,10 @@ public class PublicRepository {
 					if (postQueue.estimatedSize() > 0) {
 						Set<Entry> entriesToUpdate = new HashSet();
 						synchronized (postQueue) {
-							ConcurrentMap<java.net.URI, Entry> postQueueMap = postQueue.asMap();
-							Iterator<java.net.URI> it = postQueueMap.keySet().iterator();
+							ConcurrentMap<URI, Entry> postQueueMap = postQueue.asMap();
+							Iterator<URI> it = postQueueMap.keySet().iterator();
 							while (batchCount < BATCH_SIZE && it.hasNext()) {
-								java.net.URI key = it.next();
+								URI key = it.next();
 								Entry entry = postQueueMap.get(key);
 								postQueueMap.remove(key, entry);
 								if (entry == null) {
@@ -195,7 +196,7 @@ public class PublicRepository {
 	}
 
 	public void enqueue(Entry entry) {
-		java.net.URI entryURI = entry.getEntryURI();
+		URI entryURI = entry.getEntryURI();
 		synchronized (postQueue) {
 			log.info("Adding document to update queue: " + entryURI);
 			postQueue.put(entryURI, entry);
@@ -203,7 +204,7 @@ public class PublicRepository {
 	}
 
 	public void remove(Entry entry) {
-		java.net.URI entryURI = entry.getEntryURI();
+		URI entryURI = entry.getEntryURI();
 		synchronized (deleteQueue) {
 			log.info("Adding entry to delete queue: " + entryURI);
 			deleteQueue.add(entry);
@@ -214,7 +215,7 @@ public class PublicRepository {
 		if (isAdministrative(e)) {
 			return;
 		}
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			try {
@@ -271,7 +272,7 @@ public class PublicRepository {
 	}
 
 	private void updateEntries(Set<Entry> entries) {
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			synchronized (repository) {
@@ -317,8 +318,8 @@ public class PublicRepository {
 			String id = contextURI.substring(contextURI.lastIndexOf("/") + 1);
 			Context context = rm.getContextManager().getContext(id);
 			if (context != null) {
-				Set<java.net.URI> entries = context.getEntries();
-				for (java.net.URI entryURI : entries) {
+				Set<URI> entries = context.getEntries();
+				for (URI entryURI : entries) {
 					if (entryURI != null) {
 						try {
 							updateEntry(rm.getContextManager().getEntry(entryURI), rc);
@@ -336,7 +337,7 @@ public class PublicRepository {
 	}
 
 	private void removeEntries(Set<Entry> entries) {
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			synchronized (repository) {
@@ -372,7 +373,7 @@ public class PublicRepository {
 
 	private void removeEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
 		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			// we need to be admin, in case the ACL has become
 			// more restrictive since adding the entry
@@ -421,21 +422,21 @@ public class PublicRepository {
 				log.info("Clearing public repository took " + (new Date().getTime() - before.getTime()) + " ms");
 
 				ContextManager cm = rm.getContextManager();
-				Set<java.net.URI> contexts = cm.getEntries();
+				Set<URI> contexts = cm.getEntries();
 
-				for (java.net.URI contextURI : contexts) {
+				for (URI contextURI : contexts) {
 					String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
 					Context context = cm.getContext(id);
 					if (context != null) {
 						log.info("Adding context " + contextURI + " to public repository");
 						before = new Date();
-						Set<java.net.URI> entries = context.getEntries();
+						Set<URI> entries = context.getEntries();
 						log.info("Fetching entries took " + (new Date().getTime() - before.getTime()) + " ms");
 						before = new Date();
 						Date timeTracker = new Date();
 						long publicEntryCount = 0;
 						long processedCount = 0;
-						for (java.net.URI entryURI : entries) {
+						for (URI entryURI : entries) {
 							if (entryURI != null) {
 								processedCount++;
 								if ((new Date().getTime() - timeTracker.getTime()) > 60000) {

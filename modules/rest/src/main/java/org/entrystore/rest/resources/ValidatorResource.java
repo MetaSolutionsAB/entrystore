@@ -115,7 +115,7 @@ public class ValidatorResource extends BaseResource  {
 			}
 			// Test 1 end
 
-			// Test 2: does it work with java.net.URI?
+			// Test 2: does it work with URI?
 			List<String> errors = new ArrayList<>();
 			for (Statement s : deserializedGraph) {
 				testURI(s.getSubject(), errors);

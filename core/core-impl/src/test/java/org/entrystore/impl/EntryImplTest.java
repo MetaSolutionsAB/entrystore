@@ -17,6 +17,7 @@
 package org.entrystore.impl;
 
 import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.GraphImpl;
@@ -185,7 +186,7 @@ public class EntryImplTest extends AbstractCoreTest {
         EntryImpl sourceEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
         EntryImpl targetEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
         ValueFactory vf = sourceEntry.getRepository().getValueFactory();
-        org.eclipse.rdf4j.model.URI pred = vf.createURI("http://example.com/related");
+        IRI pred = vf.createIRI("http://example.com/related");
         Statement stm = vf.createStatement(sourceEntry.getSesameResourceURI(), pred, targetEntry.getSesameResourceURI());
         EntryImpl guestE = (EntryImpl) pm.getGuestUser().getEntry();
         Statement readStm = vf.createStatement(sourceEntry.getSesameResourceURI(), RepositoryProperties.Read, guestE.getSesameResourceURI());

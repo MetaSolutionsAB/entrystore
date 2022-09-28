@@ -56,6 +56,7 @@ import org.entrystore.repository.util.URISplit;
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
+import java.net.URI;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashSet;
@@ -88,16 +89,16 @@ public class EntryImpl implements Entry {
 	protected volatile XMLGregorianCalendar modified;
 	protected volatile XMLGregorianCalendar cachedAt;
 	protected volatile IRI creator;
-	//protected Set<java.net.URI> referredIn = new HashSet<java.net.URI>();
+	//protected Set<URI> referredIn = new HashSet<URI>();
 	protected volatile Set<IRI> contributors = new HashSet<>();
-	protected volatile java.net.URI status;
+	protected volatile URI status;
 
 	Log log = LogFactory.getLog(EntryImpl.class);
-	private volatile Set<java.net.URI> administerPrincipals;
-	private volatile Set<java.net.URI> readMetadataPrincipals;
-	private volatile Set<java.net.URI> writeMetadataPrincipals;
-	private volatile Set<java.net.URI> writeResourcePrincipals;
-	private volatile Set<java.net.URI> readResourcePrincipals;
+	private volatile Set<URI> administerPrincipals;
+	private volatile Set<URI> readMetadataPrincipals;
+	private volatile Set<URI> writeMetadataPrincipals;
+	private volatile Set<URI> writeResourcePrincipals;
+	private volatile Set<URI> readResourcePrincipals;
 	private volatile List<Statement> relations;
     protected boolean invRelations = false;
 	private volatile String format;
@@ -253,7 +254,7 @@ public class EntryImpl implements Entry {
 		if (!this.id.startsWith("_")) { //System entries don't have creators, because they're created by the system.
 			PrincipalManager pm = this.repositoryManager.getPrincipalManager();
 			if (pm != null) {
-				java.net.URI userURI = pm.getAuthenticatedUserURI();
+				URI userURI = pm.getAuthenticatedUserURI();
 				if (userURI != null) {
 					this.creator = vf.createIRI(userURI.toString());
 					rc.add(entryURI, RepositoryProperties.Creator, this.creator, entryURI);				
@@ -261,7 +262,7 @@ public class EntryImpl implements Entry {
 			}
 		}
 
-		//referredIn = new HashSet<java.net.URI>();
+		//referredIn = new HashSet<URI>();
 		//TODO Check so that not a Context is a NamedResource and other restrictions.
 	}
 
@@ -274,11 +275,11 @@ public class EntryImpl implements Entry {
 			return false;
 		}
 
-		Set<java.net.URI> administerPrincipals = null;
-		Set<java.net.URI> readMetadataPrincipals = null;
-		Set<java.net.URI> writeMetadataPrincipals = null;
-		Set<java.net.URI> readResourcePrincipals = null;
-		Set<java.net.URI> writeResourcePrincipals = null;
+		Set<URI> administerPrincipals = null;
+		Set<URI> readMetadataPrincipals = null;
+		Set<URI> writeMetadataPrincipals = null;
+		Set<URI> readResourcePrincipals = null;
+		Set<URI> writeResourcePrincipals = null;
 		Set<IRI> contributors = new HashSet<>();
 		IRI entryURI = null;
 		IRI resURI = null;
@@ -306,7 +307,7 @@ public class EntryImpl implements Entry {
 		try {
 			String base = repositoryManager.getRepositoryURL().toString();
 			rc = this.repository.getConnection();
-//			referredIn = new HashSet<java.net.URI>();
+//			referredIn = new HashSet<URI>();
 			for (Statement statement : existingStatements) {
 				IRI predicate = statement.getPredicate();
 				if (predicate.equals(RepositoryProperties.resource)) {
@@ -324,7 +325,7 @@ public class EntryImpl implements Entry {
 					// TODO: also wrong
 					cachedAt = ((Literal) statement.getObject()).calendarValue();
 //				} else if (predicate.equals(RepositoryProperties.referredIn)) {
-//					referredIn.add(java.net.URI.create(statement.getObject().stringValue()));
+//					referredIn.add(URI.create(statement.getObject().stringValue()));
 				} else if (predicate.equals(RepositoryProperties.Created)) {
 					created = ((Literal) statement.getObject()).calendarValue();
 				} else if (predicate.equals(RepositoryProperties.Creator)) {
@@ -347,7 +348,7 @@ public class EntryImpl implements Entry {
 						Value obj = statement.getObject();
 						org.eclipse.rdf4j.model.Resource subj = statement.getSubject();
 						//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-						if (obj instanceof org.eclipse.rdf4j.model.URI
+						if (obj instanceof IRI
 								&& obj.stringValue().startsWith(base)
 								&& subj.stringValue().startsWith(base)) {
 							invRelations = true;
@@ -467,8 +468,8 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	public java.net.URI getEntryURI() {
-		return java.net.URI.create(entryURI.toString());
+	public URI getEntryURI() {
+		return URI.create(entryURI.toString());
 	}
 
 	public IRI getSesameEntryURI() {
@@ -479,13 +480,13 @@ public class EntryImpl implements Entry {
 		return resURI;
 	}
 
-	public java.net.URI getResourceURI() {
-		return java.net.URI.create(resURI.stringValue());
+	public URI getResourceURI() {
+		return URI.create(resURI.stringValue());
 	}
 
-	public java.net.URI getLocalMetadataURI() {
+	public URI getLocalMetadataURI() {
 		if (localMdURI != null) {
-			return java.net.URI.create(getSesameLocalMetadataURI().stringValue());
+			return URI.create(getSesameLocalMetadataURI().stringValue());
 		}
 		return null;
 	}
@@ -494,9 +495,9 @@ public class EntryImpl implements Entry {
 		return localMdURI;
 	}
 
-	public java.net.URI getExternalMetadataURI() {
+	public URI getExternalMetadataURI() {
 		if (externalMdURI != null) {
-			return java.net.URI.create(externalMdURI.stringValue());
+			return URI.create(externalMdURI.stringValue());
 		}
 		return null;
 	}
@@ -505,9 +506,9 @@ public class EntryImpl implements Entry {
 		return externalMdURI;
 	}
 
-	public java.net.URI getCachedExternalMetadataURI() {
+	public URI getCachedExternalMetadataURI() {
 		if (cachedExternalMdURI != null) {
-			return java.net.URI.create(cachedExternalMdURI.stringValue());
+			return URI.create(cachedExternalMdURI.stringValue());
 		}
 		return null;
 	}
@@ -523,14 +524,14 @@ public class EntryImpl implements Entry {
 		return cachedAt != null ? cachedAt.toGregorianCalendar().getTime() : null;
 	}
 
-	public java.net.URI getCreator() {
+	public URI getCreator() {
 		if (this.creator != null) {
-			return java.net.URI.create(this.creator.stringValue());
+			return URI.create(this.creator.stringValue());
 		}
 		return null;
 	}
 
-	public void setCreator(java.net.URI userURI) {
+	public void setCreator(URI userURI) {
 		if (userURI == null) {
 			throw new IllegalArgumentException("User URI must not be null");
 		}
@@ -560,10 +561,10 @@ public class EntryImpl implements Entry {
 		}
 	}
 	
-	public Set<java.net.URI> getContributors() {
-		Set<java.net.URI> result = new HashSet<java.net.URI>();
+	public Set<URI> getContributors() {
+		Set<URI> result = new HashSet<URI>();
 		for (IRI contribURI : this.contributors) {
-			result.add(java.net.URI.create(contribURI.stringValue()));
+			result.add(URI.create(contribURI.stringValue()));
 		}
 		return result;
 	}
@@ -615,13 +616,13 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-    public Set<java.net.URI> getReferringListsInSameContext() {
-		HashSet<java.net.URI> set = new HashSet<java.net.URI>();
+    public Set<URI> getReferringListsInSameContext() {
+		HashSet<URI> set = new HashSet<URI>();
 		List<Statement> relations = getRelations();
 		for (Statement statement : relations) {
 			if (statement.getPredicate().equals(RepositoryProperties.hasListMember) ||
 				statement.getPredicate().equals(RepositoryProperties.hasGroupMember)) {
-				set.add(java.net.URI.create(statement.getSubject().toString()));
+				set.add(URI.create(statement.getSubject().toString()));
 			}
 		}
 		return set;
@@ -630,7 +631,7 @@ public class EntryImpl implements Entry {
 	protected void addReferringList(ResourceImpl resource, RepositoryConnection rc) throws RepositoryException {
 		synchronized (this.repository) {
 			// rc.add(entryURI, RepositoryProperties.referredIn, listResource, entryURI);
-			// referredIn.add(java.net.URI.create(listResource.stringValue()));
+			// referredIn.add(URI.create(listResource.stringValue()));
 			ValueFactory vf = this.repository.getValueFactory();
 			this.addRelationSynchronized(vf.createStatement(resource.resourceURI, 
 					resource instanceof Group ? RepositoryProperties.hasGroupMember : RepositoryProperties.hasListMember, this.getSesameEntryURI()), rc, vf);
@@ -640,7 +641,7 @@ public class EntryImpl implements Entry {
 	protected void removeReferringList(ResourceImpl resource, RepositoryConnection rc) throws RepositoryException {
 		synchronized (this.repository) {
 			// rc.remove(entryURI, RepositoryProperties.referredIn, listResource, entryURI);
-			// referredIn.remove(java.net.URI.create(listResource.stringValue()));
+			// referredIn.remove(URI.create(listResource.stringValue()));
 			ValueFactory vf = this.repository.getValueFactory();
 			this.removeRelationSynchronized(vf.createStatement(resource.resourceURI, 
 					resource instanceof Group ? RepositoryProperties.hasGroupMember : RepositoryProperties.hasListMember, this.getSesameEntryURI()), rc, vf);
@@ -677,7 +678,7 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	public void setResourceURI(java.net.URI resourceURI) {
+	public void setResourceURI(URI resourceURI) {
 		if (resourceURI.toString().equals(this.resURI.toString())) {
 			return;
 		}
@@ -808,13 +809,13 @@ public class EntryImpl implements Entry {
 
 		// update index
 		this.context.updateResource2EntryIndex(
-				java.net.URI.create(oldResourceURI.stringValue()),
-				java.net.URI.create(this.resURI.stringValue()),
-				java.net.URI.create(this.entryURI.stringValue())
+				URI.create(oldResourceURI.stringValue()),
+				URI.create(this.resURI.stringValue()),
+				URI.create(this.entryURI.stringValue())
 		);
 	}
 
-	public void setExternalMetadataURI(java.net.URI externalMetadataURI) {
+	public void setExternalMetadataURI(URI externalMetadataURI) {
 		if (this.externalMdURI != null && externalMetadataURI.toString().equals(this.externalMdURI.toString())) {
 			return;
 		}
@@ -873,9 +874,9 @@ public class EntryImpl implements Entry {
 
 		// update index
 		this.context.updateExternalMetadata2EntryIndex(
-				java.net.URI.create(oldExternalMetadataURI.stringValue()),
-				java.net.URI.create(this.externalMdURI.stringValue()),
-				java.net.URI.create(this.entryURI.stringValue())
+				URI.create(oldExternalMetadataURI.stringValue()),
+				URI.create(this.externalMdURI.stringValue()),
+				URI.create(this.entryURI.stringValue())
 		);
 	}
 
@@ -902,7 +903,7 @@ public class EntryImpl implements Entry {
 		locType = entryType;
 	}
 
-	private Set<java.net.URI> getCachedAllowedPrincipalsFor(AccessProperty prop) {
+	private Set<URI> getCachedAllowedPrincipalsFor(AccessProperty prop) {
 		switch (prop) {
 		case Administer:
 			return administerPrincipals;
@@ -918,7 +919,7 @@ public class EntryImpl implements Entry {
 		return null;
 	}
 
-	private void setCachedAllowedPrincipalsFor(AccessProperty prop, Set<java.net.URI> set) {
+	private void setCachedAllowedPrincipalsFor(AccessProperty prop, Set<URI> set) {
 		switch (prop) {
 		case Administer:
 			administerPrincipals = set;
@@ -938,9 +939,9 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	public Set<java.net.URI> getAllowedPrincipalsFor(AccessProperty prop) {
+	public Set<URI> getAllowedPrincipalsFor(AccessProperty prop) {
 		// No access check since everyone, even guest should have access to read entry information.
-		Set<java.net.URI> set = getCachedAllowedPrincipalsFor(prop);
+		Set<URI> set = getCachedAllowedPrincipalsFor(prop);
 		if (set != null) {
 			return set;
 		}
@@ -951,10 +952,10 @@ public class EntryImpl implements Entry {
 			IRI subject = getAccessSubject(prop);
 			IRI predicate = getAccessPredicate(prop);
 			List<Statement> statements = rc.getStatements(subject, predicate, null, false, entryURI).asList();
-			set = new HashSet<java.net.URI>();
+			set = new HashSet<URI>();
 			for (Statement statement : statements) {
 				if (statement.getObject() instanceof IRI) {
-					set.add(java.net.URI.create(((IRI) statement.getObject()).stringValue()));
+					set.add(URI.create(((IRI) statement.getObject()).stringValue()));
 				}
 			}
 			setCachedAllowedPrincipalsFor(prop, set);
@@ -971,26 +972,26 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	public void setAllowedPrincipalsFor(AccessProperty prop, Set<java.net.URI> principals) {
+	public void setAllowedPrincipalsFor(AccessProperty prop, Set<URI> principals) {
 		checkAdministerRights();
 		updateAllowedPrincipalsFor(prop, principals, true, false);
 	}
 
-	public void addAllowedPrincipalsFor(AccessProperty prop, java.net.URI principal) {
+	public void addAllowedPrincipalsFor(AccessProperty prop, URI principal) {
 		checkAdministerRights();
-		HashSet<java.net.URI> principals = new HashSet<java.net.URI>();
+		HashSet<URI> principals = new HashSet<URI>();
 		principals.add(principal);
 		updateAllowedPrincipalsFor(prop, principals, false, true);
 	}
 	
-	public boolean removeAllowedPrincipalsFor(AccessProperty prop, java.net.URI principal) {
+	public boolean removeAllowedPrincipalsFor(AccessProperty prop, URI principal) {
 		checkAdministerRights();
-		HashSet<java.net.URI> principals = new HashSet<java.net.URI>();
+		HashSet<URI> principals = new HashSet<URI>();
 		principals.add(principal);
 		return updateAllowedPrincipalsFor(prop, principals, false, false);
 	}
 
-	public boolean updateAllowedPrincipalsFor(AccessProperty prop, Set<java.net.URI> principals, boolean replace, boolean append) {
+	public boolean updateAllowedPrincipalsFor(AccessProperty prop, Set<URI> principals, boolean replace, boolean append) {
 		this.readOrWrite = null;
 		try {
 			synchronized (this.repository) {
@@ -1004,7 +1005,7 @@ public class EntryImpl implements Entry {
 						rc.remove(subject, predicate, null, entryURI);
 					}
 
-					for (java.net.URI principal : principals) {
+					for (URI principal : principals) {
 						IRI principalURI = this.repository.getValueFactory().createIRI(principal.toString());
 						if (replace || append) {
 							rc.add(subject, predicate, principalURI, entryURI);						
@@ -1227,7 +1228,7 @@ public class EntryImpl implements Entry {
 		if (this.repositoryManager != null &&
 				this.repositoryManager.getPrincipalManager() != null &&
 				this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI() != null){
-			java.net.URI contrib = this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI();
+			URI contrib = this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI();
 			String contributor = contrib.toString();
 			IRI contributorURI = vf.createIRI(contributor);
 		
@@ -1300,7 +1301,7 @@ public class EntryImpl implements Entry {
 		if (resourceURIStmnts.hasNext()) {
 			Value newResourceURI = resourceURIStmnts.next().getObject();
 			if (newResourceURI instanceof IRI) {
-				setResourceURI(java.net.URI.create(newResourceURI.toString()));
+				setResourceURI(URI.create(newResourceURI.toString()));
 			}
 		}
 		
@@ -1308,7 +1309,7 @@ public class EntryImpl implements Entry {
 		if (externalMdURIStmnts.hasNext()) {
 			Value newResourceURI = externalMdURIStmnts.next().getObject();
 			if (newResourceURI instanceof IRI) {
-				setExternalMetadataURI(java.net.URI.create(newResourceURI.toString()));
+				setExternalMetadataURI(URI.create(newResourceURI.toString()));
 			}
 		}
 		String originalList = this.getOriginalList();
@@ -1400,8 +1401,8 @@ public class EntryImpl implements Entry {
 							rc.add(cachedExternalMdURI, RepositoryProperties.cached, vf.createLiteral(cachedAt), entryURI);
 						}
 					}
-/*					for (java.net.URI refIn : this.referredIn) { //Adds the referredIn relations to the graph.
-						rc.add(entryURI, RepositoryProperties.referredIn, vf.createURI(refIn.toString()), entryURI);
+/*					for (URI refIn : this.referredIn) { //Adds the referredIn relations to the graph.
+						rc.add(entryURI, RepositoryProperties.referredIn, vf.createIRI(refIn.toString()), entryURI);
 					}*/
 
 					if (created != null) {
@@ -1420,7 +1421,7 @@ public class EntryImpl implements Entry {
 					}
 					
 					if (originalList !=null) {
-						rc.add(entryURI, RepositoryProperties.originallyCreatedIn, vf.createURI(originalList), entryURI);
+						rc.add(entryURI, RepositoryProperties.originallyCreatedIn, vf.createIRI(originalList), entryURI);
 					}
 
 					modified = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
@@ -1501,7 +1502,7 @@ public class EntryImpl implements Entry {
             Value obj = statement.getObject();
             org.eclipse.rdf4j.model.Resource subj = statement.getSubject();
             //Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-            if (obj instanceof org.eclipse.rdf4j.model.URI
+            if (obj instanceof IRI
                     && obj.stringValue().startsWith(base)
                     && subj.stringValue().startsWith(base)) {
                 return true;
@@ -1517,7 +1518,7 @@ public class EntryImpl implements Entry {
             while (rr.hasNext()) {
                 Statement statement = rr.next();
                 if (isStatementInvRelationCandidate(statement, base)) {
-                    java.net.URI entryURI = java.net.URI.create(statement.getObject().stringValue());
+                    URI entryURI = URI.create(statement.getObject().stringValue());
                     EntryImpl sourceEntry =  (EntryImpl) repositoryManager.getContextManager().getEntry(entryURI);
                     if (sourceEntry != null && sourceEntry != this) {
                         sourceEntry.removeRelationSynchronized(statement, rc, repository.getValueFactory());
@@ -1533,7 +1534,7 @@ public class EntryImpl implements Entry {
         String base = repositoryManager.getRepositoryURL().toString();
         for (Statement statement : graph) {
             if (isStatementInvRelationCandidate(statement, base)) {
-                java.net.URI entryURI = java.net.URI.create(statement.getObject().stringValue());
+                URI entryURI = URI.create(statement.getObject().stringValue());
                 EntryImpl sourceEntry =  (EntryImpl) repositoryManager.getContextManager().getEntry(entryURI);
                 if (sourceEntry != null && sourceEntry != this) {
                     sourceEntry.addRelationSynchronized(statement, rc, repository.getValueFactory());
@@ -1669,8 +1670,8 @@ public class EntryImpl implements Entry {
 		return this.relationURI;
 	}
 
-	public java.net.URI getRelationURI() {
-		return  java.net.URI.create(relationURI.toString());
+	public URI getRelationURI() {
+		return  URI.create(relationURI.toString());
 	}
 
 	public void setFilename(String name) {
@@ -1702,21 +1703,21 @@ public class EntryImpl implements Entry {
 			this.fileSize = size;
 		}
 	}
-	public java.net.URI getStatus() {
+	public URI getStatus() {
 		if (this.status == null) {
 			// the mime type in the local MD overwrites the mime type in the entry graph
 			Statement st = getStatement(entryURI, RepositoryProperties.status, null);
 			if (st != null) {
-				this.status = java.net.URI.create(st.getObject().stringValue());
+				this.status = URI.create(st.getObject().stringValue());
 			}
 		}
 		return this.status;
 	}
 
-	public void setStatus(java.net.URI newStatus) {
+	public void setStatus(URI newStatus) {
 		checkAdministerRights();
 		ValueFactory vf = this.repository.getValueFactory();
-		if (replaceStatement(entryURI, RepositoryProperties.status, vf.createURI(newStatus.toString()))) {
+		if (replaceStatement(entryURI, RepositoryProperties.status, vf.createIRI(newStatus.toString()))) {
 			this.status = newStatus;
 		}
 	}
@@ -1881,7 +1882,7 @@ public class EntryImpl implements Entry {
 	public void setOriginalListSynchronized(String list, RepositoryConnection rc, ValueFactory vf) throws RepositoryException {
 		rc.remove(this.entryURI, RepositoryProperties.originallyCreatedIn, null, this.entryURI);
 		if (list != null) {
-			rc.add(this.entryURI, RepositoryProperties.originallyCreatedIn, vf.createURI(list), this.entryURI);
+			rc.add(this.entryURI, RepositoryProperties.originallyCreatedIn, vf.createIRI(list), this.entryURI);
 			this.originalList = list;
 		} else {
 			this.originalList = "";
@@ -1895,7 +1896,7 @@ public class EntryImpl implements Entry {
 			try {
 				rc.remove(this.entryURI, RepositoryProperties.originallyCreatedIn, null, this.entryURI);
 				if (list != null) {
-					rc.add(this.entryURI, RepositoryProperties.originallyCreatedIn, this.repository.getValueFactory().createURI(list), this.entryURI);
+					rc.add(this.entryURI, RepositoryProperties.originallyCreatedIn, this.repository.getValueFactory().createIRI(list), this.entryURI);
 					this.originalList = list;
 				} else {
 					this.originalList = "";

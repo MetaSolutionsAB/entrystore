@@ -19,6 +19,7 @@ package org.entrystore.impl;
 
 import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
@@ -35,7 +36,7 @@ public class RDFResource extends ResourceImpl {
 		super(entry, resourceURI);
 	}
 
-	public RDFResource(EntryImpl entry, org.eclipse.rdf4j.model.URI resourceURI) {
+	public RDFResource(EntryImpl entry, IRI resourceURI) {
 		super(entry, resourceURI);
 	}
 

@@ -573,7 +573,7 @@ public class StatisticsResource extends BaseResource {
 			for (Statement s : stats){
 				IRI pred = s.getPredicate();
 				if("http://scam.sf.net/schema#aboutPerson".equals(pred.toString())){
-					java.net.URI resourceURI = java.net.URI.create(s.getSubject().toString());
+					URI resourceURI = URI.create(s.getSubject().toString());
 					String contextId = org.entrystore.impl.Util.getContextIdFromURI(this.getRM(), resourceURI);
 					Context context = cm.getContext(contextId);
 					Set<Entry> competenceEntries = context.getByResourceURI(resourceURI);

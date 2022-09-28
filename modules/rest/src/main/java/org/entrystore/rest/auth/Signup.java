@@ -52,7 +52,7 @@ public class Signup {
 			graph.add(vf.createStatement(resourceURI, vf.createIRI(NS.foaf, "name"), vf.createLiteral(fullname)));
 		}
 		if (userInfo.getEmail() != null) {
-			graph.add(vf.createStatement(resourceURI, vf.createIRI(NS.foaf, "mbox"), vf.createURI("mailto:", userInfo.getEmail())));
+			graph.add(vf.createStatement(resourceURI, vf.createIRI(NS.foaf, "mbox"), vf.createIRI("mailto:", userInfo.getEmail())));
 		}
 
 		entry.getLocalMetadata().setGraph(graph);

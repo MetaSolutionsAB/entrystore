@@ -30,6 +30,7 @@ import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -106,7 +107,7 @@ public class Pipeline {
 		if (toEntryStmts.hasNext()) {
 			destination = toEntryStmts.next().getObject().stringValue();
 			if (destination.startsWith("http")) {
-				Entry toEntryEntry = this.entry.getContext().getByEntryURI(java.net.URI.create(destination));
+				Entry toEntryEntry = this.entry.getContext().getByEntryURI(URI.create(destination));
 				destination = toEntryEntry.getId();
 			}
 		}
@@ -163,7 +164,7 @@ public class Pipeline {
 		return null;
 	}
 
-	public Set<Entry> run(Entry sourceEntry, java.net.URI listIRI) throws TransformException {
+	public Set<Entry> run(Entry sourceEntry, URI listIRI) throws TransformException {
 		//Get the data
 		if (tsteps.size() == 0) {
 			throw new IllegalStateException("Pipeline has no recognizable transforms.");

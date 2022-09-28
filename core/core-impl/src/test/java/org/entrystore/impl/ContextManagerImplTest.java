@@ -17,6 +17,7 @@
 package org.entrystore.impl;
 
 import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.query.MalformedQueryException;
 import org.eclipse.rdf4j.repository.RepositoryException;
@@ -58,7 +59,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 
 		Graph graph = listEntry.getLocalMetadata().getGraph();
 		ValueFactory vf = graph.getValueFactory();
-		org.eclipse.rdf4j.model.URI root = vf.createURI(listEntry.getResource().getURI().toString());
+		IRI root = vf.createIRI(listEntry.getResource().getURI().toString());
 
 
 		graph.add(root, vf.createIRI("http://purl.org/dc/terms/title"), vf.createLiteral("Folder 1", "en"));
@@ -69,7 +70,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 
 		graph = linkEntry.getLocalMetadata().getGraph();
 		vf = graph.getValueFactory();
-		root = vf.createURI(linkEntry.getResourceURI().toString());
+		root = vf.createIRI(linkEntry.getResourceURI().toString());
 
 		graph.add(root, vf.createIRI("http://purl.org/dc/terms/title"), vf.createLiteral("Dagens Nyheter"));
 		graph.add(root, vf.createIRI("dc:description"), vf.createLiteral("A widely spread morning newspaper in sweden."));

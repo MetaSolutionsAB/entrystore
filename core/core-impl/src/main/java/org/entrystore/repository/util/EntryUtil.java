@@ -38,6 +38,7 @@ import org.entrystore.repository.RepositoryManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -288,7 +289,7 @@ public class EntryUtil {
 	 *         from a specific graph with the given resource URI as root node.
 	 *         If no titles exist null is returned.
 	 */
-	public static String getLabel(Graph graph, java.net.URI resourceURI, Set<IRI> predicates, String language) {
+	public static String getLabel(Graph graph, URI resourceURI, Set<IRI> predicates, String language) {
 		String fallback = null;
 		if (graph != null && resourceURI != null) {
 			IRI resURI = valueFactory.createIRI(resourceURI.toString());
@@ -325,19 +326,19 @@ public class EntryUtil {
 		return fallback;
 	}
 	
-	public static String getLabel(Graph graph, java.net.URI resourceURI, IRI predicate, String language) {
+	public static String getLabel(Graph graph, URI resourceURI, IRI predicate, String language) {
 		Set<IRI> predicates = new HashSet<>();
 		predicates.add(predicate);
 		return getLabel(graph, resourceURI, predicates, language);
 	}
 	
-	public static IRI getResourceAsURI(Graph graph, java.net.URI resourceURI, IRI predicate) {
+	public static IRI getResourceAsURI(Graph graph, URI resourceURI, IRI predicate) {
 		if (graph != null && resourceURI != null) {
 			IRI resURI = valueFactory.createIRI(resourceURI.toString());
 			Iterator<Statement> stmnts = graph.match(resURI, predicate, null);
 			while (stmnts.hasNext()) {
 				Value value = stmnts.next().getObject();
-				if (value instanceof org.eclipse.rdf4j.model.URI) {
+				if (value instanceof IRI) {
 					return (IRI) value;
 				}
 			}
@@ -345,7 +346,7 @@ public class EntryUtil {
 		return null;
 	}
 
-	public static String getResource(Graph graph, java.net.URI resourceURI, IRI predicate) {
+	public static String getResource(Graph graph, URI resourceURI, IRI predicate) {
 		IRI result = getResourceAsURI(graph, resourceURI, predicate);
 		if (result != null) {
 			return result.stringValue();
@@ -368,7 +369,7 @@ public class EntryUtil {
 	 *         from a specific graph with the given resource URI as root node.
 	 *         If no titles exist null is returned.
 	 */
-	public static String getTitle(Graph graph, java.net.URI resourceURI, String language) {
+	public static String getTitle(Graph graph, URI resourceURI, String language) {
 		if (graph != null && resourceURI != null) {
 			Set<IRI> titlePredicates = new HashSet<>();
 			titlePredicates.add(valueFactory.createIRI(NS.dcterms + "title"));
@@ -621,7 +622,7 @@ public class EntryUtil {
         return new ArrayList<>();
     }
 
-	public static List<String> getResourceValues(Graph graph, java.net.URI resourceURI, Set<IRI> predicates) {
+	public static List<String> getResourceValues(Graph graph, URI resourceURI, Set<IRI> predicates) {
 		if (graph == null || predicates == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
@@ -631,7 +632,7 @@ public class EntryUtil {
 			Iterator<Statement> subjects = graph.match(valueFactory.createIRI(resourceURI.toString()), pred, null);
 			while (subjects.hasNext()) {
 				Value value = subjects.next().getObject();
-				if (value instanceof org.eclipse.rdf4j.model.URI) {
+				if (value instanceof IRI) {
 					org.eclipse.rdf4j.model.Resource res = (org.eclipse.rdf4j.model.Resource) value;
 					result.add(res.stringValue());
 				}
@@ -647,8 +648,8 @@ public class EntryUtil {
 	public static boolean isDeleted(Entry entry) {
 		String repoURL = entry.getRepositoryManager().getRepositoryURL().toString();
 		String contextID = entry.getContext().getEntry().getId();
-		java.net.URI trashURI = URISplit.fabricateURI(repoURL, contextID, RepositoryProperties.LIST_PATH, "_trash");
-		Set<java.net.URI> referredBy = entry.getReferringListsInSameContext();
+		URI trashURI = URISplit.fabricateURI(repoURL, contextID, RepositoryProperties.LIST_PATH, "_trash");
+		Set<URI> referredBy = entry.getReferringListsInSameContext();
 		if ((referredBy.size() == 1) && (referredBy.contains(trashURI))) {
 			return true;
 		}
@@ -673,7 +674,7 @@ public class EntryUtil {
 	 * @param rm A RepositoryManager instance.
 	 * @return Returns the merged metadata graphs of all matching entries.
 	 */
-	public static TraversalResult traverseAndLoadEntryMetadata(Set<IRI> entries, Set<java.net.URI> propertiesToFollow, Map<String, String> blacklist, int level, int depth, Multimap<IRI, Integer> visited, Context context, RepositoryManager rm) {
+	public static TraversalResult traverseAndLoadEntryMetadata(Set<IRI> entries, Set<URI> propertiesToFollow, Map<String, String> blacklist, int level, int depth, Multimap<IRI, Integer> visited, Context context, RepositoryManager rm) {
 		Model resultGraph = new LinkedHashModel();
 		Date latestModified = null;
 		for (IRI r : entries) {
@@ -688,7 +689,7 @@ public class EntryUtil {
 
 			Model graph = null;
 			try {
-				java.net.URI uri = java.net.URI.create(r.toString());
+				URI uri = URI.create(r.toString());
 				Entry fetchedEntry = null;
 				ContextManager cm = rm.getContextManager();
 				if (context != null) {
@@ -753,7 +754,7 @@ public class EntryUtil {
 					resultGraph.addAll(graph);
 					if (propertiesToFollow != null && level < depth) {
 						Set<IRI> objects = new HashSet<>();
-						for (java.net.URI prop : propertiesToFollow) {
+						for (URI prop : propertiesToFollow) {
 							objects.addAll(valueToURI(graph.filter(null, valueFactory.createIRI(prop.toString()), null).objects()));
 						}
 						objects.remove(r);

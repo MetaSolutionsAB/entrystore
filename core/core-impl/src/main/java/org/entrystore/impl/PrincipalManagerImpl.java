@@ -632,7 +632,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		try {
 			rc = entry.getRepository().getConnection();
 			ValueFactory vf = rc.getValueFactory();
-			RepositoryResult<Statement> rr = rc.getStatements(null, RepositoryProperties.externalID, vf.createURI("mailto:", externalID), false);
+			RepositoryResult<Statement> rr = rc.getStatements(null, RepositoryProperties.externalID, vf.createIRI("mailto:", externalID), false);
 			if (rr.hasNext()) {
 				userResourceURI = rr.next().getSubject();
 			}
