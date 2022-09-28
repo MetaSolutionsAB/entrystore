@@ -16,11 +16,11 @@
 
 package org.entrystore.rest.resources;
 
+import org.eclipse.rdf4j.model.Graph;
 import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.converters.Graph2Entries;
 import org.entrystore.rest.util.GraphUtil;
-import org.openrdf.model.Graph;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;

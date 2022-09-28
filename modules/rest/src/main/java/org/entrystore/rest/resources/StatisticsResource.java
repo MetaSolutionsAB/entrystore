@@ -16,6 +16,16 @@
 
 package org.entrystore.rest.resources;
 
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.util.GraphUtil;
+import org.eclipse.rdf4j.model.util.GraphUtilException;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -31,15 +41,6 @@ import org.entrystore.rest.util.JSONErrorMessages;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.util.GraphUtil;
-import org.openrdf.model.util.GraphUtilException;
-import org.openrdf.model.vocabulary.RDF;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -155,6 +156,7 @@ public class StatisticsResource extends BaseResource {
 	
 	public JSONObject getPropertyStatistics(Context context) {
 		JSONObject result = new JSONObject();
+		ValueFactory vf = getRM().getValueFactory();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
 		getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
@@ -189,9 +191,9 @@ public class StatisticsResource extends BaseResource {
 				String entryID = entry.getId();
 				URI resourceURI = entry.getResourceURI();
 				Graph metadata = entry.getMetadataGraph();
-				Iterator<Statement> firstLevel = metadata.match(new URIImpl(resourceURI.toString()), null, null);
+				Iterator<Statement> firstLevel = metadata.match(vf.createIRI(resourceURI.toString()), null, null);
 				while (firstLevel.hasNext()) {
-					org.openrdf.model.URI predicate = firstLevel.next().getPredicate();
+					IRI predicate = firstLevel.next().getPredicate();
 					String predStr = predicate.toString();
 					if (labelMap != null && labelMap.containsKey(predStr)) {
 						predStr = labelMap.get(predStr);
@@ -263,6 +265,7 @@ public class StatisticsResource extends BaseResource {
 	
 	public JSONObject getOntologyStatistics(Context context) {
 		JSONObject result = new JSONObject();
+		ValueFactory vf = getRM().getValueFactory();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
 		getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
@@ -284,22 +287,22 @@ public class StatisticsResource extends BaseResource {
 					continue;
 				}
 				
-				Set<org.openrdf.model.URI> allowedPredicates = new HashSet<org.openrdf.model.URI>();
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#Supports"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesAlternativeViewOn"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesExamplesOn"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#Methodology"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#Summarizes"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesDataOn"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesBackgroundOn"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#Details"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#IsAbout"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesTheoreticalInformationOn"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesNewInformationOn"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#CommentsOn"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#Refutes"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#Explains"));
-				allowedPredicates.add(new URIImpl("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesExamplesOf"));
+				Set<IRI> allowedPredicates = new HashSet<>();
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#Supports"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesAlternativeViewOn"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesExamplesOn"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#Methodology"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#Summarizes"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesDataOn"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesBackgroundOn"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#Details"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#IsAbout"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesTheoreticalInformationOn"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesNewInformationOn"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#CommentsOn"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#Refutes"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#Explains"));
+				allowedPredicates.add(vf.createIRI("http://www.cc.uah.es/ie/ont/OE-Predicates#ProvidesExamplesOf"));
 				
 				entryCount++;
 				Set<String> ontPredicates = new HashSet<String>();
@@ -307,10 +310,10 @@ public class StatisticsResource extends BaseResource {
 				String entryID = entry.getId();
 				URI resourceURI = entry.getResourceURI();
 				Graph metadata = entry.getMetadataGraph();
-				Iterator<Statement> firstLevel = metadata.match(new URIImpl(resourceURI.toString()), null, null);
+				Iterator<Statement> firstLevel = metadata.match(vf.createIRI(resourceURI.toString()), null, null);
 				while (firstLevel.hasNext()) {
 					Statement stmnt = firstLevel.next();
-					org.openrdf.model.URI predicate = stmnt.getPredicate();
+					IRI predicate = stmnt.getPredicate();
 					
 					if (!allowedPredicates.contains(predicate)) {
 						continue;
@@ -404,6 +407,7 @@ public class StatisticsResource extends BaseResource {
 	
 	public JSONObject getKeywordStatistics(Context context) {
 		JSONObject result = new JSONObject();
+		ValueFactory vf = getRM().getValueFactory();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
 		getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
@@ -423,19 +427,19 @@ public class StatisticsResource extends BaseResource {
 					continue;
 				}
 				
-				Set<org.openrdf.model.URI> allowedPredicates = new HashSet<org.openrdf.model.URI>();
-				allowedPredicates.add(new URIImpl(NS.dc + "subject"));
-				allowedPredicates.add(new URIImpl(NS.dcterms + "subject"));
+				Set<IRI> allowedPredicates = new HashSet<>();
+				allowedPredicates.add(vf.createIRI(NS.dc + "subject"));
+				allowedPredicates.add(vf.createIRI(NS.dcterms + "subject"));
 				
 				entryCount++;
 				Set<String> keywords = new HashSet<String>();
 				String entryID = entry.getId();
 				URI resourceURI = entry.getResourceURI();
 				Graph metadata = entry.getMetadataGraph();
-				Iterator<Statement> firstLevel = metadata.match(new URIImpl(resourceURI.toString()), null, null);
+				Iterator<Statement> firstLevel = metadata.match(vf.createIRI(resourceURI.toString()), null, null);
 				while (firstLevel.hasNext()) {
 					Statement stmnt = firstLevel.next();
-					org.openrdf.model.URI predicate = stmnt.getPredicate();
+					IRI predicate = stmnt.getPredicate();
 					
 					if (!allowedPredicates.contains(predicate)) {
 						continue;
@@ -567,7 +571,7 @@ public class StatisticsResource extends BaseResource {
 			//and can be found in relations
 			List<Statement> stats = user.getEntry().getRelations();
 			for (Statement s : stats){
-				org.openrdf.model.URI pred = s.getPredicate();
+				IRI pred = s.getPredicate();
 				if("http://scam.sf.net/schema#aboutPerson".equals(pred.toString())){
 					java.net.URI resourceURI = java.net.URI.create(s.getSubject().toString());
 					String contextId = org.entrystore.impl.Util.getContextIdFromURI(this.getRM(), resourceURI);
@@ -576,13 +580,13 @@ public class StatisticsResource extends BaseResource {
 					Entry competenceEntry = competenceEntries.iterator().next(); //Should only be one!
 					Graph graph = competenceEntry.getMetadataGraph();
 					Iterator<Statement> compDefsStatements = graph.match( null,
-							graph.getValueFactory().createURI("http://scam.sf.net/schema#competencyDefinition"), (Resource) null);
+							graph.getValueFactory().createIRI("http://scam.sf.net/schema#competencyDefinition"), (Resource) null);
 					
 					while (compDefsStatements.hasNext()){
 						Statement stat = compDefsStatements.next();
 						try{
 							Value compLevel  = GraphUtil.getUniqueObject(graph, stat.getSubject(), 
-									graph.getValueFactory().createURI("http://scam.sf.net/schema#competenceLevel"));
+									graph.getValueFactory().createIRI("http://scam.sf.net/schema#competenceLevel"));
 							HashMap<String, Integer> current = CompDefToCount.get(stat.getObject().toString());
 							if (current == null){
 								current = new HashMap<String, Integer>();
@@ -590,7 +594,7 @@ public class StatisticsResource extends BaseResource {
 							}
 							Integer currentInt = current.get(compLevel.toString());
 							if(currentInt == null){
-								currentInt = new Integer(0);
+								currentInt = 0;
 							}
 							currentInt++;
 							current.put(compLevel.toString(), currentInt);

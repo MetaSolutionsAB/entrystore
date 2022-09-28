@@ -16,6 +16,12 @@
 
 package org.entrystore.rest.resources;
 
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.GraphImpl;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -39,11 +45,6 @@ import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -238,14 +239,14 @@ public class ContextResource extends BaseResource {
 						Graph inheritedMD = new GraphImpl();
 						if (templateMD != null) {
 							ValueFactory vf = inheritedMD.getValueFactory();
-							org.openrdf.model.URI oldResURI = vf.createURI(templateEntry.getResourceURI().toString());
-							org.openrdf.model.URI newResURI = vf.createURI(entry.getResourceURI().toString());
+							IRI oldResURI = vf.createIRI(templateEntry.getResourceURI().toString());
+							IRI newResURI = vf.createIRI(entry.getResourceURI().toString());
 							
-							java.util.List<org.openrdf.model.URI> predicateBlackList = new ArrayList<org.openrdf.model.URI>();
-							predicateBlackList.add(vf.createURI(NS.dc, "title"));
-							predicateBlackList.add(vf.createURI(NS.dcterms, "title"));
-							predicateBlackList.add(vf.createURI(NS.dc, "description"));
-							predicateBlackList.add(vf.createURI(NS.dcterms, "description"));
+							java.util.List<IRI> predicateBlackList = new ArrayList<>();
+							predicateBlackList.add(vf.createIRI(NS.dc, "title"));
+							predicateBlackList.add(vf.createIRI(NS.dcterms, "title"));
+							predicateBlackList.add(vf.createIRI(NS.dc, "description"));
+							predicateBlackList.add(vf.createIRI(NS.dcterms, "description"));
 							java.util.List<Value> subjectBlackList = new ArrayList<Value>();
 							
 							for (Statement statement : templateMD) {

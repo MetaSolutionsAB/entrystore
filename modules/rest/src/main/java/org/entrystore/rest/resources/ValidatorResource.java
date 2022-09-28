@@ -17,22 +17,22 @@
 package org.entrystore.rest.resources;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.sail.SailRepository;
+import org.eclipse.rdf4j.rio.RDFFormat;
+import org.eclipse.rdf4j.rio.RDFHandlerException;
+import org.eclipse.rdf4j.rio.RDFParseException;
+import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.entrystore.rest.util.GraphUtil;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.impl.LiteralImpl;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.repository.Repository;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.sail.SailRepository;
-import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.RDFHandlerException;
-import org.openrdf.rio.RDFParseException;
-import org.openrdf.sail.nativerdf.NativeStore;
 import org.restlet.Response;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
@@ -200,9 +200,9 @@ public class ValidatorResource extends BaseResource  {
 		if (value != null) {
 			try {
 				String valStr = value.stringValue();
-				if (value instanceof URIImpl) {
+				if (value instanceof IRI) {
 					URI.create(valStr);
-				} else if (value instanceof LiteralImpl) {
+				} else if (value instanceof Literal) {
 					if (valStr.startsWith("http://") || valStr.startsWith("https://")) {
 						URI.create(valStr);
 					}

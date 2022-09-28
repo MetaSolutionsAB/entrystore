@@ -18,7 +18,21 @@ package org.entrystore.rest.resources;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
-import info.aduna.iteration.Iterations;
+import org.eclipse.rdf4j.common.iteration.Iterations;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.query.GraphQuery;
+import org.eclipse.rdf4j.query.MalformedQueryException;
+import org.eclipse.rdf4j.query.QueryEvaluationException;
+import org.eclipse.rdf4j.query.QueryLanguage;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.sail.SailRepository;
+import org.eclipse.rdf4j.rio.RDFFormat;
+import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Metadata;
 import org.entrystore.repository.config.Settings;
@@ -26,21 +40,6 @@ import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Model;
-import org.openrdf.model.URI;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.query.GraphQuery;
-import org.openrdf.query.MalformedQueryException;
-import org.openrdf.query.QueryEvaluationException;
-import org.openrdf.query.QueryLanguage;
-import org.openrdf.repository.Repository;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.sail.SailRepository;
-import org.openrdf.rio.RDFFormat;
-import org.openrdf.sail.memory.MemoryStore;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
@@ -59,11 +58,13 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 
@@ -78,7 +79,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(AbstractMetadataResource.class);
 
-	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+	List<MediaType> supportedMediaTypes = new ArrayList<>();
 	
 	@Override
 	public void doInit() {
@@ -331,12 +332,12 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 */
 	private EntryUtil.TraversalResult traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth) {
 		return EntryUtil.traverseAndLoadEntryMetadata(
-			ImmutableSet.of((URI) new URIImpl(entryURI.toString())),
+			ImmutableSet.of((IRI) getRM().getValueFactory().createIRI(entryURI.toString())),
 			predToFollow,
 			blacklist,
 			0,
 			depth,
-			HashMultimap.<URI, Integer>create(),
+			HashMultimap.<IRI, Integer>create(),
 			repository ? null : context,
 			getRM()
 		);
@@ -446,9 +447,20 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	}
 
 	private String getFileExtensionForMediaType(MediaType mt) {
-		RDFFormat rdfFormat = RDFFormat.forMIMEType(mt.getName());
-		if (rdfFormat != null && rdfFormat.getDefaultFileExtension() != null) {
-			return rdfFormat.getDefaultFileExtension();
+		Optional<RDFFormat> rdfFormat = RDFFormat.matchMIMEType(mt.getName(), Arrays.asList(
+				RDFFormat.RDFXML,
+				RDFFormat.NTRIPLES,
+				RDFFormat.TURTLE,
+				RDFFormat.N3,
+				RDFFormat.TRIX,
+				RDFFormat.TRIG,
+				RDFFormat.BINARY,
+				RDFFormat.NQUADS,
+				RDFFormat.JSONLD,
+				RDFFormat.RDFJSON,
+				RDFFormat.RDFA));
+		if (rdfFormat.isPresent() && rdfFormat.get().getDefaultFileExtension() != null) {
+			return rdfFormat.get().getDefaultFileExtension();
 		}
 		return "rdf";
 	}

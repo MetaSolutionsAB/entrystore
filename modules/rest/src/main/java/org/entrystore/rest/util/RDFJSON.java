@@ -16,30 +16,30 @@
 
 package org.entrystore.rest.util;
 
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.core.JsonGenerator;
+import org.eclipse.rdf4j.model.BNode;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
-
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerationException;
-import com.fasterxml.jackson.core.JsonGenerator;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.openrdf.model.BNode;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A utility class to help converting Sesame Graphs from and to RDF/JSON.
@@ -87,7 +87,7 @@ public class RDFJSON {
 				Iterator<String> predicates = pObj.keys();
 				while (predicates.hasNext()) {
 					String predStr = predicates.next();
-					URI predicate = vf.createURI(predStr);
+					IRI predicate = vf.createIRI(predStr);
 					JSONArray predArr = pObj.getJSONArray(predStr);
 					for (int i = 0; i < predArr.length(); i++) {
 						Value object = null;
@@ -104,9 +104,9 @@ public class RDFJSON {
 						if (obj.has("lang")) {
 							lang = obj.getString("lang");
 						}
-						URI datatype = null;
+						IRI datatype = null;
 						if (obj.has("datatype")) {
-							datatype = vf.createURI(obj.getString("datatype"));
+							datatype = vf.createIRI(obj.getString("datatype"));
 						}
 						if ("literal".equals(type)) {
 							if (lang != null) {
@@ -154,17 +154,16 @@ public class RDFJSON {
 		} else {
 			valueObj.put("value", v.stringValue());
 		}
-		if (v instanceof Literal) {
+		if (v instanceof Literal l) {
 			valueObj.put("type", "literal");
-			Literal l = (Literal) v;
-			if (l.getLanguage() != null) {
-				valueObj.put("lang", l.getLanguage());
+			if (l.getLanguage().isPresent()) {
+				valueObj.put("lang", l.getLanguage().get());
 			} else if (l.getDatatype() != null) {
 				valueObj.put("datatype", l.getDatatype().stringValue());
 			}
 		} else if (v instanceof BNode) {
 			valueObj.put("type", "bnode");
-		} else if (v instanceof URI) {
+		} else if (v instanceof IRI) {
 			valueObj.put("type", "uri");
 		}
 		return valueObj;
@@ -173,14 +172,14 @@ public class RDFJSON {
 	public static JSONObject graphToRdfJsonObject(Graph graph) {
 		try {
 			//First build the json structure using maps to avoid iterating through the graph more than once
-			HashMap<Resource, HashMap<URI, JSONArray>> struct = new HashMap<Resource, HashMap<URI, JSONArray>>();
+			HashMap<Resource, HashMap<IRI, JSONArray>> struct = new HashMap<>();
 			for (Statement stmt : graph) {
 				Resource subject = stmt.getSubject();
-				URI predicate = stmt.getPredicate();
+				IRI predicate = stmt.getPredicate();
 				Value object = stmt.getObject();
-				HashMap<URI, JSONArray> pred2values = struct.get(subject);
+				HashMap<IRI, JSONArray> pred2values = struct.get(subject);
 				if (pred2values == null) {
-					pred2values = new HashMap<URI, JSONArray>();
+					pred2values = new HashMap<IRI, JSONArray>();
 					struct.put(subject, pred2values);
 					JSONArray values = new JSONArray();
 					pred2values.put(predicate, values);
@@ -199,8 +198,8 @@ public class RDFJSON {
 			JSONObject result = new JSONObject(); //Top level object
 			for (Resource subject : struct.keySet()) {
 				JSONObject predicateObj = new JSONObject(); //Predicate object where each predicate is a key
-				HashMap<URI, JSONArray> pred2values = struct.get(subject);
-				for (URI predicate : pred2values.keySet()) {
+				HashMap<IRI, JSONArray> pred2values = struct.get(subject);
+				for (IRI predicate : pred2values.keySet()) {
 					predicateObj.put(predicate.stringValue(), pred2values.get(predicate)); //The value is an array of objects
 				}
 
@@ -264,12 +263,12 @@ public class RDFJSON {
 				} else {
 					g.writeObjectFieldStart(subject.stringValue()); // subject					
 				}
-				Set<URI> predicates = new HashSet<URI>();
+				Set<IRI> predicates = new HashSet<>();
 				Iterator<Statement> s2 = graph.match(subject, null, null);
 				while (s2.hasNext()) {
 					predicates.add(s2.next().getPredicate());
 				}
-				for (URI predicate : predicates) {
+				for (IRI predicate : predicates) {
 					g.writeArrayFieldStart(predicate.stringValue()); // predicate
 					Iterator<Statement> stmnts = graph.match(subject, predicate, null);
 					while (stmnts.hasNext()) {
@@ -280,17 +279,16 @@ public class RDFJSON {
 						} else {
 							g.writeStringField("value", v.stringValue());							
 						}
-						if (v instanceof Literal) {
+						if (v instanceof Literal l) {
 							g.writeStringField("type", "literal");
-							Literal l = (Literal) v;
-							if (l.getLanguage() != null) {
-								g.writeStringField("lang", l.getLanguage());
+							if (l.getLanguage().isPresent()) {
+								g.writeStringField("lang", l.getLanguage().get());
 							} else if (l.getDatatype() != null) {
 								g.writeStringField("datatype", l.getDatatype().stringValue());
 							}
 						} else if (v instanceof BNode) {
 							g.writeStringField("type", "bnode");
-						} else if (v instanceof URI) {
+						} else if (v instanceof IRI) {
 							g.writeStringField("type", "uri");
 						}
 						g.writeEndObject(); // value

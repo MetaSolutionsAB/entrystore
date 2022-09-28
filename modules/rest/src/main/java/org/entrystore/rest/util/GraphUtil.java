@@ -16,34 +16,32 @@
 
 package org.entrystore.rest.util;
 
-import com.github.jsonldjava.sesame.SesameJSONLDParser;
-import com.github.jsonldjava.sesame.SesameJSONLDWriter;
-import info.aduna.xml.XMLReaderFactory;
+import org.eclipse.rdf4j.common.xml.XMLReaderFactory;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.rio.ParserConfig;
+import org.eclipse.rdf4j.rio.RDFFormat;
+import org.eclipse.rdf4j.rio.RDFHandler;
+import org.eclipse.rdf4j.rio.RDFHandlerException;
+import org.eclipse.rdf4j.rio.RDFParseException;
+import org.eclipse.rdf4j.rio.RDFParser;
+import org.eclipse.rdf4j.rio.RDFWriter;
+import org.eclipse.rdf4j.rio.helpers.StatementCollector;
+import org.eclipse.rdf4j.rio.helpers.XMLParserSettings;
+import org.eclipse.rdf4j.rio.n3.N3ParserFactory;
+import org.eclipse.rdf4j.rio.n3.N3Writer;
+import org.eclipse.rdf4j.rio.ntriples.NTriplesParser;
+import org.eclipse.rdf4j.rio.ntriples.NTriplesWriter;
+import org.eclipse.rdf4j.rio.rdfxml.RDFXMLParser;
+import org.eclipse.rdf4j.rio.rdfxml.util.RDFXMLPrettyWriter;
+import org.eclipse.rdf4j.rio.trig.TriGParser;
+import org.eclipse.rdf4j.rio.trig.TriGWriter;
+import org.eclipse.rdf4j.rio.trix.TriXParser;
+import org.eclipse.rdf4j.rio.trix.TriXWriter;
+import org.eclipse.rdf4j.rio.turtle.TurtleParser;
+import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.repository.util.NS;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.rio.ParserConfig;
-import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.RDFHandler;
-import org.openrdf.rio.RDFHandlerException;
-import org.openrdf.rio.RDFParseException;
-import org.openrdf.rio.RDFParser;
-import org.openrdf.rio.RDFWriter;
-import org.openrdf.rio.helpers.StatementCollector;
-import org.openrdf.rio.helpers.XMLParserSettings;
-import org.openrdf.rio.n3.N3ParserFactory;
-import org.openrdf.rio.n3.N3Writer;
-import org.openrdf.rio.ntriples.NTriplesParser;
-import org.openrdf.rio.ntriples.NTriplesWriter;
-import org.openrdf.rio.rdfxml.RDFXMLParser;
-import org.openrdf.rio.rdfxml.util.RDFXMLPrettyWriter;
-import org.openrdf.rio.trig.TriGParser;
-import org.openrdf.rio.trig.TriGWriter;
-import org.openrdf.rio.trix.TriXParser;
-import org.openrdf.rio.trix.TriXWriter;
-import org.openrdf.rio.turtle.TurtleParser;
-import org.openrdf.rio.turtle.TurtleWriter;
 import org.restlet.data.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -200,7 +198,8 @@ public class GraphUtil {
 		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 			deserializedGraph = deserializeGraphUnsafe(graphString, new TriGParser());
 		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-			deserializedGraph = deserializeGraphUnsafe(graphString, new SesameJSONLDParser());
+			// FIXME
+			//deserializedGraph = deserializeGraphUnsafe(graphString, (RDFParser) new SesameJSONLDParser());
 		}
 		return deserializedGraph;
 	}
@@ -222,7 +221,8 @@ public class GraphUtil {
 		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 			serializedGraph = serializeGraph(graph, TriGWriter.class);
 		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-			serializedGraph = serializeGraph(graph, SesameJSONLDWriter.class);
+			// FIXME
+			// serializedGraph = serializeGraph(graph, (Class<? extends RDFWriter>) SesameJSONLDWriter.class);
 		} else {
 			// fallback
 			serializedGraph = serializeGraph(graph, TurtleWriter.class);
@@ -275,7 +275,8 @@ public class GraphUtil {
 		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 			parser = new TriGParser();
 		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-			parser = new SesameJSONLDParser();
+			// FIXME
+			// parser = (RDFParser) new SesameJSONLDParser();
 		}
 
 		String error = null;

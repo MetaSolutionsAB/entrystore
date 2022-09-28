@@ -16,25 +16,25 @@
 
 package org.entrystore.rest.util.jdil;
 
-import java.util.ArrayList;
+import org.eclipse.rdf4j.model.BNode;
+import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.openrdf.model.BNode;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.impl.URIImpl;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * 
@@ -65,7 +65,7 @@ public class JDIL {
 	 */
 	public Graph importJDILtoGraph(JSONObject jsonObject) {
 		try {
-			Graph graph = new org.openrdf.model.impl.GraphImpl();
+			Graph graph = new GraphImpl();
 			JDILParser.removeJDILStar(jsonObject);
 			this.JDILtoGraph(jsonObject, graph, null, new HashMap<String, BNode>());
 			return graph;
@@ -88,7 +88,7 @@ public class JDIL {
 				continue;
 			}
 
-			org.openrdf.model.URI spred = graph.getValueFactory().createURI(namespaces.expand(key));
+			IRI spred = graph.getValueFactory().createIRI(namespaces.expand(key));
 			Object obj= jsonObject.opt(key);
 
 			// Recurse (base pattern)
@@ -109,10 +109,10 @@ public class JDIL {
 		}
 	}
 
-	private void extract(Graph graph, Resource subject, org.openrdf.model.URI spred, Object obj, Map<String, BNode> bnodeResolver) throws JSONException {
+	private void extract(Graph graph, Resource subject, IRI spred, Object obj, Map<String, BNode> bnodeResolver) throws JSONException {
 		if (((JSONObject) obj).has("@id") && !((JSONObject) obj).has("@isBlank")) {
 			//Take care of object
-			org.openrdf.model.URI sobj = graph.getValueFactory().createURI(namespaces.expand(((JSONObject)obj).getString("@id")));
+			IRI sobj = graph.getValueFactory().createIRI(namespaces.expand(((JSONObject)obj).getString("@id")));
 			graph.add(subject, spred, sobj);
 			JDILtoGraph((JSONObject)obj, graph, sobj, bnodeResolver);
 		} else {
@@ -136,33 +136,27 @@ public class JDIL {
 		}
 	}
 
-	private void exportLiteral(JSONObject obj, Graph graph, Resource subject, org.openrdf.model.URI predicate) {
+	private void exportLiteral(JSONObject obj, Graph graph, Resource subject, IRI predicate) {
 		Object objVal= obj.opt("@value");
 		Object objLang= obj.opt("@language");
 		Object objType= obj.opt("@datatype");
 
-		if(objLang != null) { //value + language
-			graph.add(subject, predicate,
-					graph.getValueFactory().createLiteral((String)objVal,(String)objLang));
-		} else if(objType != null) { //value + type
-			graph.add(subject, predicate,
-					graph.getValueFactory().createLiteral((String) objVal, 
-							new URIImpl(namespaces.expand((String)objType))));
-		} else { //value
-			graph.add(subject, 
-					predicate,
-					graph.getValueFactory().createLiteral((String)objVal));
-		}
+		ValueFactory vf = graph.getValueFactory();
 
+		if(objLang != null) { //value + language
+			graph.add(subject, predicate, vf.createLiteral((String)objVal,(String)objLang));
+		} else if(objType != null) { //value + type
+			graph.add(subject, predicate, vf.createLiteral((String) objVal,	vf.createIRI(namespaces.expand((String)objType))));
+		} else { //value
+			graph.add(subject, predicate, vf.createLiteral((String)objVal));
+		}
 	}
 
 
 	/**
 	 * pseudo code
-	 * 
 	 *  
 	 * @param graph
-	 * @param root
 	 * @return
 	 */
 	public JSONObject exportRelationGraphToJSON(Graph graph) {
@@ -224,8 +218,8 @@ public class JDIL {
 
 				} else {
 					Literal lit = (Literal) value;
-					String language = lit.getLanguage();
-					URI datatype = lit.getDatatype();
+					String language = lit.getLanguage().orElse(null);
+					IRI datatype = lit.getDatatype();
 					JSONObject object = new JSONObject();
 					object.accumulate("@value", value.stringValue());
 					if (language != null) {
