@@ -16,7 +16,7 @@
 
 package org.entrystore.impl;
 
-import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.Entry;
 import org.entrystore.Metadata;
@@ -44,7 +44,7 @@ public class LocalMetadataWrapper implements Metadata {
 		}
 	}
 
-	public Graph getGraph() {
+	public Model getGraph() {
 		Entry e = null;
 		if (refEntryURI != null) {
 			e = ((ContextImpl) entry.getContext()).getCache().getByEntryURI(refEntryURI);
@@ -72,7 +72,7 @@ public class LocalMetadataWrapper implements Metadata {
 		return true;
 	}
 
-	public void setGraph(Graph graph) {
+	public void setGraph(Model graph) {
 		throw new UnsupportedOperationException();
 	}
 

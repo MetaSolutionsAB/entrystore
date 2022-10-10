@@ -19,8 +19,8 @@ package org.entrystore.impl;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -172,7 +172,7 @@ public class PublicRepository {
 		}
 
 		try {
-			repository.initialize();
+			repository.init();
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 		}
@@ -232,7 +232,7 @@ public class PublicRepository {
 				*/
 
 				// metadata
-				Graph mdGraph = null;
+				Model mdGraph = null;
 				IRI mdNG = null;
 				if (e.getLocalMetadata() != null) {
 					mdGraph = e.getLocalMetadata().getGraph();
@@ -240,7 +240,7 @@ public class PublicRepository {
 				}
 
 				// ext metadata
-				Graph extMdGraph = null;
+				Model extMdGraph = null;
 				IRI extMdNG = null;
 				if (e.getCachedExternalMetadata() != null) {
 					extMdGraph = e.getCachedExternalMetadata().getGraph();
@@ -248,10 +248,10 @@ public class PublicRepository {
 				}
 
 				// resource
-				Graph resGraph = null;
+				Model resGraph = null;
 				IRI resNG = null;
 				if (GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
-					resGraph = (Graph) e.getResource();
+					resGraph = (Model) e.getResource();
 					resNG = vf.createIRI(e.getResourceURI().toString());
 				}
 

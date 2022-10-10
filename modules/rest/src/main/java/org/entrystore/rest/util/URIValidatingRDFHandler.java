@@ -19,7 +19,7 @@ package org.entrystore.rest.util;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.rio.RDFHandlerException;
-import org.eclipse.rdf4j.rio.helpers.RDFHandlerBase;
+import org.eclipse.rdf4j.rio.helpers.AbstractRDFHandler;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -30,7 +30,7 @@ import java.net.URISyntaxException;
  *
  * @author Hannes Ebner
  */
-public class URIValidatingRDFHandler extends RDFHandlerBase {
+public class URIValidatingRDFHandler extends AbstractRDFHandler {
 
 	@Override
 	public void handleNamespace(String prefix, String uri) throws RDFHandlerException {

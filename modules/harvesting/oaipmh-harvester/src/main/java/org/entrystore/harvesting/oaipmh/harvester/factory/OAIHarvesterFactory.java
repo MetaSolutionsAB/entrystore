@@ -17,10 +17,11 @@
 package org.entrystore.harvesting.oaipmh.harvester.factory;
 
 
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Entry;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactory;
@@ -120,8 +121,8 @@ public class OAIHarvesterFactory implements HarvesterFactory {
 	}
 
 	private void initOAIHarvester(Entry contextEntry, String timeRegExp, String set, String metadataType, String target) {
-		Graph graph = contextEntry.getGraph(); 
-		ValueFactory vf = graph.getValueFactory(); 
+		Model graph = contextEntry.getGraph();
+		ValueFactory vf = SimpleValueFactory.getInstance();
 		IRI root = vf.createIRI(contextEntry.getEntryURI().toString());
 		try {
 			IRI harvesterRoot = vf.createIRI(RepositoryProperties.NSbase +"OAIHarvester");
@@ -139,8 +140,8 @@ public class OAIHarvesterFactory implements HarvesterFactory {
 	}
 	
 	public void deleteHarvester(Entry contextEntry) {
-		Graph graph = contextEntry.getGraph();
-		ValueFactory vf = graph.getValueFactory();
+		Model graph = contextEntry.getGraph();
+		ValueFactory vf = SimpleValueFactory.getInstance();
 		try {
 			IRI harvesterRoot = vf.createIRI(RepositoryProperties.NSbase + "harvester");
 			IRI oaiRoot = vf.createIRI(RepositoryProperties.NSbase + "OAIHarvester");

@@ -17,14 +17,11 @@
 
 package org.entrystore.repository.test;
 
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.GraphImpl;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
-import org.eclipse.rdf4j.model.impl.URIImpl;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -43,6 +40,9 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.HashSet;
+
+import static org.eclipse.rdf4j.model.util.Values.iri;
+import static org.eclipse.rdf4j.model.util.Values.literal;
 
 
 public class TestSuite {
@@ -255,22 +255,21 @@ public class TestSuite {
 	}
 
 	public static void setMetadata(Entry entry, String title, String desc, String subj, String format, String type) {
-		Graph graph = entry.getLocalMetadata().getGraph();
-		ValueFactory vf = graph.getValueFactory(); 
-		IRI root = vf.createIRI(entry.getResourceURI().toString());
+		Model graph = entry.getLocalMetadata().getGraph();
+		IRI root = iri(entry.getResourceURI().toString());
 		try {
-			graph.add(root, dc_title, vf.createLiteral(title, "en"));
+			graph.add(root, dc_title, literal(title, "en"));
 			if (desc != null) {
-				graph.add(root, dc_description, vf.createLiteral(desc, "en"));
+				graph.add(root, dc_description, literal(desc, "en"));
 			}
 			if (subj != null) {
-				graph.add(root, dc_subject, vf.createLiteral(subj));
+				graph.add(root, dc_subject, literal(subj));
 			}
 			if (format != null) {
-				graph.add(root, dc_format, vf.createLiteral(format));
+				graph.add(root, dc_format, literal(format));
 			}
 			if(type != null) {
-				graph.add(root, scam_type, vf.createLiteral(type));
+				graph.add(root, scam_type, literal(type));
 			}
 			entry.getLocalMetadata().setGraph(graph);
 		} catch (RepositoryException e) {
@@ -279,21 +278,21 @@ public class TestSuite {
 	}
 
 	public static void addGuestToMetadataACL(Entry entry) {
-		Graph g = entry.getGraph();
-		g.add(new URIImpl(entry.getLocalMetadataURI().toString()),
+		Model g = entry.getGraph();
+		g.add(iri(entry.getLocalMetadataURI().toString()),
 				RepositoryProperties.Read,
-				new URIImpl(entry.getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString()),
-				new URIImpl(entry.getEntryURI().toString()));
+				iri(entry.getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString()),
+				iri(entry.getEntryURI().toString()));
 		entry.setGraph(g);
 	}
 
 	public static void removeGuestFromMetadataACL(Entry entry) {
 		Model m = new LinkedHashModel(entry.getGraph());
-		m.remove(new URIImpl(entry.getLocalMetadataURI().toString()),
+		m.remove(iri(entry.getLocalMetadataURI().toString()),
 				RepositoryProperties.Read,
-				new URIImpl(entry.getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString()),
-				new URIImpl(entry.getEntryURI().toString()));
-		entry.setGraph(new GraphImpl(m));
+				iri(entry.getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString()),
+				iri(entry.getEntryURI().toString()));
+		entry.setGraph(new LinkedHashModel(m));
 	}
 
 	public static void HarvesterTestSuite(RepositoryManagerImpl rm,

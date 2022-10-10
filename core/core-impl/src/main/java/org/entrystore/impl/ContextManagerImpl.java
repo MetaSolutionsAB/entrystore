@@ -37,8 +37,8 @@ import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.eclipse.rdf4j.rio.RDFHandler;
 import org.eclipse.rdf4j.rio.RDFHandlerException;
 import org.eclipse.rdf4j.rio.RDFParseException;
-import org.eclipse.rdf4j.rio.RDFParser;
 import org.eclipse.rdf4j.rio.RDFWriter;
+import org.eclipse.rdf4j.rio.helpers.BasicParserSettings;
 import org.eclipse.rdf4j.rio.helpers.StatementCollector;
 import org.eclipse.rdf4j.rio.trig.TriGParser;
 import org.eclipse.rdf4j.rio.trig.TriGWriter;
@@ -407,7 +407,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				rc.setAutoCommit(false);
 				
 				TriGParser parser = new TriGParser();
-				parser.setDatatypeHandling(RDFParser.DatatypeHandling.IGNORE);
+				parser.getParserConfig().set(BasicParserSettings.VERIFY_DATATYPE_VALUES, false);
 				StatementCollector collector = new StatementCollector();
 				parser.setRDFHandler(collector);
 				parser.parse(rdfInput, srcScamBaseURI);
@@ -720,7 +720,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		this.remove(this.getByResourceURI(contexturi).iterator().next().getEntryURI()); 
 
 		TriGParser trigParser = new TriGParser();
-		trigParser.setDatatypeHandling(RDFParser.DatatypeHandling.IGNORE);
+		trigParser.getParserConfig().set(BasicParserSettings.VERIFY_DATATYPE_VALUES, false);
 
 		StatementCollector collector = new StatementCollector();
 		trigParser.setRDFHandler(collector);

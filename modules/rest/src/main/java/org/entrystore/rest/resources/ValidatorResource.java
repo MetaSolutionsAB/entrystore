@@ -17,9 +17,9 @@
 package org.entrystore.rest.resources;
 
 import org.apache.commons.io.FileUtils;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.repository.Repository;
@@ -101,7 +101,7 @@ public class ValidatorResource extends BaseResource  {
 
 		if (graphString != null) {
 			// Test 1: can it be deserialized?
-			Graph deserializedGraph = null;
+			Model deserializedGraph = null;
 			try {
 				deserializedGraph = GraphUtil.deserializeGraphUnsafe(graphString, mt);
 			} catch (RDFHandlerException | RDFParseException | IOException e) {
@@ -143,7 +143,7 @@ public class ValidatorResource extends BaseResource  {
 			RepositoryConnection rc = null;
 			try {
 				repo = new SailRepository(new NativeStore(tmpPath.toFile()));
-				repo.initialize();
+				repo.init();
 				rc = repo.getConnection();
 				rc.add(deserializedGraph);
 			} catch (RepositoryException e) {

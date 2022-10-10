@@ -20,17 +20,14 @@ package org.entrystore.impl;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.eclipse.rdf4j.common.iteration.Iterations;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.GraphImpl;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
-import org.eclipse.rdf4j.model.impl.URIImpl;
-import org.eclipse.rdf4j.model.util.ModelUtil;
+import org.eclipse.rdf4j.model.util.Models;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -589,14 +586,14 @@ public class EntryImpl implements Entry {
 		return locType;
 	}
 
-	public Graph getGraph() {
+	public Model getGraph() {
 		//ACL check not necessary as the prerequisite for accessing the MetaMetadata object at all is
 		//AccessProperty.readMetadata rights. It is supposed that the object is not delegated
 		//to principals with less rights.
 		RepositoryConnection rc = null; 
 		try {
 			rc = this.repository.getConnection();
-			Graph graph = Iterations.addAll(rc.getStatements(null, null, null, false, entryURI), new LinkedHashModel());
+			Model graph = Iterations.addAll(rc.getStatements(null, null, null, false, entryURI), new LinkedHashModel());
 			//TODO following is a fix for backwards compatability where homeContext is set on user object rather than in the entryinfo.
 			if (this.resource instanceof User && ((User) this.resource).getHomeContext() != null) {
 				Context context = ((User) this.resource).getHomeContext();
@@ -685,7 +682,7 @@ public class EntryImpl implements Entry {
 		
 		checkAdministerRights();
 
-		ValueFactory vf = new GraphImpl().getValueFactory();
+		ValueFactory vf = getRepositoryManager().getValueFactory();
 		IRI oldResourceURI = vf.createIRI(getResourceURI().toString());
 		IRI newResourceURI = vf.createIRI(resourceURI.toString());
 
@@ -704,8 +701,8 @@ public class EntryImpl implements Entry {
 //				newEntryGraph.add(statement);
 //			}
 //		}
-		Graph entryGraph = getGraph();
-		Graph newEntryGraph = new GraphImpl();
+		Model entryGraph = getGraph();
+		Model newEntryGraph = new LinkedHashModel();
 		for (Statement stmnt : entryGraph) {
 			if (RepositoryProperties.resource.equals(stmnt.getPredicate())) {
 				newEntryGraph.add(stmnt.getSubject(), stmnt.getPredicate(), newResourceURI);
@@ -715,11 +712,11 @@ public class EntryImpl implements Entry {
 		}
 
 		// update metadata graph
-		Graph newMetadataGraph = null;
+		Model newMetadataGraph = null;
 		if (getLocalMetadata() != null) {
-			Graph metadataGraph = getLocalMetadata().getGraph();
+			Model metadataGraph = getLocalMetadata().getGraph();
 			if (metadataGraph != null && metadataGraph.size() != 0) {
-				newMetadataGraph = new GraphImpl();
+				newMetadataGraph = new LinkedHashModel();
 				for (Statement statement : metadataGraph) {
 					if (statement.getSubject().equals(oldResourceURI)) {
 						// replace subject URI
@@ -733,11 +730,11 @@ public class EntryImpl implements Entry {
 		}
 		
 		// update cached external metadata graph
-		Graph newCachedExternalMetadataGraph = null;
+		Model newCachedExternalMetadataGraph = null;
 		if (getCachedExternalMetadata() != null) {
-			Graph metadataGraph = getCachedExternalMetadata().getGraph();
+			Model metadataGraph = getCachedExternalMetadata().getGraph();
 			if (metadataGraph != null && metadataGraph.size() != 0) {
-				newCachedExternalMetadataGraph = new GraphImpl();
+				newCachedExternalMetadataGraph = new LinkedHashModel();
 				for (Statement statement : metadataGraph) {
 					if (statement.getSubject().equals(oldResourceURI)) {
 						// replace subject URI
@@ -751,11 +748,11 @@ public class EntryImpl implements Entry {
 		}
 
 		// update resource graph if resource is builtin
-		Graph newResourceGraph = null;
+		Model newResourceGraph = null;
 		if (!getGraphType().equals(GraphType.None)) {
-			Graph resourceGraph = getResource().getEntry().getGraph();
+			Model resourceGraph = getResource().getEntry().getGraph();
 			if (resourceGraph != null && resourceGraph.size() != 0) {
-				newResourceGraph = new GraphImpl();
+				newResourceGraph = new LinkedHashModel();
 				for (Statement statement : resourceGraph) {
 					if (statement.getSubject().equals(oldResourceURI)) {
 						// replace subject URI
@@ -822,13 +819,13 @@ public class EntryImpl implements Entry {
 
 		checkAdministerRights();
 
-		ValueFactory vf = new GraphImpl().getValueFactory();
+		ValueFactory vf = getRepositoryManager().getValueFactory();
 		IRI oldExternalMetadataURI = vf.createIRI(getExternalMetadataURI().toString());
 		IRI newExternalMetadataURI = vf.createIRI(externalMetadataURI.toString());
 
 		// update entry graph
-		Graph entryGraph = getGraph();
-		Graph newEntryGraph = new GraphImpl();
+		Model entryGraph = getGraph();
+		Model newEntryGraph = new LinkedHashModel();
 		for (Statement statement : entryGraph) {
 			if (statement.getSubject().equals(oldExternalMetadataURI)) {
 				// we don't want to take the cached date into the new graph,
@@ -1052,34 +1049,22 @@ public class EntryImpl implements Entry {
 				log.error(e.getMessage());
 			}
 		}
-		return this.readOrWrite.booleanValue();
+		return this.readOrWrite;
 	}
 	
 	private IRI getAccessSubject(AccessProperty prop) {
-		switch (prop) {
-		case Administer:
-			return entryURI;
-		case ReadMetadata:
-		case WriteMetadata:
-			return localMdURI;
-		case ReadResource:
-		case WriteResource:
-			return resURI;
-		}
-		return null;
+		return switch (prop) {
+			case Administer -> entryURI;
+			case ReadMetadata, WriteMetadata -> localMdURI;
+			case ReadResource, WriteResource -> resURI;
+		};
 	}
 
 	private IRI getAccessPredicate(AccessProperty prop) {
-		switch (prop) {
-		case Administer:
-		case WriteMetadata:
-		case WriteResource:
-			return RepositoryProperties.Write;
-		case ReadResource:
-		case ReadMetadata:
-			return RepositoryProperties.Read;
-		}
-		return null;
+		return switch (prop) {
+			case Administer, WriteMetadata, WriteResource -> RepositoryProperties.Write;
+			case ReadResource, ReadMetadata -> RepositoryProperties.Read;
+		};
 	}
 
 	public void setGraphType(GraphType gt) {
@@ -1126,35 +1111,16 @@ public class EntryImpl implements Entry {
 			}
 		}
 		switch (gt) {
-		case Context:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.Context, entryURI);
-			break;
-		case SystemContext:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.SystemContext, entryURI);
-			break;
-		case List:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.List, entryURI);
-			break;
-		case ResultList:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.ResultList, entryURI);
-			break;
-		case User:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.User, entryURI);
-			break;
-		case Group:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.Group, entryURI);
-			break;
-		case Pipeline:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.Pipeline, entryURI);
-			break;
-		case PipelineResult:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.PipelineResult, entryURI);
-			break;
-		case String:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.String, entryURI); 
-			break;
-		case Graph:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.Graph, entryURI);
+			case Context -> rc.add(resURI, RDF.TYPE, RepositoryProperties.Context, entryURI);
+			case SystemContext -> rc.add(resURI, RDF.TYPE, RepositoryProperties.SystemContext, entryURI);
+			case List -> rc.add(resURI, RDF.TYPE, RepositoryProperties.List, entryURI);
+			case ResultList -> rc.add(resURI, RDF.TYPE, RepositoryProperties.ResultList, entryURI);
+			case User -> rc.add(resURI, RDF.TYPE, RepositoryProperties.User, entryURI);
+			case Group -> rc.add(resURI, RDF.TYPE, RepositoryProperties.Group, entryURI);
+			case Pipeline -> rc.add(resURI, RDF.TYPE, RepositoryProperties.Pipeline, entryURI);
+			case PipelineResult -> rc.add(resURI, RDF.TYPE, RepositoryProperties.PipelineResult, entryURI);
+			case String -> rc.add(resURI, RDF.TYPE, RepositoryProperties.String, entryURI);
+			case Graph -> rc.add(resURI, RDF.TYPE, RepositoryProperties.Graph, entryURI);
 		}
 		
 		graphType = gt;
@@ -1195,15 +1161,10 @@ public class EntryImpl implements Entry {
 		}
 
 		switch (resType) {
-		case ResolvableInformationResource:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.ResolvableInformationResource, entryURI);
-			break;
-		case Unknown:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.Unknown, entryURI);
-			break;
-		case NamedResource:
-			rc.add(resURI, RDF.TYPE, RepositoryProperties.NamedResource, entryURI);
-			break;
+			case ResolvableInformationResource ->
+					rc.add(resURI, RDF.TYPE, RepositoryProperties.ResolvableInformationResource, entryURI);
+			case Unknown -> rc.add(resURI, RDF.TYPE, RepositoryProperties.Unknown, entryURI);
+			case NamedResource -> rc.add(resURI, RDF.TYPE, RepositoryProperties.NamedResource, entryURI);
 		}
 		repType = resType;
 	}
@@ -1233,7 +1194,7 @@ public class EntryImpl implements Entry {
 			IRI contributorURI = vf.createIRI(contributor);
 		
 		    //Do not add if the contributor is the same as the creator
-		    if(contrib != null && !contrib.equals(this.getCreator()) && contributors != null && !contributors.contains(contributorURI)) {
+		    if (contrib != null && !contrib.equals(this.getCreator()) && contributors != null && !contributors.contains(contributorURI)) {
 		    	rc.add(this.entryURI,RepositoryProperties.Contributor,contributorURI, this.entryURI);
 		    	contributors.add(contributorURI);
 		    }
@@ -1259,7 +1220,7 @@ public class EntryImpl implements Entry {
      *
 	 * @param metametadata
 	 */
-	protected void setGraphRaw(Graph metametadata) {
+	protected void setGraphRaw(Model metametadata) {
 		checkAdministerRights();
 		try {
 			synchronized (this.repository) {
@@ -1292,12 +1253,12 @@ public class EntryImpl implements Entry {
 		}		
 	}
 
-	public void setGraph(Graph metametadata) {
+	public void setGraph(Model metametadata) {
 		checkAdministerRights();
 
-		Graph oldGraph = getGraph();
+		Model oldGraph = getGraph();
 		
-		Iterator<Statement> resourceURIStmnts = metametadata.match(this.entryURI, RepositoryProperties.resource, null);
+		Iterator<Statement> resourceURIStmnts = metametadata.filter(this.entryURI, RepositoryProperties.resource, null).iterator();
 		if (resourceURIStmnts.hasNext()) {
 			Value newResourceURI = resourceURIStmnts.next().getObject();
 			if (newResourceURI instanceof IRI) {
@@ -1305,7 +1266,7 @@ public class EntryImpl implements Entry {
 			}
 		}
 		
-		Iterator<Statement> externalMdURIStmnts = metametadata.match(this.entryURI, RepositoryProperties.externalMetadata, null);
+		Iterator<Statement> externalMdURIStmnts = metametadata.filter(this.entryURI, RepositoryProperties.externalMetadata, null).iterator();
 		if (externalMdURIStmnts.hasNext()) {
 			Value newResourceURI = externalMdURIStmnts.next().getObject();
 			if (newResourceURI instanceof IRI) {
@@ -1319,7 +1280,7 @@ public class EntryImpl implements Entry {
 				ValueFactory vf = this.repository.getValueFactory();
 				RepositoryConnection rc = this.repository.getConnection();
 				rc.setAutoCommit(false);
-				Graph minimalProvenanceGraph = null;
+				Model minimalProvenanceGraph = null;
 				if (this.provenance != null) {
 					minimalProvenanceGraph = this.provenance.getMinimalGraph(rc);
 				}
@@ -1464,7 +1425,7 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	private boolean hasAclChangedForGuest(Graph oldGraph, Graph newGraph) {
+	private boolean hasAclChangedForGuest(Model oldGraph, Model newGraph) {
 		if (oldGraph == null || newGraph == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
@@ -1472,7 +1433,7 @@ public class EntryImpl implements Entry {
 		Model oldModel = new LinkedHashModel(oldGraph);
 		Model newModel = new LinkedHashModel(newGraph);
 
-		IRI guestURI = new URIImpl(getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString());
+		IRI guestURI = getRepositoryManager().getValueFactory().createIRI(getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString());
 
 		Model oldAcl = new LinkedHashModel();
 		oldAcl.addAll(oldModel.filter(null, RepositoryProperties.Read, guestURI));
@@ -1482,7 +1443,7 @@ public class EntryImpl implements Entry {
 		newAcl.addAll(newModel.filter(null, RepositoryProperties.Read, guestURI));
 		newAcl.addAll(newModel.filter(null, RepositoryProperties.Write, guestURI));
 
-		return !ModelUtil.equals(oldAcl, newAcl);
+		return !Models.isomorphic(oldAcl, newAcl);
 	}
 
     private boolean isStatementInvRelationCandidate(Statement statement, String base) {
@@ -1530,7 +1491,7 @@ public class EntryImpl implements Entry {
         }
     }
 
-    private void addInverseRelations(RepositoryConnection rc, Graph graph) {
+    private void addInverseRelations(RepositoryConnection rc, Model graph) {
         String base = repositoryManager.getRepositoryURL().toString();
         for (Statement statement : graph) {
             if (isStatementInvRelationCandidate(statement, base)) {
@@ -1606,7 +1567,7 @@ public class EntryImpl implements Entry {
 		return localMetadata;
 	}
 
-	public Graph getMetadataGraph() {
+	public Model getMetadataGraph() {
 		if (getEntryType().equals(EntryType.Local) || getEntryType().equals(EntryType.Link)) {
 			if (getLocalMetadata() != null && getLocalMetadata().getGraph() != null) {
 				return getLocalMetadata().getGraph();
@@ -1616,7 +1577,7 @@ public class EntryImpl implements Entry {
 				return getCachedExternalMetadata().getGraph();
 			}
 		} else if (getEntryType().equals(EntryType.LinkReference)) {
-			Graph mergedMd = new GraphImpl();
+			Model mergedMd = new LinkedHashModel();
 			if (getLocalMetadata() != null && getLocalMetadata().getGraph() != null) {
 				mergedMd.addAll(getLocalMetadata().getGraph());
 			}

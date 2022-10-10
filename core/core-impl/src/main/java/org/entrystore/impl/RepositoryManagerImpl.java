@@ -33,11 +33,14 @@ import org.apache.solr.client.solrj.request.CoreAdminRequest;
 import org.apache.solr.client.solrj.request.CoreStatus;
 import org.apache.solr.core.NodeConfig;
 import org.apache.solr.util.SolrVersion;
+import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.RepositoryResult;
+import org.eclipse.rdf4j.repository.http.HTTPRepository;
+import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.repository.sparql.SPARQLRepository;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.eclipse.rdf4j.rio.RDFHandlerException;
@@ -47,6 +50,7 @@ import org.eclipse.rdf4j.rio.binary.BinaryRDFWriterFactory;
 import org.eclipse.rdf4j.rio.nquads.NQuadsWriterFactory;
 import org.eclipse.rdf4j.rio.trig.TriGWriterFactory;
 import org.eclipse.rdf4j.rio.trix.TriXWriterFactory;
+import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -67,25 +71,6 @@ import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.repository.util.StringUtils;
-import org.eclipse.rdf4j.model.Resource;
-import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.repository.Repository;
-import org.eclipse.rdf4j.repository.RepositoryConnection;
-import org.eclipse.rdf4j.repository.RepositoryException;
-import org.eclipse.rdf4j.repository.RepositoryResult;
-import org.eclipse.rdf4j.repository.http.HTTPRepository;
-import org.eclipse.rdf4j.repository.sail.SailRepository;
-import org.eclipse.rdf4j.repository.sparql.SPARQLRepository;
-import org.eclipse.rdf4j.rio.RDFFormat;
-import org.eclipse.rdf4j.rio.RDFHandlerException;
-import org.eclipse.rdf4j.rio.RDFWriter;
-import org.eclipse.rdf4j.rio.RDFWriterFactory;
-import org.eclipse.rdf4j.rio.binary.BinaryRDFWriterFactory;
-import org.eclipse.rdf4j.rio.nquads.NQuadsWriterFactory;
-import org.eclipse.rdf4j.rio.trig.TriGWriterFactory;
-import org.eclipse.rdf4j.rio.trix.TriXWriterFactory;
-import org.eclipse.rdf4j.sail.memory.MemoryStore;
-import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.quartz.SchedulerException;
 import org.quartz.impl.StdSchedulerFactory;
 import org.slf4j.Logger;
@@ -375,7 +360,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		}
 		try {
-			this.provenanceRepository.initialize();
+			this.provenanceRepository.init();
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 		}

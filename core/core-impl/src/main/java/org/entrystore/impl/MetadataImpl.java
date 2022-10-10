@@ -18,8 +18,8 @@
 package org.entrystore.impl;
 
 import org.eclipse.rdf4j.common.iteration.Iterations;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
@@ -37,7 +37,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.xml.datatype.DatatypeConfigurationException;
 import java.net.URI;
-import java.util.Iterator;
 
 
 public class MetadataImpl implements Metadata {
@@ -59,7 +58,7 @@ public class MetadataImpl implements Metadata {
 		this.localCache = true; //TODO fix
 	}
 
-	public Graph getGraph() {
+	public Model getGraph() {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
 		if (pm != null) {
 			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
@@ -99,7 +98,7 @@ public class MetadataImpl implements Metadata {
 		return URI.create(resourceUri.toString());
 	}
 
-	public void setGraph(Graph graph) {
+	public void setGraph(Model graph) {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
 		if (pm != null) {
 			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteMetadata);
@@ -110,7 +109,7 @@ public class MetadataImpl implements Metadata {
 				RepositoryConnection rc = this.entry.repository.getConnection();
 				rc.begin();
 				try {
-					Graph oldGraph = removeGraphSynchronized(rc);
+					Model oldGraph = removeGraphSynchronized(rc);
 					addGraphSynchronized(rc, graph);
 					ProvenanceImpl provenance = (ProvenanceImpl) this.entry.getProvenance();
 					if (provenance != null && !cached) {
@@ -139,27 +138,25 @@ public class MetadataImpl implements Metadata {
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
-	public Graph removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {
+	public Model removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {
 		String base = this.entry.repositoryManager.getRepositoryURL().toString();
 		//Fetch old graph
-		Graph graph = Iterations.addAll(rc.getStatements(null, null, null, false, mdContext), new LinkedHashModel());
+		Model graph = Iterations.addAll(rc.getStatements(null, null, null, false, mdContext), new LinkedHashModel());
 
 		// Remove relations in other entries inverse relational cache if entry has repository URL.
 		if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.
-			Iterator<Statement> iter2 = graph.iterator();
- 			while(iter2.hasNext()) {
-				Statement statement = iter2.next();
+			for (Statement statement : graph) {
 				Value obj = statement.getObject();
 				Resource subj = statement.getSubject();
 				//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
 				if (obj instanceof IRI
-					&& obj.stringValue().startsWith(base)
-					&& subj.stringValue().startsWith(base)) {
-					URI entryURI = URI.create(statement.getObject().stringValue()); 
+						&& obj.stringValue().startsWith(base)
+						&& subj.stringValue().startsWith(base)) {
+					URI entryURI = URI.create(statement.getObject().stringValue());
 
-					EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(entryURI); 
+					EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(entryURI);
 					if (sourceEntry != null) {
-					    sourceEntry.removeRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
+						sourceEntry.removeRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
 					}
 				}
 			}
@@ -168,7 +165,7 @@ public class MetadataImpl implements Metadata {
 		return graph;
 	}
 	
-	public void addGraphSynchronized(RepositoryConnection rc, Graph graph) throws RepositoryException, DatatypeConfigurationException {
+	public void addGraphSynchronized(RepositoryConnection rc, Model graph) throws RepositoryException, DatatypeConfigurationException {
 		String base = this.entry.repositoryManager.getRepositoryURL().toString();
 
 		rc.add(graph, mdContext);
@@ -182,21 +179,19 @@ public class MetadataImpl implements Metadata {
 		// If it is, then add them to the source entry's relation graph.
 		//Old graph, remove from target entry relation index.
 		if (this.resourceUri.stringValue().startsWith(base)) { //Only check for relations for non external links at this point.
-			Iterator<Statement> iter = graph.iterator();
-			while(iter.hasNext()) {
-				Statement statement = iter.next();
+			for (Statement statement : graph) {
 				Value obj = statement.getObject();
 				Resource subj = statement.getSubject();
 				//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
 				if (obj instanceof IRI
-					&& obj.stringValue().startsWith(base)
-					&& subj.stringValue().startsWith(base)) {
+						&& obj.stringValue().startsWith(base)
+						&& subj.stringValue().startsWith(base)) {
 					URI entryURI = URI.create(statement.getObject().stringValue());
 
-					EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(entryURI);
-                    if (sourceEntry != null) {
-                        sourceEntry.addRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
-                    }
+					EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(entryURI);
+					if (sourceEntry != null) {
+						sourceEntry.addRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
+					}
 				}
 			}
 		}

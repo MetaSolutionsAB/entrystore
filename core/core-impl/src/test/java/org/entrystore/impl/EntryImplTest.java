@@ -16,11 +16,11 @@
 
 package org.entrystore.impl;
 
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -150,28 +150,28 @@ public class EntryImplTest extends AbstractCoreTest {
 
 	@Test
 	public void rdf() {
-		Graph mmdGraph = listEntry.getGraph();
+		Model mmdGraph = listEntry.getGraph();
 //		assertTrue(mmdGraph.size() == 6);
-		assertTrue(mmdGraph.match(null, RepositoryProperties.resource, null).hasNext());
-		assertTrue(mmdGraph.match(null, RepositoryProperties.metadata, null).hasNext());
-		assertTrue(mmdGraph.match(null, RepositoryProperties.Created, null).hasNext());
-		assertTrue(mmdGraph.match(null, RDF.TYPE, null).hasNext());
+		assertTrue(!mmdGraph.filter(null, RepositoryProperties.resource, null).isEmpty());
+		assertTrue(!mmdGraph.filter(null, RepositoryProperties.metadata, null).isEmpty());
+		assertTrue(!mmdGraph.filter(null, RepositoryProperties.Created, null).isEmpty());
+		assertTrue(!mmdGraph.filter(null, RDF.TYPE, null).isEmpty());
 
 		assertTrue(refEntry.getExternalMetadataCacheDate() == null);
-		refEntry.getCachedExternalMetadata().setGraph(new GraphImpl());
+		refEntry.getCachedExternalMetadata().setGraph(new LinkedHashModel());
 		assertTrue(refEntry.getExternalMetadataCacheDate() != null);
 
 		assertTrue(refLinkEntry.getExternalMetadataCacheDate() == null);
-		refLinkEntry.getCachedExternalMetadata().setGraph(new GraphImpl());
+		refLinkEntry.getCachedExternalMetadata().setGraph(new LinkedHashModel());
 		assertTrue(refLinkEntry.getExternalMetadataCacheDate() != null);
 
 	}
 
 	@Test
 	public void setEntryGraph() {
-		Graph mmdGraph = listEntry.getGraph();
+		Model mmdGraph = listEntry.getGraph();
 		listEntry.setGraph(mmdGraph);
-		Graph mmdGraph2 = listEntry.getGraph();
+		Model mmdGraph2 = listEntry.getGraph();
 		assertTrue(mmdGraph.size() == mmdGraph2.size());
 	}
 
@@ -190,7 +190,7 @@ public class EntryImplTest extends AbstractCoreTest {
         Statement stm = vf.createStatement(sourceEntry.getSesameResourceURI(), pred, targetEntry.getSesameResourceURI());
         EntryImpl guestE = (EntryImpl) pm.getGuestUser().getEntry();
         Statement readStm = vf.createStatement(sourceEntry.getSesameResourceURI(), RepositoryProperties.Read, guestE.getSesameResourceURI());
-        Graph g = sourceEntry.getGraph();
+        Model g = sourceEntry.getGraph();
 
         //No relations in target entry
         assertTrue(targetEntry.getRelations().isEmpty());

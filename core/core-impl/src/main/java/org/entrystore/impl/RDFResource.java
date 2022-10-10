@@ -18,8 +18,8 @@
 package org.entrystore.impl;
 
 import org.eclipse.rdf4j.common.iteration.Iterations;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
@@ -40,7 +40,7 @@ public class RDFResource extends ResourceImpl {
 		super(entry, resourceURI);
 	}
 
-	public Graph getGraph() {
+	public Model getGraph() {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 		RepositoryConnection rc = null; 
 		try {
@@ -58,7 +58,7 @@ public class RDFResource extends ResourceImpl {
 		}
 	}
 
-	public void setGraph(Graph graph) {
+	public void setGraph(Model graph) {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 		try {
 			synchronized (this.entry.repository) {

@@ -17,17 +17,17 @@
 package org.entrystore.rest.util;
 
 import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonGenerator;
 import org.eclipse.rdf4j.model.BNode;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -48,7 +48,7 @@ import java.util.Set;
  */
 public class RDFJSON {
 	
-	private static Logger log = LoggerFactory.getLogger(RDFJSON.class);
+	private static final Logger log = LoggerFactory.getLogger(RDFJSON.class);
 
 	/**
 	 * Implementation using the json.org API.
@@ -58,10 +58,10 @@ public class RDFJSON {
 	 *            Graph.
 	 * @return A Sesame Graph if successful, otherwise null.
 	 */
-	public static Graph rdfJsonToGraph(JSONObject json) {
-		Graph result = new GraphImpl();
+	public static Model rdfJsonToGraph(JSONObject json) {
+		Model result = new LinkedHashModel();
 		HashMap<String, BNode> id2bnode = new HashMap<String, BNode>();
-		ValueFactory vf = result.getValueFactory();
+		ValueFactory vf = SimpleValueFactory.getInstance();
 
 		try {
 			JSONObject input = json;
@@ -138,7 +138,7 @@ public class RDFJSON {
 		return result;
 	}
 	
-	public static Graph rdfJsonToGraph(String json) {
+	public static Model rdfJsonToGraph(String json) {
 		try {
 			return rdfJsonToGraph(new JSONObject(json));
 		} catch (JSONException e) {
@@ -169,7 +169,7 @@ public class RDFJSON {
 		return valueObj;
 	}
 
-	public static JSONObject graphToRdfJsonObject(Graph graph) {
+	public static JSONObject graphToRdfJsonObject(Model graph) {
 		try {
 			//First build the json structure using maps to avoid iterating through the graph more than once
 			HashMap<Resource, HashMap<IRI, JSONArray>> struct = new HashMap<>();
@@ -223,7 +223,7 @@ public class RDFJSON {
 	 *            A Sesame Graph.
 	 * @return An RDF/JSON string if successful, otherwise null.
 	 */
-	public static String graphToRdfJson(Graph graph) {
+	public static String graphToRdfJson(Model graph) {
 		JSONObject obj = graphToRdfJsonObject(graph);
 		if (obj != null) {
 			return obj.toString(2);
@@ -239,7 +239,7 @@ public class RDFJSON {
 	 *            A Sesame Graph.
 	 * @return An RDF/JSON string if successful, otherwise null.
 	 */
-	public static String graphToRdfJsonJackson(Graph graph) {
+	public static String graphToRdfJsonJackson(Model graph) {
 		JsonFactory f = new JsonFactory();
 		StringWriter sw = new StringWriter();
 		JsonGenerator g = null;
@@ -264,20 +264,18 @@ public class RDFJSON {
 					g.writeObjectFieldStart(subject.stringValue()); // subject					
 				}
 				Set<IRI> predicates = new HashSet<>();
-				Iterator<Statement> s2 = graph.match(subject, null, null);
-				while (s2.hasNext()) {
-					predicates.add(s2.next().getPredicate());
+				for (Statement statement : graph.filter(subject, null, null)) {
+					predicates.add(statement.getPredicate());
 				}
 				for (IRI predicate : predicates) {
 					g.writeArrayFieldStart(predicate.stringValue()); // predicate
-					Iterator<Statement> stmnts = graph.match(subject, predicate, null);
-					while (stmnts.hasNext()) {
-						Value v = stmnts.next().getObject();
+					for (Statement statement : graph.filter(subject, predicate, null)) {
+						Value v = statement.getObject();
 						g.writeStartObject(); // value
-						if (v instanceof BNode && ! v.stringValue().startsWith("_:")) {
-							g.writeStringField("value", "_:"+v.stringValue());							
+						if (v instanceof BNode && !v.stringValue().startsWith("_:")) {
+							g.writeStringField("value", "_:" + v.stringValue());
 						} else {
-							g.writeStringField("value", v.stringValue());							
+							g.writeStringField("value", v.stringValue());
 						}
 						if (v instanceof Literal l) {
 							g.writeStringField("type", "literal");
@@ -300,10 +298,8 @@ public class RDFJSON {
 			g.writeEndObject(); // root object
 			g.close();
 			return sw.toString();
-		} catch (JsonGenerationException e) {
+		} catch (IOException e) {
 			log.error(e.getMessage(), e);
-		} catch (IOException ioe) {
-			log.error(ioe.getMessage(), ioe);
 		}
 		return null;
 	}

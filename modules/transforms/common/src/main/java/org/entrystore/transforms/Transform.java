@@ -16,15 +16,14 @@
 
 package org.entrystore.transforms;
 
-import org.entrystore.Entry;
 import org.eclipse.rdf4j.model.BNode;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
+import org.entrystore.Entry;
 
-import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -39,8 +38,8 @@ public abstract class Transform implements Comparable<Transform> {
 
 	private Map<String, String> arguments = new HashMap<String, String>();
 
-	public void extractArguments(Graph graph, Resource resource) {
-		Iterator<Statement> prios = graph.match(null, Pipeline.transformPriority, null);
+	public void extractArguments(Model graph, Resource resource) {
+		Iterator<Statement> prios = graph.filter(null, Pipeline.transformPriority, null).iterator();
 		if (prios.hasNext()) {
 			Value obj = prios.next().getObject();
 			if (obj instanceof Literal) {
@@ -48,18 +47,18 @@ public abstract class Transform implements Comparable<Transform> {
 			}
 		}
 
-		Iterator<Statement> args = graph.match(resource, Pipeline.transformArgument, null);
+		Iterator<Statement> args = graph.filter(resource, Pipeline.transformArgument, null).iterator();
 		while (args.hasNext()) {
 			Statement s = args.next();
 			if (s.getObject() instanceof BNode) {
 				String keyStr = null;
 				String valueStr = null;
-				Iterator<Statement> argKeyIt = graph.match((BNode) s.getObject(), Pipeline.transformArgumentKey, null);
+				Iterator<Statement> argKeyIt = graph.filter((BNode) s.getObject(), Pipeline.transformArgumentKey, null).iterator();
 				if (argKeyIt.hasNext()) {
 					Value argKey = argKeyIt.next().getObject();
 					if (argKey instanceof Literal) {
 						keyStr = ((Literal) argKey).stringValue();
-						Iterator<Statement> argValueIt = graph.match((BNode) s.getObject(), Pipeline.transformArgumentValue, null);
+						Iterator<Statement> argValueIt = graph.filter((BNode) s.getObject(), Pipeline.transformArgumentValue, null).iterator();
 						if (argValueIt.hasNext()) {
 							Value argValue = argValueIt.next().getObject();
 							if (argValue instanceof Literal) {
@@ -89,7 +88,7 @@ public abstract class Transform implements Comparable<Transform> {
 
 	public abstract Object transform(Pipeline pipeline, Entry sourceEntry) throws TransformException;
 
-	public Object transform(Pipeline pipeline, Graph graph) throws TransformException {
+	public Object transform(Pipeline pipeline, Model graph) throws TransformException {
 		return graph;
 	}
 

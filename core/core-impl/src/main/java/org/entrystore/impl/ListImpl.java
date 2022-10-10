@@ -20,12 +20,11 @@ package org.entrystore.impl;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.eclipse.rdf4j.common.iteration.Iterations;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.GraphImpl;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -71,9 +70,9 @@ public class ListImpl extends RDFResource implements List {
 		super(entry, uri);
 	}
 
-	public synchronized Graph getGraph() {
+	public synchronized Model getGraph() {
 		RepositoryConnection rc = null;
-		Graph result = null;
+		Model result = null;
 		try {
 			rc = entry.repository.getConnection();
 			RepositoryResult<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI);
@@ -92,7 +91,7 @@ public class ListImpl extends RDFResource implements List {
 		return result;
 	}
 
-	public synchronized void setGraph(Graph graph) {
+	public synchronized void setGraph(Model graph) {
 		if (graph == null) {
 			throw new IllegalArgumentException("Graph must not be null");
 		}
@@ -100,7 +99,7 @@ public class ListImpl extends RDFResource implements List {
 		saveChildren();
 	}
 
-	private Vector loadChildren(Graph graph) {
+	private Vector loadChildren(Model graph) {
 		if (graph == null) {
 			throw new IllegalArgumentException("Graph must not be null");
 		}
@@ -386,7 +385,7 @@ public class ListImpl extends RDFResource implements List {
 
 	
 	private void copyGraphs(EntryImpl source, EntryImpl dest) {
-		Graph eGraph = source.getGraph();
+		Model eGraph = source.getGraph();
 		HashMap<IRI, IRI> map = new HashMap<IRI, IRI>();
 		map.put(source.getSesameEntryURI(), dest.getSesameEntryURI());
 		map.put(source.getSesameLocalMetadataURI(), dest.getSesameLocalMetadataURI());
@@ -408,9 +407,8 @@ public class ListImpl extends RDFResource implements List {
 		}
 	}
 
-	private Graph replaceURI(Graph graph, IRI oUri, IRI nUri) {
-		ValueFactory vf = graph.getValueFactory();
-		Graph nGraph = new GraphImpl();
+	private Model replaceURI(Model graph, IRI oUri, IRI nUri) {
+		Model nGraph = new LinkedHashModel();
 		for (Statement statement : graph) {
 			if (statement.getSubject().equals(oUri)) {
 				// replace subject URI
@@ -426,9 +424,8 @@ public class ListImpl extends RDFResource implements List {
 		return nGraph;
 	}
 
-	private Graph replaceURIs(Graph graph, HashMap<IRI,IRI> map) {
-		ValueFactory vf = graph.getValueFactory();
-		Graph nGraph = new GraphImpl();
+	private Model replaceURIs(Model graph, HashMap<IRI,IRI> map) {
+		Model nGraph = new LinkedHashModel();
 		for (Statement statement : graph) {
 			org.eclipse.rdf4j.model.Resource subj = statement.getSubject();
 			IRI pred = statement.getPredicate();

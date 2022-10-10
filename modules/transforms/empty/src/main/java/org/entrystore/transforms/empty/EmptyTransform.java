@@ -16,7 +16,7 @@
 
 package org.entrystore.transforms.empty;
 
-import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
@@ -33,7 +33,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
-import java.util.Iterator;
 
 /**
  * Creates an empty pipeline result that can be further processed by external services.
@@ -53,7 +52,7 @@ public class EmptyTransform extends Transform {
 		Entry newEntry = pipeline.getEntry().getContext().createResource(null, GraphType.PipelineResult, ResourceType.InformationResource, null);
 		newEntry.setStatus(URI.create(RepositoryProperties.Pending.toString()));
 		String newEntryURI = newEntry.getEntryURI().toString();
-		Graph newEntryGraph = newEntry.getGraph();
+		Model newEntryGraph = newEntry.getGraph();
 		newEntryGraph.add(vf.createIRI(newEntryURI), RepositoryProperties.pipeline, vf.createIRI(pipelineURI));
 		if (sourceEntry != null) {
 			String sourceURI = sourceEntry.getEntryURI().toString();
@@ -61,19 +60,15 @@ public class EmptyTransform extends Transform {
 		}
 		newEntry.setGraph(newEntryGraph);
 
-		Graph pipelineMd = pipeline.getEntry().getMetadataGraph();
-		Graph pipelineResultMd = new LinkedHashModel();
+		Model pipelineMd = pipeline.getEntry().getMetadataGraph();
+		Model pipelineResultMd = new LinkedHashModel();
 
 		//Copy over title, to make presentation nicer from the start (already when pending)
-		Iterator<Statement> titles = pipelineMd.match(null, vf.createIRI(NS.dcterms + "title"), null);
-		while (titles.hasNext()) {
-			Statement titleStmnt = titles.next();
+		for (Statement titleStmnt : pipelineMd.filter(null, vf.createIRI(NS.dcterms + "title"), null)) {
 			pipelineResultMd.add(vf.createIRI(newEntry.getResourceURI().toString()), titleStmnt.getPredicate(), titleStmnt.getObject());
 		}
 		//Copy over tags, to make it easier to find specific pipelineresults
-		Iterator<Statement> tags = pipelineMd.match(null, vf.createIRI(NS.dcterms + "subject"), null);
-		while (tags.hasNext()) {
-			Statement tagStmnt = tags.next();
+		for (Statement tagStmnt : pipelineMd.filter(null, vf.createIRI(NS.dcterms + "subject"), null)) {
 			pipelineResultMd.add(vf.createIRI(newEntry.getResourceURI().toString()), tagStmnt.getPredicate(), tagStmnt.getObject());
 		}
 		if (!pipelineResultMd.isEmpty()) {

@@ -20,7 +20,7 @@ import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.common.SolrException;
-import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
@@ -301,7 +301,7 @@ public class SearchResource extends BaseResource {
 									// get the external metadata
 									Metadata cachedExternalMD = e.getCachedExternalMetadata();
 									if (cachedExternalMD != null) {
-										Graph cachedExternalMDGraph = cachedExternalMD.getGraph();
+										Model cachedExternalMDGraph = cachedExternalMD.getGraph();
 										if (cachedExternalMDGraph != null) {
 											JSONObject childCachedExternalMDJSON = new JSONObject(RDFJSON.graphToRdfJson(cachedExternalMDGraph));
 											childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMDJSON);
@@ -313,7 +313,7 @@ public class SearchResource extends BaseResource {
 									// get the local metadata
 									Metadata localMD = e.getLocalMetadata();
 									if (localMD != null) {
-										Graph localMDGraph = localMD.getGraph();
+										Model localMDGraph = localMD.getGraph();
 										if (localMDGraph != null) {
 											JSONObject localMDJSON = new JSONObject(RDFJSON.graphToRdfJson(localMDGraph));
 											childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
@@ -337,7 +337,7 @@ public class SearchResource extends BaseResource {
 
 							try {
 								if (e.getRelations() != null) {
-									Graph childRelationsGraph = new LinkedHashModel(e.getRelations());
+									Model childRelationsGraph = new LinkedHashModel(e.getRelations());
 									JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
 									childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 								}

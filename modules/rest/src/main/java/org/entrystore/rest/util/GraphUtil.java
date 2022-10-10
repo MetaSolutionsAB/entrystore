@@ -17,7 +17,7 @@
 package org.entrystore.rest.util;
 
 import org.eclipse.rdf4j.common.xml.XMLReaderFactory;
-import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.rio.ParserConfig;
@@ -87,7 +87,7 @@ public class GraphUtil {
 	 *               TurtleWriter
 	 * @return A String representation of the serialized Graph.
 	 */
-	public static String serializeGraph(Graph graph, Class<? extends RDFWriter> writer) {
+	public static String serializeGraph(Model graph, Class<? extends RDFWriter> writer) {
 		if (graph == null || writer == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
@@ -121,7 +121,7 @@ public class GraphUtil {
 		return stringWriter.toString();
 	}
 
-	public static void serializeGraph(Graph graph, RDFWriter rdfWriter) {
+	public static void serializeGraph(Model graph, RDFWriter rdfWriter) {
 		if (graph == null || rdfWriter == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
@@ -146,7 +146,7 @@ public class GraphUtil {
 	 *                        RDFXMLParser, TriGParser, TriXParser, TurtleParser
 	 * @return A String representation of the serialized Graph.
 	 */
-	public static Graph deserializeGraph(String serializedGraph, RDFParser parser) {
+	public static Model deserializeGraph(String serializedGraph, RDFParser parser) {
 		try {
 			return deserializeGraphUnsafe(serializedGraph, parser);
 		} catch (RDFHandlerException | RDFParseException | IOException e) {
@@ -155,7 +155,7 @@ public class GraphUtil {
 		}
 	}
 
-	public static Graph deserializeGraphUnsafe(String serializedGraph, RDFParser parser) throws RDFParseException, RDFHandlerException, IOException {
+	public static Model deserializeGraphUnsafe(String serializedGraph, RDFParser parser) throws RDFParseException, RDFHandlerException, IOException {
 		if (serializedGraph == null || parser == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
@@ -168,7 +168,7 @@ public class GraphUtil {
 		return new LinkedHashModel(collector.getStatements());
 	}
 
-	public static Graph deserializeGraph(String graphString, MediaType mediaType) {
+	public static Model deserializeGraph(String graphString, MediaType mediaType) {
 		try {
 			return deserializeGraphUnsafe(graphString, mediaType);
 		} catch (RDFHandlerException | RDFParseException | IOException e) {
@@ -177,8 +177,8 @@ public class GraphUtil {
 		return null;
 	}
 
-	public static Graph deserializeGraphUnsafe(String graphString, MediaType mediaType) throws RDFHandlerException, IOException, RDFParseException {
-		Graph deserializedGraph = null;
+	public static Model deserializeGraphUnsafe(String graphString, MediaType mediaType) throws RDFHandlerException, IOException, RDFParseException {
+		Model deserializedGraph = null;
 		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
 			deserializedGraph = RDFJSON.rdfJsonToGraph(graphString);
 		} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
@@ -204,7 +204,7 @@ public class GraphUtil {
 		return deserializedGraph;
 	}
 
-	public static String serializeGraph(Graph graph, MediaType mediaType) {
+	public static String serializeGraph(Model graph, MediaType mediaType) {
 		String serializedGraph = null;
 		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
 			serializedGraph = RDFJSON.graphToRdfJson(graph);
@@ -257,7 +257,7 @@ public class GraphUtil {
 		parser.setParserConfig(constructSafeXmlParserConfig());
 		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
 			// we have special treatment of RDF/JSON here because it does not implement the Parser interface
-			Graph g = RDFJSON.rdfJsonToGraph(rdf);
+			Model g = RDFJSON.rdfJsonToGraph(rdf);
 			if (g != null) {
 				return "There was an error parsing the RDF/JSON payload";
 			} else {

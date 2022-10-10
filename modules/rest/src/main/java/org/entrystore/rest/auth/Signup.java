@@ -16,9 +16,10 @@
 
 package org.entrystore.rest.auth;
 
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Entry;
 import org.entrystore.repository.util.NS;
 import org.slf4j.Logger;
@@ -32,8 +33,8 @@ public class Signup {
 	private static Logger log = LoggerFactory.getLogger(Signup.class);
 
 	public static void setFoafMetadata(Entry entry, org.restlet.security.User userInfo) {
-		Graph graph = entry.getLocalMetadata().getGraph();
-		ValueFactory vf = graph.getValueFactory();
+		Model graph = entry.getLocalMetadata().getGraph();
+		ValueFactory vf = SimpleValueFactory.getInstance();
 		IRI resourceURI = vf.createIRI(entry.getResourceURI().toString());
 		String fullname = null;
 		if (userInfo.getFirstName() != null) {

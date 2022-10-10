@@ -31,7 +31,7 @@ import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.util.ClientUtils;
-import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
@@ -677,7 +677,7 @@ public class ResourceResource extends BaseResource {
 			if (preferredMediaType == null) {
 				preferredMediaType = MediaType.APPLICATION_RDF_XML;
 			}
-			Graph graph = null;
+			Model graph = null;
 			if (list) {
 				graph = ((org.entrystore.List) entry.getResource()).getGraph();
 			} else {
@@ -731,7 +731,7 @@ public class ResourceResource extends BaseResource {
 			/*** Graph ***/
 			if (GraphType.Graph.equals(gt) || GraphType.Pipeline.equals(gt)) {
 				RDFResource graphResource = (RDFResource) entry.getResource(); 
-				Graph graph = graphResource.getGraph();
+				Model graph = graphResource.getGraph();
 				if (graph == null) {
 					getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 					return new JsonRepresentation("{\"error\":\"The graph has not been set\"}"); 
@@ -919,7 +919,7 @@ public class ResourceResource extends BaseResource {
 				}
 				return; // success!
 			} else {
-				Graph graph = GraphUtil.deserializeGraph(requestBody, mediaType);
+				Model graph = GraphUtil.deserializeGraph(requestBody, mediaType);
 				if (graph != null && GraphType.List.equals(entry.getGraphType())) {
 					((org.entrystore.List) entry.getResource()).setGraph(graph);
 				} else {
@@ -1040,7 +1040,7 @@ public class ResourceResource extends BaseResource {
 		if (GraphType.Graph.equals(gt) || GraphType.Pipeline.equals(gt)) {
 			RDFResource graphResource = (RDFResource) entry.getResource(); 
 			if (graphResource != null) {
-				Graph graph = null;
+				Model graph = null;
 				try {
 					graph = GraphUtil.deserializeGraph(getRequest().getEntity().getText(), mediaType);
 				} catch (IOException ioe) {

@@ -16,13 +16,13 @@
 
 package org.entrystore.repository.util;
 
-import java.util.Map;
-
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.rio.RDFHandlerException;
-import org.eclipse.rdf4j.rio.helpers.RDFHandlerBase;
+import org.eclipse.rdf4j.rio.helpers.AbstractRDFHandler;
+
+import java.util.Map;
 
 /**
  * Adds statements to a repository. Allows modification of statements before
@@ -30,7 +30,7 @@ import org.eclipse.rdf4j.rio.helpers.RDFHandlerBase;
  * 
  * @author Hannes Ebner
  */
-public class InterceptingRDFInserter extends RDFHandlerBase {
+public class InterceptingRDFInserter extends AbstractRDFHandler {
 	
 	private RepositoryConnection rc;
 	

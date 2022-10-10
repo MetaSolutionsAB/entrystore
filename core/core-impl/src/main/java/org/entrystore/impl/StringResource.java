@@ -16,11 +16,10 @@
 
 package org.entrystore.impl;
 
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.StatementImpl;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.model.vocabulary.XMLSchema;
 
@@ -39,20 +38,17 @@ public class StringResource extends RDFResource{
 	}
 
 	public void setString(String text) {
-		Graph g = getGraph();
+		Model g = getGraph();
 		ValueFactory vf = this.entry.repository.getValueFactory(); 
 		g.clear();
 		if (text != null && !text.equals("")) {
-			g.add(new StatementImpl(
-					this.entry.getSesameResourceURI(), 
-					RDF.VALUE,
-					vf.createLiteral(text, XMLSchema.STRING)));
+			g.add(vf.createStatement(this.entry.getSesameResourceURI(),	RDF.VALUE, vf.createLiteral(text, XMLSchema.STRING)));
 		}
 		this.setGraph(g); 
 	}
 
 	public String getString() {
-		Iterator<Statement> stringElements = this.getGraph().match(this.entry.getSesameResourceURI(), RDF.VALUE, null);
+		Iterator<Statement> stringElements = this.getGraph().filter(this.entry.getSesameResourceURI(), RDF.VALUE, null).iterator();
 		while(stringElements.hasNext()) {
 			return stringElements.next().getObject().stringValue(); 
 		}

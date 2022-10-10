@@ -16,15 +16,13 @@
 
 package org.entrystore.rest.resources;
 
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.util.GraphUtil;
-import org.eclipse.rdf4j.model.util.GraphUtilException;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
@@ -57,10 +55,11 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static org.eclipse.rdf4j.model.util.Values.iri;
 
 
 public class StatisticsResource extends BaseResource {
@@ -190,24 +189,23 @@ public class StatisticsResource extends BaseResource {
 				Set<String> entryProperties = new HashSet<String>();
 				String entryID = entry.getId();
 				URI resourceURI = entry.getResourceURI();
-				Graph metadata = entry.getMetadataGraph();
-				Iterator<Statement> firstLevel = metadata.match(vf.createIRI(resourceURI.toString()), null, null);
-				while (firstLevel.hasNext()) {
-					IRI predicate = firstLevel.next().getPredicate();
+				Model metadata = entry.getMetadataGraph();
+				for (Statement statement : metadata.filter(vf.createIRI(resourceURI.toString()), null, null)) {
+					IRI predicate = statement.getPredicate();
 					String predStr = predicate.toString();
 					if (labelMap != null && labelMap.containsKey(predStr)) {
 						predStr = labelMap.get(predStr);
 					}
-					
+
 					entryProperties.add(predStr);
-					
+
 					// propertyUsage
 					int count = 0;
 					if (propertyUsage.containsKey(predStr)) {
 						count = propertyUsage.get(predStr);
 					}
 					propertyUsage.put(predStr, ++count);
-					
+
 					// usedIn
 					if (propertyUsedIn.containsKey(predStr)) {
 						Set<String> usedIn = propertyUsedIn.get(predStr);
@@ -309,39 +307,37 @@ public class StatisticsResource extends BaseResource {
 				Set<String> ontTerms = new HashSet<String>();
 				String entryID = entry.getId();
 				URI resourceURI = entry.getResourceURI();
-				Graph metadata = entry.getMetadataGraph();
-				Iterator<Statement> firstLevel = metadata.match(vf.createIRI(resourceURI.toString()), null, null);
-				while (firstLevel.hasNext()) {
-					Statement stmnt = firstLevel.next();
+				Model metadata = entry.getMetadataGraph();
+				for (Statement stmnt : metadata.filter(vf.createIRI(resourceURI.toString()), null, null)) {
 					IRI predicate = stmnt.getPredicate();
-					
+
 					if (!allowedPredicates.contains(predicate)) {
 						continue;
 					}
-					
+
 					entriesWithOntTerm.add(resourceURI);
-					
+
 					String predStr = predicate.stringValue().substring(predicate.stringValue().lastIndexOf("#") + 1);
 					Value object = stmnt.getObject();
 					String objStr = object.stringValue().substring(object.stringValue().lastIndexOf("#") + 1);
-					
+
 					ontPredicates.add(predStr);
 					ontTerms.add(objStr);
-					
+
 					// ontology predicate usage
 					int ontPredCount = 0;
 					if (ontPredUsage.containsKey(predStr)) {
 						ontPredCount = ontPredUsage.get(predStr);
 					}
 					ontPredUsage.put(predStr, ++ontPredCount);
-					
+
 					// ontology term usage
 					int ontTermCount = 0;
 					if (ontTermUsage.containsKey(objStr)) {
 						ontTermCount = ontTermUsage.get(objStr);
 					}
 					ontTermUsage.put(objStr, ++ontTermCount);
-					
+
 					// usedIn
 					if (predicateUsedIn.containsKey(predStr)) {
 						Set<String> usedIn = predicateUsedIn.get(predStr);
@@ -352,7 +348,7 @@ public class StatisticsResource extends BaseResource {
 						usedIn.add(entryID);
 						predicateUsedIn.put(predStr, usedIn);
 					}
-					
+
 					if (ontologyTermUsedIn.containsKey(objStr)) {
 						Set<String> usedIn = ontologyTermUsedIn.get(objStr);
 						usedIn.add(entryID);
@@ -435,34 +431,31 @@ public class StatisticsResource extends BaseResource {
 				Set<String> keywords = new HashSet<String>();
 				String entryID = entry.getId();
 				URI resourceURI = entry.getResourceURI();
-				Graph metadata = entry.getMetadataGraph();
-				Iterator<Statement> firstLevel = metadata.match(vf.createIRI(resourceURI.toString()), null, null);
-				while (firstLevel.hasNext()) {
-					Statement stmnt = firstLevel.next();
+				Model metadata = entry.getMetadataGraph();
+				for (Statement stmnt : metadata.filter(vf.createIRI(resourceURI.toString()), null, null)) {
 					IRI predicate = stmnt.getPredicate();
-					
+
 					if (!allowedPredicates.contains(predicate)) {
 						continue;
 					}
-					
+
 					entriesWithKeyword.add(resourceURI);
-					
+
 					Value object = stmnt.getObject();
-					
+
 					if (object instanceof Resource) {
-						Iterator<Statement> secondLevel = metadata.match((Resource) object, RDF.VALUE, null);
-						while (secondLevel.hasNext()) {
-							Value o2 = secondLevel.next().getObject();
+						for (Statement statement : metadata.filter((Resource) object, RDF.VALUE, null)) {
+							Value o2 = statement.getObject();
 							if (o2 instanceof Literal) {
 								String objStr = o2.stringValue().substring(o2.stringValue().lastIndexOf("#") + 1).toLowerCase();
 								keywords.add(objStr);
-								
+
 								int keywordCount = 0;
 								if (keywordUsage.containsKey(objStr)) {
 									keywordCount = keywordUsage.get(objStr);
 								}
 								keywordUsage.put(objStr, ++keywordCount);
-								
+
 								if (keywordUsedIn.containsKey(objStr)) {
 									Set<String> usedIn = keywordUsedIn.get(objStr);
 									usedIn.add(entryID);
@@ -477,13 +470,13 @@ public class StatisticsResource extends BaseResource {
 					} else if (object instanceof Literal) {
 						String objStr = object.stringValue().substring(object.stringValue().lastIndexOf("#") + 1).toLowerCase();
 						keywords.add(objStr);
-						
+
 						int keywordCount = 0;
 						if (keywordUsage.containsKey(objStr)) {
 							keywordCount = keywordUsage.get(objStr);
 						}
 						keywordUsage.put(objStr, ++keywordCount);
-						
+
 						if (keywordUsedIn.containsKey(objStr)) {
 							Set<String> usedIn = keywordUsedIn.get(objStr);
 							usedIn.add(entryID);
@@ -507,7 +500,7 @@ public class StatisticsResource extends BaseResource {
 			for (String key : keywords) {
 				JSONObject propStats = new JSONObject();
 				propStats.put("title", key);
-				int keywordCount = keywordUsage.get(key).intValue();
+				int keywordCount = keywordUsage.get(key);
 				int usedInCount = keywordUsedIn.get(key).size();
 				propStats.put("totalCount", keywordCount);
 				propStats.put("usedInCount", usedInCount);
@@ -578,29 +571,17 @@ public class StatisticsResource extends BaseResource {
 					Context context = cm.getContext(contextId);
 					Set<Entry> competenceEntries = context.getByResourceURI(resourceURI);
 					Entry competenceEntry = competenceEntries.iterator().next(); //Should only be one!
-					Graph graph = competenceEntry.getMetadataGraph();
-					Iterator<Statement> compDefsStatements = graph.match( null,
-							graph.getValueFactory().createIRI("http://scam.sf.net/schema#competencyDefinition"), (Resource) null);
-					
-					while (compDefsStatements.hasNext()){
-						Statement stat = compDefsStatements.next();
-						try{
-							Value compLevel  = GraphUtil.getUniqueObject(graph, stat.getSubject(), 
-									graph.getValueFactory().createIRI("http://scam.sf.net/schema#competenceLevel"));
-							HashMap<String, Integer> current = CompDefToCount.get(stat.getObject().toString());
-							if (current == null){
-								current = new HashMap<String, Integer>();
-								CompDefToCount.put(stat.getObject().toString(), current);
-							}
-							Integer currentInt = current.get(compLevel.toString());
-							if(currentInt == null){
-								currentInt = 0;
-							}
-							currentInt++;
-							current.put(compLevel.toString(), currentInt);
-						} catch (GraphUtilException gue) {
-							continue;
+					Model graph = competenceEntry.getMetadataGraph();
+
+					for (Statement stat : graph.filter(null, iri("http://scam.sf.net/schema#competencyDefinition"), (Resource) null)) {
+						Value compLevel = graph.filter(stat.getSubject(), iri("http://scam.sf.net/schema#competenceLevel"), null).objects().iterator().next();
+						HashMap<String, Integer> current = CompDefToCount.computeIfAbsent(stat.getObject().toString(), k -> new HashMap<String, Integer>());
+						Integer currentInt = current.get(compLevel.toString());
+						if (currentInt == null) {
+							currentInt = 0;
 						}
+						currentInt++;
+						current.put(compLevel.toString(), currentInt);
 					}
 					break;
 				}

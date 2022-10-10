@@ -17,20 +17,18 @@
 package org.entrystore.repository.transformation;
 
 import org.eclipse.rdf4j.model.BNode;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
-import org.eclipse.rdf4j.model.impl.ValueFactoryImpl;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
-import org.eclipse.rdf4j.rio.RDFHandlerException;
-import org.eclipse.rdf4j.rio.RDFParseException;
 import org.eclipse.rdf4j.rio.RDFParser;
+import org.eclipse.rdf4j.rio.helpers.BasicParserSettings;
 import org.eclipse.rdf4j.rio.helpers.StatementCollector;
 import org.eclipse.rdf4j.rio.n3.N3ParserFactory;
 import org.eclipse.rdf4j.sail.memory.MemoryStore;
@@ -46,7 +44,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -56,6 +53,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
+
+import static org.eclipse.rdf4j.model.util.Values.bnode;
 
 
 public class SCAM2Import {
@@ -124,7 +123,7 @@ public class SCAM2Import {
 	
 	public void doImport() {
 		RDFParser parser = new N3ParserFactory().getParser();
-		parser.setDatatypeHandling(RDFParser.DatatypeHandling.IGNORE);
+		parser.getParserConfig().set(BasicParserSettings.VERIFY_DATATYPE_VALUES, false);
 
 		StatementCollector collector = new StatementCollector();
 		parser.setRDFHandler(collector);
@@ -132,29 +131,21 @@ public class SCAM2Import {
 			InputStream fileOut = Files.newInputStream(new File(this.backup, "manifest.n3").toPath());
 			parser.parse(fileOut, "");
 			fileOut.close();
-			Graph graph = new GraphImpl(collector.getStatements());
-			Resource manifestRes = graph.match(null, RDF.TYPE, manifest).next().getSubject();
-			Resource organizationsRes = (Resource) graph.match(manifestRes, organizations, null).next().getObject();
+			Model graph = new LinkedHashModel(collector.getStatements());
+			Resource manifestRes = graph.filter(null, RDF.TYPE, manifest).iterator().next().getSubject();
+			Resource organizationsRes = (Resource) graph.filter(manifestRes, organizations, null).iterator().next().getObject();
 			IRI first = getFirstChild(graph, organizationsRes);
 			recurse(graph, null, first);
 			Entry top = context.get("_top");
 			Entry firstEntry = uri2Entry.get(first);
 			((org.entrystore.List) top.getResource()).addChild(firstEntry.getEntryURI());
 			recurseFix(graph, first, (org.entrystore.List) firstEntry.getResource());
-		} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		} catch (RDFHandlerException e) {
-			e.printStackTrace();
-		} catch (RDFParseException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}
 
-	void recurseFix(Graph graph, IRI folder, org.entrystore.List list) {
+	void recurseFix(Model graph, IRI folder, org.entrystore.List list) {
 		for (IRI child : getChildren(graph, folder)) {
 			Entry entryChild = uri2Entry.get(child);
 			if (entryChild != null) {
@@ -178,7 +169,7 @@ public class SCAM2Import {
 		}
 	}
 
-	void recurse(Graph graph, IRI parent, IRI folder) {
+	void recurse(Model graph, IRI parent, IRI folder) {
 		handleFolder(graph, parent, folder);
 		for (IRI child : getChildren(graph, folder)) {
 			if (isFolder(graph, child)) {
@@ -193,19 +184,19 @@ public class SCAM2Import {
 		}
 	}
 	
-	void populateFolder(Graph graph, IRI parent, IRI folder) {
+	void populateFolder(Model graph, IRI parent, IRI folder) {
 	}
 	
-	void handleFolder(Graph graph, IRI parent, IRI folder) {
-		Graph closure = getAnonymousClosure(graph, folder);
+	void handleFolder(Model graph, IRI parent, IRI folder) {
+		Model closure = getAnonymousClosure(graph, folder);
 		URI parentList = parent == null ? null : uri2Entry.get(parent).getResourceURI();
 		Entry folderEntry = context.createResource(null, GraphType.List, ResourceType.InformationResource, parentList);
 		handleItem((EntryImpl) folderEntry, closure, parent, folder);
 	}
 
-	void handleLeaf(Graph graph, IRI parent, IRI leaf) {
+	void handleLeaf(Model graph, IRI parent, IRI leaf) {
 		log.warn("Working with \""+leaf.stringValue()+"\"");
-		Graph closure = getAnonymousClosure(graph, leaf);
+		Model closure = getAnonymousClosure(graph, leaf);
 		URI parentList = parent == null ? null : uri2Entry.get(parent).getResourceURI();
 		Entry leafEntry = null;
 		if(isURL(closure, leaf)) {
@@ -221,9 +212,9 @@ public class SCAM2Import {
 		}
 	}
 
-	void handleItem(EntryImpl entry, Graph closure, IRI parent, IRI item) {
+	void handleItem(EntryImpl entry, Model closure, IRI parent, IRI item) {
 		uri2Entry.put(item, entry);
-		Graph metadata = new GraphImpl();
+		Model metadata = new LinkedHashModel();
 		for (Statement statement : closure) {
 			Resource s = entry.getSesameResourceURI();
 			Resource subject = statement.getSubject();
@@ -250,8 +241,7 @@ public class SCAM2Import {
 					if (predicate.equals(DCTitle)) {
 						metadata.add(s, DCTTitle, statement.getObject());						
 					} else if (predicate.equals(DCDescription)) {
-						ValueFactory vf = ValueFactoryImpl.getInstance();
-						BNode bnode = vf.createBNode();
+						BNode bnode = bnode();
 						metadata.add(s, DCTDescription, bnode);
 						metadata.add(bnode, RDF.VALUE, statement.getObject());						
 					} else {
@@ -266,7 +256,7 @@ public class SCAM2Import {
 		entry.getLocalMetadata().setGraph(metadata);
 	}
 
-	void setFile(Data data, Graph closure, IRI uri) {
+	void setFile(Data data, Model closure, IRI uri) {
 		IRI loc = getLocation(closure, uri);
 		if (loc != null) {
 			String locStr = loc.stringValue();
@@ -286,49 +276,47 @@ public class SCAM2Import {
 		}
 	}
 	
-	Graph getAnonymousClosure(Graph graph, IRI subject) {
-		Graph collect = new GraphImpl();
+	Model getAnonymousClosure(Model graph, IRI subject) {
+		Model collect = new LinkedHashModel();
 		collectAnonymousClosure(graph, subject, collect);
 		return collect;
 	}
 
 	
-	void collectAnonymousClosure(Graph graph, Resource subject, Graph collect) {
-		Iterator<Statement> it = graph.match(subject, null, null);
-		while(it.hasNext()) {
-			Statement st = it.next();
+	void collectAnonymousClosure(Model graph, Resource subject, Model collect) {
+		for (Statement st : graph.filter(subject, null, null)) {
 			Value object = st.getObject();
 			if (st.getPredicate().equals(KMRrecord)) {
 				continue;
 			}
 			collect.add(st);
 			//If blank
-			if (object instanceof Resource 
+			if (object instanceof Resource
 					&& !(object instanceof IRI)) {
 				collectAnonymousClosure(graph, (Resource) object, collect);
 			}
 		}
 	}
 	
-	boolean isFolder(Graph graph, Resource subject) {
-		return graph.match(subject, RDF_1, null).hasNext();
+	boolean isFolder(Model graph, Resource subject) {
+		return graph.filter(subject, RDF_1, null).iterator().hasNext();
 		//return graph.match(subject, RDF.TYPE, KMRcollection).hasNext();
 	}
 
-	boolean isItem(Graph graph, Resource subject) {
-		return graph.match(subject, RDF.TYPE, IMSItem).hasNext();
+	boolean isItem(Model graph, Resource subject) {
+		return graph.filter(subject, RDF.TYPE, IMSItem).iterator().hasNext();
 	}
 
-	boolean isURL(Graph graph, Resource subject) {
-		return graph.match(subject, RDF.TYPE, KMRURL).hasNext();
+	boolean isURL(Model graph, Resource subject) {
+		return graph.filter(subject, RDF.TYPE, KMRURL).iterator().hasNext();
 	}
 
-	boolean isFile(Graph graph, Resource subject) {
-		return graph.match(subject, RDF.TYPE, KMRFile).hasNext();
+	boolean isFile(Model graph, Resource subject) {
+		return graph.filter(subject, RDF.TYPE, KMRFile).iterator().hasNext();
 	}
 
-	IRI getContent(Graph graph, IRI item) {
-		Iterator<Statement> it = graph.match(item, IMScontent, null);
+	IRI getContent(Model graph, IRI item) {
+		Iterator<Statement> it = graph.filter(item, IMScontent, null).iterator();
 		if (it.hasNext()) {
 			Value obj = it.next().getObject();
 			if (obj instanceof IRI) {
@@ -340,8 +328,8 @@ public class SCAM2Import {
 		return null;
 	}
 
-	IRI getLocation(Graph graph, IRI item) {
-		Iterator<Statement> it = graph.match(item, LOMTlocation, null);
+	IRI getLocation(Model graph, IRI item) {
+		Iterator<Statement> it = graph.filter(item, LOMTlocation, null).iterator();
 		if (it.hasNext()) {
 			Value obj = it.next().getObject();
 			if (obj instanceof IRI) {
@@ -353,8 +341,8 @@ public class SCAM2Import {
 		return null;	
 	}
 
-	IRI getFirstChild(Graph graph, Resource subject) {
-		Iterator<Statement> it = graph.match(subject, firstChild, null);
+	IRI getFirstChild(Model graph, Resource subject) {
+		Iterator<Statement> it = graph.filter(subject, firstChild, null).iterator();
 		if (it.hasNext()) {
 			Value obj = it.next().getObject();
 			if (obj instanceof IRI) {
@@ -366,23 +354,20 @@ public class SCAM2Import {
 		return null;
 	}
 	
-	List<IRI> getChildren(Graph graph, Resource subject) {
+	List<IRI> getChildren(Model graph, Resource subject) {
 		Vector<IRI> children = new Vector<IRI>();
-		Iterator<Statement> sts = graph.match(subject, null, null);
-		while (sts.hasNext()) {
-			Statement st = sts.next();
+		for (Statement st : graph.filter(subject, null, null)) {
 			try {
 				String value = st.getPredicate().toString().substring(RDF.NAMESPACE.length());
-				int index = Integer.parseInt(value.substring(value.lastIndexOf("_")+1));					
+				int index = Integer.parseInt(value.substring(value.lastIndexOf("_") + 1));
 				if (index > children.size()) {
-					children.setSize(index); 
+					children.setSize(index);
 				}
 
 				if (st.getObject() instanceof IRI) {
-					children.set(index-1, (IRI) st.getObject());
+					children.set(index - 1, (IRI) st.getObject());
 				}
-			} catch (IndexOutOfBoundsException iobe) {
-			} catch (NumberFormatException nfe) {
+			} catch (IndexOutOfBoundsException | NumberFormatException iobe) {
 			}
 		}
 		children.trimToSize();

@@ -17,7 +17,6 @@
 package org.entrystore.transforms.rowstore;
 
 import org.apache.commons.io.IOUtils;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
@@ -96,7 +95,7 @@ public class CSV2RowStoreTransform extends Transform {
 				newEntry.setGraphType(GraphType.PipelineResult);
 				newEntry.setResourceType(ResourceType.InformationResource);
 				String newEntryURI = newEntry.getEntryURI().toString();
-				Graph newEntryGraph = newEntry.getGraph();
+				Model newEntryGraph = newEntry.getGraph();
 				newEntryGraph.add(vf.createIRI(newEntryURI), RepositoryProperties.pipeline, vf.createIRI(pipelineURI));
 				newEntryGraph.add(vf.createIRI(newEntryURI), RepositoryProperties.pipelineData, vf.createIRI(sourceURI));
 				newEntry.setGraph(newEntryGraph);

@@ -32,7 +32,6 @@ import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -463,7 +462,7 @@ public class SolrSearchIndex implements SearchIndex {
 		return false;
 	}
 
-	public void submitContextForDelayedReindex(Entry contextEntry, Graph entryGraph) {
+	public void submitContextForDelayedReindex(Entry contextEntry, Model entryGraph) {
 		synchronized (delayedReindex) {
 			IRI guestURI = valueFactory.createIRI(rm.getPrincipalManager().getGuestUser().getURI().toString());
 			URI contextURI = contextEntry.getEntryURI();
@@ -516,8 +515,8 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
-		Graph mdGraph = entry.getMetadataGraph();
-		Graph entryGraph = entry.getGraph();
+		Model mdGraph = entry.getMetadataGraph();
+		Model entryGraph = entry.getGraph();
 		URI resourceURI = entry.getResourceURI();
 
 		SolrInputDocument doc = new SolrInputDocument();
@@ -532,13 +531,11 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.setField("context", entry.getContext().getEntry().getResourceURI().toString());
 
 		// RDF type
-		Iterator<Statement> rdfTypeE = entryGraph.match(valueFactory.createIRI(resourceURI.toString()), RDF.TYPE, null);
-		while (rdfTypeE.hasNext()) {
-			doc.addField("rdfType", rdfTypeE.next().getObject().stringValue());
+		for (Statement value : entryGraph.filter(valueFactory.createIRI(resourceURI.toString()), RDF.TYPE, null)) {
+			doc.addField("rdfType", value.getObject().stringValue());
 		}
-		Iterator<Statement> rdfTypeM = mdGraph.match(valueFactory.createIRI(resourceURI.toString()), RDF.TYPE, null);
-		while (rdfTypeM.hasNext()) {
-			doc.addField("rdfType", rdfTypeM.next().getObject().stringValue());
+		for (Statement statement : mdGraph.filter(valueFactory.createIRI(resourceURI.toString()), RDF.TYPE, null)) {
+			doc.addField("rdfType", statement.getObject().stringValue());
 		}
 
 		// creation date
@@ -735,7 +732,7 @@ public class SolrSearchIndex implements SearchIndex {
 		return doc;
 	}
 
-	private void addGenericMetadataFields(SolrInputDocument doc, Graph metadata, boolean related) {
+	private void addGenericMetadataFields(SolrInputDocument doc, Model metadata, boolean related) {
 		if (doc == null || metadata == null) {
 			throw new IllegalArgumentException("Neither SolrInputDocument nor Graph must be null");
 		}

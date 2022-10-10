@@ -16,8 +16,8 @@
 
 package org.entrystore.impl;
 
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.query.MalformedQueryException;
 import org.eclipse.rdf4j.repository.RepositoryException;
@@ -57,8 +57,8 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		Entry linkEntry = context.createLink(null, URI.create("http://slashdot.org/"), null);
 		Entry refEntry = context.createReference(null, URI.create("http://reddit.com/"), URI.create("http://example.com/md1"), null);
 
-		Graph graph = listEntry.getLocalMetadata().getGraph();
-		ValueFactory vf = graph.getValueFactory();
+		Model graph = listEntry.getLocalMetadata().getGraph();
+		ValueFactory vf = rm.getValueFactory();
 		IRI root = vf.createIRI(listEntry.getResource().getURI().toString());
 
 
@@ -69,7 +69,6 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 
 
 		graph = linkEntry.getLocalMetadata().getGraph();
-		vf = graph.getValueFactory();
 		root = vf.createIRI(linkEntry.getResourceURI().toString());
 
 		graph.add(root, vf.createIRI("http://purl.org/dc/terms/title"), vf.createLiteral("Dagens Nyheter"));
@@ -96,7 +95,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		Entry en = c.get("2");
 
 		if (!EntryType.Reference.equals(en.getEntryType())) {
-			Graph g = en.getLocalMetadata().getGraph();
+			Model g = en.getLocalMetadata().getGraph();
 			// g = en.getGraph();
 		}
 

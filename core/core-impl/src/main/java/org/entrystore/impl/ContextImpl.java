@@ -17,13 +17,12 @@
 
 package org.entrystore.impl;
 
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.ValueFactoryImpl;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.RepositoryResult;
@@ -65,6 +64,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import static org.eclipse.rdf4j.model.util.Values.iri;
+import static org.eclipse.rdf4j.model.util.Values.literal;
+
 
 public class ContextImpl extends ResourceImpl implements Context {
 
@@ -86,9 +88,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 	private volatile boolean deleted = false;
 
 	static {
-		ValueFactory vf = ValueFactoryImpl.getInstance();
-		DCModified = vf.createIRI(NS.dc, "modified");
-		DCTermsModified = vf.createIRI(NS.dcterms, "modified");
+		DCModified = iri(NS.dc, "modified");
+		DCTermsModified = iri(NS.dcterms, "modified");
 	}
 
 	protected ContextImpl(EntryImpl entry, String uri, SoftCache cache) {
@@ -1181,12 +1182,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public void setMetadata(Entry entry, String title, String desc) {
 		try {
-			Graph graph = entry.getLocalMetadata().getGraph();
-			ValueFactory vf = graph.getValueFactory(); 
-			IRI root = vf.createIRI(entry.getResourceURI().toString());
-			graph.add(root, TestSuite.dc_title, vf.createLiteral(title, "en"));
+			Model graph = entry.getLocalMetadata().getGraph();
+			IRI root = iri(entry.getResourceURI().toString());
+			graph.add(root, TestSuite.dc_title, literal(title, "en"));
 			if (desc != null) {
-				graph.add(root, TestSuite.dc_description, vf.createLiteral(desc, "en"));
+				graph.add(root, TestSuite.dc_description, literal(desc, "en"));
 			}
 			entry.getLocalMetadata().setGraph(graph);
 		} catch (Exception e) {

@@ -127,11 +127,11 @@ public class ZipExport {
 				return filename;
 			}
 		}
-		Iterator<Statement> it = entry.getLocalMetadata().getGraph().match(null, DCtitle, null);
+		Iterator<Statement> it = entry.getLocalMetadata().getGraph().filter(null, DCtitle, null).iterator();
 		if (it.hasNext()) {
 			return it.next().getObject().stringValue();
 		}
-		it = entry.getLocalMetadata().getGraph().match(null, DCTermstitle, null);
+		it = entry.getLocalMetadata().getGraph().filter(null, DCTermstitle, null).iterator();
 		if (it.hasNext()) {
 			return it.next().getObject().stringValue();
 		}

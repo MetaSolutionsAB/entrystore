@@ -19,9 +19,9 @@ package org.entrystore.impl;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.eclipse.rdf4j.common.iteration.Iterations;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -107,7 +107,7 @@ public class MetadataEntityImpl implements GraphEntity {
     }
 
     @Override
-    public Graph getGraph() {
+    public Model getGraph() {
         if (this.latest) {
             return this.entry.getMetadataGraph();
         } else {
@@ -129,7 +129,7 @@ public class MetadataEntityImpl implements GraphEntity {
     }
 
     @Override
-    public void setGraph(Graph graph) {
+    public void setGraph(Model graph) {
         //Currently no need to rewrite history.
         throw new UnsupportedOperationException("Changing metadata history is not supported by this instance");
     }

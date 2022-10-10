@@ -16,7 +16,7 @@
 
 package org.entrystore;
 
-import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.entrystore.repository.RepositoryManager;
 
@@ -80,9 +80,9 @@ public interface Entry {
 	 * The above requires that the ExternalMetadata is cahced locally, if not an empty graph is returned.
 	 * 
 	 * 
-	 * @return {@link Graph}, never null.
+	 * @return {@link Model}, never null.
 	 */
-	Graph getMetadataGraph();
+	Model getMetadataGraph();
 
 	/**
 	 * @return the URI for retrieving the metadata from the repository, if the {@link EntryType}
@@ -130,9 +130,9 @@ public interface Entry {
 	Date getExternalMetadataCacheDate();
 	
 	/**
-	 * @return a RDF graph (Sesame {@link Graph}) containing the entry information.
+	 * @return a RDF graph (Sesame {@link Model}) containing the entry information.
 	 */
-	Graph getGraph();
+	Model getGraph();
 	
 	// TODO need comments
 	List<Statement> getRelations();
@@ -141,7 +141,7 @@ public interface Entry {
 	 * @param entryInfo the new graph, should not violate any restriction
 	 * described in any of the set methods in this interface.
 	 */
-	void setGraph(Graph entryInfo);
+	void setGraph(Model entryInfo);
 	
 	/**
 	 * The list of lists is updated automatically when the resource is 
@@ -243,8 +243,7 @@ public interface Entry {
 
 	/**
 	 * If the {@link GraphType} is {@link GraphType#None} any value on
-	 * {@link ResourceType} is allowed, otherwise only
-	 * {@link ResourceType#True} is allowed.
+	 * {@link ResourceType} is allowed.
 	 * 
 	 * @param rt the new ResourceType
 	 */

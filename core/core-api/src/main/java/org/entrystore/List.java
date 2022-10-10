@@ -16,7 +16,7 @@
 
 package org.entrystore;
 
-import org.eclipse.rdf4j.model.Graph;
+import org.eclipse.rdf4j.model.Model;
 
 import java.io.IOException;
 import java.net.URI;
@@ -126,13 +126,13 @@ public interface List extends Resource {
 	 *
 	 * @return An RDF-graph.
 	 */
-	Graph getGraph();
+	Model getGraph();
 
 	/**
 	 * Sets list members using a raw RDF-graph.
 	 *
 	 * @param graph RDF-graph containing statements with list members.
 	 */
-	void setGraph(Graph graph);
+	void setGraph(Model graph);
 	
 }

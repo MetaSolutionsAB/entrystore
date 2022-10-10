@@ -19,9 +19,9 @@ package org.entrystore.impl;
 import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
@@ -202,7 +202,7 @@ public class ProvenanceImpl implements Provenance {
     }
 
     @Override
-    public GraphEntity addMetadataEntity(Graph oldgraph) {
+    public GraphEntity addMetadataEntity(Model oldgraph) {
         RepositoryConnection rc = null;
         try {
             rc = this.entry.repository.getConnection();
@@ -240,7 +240,7 @@ public class ProvenanceImpl implements Provenance {
         return null;
     }
 
-    protected void storeProvenanceGraph(IRI ng, Graph graph) {
+    protected void storeProvenanceGraph(IRI ng, Model graph) {
         RepositoryConnection rc = null;
         try {
             rc = this.entry.repositoryManager.getProvenanceRepository().getConnection();
@@ -267,7 +267,7 @@ public class ProvenanceImpl implements Provenance {
         }
     }
 
-    protected GraphEntity addMetadataEntity(Graph oldgraph, RepositoryConnection rc) throws RepositoryException {
+    protected GraphEntity addMetadataEntity(Model oldgraph, RepositoryConnection rc) throws RepositoryException {
         MetadataEntityImpl latestEntity = (MetadataEntityImpl) getEntityAt(new Date(), ProvenanceType.Metadata);
         ValueFactory vf = rc.getValueFactory();
         IRI attr = this.getUserURI(vf);
@@ -337,9 +337,9 @@ public class ProvenanceImpl implements Provenance {
                 (OWL.SAMEAS.equals(predicate) && entry.getSesameLocalMetadataURI().equals(st.getObject()));
     }
 
-    protected Graph getMinimalGraph(RepositoryConnection rc) throws RepositoryException {
+    protected Model getMinimalGraph(RepositoryConnection rc) throws RepositoryException {
         RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, this.entry.entryURI);
-        Graph result = new LinkedHashModel();
+        Model result = new LinkedHashModel();
         while (rr.hasNext()) {
             Statement st = rr.next();
             if (hasProvenanceCharacter(st)) {

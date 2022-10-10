@@ -19,8 +19,8 @@ package org.entrystore.harvesting.oaipmh.jobs;
 import ORG.oclc.oai.harvester2.verb.ListRecords;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -329,7 +329,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		
 		// if there are no old entries
 		if (entries.isEmpty()) {
-			Graph g = getExternalMetadataGraphFromXML(recordElement, metadataType, entryResourceURI);
+			Model g = getExternalMetadataGraphFromXML(recordElement, metadataType, entryResourceURI);
 			if (g != null) {
 				Entry entry = context.createReference(null, entryResourceURI, entryMetadataURI, null);
 				setCachedMetadataGraph(entry, g);
@@ -389,15 +389,15 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		return (String) expr.evaluate(el, XPathConstants.STRING);
 	}
 	
-	private Graph getExternalMetadataGraphFromXML(Element el, String metadataType, URI resourceURI) throws XPathExpressionException {
+	private Model getExternalMetadataGraphFromXML(Element el, String metadataType, URI resourceURI) throws XPathExpressionException {
 		Node metadata = getMetadataNode(el, metadataType);
 		if (metadata == null || metadata.getChildNodes() == null) {
 			return null;
 		}
-		return (Graph) ConverterManagerImpl.convert(metadataType, metadata, resourceURI, null);
+		return (Model) ConverterManagerImpl.convert(metadataType, metadata, resourceURI, null);
 	}
 
-	private void setCachedMetadataGraph(Entry entry, Graph graph) {
+	private void setCachedMetadataGraph(Entry entry, Model graph) {
 		if (graph != null) {
 			Metadata cachedMD = entry.getCachedExternalMetadata();
 			if (cachedMD != null) {

@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Data;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
@@ -24,8 +25,6 @@ import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
-import org.eclipse.rdf4j.model.impl.URIImpl;
-import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,6 +32,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+
+import static org.eclipse.rdf4j.model.util.Values.iri;
 
 
 /**
@@ -45,10 +46,10 @@ public class DataImpl extends ResourceImpl implements Data {
 
 	private File file = null;
 	
-	private static Logger log = LoggerFactory.getLogger(DataImpl.class);
+	private static final Logger log = LoggerFactory.getLogger(DataImpl.class);
 
 	public DataImpl(Entry entry) {
-		super((EntryImpl) entry, new URIImpl(entry.getResourceURI().toString()));
+		super((EntryImpl) entry, iri(entry.getResourceURI().toString()));
 	}
 
 	private File getFile() throws IOException {

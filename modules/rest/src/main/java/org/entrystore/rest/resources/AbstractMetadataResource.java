@@ -19,7 +19,6 @@ package org.entrystore.rest.resources;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
 import org.eclipse.rdf4j.common.iteration.Iterations;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
@@ -267,7 +266,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	/**
 	 * @return Metadata in the requested format.
 	 */
-	private Representation getRepresentation(Graph graph, MediaType mediaType) throws AuthorizationException {
+	private Representation getRepresentation(Model graph, MediaType mediaType) throws AuthorizationException {
 		if (graph != null) {
 			String serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
 			if (serializedGraph != null) {
@@ -294,7 +293,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		}
 		
 		if (metadata != null && graphString != null) {
-			Graph deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
+			Model deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
 			if (deserializedGraph != null) {
 				getResponse().setStatus(Status.SUCCESS_OK);
 				metadata.setGraph(deserializedGraph);
@@ -410,14 +409,14 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		return result;
 	}
 
-	private Model applyGraphQuery(String query, Graph graph) {
+	private Model applyGraphQuery(String query, Model graph) {
 		Date before = new Date();
 		MemoryStore ms = new MemoryStore();
 		Repository sr = new SailRepository(ms);
 		Model result = null;
 		RepositoryConnection rc = null;
 		try {
-			sr.initialize();
+			sr.init();
 			rc = sr.getConnection();
 			rc.add(graph);
 			GraphQuery gq = rc.prepareGraphQuery(QueryLanguage.SPARQL, query);

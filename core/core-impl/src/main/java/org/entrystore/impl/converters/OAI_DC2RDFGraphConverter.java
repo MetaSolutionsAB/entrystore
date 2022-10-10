@@ -18,11 +18,10 @@ package org.entrystore.impl.converters;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
-import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.GraphImpl;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.Converter;
 import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
@@ -32,6 +31,9 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+
+import static org.eclipse.rdf4j.model.util.Values.iri;
+import static org.eclipse.rdf4j.model.util.Values.literal;
 
 
 public class OAI_DC2RDFGraphConverter implements Converter {
@@ -72,9 +74,8 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 			return null;
 		}
 
-		Graph graph = new GraphImpl();
-		ValueFactory vf = graph.getValueFactory();
-		IRI root = vf.createIRI(resourceURI.toString());
+		Model graph = new LinkedHashModel();
+		IRI root = iri(resourceURI.toString());
 
 		for (int i = 0; i < metadataList.getLength(); i++) {
 			Node n = metadataList.item(i);
@@ -127,12 +128,12 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 			
 			Literal lit;
 			if (lang != null) {
-				lit = vf.createLiteral(nodeContent, lang);
+				lit = literal(nodeContent, lang);
 			} else {
-				lit = vf.createLiteral(nodeContent);
+				lit = literal(nodeContent);
 			}
 			
-			graph.add(root, vf.createIRI(predicate), lit);
+			graph.add(root, iri(predicate), lit);
 		}
 
 		return graph;

@@ -16,12 +16,12 @@
 
 package org.entrystore.transforms;
 
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.ValueFactoryImpl;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Entry;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.converters.Graph2Entries;
@@ -60,7 +60,7 @@ public class Pipeline {
 	public static final IRI transformDetectDestination;
 
 	static {
-		ValueFactory vf = ValueFactoryImpl.getInstance();
+		ValueFactory vf = SimpleValueFactory.getInstance();
 		transform = vf.createIRI(NS.entrystore, "transform");
 		transformPriority = vf.createIRI(NS.entrystore, "transformPriority");
 		transformType = vf.createIRI(NS.entrystore, "transformType");
@@ -96,14 +96,14 @@ public class Pipeline {
     }
 
 	private void detectTransforms() {
-		Graph graph = ((RDFResource) this.entry.getResource()).getGraph();
+		Model graph = ((RDFResource) this.entry.getResource()).getGraph();
 
         //Fallback, check for transforms in metadata graph instead, old way of doing things.
         if (graph.isEmpty()) {
             graph = this.entry.getMetadataGraph();
         }
 
-		Iterator<Statement> toEntryStmts = graph.match(null, transformDestination, null);
+		Iterator<Statement> toEntryStmts = graph.filter(null, transformDestination, null).iterator();
 		if (toEntryStmts.hasNext()) {
 			destination = toEntryStmts.next().getObject().stringValue();
 			if (destination.startsWith("http")) {
@@ -112,17 +112,17 @@ public class Pipeline {
 			}
 		}
 
-		Iterator<Statement> detectStmts = graph.match(null, transformDetectDestination, null);
+		Iterator<Statement> detectStmts = graph.filter(null, transformDetectDestination, null).iterator();
 		if (detectStmts.hasNext()) {
 			detectDestination = detectStmts.next().getObject().stringValue().contains("true");
 		}
 
-		Iterator<Statement> stmts = graph.match(null, transform, null);
+		Iterator<Statement> stmts = graph.filter(null, transform, null).iterator();
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			if (statement.getObject() instanceof Resource) {
 				Resource transformResource = (Resource) statement.getObject();
-				Iterator<Statement> types = graph.match(transformResource, transformType, null);
+				Iterator<Statement> types = graph.filter(transformResource, transformType, null).iterator();
 				if (types.hasNext()) {
 					Transform transform = createTransform(types.next().getObject().stringValue());
 					if (transform != null) {
@@ -172,8 +172,8 @@ public class Pipeline {
 		Transform first = tsteps.get(0);
 		Object result = first.transform(this, sourceEntry);
 		for (int idx = 1; idx < tsteps.size(); idx++) {
-            if (result instanceof Graph) {
-                result = tsteps.get(idx).transform(this, (Graph) result);
+            if (result instanceof Model) {
+                result = tsteps.get(idx).transform(this, (Model) result);
             } else if (result instanceof Entry) {
                 result = tsteps.get(idx).transform(this, (Entry) result);
             } else {
@@ -181,8 +181,8 @@ public class Pipeline {
             }
 		}
 
-        if (result instanceof Graph) {
-            Graph graph = (Graph) result;
+        if (result instanceof Model) {
+            Model graph = (Model) result;
             Graph2Entries g2e = new Graph2Entries(this.entry.getContext());
             if (detectDestination) {
                 return g2e.merge(graph, null, null);

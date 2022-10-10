@@ -17,7 +17,6 @@
 package org.entrystore.repository.util;
 
 import com.google.common.collect.Multimap;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -289,19 +288,18 @@ public class EntryUtil {
 	 *         from a specific graph with the given resource URI as root node.
 	 *         If no titles exist null is returned.
 	 */
-	public static String getLabel(Graph graph, URI resourceURI, Set<IRI> predicates, String language) {
+	public static String getLabel(Model graph, URI resourceURI, Set<IRI> predicates, String language) {
 		String fallback = null;
 		if (graph != null && resourceURI != null) {
 			IRI resURI = valueFactory.createIRI(resourceURI.toString());
 			for (IRI titlePred : predicates) {
-				Iterator<Statement> lables = graph.match(resURI, titlePred, null);
-				while (lables.hasNext()) {
-					Value value = lables.next().getObject();
+				for (Statement statement : graph.filter(resURI, titlePred, null)) {
+					Value value = statement.getObject();
 					Literal lit = null;
 					if (value instanceof Literal) {
 						lit = (Literal) value;
 					} else if (value instanceof org.eclipse.rdf4j.model.Resource) {
-						Iterator<Statement> indirectLables = graph.match((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null);
+						Iterator<Statement> indirectLables = graph.filter((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null).iterator();
 						if (indirectLables.hasNext()) {
 							Value indirectValue = indirectLables.next().getObject();
 							if (indirectValue instanceof Literal) {
@@ -326,18 +324,17 @@ public class EntryUtil {
 		return fallback;
 	}
 	
-	public static String getLabel(Graph graph, URI resourceURI, IRI predicate, String language) {
+	public static String getLabel(Model graph, URI resourceURI, IRI predicate, String language) {
 		Set<IRI> predicates = new HashSet<>();
 		predicates.add(predicate);
 		return getLabel(graph, resourceURI, predicates, language);
 	}
 	
-	public static IRI getResourceAsURI(Graph graph, URI resourceURI, IRI predicate) {
+	public static IRI getResourceAsURI(Model graph, URI resourceURI, IRI predicate) {
 		if (graph != null && resourceURI != null) {
 			IRI resURI = valueFactory.createIRI(resourceURI.toString());
-			Iterator<Statement> stmnts = graph.match(resURI, predicate, null);
-			while (stmnts.hasNext()) {
-				Value value = stmnts.next().getObject();
+			for (Statement statement : graph.filter(resURI, predicate, null)) {
+				Value value = statement.getObject();
 				if (value instanceof IRI) {
 					return (IRI) value;
 				}
@@ -346,7 +343,7 @@ public class EntryUtil {
 		return null;
 	}
 
-	public static String getResource(Graph graph, URI resourceURI, IRI predicate) {
+	public static String getResource(Model graph, URI resourceURI, IRI predicate) {
 		IRI result = getResourceAsURI(graph, resourceURI, predicate);
 		if (result != null) {
 			return result.stringValue();
@@ -369,7 +366,7 @@ public class EntryUtil {
 	 *         from a specific graph with the given resource URI as root node.
 	 *         If no titles exist null is returned.
 	 */
-	public static String getTitle(Graph graph, URI resourceURI, String language) {
+	public static String getTitle(Model graph, URI resourceURI, String language) {
 		if (graph != null && resourceURI != null) {
 			Set<IRI> titlePredicates = new HashSet<>();
 			titlePredicates.add(valueFactory.createIRI(NS.dcterms + "title"));
@@ -562,7 +559,7 @@ public class EntryUtil {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
 
-		Graph graph = null;
+		Model graph = null;
 		try {
 			graph = entry.getMetadataGraph();
 		} catch (AuthorizationException ae) {
@@ -573,18 +570,15 @@ public class EntryUtil {
 			IRI resourceURI = valueFactory.createIRI(entry.getResourceURI().toString());
 			Map<String, String> result = new LinkedHashMap<>();
 			for (IRI pred : predicates) {
-				Iterator<Statement> stmnts = graph.match(resourceURI, pred, null);
-				while (stmnts.hasNext()) {
-					Value value = stmnts.next().getObject();
-					if (value instanceof Literal) {
-						Literal lit = (Literal) value;
+				for (Statement statement : graph.filter(resourceURI, pred, null)) {
+					Value value = statement.getObject();
+					if (value instanceof Literal lit) {
 						result.put(lit.stringValue(), lit.getLanguage().orElse(null));
 					} else if (value instanceof org.eclipse.rdf4j.model.Resource) {
-						Iterator<Statement> stmnts2 = graph.match((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null);
+						Iterator<Statement> stmnts2 = graph.filter((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null).iterator();
 						if (stmnts2.hasNext()) {
 							Value value2 = stmnts2.next().getObject();
-							if (value2 instanceof Literal) {
-								Literal lit2 = (Literal) value2;
+							if (value2 instanceof Literal lit2) {
 								result.put(lit2.stringValue(), lit2.getLanguage().orElse(null));
 							}
 						}
@@ -608,7 +602,7 @@ public class EntryUtil {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
 
-		Graph graph = null;
+		Model graph = null;
         try {
             graph = entry.getMetadataGraph();
         } catch (AuthorizationException ae) {
@@ -622,16 +616,15 @@ public class EntryUtil {
         return new ArrayList<>();
     }
 
-	public static List<String> getResourceValues(Graph graph, URI resourceURI, Set<IRI> predicates) {
+	public static List<String> getResourceValues(Model graph, URI resourceURI, Set<IRI> predicates) {
 		if (graph == null || predicates == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
 
 		List<String> result = new ArrayList<>();
 		for (IRI pred : predicates) {
-			Iterator<Statement> subjects = graph.match(valueFactory.createIRI(resourceURI.toString()), pred, null);
-			while (subjects.hasNext()) {
-				Value value = subjects.next().getObject();
+			for (Statement statement : graph.filter(valueFactory.createIRI(resourceURI.toString()), pred, null)) {
+				Value value = statement.getObject();
 				if (value instanceof IRI) {
 					org.eclipse.rdf4j.model.Resource res = (org.eclipse.rdf4j.model.Resource) value;
 					result.add(res.stringValue());

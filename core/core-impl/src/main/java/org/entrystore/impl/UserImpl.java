@@ -17,9 +17,9 @@
 package org.entrystore.impl;
 
 import org.eclipse.rdf4j.model.BNode;
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -238,8 +238,8 @@ public class UserImpl extends RDFResource implements User {
 
 	public void setMetadata(Entry entry, String title, String desc) {
 		try {
-			Graph graph = entry.getLocalMetadata().getGraph();
-			ValueFactory vf = graph.getValueFactory(); 
+			Model graph = entry.getLocalMetadata().getGraph();
+			ValueFactory vf = SimpleValueFactory.getInstance();
 			IRI root = vf.createIRI(entry.getResourceURI().toString());
 			graph.add(root, TestSuite.dc_title, vf.createLiteral(title, "en"));
 			if (desc != null) {
@@ -476,19 +476,19 @@ public class UserImpl extends RDFResource implements User {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 
 		Map<String, String> result = new HashMap<>();
-		Graph userResourceGraph = getGraph();
-		Iterator<Statement> args = userResourceGraph.match(resourceURI, customProperty, null);
+		Model userResourceGraph = getGraph();
+		Iterator<Statement> args = userResourceGraph.filter(resourceURI, customProperty, null).iterator();
 		while (args.hasNext()) {
 			Statement s = args.next();
 			if (s.getObject() instanceof BNode) {
 				String keyStr = null;
 				String valueStr = null;
-				Iterator<Statement> argKeyIt = userResourceGraph.match((BNode) s.getObject(), customPropertyKey, null);
+				Iterator<Statement> argKeyIt = userResourceGraph.filter((BNode) s.getObject(), customPropertyKey, null).iterator();
 				if (argKeyIt.hasNext()) {
 					Value argKey = argKeyIt.next().getObject();
 					if (argKey instanceof Literal) {
 						keyStr = ((Literal) argKey).stringValue();
-						Iterator<Statement> argValueIt = userResourceGraph.match((BNode) s.getObject(), customPropertyValue, null);
+						Iterator<Statement> argValueIt = userResourceGraph.filter((BNode) s.getObject(), customPropertyValue, null).iterator();
 						if (argValueIt.hasNext()) {
 							Value argValue = argValueIt.next().getObject();
 							if (argValue instanceof Literal) {

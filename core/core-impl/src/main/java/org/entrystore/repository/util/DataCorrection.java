@@ -16,14 +16,13 @@
 
 package org.entrystore.repository.util;
 
-import org.eclipse.rdf4j.model.Graph;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.GraphImpl;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.eclipse.rdf4j.repository.Repository;
@@ -51,10 +50,12 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+
+import static org.eclipse.rdf4j.model.util.Values.getValueFactory;
+import static org.eclipse.rdf4j.model.util.Values.iri;
 
 
 /**
@@ -78,14 +79,6 @@ public class DataCorrection {
 	public static String createW3CDTF(java.util.Date date) {
 		SimpleDateFormat W3CDTF = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
 		return W3CDTF.format(date);
-	}
-	
-	public static IRI createIRI(String namespace, String uri) {
-		ValueFactory vf = new GraphImpl().getValueFactory();
-		if (namespace != null) {
-			return vf.createIRI(namespace, uri);
-		}
-		return vf.createIRI(uri);
 	}
 	
 	private Set<URI> getContexts() {
@@ -129,21 +122,19 @@ public class DataCorrection {
 		if (entry == null) {
 			return;
 		}
-		Graph metadata = entry.getGraph();
+		Model metadata = entry.getGraph();
 		if (metadata != null) {
-			ValueFactory vf = new GraphImpl().getValueFactory();
+			IRI resourceURI = iri(entry.getResourceURI().toString());
+			IRI metadataURI = iri(entry.getLocalMetadata().getURI().toString());
+
+			Statement resourceRights = getValueFactory().createStatement(resourceURI, iri(NS.entrystore, "write"), resourceURI);
+			Statement metadataRights = getValueFactory().createStatement(metadataURI, iri(NS.entrystore, "write"), resourceURI);
 			
-			IRI resourceURI = vf.createIRI(entry.getResourceURI().toString());
-			IRI metadataURI = vf.createIRI(entry.getLocalMetadata().getURI().toString());
-			
-			Statement resourceRights = vf.createStatement(resourceURI, createIRI(NS.entrystore, "write"), resourceURI);
-			Statement metadataRights = vf.createStatement(metadataURI, createIRI(NS.entrystore, "write"), resourceURI);
-			
-			if (!metadata.match(resourceRights.getSubject(), resourceRights.getPredicate(), resourceRights.getObject()).hasNext()) {
+			if (!metadata.filter(resourceRights.getSubject(), resourceRights.getPredicate(), resourceRights.getObject()).iterator().hasNext()) {
 				metadata.add(resourceRights);
 				log.info("Added statement: " + resourceRights);
 			}
-			if (!metadata.match(metadataRights.getSubject(), metadataRights.getPredicate(), metadataRights.getObject()).hasNext()) {
+			if (!metadata.filter(metadataRights.getSubject(), metadataRights.getPredicate(), metadataRights.getObject()).iterator().hasNext()) {
 				metadata.add(metadataRights);
 				log.info("Added statement: " + metadataRights);
 			}
@@ -155,28 +146,25 @@ public class DataCorrection {
 	private void fixMetadataOfEntry(Entry entry) {
 		Metadata localMd = entry.getLocalMetadata();
 		if (localMd != null) {
-			Graph metadata = entry.getLocalMetadata().getGraph();
+			Model metadata = entry.getLocalMetadata().getGraph();
 			if (metadata != null) {
 				boolean updateNecessary = false;
-				ValueFactory vf = metadata.getValueFactory();
 				URI rURI = entry.getResourceURI();
 				if (rURI == null) {
 					log.error("Resource URI is null!");
 					return;
 				}
-				IRI resURI = vf.createIRI(rURI.toString());
+				IRI resURI = iri(rURI.toString());
 				
 				List<Statement> toRemove = new ArrayList<Statement>();
 				List<Statement> toAdd = new ArrayList<Statement>();
 
-				Iterator<Statement> rdfsTypeStmnts = metadata.match(null, vf.createIRI("http://www.w3.org/TR/rdf-schema/type"), null);
-				while (rdfsTypeStmnts.hasNext()) {
-					Statement rdfsTypeStmnt = rdfsTypeStmnts.next();
+				for (Statement rdfsTypeStmnt : metadata.filter(null, iri("http://www.w3.org/TR/rdf-schema/type"), null)) {
 					if (rdfsTypeStmnt.getObject() instanceof Resource) {
 						String objValue = rdfsTypeStmnt.getObject().stringValue();
 						if (objValue.startsWith("http://purl.org/telmap/") || // fix for telmap
 								objValue.equals("http://http://xmlns.com/foaf/0.1/Person")) { // fix for voa3r
-							toAdd.add(vf.createStatement(rdfsTypeStmnt.getSubject(), RDF.TYPE, rdfsTypeStmnt.getObject()));
+							toAdd.add(getValueFactory().createStatement(rdfsTypeStmnt.getSubject(), RDF.TYPE, rdfsTypeStmnt.getObject()));
 							toRemove.add(rdfsTypeStmnt);
 						}
 					}
@@ -228,13 +216,11 @@ public class DataCorrection {
 		
 		Metadata localMd = entry.getLocalMetadata();
 		if (localMd != null) {
-			Graph metadata = entry.getLocalMetadata().getGraph();
+			Model metadata = entry.getLocalMetadata().getGraph();
 			if (metadata != null) {
-				Iterator<Statement> stmnts = metadata.match(null, dctermsDate, null);
-				while (stmnts.hasNext()) {
-					Value obj = stmnts.next().getObject();
-					if (obj instanceof Literal) {
-						Literal lit = (Literal) obj;
+				for (Statement statement : metadata.filter(null, dctermsDate, null)) {
+					Value obj = statement.getObject();
+					if (obj instanceof Literal lit) {
 						if (!w3cdtf.equals(lit.getDatatype())) {
 							log.info("STRANGE: incorrect datatype!");
 						}
