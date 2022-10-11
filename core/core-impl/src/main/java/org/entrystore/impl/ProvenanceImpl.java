@@ -19,20 +19,20 @@ package org.entrystore.impl;
 import com.google.common.collect.Lists;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.vocabulary.OWL;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.entrystore.Entity;
 import org.entrystore.GraphEntity;
 import org.entrystore.Provenance;
 import org.entrystore.ProvenanceType;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Statement;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.model.vocabulary.OWL;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.RepositoryResult;
 
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
@@ -89,10 +89,10 @@ public class ProvenanceImpl implements Provenance {
     public List<Entity> getEntities(ProvenanceType type, RepositoryConnection rc) throws RepositoryException {
         List<Entity> entities = new ArrayList<Entity>();
         RepositoryResult<Statement> latestStmt = null;
-        org.openrdf.model.URI latestURI = null;
+        IRI latestURI = null;
         try {
             latestStmt = rc.getStatements(null, OWL.SAMEAS, this.entry.getSesameLocalMetadataURI(), false, this.entry.entryURI);
-            latestURI = latestStmt.hasNext() ? (org.openrdf.model.URI) latestStmt.next().getSubject() : null;
+            latestURI = latestStmt.hasNext() ? (IRI) latestStmt.next().getSubject() : null;
         } finally {
             if (latestStmt != null && !latestStmt.isClosed()) {
                 latestStmt.close();
@@ -146,9 +146,9 @@ public class ProvenanceImpl implements Provenance {
 		RepositoryResult<Statement> latestStmt = null;
 		try {
             rc = this.entry.repository.getConnection();
-            rr = rc.getStatements(rc.getValueFactory().createURI(uri.toString()), RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
+            rr = rc.getStatements(rc.getValueFactory().createIRI(uri.toString()), RepositoryProperties.generatedAtTime, null, false, this.entry.entryURI);
             latestStmt = rc.getStatements(null, OWL.SAMEAS, this.entry.getSesameLocalMetadataURI(), false, this.entry.entryURI);
-            org.openrdf.model.URI latestURI = latestStmt.hasNext() ? (org.openrdf.model.URI) latestStmt.next().getSubject() : null;
+            IRI latestURI = latestStmt.hasNext() ? (IRI) latestStmt.next().getSubject() : null;
             Entity entity = null;
             if (rr.hasNext()) {
                 entity = new MetadataEntityImpl(this.entry, rr.next(), latestURI);
@@ -202,7 +202,7 @@ public class ProvenanceImpl implements Provenance {
     }
 
     @Override
-    public GraphEntity addMetadataEntity(Graph oldgraph) {
+    public GraphEntity addMetadataEntity(Model oldgraph) {
         RepositoryConnection rc = null;
         try {
             rc = this.entry.repository.getConnection();
@@ -231,16 +231,16 @@ public class ProvenanceImpl implements Provenance {
         return null;
     }
 
-    private org.openrdf.model.URI getUserURI(ValueFactory vf) {
+    private IRI getUserURI(ValueFactory vf) {
         if (this.entry.repositoryManager != null &&
                 this.entry.repositoryManager.getPrincipalManager() != null &&
                 this.entry.repositoryManager.getPrincipalManager().getAuthenticatedUserURI() != null) {
-            return vf.createURI(this.entry.repositoryManager.getPrincipalManager().getAuthenticatedUserURI().toString());
+            return vf.createIRI(this.entry.repositoryManager.getPrincipalManager().getAuthenticatedUserURI().toString());
         }
         return null;
     }
 
-    protected void storeProvenanceGraph(org.openrdf.model.URI ng, Graph graph) {
+    protected void storeProvenanceGraph(IRI ng, Model graph) {
         RepositoryConnection rc = null;
         try {
             rc = this.entry.repositoryManager.getProvenanceRepository().getConnection();
@@ -267,21 +267,21 @@ public class ProvenanceImpl implements Provenance {
         }
     }
 
-    protected GraphEntity addMetadataEntity(Graph oldgraph, RepositoryConnection rc) throws RepositoryException {
+    protected GraphEntity addMetadataEntity(Model oldgraph, RepositoryConnection rc) throws RepositoryException {
         MetadataEntityImpl latestEntity = (MetadataEntityImpl) getEntityAt(new Date(), ProvenanceType.Metadata);
         ValueFactory vf = rc.getValueFactory();
-        org.openrdf.model.URI attr = this.getUserURI(vf);
+        IRI attr = this.getUserURI(vf);
         if (attr == null) {
             return null;
         }
-        org.openrdf.model.URI uri;
-        org.openrdf.model.URI eURI = this.entry.entryURI;
+        IRI uri;
+        IRI eURI = this.entry.entryURI;
 
         if (latestEntity == null) {
-            uri = vf.createURI(getRevisionURI("1", ProvenanceType.Metadata).toString());
+            uri = vf.createIRI(getRevisionURI("1", ProvenanceType.Metadata).toString());
         } else {
             URI newMDURI = getNewRevisionURIFromOld(latestEntity.getURI(), ProvenanceType.Metadata);
-            uri = vf.createURI(newMDURI.toString());
+            uri = vf.createIRI(newMDURI.toString());
             rc.add(uri, RepositoryProperties.wasRevisionOf, latestEntity.getSesameURI(), eURI);
             rc.remove(rc.getStatements(latestEntity.getSesameURI(), OWL.SAMEAS, null, false, eURI), eURI);
             storeProvenanceGraph(latestEntity.getSesameURI(), oldgraph);
@@ -330,16 +330,16 @@ public class ProvenanceImpl implements Provenance {
     }
 
     protected boolean hasProvenanceCharacter(Statement st) {
-        org.openrdf.model.URI predicate = st.getPredicate();
+        IRI predicate = st.getPredicate();
         return RepositoryProperties.wasRevisionOf.equals(predicate) ||
                 RepositoryProperties.generatedAtTime.equals(predicate) ||
                 RepositoryProperties.wasAttributedTo.equals(predicate) ||
                 (OWL.SAMEAS.equals(predicate) && entry.getSesameLocalMetadataURI().equals(st.getObject()));
     }
 
-    protected Graph getMinimalGraph(RepositoryConnection rc) throws RepositoryException {
+    protected Model getMinimalGraph(RepositoryConnection rc) throws RepositoryException {
         RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, this.entry.entryURI);
-        Graph result = new LinkedHashModel();
+        Model result = new LinkedHashModel();
         while (rr.hasNext()) {
             Statement st = rr.next();
             if (hasProvenanceCharacter(st)) {

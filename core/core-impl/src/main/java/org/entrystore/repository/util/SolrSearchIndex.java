@@ -32,6 +32,13 @@ import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -47,13 +54,6 @@ import org.entrystore.impl.RegularContext;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Model;
-import org.openrdf.model.Statement;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.vocabulary.RDF;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -105,7 +105,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private boolean related = false;
 
-	private Map<org.openrdf.model.URI, Boolean> relatedProperties = null;
+	private Map<IRI, Boolean> relatedProperties = null;
 
 	private boolean relatedContainsGlobal = false;
 
@@ -128,6 +128,8 @@ public class SolrSearchIndex implements SearchIndex {
 	private final ExecutorService reindexExecutor = Executors.newSingleThreadExecutor();
 
 	private final Map<URI, DelayedContextIndexerInfo> delayedReindex = Collections.synchronizedMap(new HashMap<>());
+
+	private ValueFactory valueFactory;
 
 	public class SolrInputDocumentSubmitter extends Thread {
 
@@ -256,6 +258,7 @@ public class SolrSearchIndex implements SearchIndex {
 		solrDateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 		solrDateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"));
 		this.rm = rm;
+		valueFactory = this.rm.getValueFactory();
 		this.solrServer = solrServer;
 		extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_EXTRACT_FULLTEXT, "off"));
 		related = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_RELATED, "off"));
@@ -267,9 +270,9 @@ public class SolrSearchIndex implements SearchIndex {
 				relatedProperties = new HashMap<>();
 				for (String relProp : rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>())) {
 					if (relProp.endsWith(",global")) {
-						relatedProperties.put(rm.getValueFactory().createURI(relProp.substring(0, relProp.indexOf(","))), true);
+						relatedProperties.put(valueFactory.createIRI(relProp.substring(0, relProp.indexOf(","))), true);
 					} else {
-						relatedProperties.put(rm.getValueFactory().createURI(relProp), false);
+						relatedProperties.put(valueFactory.createIRI(relProp), false);
 					}
 				}
 				relatedContainsGlobal = relatedProperties.containsValue(true);
@@ -459,13 +462,13 @@ public class SolrSearchIndex implements SearchIndex {
 		return false;
 	}
 
-	public void submitContextForDelayedReindex(Entry contextEntry, Graph entryGraph) {
+	public void submitContextForDelayedReindex(Entry contextEntry, Model entryGraph) {
 		synchronized (delayedReindex) {
-			org.openrdf.model.URI guestURI = new URIImpl(rm.getPrincipalManager().getGuestUser().getURI().toString());
+			IRI guestURI = valueFactory.createIRI(rm.getPrincipalManager().getGuestUser().getURI().toString());
 			URI contextURI = contextEntry.getEntryURI();
 			Model m = new LinkedHashModel(entryGraph);
-			boolean newGuestReadable = m.contains(new URIImpl(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Read, guestURI) ||
-					m.contains(new URIImpl(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Write, guestURI);
+			boolean newGuestReadable = m.contains(valueFactory.createIRI(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Read, guestURI) ||
+					m.contains(valueFactory.createIRI(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Write, guestURI);
 			if (delayedReindex.containsKey(contextURI) && (delayedReindex.get(contextURI).guestReadable != newGuestReadable)) {
 				// the context has been switched back to the previous
 				// status and does not need to be reindexed anymore
@@ -512,8 +515,8 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
-		Graph mdGraph = entry.getMetadataGraph();
-		Graph entryGraph = entry.getGraph();
+		Model mdGraph = entry.getMetadataGraph();
+		Model entryGraph = entry.getGraph();
 		URI resourceURI = entry.getResourceURI();
 
 		SolrInputDocument doc = new SolrInputDocument();
@@ -528,13 +531,11 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.setField("context", entry.getContext().getEntry().getResourceURI().toString());
 
 		// RDF type
-		Iterator<Statement> rdfTypeE = entryGraph.match(new URIImpl(resourceURI.toString()), RDF.TYPE, null);
-		while (rdfTypeE.hasNext()) {
-			doc.addField("rdfType", rdfTypeE.next().getObject().stringValue());
+		for (Statement value : entryGraph.filter(valueFactory.createIRI(resourceURI.toString()), RDF.TYPE, null)) {
+			doc.addField("rdfType", value.getObject().stringValue());
 		}
-		Iterator<Statement> rdfTypeM = mdGraph.match(new URIImpl(resourceURI.toString()), RDF.TYPE, null);
-		while (rdfTypeM.hasNext()) {
-			doc.addField("rdfType", rdfTypeM.next().getObject().stringValue());
+		for (Statement statement : mdGraph.filter(valueFactory.createIRI(resourceURI.toString()), RDF.TYPE, null)) {
+			doc.addField("rdfType", statement.getObject().stringValue());
 		}
 
 		// creation date
@@ -555,9 +556,9 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.setField("resourceType", entry.getResourceType().name());
 
 		// profile
-		Set<org.openrdf.model.URI> profilePreds = new HashSet<>();
-		profilePreds.add(new URIImpl("http://entryscape.com/terms/entityType"));
-		profilePreds.add(new URIImpl("http://entrystore.org/terms/profile"));
+		Set<IRI> profilePreds = new HashSet<>();
+		profilePreds.add(valueFactory.createIRI("http://entryscape.com/terms/entityType"));
+		profilePreds.add(valueFactory.createIRI("http://entrystore.org/terms/profile"));
 		for (String profileURI : EntryUtil.getResourceValues(entryGraph, entry.getResourceURI(), profilePreds)) {
 			doc.setField("profile", profileURI);
 			break; // we only need the first match
@@ -681,11 +682,11 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// language of the resource
-		String dcLang = EntryUtil.getLabel(mdGraph, resourceURI, new URIImpl(NS.dc + "language"), null);
+		String dcLang = EntryUtil.getLabel(mdGraph, resourceURI, valueFactory.createIRI(NS.dc + "language"), null);
 		if (dcLang != null) {
 			doc.addField("lang", dcLang);
 		}
-		String dctLang = EntryUtil.getLabel(mdGraph, resourceURI, new URIImpl(NS.dcterms + "language"), null);
+		String dctLang = EntryUtil.getLabel(mdGraph, resourceURI, valueFactory.createIRI(NS.dcterms + "language"), null);
 		if (dctLang != null) {
 			doc.addField("lang", dctLang);
 		}
@@ -731,7 +732,7 @@ public class SolrSearchIndex implements SearchIndex {
 		return doc;
 	}
 
-	private void addGenericMetadataFields(SolrInputDocument doc, Graph metadata, boolean related) {
+	private void addGenericMetadataFields(SolrInputDocument doc, Model metadata, boolean related) {
 		if (doc == null || metadata == null) {
 			throw new IllegalArgumentException("Neither SolrInputDocument nor Graph must be null");
 		}
@@ -750,7 +751,7 @@ public class SolrSearchIndex implements SearchIndex {
 			String predMD5Trunc8 = Hashing.md5(predString).substring(0, 8);
 
 			// object
-			if (s.getObject() instanceof org.openrdf.model.URI) {
+			if (s.getObject() instanceof IRI) {
 				String objString = s.getObject().stringValue();
 				if (!related) {
 					addFieldValueOnce(doc,prefix + "metadata.object.uri", objString);
@@ -811,7 +812,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		Set<Entry> relatedEntries = new HashSet<>();
-		for (org.openrdf.model.URI relProp : relatedProperties.keySet()) {
+		for (IRI relProp : relatedProperties.keySet()) {
 			List<String> relatedURIs = EntryUtil.getResourceValues(entry, Collections.singleton(relProp));
 			if (relatedURIs.isEmpty()) {
 				continue;

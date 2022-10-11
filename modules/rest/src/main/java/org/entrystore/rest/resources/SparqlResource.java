@@ -16,23 +16,22 @@
 
 package org.entrystore.rest.resources;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.query.MalformedQueryException;
+import org.eclipse.rdf4j.query.QueryEvaluationException;
+import org.eclipse.rdf4j.query.QueryLanguage;
+import org.eclipse.rdf4j.query.TupleQuery;
+import org.eclipse.rdf4j.query.TupleQueryResultHandler;
+import org.eclipse.rdf4j.query.TupleQueryResultHandlerException;
+import org.eclipse.rdf4j.query.impl.DatasetImpl;
+import org.eclipse.rdf4j.query.resultio.binary.BinaryQueryResultWriter;
+import org.eclipse.rdf4j.query.resultio.sparqljson.SPARQLResultsJSONWriter;
+import org.eclipse.rdf4j.query.resultio.sparqlxml.SPARQLResultsXMLWriter;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.rest.util.HttpUtil;
-import org.openrdf.model.URI;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.query.MalformedQueryException;
-import org.openrdf.query.QueryEvaluationException;
-import org.openrdf.query.QueryLanguage;
-import org.openrdf.query.TupleQuery;
-import org.openrdf.query.TupleQueryResultHandler;
-import org.openrdf.query.TupleQueryResultHandlerException;
-import org.openrdf.query.impl.DatasetImpl;
-import org.openrdf.query.resultio.binary.BinaryQueryResultWriter;
-import org.openrdf.query.resultio.sparqljson.SPARQLResultsJSONWriter;
-import org.openrdf.query.resultio.sparqlxml.SPARQLResultsXMLWriter;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
 import org.restlet.data.Form;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
@@ -180,7 +179,7 @@ public class SparqlResource extends BaseResource {
 			TupleQuery query = rc.prepareTupleQuery(QueryLanguage.SPARQL, queryString);
 			query.setMaxQueryTime(600); // setting a max query time of 10 minutes
 			if (context != null) {
-				URI contextURI = new URIImpl(context.getURI().toString());
+				IRI contextURI = rc.getValueFactory().createIRI(context.getURI().toString());
 				DatasetImpl ds = new DatasetImpl();
 				ds.addDefaultGraph(contextURI);
 				ds.addNamedGraph(contextURI);

@@ -17,12 +17,13 @@
 
 package org.entrystore.impl;
 
-import info.aduna.iteration.Iterations;
+import org.eclipse.rdf4j.common.iteration.Iterations;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.PrincipalManager.AccessProperty;
-import org.openrdf.model.Graph;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,11 +36,11 @@ public class RDFResource extends ResourceImpl {
 		super(entry, resourceURI);
 	}
 
-	public RDFResource(EntryImpl entry, org.openrdf.model.URI resourceURI) {
+	public RDFResource(EntryImpl entry, IRI resourceURI) {
 		super(entry, resourceURI);
 	}
 
-	public Graph getGraph() {
+	public Model getGraph() {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 		RepositoryConnection rc = null; 
 		try {
@@ -57,7 +58,7 @@ public class RDFResource extends ResourceImpl {
 		}
 	}
 
-	public void setGraph(Graph graph) {
+	public void setGraph(Model graph) {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 		try {
 			synchronized (this.entry.repository) {

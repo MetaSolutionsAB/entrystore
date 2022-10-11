@@ -16,6 +16,12 @@
 
 package org.entrystore.rest.resources;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -39,11 +45,6 @@ import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -234,18 +235,18 @@ public class ContextResource extends BaseResource {
 						templateEntry = context.getByEntryURI(templateEntryURI);
 					}
 					if (templateEntry != null && templateEntry.getLocalMetadata() != null) {
-						Graph templateMD = templateEntry.getLocalMetadata().getGraph();
-						Graph inheritedMD = new GraphImpl();
+						Model templateMD = templateEntry.getLocalMetadata().getGraph();
+						Model inheritedMD = new LinkedHashModel();
 						if (templateMD != null) {
-							ValueFactory vf = inheritedMD.getValueFactory();
-							org.openrdf.model.URI oldResURI = vf.createURI(templateEntry.getResourceURI().toString());
-							org.openrdf.model.URI newResURI = vf.createURI(entry.getResourceURI().toString());
+							ValueFactory vf = getRM().getValueFactory();
+							IRI oldResURI = vf.createIRI(templateEntry.getResourceURI().toString());
+							IRI newResURI = vf.createIRI(entry.getResourceURI().toString());
 							
-							java.util.List<org.openrdf.model.URI> predicateBlackList = new ArrayList<org.openrdf.model.URI>();
-							predicateBlackList.add(vf.createURI(NS.dc, "title"));
-							predicateBlackList.add(vf.createURI(NS.dcterms, "title"));
-							predicateBlackList.add(vf.createURI(NS.dc, "description"));
-							predicateBlackList.add(vf.createURI(NS.dcterms, "description"));
+							java.util.List<IRI> predicateBlackList = new ArrayList<>();
+							predicateBlackList.add(vf.createIRI(NS.dc, "title"));
+							predicateBlackList.add(vf.createIRI(NS.dcterms, "title"));
+							predicateBlackList.add(vf.createIRI(NS.dc, "description"));
+							predicateBlackList.add(vf.createIRI(NS.dcterms, "description"));
 							java.util.List<Value> subjectBlackList = new ArrayList<Value>();
 							
 							for (Statement statement : templateMD) {
@@ -264,7 +265,7 @@ public class ContextResource extends BaseResource {
 							}
 						}
 						if (inheritedMD != null && !inheritedMD.isEmpty() && entry.getLocalMetadata() != null) {
-							Graph mergedGraph = new GraphImpl();
+							Model mergedGraph = new LinkedHashModel();
 							mergedGraph.addAll(entry.getLocalMetadata().getGraph());
 							mergedGraph.addAll(inheritedMD);
 							entry.getLocalMetadata().setGraph(mergedGraph);
@@ -582,7 +583,7 @@ public class ContextResource extends BaseResource {
         case Graph:
         case Pipeline:
 			RDFResource RDFRes = (RDFResource) entry.getResource();
-			Graph g = RDFJSON.rdfJsonToGraph((JSONObject) jsonObj.get("resource"));
+			Model g = RDFJSON.rdfJsonToGraph((JSONObject) jsonObj.get("resource"));
 			RDFRes.setGraph(g);
 			break;
 		case PipelineResult:
@@ -647,7 +648,7 @@ public class ContextResource extends BaseResource {
 			JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 			if (mdObj.has("metadata")) {
 				JSONObject obj =(JSONObject) mdObj.get("metadata");
-				Graph graph = null;
+				Model graph = null;
 				if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
 					entry.getLocalMetadata().setGraph(graph);
 				}
@@ -672,7 +673,7 @@ public class ContextResource extends BaseResource {
 				JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 				if (mdObj.has("cached-external-metadata")) {
 					JSONObject obj = (JSONObject) mdObj.get("cached-external-metadata");
-					Graph graph = null;
+					Model graph = null;
 					if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
 						entry.getCachedExternalMetadata().setGraph(graph);
 					}
@@ -700,7 +701,7 @@ public class ContextResource extends BaseResource {
 			JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 			if (mdObj.has("info")) {
 				JSONObject obj = (JSONObject) mdObj.get("info");
-				Graph graph = null;
+				Model graph = null;
 				if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
 					entry.setGraph(graph);
 				}

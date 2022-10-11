@@ -16,24 +16,25 @@
 
 package org.entrystore.impl;
 
-import java.util.Iterator;
-import java.util.List;
-import java.util.Vector;
-
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.entrystore.Context;
-import org.entrystore.GraphType;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.repository.RepositoryException;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Vector;
 
 
 /**
@@ -46,14 +47,14 @@ public class GroupImpl extends ListImpl implements Group {
 	/** Logger */
 	static Logger log = LoggerFactory.getLogger(UserImpl.class);
 
-	private java.net.URI homeContext;
+	private URI homeContext;
 	
 	/**
 	 * Creates a new group with the specified URI
 	 * @param entry the entry for the new group
 	 * @param uri the URI for the new group
 	 */
-	public GroupImpl(EntryImpl entry, URI uri, SoftCache cache) {
+	public GroupImpl(EntryImpl entry, IRI uri, SoftCache cache) {
 		super(entry, uri);
 	}
 	
@@ -81,15 +82,15 @@ public class GroupImpl extends ListImpl implements Group {
 				rc = this.entry.repository.getConnection();
 				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI()).asList();
 				if (!matches.isEmpty()) {
-					this.homeContext = java.net.URI.create(matches.get(0).getObject().stringValue());
+					this.homeContext = URI.create(matches.get(0).getObject().stringValue());
 				}
-			} catch (org.openrdf.repository.RepositoryException e) {
+			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 				log.error(e.getMessage(), e);
 				throw new RepositoryException("Failed to connect to repository", e);
 			} finally {
 				try {
 					rc.close();
-				} catch (org.openrdf.repository.RepositoryException e) {
+				} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 					log.error(e.getMessage(), e);
 				}
 			}
@@ -118,7 +119,7 @@ public class GroupImpl extends ListImpl implements Group {
                 RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
                 while(iter.hasNext()) {
                     Statement statement = iter.next();
-                    java.net.URI sourceEntryURI = java.net.URI.create(statement.getObject().stringValue());
+                    URI sourceEntryURI = URI.create(statement.getObject().stringValue());
                     EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
                     if (sourceEntry != null) {
                         sourceEntry.removeRelationSynchronized(statement, rc, vf);
@@ -134,11 +135,11 @@ public class GroupImpl extends ListImpl implements Group {
                     ((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
                 }
                 rc.commit();
-            } catch (org.openrdf.repository.RepositoryException e) {
+            } catch (org.eclipse.rdf4j.repository.RepositoryException e) {
                 log.error(e.getMessage(), e);
                 try {
                     rc.rollback();
-                } catch (org.openrdf.repository.RepositoryException e1) {
+                } catch (org.eclipse.rdf4j.repository.RepositoryException e1) {
                     log.error(e.getMessage(), e1);
                 }
             } finally {
@@ -146,7 +147,7 @@ public class GroupImpl extends ListImpl implements Group {
                     rc.close();
 					//We poke in the internals of entryImpl, to notify that it has relations for later setGraph calls to work
 					entry.invRelations = true;
-                } catch (org.openrdf.repository.RepositoryException e) {
+                } catch (org.eclipse.rdf4j.repository.RepositoryException e) {
                     log.error(e.getMessage());
                 }
                 this.homeContext = context.getEntry().getEntryURI();
@@ -182,9 +183,9 @@ public class GroupImpl extends ListImpl implements Group {
 			return false;
 		}
 		
-		List<java.net.URI> children = getChildren();
+		List<URI> children = getChildren();
 		Entry userEntry = user.getEntry();
-		java.net.URI userEntryURI = userEntry.getEntryURI();
+		URI userEntryURI = userEntry.getEntryURI();
 		
 		return children.contains(userEntryURI);
 	}
@@ -193,7 +194,7 @@ public class GroupImpl extends ListImpl implements Group {
 	 * Returns a list of all members URIs (entryURIs)
 	 * @return a list of all members URIs
 	 */
-	public List<java.net.URI> memberUris() {
+	public List<URI> memberUris() {
 		return getChildren();
 	}
 
@@ -203,11 +204,11 @@ public class GroupImpl extends ListImpl implements Group {
 	 */
 	public List<User> members() {
 		List<User> userList = new Vector<User>();
-		Iterator<java.net.URI> memberUriIterator = memberUris().iterator();
+		Iterator<URI> memberUriIterator = memberUris().iterator();
 		boolean contentError = false;
 
 		while(memberUriIterator.hasNext()) {
-			java.net.URI entryURI = memberUriIterator.next();
+			URI entryURI = memberUriIterator.next();
 			try {
 				Entry userEntry = entry.getContext().getByEntryURI(entryURI);
 				if(userEntry.getGraphType() == GraphType.User) {
@@ -229,9 +230,9 @@ public class GroupImpl extends ListImpl implements Group {
 		return userList;
 	}
 
-	public Vector<java.net.URI> setChildren(Vector<java.net.URI> children) {
+	public Vector<URI> setChildren(Vector<URI> children) {
 		setChildren(children, true, true);
-		return new Vector<java.net.URI>(getChildren()); 
+		return new Vector<URI>(getChildren()); 
 
 	}
 

@@ -16,9 +16,10 @@
 
 package org.entrystore.rest.util;
 
-import org.openrdf.model.Statement;
-import org.openrdf.rio.RDFHandlerException;
-import org.openrdf.rio.helpers.RDFHandlerBase;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.rio.RDFHandlerException;
+import org.eclipse.rdf4j.rio.helpers.AbstractRDFHandler;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -29,7 +30,7 @@ import java.net.URISyntaxException;
  *
  * @author Hannes Ebner
  */
-public class URIValidatingRDFHandler extends RDFHandlerBase {
+public class URIValidatingRDFHandler extends AbstractRDFHandler {
 
 	@Override
 	public void handleNamespace(String prefix, String uri) throws RDFHandlerException {
@@ -43,11 +44,11 @@ public class URIValidatingRDFHandler extends RDFHandlerBase {
 	@Override
 	public void handleStatement(Statement st) throws RDFHandlerException {
 		try {
-			if (st.getSubject() instanceof org.openrdf.model.URI) {
+			if (st.getSubject() instanceof IRI) {
 				new URI(st.getSubject().stringValue());
 			}
 			new URI(st.getPredicate().stringValue());
-			if (st.getObject() instanceof org.openrdf.model.URI) {
+			if (st.getObject() instanceof IRI) {
 				new URI(st.getObject().stringValue());
 			}
 		} catch (URISyntaxException e) {

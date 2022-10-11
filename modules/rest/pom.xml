@@ -155,21 +155,6 @@
             <version>2.6</version>
         </dependency>
         <dependency>
-            <groupId>com.github.jsonld-java</groupId>
-            <artifactId>jsonld-java-sesame</artifactId>
-            <version>0.3</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.openrdf.sesame</groupId>
-                    <artifactId>sesame-model</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.openrdf.sesame</groupId>
-                    <artifactId>sesame-rio-api</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
             <groupId>commons-validator</groupId>
             <artifactId>commons-validator</artifactId>
             <version>1.7</version>

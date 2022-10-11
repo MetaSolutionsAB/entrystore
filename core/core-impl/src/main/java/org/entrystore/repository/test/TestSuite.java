@@ -17,6 +17,11 @@
 
 package org.entrystore.repository.test;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -30,18 +35,14 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryManager;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Model;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.impl.ValueFactoryImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.HashSet;
+
+import static org.eclipse.rdf4j.model.util.Values.iri;
+import static org.eclipse.rdf4j.model.util.Values.literal;
 
 
 public class TestSuite {
@@ -50,28 +51,28 @@ public class TestSuite {
 
 	public static final String NSDCTERMS = "http://purl.org/dc/terms/";
 	public static final String NSbase = "http://entrystore.org/terms/";
-	public static final org.openrdf.model.URI dc_title;
-	public static final org.openrdf.model.URI dc_description;
-	public static final org.openrdf.model.URI dc_subject;
-	public static final org.openrdf.model.URI dc_format;
+	public static final IRI dc_title;
+	public static final IRI dc_description;
+	public static final IRI dc_subject;
+	public static final IRI dc_format;
 
-	public static final org.openrdf.model.URI scam_name;
-	public static final org.openrdf.model.URI scam_email;
-	public static final org.openrdf.model.URI scam_type;
-	public static final org.openrdf.model.URI scam_group;
+	public static final IRI scam_name;
+	public static final IRI scam_email;
+	public static final IRI scam_type;
+	public static final IRI scam_group;
 
 
 	static {
-		ValueFactory vf = ValueFactoryImpl.getInstance();
-		dc_title = vf.createURI(NSDCTERMS + "title");
-		dc_description = vf.createURI(NSDCTERMS + "description");
-		dc_subject = vf.createURI(NSDCTERMS + "subject");
-		dc_format = vf.createURI(NSDCTERMS + "format");
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		dc_title = vf.createIRI(NSDCTERMS + "title");
+		dc_description = vf.createIRI(NSDCTERMS + "description");
+		dc_subject = vf.createIRI(NSDCTERMS + "subject");
+		dc_format = vf.createIRI(NSDCTERMS + "format");
 
-		scam_name = vf.createURI(NSbase + "name");
-		scam_email = vf.createURI(NSbase + "email");
-		scam_type = vf.createURI(NSbase + "type");
-		scam_group = vf.createURI(NSbase + "group");
+		scam_name = vf.createIRI(NSbase + "name");
+		scam_email = vf.createIRI(NSbase + "email");
+		scam_type = vf.createIRI(NSbase + "type");
+		scam_group = vf.createIRI(NSbase + "group");
 	}
 
 	/**
@@ -254,22 +255,21 @@ public class TestSuite {
 	}
 
 	public static void setMetadata(Entry entry, String title, String desc, String subj, String format, String type) {
-		Graph graph = entry.getLocalMetadata().getGraph();
-		ValueFactory vf = graph.getValueFactory(); 
-		org.openrdf.model.URI root = vf.createURI(entry.getResourceURI().toString());
+		Model graph = entry.getLocalMetadata().getGraph();
+		IRI root = iri(entry.getResourceURI().toString());
 		try {
-			graph.add(root, dc_title, vf.createLiteral(title, "en"));
+			graph.add(root, dc_title, literal(title, "en"));
 			if (desc != null) {
-				graph.add(root, dc_description, vf.createLiteral(desc, "en"));
+				graph.add(root, dc_description, literal(desc, "en"));
 			}
 			if (subj != null) {
-				graph.add(root, dc_subject, vf.createLiteral(subj));
+				graph.add(root, dc_subject, literal(subj));
 			}
 			if (format != null) {
-				graph.add(root, dc_format, vf.createLiteral(format));
+				graph.add(root, dc_format, literal(format));
 			}
 			if(type != null) {
-				graph.add(root, scam_type, vf.createLiteral(type));
+				graph.add(root, scam_type, literal(type));
 			}
 			entry.getLocalMetadata().setGraph(graph);
 		} catch (RepositoryException e) {
@@ -278,21 +278,21 @@ public class TestSuite {
 	}
 
 	public static void addGuestToMetadataACL(Entry entry) {
-		Graph g = entry.getGraph();
-		g.add(new URIImpl(entry.getLocalMetadataURI().toString()),
+		Model g = entry.getGraph();
+		g.add(iri(entry.getLocalMetadataURI().toString()),
 				RepositoryProperties.Read,
-				new URIImpl(entry.getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString()),
-				new URIImpl(entry.getEntryURI().toString()));
+				iri(entry.getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString()),
+				iri(entry.getEntryURI().toString()));
 		entry.setGraph(g);
 	}
 
 	public static void removeGuestFromMetadataACL(Entry entry) {
 		Model m = new LinkedHashModel(entry.getGraph());
-		m.remove(new URIImpl(entry.getLocalMetadataURI().toString()),
+		m.remove(iri(entry.getLocalMetadataURI().toString()),
 				RepositoryProperties.Read,
-				new URIImpl(entry.getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString()),
-				new URIImpl(entry.getEntryURI().toString()));
-		entry.setGraph(new GraphImpl(m));
+				iri(entry.getRepositoryManager().getPrincipalManager().getGuestUser().getURI().toString()),
+				iri(entry.getEntryURI().toString()));
+		entry.setGraph(new LinkedHashModel(m));
 	}
 
 	public static void HarvesterTestSuite(RepositoryManagerImpl rm,

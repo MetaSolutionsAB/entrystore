@@ -19,6 +19,17 @@ package org.entrystore.impl;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.sail.SailRepository;
+import org.eclipse.rdf4j.sail.memory.MemoryStore;
+import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -29,21 +40,11 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Resource;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.repository.Repository;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.sail.SailRepository;
-import org.openrdf.sail.memory.MemoryStore;
-import org.openrdf.sail.nativerdf.NativeStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.net.URI;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -68,7 +69,7 @@ public class PublicRepository {
 
 	private Thread entrySubmitter;
 
-	private final Cache<java.net.URI, Entry> postQueue = Caffeine.newBuilder().build();
+	private final Cache<URI, Entry> postQueue = Caffeine.newBuilder().build();
 
 	private final Queue<Entry> deleteQueue = Queues.newConcurrentLinkedQueue();
 
@@ -103,10 +104,10 @@ public class PublicRepository {
 					if (postQueue.estimatedSize() > 0) {
 						Set<Entry> entriesToUpdate = new HashSet();
 						synchronized (postQueue) {
-							ConcurrentMap<java.net.URI, Entry> postQueueMap = postQueue.asMap();
-							Iterator<java.net.URI> it = postQueueMap.keySet().iterator();
+							ConcurrentMap<URI, Entry> postQueueMap = postQueue.asMap();
+							Iterator<URI> it = postQueueMap.keySet().iterator();
 							while (batchCount < BATCH_SIZE && it.hasNext()) {
-								java.net.URI key = it.next();
+								URI key = it.next();
 								Entry entry = postQueueMap.get(key);
 								postQueueMap.remove(key, entry);
 								if (entry == null) {
@@ -171,7 +172,7 @@ public class PublicRepository {
 		}
 
 		try {
-			repository.initialize();
+			repository.init();
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 		}
@@ -195,7 +196,7 @@ public class PublicRepository {
 	}
 
 	public void enqueue(Entry entry) {
-		java.net.URI entryURI = entry.getEntryURI();
+		URI entryURI = entry.getEntryURI();
 		synchronized (postQueue) {
 			log.info("Adding document to update queue: " + entryURI);
 			postQueue.put(entryURI, entry);
@@ -203,7 +204,7 @@ public class PublicRepository {
 	}
 
 	public void remove(Entry entry) {
-		java.net.URI entryURI = entry.getEntryURI();
+		URI entryURI = entry.getEntryURI();
 		synchronized (deleteQueue) {
 			log.info("Adding entry to delete queue: " + entryURI);
 			deleteQueue.add(entry);
@@ -214,44 +215,44 @@ public class PublicRepository {
 		if (isAdministrative(e)) {
 			return;
 		}
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			try {
 				ValueFactory vf = repository.getValueFactory();
-				URI contextURI = vf.createURI(e.getContext().getURI().toString());
+				IRI contextURI = vf.createIRI(e.getContext().getURI().toString());
 
 				// entry
 				/* DEACTIVATED
 				Graph entryGraph = e.getGraph();
-				URI entryNG = vf.createURI(e.getEntryURI().toString());
+				URI entryNG = vf.createIRI(e.getEntryURI().toString());
 				if (entryGraph != null) {
 					rc.add(entryGraph, entryNG, contextURI);
 				}
 				*/
 
 				// metadata
-				Graph mdGraph = null;
-				URI mdNG = null;
+				Model mdGraph = null;
+				IRI mdNG = null;
 				if (e.getLocalMetadata() != null) {
 					mdGraph = e.getLocalMetadata().getGraph();
-					mdNG = vf.createURI(e.getLocalMetadataURI().toString());
+					mdNG = vf.createIRI(e.getLocalMetadataURI().toString());
 				}
 
 				// ext metadata
-				Graph extMdGraph = null;
-				URI extMdNG = null;
+				Model extMdGraph = null;
+				IRI extMdNG = null;
 				if (e.getCachedExternalMetadata() != null) {
 					extMdGraph = e.getCachedExternalMetadata().getGraph();
-					extMdNG = vf.createURI(e.getCachedExternalMetadataURI().toString());
+					extMdNG = vf.createIRI(e.getCachedExternalMetadataURI().toString());
 				}
 
 				// resource
-				Graph resGraph = null;
-				URI resNG = null;
+				Model resGraph = null;
+				IRI resNG = null;
 				if (GraphType.Graph.equals(e.getGraphType()) && EntryType.Local.equals(e.getEntryType())) {
-					resGraph = (Graph) e.getResource();
-					resNG = vf.createURI(e.getResourceURI().toString());
+					resGraph = (Model) e.getResource();
+					resNG = vf.createIRI(e.getResourceURI().toString());
 				}
 
 				if (mdGraph != null) {
@@ -271,7 +272,7 @@ public class PublicRepository {
 	}
 
 	private void updateEntries(Set<Entry> entries) {
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			synchronized (repository) {
@@ -317,8 +318,8 @@ public class PublicRepository {
 			String id = contextURI.substring(contextURI.lastIndexOf("/") + 1);
 			Context context = rm.getContextManager().getContext(id);
 			if (context != null) {
-				Set<java.net.URI> entries = context.getEntries();
-				for (java.net.URI entryURI : entries) {
+				Set<URI> entries = context.getEntries();
+				for (URI entryURI : entries) {
 					if (entryURI != null) {
 						try {
 							updateEntry(rm.getContextManager().getEntry(entryURI), rc);
@@ -336,7 +337,7 @@ public class PublicRepository {
 	}
 
 	private void removeEntries(Set<Entry> entries) {
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			synchronized (repository) {
@@ -372,27 +373,27 @@ public class PublicRepository {
 
 	private void removeEntry(Entry e, RepositoryConnection rc) throws RepositoryException {
 		PrincipalManager pm = e.getRepositoryManager().getPrincipalManager();
-		java.net.URI currentUser = pm.getAuthenticatedUserURI();
+		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			// we need to be admin, in case the ACL has become
 			// more restrictive since adding the entry
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			ValueFactory vf = repository.getValueFactory();
-			URI contextURI = vf.createURI(e.getContext().getURI().toString());
+			IRI contextURI = vf.createIRI(e.getContext().getURI().toString());
 
-			URI entryNG = vf.createURI(e.getEntryURI().toString());
-			URI mdNG = vf.createURI(e.getLocalMetadataURI().toString());
-			URI resNG = vf.createURI(e.getResourceURI().toString());
-			URI extMdNG = null;
+			IRI entryNG = vf.createIRI(e.getEntryURI().toString());
+			IRI mdNG = vf.createIRI(e.getLocalMetadataURI().toString());
+			IRI resNG = vf.createIRI(e.getResourceURI().toString());
+			IRI extMdNG = null;
 
 			if (e.getExternalMetadataURI() != null) {
-				extMdNG = vf.createURI(e.getCachedExternalMetadataURI().toString());
+				extMdNG = vf.createIRI(e.getCachedExternalMetadataURI().toString());
 			}
 
 			if (extMdNG != null) {
-				rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
+				rc.remove(rc.getStatements((Resource) null, (IRI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, extMdNG, resNG);
 			} else {
-				rc.remove(rc.getStatements((Resource) null, (URI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, resNG);
+				rc.remove(rc.getStatements((Resource) null, (IRI) null, (Value) null, false, entryNG, mdNG, extMdNG, resNG), contextURI, entryNG, mdNG, resNG);
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
@@ -421,21 +422,21 @@ public class PublicRepository {
 				log.info("Clearing public repository took " + (new Date().getTime() - before.getTime()) + " ms");
 
 				ContextManager cm = rm.getContextManager();
-				Set<java.net.URI> contexts = cm.getEntries();
+				Set<URI> contexts = cm.getEntries();
 
-				for (java.net.URI contextURI : contexts) {
+				for (URI contextURI : contexts) {
 					String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
 					Context context = cm.getContext(id);
 					if (context != null) {
 						log.info("Adding context " + contextURI + " to public repository");
 						before = new Date();
-						Set<java.net.URI> entries = context.getEntries();
+						Set<URI> entries = context.getEntries();
 						log.info("Fetching entries took " + (new Date().getTime() - before.getTime()) + " ms");
 						before = new Date();
 						Date timeTracker = new Date();
 						long publicEntryCount = 0;
 						long processedCount = 0;
-						for (java.net.URI entryURI : entries) {
+						for (URI entryURI : entries) {
 							if (entryURI != null) {
 								processedCount++;
 								if ((new Date().getTime() - timeTracker.getTime()) > 60000) {

@@ -16,22 +16,30 @@
 
 package org.entrystore.transforms;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Entry;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.converters.Graph2Entries;
 import org.entrystore.repository.util.NS;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.ValueFactoryImpl;
 import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.InputStream;
-import java.util.*;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * @author Matthias Palmér
@@ -39,28 +47,28 @@ import java.util.*;
  */
 public class Pipeline {
 
-	private static Logger log = LoggerFactory.getLogger(Pipeline.class);
+	private static final Logger log = LoggerFactory.getLogger(Pipeline.class);
 
-	public static final URI transform;
-	public static final URI transformPriority;
-	public static final URI transformType;
-	public static final URI transformArgument;
-	public static final URI transformArgumentKey;
-	public static final URI transformArgumentValue;
+	public static final IRI transform;
+	public static final IRI transformPriority;
+	public static final IRI transformType;
+	public static final IRI transformArgument;
+	public static final IRI transformArgumentKey;
+	public static final IRI transformArgumentValue;
 
-	public static final URI transformDestination;
-	public static final URI transformDetectDestination;
+	public static final IRI transformDestination;
+	public static final IRI transformDetectDestination;
 
 	static {
-		ValueFactory vf = ValueFactoryImpl.getInstance();
-		transform = vf.createURI(NS.entrystore, "transform");
-		transformPriority = vf.createURI(NS.entrystore, "transformPriority");
-		transformType = vf.createURI(NS.entrystore, "transformType");
-		transformArgument = vf.createURI(NS.entrystore, "transformArgument");
-		transformArgumentKey = vf.createURI(NS.entrystore, "transformArgumentKey");
-		transformArgumentValue = vf.createURI(NS.entrystore, "transformArgumentValue");
-		transformDestination = vf.createURI(NS.entrystore, "transformDestination");
-		transformDetectDestination = vf.createURI(NS.entrystore, "transformDetectDestination");		
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		transform = vf.createIRI(NS.entrystore, "transform");
+		transformPriority = vf.createIRI(NS.entrystore, "transformPriority");
+		transformType = vf.createIRI(NS.entrystore, "transformType");
+		transformArgument = vf.createIRI(NS.entrystore, "transformArgument");
+		transformArgumentKey = vf.createIRI(NS.entrystore, "transformArgumentKey");
+		transformArgumentValue = vf.createIRI(NS.entrystore, "transformArgumentValue");
+		transformDestination = vf.createIRI(NS.entrystore, "transformDestination");
+		transformDetectDestination = vf.createIRI(NS.entrystore, "transformDetectDestination");		
 	}
 
 	private Entry entry;
@@ -88,33 +96,33 @@ public class Pipeline {
     }
 
 	private void detectTransforms() {
-		Graph graph = ((RDFResource) this.entry.getResource()).getGraph();
+		Model graph = ((RDFResource) this.entry.getResource()).getGraph();
 
         //Fallback, check for transforms in metadata graph instead, old way of doing things.
         if (graph.isEmpty()) {
             graph = this.entry.getMetadataGraph();
         }
 
-		Iterator<Statement> toEntryStmts = graph.match(null, transformDestination, null);
+		Iterator<Statement> toEntryStmts = graph.filter(null, transformDestination, null).iterator();
 		if (toEntryStmts.hasNext()) {
 			destination = toEntryStmts.next().getObject().stringValue();
 			if (destination.startsWith("http")) {
-				Entry toEntryEntry = this.entry.getContext().getByEntryURI(java.net.URI.create(destination));
+				Entry toEntryEntry = this.entry.getContext().getByEntryURI(URI.create(destination));
 				destination = toEntryEntry.getId();
 			}
 		}
 
-		Iterator<Statement> detectStmts = graph.match(null, transformDetectDestination, null);
+		Iterator<Statement> detectStmts = graph.filter(null, transformDetectDestination, null).iterator();
 		if (detectStmts.hasNext()) {
 			detectDestination = detectStmts.next().getObject().stringValue().contains("true");
 		}
 
-		Iterator<Statement> stmts = graph.match(null, transform, null);
+		Iterator<Statement> stmts = graph.filter(null, transform, null).iterator();
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			if (statement.getObject() instanceof Resource) {
 				Resource transformResource = (Resource) statement.getObject();
-				Iterator<Statement> types = graph.match(transformResource, transformType, null);
+				Iterator<Statement> types = graph.filter(transformResource, transformType, null).iterator();
 				if (types.hasNext()) {
 					Transform transform = createTransform(types.next().getObject().stringValue());
 					if (transform != null) {
@@ -156,7 +164,7 @@ public class Pipeline {
 		return null;
 	}
 
-	public Set<Entry> run(Entry sourceEntry, java.net.URI listURI) throws TransformException {
+	public Set<Entry> run(Entry sourceEntry, URI listIRI) throws TransformException {
 		//Get the data
 		if (tsteps.size() == 0) {
 			throw new IllegalStateException("Pipeline has no recognizable transforms.");
@@ -164,8 +172,8 @@ public class Pipeline {
 		Transform first = tsteps.get(0);
 		Object result = first.transform(this, sourceEntry);
 		for (int idx = 1; idx < tsteps.size(); idx++) {
-            if (result instanceof Graph) {
-                result = tsteps.get(idx).transform(this, (Graph) result);
+            if (result instanceof Model) {
+                result = tsteps.get(idx).transform(this, (Model) result);
             } else if (result instanceof Entry) {
                 result = tsteps.get(idx).transform(this, (Entry) result);
             } else {
@@ -173,13 +181,13 @@ public class Pipeline {
             }
 		}
 
-        if (result instanceof Graph) {
-            Graph graph = (Graph) result;
+        if (result instanceof Model) {
+            Model graph = (Model) result;
             Graph2Entries g2e = new Graph2Entries(this.entry.getContext());
             if (detectDestination) {
                 return g2e.merge(graph, null, null);
             } else {
-                return g2e.merge(graph, destination, listURI);
+                return g2e.merge(graph, destination, listIRI);
             }
         } else if (result instanceof Entry) {
             return new HashSet<Entry>(Arrays.asList((Entry) result));

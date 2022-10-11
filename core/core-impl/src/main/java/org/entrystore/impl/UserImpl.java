@@ -16,6 +16,16 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.BNode;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -27,19 +37,10 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.repository.util.NS;
-import org.openrdf.model.BNode;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.ValueFactoryImpl;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -57,23 +58,23 @@ public class UserImpl extends RDFResource implements User {
 
 	private String language;
 
-	private java.net.URI homeContext;
+	private URI homeContext;
 	
 	private String externalID;
 	
 	private RepositoryManager rm;
 
-	public static final org.openrdf.model.URI customProperty;
+	public static final IRI customProperty;
 
-	public static final org.openrdf.model.URI customPropertyKey;
+	public static final IRI customPropertyKey;
 
-	public static final org.openrdf.model.URI customPropertyValue;
+	public static final IRI customPropertyValue;
 
 	static {
-		ValueFactory vf = ValueFactoryImpl.getInstance();
-		customProperty = vf.createURI(NS.entrystore, "customProperty");
-		customPropertyKey = vf.createURI(NS.entrystore, "customPropertyKey");
-		customPropertyValue = vf.createURI(NS.entrystore, "customPropertyValue");
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		customProperty = vf.createIRI(NS.entrystore, "customProperty");
+		customPropertyKey = vf.createIRI(NS.entrystore, "customPropertyKey");
+		customPropertyValue = vf.createIRI(NS.entrystore, "customPropertyValue");
 	}
 
 	/**
@@ -83,7 +84,7 @@ public class UserImpl extends RDFResource implements User {
 	 * @param cache
 	 */
 	//What to do with the cache?
-	protected UserImpl(EntryImpl entry, URI resourceURI, SoftCache cache) {
+	protected UserImpl(EntryImpl entry, IRI resourceURI, SoftCache cache) {
 		super(entry, resourceURI);
 		rm = entry.getRepositoryManager();
 	}
@@ -122,13 +123,13 @@ public class UserImpl extends RDFResource implements User {
 			if (!matches.isEmpty()) {
 				secret = matches.get(0).getObject().stringValue();
 			}
-		} catch (org.openrdf.repository.RepositoryException e) {
+		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new RepositoryException("Failed to connect to repository", e);
 		} finally {
 			try {
 				rc.close();
-			} catch (org.openrdf.repository.RepositoryException e) {
+			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 				log.error(e.getMessage(), e);
 			}
 		}
@@ -160,13 +161,13 @@ public class UserImpl extends RDFResource implements User {
 				if (!matches.isEmpty()) {
 					this.saltedHashedSecret = matches.get(0).getObject().stringValue();
 				}
-			} catch (org.openrdf.repository.RepositoryException e) {
+			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 				log.error(e.getMessage(), e);
 				throw new RepositoryException("Failed to connect to repository", e);
 			} finally {
 				try {
 					rc.close();
-				} catch (org.openrdf.repository.RepositoryException e) {
+				} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 					log.error(e.getMessage(), e);
 				}
 			}
@@ -227,7 +228,7 @@ public class UserImpl extends RDFResource implements User {
 					rc.close();
 				}
 			}
-		} catch (org.openrdf.repository.RepositoryException e) {
+		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new RepositoryException("Failed to connect to repository", e);
 		}
@@ -237,9 +238,9 @@ public class UserImpl extends RDFResource implements User {
 
 	public void setMetadata(Entry entry, String title, String desc) {
 		try {
-			Graph graph = entry.getLocalMetadata().getGraph();
-			ValueFactory vf = graph.getValueFactory(); 
-			org.openrdf.model.URI root = vf.createURI(entry.getResourceURI().toString());
+			Model graph = entry.getLocalMetadata().getGraph();
+			ValueFactory vf = SimpleValueFactory.getInstance();
+			IRI root = vf.createIRI(entry.getResourceURI().toString());
 			graph.add(root, TestSuite.dc_title, vf.createLiteral(title, "en"));
 			if (desc != null) {
 				graph.add(root, TestSuite.dc_description, vf.createLiteral(desc, "en"));
@@ -259,21 +260,21 @@ public class UserImpl extends RDFResource implements User {
 				rc = this.entry.repository.getConnection();
                 List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null,false, entry.getSesameEntryURI()).asList();
                 if (!matches.isEmpty()) {
-                    this.homeContext = java.net.URI.create(matches.get(0).getObject().stringValue());
+                    this.homeContext = URI.create(matches.get(0).getObject().stringValue());
                 } else { //TODO else case is backwards compatible code, remove in future.
                     matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, resourceURI).asList();
                     if (!matches.isEmpty()) {
-                        this.homeContext = java.net.URI.create(matches.get(0).getObject().stringValue());
+                        this.homeContext = URI.create(matches.get(0).getObject().stringValue());
                     }
                 }
 				
-			} catch (org.openrdf.repository.RepositoryException e) {
+			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 				log.error(e.getMessage(), e);
 				throw new RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				try {
 					rc.close();
-				} catch (org.openrdf.repository.RepositoryException e) {
+				} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 					log.error(e.getMessage(), e);
 				}
 			}
@@ -301,7 +302,7 @@ public class UserImpl extends RDFResource implements User {
 					RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
 					while (iter.hasNext()) {
 						Statement statement = iter.next();
-						java.net.URI sourceEntryURI = java.net.URI.create(statement.getObject().stringValue());
+						URI sourceEntryURI = URI.create(statement.getObject().stringValue());
 						EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
 						if (sourceEntry != null) {
 							sourceEntry.removeRelationSynchronized(statement, rc, vf);
@@ -331,7 +332,7 @@ public class UserImpl extends RDFResource implements User {
 					this.homeContext = context.getEntry().getEntryURI();
 				}
 			}
-		} catch (org.openrdf.repository.RepositoryException e) {
+		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new RepositoryException("Failed to connect to repository.", e);
 		}
@@ -348,13 +349,13 @@ public class UserImpl extends RDFResource implements User {
 				if (!matches.isEmpty()) {
 					this.language = matches.get(0).getObject().stringValue();
 				}
-			} catch (org.openrdf.repository.RepositoryException e) {
+			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 				log.error(e.getMessage(), e);
 				throw new RepositoryException("Failed to connect to Repository.", e);
 			} finally {
 				try {
 					rc.close();
-				} catch (org.openrdf.repository.RepositoryException e) {
+				} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 					log.error(e.getMessage(), e);
 				}
 			}
@@ -385,7 +386,7 @@ public class UserImpl extends RDFResource implements User {
 					this.language = language;
 				}
 			}
-		} catch (org.openrdf.repository.RepositoryException e) {
+		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new RepositoryException("Failed to connect to Repository.", e);
 		}
@@ -411,13 +412,13 @@ public class UserImpl extends RDFResource implements User {
 						externalID = externalID.substring(externalID.lastIndexOf(prefix) + prefix.length());
 					}
 				}
-			} catch (org.openrdf.repository.RepositoryException e) {
+			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 				log.error(e.getMessage(), e);
 				throw new RepositoryException("Failed to connect to repository", e);
 			} finally {
 				try {
 					rc.close();
-				} catch (org.openrdf.repository.RepositoryException e) {
+				} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 					log.error(e.getMessage(), e);
 				}
 			}
@@ -441,7 +442,7 @@ public class UserImpl extends RDFResource implements User {
 				try {
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.externalID, null, false, resourceURI), resourceURI);
 					if (eid != null) {
-						rc.add(resourceURI, RepositoryProperties.externalID, vf.createURI("mailto:", eid), resourceURI);
+						rc.add(resourceURI, RepositoryProperties.externalID, vf.createIRI("mailto:", eid), resourceURI);
 					}
 					rc.commit();
 					return true;
@@ -453,19 +454,19 @@ public class UserImpl extends RDFResource implements User {
 					this.externalID = eid;
 				}
 			}
-		} catch (org.openrdf.repository.RepositoryException e) {
+		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new RepositoryException("Failed to connect to repository", e);
 		}
 		return false;
 	}
 
-	public Set<java.net.URI> getGroups() {
-		HashSet<java.net.URI> set = new HashSet<java.net.URI>();
+	public Set<URI> getGroups() {
+		HashSet<URI> set = new HashSet<URI>();
 		List<Statement> relations = this.entry.getRelations();
 		for (Statement statement : relations) {
 			if (statement.getPredicate().equals(RepositoryProperties.hasGroupMember)) {
-				set.add(java.net.URI.create(statement.getSubject().toString()));
+				set.add(URI.create(statement.getSubject().toString()));
 			}
 		}
 		return set;
@@ -475,19 +476,19 @@ public class UserImpl extends RDFResource implements User {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
 
 		Map<String, String> result = new HashMap<>();
-		Graph userResourceGraph = getGraph();
-		Iterator<Statement> args = userResourceGraph.match(resourceURI, customProperty, null);
+		Model userResourceGraph = getGraph();
+		Iterator<Statement> args = userResourceGraph.filter(resourceURI, customProperty, null).iterator();
 		while (args.hasNext()) {
 			Statement s = args.next();
 			if (s.getObject() instanceof BNode) {
 				String keyStr = null;
 				String valueStr = null;
-				Iterator<Statement> argKeyIt = userResourceGraph.match((BNode) s.getObject(), customPropertyKey, null);
+				Iterator<Statement> argKeyIt = userResourceGraph.filter((BNode) s.getObject(), customPropertyKey, null).iterator();
 				if (argKeyIt.hasNext()) {
 					Value argKey = argKeyIt.next().getObject();
 					if (argKey instanceof Literal) {
 						keyStr = ((Literal) argKey).stringValue();
-						Iterator<Statement> argValueIt = userResourceGraph.match((BNode) s.getObject(), customPropertyValue, null);
+						Iterator<Statement> argValueIt = userResourceGraph.filter((BNode) s.getObject(), customPropertyValue, null).iterator();
 						if (argValueIt.hasNext()) {
 							Value argValue = argValueIt.next().getObject();
 							if (argValue instanceof Literal) {
@@ -538,7 +539,7 @@ public class UserImpl extends RDFResource implements User {
 					rc.close();
 				}
 			}
-		} catch (org.openrdf.repository.RepositoryException e) {
+		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new RepositoryException("Failed to connect to repository", e);
 		}
@@ -555,7 +556,7 @@ public class UserImpl extends RDFResource implements User {
 				Literal l = (Literal) matches.get(0).getObject();
 				return l.booleanValue();
 			}
-		} catch (org.openrdf.repository.RepositoryException e) {
+		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 			log.error(e.getMessage());
 			throw new RepositoryException("Failed to connect to repository", e);
 		} finally {
@@ -563,7 +564,7 @@ public class UserImpl extends RDFResource implements User {
 				if (rc != null) {
 					rc.close();
 				}
-			} catch (org.openrdf.repository.RepositoryException e) {
+			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 				log.error(e.getMessage());
 			}
 		}
@@ -592,7 +593,7 @@ public class UserImpl extends RDFResource implements User {
 					}
 				}
 			}
-		} catch (org.openrdf.repository.RepositoryException e) {
+		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 			log.error(e.getMessage());
 			throw new RepositoryException("Failed to connect to repository", e);
 		}

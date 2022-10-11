@@ -17,9 +17,19 @@
 
 package org.entrystore.impl;
 
-import info.aduna.iteration.Iterations;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.eclipse.rdf4j.common.iteration.Iterations;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -34,16 +44,6 @@ import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.DisallowedException;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.model.vocabulary.RDF;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.RepositoryResult;
 
 import java.io.IOException;
 import java.net.URI;
@@ -66,13 +66,13 @@ public class ListImpl extends RDFResource implements List {
 		super(entry, uri);
 	}
 	
-	public ListImpl(EntryImpl entry, org.openrdf.model.URI uri) {
+	public ListImpl(EntryImpl entry, IRI uri) {
 		super(entry, uri);
 	}
 
-	public synchronized Graph getGraph() {
+	public synchronized Model getGraph() {
 		RepositoryConnection rc = null;
-		Graph result = null;
+		Model result = null;
 		try {
 			rc = entry.repository.getConnection();
 			RepositoryResult<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI);
@@ -91,7 +91,7 @@ public class ListImpl extends RDFResource implements List {
 		return result;
 	}
 
-	public synchronized void setGraph(Graph graph) {
+	public synchronized void setGraph(Model graph) {
 		if (graph == null) {
 			throw new IllegalArgumentException("Graph must not be null");
 		}
@@ -99,14 +99,14 @@ public class ListImpl extends RDFResource implements List {
 		saveChildren();
 	}
 
-	private Vector loadChildren(Graph graph) {
+	private Vector loadChildren(Model graph) {
 		if (graph == null) {
 			throw new IllegalArgumentException("Graph must not be null");
 		}
 
 		Vector<URI> result = new Vector<URI>();
 		for (Statement statement : graph) {
-			org.openrdf.model.URI predicate = statement.getPredicate();
+			IRI predicate = statement.getPredicate();
 			if (!predicate.toString().startsWith(RDF.NAMESPACE.toString() + "_")) {
 				continue;
 			}
@@ -163,8 +163,8 @@ public class ListImpl extends RDFResource implements List {
 		if (children.size() > 0) {
 			rc.add(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
 			for (int i = 0; i < children.size(); i++) {
-				org.openrdf.model.URI li = vf.createURI(RDF.NAMESPACE+"_" + Integer.toString(i + 1));
-				org.openrdf.model.URI child = vf.createURI(children.get(i).toString());
+				IRI li = vf.createIRI(RDF.NAMESPACE+"_" + Integer.toString(i + 1));
+				IRI child = vf.createIRI(children.get(i).toString());
 				rc.add(this.resourceURI, li, child, this.resourceURI);
 			}
 			entry.registerEntryModified(rc, rc.getValueFactory());
@@ -216,8 +216,8 @@ public class ListImpl extends RDFResource implements List {
 						rc.add(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
 					}
 					
-					org.openrdf.model.URI li = vf.createURI(RDF.NAMESPACE+"_"+Integer.toString(children.size()+1));
-					org.openrdf.model.URI childURI = vf.createURI(nEntry.toString());
+					IRI li = vf.createIRI(RDF.NAMESPACE+"_"+Integer.toString(children.size()+1));
+					IRI childURI = vf.createIRI(nEntry.toString());
 					rc.add(this.resourceURI, li, childURI, this.resourceURI);
 					childEntry.addReferringList(this, rc); //TODO deprecate addReferringList.
 					children.add(nEntry);
@@ -385,8 +385,8 @@ public class ListImpl extends RDFResource implements List {
 
 	
 	private void copyGraphs(EntryImpl source, EntryImpl dest) {
-		Graph eGraph = source.getGraph();
-		HashMap<org.openrdf.model.URI,org.openrdf.model.URI> map = new HashMap<org.openrdf.model.URI,org.openrdf.model.URI>();
+		Model eGraph = source.getGraph();
+		HashMap<IRI, IRI> map = new HashMap<IRI, IRI>();
 		map.put(source.getSesameEntryURI(), dest.getSesameEntryURI());
 		map.put(source.getSesameLocalMetadataURI(), dest.getSesameLocalMetadataURI());
 		map.put(source.getSesameResourceURI(), dest.getSesameResourceURI());
@@ -407,9 +407,8 @@ public class ListImpl extends RDFResource implements List {
 		}
 	}
 
-	private Graph replaceURI(Graph graph, org.openrdf.model.URI oUri, org.openrdf.model.URI nUri) {
-		ValueFactory vf = graph.getValueFactory();
-		Graph nGraph = new GraphImpl();
+	private Model replaceURI(Model graph, IRI oUri, IRI nUri) {
+		Model nGraph = new LinkedHashModel();
 		for (Statement statement : graph) {
 			if (statement.getSubject().equals(oUri)) {
 				// replace subject URI
@@ -425,20 +424,19 @@ public class ListImpl extends RDFResource implements List {
 		return nGraph;
 	}
 
-	private Graph replaceURIs(Graph graph, HashMap<org.openrdf.model.URI,org.openrdf.model.URI> map) {
-		ValueFactory vf = graph.getValueFactory();
-		Graph nGraph = new GraphImpl();
+	private Model replaceURIs(Model graph, HashMap<IRI,IRI> map) {
+		Model nGraph = new LinkedHashModel();
 		for (Statement statement : graph) {
-			org.openrdf.model.Resource subj = statement.getSubject();
-			org.openrdf.model.URI pred = statement.getPredicate();
+			org.eclipse.rdf4j.model.Resource subj = statement.getSubject();
+			IRI pred = statement.getPredicate();
 			Value obj = statement.getObject();
 			if (map.containsKey(subj)) {
-				subj = (org.openrdf.model.Resource) map.get(subj);
+				subj = (org.eclipse.rdf4j.model.Resource) map.get(subj);
 			}
 			if (map.containsKey(pred)) {
 				pred = map.get(pred);
 			}
-			if (obj instanceof org.openrdf.model.URI && map.containsKey(obj)) {
+			if (obj instanceof IRI && map.containsKey(obj)) {
 				obj = map.get(obj);
 			}
 			nGraph.add(subj, pred, obj);
@@ -653,7 +651,7 @@ public class ListImpl extends RDFResource implements List {
 		if (childEntry == null) {
 			return false;
 		}
-		Set<java.net.URI> refLists = childEntry.getReferringListsInSameContext();
+		Set<URI> refLists = childEntry.getReferringListsInSameContext();
 		if ((refLists != null) && checkOrphaned && refLists.size() == 1) {
 			if (isOwnerOfContext) {
 				return true;

@@ -16,6 +16,18 @@
 
 package org.entrystore.repository.util;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -25,18 +37,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.vocabulary.RDF;
-import org.openrdf.repository.Repository;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,10 +50,12 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+
+import static org.eclipse.rdf4j.model.util.Values.getValueFactory;
+import static org.eclipse.rdf4j.model.util.Values.iri;
 
 
 /**
@@ -63,7 +65,7 @@ import java.util.Set;
  */
 public class DataCorrection {
 	
-	private static Logger log = LoggerFactory.getLogger(DataCorrection.class);
+	private static final Logger log = LoggerFactory.getLogger(DataCorrection.class);
 	
 	private PrincipalManager pm;
 	
@@ -77,14 +79,6 @@ public class DataCorrection {
 	public static String createW3CDTF(java.util.Date date) {
 		SimpleDateFormat W3CDTF = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
 		return W3CDTF.format(date);
-	}
-	
-	public static org.openrdf.model.URI createURI(String namespace, String uri) {
-		ValueFactory vf = new GraphImpl().getValueFactory();
-		if (namespace != null) {
-			return vf.createURI(namespace, uri);
-		}
-		return vf.createURI(uri);
 	}
 	
 	private Set<URI> getContexts() {
@@ -128,21 +122,19 @@ public class DataCorrection {
 		if (entry == null) {
 			return;
 		}
-		Graph metadata = entry.getGraph();
+		Model metadata = entry.getGraph();
 		if (metadata != null) {
-			ValueFactory vf = new GraphImpl().getValueFactory();
+			IRI resourceURI = iri(entry.getResourceURI().toString());
+			IRI metadataURI = iri(entry.getLocalMetadata().getURI().toString());
+
+			Statement resourceRights = getValueFactory().createStatement(resourceURI, iri(NS.entrystore, "write"), resourceURI);
+			Statement metadataRights = getValueFactory().createStatement(metadataURI, iri(NS.entrystore, "write"), resourceURI);
 			
-			org.openrdf.model.URI resourceURI = vf.createURI(entry.getResourceURI().toString());
-			org.openrdf.model.URI metadataURI = vf.createURI(entry.getLocalMetadata().getURI().toString());
-			
-			Statement resourceRights = vf.createStatement(resourceURI, createURI(NS.entrystore, "write"), resourceURI);
-			Statement metadataRights = vf.createStatement(metadataURI, createURI(NS.entrystore, "write"), resourceURI);
-			
-			if (!metadata.match(resourceRights.getSubject(), resourceRights.getPredicate(), resourceRights.getObject()).hasNext()) {
+			if (!metadata.filter(resourceRights.getSubject(), resourceRights.getPredicate(), resourceRights.getObject()).iterator().hasNext()) {
 				metadata.add(resourceRights);
 				log.info("Added statement: " + resourceRights);
 			}
-			if (!metadata.match(metadataRights.getSubject(), metadataRights.getPredicate(), metadataRights.getObject()).hasNext()) {
+			if (!metadata.filter(metadataRights.getSubject(), metadataRights.getPredicate(), metadataRights.getObject()).iterator().hasNext()) {
 				metadata.add(metadataRights);
 				log.info("Added statement: " + metadataRights);
 			}
@@ -154,28 +146,25 @@ public class DataCorrection {
 	private void fixMetadataOfEntry(Entry entry) {
 		Metadata localMd = entry.getLocalMetadata();
 		if (localMd != null) {
-			Graph metadata = entry.getLocalMetadata().getGraph();
+			Model metadata = entry.getLocalMetadata().getGraph();
 			if (metadata != null) {
 				boolean updateNecessary = false;
-				ValueFactory vf = metadata.getValueFactory();
 				URI rURI = entry.getResourceURI();
 				if (rURI == null) {
 					log.error("Resource URI is null!");
 					return;
 				}
-				org.openrdf.model.URI resURI = vf.createURI(rURI.toString());
+				IRI resURI = iri(rURI.toString());
 				
 				List<Statement> toRemove = new ArrayList<Statement>();
 				List<Statement> toAdd = new ArrayList<Statement>();
 
-				Iterator<Statement> rdfsTypeStmnts = metadata.match(null, vf.createURI("http://www.w3.org/TR/rdf-schema/type"), null);
-				while (rdfsTypeStmnts.hasNext()) {
-					Statement rdfsTypeStmnt = rdfsTypeStmnts.next();
+				for (Statement rdfsTypeStmnt : metadata.filter(null, iri("http://www.w3.org/TR/rdf-schema/type"), null)) {
 					if (rdfsTypeStmnt.getObject() instanceof Resource) {
 						String objValue = rdfsTypeStmnt.getObject().stringValue();
 						if (objValue.startsWith("http://purl.org/telmap/") || // fix for telmap
 								objValue.equals("http://http://xmlns.com/foaf/0.1/Person")) { // fix for voa3r
-							toAdd.add(vf.createStatement(rdfsTypeStmnt.getSubject(), RDF.TYPE, rdfsTypeStmnt.getObject()));
+							toAdd.add(getValueFactory().createStatement(rdfsTypeStmnt.getSubject(), RDF.TYPE, rdfsTypeStmnt.getObject()));
 							toRemove.add(rdfsTypeStmnt);
 						}
 					}
@@ -217,22 +206,21 @@ public class DataCorrection {
 	}
 	
 	private static Set<Date> getStrangeDates(Entry entry) {
-		Set<Date> result = new HashSet<Date>();
+		Set<Date> result = new HashSet<>();
+		ValueFactory vf = SimpleValueFactory.getInstance();
 		
 		Date from = parseDateFromStringStrict("1910-01-01");
 		Date until = parseDateFromStringStrict("2009-12-01");
-		org.openrdf.model.URI dctermsDate = new URIImpl(NS.dcterms + "date");
-		org.openrdf.model.URI w3cdtf = new URIImpl("http://purl.org/dc/terms/W3CDTF");
+		IRI dctermsDate = vf.createIRI(NS.dcterms + "date");
+		IRI w3cdtf = vf.createIRI("http://purl.org/dc/terms/W3CDTF");
 		
 		Metadata localMd = entry.getLocalMetadata();
 		if (localMd != null) {
-			Graph metadata = entry.getLocalMetadata().getGraph();
+			Model metadata = entry.getLocalMetadata().getGraph();
 			if (metadata != null) {
-				Iterator<Statement> stmnts = metadata.match(null, dctermsDate, null);
-				while (stmnts.hasNext()) {
-					Value obj = stmnts.next().getObject();
-					if (obj instanceof Literal) {
-						Literal lit = (Literal) obj;
+				for (Statement statement : metadata.filter(null, dctermsDate, null)) {
+					Value obj = statement.getObject();
+					if (obj instanceof Literal lit) {
 						if (!w3cdtf.equals(lit.getDatatype())) {
 							log.info("STRANGE: incorrect datatype!");
 						}

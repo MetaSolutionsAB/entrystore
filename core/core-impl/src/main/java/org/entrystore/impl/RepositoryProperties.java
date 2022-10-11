@@ -17,11 +17,11 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.RDFS;
 import org.entrystore.GraphType;
-import org.openrdf.model.URI;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.ValueFactoryImpl;
-import org.openrdf.model.vocabulary.RDFS;
 
 /**
  * This class sets static properties for the repository.
@@ -65,165 +65,165 @@ public class RepositoryProperties {
 	public static final String NSPROV = "http://www.w3.org/ns/prov#";
 
 
-	public static final URI counter;
-	public static final URI mdHasEntry;
-	public static final URI resHasEntry;
+	public static final IRI counter;
+	public static final IRI mdHasEntry;
+	public static final IRI resHasEntry;
 
-	public static final URI resource;
-	public static final URI metadata;
-	public static final URI relation;
-	public static final URI externalMetadata;
-	public static final URI cachedExternalMetadata;
-	public static final URI cached;
+	public static final IRI resource;
+	public static final IRI metadata;
+	public static final IRI relation;
+	public static final IRI externalMetadata;
+	public static final IRI cachedExternalMetadata;
+	public static final IRI cached;
 	
-	public static final URI alias;
+	public static final IRI alias;
 	
-	public static final URI InformationResource;
-	public static final URI ResolvableInformationResource;
-	public static final URI Unknown;
-	public static final URI NamedResource;
+	public static final IRI InformationResource;
+	public static final IRI ResolvableInformationResource;
+	public static final IRI Unknown;
+	public static final IRI NamedResource;
 
-	public static final URI referredIn;
-	public static final URI hasListMember;
-	public static final URI hasGroupMember;
+	public static final IRI referredIn;
+	public static final IRI hasListMember;
+	public static final IRI hasGroupMember;
 	
-	public static final URI Local;
-	public static final URI Reference;
-	public static final URI Link;
-	public static final URI LinkReference;
+	public static final IRI Local;
+	public static final IRI Reference;
+	public static final IRI Link;
+	public static final IRI LinkReference;
 	
-	public static final URI Context;
-	public static final URI SystemContext;
-	public static final URI List;
-	public static final URI ResultList;
-	public static final URI User;
-	public static final URI Group;
-	public static final URI Pipeline;
-	public static final URI PipelineResult;
-	public static final URI None;	
-	public static final URI String;	
+	public static final IRI Context;
+	public static final IRI SystemContext;
+	public static final IRI List;
+	public static final IRI ResultList;
+	public static final IRI User;
+	public static final IRI Group;
+	public static final IRI Pipeline;
+	public static final IRI PipelineResult;
+	public static final IRI None;
+	public static final IRI String;
 
-	public static final URI homeContext;
-	public static final URI secret;
-	public static final URI saltedHashedSecret;
-	public static final URI language;
-	public static final URI originallyCreatedIn;
-	public static final URI externalID;
-	public static final URI disabled;
+	public static final IRI homeContext;
+	public static final IRI secret;
+	public static final IRI saltedHashedSecret;
+	public static final IRI language;
+	public static final IRI originallyCreatedIn;
+	public static final IRI externalID;
+	public static final IRI disabled;
 
-	public static final URI Graph;
+	public static final IRI Graph;
 	
-	public static final URI Created;
-	public static final URI Modified;
+	public static final IRI Created;
+	public static final IRI Modified;
 	
-	public static final URI Deleted;
-	public static final URI DeletedBy;
+	public static final IRI Deleted;
+	public static final IRI DeletedBy;
 	
-	public static final URI CommentsOn;
-	public static final URI ReviewsOn;
+	public static final IRI CommentsOn;
+	public static final IRI ReviewsOn;
 	
-	public static final URI Creator;
-	public static final URI Contributor;
-	public static final URI format;
-	public static final URI fileSize;
-	public static final URI filename;
+	public static final IRI Creator;
+	public static final IRI Contributor;
+	public static final IRI format;
+	public static final IRI fileSize;
+	public static final IRI filename;
 	
-	public static final URI Quota;
-	public static final URI QuotaFillLevel;
+	public static final IRI Quota;
+	public static final IRI QuotaFillLevel;
 	
-	public static final URI Read;
-	public static final URI Write;
+	public static final IRI Read;
+	public static final IRI Write;
 
-	public static final URI pipeline;
-	public static final URI pipelineData;
-	public static final URI status;
-	public static final URI Pending;
-	public static final URI Failed;
-	public static final URI Succeeded;
+	public static final IRI pipeline;
+	public static final IRI pipelineData;
+	public static final IRI status;
+	public static final IRI Pending;
+	public static final IRI Failed;
+	public static final IRI Succeeded;
 
-	public static final URI wasAttributedTo;
-	public static final URI generatedAtTime;
-	public static final URI wasRevisionOf;
+	public static final IRI wasAttributedTo;
+	public static final IRI generatedAtTime;
+	public static final IRI wasRevisionOf;
 
 
 	static {
-		ValueFactory vf = ValueFactoryImpl.getInstance();
-		counter = vf.createURI(NSbase + "counter");
-		mdHasEntry = vf.createURI(NSbase + "mdHasMMd");
-		resHasEntry = vf.createURI(NSbase + "resHasMMd");
-		alias = vf.createURI(NSbase + "alias");
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		counter = vf.createIRI(NSbase + "counter");
+		mdHasEntry = vf.createIRI(NSbase + "mdHasMMd");
+		resHasEntry = vf.createIRI(NSbase + "resHasMMd");
+		alias = vf.createIRI(NSbase + "alias");
 		
-		metadata = vf.createURI(NSbase + "metadata");
-		relation = vf.createURI(NSbase + "relation");
-		externalMetadata = vf.createURI(NSbase + "externalMetadata");
-		cachedExternalMetadata = vf.createURI(NSbase + "cachedExternalMetadata");
-		cached = vf.createURI(NSbase + "cached");		
+		metadata = vf.createIRI(NSbase + "metadata");
+		relation = vf.createIRI(NSbase + "relation");
+		externalMetadata = vf.createIRI(NSbase + "externalMetadata");
+		cachedExternalMetadata = vf.createIRI(NSbase + "cachedExternalMetadata");
+		cached = vf.createIRI(NSbase + "cached");
 
-		Local = vf.createURI(NSbase + "Local");
-		Reference = vf.createURI(NSbase + "Reference");
-		Link = vf.createURI(NSbase + "Link");
-		LinkReference = vf.createURI(NSbase + "LinkReference");
-		resource = vf.createURI(NSbase + "resource");
+		Local = vf.createIRI(NSbase + "Local");
+		Reference = vf.createIRI(NSbase + "Reference");
+		Link = vf.createIRI(NSbase + "Link");
+		LinkReference = vf.createIRI(NSbase + "LinkReference");
+		resource = vf.createIRI(NSbase + "resource");
 		
-		referredIn = vf.createURI(NSbase + "referredIn");
-		hasListMember = vf.createURI(NSbase + "hasListMember");
-		hasGroupMember = vf.createURI(NSbase + "hasGroupMember");
+		referredIn = vf.createIRI(NSbase + "referredIn");
+		hasListMember = vf.createIRI(NSbase + "hasListMember");
+		hasGroupMember = vf.createIRI(NSbase + "hasGroupMember");
 
-		InformationResource = vf.createURI(NSbase + "InformationResource");
-		ResolvableInformationResource = vf.createURI(NSbase + "ResolvableInformationResource");
-		Unknown = vf.createURI(NSbase + "Unknown");
-		NamedResource = vf.createURI(NSbase + "NamedResource");
-		Context = vf.createURI(NSbase + "Context");
-		SystemContext = vf.createURI(NSbase + "SystemContext");
-		List = vf.createURI(NSbase + "List");
-		ResultList = vf.createURI(NSbase + "ResultList");
-		User = vf.createURI(NSbase + "User");
-		Group = vf.createURI(NSbase + "Group");
-		Pipeline = vf.createURI(NSbase + "Pipeline");
-		PipelineResult = vf.createURI(NSbase + "PipelineResult");
-		None = vf.createURI(NSbase + "None");
-		String = vf.createURI(NSbase + "String");
-		Graph = vf.createURI(NSbase + "Graph");
+		InformationResource = vf.createIRI(NSbase + "InformationResource");
+		ResolvableInformationResource = vf.createIRI(NSbase + "ResolvableInformationResource");
+		Unknown = vf.createIRI(NSbase + "Unknown");
+		NamedResource = vf.createIRI(NSbase + "NamedResource");
+		Context = vf.createIRI(NSbase + "Context");
+		SystemContext = vf.createIRI(NSbase + "SystemContext");
+		List = vf.createIRI(NSbase + "List");
+		ResultList = vf.createIRI(NSbase + "ResultList");
+		User = vf.createIRI(NSbase + "User");
+		Group = vf.createIRI(NSbase + "Group");
+		Pipeline = vf.createIRI(NSbase + "Pipeline");
+		PipelineResult = vf.createIRI(NSbase + "PipelineResult");
+		None = vf.createIRI(NSbase + "None");
+		String = vf.createIRI(NSbase + "String");
+		Graph = vf.createIRI(NSbase + "Graph");
 		
-		secret = vf.createURI(NSbase + "secret");
-		saltedHashedSecret = vf.createURI(NSbase + "saltedHashedSecret");
-		homeContext = vf.createURI(NSbase + "homeContext");
-		language = vf.createURI(NSbase + "language");
-		externalID = vf.createURI(NSbase, "externalID");
-		disabled = vf.createURI(NSbase, "disabled");
+		secret = vf.createIRI(NSbase + "secret");
+		saltedHashedSecret = vf.createIRI(NSbase + "saltedHashedSecret");
+		homeContext = vf.createIRI(NSbase + "homeContext");
+		language = vf.createIRI(NSbase + "language");
+		externalID = vf.createIRI(NSbase, "externalID");
+		disabled = vf.createIRI(NSbase, "disabled");
 		
-		originallyCreatedIn = vf.createURI(NSbase + "originallyCreatedIn");
+		originallyCreatedIn = vf.createIRI(NSbase + "originallyCreatedIn");
 
-		Created = vf.createURI(NSDCTERMS + "created");
-		Modified = vf.createURI(NSDCTERMS + "modified");
+		Created = vf.createIRI(NSDCTERMS + "created");
+		Modified = vf.createIRI(NSDCTERMS + "modified");
 		
-		Deleted = vf.createURI(NSbase, "deleted");
-		DeletedBy = vf.createURI(NSbase, "deletedBy");
+		Deleted = vf.createIRI(NSbase, "deleted");
+		DeletedBy = vf.createIRI(NSbase, "deletedBy");
 		
-		CommentsOn = vf.createURI(NSbase + "commentsOn");
-		ReviewsOn = vf.createURI(NSbase + "reviewsOn");
-		format = vf.createURI(NSDCTERMS + "format");
-		fileSize = vf.createURI(NSDCTERMS + "extent");
+		CommentsOn = vf.createIRI(NSbase + "commentsOn");
+		ReviewsOn = vf.createIRI(NSbase + "reviewsOn");
+		format = vf.createIRI(NSDCTERMS + "format");
+		fileSize = vf.createIRI(NSDCTERMS + "extent");
 		filename = RDFS.LABEL;
 		
-		Creator = vf.createURI(NSDCTERMS + "creator");
-		Contributor = vf.createURI(NSDCTERMS + "contributor");
+		Creator = vf.createIRI(NSDCTERMS + "creator");
+		Contributor = vf.createIRI(NSDCTERMS + "contributor");
 		
-		Read = vf.createURI(NSbase + "read");
-		Write = vf.createURI(NSbase + "write");
+		Read = vf.createIRI(NSbase + "read");
+		Write = vf.createIRI(NSbase + "write");
 		
-		Quota = vf.createURI(NSbase, "hasQuota");
-		QuotaFillLevel = vf.createURI(NSbase, "hasQuotaFillLevel");
+		Quota = vf.createIRI(NSbase, "hasQuota");
+		QuotaFillLevel = vf.createIRI(NSbase, "hasQuotaFillLevel");
 
-		pipeline = vf.createURI(NSbase, "pipeline");
-		pipelineData = vf.createURI(NSbase, "pipelineData");
-		status = vf.createURI(NSbase, "status");
-		Pending = vf.createURI(NSbase, "Pending");
-		Failed = vf.createURI(NSbase, "Failed");
-		Succeeded = vf.createURI(NSbase, "Succeeded");
+		pipeline = vf.createIRI(NSbase, "pipeline");
+		pipelineData = vf.createIRI(NSbase, "pipelineData");
+		status = vf.createIRI(NSbase, "status");
+		Pending = vf.createIRI(NSbase, "Pending");
+		Failed = vf.createIRI(NSbase, "Failed");
+		Succeeded = vf.createIRI(NSbase, "Succeeded");
 
-		wasAttributedTo = vf.createURI(NSPROV, "wasAttributedTo");
-		generatedAtTime = vf.createURI(NSPROV, "generatedAtTime");
-		wasRevisionOf = vf.createURI(NSPROV, "wasRevisionOf");
+		wasAttributedTo = vf.createIRI(NSPROV, "wasAttributedTo");
+		generatedAtTime = vf.createIRI(NSPROV, "generatedAtTime");
+		wasRevisionOf = vf.createIRI(NSPROV, "wasRevisionOf");
 	}
 }

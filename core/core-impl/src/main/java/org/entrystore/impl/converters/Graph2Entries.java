@@ -16,6 +16,28 @@
 
 package org.entrystore.impl.converters;
 
+import org.eclipse.rdf4j.model.BNode;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.ResourceType;
+import org.entrystore.impl.ContextImpl;
+import org.entrystore.impl.RDFResource;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.util.NS;
+import org.entrystore.repository.util.URISplit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.net.URI;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
@@ -23,27 +45,6 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-
-import org.entrystore.GraphType;
-import org.entrystore.Context;
-import org.entrystore.Entry;
-import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.ResourceType;
-import org.entrystore.impl.ContextImpl;
-import org.entrystore.impl.RDFResource;
-import org.entrystore.repository.util.NS;
-import org.entrystore.repository.util.URISplit;
-import org.openrdf.model.BNode;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.impl.ValueFactoryImpl;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
@@ -53,9 +54,9 @@ import org.slf4j.LoggerFactory;
  */
 public class Graph2Entries {
 	
-	private static ValueFactory vf = ValueFactoryImpl.getInstance();
-	private static URI mergeResourceId = vf.createURI(NS.entrystore, "mergeResourceId");
-	private static URI referenceResourceId = vf.createURI(NS.entrystore, "referenceResourceId");
+	private static ValueFactory vf = SimpleValueFactory.getInstance();
+	private static IRI mergeResourceId = vf.createIRI(NS.entrystore, "mergeResourceId");
+	private static IRI referenceResourceId = vf.createIRI(NS.entrystore, "referenceResourceId");
 
 	private static Logger log = LoggerFactory.getLogger(Graph2Entries.class);
 	private Context context;
@@ -81,7 +82,7 @@ public class Graph2Entries {
 	 * @param destinationListURI a list where the destinationEntryId will be created if a new entry is to be created.
 	 * @return a collection of the merged entries (updated or created), the referenced entries are not included in the collection.
 	 */
-	public Set<Entry> merge(Graph graph, String destinationEntryId, java.net.URI destinationListURI) {
+	public Set<Entry> merge(Model graph, String destinationEntryId, URI destinationListURI) {
 		log.info("About to update/create entries in context "+this.context.getEntry().getId()+".");
 		Set<Entry> entries = new HashSet<Entry>();
 		
@@ -89,28 +90,28 @@ public class Graph2Entries {
 		HashMap<String, Resource> oldResources = new HashMap<String, Resource>();
 		HashMap<Resource, Resource> translate = new HashMap<Resource, Resource>();
 
-		Iterator<Statement> stmts = graph.match(null, referenceResourceId, null);
+		Iterator<Statement> stmts = graph.filter(null, referenceResourceId, null).iterator();
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			String entryId = statement.getObject().stringValue();
 			Resource re = newResources.get(entryId);
 			if (re == null) {
-				java.net.URI uri = URISplit.fabricateURI(
+				URI uri = URISplit.fabricateURI(
 						context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
 						context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
-				re = vf.createURI(uri.toString());
+				re = vf.createIRI(uri.toString());
 			}
 			translate.put(statement.getSubject(), re);
 		}
 
 		
 		if (destinationEntryId != null) {
-			java.net.URI uri = URISplit.fabricateURI(
+			URI uri = URISplit.fabricateURI(
 					context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
 					context.getEntry().getId(), RepositoryProperties.DATA_PATH, destinationEntryId);
-			Resource newRe = vf.createURI(uri.toString());
+			Resource newRe = vf.createIRI(uri.toString());
 
-			stmts = graph.match(null, mergeResourceId, null);
+			stmts = graph.filter(null, mergeResourceId, null).iterator();
 			while (stmts.hasNext()) {
 				Statement statement = (Statement) stmts.next();
 				translate.put(statement.getSubject(), newRe);
@@ -129,10 +130,10 @@ public class Graph2Entries {
 					entryCreated = true;
 				}				
 			}
-			Graph resg = this.translate(graph, translate);
+			Model resg = this.translate(graph, translate);
 			((RDFResource) entry.getResource()).setGraph(resg);
 
-			Graph subg = this.extract(resg, newRe, new HashSet<Resource>(), new HashMap<Resource, Resource>());
+			Model subg = this.extract(resg, newRe, new HashSet<Resource>(), new HashMap<Resource, Resource>());
 			if (!subg.isEmpty()) {
 				entry.getLocalMetadata().setGraph(subg);
 			} else if (entryCreated) {
@@ -143,14 +144,14 @@ public class Graph2Entries {
 			return entries;
 		}
 		
-		stmts = graph.match(null, mergeResourceId, null);
+		stmts = graph.filter(null, mergeResourceId, null).iterator();
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			String entryId = statement.getObject().stringValue();
-			java.net.URI uri = URISplit.fabricateURI(
+			URI uri = URISplit.fabricateURI(
 					context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
 					context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
-			Resource newRe = vf.createURI(uri.toString());
+			Resource newRe = vf.createIRI(uri.toString());
 			newResources.put(entryId, newRe);
 			oldResources.put(entryId, statement.getSubject());
 			translate.put(statement.getSubject(), newRe);
@@ -161,9 +162,8 @@ public class Graph2Entries {
 		int newResCounter = 0;
 		int updResCounter = 0;
 		Collection<Resource> ignore = newResources.values();
-		for (Iterator<String> it = newResources.keySet().iterator(); it.hasNext();) {
-			String entryId = (String) it.next();
-			Graph subg = this.extract(graph, oldResources.get(entryId), ignore, translate);
+		for (String entryId : newResources.keySet()) {
+			Model subg = this.extract(graph, oldResources.get(entryId), ignore, translate);
 			Entry entry = this.context.get(entryId); //Try to fetch existing entry.
 			if (entry == null) {  //If none exist, create it.
 				entry = this.context.createResource(entryId, GraphType.None, ResourceType.NamedResource, null);
@@ -190,18 +190,18 @@ public class Graph2Entries {
 	 * @param translate a map of resources, the keys should be replaces with the values when encountered.
 	 * @return the extracted subgraph, may be empty, not null.
 	 */
-	private Graph extract(Graph from, Resource subject, Collection<Resource> ignore, Map<Resource, Resource> translate) {
-		Graph to = new GraphImpl();
+	private Model extract(Model from, Resource subject, Collection<Resource> ignore, Map<Resource, Resource> translate) {
+		Model to = new LinkedHashModel();
 		HashSet<Resource> collected = new HashSet<Resource>(ignore);
 		this._extract(from, to, subject, collected, translate);
 		return to;
 	}
-	private void _extract(Graph from, Graph to, Resource subject, Set<Resource> collected, Map<Resource, Resource> translate) {
-		Iterator<Statement> stmts = from.match(subject, null, null);
+	private void _extract(Model from, Model to, Resource subject, Set<Resource> collected, Map<Resource, Resource> translate) {
+		Iterator<Statement> stmts = from.filter(subject, null, null).iterator();
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			Resource subj = statement.getSubject();
-			URI pred = statement.getPredicate();
+			IRI pred = statement.getPredicate();
 			Value obj = statement.getObject();
 			//Recursive step.
 			if (obj instanceof BNode && !collected.contains(obj)) {
@@ -222,18 +222,16 @@ public class Graph2Entries {
 			to.add(subj, pred, obj);
 		}
 	}
-	private Graph translate(Graph from, Map<Resource, Resource> translate) {
-		Graph to = new GraphImpl();
-		Iterator<Statement> stmts = from.iterator();
-		while (stmts.hasNext()) {
-			Statement statement = (Statement) stmts.next();
+	private Model translate(Model from, Map<Resource, Resource> translate) {
+		Model to = new LinkedHashModel();
+		for (Statement statement : from) {
 			Resource subj = statement.getSubject();
-			URI pred = statement.getPredicate();
+			IRI pred = statement.getPredicate();
 			Value obj = statement.getObject();
 			if (pred.equals(mergeResourceId) || pred.equals(referenceResourceId)) {
 				continue;
 			}
-			
+
 			if (translate.get(subj) != null) {
 				subj = translate.get(subj);
 			}

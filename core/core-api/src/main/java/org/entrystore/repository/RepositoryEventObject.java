@@ -16,10 +16,10 @@
 
 package org.entrystore.repository;
 
-import java.util.EventObject;
-
+import org.eclipse.rdf4j.model.Model;
 import org.entrystore.Entry;
-import org.openrdf.model.Graph;
+
+import java.util.EventObject;
 
 /**
  * @author Hannes Ebner
@@ -28,14 +28,14 @@ public class RepositoryEventObject extends EventObject {
 	
 	RepositoryEvent event;
 	
-	Graph updatedGraph;
+	Model updatedGraph;
 
 	public RepositoryEventObject(Entry source, RepositoryEvent event) {
 		super(source);
 		this.event = event;
 	}
 	
-	public RepositoryEventObject(Entry source, RepositoryEvent event, Graph updatedGraph) {
+	public RepositoryEventObject(Entry source, RepositoryEvent event, Model updatedGraph) {
 		this(source, event);
 		this.updatedGraph = updatedGraph;
 	}
@@ -49,7 +49,7 @@ public class RepositoryEventObject extends EventObject {
 	 *         save the getGraph() call on the Entry object, minimizing the
 	 *         repository requests.
 	 */
-	public Graph getUpdatedGraph() {
+	public Model getUpdatedGraph() {
 		return updatedGraph;
 	}
 	

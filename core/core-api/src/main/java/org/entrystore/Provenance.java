@@ -16,7 +16,7 @@
 
 package org.entrystore;
 
-import org.openrdf.model.Graph;
+import org.eclipse.rdf4j.model.Model;
 
 import java.net.URI;
 import java.util.Date;
@@ -88,5 +88,5 @@ public interface Provenance {
 	 *                    before this revision (the previous revision).
 	 * @return a new GraphEntity
 	 */
-	GraphEntity addMetadataEntity(Graph previousRevisionGraph);
+	GraphEntity addMetadataEntity(Model previousRevisionGraph);
 }

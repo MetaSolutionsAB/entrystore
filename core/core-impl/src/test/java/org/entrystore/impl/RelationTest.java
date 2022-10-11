@@ -16,6 +16,9 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.RDFS;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -23,9 +26,6 @@ import org.entrystore.List;
 import org.entrystore.Metadata;
 import org.entrystore.User;
 import org.junit.Test;
-import org.openrdf.model.Graph;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.vocabulary.RDFS;
 
 import java.net.URI;
 
@@ -67,8 +67,8 @@ public class RelationTest extends AbstractCoreTest {
 		EntryImpl list2 = (EntryImpl) duck.createResource(null, GraphType.List, null, null);
 		EntryImpl link = (EntryImpl) duck.createLink(null, URI.create("http://slashdot.org"), null);
 		Metadata md = list1.getLocalMetadata();
-		Graph g = md.getGraph();
-		ValueFactory vf = g.getValueFactory();
+		Model g = md.getGraph();
+		ValueFactory vf = rm.getValueFactory();
 		g.add(vf.createStatement(list1.getSesameResourceURI(), RDFS.ISDEFINEDBY, list2.getSesameEntryURI()));
 		g.add(vf.createStatement(list1.getSesameResourceURI(), RDFS.ISDEFINEDBY, list2.getSesameLocalMetadataURI()));
 		g.add(vf.createStatement(list1.getSesameResourceURI(), RDFS.ISDEFINEDBY, list2.getSesameResourceURI()));
@@ -76,7 +76,7 @@ public class RelationTest extends AbstractCoreTest {
 		assertTrue(list2.getRelations().size() == 3);
 
 		Metadata lmd = list1.getLocalMetadata();
-		Graph lg = lmd.getGraph();
+		Model lg = lmd.getGraph();
 		lg.add(vf.createStatement(link.getSesameResourceURI(), RDFS.ISDEFINEDBY, list2.getSesameResourceURI()));
 		assertTrue(list2.getRelations().size() == 3); //Should not be changed since resourceURI is not a repository URI.
 	}

@@ -17,11 +17,12 @@
 
 package org.entrystore.repository.util;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.entrystore.impl.RepositoryProperties;
+
 import java.net.URI;
 import java.net.URL;
 import java.util.StringTokenizer;
-
-import org.entrystore.impl.RepositoryProperties;
 
 public class URISplit {
 
@@ -39,11 +40,11 @@ public class URISplit {
 	String base;
 	boolean isContext = false;
 
-	public URISplit(org.openrdf.model.URI anyURI, URL baseURL) {
+	public URISplit(IRI anyURI, URL baseURL) {
 		this(anyURI.toString(), baseURL);
 	}
 
-	public URISplit(java.net.URI anyURI, URL baseURL) {
+	public URISplit(URI anyURI, URL baseURL) {
 		this(anyURI.toString(), baseURL);
 	}
 
