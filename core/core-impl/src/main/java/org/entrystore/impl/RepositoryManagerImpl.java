@@ -33,12 +33,10 @@ import org.apache.solr.client.solrj.request.CoreAdminRequest;
 import org.apache.solr.client.solrj.request.CoreStatus;
 import org.apache.solr.core.NodeConfig;
 import org.apache.solr.util.SolrVersion;
-import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
-import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.eclipse.rdf4j.repository.http.HTTPRepository;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.repository.sparql.SPARQLRepository;
@@ -84,7 +82,9 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -177,6 +177,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			} else {
 				File path = new File(config.getURI(Settings.STORE_PATH));
 				String indexes = config.getString(Settings.STORE_INDEXES);
+				checkAndUpgradeNativeStore(path, indexes);
 				log.info("Using Native Store at " + path);
 				log.info("Indexes: " + indexes);
 				NativeStore store = null;
@@ -871,45 +872,88 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 		return null;
 	}
-	
-	public long getNamedGraphCount() {
-		long amountNGs = 0;
-		RepositoryConnection rc = null;
-		try {
-			rc = repository.getConnection();
-			RepositoryResult<Resource> contextResult = rc.getContextIDs();
-			for (; contextResult.hasNext(); contextResult.next()) {
-				amountNGs++;
-			}
-			contextResult.close();
-		} catch (RepositoryException re) {
-			log.error(re.getMessage());
-		} finally {
-			try {
-				rc.close();
-			} catch (RepositoryException e) {
-				log.error(e.getMessage());
-			}
+
+	private void checkAndUpgradeNativeStore(File path, String indexes) {
+		if (path.exists() && path.isDirectory() && (path.list().length == 0 || new File(path, "nativerdf.ver").exists())) {
+			// no upgrade needed
+			return;
 		}
-		return amountNGs;
+		log.warn("Unable to detect version of native store, attempting upgrade");
+
+		File valuesDat = new File(path, "values.dat");
+		if (!valuesDat.exists()) {
+			throw new RuntimeException(valuesDat + " not found, is the path of the native store configured properly?");
+		}
+
+		File backupPath = new File(path, "backup");
+		if (backupPath.exists() && backupPath.isDirectory() && backupPath.list().length > 0) {
+			throw new RuntimeException(("Backup path at " + backupPath + " exists and is not empty"));
+		}
+
+		if (!backupPath.exists() && !backupPath.mkdirs()) {
+			throw new RuntimeException("Backup path at " + backupPath + " could not be created");
+		}
+
+		try {
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(path.toPath())) {
+				for (Path p : stream) {
+					if (!"backup".equals(p.getFileName().toString())) {
+						log.debug("Moving " + p + " to " + new File(backupPath, p.getFileName().toString()).toPath());
+						Files.move(p, new File(backupPath, p.getFileName().toString()).toPath());
+					}
+				}
+			}
+		} catch (IOException ioe) {
+			throw new RuntimeException(ioe);
+		}
+
+		SailRepository oldRepo = new SailRepository(new NativeStore(backupPath, indexes));
+		oldRepo.init();
+		SailRepository newRepo = new SailRepository(new NativeStore(path, indexes));
+		newRepo.init();
+
+		long oldTripleCount;
+		long newTripleCount;
+		long oldContextCount;
+		long newContextCount;
+
+		try (RepositoryConnection rcOld = oldRepo.getConnection()) {
+			try (RepositoryConnection rcNew = newRepo.getConnection()) {
+				rcNew.add(rcOld.getStatements(null, null, null, false));
+				oldTripleCount = rcOld.size();
+				newTripleCount = rcNew.size();
+				oldContextCount = rcOld.getContextIDs().stream().count();
+				newContextCount = rcNew.getContextIDs().stream().count();
+			}
+			newRepo.shutDown();
+		}
+		oldRepo.shutDown();
+
+		if (oldTripleCount != newTripleCount || oldContextCount != newContextCount) {
+			throw new RuntimeException("Amount of triples or contexts in migrated native store is not the same as in original native store");
+		}
+
+		log.info("Repository statistics: " + newTripleCount + " triples, " + newContextCount + " named graphs");
+
+		try {
+			FileUtils.deleteDirectory(backupPath);
+		} catch (IOException e) {
+			log.error(e.getMessage());
+		}
+
+		log.info("Native store successfully upgraded");
 	}
-	
-	public long getTripleCount() {
-		long amountTriples = 0;
-		RepositoryConnection rc = null;
-		try {
-			rc = repository.getConnection();
-			amountTriples = rc.size();
-		} catch (RepositoryException re) {
-			log.error(re.getMessage());
-		} finally {
-			try {
-				rc.close();
-			} catch (RepositoryException e) {
-				log.error(e.getMessage());
-			}
+
+	public long getNamedGraphCount() {
+		try (RepositoryConnection rc = repository.getConnection()) {
+			return rc.getContextIDs().stream().count();
 		}
-		return amountTriples;
+	}
+
+	public long getTripleCount() {
+		try (RepositoryConnection rc = repository.getConnection()) {
+			return rc.size();
+		}
 	}
 
 	public static String getVersion() {
