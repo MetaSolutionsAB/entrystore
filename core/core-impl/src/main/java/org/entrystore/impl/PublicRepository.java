@@ -102,7 +102,7 @@ public class PublicRepository {
 						}
 					}
 					if (postQueue.estimatedSize() > 0) {
-						Set<Entry> entriesToUpdate = new HashSet();
+						Set<Entry> entriesToUpdate = new HashSet<>();
 						synchronized (postQueue) {
 							ConcurrentMap<URI, Entry> postQueueMap = postQueue.asMap();
 							Iterator<URI> it = postQueueMap.keySet().iterator();
@@ -150,9 +150,8 @@ public class PublicRepository {
 			} else {
 				File path = new File(config.getURI(Settings.REPOSITORY_PUBLIC_PATH));
 				String indexes = config.getString(Settings.REPOSITORY_PUBLIC_INDEXES);
-				
-				log.info("Public repository path: " + path);
-				log.info("Public repository indexes: " + indexes);
+				((RepositoryManagerImpl) rm).checkAndUpgradeNativeStore(path, indexes);
+				log.info("Public repository: using Native Store at {} with indexes {}", path, indexes);
 				
 				NativeStore store = null;
 				if (indexes != null) {

@@ -178,8 +178,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				File path = new File(config.getURI(Settings.STORE_PATH));
 				String indexes = config.getString(Settings.STORE_INDEXES);
 				checkAndUpgradeNativeStore(path, indexes);
-				log.info("Using Native Store at " + path);
-				log.info("Indexes: " + indexes);
+				log.info("Main repository: using Native Store at {} with indexes {}", path, indexes);
 				NativeStore store = null;
 				if (indexes != null) {
 					store = new NativeStore(path, indexes);
@@ -347,9 +346,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			} else {
 				File path = new File(config.getURI(Settings.REPOSITORY_PROVENANCE_PATH));
 				String indexes = config.getString(Settings.REPOSITORY_PROVENANCE_INDEXES);
-
-				log.info("Provenance repository path: " + path);
-				log.info("Provenance repository indexes: " + indexes);
+				checkAndUpgradeNativeStore(path, indexes);
+				log.info("Provenance repository: using Native Store at {} with indexes {}", path, indexes);
 
 				NativeStore store = null;
 				if (indexes != null) {
@@ -821,8 +819,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			RepositoryListener contextIndexer = new RepositoryListener() {
 				@Override
 				public void repositoryUpdated(RepositoryEventObject eventObject) {
-					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry)) {
-						Entry e = (Entry) eventObject.getSource();
+					if ((eventObject.getSource() != null) && (eventObject.getSource() instanceof Entry e)) {
 						if (GraphType.Context.equals(e.getGraphType())) {
 							solrIndex.submitContextForDelayedReindex(e, eventObject.getUpdatedGraph());
 						}
@@ -873,16 +870,17 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		return null;
 	}
 
-	private void checkAndUpgradeNativeStore(File path, String indexes) {
+	protected void checkAndUpgradeNativeStore(File path, String indexes) {
 		if (path.exists() && path.isDirectory() && (path.list().length == 0 || new File(path, "nativerdf.ver").exists())) {
 			// no upgrade needed
 			return;
 		}
-		log.warn("Unable to detect version of native store, attempting upgrade");
+		long before = new Date().getTime();
+		log.warn("Unable to detect version of Native Store at {}, attempting upgrade", path);
 
 		File valuesDat = new File(path, "values.dat");
 		if (!valuesDat.exists()) {
-			throw new RuntimeException(valuesDat + " not found, is the path of the native store configured properly?");
+			throw new RuntimeException(valuesDat + " not found, is the path of the Native Store (" + path + ") configured properly?");
 		}
 
 		File backupPath = new File(path, "backup");
@@ -930,10 +928,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		oldRepo.shutDown();
 
 		if (oldTripleCount != newTripleCount || oldContextCount != newContextCount) {
-			throw new RuntimeException("Amount of triples or contexts in migrated native store is not the same as in original native store");
+			throw new RuntimeException("Amount of triples or contexts in migrated Native Store at " + path + " is not the same as in original Native Store");
 		}
 
-		log.info("Repository statistics: " + newTripleCount + " triples, " + newContextCount + " named graphs");
+		log.info("Repository statistics for {}: " + newTripleCount + " triples, " + newContextCount + " named graphs", path);
 
 		try {
 			FileUtils.deleteDirectory(backupPath);
@@ -941,7 +939,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			log.error(e.getMessage());
 		}
 
-		log.info("Native store successfully upgraded");
+		log.info("Native store at {} successfully upgraded, took {} ms", path, new Date().getTime() - before);
 	}
 
 	public long getNamedGraphCount() {
