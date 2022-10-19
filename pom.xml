@@ -31,6 +31,7 @@
         <jetty.version>9.4.49.v20220914</jetty.version>
         <jsonorg.version>20220320</jsonorg.version>
         <jackson.version>2.13.4</jackson.version>
+        <jackson-databind.version>2.13.4.2</jackson-databind.version>
         <site.url>https://entrystore.org</site.url>
         <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
         <distribution.url>https://entrystore.org</distribution.url>
@@ -329,7 +330,7 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
-                <version>${jackson.version}</version>
+                <version>${jackson-databind.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
