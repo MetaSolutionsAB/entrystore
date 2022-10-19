@@ -106,11 +106,11 @@ public class GraphUtil {
 		}
 
 		try {
+			rdfWriter.startRDF();
 			Map<String, String> namespaces = NS.getMap();
 			for (String nsName : namespaces.keySet()) {
 				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
 			}
-			rdfWriter.startRDF();
 			for (Statement statement : graph) {
 				rdfWriter.handleStatement(statement);
 			}
@@ -126,11 +126,11 @@ public class GraphUtil {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
 		try {
+			rdfWriter.startRDF();
 			Map<String, String> namespaces = NS.getMap();
 			for (String nsName : namespaces.keySet()) {
 				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
 			}
-			rdfWriter.startRDF();
 			for (Statement statement : graph) {
 				rdfWriter.handleStatement(statement);
 			}

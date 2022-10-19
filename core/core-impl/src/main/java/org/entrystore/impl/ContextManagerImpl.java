@@ -276,13 +276,13 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					log.error("Unable to create an RDF writer, format not supported");
 					return;
 				}
-				
+
+				rdfWriter.startRDF();
 				Map<String, String> namespaces = NS.getMap();
 				for (String nsName : namespaces.keySet()) {
 					rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
 				}
-				
-				rdfWriter.startRDF();
+
 				RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, filteredNGs.toArray(new org.eclipse.rdf4j.model.Resource[filteredNGs.size()]));
 				while (rr.hasNext()) {
 					Statement s = rr.next();
