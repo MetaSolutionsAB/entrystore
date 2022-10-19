@@ -30,7 +30,7 @@
         <guava.version>31.1-jre</guava.version>
         <jetty.version>9.4.49.v20220914</jetty.version>
         <jsonorg.version>20220320</jsonorg.version>
-        <jackson.version>2.13.4</jackson.version>
+        <jackson.version>2.13.4.1</jackson.version>
         <site.url>https://entrystore.org</site.url>
         <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
         <distribution.url>https://entrystore.org</distribution.url>
