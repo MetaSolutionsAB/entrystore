@@ -28,6 +28,7 @@ import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.repository.util.NS;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -41,6 +42,8 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
+import static org.eclipse.rdf4j.model.util.Values.iri;
+
 /**
  * A utility class to help converting Sesame Graphs from and to RDF/JSON.
  * 
@@ -49,6 +52,10 @@ import java.util.Set;
 public class RDFJSON {
 	
 	private static final Logger log = LoggerFactory.getLogger(RDFJSON.class);
+
+	private static IRI dtString = iri(NS.xsd, "string");
+
+	private static IRI dtLangString = iri(NS.rdf, "langString");
 
 	/**
 	 * Implementation using the json.org API.
@@ -60,7 +67,7 @@ public class RDFJSON {
 	 */
 	public static Model rdfJsonToGraph(JSONObject json) {
 		Model result = new LinkedHashModel();
-		HashMap<String, BNode> id2bnode = new HashMap<String, BNode>();
+		HashMap<String, BNode> id2bnode = new HashMap<>();
 		ValueFactory vf = SimpleValueFactory.getInstance();
 
 		try {
@@ -103,6 +110,9 @@ public class RDFJSON {
 						String lang = null;
 						if (obj.has("lang")) {
 							lang = obj.getString("lang");
+							if (lang.trim().isEmpty()) {
+								lang = null;
+							}
 						}
 						IRI datatype = null;
 						if (obj.has("datatype")) {
@@ -150,7 +160,7 @@ public class RDFJSON {
 	private static JSONObject getValue(Value v) {
 		JSONObject valueObj = new JSONObject();
 		if (v instanceof BNode && !v.stringValue().startsWith("_:")) {
-			valueObj.put("value", "_:"+v.stringValue());
+			valueObj.put("value", "_:" + v.stringValue());
 		} else {
 			valueObj.put("value", v.stringValue());
 		}
@@ -159,7 +169,11 @@ public class RDFJSON {
 			if (l.getLanguage().isPresent()) {
 				valueObj.put("lang", l.getLanguage().get());
 			} else if (l.getDatatype() != null) {
-				valueObj.put("datatype", l.getDatatype().stringValue());
+				IRI dataType = l.getDatatype();
+				// we ignore data types for strings (as introduced by RDF 1.1) to be compatible with RDF 1.0
+				if (!dataType.equals(dtString) && !dataType.equals(dtLangString)) {
+					valueObj.put("datatype", dataType.stringValue());
+				}
 			}
 		} else if (v instanceof BNode) {
 			valueObj.put("type", "bnode");
@@ -179,7 +193,7 @@ public class RDFJSON {
 				Value object = stmt.getObject();
 				HashMap<IRI, JSONArray> pred2values = struct.get(subject);
 				if (pred2values == null) {
-					pred2values = new HashMap<IRI, JSONArray>();
+					pred2values = new HashMap<>();
 					struct.put(subject, pred2values);
 					JSONArray values = new JSONArray();
 					pred2values.put(predicate, values);

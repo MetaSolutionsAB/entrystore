@@ -27,6 +27,7 @@ import org.eclipse.rdf4j.rio.RDFHandlerException;
 import org.eclipse.rdf4j.rio.RDFParseException;
 import org.eclipse.rdf4j.rio.RDFParser;
 import org.eclipse.rdf4j.rio.RDFWriter;
+import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings;
 import org.eclipse.rdf4j.rio.helpers.StatementCollector;
 import org.eclipse.rdf4j.rio.helpers.XMLParserSettings;
 import org.eclipse.rdf4j.rio.n3.N3ParserFactory;
@@ -96,7 +97,13 @@ public class GraphUtil {
 		RDFWriter rdfWriter = null;
 		try {
 			Constructor<? extends RDFWriter> constructor = writer.getConstructor(Writer.class);
-			rdfWriter = (RDFWriter) constructor.newInstance(stringWriter);
+			rdfWriter = constructor.newInstance(stringWriter);
+			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.rdf10_plain_literals")) {
+				rdfWriter.getWriterConfig().set(BasicWriterSettings.XSD_STRING_TO_PLAIN_LITERAL, true);
+			}
+			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.rdf10_language_literals")) {
+				rdfWriter.getWriterConfig().set(BasicWriterSettings.RDF_LANGSTRING_TO_LANG_LITERAL, true);
+			}
 		} catch (Exception e) {
 			log.error(e.getMessage());
 		}
