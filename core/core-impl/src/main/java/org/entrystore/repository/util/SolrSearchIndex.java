@@ -559,7 +559,7 @@ public class SolrSearchIndex implements SearchIndex {
 		Set<IRI> profilePreds = new HashSet<>();
 		profilePreds.add(valueFactory.createIRI("http://entryscape.com/terms/entityType"));
 		profilePreds.add(valueFactory.createIRI("http://entrystore.org/terms/profile"));
-		for (String profileURI : EntryUtil.getResourceValues(entryGraph, entry.getResourceURI(), profilePreds)) {
+		for (String profileURI : EntryUtil.getResourceValues(entryGraph, entry.getLocalMetadataURI(), profilePreds)) {
 			doc.setField("profile", profileURI);
 			break; // we only need the first match
 		}
