@@ -28,6 +28,8 @@ import org.eclipse.rdf4j.rio.RDFParseException;
 import org.eclipse.rdf4j.rio.RDFParser;
 import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings;
+import org.eclipse.rdf4j.rio.helpers.JSONLDMode;
+import org.eclipse.rdf4j.rio.helpers.JSONLDSettings;
 import org.eclipse.rdf4j.rio.helpers.StatementCollector;
 import org.eclipse.rdf4j.rio.helpers.XMLParserSettings;
 import org.eclipse.rdf4j.rio.jsonld.JSONLDParser;
@@ -98,14 +100,35 @@ public class GraphUtil {
 		StringWriter stringWriter = new StringWriter();
 		RDFWriter rdfWriter = null;
 		try {
+			/*
+			Constructor<? extends RDFWriter> constructor = null;
+			if (writer.equals(JSONLDWriter.class) && NS.getMap().containsKey("store")) {
+				constructor = writer.getConstructor(Writer.class, String.class);
+				rdfWriter = constructor.newInstance(stringWriter, NS.getMap().get("store"));
+			} else {
+				constructor = writer.getConstructor(Writer.class);
+				rdfWriter = constructor.newInstance(stringWriter);
+			}
+			*/
 			Constructor<? extends RDFWriter> constructor = writer.getConstructor(Writer.class);
 			rdfWriter = constructor.newInstance(stringWriter);
+
 			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.rdf10_plain_literals")) {
 				rdfWriter.getWriterConfig().set(BasicWriterSettings.XSD_STRING_TO_PLAIN_LITERAL, true);
 			}
 			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.rdf10_language_literals")) {
 				rdfWriter.getWriterConfig().set(BasicWriterSettings.RDF_LANGSTRING_TO_LANG_LITERAL, true);
 			}
+			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.jsonld.optimize")) {
+				rdfWriter.getWriterConfig().set(JSONLDSettings.OPTIMIZE, true);
+			}
+			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.jsonld.use_native_types")) {
+				rdfWriter.getWriterConfig().set(JSONLDSettings.USE_NATIVE_TYPES, true);
+			}
+			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.jsonld.hierarchical_view")) {
+				rdfWriter.getWriterConfig().set(JSONLDSettings.HIERARCHICAL_VIEW, true);
+			}
+			rdfWriter.getWriterConfig().set(JSONLDSettings.JSONLD_MODE, JSONLDMode.COMPACT);
 		} catch (Exception e) {
 			log.error(e.getMessage());
 		}
@@ -118,6 +141,11 @@ public class GraphUtil {
 			rdfWriter.startRDF();
 			Map<String, String> namespaces = NS.getMap();
 			for (String nsName : namespaces.keySet()) {
+				/*
+				if ("store".equals(nsName)) {
+					continue;
+				}
+				*/
 				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
 			}
 			for (Statement statement : graph) {
