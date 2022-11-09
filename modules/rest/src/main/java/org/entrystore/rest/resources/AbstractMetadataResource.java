@@ -57,6 +57,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -119,20 +120,12 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 				String graphQuery = null;
 				if (parameters.containsKey("graphQuery")) {
-					try {
-						graphQuery = URLDecoder.decode(parameters.get("graphQuery"), "UTF-8");
-					} catch (UnsupportedEncodingException e) {
-						log.error(e.getMessage());
-					}
+					graphQuery = URLDecoder.decode(parameters.get("graphQuery"), StandardCharsets.UTF_8);
 				}
 
 				if (parameters.containsKey("recursive")) {
 					String traversalParam = null;
-					try {
-						traversalParam = URLDecoder.decode(parameters.get("recursive"), "UTF-8");
-					} catch (UnsupportedEncodingException e) {
-						log.error(e.getMessage());
-					}
+					traversalParam = URLDecoder.decode(parameters.get("recursive"), StandardCharsets.UTF_8);
 					Set<URI> predicatesToFollow = resolvePredicates(traversalParam);
 					if (predicatesToFollow.isEmpty()) {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -369,7 +362,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	}
 
 	private Map<String, String> loadBlacklist(String traversalParam) {
-		Map<String, String> result = new HashMap();
+		Map<String, String> result = new HashMap<>();
 		for (String s : traversalParam.split(",")) {
 			result.putAll(loadTraversalBlacklistForProfile(s));
 		}
