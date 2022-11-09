@@ -30,6 +30,8 @@ import org.eclipse.rdf4j.rio.RDFWriter;
 import org.eclipse.rdf4j.rio.helpers.BasicWriterSettings;
 import org.eclipse.rdf4j.rio.helpers.StatementCollector;
 import org.eclipse.rdf4j.rio.helpers.XMLParserSettings;
+import org.eclipse.rdf4j.rio.jsonld.JSONLDParser;
+import org.eclipse.rdf4j.rio.jsonld.JSONLDWriter;
 import org.eclipse.rdf4j.rio.n3.N3ParserFactory;
 import org.eclipse.rdf4j.rio.n3.N3Writer;
 import org.eclipse.rdf4j.rio.ntriples.NTriplesParser;
@@ -205,8 +207,7 @@ public class GraphUtil {
 		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 			deserializedGraph = deserializeGraphUnsafe(graphString, new TriGParser());
 		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-			// FIXME
-			//deserializedGraph = deserializeGraphUnsafe(graphString, (RDFParser) new SesameJSONLDParser());
+			deserializedGraph = deserializeGraphUnsafe(graphString, new JSONLDParser());
 		}
 		return deserializedGraph;
 	}
@@ -228,8 +229,7 @@ public class GraphUtil {
 		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 			serializedGraph = serializeGraph(graph, TriGWriter.class);
 		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-			// FIXME
-			// serializedGraph = serializeGraph(graph, (Class<? extends RDFWriter>) SesameJSONLDWriter.class);
+			serializedGraph = serializeGraph(graph, JSONLDWriter.class);
 		} else {
 			// fallback
 			serializedGraph = serializeGraph(graph, TurtleWriter.class);
