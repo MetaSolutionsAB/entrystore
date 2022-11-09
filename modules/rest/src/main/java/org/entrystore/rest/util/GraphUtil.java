@@ -67,9 +67,9 @@ import java.util.Map;
  */
 public class GraphUtil {
 
-	private static Logger log = LoggerFactory.getLogger(GraphUtil.class);
+	private final static Logger log = LoggerFactory.getLogger(GraphUtil.class);
 
-	private static List<MediaType> supportedMediaTypes = new ArrayList<>();
+	private final static List<MediaType> supportedMediaTypes = new ArrayList<>();
 
 	static {
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
@@ -282,8 +282,7 @@ public class GraphUtil {
 		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
 			parser = new TriGParser();
 		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-			// FIXME
-			// parser = (RDFParser) new SesameJSONLDParser();
+			parser = new JSONLDParser();
 		}
 
 		String error = null;
