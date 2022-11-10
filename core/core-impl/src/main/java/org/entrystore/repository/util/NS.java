@@ -35,7 +35,7 @@ public class NS {
 	public static String entrystore = "http://entrystore.org/terms/";
 
 	public static String xsd = "http://www.w3.org/2001/XMLSchema#";
-	
+
 	public static String vcard = "http://www.w3.org/2006/vcard/ns#";
 
 	public static String adms = "http://www.w3.org/ns/adms#";
@@ -44,11 +44,19 @@ public class NS {
 
 	public static String odrs = "http://schema.theodi.org/odrs#";
 
-    public static String skos = "http://www.w3.org/2004/02/skos/core#";
+	public static String skos = "http://www.w3.org/2004/02/skos/core#";
 
-    public static String schema = "http://schema.org/";
+	public static String schema = "http://schema.org/";
 
-    private static HashMap<String, String> map;
+	public static String prov = "http://www.w3.org/ns/prov#";
+
+	public static String owl = "http://www.w3.org/2002/07/owl#";
+
+	public static String pubeu = "http://publications.europa.eu/resource/authority/";
+
+	public static String geosparql = "http://www.opengis.net/ont/geosparql#";
+
+	private static final HashMap<String, String> map;
 
 	static {
 		map = new HashMap<String, String>();
@@ -63,6 +71,12 @@ public class NS {
 		map.put("adms", NS.adms);
 		map.put("odrs", NS.odrs);
 		map.put("vcard", NS.vcard);
+		map.put("prov", NS.prov);
+		map.put("owl", NS.owl);
+		map.put("pubeu", NS.pubeu);
+		map.put("schema", NS.schema);
+		map.put("geosparql", NS.geosparql);
+		map.put("skos", NS.skos);
 	}
 
 	/**
@@ -86,5 +100,5 @@ public class NS {
 		}
 		return URI.create(abbrvURI);
 	}
-	
+
 }
