@@ -8,18 +8,17 @@ import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager;
 import org.entrystore.SearchIndex;
 import org.entrystore.config.Config;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
-import org.entrystore.rest.EntryStoreApplication;
-import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.resources.EchoResource;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -34,6 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class StatusController {
 
 	private static Logger log = LoggerFactory.getLogger(StatusController.class);
+
+	public static long MAX_ENTITY_SIZE = 10*1024*1024; // 10MB, in bytes
 
 	private final Config config;
 	private final PrincipalManager pm;
@@ -79,7 +80,7 @@ public class StatusController {
 					result.put("corsHeaders", config.getString(Settings.CORS_HEADERS, "unconfigured"));
 					result.put("corsMaxAge", config.getString(Settings.CORS_MAX_AGE, "unconfigured"));
 					result.put("corsOrigins", config.getString(Settings.CORS_ORIGINS, "unconfigured"));
-					result.put("echoMaxEntitySize", EchoResource.MAX_ENTITY_SIZE);
+					result.put("echoMaxEntitySize", MAX_ENTITY_SIZE);
 					result.put("oaiHarvester", config.getBoolean(Settings.HARVESTER_OAI, false));
 					result.put("oaiHarvesterMultiThreaded", config.getBoolean(Settings.HARVESTER_OAI_MULTITHREADED, false));
 					result.put("provenance", config.getBoolean(Settings.REPOSITORY_PROVENANCE, false));
@@ -96,8 +97,10 @@ public class StatusController {
 					result.put("solr", config.getBoolean(Settings.SOLR, false));
 					result.put("solrReindexOnStartup", config.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false));
 					result.put("solrStatus", index.ping() ? "online" : "offline");
-					result.put("version", EntryStoreApplication.getVersion());
-					result.put("startupTime", EntryStoreApplication.getStartupDate());
+					result.put("version", RepositoryManagerImpl.getVersion());
+					//TODO: Fix Startupdate
+					result.put("startupTime", new Date());
+//					result.put("startupTime", EntryStoreApplication.getStartupDate());
 
 					// Authentication
 					JSONObject auth = new JSONObject();
@@ -113,7 +116,9 @@ public class StatusController {
 					auth.put("signupWhitelist", signupWhitelist);
 					auth.put("passwordReset", config.getBoolean(Settings.PASSWORD_RESET, false));
 					auth.put("passwordMaxLength", Password.PASSWORD_MAX_LENGTH);
-					auth.put("authTokenCount", LoginTokenCache.getInstance().size());
+//TODO: Implement LoginTokenCache
+//					auth.put("authTokenCount", LoginTokenCache.getInstance().size());
+					auth.put("authTokenCount", 0);
 					result.put("auth", auth);
 
 					// Backup
@@ -122,6 +127,7 @@ public class StatusController {
 					backup.put("format", config.getString(Settings.BACKUP_FORMAT, "unconfigured"));
 					backup.put("maintenance", config.getBoolean(Settings.BACKUP_MAINTENANCE, false));
 					backup.put("cronExpression", config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED, "unconfigured")));
+// TODO: Implement BackupScheduler
 //					if (BackupScheduler.getInstance(getRM()) != null) {
 //						backup.put("cronExpressionResolved", BackupScheduler.getInstance(getRM()).getCronExpression());
 //					}
@@ -143,6 +149,7 @@ public class StatusController {
 					result.put("jvm", jvm);
 
 					if (includeStats) {
+// TODO: Implement includeStats
 //						try {
 //							pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 //							result.put("contextCount", getRM().getContextManager().getEntries().size());
@@ -163,7 +170,7 @@ public class StatusController {
 			} else {
 				try {
 					JSONObject result = new JSONObject();
-					result.put("version", EntryStoreApplication.getVersion());
+					result.put("version", RepositoryManagerImpl.getVersion());
 					result.put("repositoryStatus", rm != null ? "online" : "offline");
 					return ResponseEntity.ok(result.toString());
 				} catch (JSONException e) {

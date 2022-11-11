@@ -17,31 +17,8 @@
 package org.entrystore.rest.standalone.springboot;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Map;
-import org.apache.commons.cli.CommandLine;
-import org.apache.commons.cli.CommandLineParser;
-import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.cli.PatternOptionBuilder;
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.core.config.Configurator;
-import org.entrystore.rest.EntryStoreApplication;
-import org.entrystore.rest.standalone.EntryStoreApplicationStandalone;
-import org.restlet.Context;
-import org.restlet.Server;
-import org.restlet.data.Protocol;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.PropertySource;
-import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
 /**
