@@ -38,6 +38,7 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.util.ArrayList;
@@ -146,6 +147,7 @@ public class StatusResource extends BaseResource  {
 					jvm.put("committedHeap", ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getCommitted());
 					jvm.put("totalUsedMemory", getTotalUsedMemory());
 					jvm.put("usedHeap", ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed());
+					jvm.put("gc", getGarbageCollectors());
 					result.put("jvm", jvm);
 
 					if (parameters.containsKey("includeStats")) {
@@ -200,6 +202,14 @@ public class StatusResource extends BaseResource  {
 	long getTotalUsedMemory() {
 		return ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed() +
 				ManagementFactory.getMemoryMXBean().getNonHeapMemoryUsage().getUsed();
+	}
+
+	JSONArray getGarbageCollectors() {
+		JSONArray result = new JSONArray();
+		for (GarbageCollectorMXBean gcMxBean : ManagementFactory.getGarbageCollectorMXBeans()) {
+			result.put(gcMxBean.getName());
+		}
+		return result;
 	}
 
 }
