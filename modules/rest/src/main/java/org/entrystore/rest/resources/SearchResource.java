@@ -16,7 +16,9 @@
 
 package org.entrystore.rest.resources;
 
+import static java.lang.String.format;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.entrystore.rest.util.RDFJSON.graphToRdfJson;
 import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
 import static org.restlet.data.Status.CLIENT_ERROR_METHOD_NOT_ALLOWED;
 import static org.restlet.data.Status.SERVER_ERROR_INTERNAL;
@@ -61,7 +63,6 @@ import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.JSONErrorMessages;
-import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -340,7 +341,8 @@ public class SearchResource extends BaseResource {
 									if (cachedExternalMD != null) {
 										Model cachedExternalMDGraph = cachedExternalMD.getGraph();
 										if (cachedExternalMDGraph != null) {
-											JSONObject childCachedExternalMDJSON = new JSONObject(RDFJSON.graphToRdfJson(cachedExternalMDGraph));
+											//TODO Might fail with a NullpointerException
+											JSONObject childCachedExternalMDJSON = new JSONObject(graphToRdfJson(cachedExternalMDGraph));
 											childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMDJSON);
 										}
 									}
@@ -352,7 +354,8 @@ public class SearchResource extends BaseResource {
 									if (localMD != null) {
 										Model localMDGraph = localMD.getGraph();
 										if (localMDGraph != null) {
-											JSONObject localMDJSON = new JSONObject(RDFJSON.graphToRdfJson(localMDGraph));
+											//TODO Might fail with a NullpointerException
+											JSONObject localMDJSON = new JSONObject(graphToRdfJson(localMDGraph));
 											childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
 										}
 									}
@@ -362,7 +365,8 @@ public class SearchResource extends BaseResource {
 							}
 
 							try {
-								JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(e.getGraph()));
+								//TODO Might fail with a NullpointerException
+								JSONObject childInfo = new JSONObject(graphToRdfJson(e.getGraph()));
 								if (childInfo != null) {
 									childJSON.accumulate("info", childInfo);
 								} else {
@@ -375,7 +379,8 @@ public class SearchResource extends BaseResource {
 							try {
 								if (e.getRelations() != null) {
 									Model childRelationsGraph = new LinkedHashModel(e.getRelations());
-									JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
+									//TODO Might fail with a NullpointerException
+									JSONObject childRelationObj = new JSONObject(graphToRdfJson(childRelationsGraph));
 									childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 								}
 							} catch (AuthorizationException ae) {
@@ -438,8 +443,8 @@ public class SearchResource extends BaseResource {
 		SyndFeed feed = new SyndFeedImpl();
 		feed.setFeedType(type);
 
-		feed.setTitle("Feed of search");
-		feed.setDescription("A syndication feed containing the 50 most recent items from");
+		feed.setTitle("Syndigation feed of search");
+		feed.setDescription(format("Syndication feed containing max %d items", limit));
 		feed.setLink(getRequest().getResourceRef().getIdentifier());
 
 		List<SyndEntry> syndEntries = new ArrayList<>();
