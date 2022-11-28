@@ -16,6 +16,29 @@
 
 package org.entrystore.rest.resources;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
+import static org.restlet.data.Status.CLIENT_ERROR_METHOD_NOT_ALLOWED;
+import static org.restlet.data.Status.SERVER_ERROR_INTERNAL;
+import static org.restlet.data.Status.SERVER_ERROR_SERVICE_UNAVAILABLE;
+
+import com.rometools.rome.feed.synd.SyndContent;
+import com.rometools.rome.feed.synd.SyndContentImpl;
+import com.rometools.rome.feed.synd.SyndEntry;
+import com.rometools.rome.feed.synd.SyndEntryImpl;
+import com.rometools.rome.feed.synd.SyndFeed;
+import com.rometools.rome.feed.synd.SyndFeedImpl;
+import com.rometools.rome.io.FeedException;
+import com.rometools.rome.io.SyndFeedOutput;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.response.FacetField;
@@ -34,14 +57,15 @@ import org.entrystore.Resource;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.MediaType;
-import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.representation.StringRepresentation;
@@ -50,19 +74,10 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
-
 
 /**
  * Handles searches
- * 
+ *
  * @author Hannes Ebner
  */
 public class SearchResource extends BaseResource {
@@ -72,7 +87,7 @@ public class SearchResource extends BaseResource {
 	static int DEFAULT_LIMIT = 50;
 
 	static int MAX_LIMIT = -1;
-	
+
 	@Override
 	public void doInit() {
 		if (MAX_LIMIT == -1) {
@@ -88,32 +103,63 @@ public class SearchResource extends BaseResource {
 					parameters.get("type") == null ||
 					parameters.get("query") == null) {
 				log.info("Got invalid query");
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation("{\"error\":\"Invalid query\"}");
 			}
-			
-			List<Entry> entries = new ArrayList<Entry>();
-			String type = parameters.get("type").toLowerCase();
-			String queryValue = null;
-			try {
-				queryValue = URLDecoder.decode(parameters.get("query"), "UTF-8");
-			} catch (UnsupportedEncodingException e1) {
-				log.error(e1.getMessage());
-				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
-				return new JsonRepresentation("{\"error\":\"" + e1.getMessage() + "\"}");
+
+			// Query parameter: type
+			String type;
+			if (parameters.get("type") == null) {
+				log.info("Mandatory query parameter 'type' is missing");
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+				return new JsonRepresentation("{\"error\":\"Mandatory query parameter 'type' is missing\"}");
 			}
-			
+			type = parameters.get("type").toLowerCase();
+
+			// Query parameter: query
+			String queryValue;
+			if (parameters.get("query") == null) {
+				log.info("Mandatory query parameter 'query' is missing");
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+				return new JsonRepresentation("{\"error\":\"Mandatory query parameter 'query' is missing\"}");
+			}
+			queryValue = URLDecoder.decode(parameters.get("query"), UTF_8);
 			if (queryValue.length() < 3) {
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation("{\"error\":\"Query too short\"}");
 			}
-			
+
+			// Query parameter: sort
+			String sorting = null;
+			if (parameters.containsKey("sort")) {
+				if (parameters.containsKey("syndication")) {
+					log.info("Sort query parameter not suported with syndication");
+					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+					return new JsonRepresentation(
+						"{\"error\":\"Sort query parameter not suported with syndication\"}");
+				}
+				sorting = URLDecoder.decode(parameters.get("sort"), UTF_8);
+			}
+
+			// Query parameter: offset
 			int offset = 0;
+			if (parameters.containsKey("offset")) {
+				if (parameters.containsKey("syndication")) {
+					log.info("Query parameter 'offset' not suported with syndication");
+					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+					return new JsonRepresentation(
+						"{\"error\":\"Query parameter 'offset' not suported with syndication\"}");
+				}
+				try {
+					offset = Integer.valueOf(parameters.get("offset"));
+				} catch (NumberFormatException ignored) {}
+				if (offset < 0) {
+					offset = 0;
+				}
+			}
+
+			// Query parameter: limit
 			int limit = DEFAULT_LIMIT;
-			long results = 0;
-			List<FacetField> responseFacetFields = null;
-			
-			// size of returned entry list
 			if (parameters.containsKey("limit")) {
 				try {
 					limit = Integer.valueOf(parameters.get("limit"));
@@ -124,85 +170,61 @@ public class SearchResource extends BaseResource {
 					}
 				} catch (NumberFormatException ignored) {}
 			}
-			
-			// offset (needed for pagination)
-			if (parameters.containsKey("offset")) {
-				try {
-					offset = Integer.valueOf(parameters.get("offset"));
-				} catch (NumberFormatException ignored) {}
-				if (offset < 0) {
-					offset = 0;
+
+			// Query parameter: facetFields
+			String facetFields = null;
+			if (parameters.containsKey("facetFields")) {
+				facetFields = URLDecoder.decode(parameters.get("facetFields"), UTF_8);
+			}
+
+			// Query parameter: filterQuery
+			List<String> filterQueries = new ArrayList();
+			if (parameters.containsKey("filterQuery")) {
+				// We URLDecode after the split because we want to be able to use comma
+				// as separator (unencoded) for FQs and as content inside FQs (encoded)
+				for (String fq : parameters.get("filterQuery").split(",")) {
+					filterQueries.add(URLDecoder.decode(fq, UTF_8));
 				}
 			}
 
+			int facetMinCount = 1;
+			if (parameters.containsKey("facetMinCount")) {
+				try {
+					facetMinCount = Integer.valueOf(parameters.get("facetMinCount"));
+				} catch (NumberFormatException e) {
+					log.info(e.getMessage());
+					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+					return null;
+				}
+			}
+
+			List<Entry> entries = new ArrayList<>();
+			long results = 0;
+			List<FacetField> responseFacetFields = null;
+
 			if ("sparql".equalsIgnoreCase(type)) {
 				try {
-					String query = new String(
+					String query =
 							"PREFIX dc:<http://purl.org/dc/terms/> " +
 							"SELECT ?x " +
 							"WHERE { " +
-							"?x " + queryValue + " ?y }"); 
+							"?x " + queryValue + " ?y }";
 					entries = getCM().search(query, null, null);
 				} catch (Exception e) {
 					log.error(e.getMessage());
-					try {
-						return new JsonRepresentation("{\"error\":\"" + URLEncoder.encode(e.getMessage(), "UTF-8") + "\"}");
-					} catch (UnsupportedEncodingException ignored) {
-						return new JsonRepresentation("error");
-					}
+					return new JsonRepresentation(
+						"{\"error\":\"" + URLEncoder.encode(e.getMessage(), UTF_8) + "\"}");
 				}
 			} else if ("solr".equalsIgnoreCase(type)) {
 				if (getRM().getIndex() == null) {
-					getResponse().setStatus(Status.SERVER_ERROR_SERVICE_UNAVAILABLE, "Solr search deactivated");
+					getResponse().setStatus(SERVER_ERROR_SERVICE_UNAVAILABLE, "Solr search deactivated");
 					return new JsonRepresentation("{\"error\":\"Solr search is deactivated\"}");
 				}
-				
-				String sorting = null;
-				if (parameters.containsKey("sort")) {
-					try {
-						sorting = URLDecoder.decode(parameters.get("sort"), "UTF-8");
-					} catch (UnsupportedEncodingException e) {
-						log.error(e.getMessage());
-					}
-				}
 
-				String facetFields = null;
-				if (parameters.containsKey("facetFields")) {
-					try {
-						facetFields = URLDecoder.decode(parameters.get("facetFields"), "UTF-8");
-					} catch (UnsupportedEncodingException e) {
-						log.error(e.getMessage());
-					}
-				}
-
-				List<String> filterQueries = new ArrayList();
-				if (parameters.containsKey("filterQuery")) {
-					try {
-						// We URLDecode after the split because we want to be able to use comma
-						// as separator (unencoded) for FQs and as content inside FQs (encoded)
-						for (String fq : parameters.get("filterQuery").split(",")) {
-							filterQueries.add(URLDecoder.decode(fq, "UTF-8"));
-						}
-					} catch (UnsupportedEncodingException e) {
-						log.error(e.getMessage());
-					}
-				}
-
-				int facetMinCount = 1;
-				if (parameters.containsKey("facetMinCount")) {
-					try {
-						facetMinCount = Integer.valueOf(parameters.get("facetMinCount"));
-					} catch (NumberFormatException nfe) {
-						log.info(nfe.getMessage());
-						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-						return null;
-					}
-				}
-				
 				SolrQuery q = new SolrQuery(queryValue);
 				q.setStart(offset);
 				q.setRows(limit);
-				
+
 				if (sorting != null) {
 					for (String string : sorting.split(",")) {
 						String[] fieldAndOrder = string.split(" ");
@@ -236,16 +258,31 @@ public class SearchResource extends BaseResource {
 				for (String fq : filterQueries) {
 					q.addFilterQuery(fq);
 				}
-				
+
 				try {
 					QueryResult qResult = ((SolrSearchIndex) getRM().getIndex()).sendQuery(q);
-					entries = new LinkedList<Entry>(qResult.getEntries());
+					entries = new LinkedList<>(qResult.getEntries());
 					results = qResult.getHits();
 					responseFacetFields = qResult.getFacetFields();
 				} catch (SolrException se) {
 					log.warn(se.getMessage());
-					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 					return new StringRepresentation("{\"error\":\"Search failed due to wrong parameters\"}", MediaType.APPLICATION_JSON);
+				}
+			}
+
+			// RSS feed
+			if (parameters.containsKey("syndication")) {
+				try {
+					StringRepresentation rep = getSyndicationSolr(entries, parameters.get("syndication"), limit);
+					if (rep == null) {
+						getResponse().setStatus(CLIENT_ERROR_METHOD_NOT_ALLOWED);
+						return new JsonRepresentation(JSONErrorMessages.errorNotAContext);
+					}
+					return rep;
+				} catch (IllegalArgumentException e) {
+					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+					return new JsonRepresentation(JSONErrorMessages.syndicationFormat);
 				}
 			}
 
@@ -255,7 +292,7 @@ public class SearchResource extends BaseResource {
 				if (entries != null) {
 					for (Entry e : entries) {
 						if (e != null) {
-							JSONObject childJSON = new JSONObject(); 
+							JSONObject childJSON = new JSONObject();
 							childJSON.put("entryId", e.getId());
 							childJSON.put("contextId", e.getContext().getEntry().getId());
 							GraphType btChild = e.getGraphType();
@@ -308,7 +345,7 @@ public class SearchResource extends BaseResource {
 										}
 									}
 								}
-								
+
 								if (EntryType.Link.equals(ltC) || EntryType.Local.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 									// get the local metadata
 									Metadata localMD = e.getLocalMetadata();
@@ -349,7 +386,7 @@ public class SearchResource extends BaseResource {
 						}
 					}
 				}
-				
+
 				JSONObject result = new JSONObject();
 				JSONObject resource = new JSONObject();
 				resource.put("children", children);
@@ -382,14 +419,14 @@ public class SearchResource extends BaseResource {
 				jaRights.put("readresource");
 				result.put("rights", jaRights);
 				*/
-				
+
 				long timeDiff = new Date().getTime() - before.getTime();
 				log.debug("Graph fetching and serialization took " + timeDiff + " ms");
 
 				return new JsonRepresentation(result.toString(2));
 			} catch (JSONException e) {
 				log.error(e.getMessage());
-				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+				getResponse().setStatus(SERVER_ERROR_INTERNAL);
 				return new JsonRepresentation("\"error\"");
 			}
 		} catch (AuthorizationException e) {
@@ -397,4 +434,82 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
+	public StringRepresentation getSyndicationSolr(List<Entry> entries, String type, int limit) {
+		SyndFeed feed = new SyndFeedImpl();
+		feed.setFeedType(type);
+
+		feed.setTitle("Feed of search");
+		feed.setDescription("A syndication feed containing the 50 most recent items from");
+		feed.setLink(getRequest().getResourceRef().getIdentifier());
+
+		List<SyndEntry> syndEntries = new ArrayList<>();
+		int limitedCount = 0;
+		for (Entry entry : entries) {
+			SyndEntry syndEntry;
+			syndEntry = new SyndEntryImpl();
+			syndEntry.setTitle(EntryUtil.getTitle(entry, "en"));
+			syndEntry.setPublishedDate(entry.getCreationDate());
+			syndEntry.setUpdatedDate(entry.getModifiedDate());
+			syndEntry.setLink(entry.getResourceURI().toString());
+
+			SyndContent description = new SyndContentImpl();
+			description.setType("text/plain");
+
+			Map<String, String> descriptions = EntryUtil.getDescriptions(entry);
+			Set<java.util.Map.Entry<String,String>> descEntrySet = descriptions.entrySet();
+			String desc = null;
+			for (Map.Entry<String, String> descEntry : descEntrySet) {
+				desc = descEntry.getKey();
+				if ("en".equals(descEntry.getValue())) {
+					break;
+				}
+			}
+
+			if (desc != null) {
+				description.setValue(desc);
+			}
+
+			syndEntry.setDescription(description);
+
+			URI creator = entry.getCreator();
+			if (creator != null) {
+				Entry creatorEntry = getRM().getPrincipalManager().getByEntryURI(creator);
+				String creatorName = EntryUtil.getName(creatorEntry);
+				if (creatorName != null) {
+					syndEntry.setAuthor(creatorName);
+				}
+			}
+
+			syndEntries.add(syndEntry);
+
+			if (limitedCount++ >= limit) {
+				break;
+			}
+		}
+
+		feed.setEntries(syndEntries);
+		String s = null;
+		try {
+			s = new SyndFeedOutput().outputString(feed, true);
+		} catch (FeedException fe) {
+			log.error(fe.getMessage());
+			s = fe.getMessage();
+		}
+
+		String feedType = feed.getFeedType();
+		MediaType mediaType = null;
+		if (feedType != null) {
+			if (feedType.startsWith("rss_")) {
+				mediaType = MediaType.APPLICATION_RSS;
+			} else if (feedType.startsWith("atom_")) {
+				mediaType = MediaType.APPLICATION_ATOM;
+			}
+		}
+
+		if (mediaType != null) {
+			return new StringRepresentation(s, mediaType);
+		} else {
+			return new StringRepresentation(s);
+		}
+	}
 }
