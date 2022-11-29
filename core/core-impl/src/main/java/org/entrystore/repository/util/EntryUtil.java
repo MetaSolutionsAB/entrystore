@@ -16,7 +16,10 @@
 
 package org.entrystore.repository.util;
 
+import static java.util.Objects.requireNonNull;
+
 import com.google.common.collect.Multimap;
+import java.util.Objects;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -52,18 +55,18 @@ import java.util.Set;
 
 /**
  * Helper methods to make Entry handling easier, mostly sorting methods.
- * 
+ *
  * @author Hannes Ebner
  */
 public class EntryUtil {
-	
+
 	static Logger log = LoggerFactory.getLogger(EntryUtil.class);
 
 	static ValueFactory valueFactory = SimpleValueFactory.getInstance();
 
 	/**
 	 * Sorts a list of entries after the modification date.
-	 * 
+	 *
 	 * @param entries
 	 *            The list of entries to sort.
 	 * @param ascending
@@ -85,15 +88,15 @@ public class EntryUtil {
 				}
 				return result;
 			}
-			
+
 		});
-		
+
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
 	/**
 	 * Sorts a list of entries after the creation date.
-	 * 
+	 *
 	 * @param entries
 	 *            The list of entries to sort.
 	 * @param ascending
@@ -115,9 +118,9 @@ public class EntryUtil {
 				}
 				return result;
 			}
-			
+
 		});
-		
+
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
@@ -125,7 +128,7 @@ public class EntryUtil {
 	 * Sorts a list of entries after the file size. Folders are listed before
 	 * entries with ResourceType.None and they are sorted among themselves after
 	 * the amount of children they contain.
-	 * 
+	 *
 	 * @param entries
 	 *            The list of entries to sort.
 	 * @param ascending
@@ -183,15 +186,15 @@ public class EntryUtil {
 				}
 				return result;
 			}
-			
+
 		});
-		
+
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
 	/**
 	 * Sorts a list of entries after its titles.
-	 * 
+	 *
 	 * @param entries
 	 *            The list of entries to sort.
 	 * @param language
@@ -226,16 +229,16 @@ public class EntryUtil {
 				}
 				return result;
 			}
-			
+
 		});
-		
+
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
 	/**
 	 * Reorders the list of entries with the given ResourceType first or last,
 	 * depending on the boolean parameter.
-	 * 
+	 *
 	 * @param entries
 	 *            The list of entries to reorder.
 	 * @param resourceType
@@ -248,7 +251,7 @@ public class EntryUtil {
 		if (entries == null || resourceType == null) {
 			return;
 		}
-		
+
 		Collections.sort(entries, new Comparator<Entry>() {
 
 			public int compare(Entry e1, Entry e2) {
@@ -269,13 +272,13 @@ public class EntryUtil {
 				}
 				return result;
 			}
-			
+
 		});
 	}
-	
+
 	/**
 	 * Requests a literal value from a metadata graph.
-	 * 
+	 *
 	 * @param graph
 	 *            The graph to be used to search for the title.
 	 * @param resourceURI
@@ -323,13 +326,13 @@ public class EntryUtil {
 		}
 		return fallback;
 	}
-	
+
 	public static String getLabel(Model graph, URI resourceURI, IRI predicate, String language) {
 		Set<IRI> predicates = new HashSet<>();
 		predicates.add(predicate);
 		return getLabel(graph, resourceURI, predicates, language);
 	}
-	
+
 	public static IRI getResourceAsURI(Model graph, URI resourceURI, IRI predicate) {
 		if (graph != null && resourceURI != null) {
 			IRI resURI = valueFactory.createIRI(resourceURI.toString());
@@ -353,7 +356,7 @@ public class EntryUtil {
 
 	/**
 	 * Requests the title of an Entry.
-	 * 
+	 *
 	 * @param graph
 	 *            The graph to be used to search for the title.
 	 * @param resourceURI
@@ -375,7 +378,7 @@ public class EntryUtil {
 		}
 		return null;
 	}
-	
+
 	public static String getTitle(Entry entry, String language) {
 		if (entry != null) {
 			try {
@@ -386,7 +389,7 @@ public class EntryUtil {
 		}
 		return null;
 	}
-	
+
 	public static String getName(Entry entry) {
 		String result = null;
 		if (entry != null) {
@@ -409,7 +412,7 @@ public class EntryUtil {
 		}
 		return result;
 	}
-	
+
 	public static String getStructuredName(Entry entry) {
 		String result = null;
 		if (entry != null) {
@@ -421,7 +424,7 @@ public class EntryUtil {
 			foafSurname.add(valueFactory.createIRI(NS.foaf + "lastName"));
 			foafSurname.add(valueFactory.createIRI(NS.foaf + "familyName"));
 			String firstName = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafFirstName, null);
-			String surname = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafSurname, null); 
+			String surname = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafSurname, null);
 			if (surname != null) {
 				result = surname;
 			}
@@ -435,7 +438,7 @@ public class EntryUtil {
 		}
 		return result;
 	}
-	
+
 	public static String getFirstName(Entry entry) {
 		if (entry != null) {
 			Set<IRI> foafFN = new HashSet<>();
@@ -445,7 +448,7 @@ public class EntryUtil {
 		}
 		return null;
 	}
-	
+
 	public static String getLastName(Entry entry) {
 		if (entry != null) {
 			Set<IRI> foafLN = new HashSet<>();
@@ -456,21 +459,21 @@ public class EntryUtil {
 		}
 		return null;
 	}
-	
+
 	public static String getEmail(Entry entry) {
 		if (entry != null) {
 			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), valueFactory.createIRI(NS.foaf + "mbox"), null);
 		}
 		return null;
 	}
-	
+
 	public static String getMemberOf(Entry entry) {
 		if (entry != null) {
 			return getResource(entry.getMetadataGraph(), entry.getResourceURI(), valueFactory.createIRI("http://open.vocab.org/terms/isMemberOf"));
 		}
 		return null;
 	}
-	
+
 	public static String getFOAFTitle(Entry entry) {
 		if (entry != null) {
 			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), valueFactory.createIRI(NS.foaf + "title"), null);
@@ -481,7 +484,7 @@ public class EntryUtil {
 	/**
 	 * Retrieves all titles from the metadata of an Entry. Includes cached
 	 * external metadata if it exists.
-	 * 
+	 *
 	 * @param entry
 	 *            Entry of which the titles should be returned.
 	 * @return Returns all key/value (title/language) pairs for dcterms:title
@@ -500,11 +503,11 @@ public class EntryUtil {
 		titlePredicates.add(valueFactory.createIRI(NS.schema, "name"));
 		return getLiteralValues(entry, titlePredicates);
 	}
-	
+
 	/**
 	 * Retrieves all descriptions from the metadata of an Entry. Includes cached
 	 * external metadata if it exists.
-	 * 
+	 *
 	 * @param entry
 	 *            Entry from where the descriptions should be returned.
 	 * @return Returns all key/value (description/language) pairs for dcterms:description
@@ -517,6 +520,24 @@ public class EntryUtil {
 		return getLiteralValues(entry, descPreds);
 	}
 
+	public static String getDescription(Entry entry, String language) {
+		requireNonNull(language, "language parameter must not be null");
+
+		var descriptions = getDescriptions(entry).entrySet();
+		if (descriptions.isEmpty()) {
+			return null;
+		}
+
+		String description = null;
+		for (var descEntry : descriptions) {
+			description = descEntry.getKey();
+			if (language.equals(descEntry.getValue())) {
+				break;
+			}
+		}
+
+		return description;
+	}
 
 	/**
 	 * Retrieves all literals of subjects, tags and keywords from the metadata of an Entry.
@@ -636,7 +657,7 @@ public class EntryUtil {
 	}
 
 	/**
-	 * FIXME this does not take entries in deleted folders into consideration 
+	 * FIXME this does not take entries in deleted folders into consideration
 	 */
 	public static boolean isDeleted(Entry entry) {
 		String repoURL = entry.getRepositoryManager().getRepositoryURL().toString();

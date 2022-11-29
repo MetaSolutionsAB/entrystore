@@ -24,6 +24,7 @@ import static org.restlet.data.Status.CLIENT_ERROR_METHOD_NOT_ALLOWED;
 import static org.restlet.data.Status.SERVER_ERROR_INTERNAL;
 import static org.restlet.data.Status.SERVER_ERROR_SERVICE_UNAVAILABLE;
 
+import com.google.common.base.Strings;
 import com.rometools.rome.feed.synd.SyndContent;
 import com.rometools.rome.feed.synd.SyndContentImpl;
 import com.rometools.rome.feed.synd.SyndEntry;
@@ -40,7 +41,11 @@ import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
+import org.apache.commons.lang.StringUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.response.FacetField;
@@ -129,6 +134,9 @@ public class SearchResource extends BaseResource {
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation("{\"error\":\"Query too short\"}");
 			}
+
+			// Query parameter: language
+			var language = decodeParameter("lang");
 
 			// Query parameter: sort
 			String sorting = null;
@@ -275,7 +283,7 @@ public class SearchResource extends BaseResource {
 			// RSS feed
 			if (parameters.containsKey("syndication")) {
 				try {
-					StringRepresentation rep = getSyndicationSolr(entries, parameters.get("syndication"), limit);
+					StringRepresentation rep = getSyndicationSolr(entries, parameters.get("syndication"), language, limit);
 					if (rep == null) {
 						getResponse().setStatus(CLIENT_ERROR_METHOD_NOT_ALLOWED);
 						return new JsonRepresentation(JSONErrorMessages.errorNotAContext);
@@ -439,42 +447,42 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
-	public StringRepresentation getSyndicationSolr(List<Entry> entries, String type, int limit) {
+	private String decodeParameter(String parameter) {
+		return Optional.ofNullable(parameters.get(parameter))
+			.map(param -> URLDecoder.decode(param, UTF_8))
+			.orElse(null);
+	}
+
+	public StringRepresentation getSyndicationSolr(List<Entry> entries, String type, String language, int limit) {
 		SyndFeed feed = new SyndFeedImpl();
 		feed.setFeedType(type);
 
-		feed.setTitle("Syndigation feed of search");
+		feed.setTitle("Syndication feed of search");
 		feed.setDescription(format("Syndication feed containing max %d items", limit));
 		feed.setLink(getRequest().getResourceRef().getIdentifier());
 
 		List<SyndEntry> syndEntries = new ArrayList<>();
 		int limitedCount = 0;
 		for (Entry entry : entries) {
-			SyndEntry syndEntry;
-			syndEntry = new SyndEntryImpl();
-			syndEntry.setTitle(EntryUtil.getTitle(entry, "en"));
+
+			String title = EntryUtil.getTitle(entry, language);
+			String description = EntryUtil.getDescription(entry, language);
+
+			if (title == null && description == null) {
+				break;
+			}
+
+			SyndContent syndConcentDescription = new SyndContentImpl();
+			syndConcentDescription.setType("text/plain");
+			syndConcentDescription.setValue(description);
+
+			SyndEntry syndEntry = new SyndEntryImpl();
+			syndEntry.setTitle(title);
+			syndEntry.setDescription(syndConcentDescription);
+
 			syndEntry.setPublishedDate(entry.getCreationDate());
 			syndEntry.setUpdatedDate(entry.getModifiedDate());
 			syndEntry.setLink(entry.getResourceURI().toString());
-
-			SyndContent description = new SyndContentImpl();
-			description.setType("text/plain");
-
-			Map<String, String> descriptions = EntryUtil.getDescriptions(entry);
-			Set<java.util.Map.Entry<String,String>> descEntrySet = descriptions.entrySet();
-			String desc = null;
-			for (Map.Entry<String, String> descEntry : descEntrySet) {
-				desc = descEntry.getKey();
-				if ("en".equals(descEntry.getValue())) {
-					break;
-				}
-			}
-
-			if (desc != null) {
-				description.setValue(desc);
-			}
-
-			syndEntry.setDescription(description);
 
 			URI creator = entry.getCreator();
 			if (creator != null) {
