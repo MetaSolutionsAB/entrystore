@@ -131,7 +131,7 @@ public class SearchResource extends BaseResource {
 				return new JsonRepresentation("{\"error\":\"Query too short\"}");
 			}
 
-			// Query parameter: language
+			// Query parameter: lang
 			var language = decodeParameter("lang");
 
 			// Query parameter: sort
@@ -214,9 +214,9 @@ public class SearchResource extends BaseResource {
 
 			// RSS feed
 			if (parameters.containsKey("syndication")) {
-				return parseSyndication(queryResults.entries(), parameters.get("syndication"), language, limit);
+				return writeSyndication(queryResults.entries(), parameters.get("syndication"), language, limit);
 			} else {
-				return parseJson(offset, limit, queryResults);
+				return writeJson(offset, limit, queryResults);
 			}
 		} catch (JsonErrorException e) {
 			return e.getRepresentation();
@@ -225,7 +225,7 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
-	public StringRepresentation parseSyndication(List<Entry> entries, String type, String language, int limit)
+	public StringRepresentation writeSyndication(List<Entry> entries, String type, String language, int limit)
 		throws JsonErrorException {
 		try {
 
@@ -312,7 +312,7 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
-	private JsonRepresentation parseJson(int offset, int limit, QueryResults queryResults) {
+	private JsonRepresentation writeJson(int offset, int limit, QueryResults queryResults) {
 		Date before = new Date();
 		JSONArray children = new JSONArray();
 		if (queryResults.entries() != null) {
