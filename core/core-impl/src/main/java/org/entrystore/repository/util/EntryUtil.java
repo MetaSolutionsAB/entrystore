@@ -16,10 +16,20 @@
 
 package org.entrystore.repository.util;
 
-import static java.util.Objects.requireNonNull;
+import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.collect.Multimap;
-import java.util.Objects;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -39,18 +49,6 @@ import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 
 /**
@@ -521,7 +519,7 @@ public class EntryUtil {
 	}
 
 	public static String getDescription(Entry entry, String language) {
-		requireNonNull(language, "language parameter must not be null");
+		checkArgument(language != null, "language parameter must not be null");
 
 		var descriptions = getDescriptions(entry).entrySet();
 		if (descriptions.isEmpty()) {
