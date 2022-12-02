@@ -440,7 +440,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	}
 
 	private static RDFFormat RDFJSON_WITH_APPLICATION_JSON
-		= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("rj"), SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
+		= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("json"), SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
 
 	private String getFileExtensionForMediaType(MediaType mt) {
 		Optional<RDFFormat> rdfFormat = RDFFormat.matchMIMEType(mt.getName(), Arrays.asList(
