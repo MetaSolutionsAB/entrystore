@@ -22,6 +22,7 @@ import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.query.GraphQuery;
 import org.eclipse.rdf4j.query.MalformedQueryException;
 import org.eclipse.rdf4j.query.QueryEvaluationException;
@@ -72,7 +73,7 @@ import java.util.Set;
  * Provides methods to read/write metadata graphs.
  *
  * Subclasses need to implement getMetadata().
- * 
+ *
  * @author Hannes Ebner
  */
 public abstract class AbstractMetadataResource extends BaseResource {
@@ -80,7 +81,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	static Logger log = LoggerFactory.getLogger(AbstractMetadataResource.class);
 
 	List<MediaType> supportedMediaTypes = new ArrayList<>();
-	
+
 	@Override
 	public void doInit() {
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
@@ -93,7 +94,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType("application/rdf+json"));
 	}
-	
+
 	/**
 	 * <pre>
 	 * GET {baseURI}/{context-id}/{metadata}/{entry-id}
@@ -283,7 +284,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		} catch (IOException e) {
 			log.error(e.getMessage());
 		}
-		
+
 		if (metadata != null && graphString != null) {
 			Model deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
 			if (deserializedGraph != null) {
@@ -438,6 +439,9 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		return result;
 	}
 
+	private static RDFFormat RDFJSON_WITH_APPLICATION_JSON
+		= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("json"), SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
+
 	private String getFileExtensionForMediaType(MediaType mt) {
 		Optional<RDFFormat> rdfFormat = RDFFormat.matchMIMEType(mt.getName(), Arrays.asList(
 				RDFFormat.RDFXML,
@@ -450,11 +454,12 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				RDFFormat.NQUADS,
 				RDFFormat.JSONLD,
 				RDFFormat.RDFJSON,
-				RDFFormat.RDFA));
+				RDFFormat.RDFA,
+				RDFJSON_WITH_APPLICATION_JSON)
+		);
 		if (rdfFormat.isPresent() && rdfFormat.get().getDefaultFileExtension() != null) {
 			return rdfFormat.get().getDefaultFileExtension();
 		}
 		return "rdf";
 	}
-
 }
