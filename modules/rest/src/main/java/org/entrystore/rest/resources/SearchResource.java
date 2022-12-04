@@ -99,73 +99,112 @@ public class SearchResource extends BaseResource {
 	@Get
 	public Representation represent() throws ResourceException {
 		try {
+			if (!parameters.containsKey("type") ||
+				!parameters.containsKey("query") ||
+				parameters.get("type") == null ||
+				parameters.get("query") == null) {
+
+				log.info("Got invalid query");
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+				return new JsonRepresentation("{\"error\":\"Invalid query\"}");
+			}
+
 			// Query parameter: type
-			String type = decodeMandatoryParameter("type");
+			String type;
+			if (parameters.get("type") == null) {
+				log.info("Mandatory query parameter 'type' is missing");
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+				return new JsonRepresentation("{\"error\":\"Mandatory query parameter 'type' is missing\"}");
+			}
+			type = parameters.get("type").toLowerCase();
 
 			// Query parameter: query
-			String queryValue = decodeMandatoryParameter("query");
+			String queryValue;
+			if (parameters.get("query") == null) {
+				log.info("Mandatory query parameter 'query' is missing");
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+				return new JsonRepresentation("{\"error\":\"Mandatory query parameter 'query' is missing\"}");
+			}
+			queryValue = URLDecoder.decode(parameters.get("query"), UTF_8);
 			if (queryValue.length() < 3) {
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation("{\"error\":\"Query too short\"}");
 			}
 
-			// Query parameter: syndication
-			var syndication = decodeOptionalParameter("syndication", null);
-
 			// Query parameter: lang
-			var language = decodeOptionalParameter("lang", null);
+			var language = decodeParameter("lang");
 
 			// Query parameter: sort
-			String sorting = decodeOptionalParameter("sort", null);;
-			if (syndication != null && sorting != null) {
-				log.info("Sort query parameter not suported with syndication");
-				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-				return new JsonRepresentation(
-					"{\"error\":\"Sort query parameter not suported with syndication\"}");
+			String sorting = null;
+			if (parameters.containsKey("sort")) {
+				if (parameters.containsKey("syndication")) {
+					log.info("Sort query parameter not suported with syndication");
+					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+					return new JsonRepresentation(
+						"{\"error\":\"Sort query parameter not suported with syndication\"}");
+				}
+				sorting = URLDecoder.decode(parameters.get("sort"), UTF_8);
 			}
 
 			// Query parameter: offset
-			int offset = decodeOptionalParameterInteger("offset", 0);;
-			if (syndication != null && offset > 0) {
-				log.info("Query parameter 'offset' not suported with syndication");
-				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-				return new JsonRepresentation(
-					"{\"error\":\"Query parameter 'offset' not suported with syndication\"}");
-			}
-			if (offset < 0) {
-				offset = 0;
-			}
-
-			// Query parameter: limit
-			int limit = decodeOptionalParameterInteger("limit", DEFAULT_LIMIT);;
-			if (limit > MAX_LIMIT) {
-				limit = MAX_LIMIT;
-			} else if (limit < 0) {
-				// we allow 0 on purpose, this enables requests for the purpose of getting a result count only
-				limit = DEFAULT_LIMIT;
-			}
-
-			// Query parameter: facetFields
-			String facetFields = decodeOptionalParameter("facetFields", null);
-
-			// Query parameter: filterQuery
-			List<String> filterQueries = new ArrayList();
-			{
-				String filterQueriesStr = decodeOptionalParameter("filterQuery", null);
-				if (filterQueriesStr != null) {
-					// We URLDecode after the split because we want to be able to use comma
-					// as separator (unencoded) for FQs and as content inside FQs (encoded)
-					for (String fq : filterQueriesStr.split(",")) {
-						filterQueries.add(URLDecoder.decode(fq, UTF_8));
-					}
+			int offset = 0;
+			if (parameters.containsKey("offset")) {
+				if (parameters.containsKey("syndication")) {
+					log.info("Query parameter 'offset' not suported with syndication");
+					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+					return new JsonRepresentation(
+						"{\"error\":\"Query parameter 'offset' not suported with syndication\"}");
+				}
+				try {
+					offset = Integer.valueOf(parameters.get("offset"));
+				} catch (NumberFormatException ignored) {
+				}
+				if (offset < 0) {
+					offset = 0;
 				}
 			}
 
-			// Query parameter: facetMinCount
-			int facetMinCount = decodeOptionalParameterInteger("facetMinCount", 1);;
+			// Query parameter: limit
+			int limit = DEFAULT_LIMIT;
+			if (parameters.containsKey("limit")) {
+				try {
+					limit = Integer.valueOf(parameters.get("limit"));
+					if (limit > MAX_LIMIT) {
+						limit = MAX_LIMIT;
+					} else if (limit < 0) { // we allow 0 on purpose, this enables requests for the purpose of getting a result count only
+						limit = DEFAULT_LIMIT;
+					}
+				} catch (NumberFormatException ignored) {
+				}
+			}
 
+			// Query parameter: facetFields
+			String facetFields = null;
+			if (parameters.containsKey("facetFields")) {
+				facetFields = URLDecoder.decode(parameters.get("facetFields"), UTF_8);
+			}
 
-			// Logic
+			// Query parameter: filterQuery
+			List<String> filterQueries = new ArrayList();
+			if (parameters.containsKey("filterQuery")) {
+				// We URLDecode after the split because we want to be able to use comma
+				// as separator (unencoded) for FQs and as content inside FQs (encoded)
+				for (String fq : parameters.get("filterQuery").split(",")) {
+					filterQueries.add(URLDecoder.decode(fq, UTF_8));
+				}
+			}
+
+			int facetMinCount = 1;
+			if (parameters.containsKey("facetMinCount")) {
+				try {
+					facetMinCount = Integer.valueOf(parameters.get("facetMinCount"));
+				} catch (NumberFormatException e) {
+					log.info(e.getMessage());
+					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+					return null;
+				}
+			}
+
 			QueryResults queryResults = new QueryResults(List.of(), -1, List.of());
 			if ("sparql".equalsIgnoreCase(type)) {
 				queryResults = searchSparql(queryValue);
@@ -173,8 +212,9 @@ public class SearchResource extends BaseResource {
 				queryResults = searchSolr(queryValue, sorting, offset, limit, facetFields, filterQueries, facetMinCount);
 			}
 
-			if (syndication != null) {
-				return writeSyndication(queryResults.entries(), syndication, language, limit);
+			// RSS feed
+			if (parameters.containsKey("syndication")) {
+				return writeSyndication(queryResults.entries(), parameters.get("syndication"), language, limit);
 			} else {
 				return writeJson(offset, limit, queryResults);
 			}
@@ -512,33 +552,12 @@ public class SearchResource extends BaseResource {
 		return new QueryResults(entries, entries.size());
 	}
 
-	private String decodeOptionalParameter(String parameter, String defaultValue) {
+	private String decodeParameter(String parameter) {
 		return Optional.ofNullable(parameters.get(parameter))
 			.map(param -> URLDecoder.decode(param, UTF_8))
-			.orElse(defaultValue);
+			.orElse(null);
 	}
 
-	private Integer decodeOptionalParameterInteger(String parameter, int defaultValue) {
-		String value = decodeOptionalParameter(parameter, defaultValue + "");
-		try {
-			return Integer.valueOf(value);
-		} catch (NumberFormatException e) {
-			log.info(e.getMessage());
-			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-			return defaultValue;
-		}
-	}
-
-	private String decodeMandatoryParameter(String parameter) throws JsonErrorException {
-		return Optional.ofNullable(parameters.get(parameter))
-			.map(param -> URLDecoder.decode(param, UTF_8).toLowerCase())
-			.orElseThrow(() -> {
-				String msg = "Mandatory parameter '" + parameter + "' is missing";
-				log.info(msg);
-				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-				return new JsonErrorException(msg);
-			});
-	}
 	static class JsonErrorException extends Throwable {
 
 		private final JsonRepresentation representation;
