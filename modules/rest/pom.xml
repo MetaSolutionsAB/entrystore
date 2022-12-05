@@ -203,6 +203,11 @@
                 </exclusion>
             </exclusions>
         </dependency>
-    </dependencies>
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-core</artifactId>
+			<version>1.10.2</version>
+		</dependency>
+	</dependencies>
 
 </project>
