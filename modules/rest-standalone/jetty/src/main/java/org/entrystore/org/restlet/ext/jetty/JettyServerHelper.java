@@ -24,6 +24,11 @@
 
 package org.entrystore.org.restlet.ext.jetty;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.jetty.JettyConnectionMetrics;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
+import io.micrometer.core.instrument.logging.LoggingMeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.Arrays;
@@ -325,7 +330,37 @@ public abstract class JettyServerHelper extends org.restlet.engine.adapter.HttpS
 		connector.setSoLingerTime(getConnectorSoLingerTime());
 		connector.setStopTimeout(getConnectorStopTimeout());
 
+		connector.setName("Jetty");
+		JettyConnectionMetrics jettyConnectionMetricsBean = createJettyConnectionMetricsBean(connector);
+		connector.addBean(jettyConnectionMetricsBean);
+
 		return connector;
+	}
+
+
+	/**
+	 * Create a micrometer metrics bean for Jetty
+	 *
+	 * @param connector The restlet connector
+	 * @return the micrometer bean
+	 */
+	private JettyConnectionMetrics createJettyConnectionMetricsBean(Connector connector) {
+		MeterRegistry registry = createMicrometerRegistry();
+		return new JettyConnectionMetrics(registry, connector);
+	}
+
+	/**
+	 * Create a micrometer composite registry
+	 *
+	 * @return the micrometer composite registry
+	 */
+	private static CompositeMeterRegistry createMicrometerRegistry() {
+		CompositeMeterRegistry registry = new CompositeMeterRegistry();
+		SimpleMeterRegistry simpleMeterRegistry = new SimpleMeterRegistry();
+		LoggingMeterRegistry loggingMeterRegistry = new LoggingMeterRegistry();
+		registry.add(simpleMeterRegistry);
+		registry.add(loggingMeterRegistry);
+		return registry;
 	}
 
 	/**
