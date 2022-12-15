@@ -78,7 +78,7 @@ import java.util.Set;
  */
 public abstract class AbstractMetadataResource extends BaseResource {
 
-	static Logger log = LoggerFactory.getLogger(AbstractMetadataResource.class);
+	static Logger log = LoggerFactory.getLogger(PerformanceMetricsResource.class);
 
 	List<MediaType> supportedMediaTypes = new ArrayList<>();
 
