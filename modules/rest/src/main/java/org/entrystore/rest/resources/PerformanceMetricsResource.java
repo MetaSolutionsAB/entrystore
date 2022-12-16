@@ -71,16 +71,23 @@ public class PerformanceMetricsResource extends BaseResource {
 			for (Meter meter : registry.getMeters()) {
 				// We only expose the request timers for now
 				if (meter instanceof CumulativeTimer timer) {
-					HistogramSnapshot histogramSnapshot = timer.takeSnapshot();
-					JSONObject key = new JSONObject();
-					key.put("requests", histogramSnapshot.count());
-					key.put("mean", histogramSnapshot.mean(TimeUnit.MILLISECONDS));
-					key.put("max", histogramSnapshot.max(TimeUnit.MILLISECONDS));
-					//TODO: @hannes Percentiles does not work, and I do not know why. Should we release without fixing them?
-					for (ValueAtPercentile valueAtPercentile : histogramSnapshot.percentileValues()) {
-						key.put("percentile" + valueAtPercentile.percentile(), valueAtPercentile.value(TimeUnit.MILLISECONDS));
+					String timerName = timer.getId().getName();
+					// We don't want this performance metric
+					if (timerName.equals("jetty.connections.request")) {
+						continue;
 					}
-					result.put(timer.getId().getName(), key);
+					HistogramSnapshot histogramSnapshot = timer.takeSnapshot();
+					JSONObject timerData = new JSONObject();
+					timerData.put("requests", histogramSnapshot.count());
+					timerData.put("mean", Math.round(histogramSnapshot.mean(TimeUnit.MILLISECONDS)));
+					timerData.put("max", Math.round(histogramSnapshot.max(TimeUnit.MILLISECONDS)));
+					//TODO: @hannes Percentiles does not work, and I do not know why.
+					// Probably because it implements the NoopHistogram, when it should implement TimedWindowPercentileHistogram.
+					// Should I look into it, or should we wait with this?
+					for (ValueAtPercentile valueAtPercentile : histogramSnapshot.percentileValues()) {
+						timerData.put("percentile" + valueAtPercentile.percentile(), valueAtPercentile.value(TimeUnit.MILLISECONDS));
+					}
+					result.put(timerName, timerData);
 				}
 			}
 			return new JsonRepresentation(result.toString(2));

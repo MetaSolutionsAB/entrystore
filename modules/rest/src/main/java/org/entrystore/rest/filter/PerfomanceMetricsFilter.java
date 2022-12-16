@@ -36,19 +36,18 @@ public class PerfomanceMetricsFilter extends Filter {
 
 	static private Logger log = LoggerFactory.getLogger(PerfomanceMetricsFilter.class);
 
-	final static private SimpleMeterRegistry registry = new SimpleMeterRegistry();
+	static private SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
 	final private boolean disableCallToSuperDoHandle;
 
 	/**
-	 * Only use this constructor for JUnit tests if you wnt to test the functionality of the filter.
+	 * Only use this constructor for JUnit tests, as it will disable all services of the Web Rest API!
 	 *
-	 * Will disable all services of the Web Rest API!
-	 *
-	 * @param disableCallToSuperDoHandle
+	 * @param testMode
 	 */
-	protected PerfomanceMetricsFilter(boolean disableCallToSuperDoHandle) {
-		this.disableCallToSuperDoHandle = disableCallToSuperDoHandle;
+	protected PerfomanceMetricsFilter(boolean testMode) {
+		this.disableCallToSuperDoHandle = testMode;
+		PerfomanceMetricsFilter.registry = new SimpleMeterRegistry();
 		Metrics.addRegistry(PerfomanceMetricsFilter.registry);
 	}
 
