@@ -38,9 +38,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Provides methods to read/write metadata graphs.
- *
- * Subclasses need to implement getMetadata().
+ * Provides methods to retrieve performance metrics.
  *
  * @author Hannes Ebner
  */
@@ -62,6 +60,7 @@ public class PerformanceMetricsResource extends BaseResource {
 			PrincipalManager pm = getRM().getPrincipalManager();
 			URI currentUser = pm.getAuthenticatedUserURI();
 
+			//TODO: @hannes I only allow admins to get metrics. Should we allow regular users access?
 			if (!pm.getAdminUser().getURI().equals(currentUser) &&
 					!pm.getAdminGroup().isMember(pm.getUser(currentUser))) {
 				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
@@ -70,17 +69,19 @@ public class PerformanceMetricsResource extends BaseResource {
 
 			JSONObject result = new JSONObject();
 			for (Meter meter : registry.getMeters()) {
-				CumulativeTimer timer = (CumulativeTimer) meter;
-				HistogramSnapshot histogramSnapshot = timer.takeSnapshot();
-				JSONObject key = new JSONObject();
-				key.put("requests", histogramSnapshot.count());
-				key.put("mean", histogramSnapshot.mean(TimeUnit.MILLISECONDS));
-				key.put("max", histogramSnapshot.max(TimeUnit.MILLISECONDS));
-				//TODO: Percentiles are not registered
-				for (ValueAtPercentile valueAtPercentile : histogramSnapshot.percentileValues()) {
-					key.put("percentile" + valueAtPercentile.percentile(), valueAtPercentile.value(TimeUnit.MILLISECONDS));
+				// We only expose the request timers for now
+				if (meter instanceof CumulativeTimer timer) {
+					HistogramSnapshot histogramSnapshot = timer.takeSnapshot();
+					JSONObject key = new JSONObject();
+					key.put("requests", histogramSnapshot.count());
+					key.put("mean", histogramSnapshot.mean(TimeUnit.MILLISECONDS));
+					key.put("max", histogramSnapshot.max(TimeUnit.MILLISECONDS));
+					//TODO: @hannes Percentiles does not work, and I do not know why. Should we release without fixing them?
+					for (ValueAtPercentile valueAtPercentile : histogramSnapshot.percentileValues()) {
+						key.put("percentile" + valueAtPercentile.percentile(), valueAtPercentile.value(TimeUnit.MILLISECONDS));
+					}
+					result.put(timer.getId().getName(), key);
 				}
-				result.put(timer.getId().getName(), key);
 			}
 			return new JsonRepresentation(result.toString(2));
 		} catch (AuthorizationException e) {

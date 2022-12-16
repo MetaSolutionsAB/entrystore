@@ -26,9 +26,6 @@ package org.entrystore.org.restlet.ext.jetty;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.jetty.JettyConnectionMetrics;
-import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
-import io.micrometer.core.instrument.logging.LoggingMeterRegistry;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.Arrays;
@@ -49,6 +46,7 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 import org.eclipse.jetty.util.thread.Scheduler;
 import org.eclipse.jetty.util.thread.ThreadPool;
 import org.entrystore.org.restlet.ext.jetty.internal.JettyServerCall;
+import org.entrystore.rest.filter.PerfomanceMetricsFilter;
 import org.restlet.Server;
 
 /**
@@ -354,13 +352,8 @@ public abstract class JettyServerHelper extends org.restlet.engine.adapter.HttpS
 	 *
 	 * @return the micrometer composite registry
 	 */
-	private static CompositeMeterRegistry createMicrometerRegistry() {
-		CompositeMeterRegistry registry = new CompositeMeterRegistry();
-		SimpleMeterRegistry simpleMeterRegistry = new SimpleMeterRegistry();
-		LoggingMeterRegistry loggingMeterRegistry = new LoggingMeterRegistry();
-		registry.add(simpleMeterRegistry);
-		registry.add(loggingMeterRegistry);
-		return registry;
+	private static MeterRegistry createMicrometerRegistry() {
+		return PerfomanceMetricsFilter.getSimpleMeterRegistry();
 	}
 
 	/**

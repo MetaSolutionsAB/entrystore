@@ -41,7 +41,7 @@ public class PerfomanceMetricsFilter extends Filter {
 	final private boolean disableCallToSuperDoHandle;
 
 	/**
-	 * Only use for JUnit tests if you wnt to test the functionality of the filter.
+	 * Only use this constructor for JUnit tests if you wnt to test the functionality of the filter.
 	 *
 	 * Will disable all services of the Web Rest API!
 	 *
@@ -81,8 +81,8 @@ public class PerfomanceMetricsFilter extends Filter {
 		if (search == null) {
 			Timer
 					.builder(metricName)
-//					.percentilePrecision(0)
 					.publishPercentileHistogram()
+					//TODO: @hannes are these sensible values? Or is maybe just 90 or 95 be used?
 					.publishPercentiles(0.90d, 0.99d)
 					.register(registry);
 		}
@@ -91,6 +91,7 @@ public class PerfomanceMetricsFilter extends Filter {
 		return returnStatus;
 	}
 
+	//TODO: @hannes Is this list of exposed entries correct? Remove soomethiing or add something?
 	final static private List allowedTypes = List.of(
 			"resource",
 			"entry",
