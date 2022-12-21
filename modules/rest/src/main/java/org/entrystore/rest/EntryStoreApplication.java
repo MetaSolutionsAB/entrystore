@@ -296,10 +296,6 @@ public class EntryStoreApplication extends Application {
 		reservedNames.add("validator");
 		router.attach("/validator", ValidatorResource.class);
 
-		// Performance Metrics
-		reservedNames.add("metrics");
-		router.attach("/metrics", PerformanceMetricsResource.class);
-
 		// authentication resources
 		reservedNames.add("auth");
 		if (!passwordAuthOff) {
@@ -338,6 +334,8 @@ public class EntryStoreApplication extends Application {
 		router.attach("/management/logging", LoggingResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
+		router.attach("/management/metrics", PerformanceMetricsResource.class);
+
 
 		// context scope
 		router.attach("/{context-id}", ContextResource.class);

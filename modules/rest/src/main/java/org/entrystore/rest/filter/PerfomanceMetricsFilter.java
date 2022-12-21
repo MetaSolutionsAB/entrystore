@@ -81,8 +81,7 @@ public class PerfomanceMetricsFilter extends Filter {
 			Timer
 					.builder(metricName)
 					.publishPercentileHistogram()
-					//TODO: @hannes are these sensible values? Or is maybe just 90 or 95 be used?
-					.publishPercentiles(0.90d, 0.99d)
+					.publishPercentiles(0.99d)
 					.register(registry);
 		}
 		sample.stop(registry.timer(metricName));
@@ -90,15 +89,10 @@ public class PerfomanceMetricsFilter extends Filter {
 		return returnStatus;
 	}
 
-	//TODO: @hannes Is this list of exposed entries correct? Remove soomethiing or add something?
 	final static private List allowedTypes = List.of(
 			"resource",
 			"entry",
 			"metadata",
-			"export",
-			"import",
-			"merge",
-			"groups",
 			"search"
 	);
 

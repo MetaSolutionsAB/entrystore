@@ -60,7 +60,6 @@ public class PerformanceMetricsResource extends BaseResource {
 			PrincipalManager pm = getRM().getPrincipalManager();
 			URI currentUser = pm.getAuthenticatedUserURI();
 
-			//TODO: @hannes I only allow admins to get metrics. Should we allow regular users access?
 			if (!pm.getAdminUser().getURI().equals(currentUser) &&
 					!pm.getAdminGroup().isMember(pm.getUser(currentUser))) {
 				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
@@ -81,9 +80,7 @@ public class PerformanceMetricsResource extends BaseResource {
 					timerData.put("requests", histogramSnapshot.count());
 					timerData.put("mean", Math.round(histogramSnapshot.mean(TimeUnit.MILLISECONDS)));
 					timerData.put("max", Math.round(histogramSnapshot.max(TimeUnit.MILLISECONDS)));
-					//TODO: @hannes Percentiles does not work, and I do not know why.
-					// Probably because it implements the NoopHistogram, when it should implement TimedWindowPercentileHistogram.
-					// Should I look into it, or should we wait with this?
+					// Percentils are currently hardcoded as 'disabled' in SimpleMeterRegistry, line 95
 					for (ValueAtPercentile valueAtPercentile : histogramSnapshot.percentileValues()) {
 						timerData.put("percentile" + valueAtPercentile.percentile(), valueAtPercentile.value(TimeUnit.MILLISECONDS));
 					}
