@@ -16,17 +16,17 @@
 
 package org.entrystore.rest.resources;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+
 import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Timer;
-import io.micrometer.core.instrument.cumulative.CumulativeTimer;
 import io.micrometer.core.instrument.distribution.HistogramSnapshot;
 import io.micrometer.core.instrument.distribution.ValueAtPercentile;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.net.URI;
-import java.util.concurrent.TimeUnit;
 import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager;
-import org.entrystore.rest.filter.PerfomanceMetricsFilter;
 import org.json.JSONObject;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -56,7 +56,7 @@ public class PerformanceMetricsResource extends BaseResource {
 	@Get
 	public Representation represent() {
 		try {
-			SimpleMeterRegistry registry = PerfomanceMetricsFilter.getSimpleMeterRegistry();
+			MeterRegistry registry = Metrics.globalRegistry;
 			PrincipalManager pm = getRM().getPrincipalManager();
 			URI currentUser = pm.getAuthenticatedUserURI();
 
@@ -69,20 +69,16 @@ public class PerformanceMetricsResource extends BaseResource {
 			JSONObject result = new JSONObject();
 			for (Meter meter : registry.getMeters()) {
 				// We only expose the request timers for now
-				if (meter instanceof CumulativeTimer timer) {
+				if (meter instanceof Timer timer) {
 					String timerName = timer.getId().getName();
-					// We don't want this performance metric
-					if (timerName.equals("jetty.connections.request")) {
-						continue;
-					}
 					HistogramSnapshot histogramSnapshot = timer.takeSnapshot();
 					JSONObject timerData = new JSONObject();
 					timerData.put("requests", histogramSnapshot.count());
-					timerData.put("mean", Math.round(histogramSnapshot.mean(TimeUnit.MILLISECONDS)));
-					timerData.put("max", Math.round(histogramSnapshot.max(TimeUnit.MILLISECONDS)));
-					// Percentils are currently hardcoded as 'disabled' in SimpleMeterRegistry, line 95
+					timerData.put("mean", Math.round(histogramSnapshot.mean(MILLISECONDS)));
+					timerData.put("max", Math.round(histogramSnapshot.max(MILLISECONDS)));
 					for (ValueAtPercentile valueAtPercentile : histogramSnapshot.percentileValues()) {
-						timerData.put("percentile" + valueAtPercentile.percentile(), valueAtPercentile.value(TimeUnit.MILLISECONDS));
+						timerData.put("percentile-" + valueAtPercentile.percentile(),
+								Math.round(valueAtPercentile.value(MILLISECONDS)));
 					}
 					result.put(timerName, timerData);
 				}

@@ -16,13 +16,13 @@
 
 package org.entrystore.rest.filter;
 
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.search.Search;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.Arrays;
 import java.util.List;
+import org.entrystore.rest.micrometer.EntryscapeSimpleMeterRegistry;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.routing.Filter;
@@ -34,21 +34,22 @@ import org.slf4j.LoggerFactory;
  */
 public class PerfomanceMetricsFilter extends Filter {
 
-	static private Logger log = LoggerFactory.getLogger(PerfomanceMetricsFilter.class);
-
-	static private SimpleMeterRegistry registry = new SimpleMeterRegistry();
-
+	final static private List allowedTypes = List.of(
+			"resource",
+			"entry",
+			"metadata",
+			"search"
+	);
+	static private final Logger log = LoggerFactory.getLogger(PerfomanceMetricsFilter.class);
 	final private boolean disableCallToSuperDoHandle;
 
 	/**
 	 * Only use this constructor for JUnit tests, as it will disable all services of the Web Rest API!
-	 *
-	 * @param testMode
 	 */
 	protected PerfomanceMetricsFilter(boolean testMode) {
 		this.disableCallToSuperDoHandle = testMode;
-		PerfomanceMetricsFilter.registry = new SimpleMeterRegistry();
-		Metrics.addRegistry(PerfomanceMetricsFilter.registry);
+		EntryscapeSimpleMeterRegistry registry = new EntryscapeSimpleMeterRegistry();
+		Metrics.addRegistry(registry);
 	}
 
 	public PerfomanceMetricsFilter() {
@@ -58,9 +59,11 @@ public class PerfomanceMetricsFilter extends Filter {
 	@Override
 	protected int doHandle(Request request, Response response) {
 
+		CompositeMeterRegistry registry = Metrics.globalRegistry;
+
 		Timer.Sample sample = Timer.start(registry);
 
-		int returnStatus = this.disableCallToSuperDoHandle ? CONTINUE :  super.doHandle(request, response);
+		int returnStatus = this.disableCallToSuperDoHandle ? CONTINUE : super.doHandle(request, response);
 
 		String type = extractType(request.getResourceRef().getPath());
 		if (type == null) {
@@ -78,23 +81,12 @@ public class PerfomanceMetricsFilter extends Filter {
 
 		Search search = registry.find(metricName);
 		if (search == null) {
-			Timer
-					.builder(metricName)
-					.publishPercentileHistogram()
-					.publishPercentiles(0.99d)
-					.register(registry);
+			Timer.builder(metricName).register(registry);
 		}
 		sample.stop(registry.timer(metricName));
 
 		return returnStatus;
 	}
-
-	final static private List allowedTypes = List.of(
-			"resource",
-			"entry",
-			"metadata",
-			"search"
-	);
 
 	private String extractType(String requestPath) {
 
@@ -113,9 +105,5 @@ public class PerfomanceMetricsFilter extends Filter {
 		} else {
 			return null;
 		}
-	}
-
-	public static SimpleMeterRegistry getSimpleMeterRegistry() {
-		return PerfomanceMetricsFilter.registry;
 	}
 }
