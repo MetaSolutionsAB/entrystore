@@ -16,12 +16,17 @@
 
 package org.entrystore.rest.filter;
 
+import static org.entrystore.repository.config.Settings.METRICS;
+
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.search.Search;
+import java.io.IOException;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
+import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.rest.micrometer.EntryscapeSimpleMeterRegistry;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -34,7 +39,7 @@ import org.slf4j.LoggerFactory;
  */
 public class PerfomanceMetricsFilter extends Filter {
 
-	final static private List allowedTypes = List.of(
+	final static private List<String> allowedTypes = List.of(
 			"resource",
 			"entry",
 			"metadata",
@@ -42,6 +47,7 @@ public class PerfomanceMetricsFilter extends Filter {
 	);
 	static private final Logger log = LoggerFactory.getLogger(PerfomanceMetricsFilter.class);
 	final private boolean disableCallToSuperDoHandle;
+	final private boolean enableMetrics;
 
 	/**
 	 * Only use this constructor for JUnit tests, as it will disable all services of the Web Rest API!
@@ -50,6 +56,15 @@ public class PerfomanceMetricsFilter extends Filter {
 		this.disableCallToSuperDoHandle = testMode;
 		EntryscapeSimpleMeterRegistry registry = new EntryscapeSimpleMeterRegistry();
 		Metrics.addRegistry(registry);
+
+		ConfigurationManager configurationManager;
+		try {
+			URI uri = ConfigurationManager.getConfigurationURI();
+			configurationManager = new ConfigurationManager(uri);
+		} catch (IOException e) {
+			configurationManager = null;
+		}
+		this.enableMetrics = configurationManager.getConfiguration().getBoolean(METRICS, false);
 	}
 
 	public PerfomanceMetricsFilter() {
@@ -59,8 +74,12 @@ public class PerfomanceMetricsFilter extends Filter {
 	@Override
 	protected int doHandle(Request request, Response response) {
 
-		CompositeMeterRegistry registry = Metrics.globalRegistry;
+		if (!enableMetrics) {
+			super.doHandle(request, response);
+			return CONTINUE;
+		}
 
+		CompositeMeterRegistry registry = Metrics.globalRegistry;
 		Timer.Sample sample = Timer.start(registry);
 
 		int returnStatus = this.disableCallToSuperDoHandle ? CONTINUE : super.doHandle(request, response);
@@ -97,13 +116,10 @@ public class PerfomanceMetricsFilter extends Filter {
 		String[] split = requestPath.split("/");
 		String resourceType = (split.length == 1) ? split[0] : split[1];
 		if (log.isDebugEnabled()) {
-			log.debug("URI split into [{}] parts, choosing [{}] as type - {}", split.length, Arrays.toString(split));
+			log.debug("URI split into [{}] parts, choosing [{}] as type - {}",
+					split.length, resourceType, Arrays.toString(split));
 		}
 
-		if (allowedTypes.contains(resourceType)) {
-			return resourceType;
-		} else {
-			return null;
-		}
+		return allowedTypes.contains(resourceType) ? resourceType : null;
 	}
 }
