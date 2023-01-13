@@ -1,5 +1,47 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 5.0.0 (2023-01-13)
+
+### Improvement
+
+[ENTRYSTORE-367](https://metasolutions.atlassian.net/browse/ENTRYSTORE-367) Migrate to RDF4J
+
+[ENTRYSTORE-491](https://metasolutions.atlassian.net/browse/ENTRYSTORE-491) Provide different file extensions when downloading in different RDF formats
+
+[ENTRYSTORE-552](https://metasolutions.atlassian.net/browse/ENTRYSTORE-552) Add support for SPARQLResultsCSVWriter in SparqlResource
+
+[ENTRYSTORE-571](https://metasolutions.atlassian.net/browse/ENTRYSTORE-571) Replace com.github.jsonld-java with RDF4J native JSON-LD support
+
+[ENTRYSTORE-674](https://metasolutions.atlassian.net/browse/ENTRYSTORE-674) Add support for RSS as response format for Solr queries
+
+[ENTRYSTORE-711](https://metasolutions.atlassian.net/browse/ENTRYSTORE-711) Upgrade to Java 17
+
+[ENTRYSTORE-712](https://metasolutions.atlassian.net/browse/ENTRYSTORE-712) Reimplement support for JSON-LD
+
+[ENTRYSTORE-722](https://metasolutions.atlassian.net/browse/ENTRYSTORE-722) Serialize Strings according to RDF 1.0 without explicit data types
+
+### Task
+
+[ENTRYSTORE-715](https://metasolutions.atlassian.net/browse/ENTRYSTORE-715) Spring Boot POC
+
+[ENTRYSTORE-716](https://metasolutions.atlassian.net/browse/ENTRYSTORE-716) Remake EntryStore to a Spring Boot App, removing all Jetty configuration, filters, Jetty configurations etc \(temporarily\)
+
+### New Feature
+
+[ENTRYSTORE-318](https://metasolutions.atlassian.net/browse/ENTRYSTORE-318) Enhancement using Apache Stanbol
+
+[ENTRYSTORE-391](https://metasolutions.atlassian.net/browse/ENTRYSTORE-391) Add support for KiWi backend
+
+[ENTRYSTORE-713](https://metasolutions.atlassian.net/browse/ENTRYSTORE-713) Support automatic migration of native store
+
+### Bug
+
+[ENTRYSTORE-714](https://metasolutions.atlassian.net/browse/ENTRYSTORE-714) RDF writers require startRDF\(\) before namespace handling
+
+[ENTRYSTORE-723](https://metasolutions.atlassian.net/browse/ENTRYSTORE-723) Empty language properties in RDF/JSON requests break deserialization
+
+[ENTRYSTORE-726](https://metasolutions.atlassian.net/browse/ENTRYSTORE-726) Profile field in Solr should be detected based on metadata URI in the entry graph
+
 ## Version 4.13 (2022-09-20)
 
 ### Bug

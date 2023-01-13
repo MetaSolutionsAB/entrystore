@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.resources;
 
+import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
+
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
@@ -39,10 +41,10 @@ import java.util.List;
 
 /**
  * This resource checks credentials and sets a cookie.
- * 
+ *
  * It only allows POST requests to avoid user/password in URL and therefore
  * logging in clear-text.
- * 
+ *
  * @author Hannes Ebner
  */
 public class CookieLoginResource extends BaseResource {
@@ -66,7 +68,9 @@ public class CookieLoginResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		if (HttpUtil.isLargerThan(r, 32768)) {
-			log.warn("The size of the representation is larger than 32KB or unknown, similar requests may be blocked in future versions");
+			log.warn("The size of the representation is larger than 32KB or unknown, request blocked");
+			getResponse().setStatus(CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
+			return;
 		}
 
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
@@ -82,7 +86,7 @@ public class CookieLoginResource extends BaseResource {
 		String userName = query.getFirstValue("auth_username");
 		String password = query.getFirstValue("auth_password");
 		String maxAgeStr = query.getFirstValue("auth_maxage");
-		
+
 		if (userName == null || password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
