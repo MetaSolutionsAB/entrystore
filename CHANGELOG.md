@@ -23,6 +23,7 @@
 ### Task
 
 [ENTRYSTORE-715](https://metasolutions.atlassian.net/browse/ENTRYSTORE-715) Spring Boot POC
+
 [ENTRYSTORE-716](https://metasolutions.atlassian.net/browse/ENTRYSTORE-716) Remake EntryStore to a Spring Boot App, removing all Jetty configuration, filters, Jetty configurations etc \(temporarily\)
 
 ### New Feature
