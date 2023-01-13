@@ -1,6 +1,6 @@
 # ENTRYSTORE CHANGELOG
 
-## Version 5.0.0 (2022-01-13)
+## Version 5.0.0 (2023-01-13)
 
 ### Improvement
 
