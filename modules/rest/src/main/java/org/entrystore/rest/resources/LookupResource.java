@@ -19,15 +19,15 @@ package org.entrystore.rest.resources;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrException;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.GraphUtil;
-import org.openrdf.model.Graph;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.rio.RDFFormat;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.EmptyRepresentation;
@@ -157,7 +157,7 @@ public class LookupResource extends BaseResource {
 	
 	private Representation getMetadata(Entry e, String scope, MediaType mediaType) throws AuthorizationException {
 		EntryType locType = entry.getEntryType();
-		Graph graph = new GraphImpl();
+		Model graph = new LinkedHashModel();
 		if (EntryType.Local.equals(locType) || EntryType.Link.equals(locType)) {
 			if ("all".equals(scope) || "local".equals(scope)) {
 				graph.addAll(entry.getLocalMetadata().getGraph());

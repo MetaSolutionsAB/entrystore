@@ -18,7 +18,21 @@ package org.entrystore.rest.resources;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
-import info.aduna.iteration.Iterations;
+import org.eclipse.rdf4j.common.iteration.Iterations;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.query.GraphQuery;
+import org.eclipse.rdf4j.query.MalformedQueryException;
+import org.eclipse.rdf4j.query.QueryEvaluationException;
+import org.eclipse.rdf4j.query.QueryLanguage;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.sail.SailRepository;
+import org.eclipse.rdf4j.rio.RDFFormat;
+import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Metadata;
 import org.entrystore.repository.config.Settings;
@@ -26,21 +40,6 @@ import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Model;
-import org.openrdf.model.URI;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.query.GraphQuery;
-import org.openrdf.query.MalformedQueryException;
-import org.openrdf.query.QueryEvaluationException;
-import org.openrdf.query.QueryLanguage;
-import org.openrdf.repository.Repository;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.sail.SailRepository;
-import org.openrdf.rio.RDFFormat;
-import org.openrdf.sail.memory.MemoryStore;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
@@ -56,14 +55,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.net.URI;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 
@@ -71,15 +73,15 @@ import java.util.Set;
  * Provides methods to read/write metadata graphs.
  *
  * Subclasses need to implement getMetadata().
- * 
+ *
  * @author Hannes Ebner
  */
 public abstract class AbstractMetadataResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(AbstractMetadataResource.class);
 
-	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
-	
+	List<MediaType> supportedMediaTypes = new ArrayList<>();
+
 	@Override
 	public void doInit() {
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
@@ -92,7 +94,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 		supportedMediaTypes.add(new MediaType("application/rdf+json"));
 	}
-	
+
 	/**
 	 * <pre>
 	 * GET {baseURI}/{context-id}/{metadata}/{entry-id}
@@ -118,21 +120,13 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 				String graphQuery = null;
 				if (parameters.containsKey("graphQuery")) {
-					try {
-						graphQuery = URLDecoder.decode(parameters.get("graphQuery"), "UTF-8");
-					} catch (UnsupportedEncodingException e) {
-						log.error(e.getMessage());
-					}
+					graphQuery = URLDecoder.decode(parameters.get("graphQuery"), StandardCharsets.UTF_8);
 				}
 
 				if (parameters.containsKey("recursive")) {
 					String traversalParam = null;
-					try {
-						traversalParam = URLDecoder.decode(parameters.get("recursive"), "UTF-8");
-					} catch (UnsupportedEncodingException e) {
-						log.error(e.getMessage());
-					}
-					Set<java.net.URI> predicatesToFollow = resolvePredicates(traversalParam);
+					traversalParam = URLDecoder.decode(parameters.get("recursive"), StandardCharsets.UTF_8);
+					Set<URI> predicatesToFollow = resolvePredicates(traversalParam);
 					if (predicatesToFollow.isEmpty()) {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						return null;
@@ -265,7 +259,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	/**
 	 * @return Metadata in the requested format.
 	 */
-	private Representation getRepresentation(Graph graph, MediaType mediaType) throws AuthorizationException {
+	private Representation getRepresentation(Model graph, MediaType mediaType) throws AuthorizationException {
 		if (graph != null) {
 			String serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
 			if (serializedGraph != null) {
@@ -290,9 +284,9 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		} catch (IOException e) {
 			log.error(e.getMessage());
 		}
-		
+
 		if (metadata != null && graphString != null) {
-			Graph deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
+			Model deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
 			if (deserializedGraph != null) {
 				getResponse().setStatus(Status.SUCCESS_OK);
 				metadata.setGraph(deserializedGraph);
@@ -329,14 +323,14 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @param depth        Levels traversed.
 	 * @return Returns a Graph consisting of merged metadata graphs. Contains all metadata, including e.g. cached external.
 	 */
-	private EntryUtil.TraversalResult traverse(java.net.URI entryURI, Set<java.net.URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth) {
+	private EntryUtil.TraversalResult traverse(URI entryURI, Set<URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth) {
 		return EntryUtil.traverseAndLoadEntryMetadata(
-			ImmutableSet.of((URI) new URIImpl(entryURI.toString())),
+			ImmutableSet.of((IRI) getRM().getValueFactory().createIRI(entryURI.toString())),
 			predToFollow,
 			blacklist,
 			0,
 			depth,
-			HashMultimap.<URI, Integer>create(),
+			HashMultimap.<IRI, Integer>create(),
 			repository ? null : context,
 			getRM()
 		);
@@ -350,15 +344,15 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @return Returns a set of URIs. Traversal profile names are resolved
 	 * in their member URIs and namespaces URIs are expanded.
 	 */
-	private Set<java.net.URI> resolvePredicates(String predCSV) {
-		Set<java.net.URI> result = new HashSet<>();
+	private Set<URI> resolvePredicates(String predCSV) {
+		Set<URI> result = new HashSet<>();
 		for (String s : predCSV.split(",")) {
-			Set<java.net.URI> pSet = loadTraversalProfile(s);
+			Set<URI> pSet = loadTraversalProfile(s);
 			if (pSet.isEmpty()) {
-				java.net.URI expanded = NS.expand(s);
+				URI expanded = NS.expand(s);
 				// we add it to the result if it could be expanded
 				if (!s.equals(expanded.toString())) {
-					result.add(java.net.URI.create(NS.expand(s).toString()));
+					result.add(URI.create(NS.expand(s).toString()));
 				}
 			} else {
 				result.addAll(pSet);
@@ -368,7 +362,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	}
 
 	private Map<String, String> loadBlacklist(String traversalParam) {
-		Map<String, String> result = new HashMap();
+		Map<String, String> result = new HashMap<>();
 		for (String s : traversalParam.split(",")) {
 			result.putAll(loadTraversalBlacklistForProfile(s));
 		}
@@ -380,11 +374,11 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @param profileName The name of the traversal profile.
 	 * @return A set of URIs.
 	 */
-	private Set<java.net.URI> loadTraversalProfile(String profileName) {
+	private Set<URI> loadTraversalProfile(String profileName) {
 		List<String> predicates = getRM().getConfiguration().getStringList(Settings.TRAVERSAL_PROFILE + "." + profileName, new ArrayList<String>());
-		Set<java.net.URI> result = new HashSet<>();
+		Set<URI> result = new HashSet<>();
 		for (String s : predicates) {
-			result.add(java.net.URI.create(s));
+			result.add(URI.create(s));
 		}
 		return result;
 	}
@@ -408,14 +402,14 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		return result;
 	}
 
-	private Model applyGraphQuery(String query, Graph graph) {
+	private Model applyGraphQuery(String query, Model graph) {
 		Date before = new Date();
 		MemoryStore ms = new MemoryStore();
 		Repository sr = new SailRepository(ms);
 		Model result = null;
 		RepositoryConnection rc = null;
 		try {
-			sr.initialize();
+			sr.init();
 			rc = sr.getConnection();
 			rc.add(graph);
 			GraphQuery gq = rc.prepareGraphQuery(QueryLanguage.SPARQL, query);
@@ -445,12 +439,27 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		return result;
 	}
 
+	private static RDFFormat RDFJSON_WITH_APPLICATION_JSON
+		= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("json"), SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
+
 	private String getFileExtensionForMediaType(MediaType mt) {
-		RDFFormat rdfFormat = RDFFormat.forMIMEType(mt.getName());
-		if (rdfFormat != null && rdfFormat.getDefaultFileExtension() != null) {
-			return rdfFormat.getDefaultFileExtension();
+		Optional<RDFFormat> rdfFormat = RDFFormat.matchMIMEType(mt.getName(), Arrays.asList(
+				RDFFormat.RDFXML,
+				RDFFormat.NTRIPLES,
+				RDFFormat.TURTLE,
+				RDFFormat.N3,
+				RDFFormat.TRIX,
+				RDFFormat.TRIG,
+				RDFFormat.BINARY,
+				RDFFormat.NQUADS,
+				RDFFormat.JSONLD,
+				RDFFormat.RDFJSON,
+				RDFFormat.RDFA,
+				RDFJSON_WITH_APPLICATION_JSON)
+		);
+		if (rdfFormat.isPresent() && rdfFormat.get().getDefaultFileExtension() != null) {
+			return rdfFormat.get().getDefaultFileExtension();
 		}
 		return "rdf";
 	}
-
 }

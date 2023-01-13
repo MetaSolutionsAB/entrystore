@@ -7,11 +7,11 @@
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-rest-standalone</artifactId>
-        <version>4.13.0</version>
+        <version>5.0.0</version>
     </parent>
     <artifactId>entrystore-rest-standalone-simple</artifactId>
     <packaging>jar</packaging>
-    <version>4.13.0</version>
+    <version>5.0.0</version>
     <name>EntryStore REST Standalone Simple Framework</name>
 
     <build>
@@ -35,6 +35,7 @@
                 <configuration>
                     <release>${maven.compiler.release}</release>
                     <compilerArgument></compilerArgument>
+                    <encoding>UTF-8</encoding>
                 </configuration>
             </plugin>
             <plugin>
@@ -44,7 +45,7 @@
                     <programs>
                         <program>
                             <mainClass>org.entrystore.rest.standalone.EntryStoreApplicationStandaloneSimple</mainClass>
-                            <name>entrystore</name>
+                            <id>entrystore</id>
                         </program>
                     </programs>
                     <repositoryLayout>flat</repositoryLayout>

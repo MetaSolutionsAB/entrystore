@@ -16,23 +16,23 @@
 
 package org.entrystore.rest.resources;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.query.MalformedQueryException;
+import org.eclipse.rdf4j.query.QueryEvaluationException;
+import org.eclipse.rdf4j.query.QueryLanguage;
+import org.eclipse.rdf4j.query.TupleQuery;
+import org.eclipse.rdf4j.query.TupleQueryResultHandler;
+import org.eclipse.rdf4j.query.TupleQueryResultHandlerException;
+import org.eclipse.rdf4j.query.impl.DatasetImpl;
+import org.eclipse.rdf4j.query.resultio.binary.BinaryQueryResultWriter;
+import org.eclipse.rdf4j.query.resultio.sparqljson.SPARQLResultsJSONWriter;
+import org.eclipse.rdf4j.query.resultio.sparqlxml.SPARQLResultsXMLWriter;
+import org.eclipse.rdf4j.query.resultio.text.csv.SPARQLResultsCSVWriter;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.rest.util.HttpUtil;
-import org.openrdf.model.URI;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.query.MalformedQueryException;
-import org.openrdf.query.QueryEvaluationException;
-import org.openrdf.query.QueryLanguage;
-import org.openrdf.query.TupleQuery;
-import org.openrdf.query.TupleQueryResultHandler;
-import org.openrdf.query.TupleQueryResultHandlerException;
-import org.openrdf.query.impl.DatasetImpl;
-import org.openrdf.query.resultio.binary.BinaryQueryResultWriter;
-import org.openrdf.query.resultio.sparqljson.SPARQLResultsJSONWriter;
-import org.openrdf.query.resultio.sparqlxml.SPARQLResultsXMLWriter;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
 import org.restlet.data.Form;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
@@ -46,8 +46,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -67,6 +67,7 @@ public class SparqlResource extends BaseResource {
 	public void doInit() {
 		supportedMediaTypes.add(MediaType.APPLICATION_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+		supportedMediaTypes.add(MediaType.TEXT_CSV);
 		supportedMediaTypes.add(MediaType.ALL);
 	}
 
@@ -87,17 +88,13 @@ public class SparqlResource extends BaseResource {
 			
 			String queryString = null;
 			if (parameters.containsKey("query")) {
-				try {
-					queryString = URLDecoder.decode(parameters.get("query"), "UTF-8");
-				} catch (UnsupportedEncodingException uee) {
-					log.error(uee.getMessage());
-				}
+				queryString = URLDecoder.decode(parameters.get("query"), StandardCharsets.UTF_8);
 			} else {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return null;
 			}
 			
-			Representation result = getSparqlResponse(format, queryString); 
+			Representation result = getSparqlResponse(format, queryString);
 			if (result != null) {
 				return result;
 			} else {
@@ -123,10 +120,10 @@ public class SparqlResource extends BaseResource {
 
 			Form form = new Form(getRequest().getEntity());
 			String format = form.getFirstValue("output", true, "json");;
-			if (format.equals("json")) {
-				this.format = MediaType.APPLICATION_JSON;
-			} else if (format.equals("xml")) {
-				this.format = MediaType.APPLICATION_XML;
+			switch (format) {
+				case "json" -> this.format = MediaType.APPLICATION_JSON;
+				case "xml" -> this.format = MediaType.APPLICATION_XML;
+				case "csv" -> this.format = MediaType.TEXT_CSV;
 			}
 			String query = form.getFirstValue("query", true);
 			if (query == null) {
@@ -154,6 +151,8 @@ public class SparqlResource extends BaseResource {
 				success = runSparqlQuery(queryString, context, new SPARQLResultsJSONWriter(baos));
 			} else if (MediaType.APPLICATION_XML.equals(format)) {
 				success = runSparqlQuery(queryString, context, new SPARQLResultsXMLWriter(baos));
+			} else if (MediaType.TEXT_CSV.equals(format)) {
+				success = runSparqlQuery(queryString, context, new SPARQLResultsCSVWriter(baos));
 			} else {
 				success = runSparqlQuery(queryString, context, new BinaryQueryResultWriter(baos));
 			}
@@ -170,9 +169,7 @@ public class SparqlResource extends BaseResource {
 	}
 	
 	private boolean runSparqlQuery(String queryString, Context context, TupleQueryResultHandler resultHandler) throws RepositoryException, MalformedQueryException, QueryEvaluationException, TupleQueryResultHandlerException {
-		RepositoryConnection rc = null;
-		try {
-			rc = this.getRM().getPublicRepository().getConnection();
+		try (RepositoryConnection rc = this.getRM().getPublicRepository().getConnection()) {
 			if (rc == null) {
 				return false;
 			}
@@ -180,7 +177,7 @@ public class SparqlResource extends BaseResource {
 			TupleQuery query = rc.prepareTupleQuery(QueryLanguage.SPARQL, queryString);
 			query.setMaxQueryTime(600); // setting a max query time of 10 minutes
 			if (context != null) {
-				URI contextURI = new URIImpl(context.getURI().toString());
+				IRI contextURI = rc.getValueFactory().createIRI(context.getURI().toString());
 				DatasetImpl ds = new DatasetImpl();
 				ds.addDefaultGraph(contextURI);
 				ds.addNamedGraph(contextURI);
@@ -192,10 +189,6 @@ public class SparqlResource extends BaseResource {
 			}
 
 			query.evaluate(resultHandler);
-		} finally {
-			if (rc != null) {
-				rc.close();
-			}
 		}
 		return true;
 	}

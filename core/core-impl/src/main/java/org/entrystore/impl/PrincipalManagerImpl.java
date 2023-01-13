@@ -16,6 +16,12 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -24,12 +30,6 @@ import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.repository.util.URISplit;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.RepositoryResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -632,7 +632,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		try {
 			rc = entry.getRepository().getConnection();
 			ValueFactory vf = rc.getValueFactory();
-			RepositoryResult<Statement> rr = rc.getStatements(null, RepositoryProperties.externalID, vf.createURI("mailto:", externalID), false);
+			RepositoryResult<Statement> rr = rc.getStatements(null, RepositoryProperties.externalID, vf.createIRI("mailto:", externalID), false);
 			if (rr.hasNext()) {
 				userResourceURI = rr.next().getSubject();
 			}

@@ -16,29 +16,10 @@
 
 package org.entrystore.repository.util;
 
-import com.google.common.collect.Multimap;
-import org.entrystore.AuthorizationException;
-import org.entrystore.Context;
-import org.entrystore.ContextManager;
-import org.entrystore.Entry;
-import org.entrystore.GraphType;
-import org.entrystore.Resource;
-import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.repository.RepositoryManager;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Model;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.model.impl.ValueFactoryImpl;
-import org.openrdf.model.vocabulary.RDF;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static com.google.common.base.Preconditions.checkArgument;
 
+import com.google.common.collect.Multimap;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -49,20 +30,41 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.Resource;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.RepositoryManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Helper methods to make Entry handling easier, mostly sorting methods.
- * 
+ *
  * @author Hannes Ebner
  */
 public class EntryUtil {
-	
+
 	static Logger log = LoggerFactory.getLogger(EntryUtil.class);
+
+	static ValueFactory valueFactory = SimpleValueFactory.getInstance();
 
 	/**
 	 * Sorts a list of entries after the modification date.
-	 * 
+	 *
 	 * @param entries
 	 *            The list of entries to sort.
 	 * @param ascending
@@ -84,15 +86,15 @@ public class EntryUtil {
 				}
 				return result;
 			}
-			
+
 		});
-		
+
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
 	/**
 	 * Sorts a list of entries after the creation date.
-	 * 
+	 *
 	 * @param entries
 	 *            The list of entries to sort.
 	 * @param ascending
@@ -114,9 +116,9 @@ public class EntryUtil {
 				}
 				return result;
 			}
-			
+
 		});
-		
+
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
@@ -124,7 +126,7 @@ public class EntryUtil {
 	 * Sorts a list of entries after the file size. Folders are listed before
 	 * entries with ResourceType.None and they are sorted among themselves after
 	 * the amount of children they contain.
-	 * 
+	 *
 	 * @param entries
 	 *            The list of entries to sort.
 	 * @param ascending
@@ -182,15 +184,15 @@ public class EntryUtil {
 				}
 				return result;
 			}
-			
+
 		});
-		
+
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
 	/**
 	 * Sorts a list of entries after its titles.
-	 * 
+	 *
 	 * @param entries
 	 *            The list of entries to sort.
 	 * @param language
@@ -225,16 +227,16 @@ public class EntryUtil {
 				}
 				return result;
 			}
-			
+
 		});
-		
+
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
 	/**
 	 * Reorders the list of entries with the given ResourceType first or last,
 	 * depending on the boolean parameter.
-	 * 
+	 *
 	 * @param entries
 	 *            The list of entries to reorder.
 	 * @param resourceType
@@ -247,7 +249,7 @@ public class EntryUtil {
 		if (entries == null || resourceType == null) {
 			return;
 		}
-		
+
 		Collections.sort(entries, new Comparator<Entry>() {
 
 			public int compare(Entry e1, Entry e2) {
@@ -268,13 +270,13 @@ public class EntryUtil {
 				}
 				return result;
 			}
-			
+
 		});
 	}
-	
+
 	/**
 	 * Requests a literal value from a metadata graph.
-	 * 
+	 *
 	 * @param graph
 	 *            The graph to be used to search for the title.
 	 * @param resourceURI
@@ -287,19 +289,18 @@ public class EntryUtil {
 	 *         from a specific graph with the given resource URI as root node.
 	 *         If no titles exist null is returned.
 	 */
-	public static String getLabel(Graph graph, java.net.URI resourceURI, Set<URI> predicates, String language) {
+	public static String getLabel(Model graph, URI resourceURI, Set<IRI> predicates, String language) {
 		String fallback = null;
 		if (graph != null && resourceURI != null) {
-			URI resURI = new URIImpl(resourceURI.toString());
-			for (URI titlePred : predicates) {
-				Iterator<Statement> lables = graph.match(resURI, titlePred, null);
-				while (lables.hasNext()) {
-					Value value = lables.next().getObject();
+			IRI resURI = valueFactory.createIRI(resourceURI.toString());
+			for (IRI titlePred : predicates) {
+				for (Statement statement : graph.filter(resURI, titlePred, null)) {
+					Value value = statement.getObject();
 					Literal lit = null;
 					if (value instanceof Literal) {
 						lit = (Literal) value;
-					} else if (value instanceof org.openrdf.model.Resource) {
-						Iterator<Statement> indirectLables = graph.match((org.openrdf.model.Resource) value, RDF.VALUE, null);
+					} else if (value instanceof org.eclipse.rdf4j.model.Resource) {
+						Iterator<Statement> indirectLables = graph.filter((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null).iterator();
 						if (indirectLables.hasNext()) {
 							Value indirectValue = indirectLables.next().getObject();
 							if (indirectValue instanceof Literal) {
@@ -309,8 +310,7 @@ public class EntryUtil {
 					}
 					if (lit != null) {
 						if (language != null) {
-							String litLang = lit.getLanguage();
-							if (litLang != null && litLang.equalsIgnoreCase(language)) {
+							if (lit.getLanguage().isPresent() && lit.getLanguage().get().equalsIgnoreCase(language)) {
 								return lit.stringValue();
 							} else {
 								fallback = lit.stringValue();
@@ -324,29 +324,28 @@ public class EntryUtil {
 		}
 		return fallback;
 	}
-	
-	public static String getLabel(Graph graph, java.net.URI resourceURI, URI predicate, String language) {
-		Set<URI> predicates = new HashSet<URI>();
+
+	public static String getLabel(Model graph, URI resourceURI, IRI predicate, String language) {
+		Set<IRI> predicates = new HashSet<>();
 		predicates.add(predicate);
 		return getLabel(graph, resourceURI, predicates, language);
 	}
-	
-	public static org.openrdf.model.URI getResourceAsURI(Graph graph, java.net.URI resourceURI, URI predicate) {
+
+	public static IRI getResourceAsURI(Model graph, URI resourceURI, IRI predicate) {
 		if (graph != null && resourceURI != null) {
-			URI resURI = new URIImpl(resourceURI.toString());
-			Iterator<Statement> stmnts = graph.match(resURI, predicate, null);
-			while (stmnts.hasNext()) {
-				Value value = stmnts.next().getObject();
-				if (value instanceof org.openrdf.model.URI) {
-					return (org.openrdf.model.URI) value;
+			IRI resURI = valueFactory.createIRI(resourceURI.toString());
+			for (Statement statement : graph.filter(resURI, predicate, null)) {
+				Value value = statement.getObject();
+				if (value instanceof IRI) {
+					return (IRI) value;
 				}
 			}
 		}
 		return null;
 	}
 
-	public static String getResource(Graph graph, java.net.URI resourceURI, URI predicate) {
-		URI result = getResourceAsURI(graph, resourceURI, predicate);
+	public static String getResource(Model graph, URI resourceURI, IRI predicate) {
+		IRI result = getResourceAsURI(graph, resourceURI, predicate);
 		if (result != null) {
 			return result.stringValue();
 		}
@@ -355,7 +354,7 @@ public class EntryUtil {
 
 	/**
 	 * Requests the title of an Entry.
-	 * 
+	 *
 	 * @param graph
 	 *            The graph to be used to search for the title.
 	 * @param resourceURI
@@ -368,16 +367,16 @@ public class EntryUtil {
 	 *         from a specific graph with the given resource URI as root node.
 	 *         If no titles exist null is returned.
 	 */
-	public static String getTitle(Graph graph, java.net.URI resourceURI, String language) {
+	public static String getTitle(Model graph, URI resourceURI, String language) {
 		if (graph != null && resourceURI != null) {
-			Set<URI> titlePredicates = new HashSet<URI>();
-			titlePredicates.add(new URIImpl(NS.dcterms + "title"));
-			titlePredicates.add(new URIImpl(NS.dc + "title"));
+			Set<IRI> titlePredicates = new HashSet<>();
+			titlePredicates.add(valueFactory.createIRI(NS.dcterms + "title"));
+			titlePredicates.add(valueFactory.createIRI(NS.dc + "title"));
 			return getLabel(graph, resourceURI, titlePredicates, language);
 		}
 		return null;
 	}
-	
+
 	public static String getTitle(Entry entry, String language) {
 		if (entry != null) {
 			try {
@@ -388,16 +387,16 @@ public class EntryUtil {
 		}
 		return null;
 	}
-	
+
 	public static String getName(Entry entry) {
 		String result = null;
 		if (entry != null) {
-			String name = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl(NS.foaf + "name"), null);
+			String name = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), valueFactory.createIRI(NS.foaf + "name"), null);
 			if (name != null) {
 				return name;
 			}
-			String givenName = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl(NS.foaf + "givenName"), null);
-			String familyName = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl(NS.foaf + "familyName"), null);
+			String givenName = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), valueFactory.createIRI(NS.foaf + "givenName"), null);
+			String familyName = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), valueFactory.createIRI(NS.foaf + "familyName"), null);
 			if (givenName != null) {
 				result = givenName;
 			}
@@ -411,19 +410,19 @@ public class EntryUtil {
 		}
 		return result;
 	}
-	
+
 	public static String getStructuredName(Entry entry) {
 		String result = null;
 		if (entry != null) {
-			Set<URI> foafFirstName = new HashSet<URI>();
-			Set<URI> foafSurname = new HashSet<URI>();
-			foafFirstName.add(new URIImpl(NS.foaf + "firstName"));
-			foafFirstName.add(new URIImpl(NS.foaf + "givenName"));
-			foafSurname.add(new URIImpl(NS.foaf + "surname"));
-			foafSurname.add(new URIImpl(NS.foaf + "lastName"));
-			foafSurname.add(new URIImpl(NS.foaf + "familyName"));
+			Set<IRI> foafFirstName = new HashSet<>();
+			Set<IRI> foafSurname = new HashSet<>();
+			foafFirstName.add(valueFactory.createIRI(NS.foaf + "firstName"));
+			foafFirstName.add(valueFactory.createIRI(NS.foaf + "givenName"));
+			foafSurname.add(valueFactory.createIRI(NS.foaf + "surname"));
+			foafSurname.add(valueFactory.createIRI(NS.foaf + "lastName"));
+			foafSurname.add(valueFactory.createIRI(NS.foaf + "familyName"));
 			String firstName = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafFirstName, null);
-			String surname = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafSurname, null); 
+			String surname = getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafSurname, null);
 			if (surname != null) {
 				result = surname;
 			}
@@ -437,45 +436,45 @@ public class EntryUtil {
 		}
 		return result;
 	}
-	
+
 	public static String getFirstName(Entry entry) {
 		if (entry != null) {
-			Set<URI> foafFN = new HashSet<URI>();
-			foafFN.add(new URIImpl(NS.foaf + "givenName"));
-			foafFN.add(new URIImpl(NS.foaf + "firstName"));
+			Set<IRI> foafFN = new HashSet<>();
+			foafFN.add(valueFactory.createIRI(NS.foaf + "givenName"));
+			foafFN.add(valueFactory.createIRI(NS.foaf + "firstName"));
 			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafFN, null);
 		}
 		return null;
 	}
-	
+
 	public static String getLastName(Entry entry) {
 		if (entry != null) {
-			Set<URI> foafLN = new HashSet<URI>();
-			foafLN.add(new URIImpl(NS.foaf + "surname"));
-			foafLN.add(new URIImpl(NS.foaf + "lastName"));
-			foafLN.add(new URIImpl(NS.foaf + "familyName"));
+			Set<IRI> foafLN = new HashSet<>();
+			foafLN.add(valueFactory.createIRI(NS.foaf + "surname"));
+			foafLN.add(valueFactory.createIRI(NS.foaf + "lastName"));
+			foafLN.add(valueFactory.createIRI(NS.foaf + "familyName"));
 			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafLN, null);
 		}
 		return null;
 	}
-	
+
 	public static String getEmail(Entry entry) {
 		if (entry != null) {
-			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl(NS.foaf + "mbox"), null);
+			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), valueFactory.createIRI(NS.foaf + "mbox"), null);
 		}
 		return null;
 	}
-	
+
 	public static String getMemberOf(Entry entry) {
 		if (entry != null) {
-			return getResource(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl("http://open.vocab.org/terms/isMemberOf"));
+			return getResource(entry.getMetadataGraph(), entry.getResourceURI(), valueFactory.createIRI("http://open.vocab.org/terms/isMemberOf"));
 		}
 		return null;
 	}
-	
+
 	public static String getFOAFTitle(Entry entry) {
 		if (entry != null) {
-			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), new URIImpl(NS.foaf + "title"), null);
+			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), valueFactory.createIRI(NS.foaf + "title"), null);
 		}
 		return null;
 	}
@@ -483,44 +482,60 @@ public class EntryUtil {
 	/**
 	 * Retrieves all titles from the metadata of an Entry. Includes cached
 	 * external metadata if it exists.
-	 * 
+	 *
 	 * @param entry
 	 *            Entry of which the titles should be returned.
 	 * @return Returns all key/value (title/language) pairs for dcterms:title
 	 *         and dc:title
 	 */
 	public static Map<String, String> getTitles(Entry entry) {
-		ValueFactory vf = new ValueFactoryImpl();
-		List<URI> titlePredicates = new ArrayList<>();
-		titlePredicates.add(vf.createURI(NS.foaf, "name"));
-		titlePredicates.add(vf.createURI(NS.vcard, "fn"));
-		titlePredicates.add(vf.createURI(NS.dcterms, "title"));
-		titlePredicates.add(vf.createURI(NS.dc, "title"));
-		titlePredicates.add(vf.createURI(NS.skos, "prefLabel"));
-		titlePredicates.add(vf.createURI(NS.skos, "altLabel"));
-		titlePredicates.add(vf.createURI(NS.skos, "hiddenLabel"));
-		titlePredicates.add(vf.createURI(NS.rdfs, "label"));
-		titlePredicates.add(vf.createURI(NS.schema, "name"));
+		List<IRI> titlePredicates = new ArrayList<>();
+		titlePredicates.add(valueFactory.createIRI(NS.foaf, "name"));
+		titlePredicates.add(valueFactory.createIRI(NS.vcard, "fn"));
+		titlePredicates.add(valueFactory.createIRI(NS.dcterms, "title"));
+		titlePredicates.add(valueFactory.createIRI(NS.dc, "title"));
+		titlePredicates.add(valueFactory.createIRI(NS.skos, "prefLabel"));
+		titlePredicates.add(valueFactory.createIRI(NS.skos, "altLabel"));
+		titlePredicates.add(valueFactory.createIRI(NS.skos, "hiddenLabel"));
+		titlePredicates.add(valueFactory.createIRI(NS.rdfs, "label"));
+		titlePredicates.add(valueFactory.createIRI(NS.schema, "name"));
 		return getLiteralValues(entry, titlePredicates);
 	}
-	
+
 	/**
 	 * Retrieves all descriptions from the metadata of an Entry. Includes cached
 	 * external metadata if it exists.
-	 * 
+	 *
 	 * @param entry
 	 *            Entry from where the descriptions should be returned.
 	 * @return Returns all key/value (description/language) pairs for dcterms:description
 	 *         and dc:description
 	 */
 	public static Map<String, String> getDescriptions(Entry entry) {
-		ValueFactory vf = new ValueFactoryImpl();
-		List<URI> descPreds = new ArrayList<>();
-		descPreds.add(vf.createURI(NS.dcterms, "description"));
-		descPreds.add(vf.createURI(NS.dc, "description"));
+		List<IRI> descPreds = new ArrayList<>();
+		descPreds.add(valueFactory.createIRI(NS.dcterms, "description"));
+		descPreds.add(valueFactory.createIRI(NS.dc, "description"));
 		return getLiteralValues(entry, descPreds);
 	}
 
+	public static String getDescription(Entry entry, String language) {
+		checkArgument(language != null, "language parameter must not be null");
+
+		var descriptions = getDescriptions(entry).entrySet();
+		if (descriptions.isEmpty()) {
+			return null;
+		}
+
+		String description = null;
+		for (var descEntry : descriptions) {
+			description = descEntry.getKey();
+			if (language.equals(descEntry.getValue())) {
+				break;
+			}
+		}
+
+		return description;
+	}
 
 	/**
 	 * Retrieves all literals of subjects, tags and keywords from the metadata of an Entry.
@@ -530,11 +545,10 @@ public class EntryUtil {
 	 * @return Returns all matching literal-language pairs.
 	 */
 	public static Map<String, String> getTagLiterals(Entry entry) {
-		ValueFactory vf = new ValueFactoryImpl();
-		List<URI> preds = new ArrayList<>();
-		preds.add(vf.createURI(NS.dcterms, "subject"));
-		preds.add(vf.createURI(NS.dc, "subject"));
-		preds.add(vf.createURI(NS.dcat, "keyword"));
+		List<IRI> preds = new ArrayList<>();
+		preds.add(valueFactory.createIRI(NS.dcterms, "subject"));
+		preds.add(valueFactory.createIRI(NS.dc, "subject"));
+		preds.add(valueFactory.createIRI(NS.dcat, "keyword"));
 		return getLiteralValues(entry, preds);
 	}
 
@@ -546,10 +560,9 @@ public class EntryUtil {
 	 * @return Returns all matching literal-language pairs.
 	 */
 	public static List<String> getTagResources(Entry entry) {
-		ValueFactory vf = new ValueFactoryImpl();
-		Set<URI> preds = new HashSet<URI>();
-		preds.add(vf.createURI(NS.dc, "subject"));
-		preds.add(vf.createURI(NS.dcterms, "subject"));
+		Set<IRI> preds = new HashSet<>();
+		preds.add(valueFactory.createIRI(NS.dc, "subject"));
+		preds.add(valueFactory.createIRI(NS.dcterms, "subject"));
 		return getResourceValues(entry, preds);
 	}
 
@@ -560,12 +573,12 @@ public class EntryUtil {
 	 * @param predicates A list of predicates to use for statement matching.
 	 * @return Returns all matching literal-language pairs.
 	 */
-	public static Map<String, String> getLiteralValues(Entry entry, List<URI> predicates) {
+	public static Map<String, String> getLiteralValues(Entry entry, List<IRI> predicates) {
 		if (entry == null || predicates == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
 
-		Graph graph = null;
+		Model graph = null;
 		try {
 			graph = entry.getMetadataGraph();
 		} catch (AuthorizationException ae) {
@@ -573,22 +586,19 @@ public class EntryUtil {
 		}
 
 		if (graph != null) {
-			URI resourceURI = new URIImpl(entry.getResourceURI().toString());
-			Map<String, String> result = new LinkedHashMap<String, String>();
-			for (URI pred : predicates) {
-				Iterator<Statement> stmnts = graph.match(resourceURI, pred, null);
-				while (stmnts.hasNext()) {
-					Value value = stmnts.next().getObject();
-					if (value instanceof Literal) {
-						Literal lit = (Literal) value;
-						result.put(lit.stringValue(), lit.getLanguage());
-					} else if (value instanceof org.openrdf.model.Resource) {
-						Iterator<Statement> stmnts2 = graph.match((org.openrdf.model.Resource) value, RDF.VALUE, null);
+			IRI resourceURI = valueFactory.createIRI(entry.getResourceURI().toString());
+			Map<String, String> result = new LinkedHashMap<>();
+			for (IRI pred : predicates) {
+				for (Statement statement : graph.filter(resourceURI, pred, null)) {
+					Value value = statement.getObject();
+					if (value instanceof Literal lit) {
+						result.put(lit.stringValue(), lit.getLanguage().orElse(null));
+					} else if (value instanceof org.eclipse.rdf4j.model.Resource) {
+						Iterator<Statement> stmnts2 = graph.filter((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null).iterator();
 						if (stmnts2.hasNext()) {
 							Value value2 = stmnts2.next().getObject();
-							if (value2 instanceof Literal) {
-								Literal lit2 = (Literal) value2;
-								result.put(lit2.stringValue(), lit2.getLanguage());
+							if (value2 instanceof Literal lit2) {
+								result.put(lit2.stringValue(), lit2.getLanguage().orElse(null));
 							}
 						}
 					}
@@ -606,12 +616,12 @@ public class EntryUtil {
 	 * @param predicates A list of predicates to use for statement matching.
 	 * @return Returns a list of URIs.
 	 */
-    public static List<String> getResourceValues(Entry entry, Set<URI> predicates) {
+    public static List<String> getResourceValues(Entry entry, Set<IRI> predicates) {
 		if (entry == null || predicates == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
 
-		Graph graph = null;
+		Model graph = null;
         try {
             graph = entry.getMetadataGraph();
         } catch (AuthorizationException ae) {
@@ -625,18 +635,17 @@ public class EntryUtil {
         return new ArrayList<>();
     }
 
-	public static List<String> getResourceValues(Graph graph, java.net.URI resourceURI, Set<URI> predicates) {
+	public static List<String> getResourceValues(Model graph, URI resourceURI, Set<IRI> predicates) {
 		if (graph == null || predicates == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
 
 		List<String> result = new ArrayList<>();
-		for (URI pred : predicates) {
-			Iterator<Statement> subjects = graph.match(new URIImpl(resourceURI.toString()), pred, null);
-			while (subjects.hasNext()) {
-				Value value = subjects.next().getObject();
-				if (value instanceof org.openrdf.model.URI) {
-					org.openrdf.model.Resource res = (org.openrdf.model.Resource) value;
+		for (IRI pred : predicates) {
+			for (Statement statement : graph.filter(valueFactory.createIRI(resourceURI.toString()), pred, null)) {
+				Value value = statement.getObject();
+				if (value instanceof IRI) {
+					org.eclipse.rdf4j.model.Resource res = (org.eclipse.rdf4j.model.Resource) value;
 					result.add(res.stringValue());
 				}
 			}
@@ -646,13 +655,13 @@ public class EntryUtil {
 	}
 
 	/**
-	 * FIXME this does not take entries in deleted folders into consideration 
+	 * FIXME this does not take entries in deleted folders into consideration
 	 */
 	public static boolean isDeleted(Entry entry) {
 		String repoURL = entry.getRepositoryManager().getRepositoryURL().toString();
 		String contextID = entry.getContext().getEntry().getId();
-		java.net.URI trashURI = URISplit.fabricateURI(repoURL, contextID, RepositoryProperties.LIST_PATH, "_trash");
-		Set<java.net.URI> referredBy = entry.getReferringListsInSameContext();
+		URI trashURI = URISplit.fabricateURI(repoURL, contextID, RepositoryProperties.LIST_PATH, "_trash");
+		Set<URI> referredBy = entry.getReferringListsInSameContext();
 		if ((referredBy.size() == 1) && (referredBy.contains(trashURI))) {
 			return true;
 		}
@@ -677,10 +686,10 @@ public class EntryUtil {
 	 * @param rm A RepositoryManager instance.
 	 * @return Returns the merged metadata graphs of all matching entries.
 	 */
-	public static TraversalResult traverseAndLoadEntryMetadata(Set<URI> entries, Set<java.net.URI> propertiesToFollow, Map<String, String> blacklist, int level, int depth, Multimap<URI, Integer> visited, Context context, RepositoryManager rm) {
+	public static TraversalResult traverseAndLoadEntryMetadata(Set<IRI> entries, Set<URI> propertiesToFollow, Map<String, String> blacklist, int level, int depth, Multimap<IRI, Integer> visited, Context context, RepositoryManager rm) {
 		Model resultGraph = new LinkedHashModel();
 		Date latestModified = null;
-		for (URI r : entries) {
+		for (IRI r : entries) {
 	/*		if (!r.toString().startsWith(rm.getRepositoryURL().toString())) {
 				log.debug("URI has external prefix, skipping: " + r);
 				continue;
@@ -692,7 +701,7 @@ public class EntryUtil {
 
 			Model graph = null;
 			try {
-				java.net.URI uri = java.net.URI.create(r.toString());
+				URI uri = URI.create(r.toString());
 				Entry fetchedEntry = null;
 				ContextManager cm = rm.getContextManager();
 				if (context != null) {
@@ -750,15 +759,15 @@ public class EntryUtil {
 			}
 
 			if (graph != null) {
-				visited.put((URI) r, level);
+				visited.put((IRI) r, level);
 				if (graphContainsPredicateObjectTuple(graph, blacklist)) {
 					log.debug("Found blacklisted predicate/object tuple in graph, excluding " + r);
 				} else {
 					resultGraph.addAll(graph);
 					if (propertiesToFollow != null && level < depth) {
-						Set<URI> objects = new HashSet<>();
-						for (java.net.URI prop : propertiesToFollow) {
-							objects.addAll(valueToURI(graph.filter(null, new URIImpl(prop.toString()), null).objects()));
+						Set<IRI> objects = new HashSet<>();
+						for (URI prop : propertiesToFollow) {
+							objects.addAll(valueToURI(graph.filter(null, valueFactory.createIRI(prop.toString()), null).objects()));
 						}
 						objects.remove(r);
 						if (objects.size() > 0) {
@@ -819,11 +828,11 @@ public class EntryUtil {
 	 * @param values A set of Values.
 	 * @return A filtered and converted set of URIs.
 	 */
-	public static Set<URI> valueToURI(Set<Value> values) {
-		Set<URI> result = new HashSet<>();
+	public static Set<IRI> valueToURI(Set<Value> values) {
+		Set<IRI> result = new HashSet<>();
 		for (Value v : values) {
-			if (v != null && v instanceof URI) {
-				result.add((URI) v);
+			if (v != null && v instanceof IRI) {
+				result.add((IRI) v);
 			}
 		}
 		return result;

@@ -38,6 +38,6 @@ public interface Group extends Resource {
 
 	public java.util.List<User> members();
 
-	public java.util.List<java.net.URI> memberUris();
+	public java.util.List<URI> memberUris();
 
 }

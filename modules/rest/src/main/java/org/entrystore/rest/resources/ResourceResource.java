@@ -17,20 +17,42 @@
 package org.entrystore.rest.resources;
 
 import com.google.common.html.HtmlEscapers;
-import com.sun.syndication.feed.synd.SyndContent;
-import com.sun.syndication.feed.synd.SyndContentImpl;
-import com.sun.syndication.feed.synd.SyndEntry;
-import com.sun.syndication.feed.synd.SyndEntryImpl;
-import com.sun.syndication.feed.synd.SyndFeed;
-import com.sun.syndication.feed.synd.SyndFeedImpl;
-import com.sun.syndication.io.FeedException;
-import com.sun.syndication.io.SyndFeedOutput;
+import com.rometools.rome.feed.synd.SyndContent;
+import com.rometools.rome.feed.synd.SyndContentImpl;
+import com.rometools.rome.feed.synd.SyndEntry;
+import com.rometools.rome.feed.synd.SyndEntryImpl;
+import com.rometools.rome.feed.synd.SyndFeed;
+import com.rometools.rome.feed.synd.SyndFeedImpl;
+import com.rometools.rome.io.FeedException;
+import com.rometools.rome.io.SyndFeedOutput;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.StringWriter;
+import java.net.URI;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Vector;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.util.ClientUtils;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
@@ -60,8 +82,6 @@ import org.entrystore.rest.util.Util;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.openrdf.model.Graph;
-import org.openrdf.rio.RDFFormat;
 import org.restlet.Client;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -84,30 +104,9 @@ import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.StringWriter;
-import java.net.URI;
-import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Vector;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-
 /**
- * This class is the resource for entries. 
- * 
+ * This class is the resource for entries.
+ *
  * @author Eric Johansson
  * @author Hannes Ebner
  */
@@ -131,20 +130,20 @@ public class ResourceResource extends BaseResource {
 
 	/**
 	 * GET
-	 * 
+	 *
 	 * From the REST API:
-	 * 
+	 *
 	 * <pre>
 	 * GET {baseURI}/{portfolio-id}/resource/{entry-id}
 	 * </pre>
-	 * 
+	 *
 	 * @return The Representation as JSON
 	 */
 	@Get
 	public Representation represent() {
 		try {
 			if (entry == null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
@@ -152,7 +151,7 @@ public class ResourceResource extends BaseResource {
 
 			// the check for resource safety is necessary to avoid an implicit
 			// getMetadata() in the case of a PUT on (not yet) existant metadata
-			// - this is e.g. the case if conditional requests are issued 
+			// - this is e.g. the case if conditional requests are issued
 			if (Method.GET.equals(getRequest().getMethod())) {
 				result = getResource();
 			} else {
@@ -221,7 +220,7 @@ public class ResourceResource extends BaseResource {
 				// Entry URI of the Entry to be moved
 				URI movableEntry = movableEntryString.startsWith("http://") ? URI.create(movableEntryString) : URI.create(baseURI + movableEntryString);
 				// Resource URI of the source List
-				
+
 				URI movableEntrySource = null;
 				if (movableEntrySourceString != null) {
 					movableEntrySource = movableEntrySourceString.startsWith("http://") ? URI.create(movableEntrySourceString) : URI.create(baseURI + movableEntrySourceString);
@@ -250,7 +249,7 @@ public class ResourceResource extends BaseResource {
 					getResponse().setEntity(new JsonRepresentation(jsonError));
 					return;
 				}
-				
+
 				JSONObject result = new JSONObject();
 				try {
 					result.put("entryURI", movedEntry.getEntryURI());
@@ -272,7 +271,7 @@ public class ResourceResource extends BaseResource {
 		if (entry == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		}
-		
+
 		try {
 			if ((EntryType.Link.equals(entry.getEntryType()) ||
 					EntryType.Reference.equals(entry.getEntryType()) ||
@@ -326,7 +325,7 @@ public class ResourceResource extends BaseResource {
 				Data data = (Data) entry.getResource();
 				if (data.delete() == false) {
 					log.error("Unable to delete resource of entry " + entry.getEntryURI());
-					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorUnknownKind));
 				}
 			}
@@ -426,10 +425,10 @@ public class ResourceResource extends BaseResource {
 				tmpFile.delete();
 			}
 		}
-		
+
 		return Status.SUCCESS_CREATED;
 	}
-	
+
 	public File writeStreamToTmpFile(InputStream is) throws IOException {
 		File tmpFile = File.createTempFile("scam_import_", ".zip");
 		log.info("[IMPORT] Created temporary file: " + tmpFile);
@@ -441,7 +440,7 @@ public class ResourceResource extends BaseResource {
 	private void importRDFResource(String rdfString) {
 		// TODO
 	}
-	
+
 	public Set<Entry> getListChildrenRecursively(Entry listEntry) {
 		Set<Entry> result = new HashSet<Entry>();
 		if (GraphType.List.equals(listEntry.getGraphType()) && EntryType.Local.equals(listEntry.getEntryType())) {
@@ -462,12 +461,12 @@ public class ResourceResource extends BaseResource {
 		}
 		return result;
 	}
-	
+
 	public StringRepresentation getSyndicationSolr(Entry entry, String type) {
 		if (getRM().getIndex() == null) {
 			return null;
 		}
-		
+
 		int FEED_SIZE = 250;
 		if (parameters.containsKey("feedSize")) {
 			try {
@@ -476,7 +475,7 @@ public class ResourceResource extends BaseResource {
 				log.warn("Feed size parameter was not a legal Integer: " + nfe.getMessage());
 			}
 		}
-		
+
 		SyndFeed feed = new SyndFeedImpl();
 		feed.setFeedType(type);
 
@@ -495,11 +494,11 @@ public class ResourceResource extends BaseResource {
 			alias = EntryUtil.getTitle(entry, "en");
 			solrQueryValue = "lists:";
 		}
-		
+
 		feed.setTitle("Feed of \"" + alias + "\"");
 		feed.setDescription("A syndication feed containing the 50 most recent items from \"" + alias + "\"");
 		feed.setLink(entry.getResourceURI().toString());
-		
+
 		solrQueryValue += ClientUtils.escapeQueryChars(entry.getResourceURI().toString());
 		SolrQuery solrQuery = new SolrQuery(solrQueryValue);
 		solrQuery.setStart(0);
@@ -513,7 +512,7 @@ public class ResourceResource extends BaseResource {
 			recursiveEntries.addAll(getListChildrenRecursively(e));
 		}
 		EntryUtil.sortAfterModificationDate(recursiveEntries, false, null);
-		
+
 		int limitedCount = 0;
 		for (Entry e : recursiveEntries) {
 			SyndEntry syndEntry;
@@ -525,7 +524,7 @@ public class ResourceResource extends BaseResource {
 
 			SyndContent description = new SyndContentImpl();
 			description.setType("text/plain");
-			
+
 			Map<String, String> descriptions = EntryUtil.getDescriptions(e);
 			Set<java.util.Map.Entry<String,String>> descEntrySet = descriptions.entrySet();
 			String desc = null;
@@ -535,13 +534,13 @@ public class ResourceResource extends BaseResource {
 					break;
 				}
 			}
-			
-			if (desc != null) {  
+
+			if (desc != null) {
 				description.setValue(desc);
 			}
 
 			syndEntry.setDescription(description);
-			
+
 			URI creator = e.getCreator();
 			if (creator != null) {
 				Entry creatorEntry = getRM().getPrincipalManager().getByEntryURI(creator);
@@ -550,9 +549,9 @@ public class ResourceResource extends BaseResource {
 					syndEntry.setAuthor(creatorName);
 				}
 			}
-			
+
 			syndEntries.add(syndEntry);
-			
+
 			if (limitedCount++ >= FEED_SIZE) {
 				break;
 			}
@@ -566,7 +565,7 @@ public class ResourceResource extends BaseResource {
 			log.error(fe.getMessage());
 			s = fe.getMessage();
 		}
-		
+
 		String feedType = feed.getFeedType();
 		MediaType mediaType = null;
 		if (feedType != null) {
@@ -647,7 +646,7 @@ public class ResourceResource extends BaseResource {
 
 	/**
 	 * Gets the resource's JSON representation
-	 * 
+	 *
 	 * @return JSON representation
 	 */
 	private Representation getResource() throws AuthorizationException {
@@ -677,7 +676,7 @@ public class ResourceResource extends BaseResource {
 			if (preferredMediaType == null) {
 				preferredMediaType = MediaType.APPLICATION_RDF_XML;
 			}
-			Graph graph = null;
+			Model graph = null;
 			if (list) {
 				graph = ((org.entrystore.List) entry.getResource()).getGraph();
 			} else {
@@ -724,31 +723,31 @@ public class ResourceResource extends BaseResource {
 			GraphType gt = entry.getGraphType();
 			/*** String ***/
 			if (GraphType.String.equals(gt)) {
-				StringResource stringResource = (StringResource)entry.getResource(); 
+				StringResource stringResource = (StringResource)entry.getResource();
 				return new StringRepresentation(stringResource.getString());
 			}
 
 			/*** Graph ***/
 			if (GraphType.Graph.equals(gt) || GraphType.Pipeline.equals(gt)) {
-				RDFResource graphResource = (RDFResource) entry.getResource(); 
-				Graph graph = graphResource.getGraph();
+				RDFResource graphResource = (RDFResource) entry.getResource();
+				Model graph = graphResource.getGraph();
 				if (graph == null) {
 					getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-					return new JsonRepresentation("{\"error\":\"The graph has not been set\"}"); 
-				} 
-				return new JsonRepresentation(RDFJSON.graphToRdfJson(graph));  
+					return new JsonRepresentation("{\"error\":\"The graph has not been set\"}");
+				}
+				return new JsonRepresentation(RDFJSON.graphToRdfJson(graph));
 			}
 
 			/*** Context ***/
 			if (GraphType.Context.equals(gt) || GraphType.SystemContext.equals(gt)) {
 				JSONArray array = new JSONArray();
 				Context c = (Context) entry.getResource();
-				Set<URI> uris = c.getEntries(); 
+				Set<URI> uris = c.getEntries();
 				for(URI u: uris) {
 					String entryId = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/')+1);
-					array.put(entryId); 					
+					array.put(entryId);
 				}
-				return new JsonRepresentation(array.toString());	
+				return new JsonRepresentation(array.toString());
 			}
 
 			/*** None ***/
@@ -756,7 +755,7 @@ public class ResourceResource extends BaseResource {
 
 				// Local data
 				if(entry.getResourceType() == ResourceType.InformationResource) {
-					File file = ((Data)entry.getResource()).getDataFile(); 
+					File file = ((Data)entry.getResource()).getDataFile();
 					if  (file != null) {
 						String medTyp = entry.getMimetype();
 						FileRepresentation rep = null;
@@ -795,8 +794,8 @@ public class ResourceResource extends BaseResource {
 
 			/*** User ***/
 			if (GraphType.User.equals(gt)) {
-				JSONObject jsonUserObj = new JSONObject();  
-				User user = (User) entry.getResource(); 
+				JSONObject jsonUserObj = new JSONObject();
+				User user = (User) entry.getResource();
 				try {
 					jsonUserObj.put("name", user.getName());
 
@@ -823,39 +822,39 @@ public class ResourceResource extends BaseResource {
 					return new JsonRepresentation(jsonUserObj);
 				} catch (JSONException e) {
 					log.error(e.getMessage());
-				} 
+				}
 			}
 
 			/*** Group ***/
 			if (GraphType.Group.equals(gt)) {
-				JSONObject jsonGroupObj = new JSONObject(); 
-				Group group = (Group) entry.getResource(); 
-				JSONArray userArray = new JSONArray(); 
+				JSONObject jsonGroupObj = new JSONObject();
+				Group group = (Group) entry.getResource();
+				JSONArray userArray = new JSONArray();
 				try {
 					for(User u : group.members()) {
 						JSONObject childJSON = new JSONObject();
-						JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getGraph())); 
+						JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getGraph()));
 
 						if(childInfo != null) {
-							childJSON.accumulate("info_stub", childInfo);   
-						} else {	
-							childJSON.accumulate("info_stub", new JSONObject());  
+							childJSON.accumulate("info_stub", childInfo);
+						} else {
+							childJSON.accumulate("info_stub", new JSONObject());
 						}
 
-						JSONObject childMd = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getLocalMetadata().getGraph())); 
+						JSONObject childMd = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getLocalMetadata().getGraph()));
 
 						if(childMd != null) {
-							childJSON.accumulate(RepositoryProperties.MD_PATH_STUB, childMd);   
-						} else {	
-							childJSON.accumulate(RepositoryProperties.MD_PATH_STUB, new JSONObject());  
+							childJSON.accumulate(RepositoryProperties.MD_PATH_STUB, childMd);
+						} else {
+							childJSON.accumulate(RepositoryProperties.MD_PATH_STUB, new JSONObject());
 						}
-						userArray.put(childJSON); 
+						userArray.put(childJSON);
 					}
-					jsonGroupObj.put("children", userArray); 
+					jsonGroupObj.put("children", userArray);
 					return new JsonRepresentation(jsonGroupObj);
 				} catch (JSONException e) {
 					log.error(e.getMessage());
-				} 
+				}
 			}
 
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -919,7 +918,7 @@ public class ResourceResource extends BaseResource {
 				}
 				return; // success!
 			} else {
-				Graph graph = GraphUtil.deserializeGraph(requestBody, mediaType);
+				Model graph = GraphUtil.deserializeGraph(requestBody, mediaType);
 				if (graph != null && GraphType.List.equals(entry.getGraphType())) {
 					((org.entrystore.List) entry.getResource()).setGraph(graph);
 				} else {
@@ -963,7 +962,7 @@ public class ResourceResource extends BaseResource {
 					}
 				} catch (FileUploadException e) {
 					error = e.getMessage();
-					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				} catch (IOException ioe) {
 					error = ioe.getMessage();
 					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
@@ -998,7 +997,7 @@ public class ResourceResource extends BaseResource {
 					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				}
 			}
-			
+
 			if (error != null) {
 				if (textarea) {
 					getResponse().setEntity("<textarea>{\"error\":\"" + error + "\"}</textarea>", MediaType.TEXT_HTML);
@@ -1028,19 +1027,19 @@ public class ResourceResource extends BaseResource {
 		/*** String  ***/
 		if(GraphType.String.equals(gt)) {
 			try {
-				StringResource stringResource = (StringResource)entry.getResource(); 
+				StringResource stringResource = (StringResource)entry.getResource();
 				stringResource.setString(getRequest().getEntity().getText());
 			} catch (IOException e) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"Problem with input.\"}"));
 			}
 		}
-		
+
 		/*** Graph and Pipeline ***/
 		if (GraphType.Graph.equals(gt) || GraphType.Pipeline.equals(gt)) {
-			RDFResource graphResource = (RDFResource) entry.getResource(); 
+			RDFResource graphResource = (RDFResource) entry.getResource();
 			if (graphResource != null) {
-				Graph graph = null;
+				Model graph = null;
 				try {
 					graph = GraphUtil.deserializeGraph(getRequest().getEntity().getText(), mediaType);
 				} catch (IOException ioe) {
@@ -1061,7 +1060,7 @@ public class ResourceResource extends BaseResource {
 
 		/*** User ***/
 		if (GraphType.User.equals(gt)) {
-			JSONObject entityJSON = null; 
+			JSONObject entityJSON = null;
 			try {
 				entityJSON = new JSONObject(getRequest().getEntity().getText());
 
@@ -1094,7 +1093,7 @@ public class ResourceResource extends BaseResource {
 				if (entityJSON.has("language")) {
 					String prefLang = entityJSON.getString("language");
 					if (prefLang.equals("")) {
-						resourceUser.setLanguage(null);						
+						resourceUser.setLanguage(null);
 					} else if (!resourceUser.setLanguage(prefLang)) {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Preferred language could not be set.\"}"));
@@ -1109,7 +1108,7 @@ public class ResourceResource extends BaseResource {
 								|| !resourceUser.setHomeContext((Context) entryHomeContext.getResource())) {
 							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 							getResponse().setEntity(new JsonRepresentation("{\"error\":\"Given homecontext is not a context.\"}"));
-							return;						
+							return;
 						}
 					}
 				}
@@ -1138,11 +1137,11 @@ public class ResourceResource extends BaseResource {
 				getResponse().setStatus(Status.SUCCESS_OK);
 			} catch (JSONException e) {
 				log.debug("Wrong JSON syntax: " + e.getMessage());
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
 			} catch (IOException e) {
 				log.error(e.getMessage());
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(new JsonRepresentation("{\"error\":\"IOException\"}"));
 			}
 		}

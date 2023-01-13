@@ -19,6 +19,9 @@ package org.entrystore.harvesting.oaipmh.jobs;
 import ORG.oclc.oai.harvester2.verb.ListRecords;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -28,8 +31,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.converters.ConverterManagerImpl;
 import org.entrystore.repository.config.Settings;
-import org.openrdf.model.Graph;
-import org.openrdf.model.ValueFactory;
 import org.quartz.InterruptableJob;
 import org.quartz.Job;
 import org.quartz.JobDataMap;
@@ -283,21 +284,21 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		//
 		// Before you touch any of the code down there, think twice!
 		
-		org.openrdf.model.URI openrdfEntryResourceURI = null;
+		IRI openrdfEntryResourceURI = null;
 		try {
 			String resourceIdentifier = getResourceIdentifier(recordElement, metadataType);
 			if (resourceIdentifier == null) {
 				log.warn("Resource identifier is null, skipping resource");
 				return;
 			}
-			openrdfEntryResourceURI =  vf.createURI(resourceIdentifier);
+			openrdfEntryResourceURI =  vf.createIRI(resourceIdentifier);
 		} catch (IllegalArgumentException e) {
 			log.error("Skipping this record, no proper resource URI found: " + e.getMessage());
 			return;
 		}
-		org.openrdf.model.URI openrdfEntryMetadataURI = null;
+		IRI openrdfEntryMetadataURI = null;
 		try {
-			openrdfEntryMetadataURI = vf.createURI(target + "?verb=GetRecord&identifier=" + identifier + "&metadataPrefix=" + metadataType);
+			openrdfEntryMetadataURI = vf.createIRI(target + "?verb=GetRecord&identifier=" + identifier + "&metadataPrefix=" + metadataType);
 		} catch (IllegalArgumentException e) {
 			log.error("Illegal external metadata URI, not creating entry: " + e.getMessage());
 			return;
@@ -328,7 +329,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		
 		// if there are no old entries
 		if (entries.isEmpty()) {
-			Graph g = getExternalMetadataGraphFromXML(recordElement, metadataType, entryResourceURI);
+			Model g = getExternalMetadataGraphFromXML(recordElement, metadataType, entryResourceURI);
 			if (g != null) {
 				Entry entry = context.createReference(null, entryResourceURI, entryMetadataURI, null);
 				setCachedMetadataGraph(entry, g);
@@ -388,15 +389,15 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		return (String) expr.evaluate(el, XPathConstants.STRING);
 	}
 	
-	private Graph getExternalMetadataGraphFromXML(Element el, String metadataType, URI resourceURI) throws XPathExpressionException {
+	private Model getExternalMetadataGraphFromXML(Element el, String metadataType, URI resourceURI) throws XPathExpressionException {
 		Node metadata = getMetadataNode(el, metadataType);
 		if (metadata == null || metadata.getChildNodes() == null) {
 			return null;
 		}
-		return (Graph) ConverterManagerImpl.convert(metadataType, metadata, resourceURI, null);
+		return (Model) ConverterManagerImpl.convert(metadataType, metadata, resourceURI, null);
 	}
 
-	private void setCachedMetadataGraph(Entry entry, Graph graph) {
+	private void setCachedMetadataGraph(Entry entry, Model graph) {
 		if (graph != null) {
 			Metadata cachedMD = entry.getCachedExternalMetadata();
 			if (cachedMD != null) {

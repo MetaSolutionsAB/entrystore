@@ -16,11 +16,11 @@
 
 package org.entrystore.rest.resources;
 
+import org.eclipse.rdf4j.model.Model;
 import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.converters.Graph2Entries;
 import org.entrystore.rest.util.GraphUtil;
-import org.openrdf.model.Graph;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
@@ -63,7 +63,7 @@ public class MergeResource extends BaseResource {
 			
 			if (graphString != null) {
 				MediaType mediaType = (format != null) ? format : getRequestEntity().getMediaType();
-				Graph deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
+				Model deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
 				
 				if (deserializedGraph != null) {
 					Graph2Entries g2e = new Graph2Entries(this.context);

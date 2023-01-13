@@ -17,24 +17,26 @@
 package org.entrystore.harvesting.oaipmh.harvester.factory;
 
 
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collection;
-
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.Entry;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvester.factory.HarvesterFactory;
 import org.entrystore.harvester.factory.HarvesterFactoryException;
 import org.entrystore.harvesting.oaipmh.harvester.OAIHarvester;
-import org.entrystore.Entry;
-import org.entrystore.repository.RepositoryException;
-import org.entrystore.impl.RepositoryProperties;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.ValueFactory;
+import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.RepositoryException;
+import org.entrystore.repository.config.Settings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collection;
 
 
 
@@ -119,17 +121,17 @@ public class OAIHarvesterFactory implements HarvesterFactory {
 	}
 
 	private void initOAIHarvester(Entry contextEntry, String timeRegExp, String set, String metadataType, String target) {
-		Graph graph = contextEntry.getGraph(); 
-		ValueFactory vf = graph.getValueFactory(); 
-		org.openrdf.model.URI root = vf.createURI(contextEntry.getEntryURI().toString());
+		Model graph = contextEntry.getGraph();
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		IRI root = vf.createIRI(contextEntry.getEntryURI().toString());
 		try {
-			org.openrdf.model.URI harvesterRoot = vf.createURI(RepositoryProperties.NSbase +"OAIHarvester"); 
-			graph.add(root, vf.createURI(RepositoryProperties.NSbase + "harvester") , harvesterRoot);
-			graph.add(harvesterRoot, vf.createURI(RepositoryProperties.NSbase +"harvestTimeRegExp"), vf.createLiteral(timeRegExp));
-			graph.add(harvesterRoot, vf.createURI(RepositoryProperties.NSbase +"target"), vf.createLiteral(target));
-			graph.add(harvesterRoot, vf.createURI(RepositoryProperties.NSbase +"metadataType"), vf.createLiteral(metadataType));
+			IRI harvesterRoot = vf.createIRI(RepositoryProperties.NSbase +"OAIHarvester");
+			graph.add(root, vf.createIRI(RepositoryProperties.NSbase + "harvester") , harvesterRoot);
+			graph.add(harvesterRoot, vf.createIRI(RepositoryProperties.NSbase +"harvestTimeRegExp"), vf.createLiteral(timeRegExp));
+			graph.add(harvesterRoot, vf.createIRI(RepositoryProperties.NSbase +"target"), vf.createLiteral(target));
+			graph.add(harvesterRoot, vf.createIRI(RepositoryProperties.NSbase +"metadataType"), vf.createLiteral(metadataType));
 			if (set != null) {
-				graph.add(harvesterRoot, vf.createURI(RepositoryProperties.NSbase +"set"), vf.createLiteral(set));
+				graph.add(harvesterRoot, vf.createIRI(RepositoryProperties.NSbase +"set"), vf.createLiteral(set));
 			}
 			contextEntry.setGraph(graph);
 		} catch (RepositoryException e) {
@@ -138,11 +140,11 @@ public class OAIHarvesterFactory implements HarvesterFactory {
 	}
 	
 	public void deleteHarvester(Entry contextEntry) {
-		Graph graph = contextEntry.getGraph();
-		ValueFactory vf = graph.getValueFactory();
+		Model graph = contextEntry.getGraph();
+		ValueFactory vf = SimpleValueFactory.getInstance();
 		try {
-			org.openrdf.model.URI harvesterRoot = vf.createURI(RepositoryProperties.NSbase + "harvester");
-			org.openrdf.model.URI oaiRoot = vf.createURI(RepositoryProperties.NSbase + "OAIHarvester");
+			IRI harvesterRoot = vf.createIRI(RepositoryProperties.NSbase + "harvester");
+			IRI oaiRoot = vf.createIRI(RepositoryProperties.NSbase + "OAIHarvester");
 			Collection<Statement> statements = new ArrayList<Statement>();
 			for (Statement statement : graph) {
 				if (statement.getPredicate().equals(harvesterRoot) ||

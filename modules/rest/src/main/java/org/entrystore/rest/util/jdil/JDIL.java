@@ -16,25 +16,26 @@
 
 package org.entrystore.rest.util.jdil;
 
-import java.util.ArrayList;
+import org.eclipse.rdf4j.model.BNode;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Resource;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.openrdf.model.BNode;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Literal;
-import org.openrdf.model.Resource;
-import org.openrdf.model.Statement;
-import org.openrdf.model.URI;
-import org.openrdf.model.Value;
-import org.openrdf.model.impl.URIImpl;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.eclipse.rdf4j.model.util.Values.*;
 
 /**
  * 
@@ -63,9 +64,9 @@ public class JDIL {
 	 * @param jsonObject the JSONobject with the JDIL-JSON
 	 * @return a new Graph
 	 */
-	public Graph importJDILtoGraph(JSONObject jsonObject) {
+	public Model importJDILtoGraph(JSONObject jsonObject) {
 		try {
-			Graph graph = new org.openrdf.model.impl.GraphImpl();
+			Model graph = new LinkedHashModel();
 			JDILParser.removeJDILStar(jsonObject);
 			this.JDILtoGraph(jsonObject, graph, null, new HashMap<String, BNode>());
 			return graph;
@@ -75,9 +76,9 @@ public class JDIL {
 		return null; 
 	}
 
-	private void JDILtoGraph(JSONObject jsonObject, Graph graph, Resource subject, Map<String, BNode> bnodeResolver) throws JSONException {
+	private void JDILtoGraph(JSONObject jsonObject, Model graph, Resource subject, Map<String, BNode> bnodeResolver) throws JSONException {
 		if (subject == null) { //Assume there is a @id.
-			subject = graph.getValueFactory().createURI(namespaces.expand(jsonObject.getString("@id")));
+			subject = iri(namespaces.expand(jsonObject.getString("@id")));
 		}
 
 		Iterator keyIt = jsonObject.keys();
@@ -88,7 +89,7 @@ public class JDIL {
 				continue;
 			}
 
-			org.openrdf.model.URI spred = graph.getValueFactory().createURI(namespaces.expand(key));
+			IRI spred = iri(namespaces.expand(key));
 			Object obj= jsonObject.opt(key);
 
 			// Recurse (base pattern)
@@ -104,15 +105,15 @@ public class JDIL {
 				}
 			} else {
 				//Take care of literal.
-				graph.add(subject, spred, graph.getValueFactory().createLiteral(obj.toString()));
+				graph.add(subject, spred, literal(obj.toString()));
 			}
 		}
 	}
 
-	private void extract(Graph graph, Resource subject, org.openrdf.model.URI spred, Object obj, Map<String, BNode> bnodeResolver) throws JSONException {
+	private void extract(Model graph, Resource subject, IRI spred, Object obj, Map<String, BNode> bnodeResolver) throws JSONException {
 		if (((JSONObject) obj).has("@id") && !((JSONObject) obj).has("@isBlank")) {
 			//Take care of object
-			org.openrdf.model.URI sobj = graph.getValueFactory().createURI(namespaces.expand(((JSONObject)obj).getString("@id")));
+			IRI sobj = iri(namespaces.expand(((JSONObject)obj).getString("@id")));
 			graph.add(subject, spred, sobj);
 			JDILtoGraph((JSONObject)obj, graph, sobj, bnodeResolver);
 		} else {
@@ -120,11 +121,11 @@ public class JDIL {
 				String bid = ((JSONObject)obj).getString("@id");
 				BNode sobj = null;
 				if (bid == null) {
-					sobj = graph.getValueFactory().createBNode();
+					sobj = bnode();
 				} else if (bnodeResolver.containsKey(bid)){
 					sobj = bnodeResolver.get(bid);
 				} else {
-					sobj = graph.getValueFactory().createBNode();
+					sobj = bnode();
 					bnodeResolver.put(bid, sobj);
 				}
 				graph.add(subject, spred, sobj);
@@ -136,36 +137,28 @@ public class JDIL {
 		}
 	}
 
-	private void exportLiteral(JSONObject obj, Graph graph, Resource subject, org.openrdf.model.URI predicate) {
+	private void exportLiteral(JSONObject obj, Model graph, Resource subject, IRI predicate) {
 		Object objVal= obj.opt("@value");
 		Object objLang= obj.opt("@language");
 		Object objType= obj.opt("@datatype");
 
 		if(objLang != null) { //value + language
-			graph.add(subject, predicate,
-					graph.getValueFactory().createLiteral((String)objVal,(String)objLang));
+			graph.add(subject, predicate, literal((String)objVal,(String)objLang));
 		} else if(objType != null) { //value + type
-			graph.add(subject, predicate,
-					graph.getValueFactory().createLiteral((String) objVal, 
-							new URIImpl(namespaces.expand((String)objType))));
+			graph.add(subject, predicate, literal((String) objVal, iri(namespaces.expand((String)objType))));
 		} else { //value
-			graph.add(subject, 
-					predicate,
-					graph.getValueFactory().createLiteral((String)objVal));
+			graph.add(subject, predicate, literal((String)objVal));
 		}
-
 	}
 
 
 	/**
 	 * pseudo code
-	 * 
 	 *  
 	 * @param graph
-	 * @param root
 	 * @return
 	 */
-	public JSONObject exportRelationGraphToJSON(Graph graph) {
+	public JSONObject exportRelationGraphToJSON(Model graph) {
 		JSONObject result = new JSONObject(); 
 		//HashMap<String, HashMap<String, ArrayList<String>>> objRelations = new HashMap<String, HashMap<String,ArrayList<String>>>();   
 		//HashMap<String, ArrayList<String>> subjRelations = new HashMap<String,ArrayList<String>>();   
@@ -201,7 +194,7 @@ public class JDIL {
 	}
 
 
-	public JSONObject exportGraphToJDIL(Graph graph, Resource root) {
+	public JSONObject exportGraphToJDIL(Model graph, Resource root) {
 		try {
 			HashMap<Resource, JSONObject> res2Jdil= new HashMap<Resource, JSONObject>();
 			HashSet<Resource> notRoots = new HashSet<Resource>();
@@ -224,8 +217,8 @@ public class JDIL {
 
 				} else {
 					Literal lit = (Literal) value;
-					String language = lit.getLanguage();
-					URI datatype = lit.getDatatype();
+					String language = lit.getLanguage().orElse(null);
+					IRI datatype = lit.getDatatype();
 					JSONObject object = new JSONObject();
 					object.accumulate("@value", value.stringValue());
 					if (language != null) {

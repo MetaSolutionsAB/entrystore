@@ -17,10 +17,10 @@
 package org.entrystore.repository.backup;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
-import org.openrdf.rio.RDFFormat;
 import org.quartz.InterruptableJob;
 import org.quartz.Job;
 import org.quartz.JobDataMap;

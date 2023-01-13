@@ -17,22 +17,24 @@
 package org.entrystore.rest.resources;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.ValidatingValueFactory;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.sail.SailRepository;
+import org.eclipse.rdf4j.rio.RDFFormat;
+import org.eclipse.rdf4j.rio.RDFHandlerException;
+import org.eclipse.rdf4j.rio.RDFParseException;
+import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.entrystore.rest.util.GraphUtil;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.Value;
-import org.openrdf.model.impl.LiteralImpl;
-import org.openrdf.model.impl.URIImpl;
-import org.openrdf.repository.Repository;
-import org.openrdf.repository.RepositoryConnection;
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.repository.sail.SailRepository;
-import org.openrdf.rio.RDFFormat;
-import org.openrdf.rio.RDFHandlerException;
-import org.openrdf.rio.RDFParseException;
-import org.openrdf.sail.nativerdf.NativeStore;
 import org.restlet.Response;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
@@ -46,11 +48,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 
@@ -61,7 +62,9 @@ public class ValidatorResource extends BaseResource  {
 
 	static Logger log = LoggerFactory.getLogger(ValidatorResource.class);
 	
-	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+	List<MediaType> supportedMediaTypes = new ArrayList<>();
+
+	ValueFactory vf = new ValidatingValueFactory();
 
 	@Override
 	public void doInit() {
@@ -101,7 +104,7 @@ public class ValidatorResource extends BaseResource  {
 
 		if (graphString != null) {
 			// Test 1: can it be deserialized?
-			Graph deserializedGraph = null;
+			Model deserializedGraph = null;
 			try {
 				deserializedGraph = GraphUtil.deserializeGraphUnsafe(graphString, mt);
 			} catch (RDFHandlerException | RDFParseException | IOException e) {
@@ -115,13 +118,13 @@ public class ValidatorResource extends BaseResource  {
 			}
 			// Test 1 end
 
-			// Test 2: does it work with java.net.URI?
+			// Test 2: does it work as IRI?
 			List<String> errors = new ArrayList<>();
 			for (Statement s : deserializedGraph) {
-				testURI(s.getSubject(), errors);
-				testURI(s.getPredicate(), errors);
-				testURI(s.getObject(), errors);
-				testURI(s.getContext(), errors);
+				testIRI(s.getSubject(), errors);
+				testIRI(s.getPredicate(), errors);
+				testIRI(s.getObject(), errors);
+				testIRI(s.getContext(), errors);
 			}
 			if (!errors.isEmpty()) {
 				setRepresentation(getResponse(), Status.SUCCESS_OK, errors);
@@ -143,7 +146,7 @@ public class ValidatorResource extends BaseResource  {
 			RepositoryConnection rc = null;
 			try {
 				repo = new SailRepository(new NativeStore(tmpPath.toFile()));
-				repo.initialize();
+				repo.init();
 				rc = repo.getConnection();
 				rc.add(deserializedGraph);
 			} catch (RepositoryException e) {
@@ -189,22 +192,22 @@ public class ValidatorResource extends BaseResource  {
 	}
 
 	private void setRepresentation(Response response, Status status, String error) {
-		setRepresentation(response, status, Arrays.asList(error));
+		setRepresentation(response, status, Collections.singletonList(error));
 	}
 
 	private void setRepresentation(Response response, Status status) {
 		setRepresentation(response, status, new ArrayList<>());
 	}
 
-	private void testURI(Value value, List errors) {
+	private void testIRI(Value value, List<String> errors) {
 		if (value != null) {
 			try {
 				String valStr = value.stringValue();
-				if (value instanceof URIImpl) {
-					URI.create(valStr);
-				} else if (value instanceof LiteralImpl) {
+				if (value instanceof IRI) {
+					vf.createIRI(valStr);
+				} else if (value instanceof Literal) {
 					if (valStr.startsWith("http://") || valStr.startsWith("https://")) {
-						URI.create(valStr);
+						vf.createIRI(valStr);
 					}
 				}
 			} catch (IllegalArgumentException e) {

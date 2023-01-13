@@ -17,24 +17,25 @@
 
 package org.entrystore.impl;
 
-import java.net.URI;
-
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Entry;
 import org.entrystore.Resource;
-import org.openrdf.repository.RepositoryConnection;
+
+import java.net.URI;
 
 
 public class ResourceImpl implements Resource {
 
 	protected EntryImpl entry;
-	protected org.openrdf.model.URI resourceURI;
+	protected IRI resourceURI;
 	
 	protected ResourceImpl(EntryImpl entry, String resourceURI) {
 		this.entry = entry;
-		this.resourceURI = entry.repository.getValueFactory().createURI(resourceURI.toString());
+		this.resourceURI = entry.repository.getValueFactory().createIRI(resourceURI.toString());
 	}
 	
-	public ResourceImpl(EntryImpl entry, org.openrdf.model.URI resourceURI) {
+	public ResourceImpl(EntryImpl entry, IRI resourceURI) {
 		this.entry = entry;
 		this.resourceURI = resourceURI;
 	}
@@ -43,7 +44,7 @@ public class ResourceImpl implements Resource {
 		return URI.create(resourceURI.toString());
 	}
 	
-	public org.openrdf.model.URI getSesameURI() {
+	public IRI getSesameURI() {
 		return resourceURI;
 	}
 	

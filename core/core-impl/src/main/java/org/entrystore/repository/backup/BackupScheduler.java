@@ -16,10 +16,10 @@
 
 package org.entrystore.repository.backup;
 
+import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
-import org.openrdf.rio.RDFFormat;
 import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
@@ -29,7 +29,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.text.ParseException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -98,6 +101,30 @@ public class BackupScheduler {
 		log.info("Created backup scheduler");
 	}
 
+	private static RDFFormat getFormat(String formatName) {
+		List<RDFFormat> allFormats = new ArrayList<>();
+		Arrays.asList(
+				RDFFormat.RDFXML,
+				RDFFormat.NTRIPLES,
+				RDFFormat.TURTLE,
+				RDFFormat.N3,
+				RDFFormat.TRIX,
+				RDFFormat.TRIG,
+				RDFFormat.BINARY,
+				RDFFormat.NQUADS,
+				RDFFormat.JSONLD,
+				RDFFormat.RDFJSON,
+				RDFFormat.RDFA);
+
+		for (RDFFormat format : allFormats) {
+			if (format.getName().equalsIgnoreCase(formatName)) {
+				return format;
+			}
+		}
+
+		return null;
+	}
+
 	public static synchronized BackupScheduler getInstance(RepositoryManager rm) {
 		if (instance == null) {
 			log.info("Loading backup configuration");
@@ -113,7 +140,7 @@ public class BackupScheduler {
 			int upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
 			int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
 			int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
-			RDFFormat format = RDFFormat.valueOf(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
+			RDFFormat format = getFormat(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
 			if (format == null) {
 				log.warn("Invalid backup format " + config.getString(Settings.BACKUP_FORMAT + ", falling back to TriX"));
 				format = RDFFormat.TRIX;

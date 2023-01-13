@@ -16,6 +16,9 @@
 
 package org.entrystore.rest.resources;
 
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -37,9 +40,6 @@ import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.openrdf.model.Graph;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.rio.RDFFormat;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
 import org.restlet.data.Status;
@@ -184,7 +184,7 @@ public class EntryResource extends BaseResource {
 
 	private Representation getEntry(MediaType mediaType) {
 		String serializedGraph = null;
-		Graph graph = entry.getGraph();
+		Model graph = entry.getGraph();
 		/* if (MediaType.TEXT_HTML.equals(mediaType)) {
 			return getEntryInHTML();
 		} else */ if (MediaType.APPLICATION_JSON.equals(mediaType)) {
@@ -276,7 +276,7 @@ public class EntryResource extends BaseResource {
 			/*
 			 * Entry information
 			 */
-			Graph entryGraph = entry.getGraph();
+			Model entryGraph = entry.getGraph();
 			JSONObject entryObj = new JSONObject(RDFJSON.graphToRdfJson(entryGraph));
 			jdilObj.accumulate("info", entryObj);
 
@@ -301,7 +301,7 @@ public class EntryResource extends BaseResource {
 			if (EntryType.LinkReference.equals(lt) || EntryType.Reference.equals(lt)) {
 				try {
 					Metadata cachedExternalMd = entry.getCachedExternalMetadata();
-					Graph g = cachedExternalMd.getGraph();
+					Model g = cachedExternalMd.getGraph();
 					if (g != null) {
 						cachedExternalMdObj = new JSONObject(RDFJSON.graphToRdfJson(g));
 						jdilObj.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, cachedExternalMdObj);
@@ -319,7 +319,7 @@ public class EntryResource extends BaseResource {
 			if (EntryType.Local.equals(lt) || EntryType.Link.equals(lt) || EntryType.LinkReference.equals(lt)) {
 				try {
 					Metadata localMd = entry.getLocalMetadata();
-					Graph g = localMd.getGraph();
+					Model g = localMd.getGraph();
 					if (g != null) {
 						localMdObj = new JSONObject(RDFJSON.graphToRdfJson(g));
 						jdilObj.accumulate(RepositoryProperties.MD_PATH, localMdObj);
@@ -337,7 +337,7 @@ public class EntryResource extends BaseResource {
 			 */
 			if (entry.getRelations() != null) {
 				JSONObject relationObj = new JSONObject();
-				relationObj = new JSONObject(RDFJSON.graphToRdfJson(new GraphImpl(entry.getRelations())));
+				relationObj = new JSONObject(RDFJSON.graphToRdfJson(new LinkedHashModel(entry.getRelations())));
 				jdilObj.accumulate(RepositoryProperties.RELATION, relationObj);
 			}
 			
@@ -490,7 +490,7 @@ public class EntryResource extends BaseResource {
 									// get the external metadata
 									Metadata cachedExternalMD = childEntry.getCachedExternalMetadata();
 									if (cachedExternalMD != null) {
-										Graph cachedExternalMDGraph = cachedExternalMD.getGraph();
+										Model cachedExternalMDGraph = cachedExternalMD.getGraph();
 										if (cachedExternalMDGraph != null) {
 											JSONObject childCachedExternalMDJSON = new JSONObject(RDFJSON.graphToRdfJson(cachedExternalMDGraph));
 											childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMDJSON);
@@ -502,7 +502,7 @@ public class EntryResource extends BaseResource {
 									// get the local metadata
 									Metadata localMD = childEntry.getLocalMetadata();
 									if (localMD != null) {
-										Graph localMDGraph = localMD.getGraph();
+										Model localMDGraph = localMD.getGraph();
 										if (localMDGraph != null) {
 											JSONObject localMDJSON = new JSONObject(RDFJSON.graphToRdfJson(localMDGraph));
 											childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
@@ -515,7 +515,7 @@ public class EntryResource extends BaseResource {
 								// childJSON.accumulate(RepositoryProperties.MD_PATH_STUB, new JSONObject());
 							}
 
-							Graph childEntryGraph = childEntry.getGraph();
+							Model childEntryGraph = childEntry.getGraph();
 							JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(childEntryGraph));
 
 							if (childInfo != null) {
@@ -526,7 +526,7 @@ public class EntryResource extends BaseResource {
 							//							childrenObjects.add(childJSON);
 							
 							if (childEntry.getRelations() != null) {
-								Graph childRelationsGraph = new GraphImpl(childEntry.getRelations());
+								Model childRelationsGraph = new LinkedHashModel(childEntry.getRelations());
 								JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
 								childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 							}
@@ -621,7 +621,7 @@ public class EntryResource extends BaseResource {
 
 							//Relations for every user in this group.
 							if (u.getEntry().getRelations() != null) {
-								Graph childRelationsGraph = new GraphImpl(u.getEntry().getRelations());
+								Model childRelationsGraph = new LinkedHashModel(u.getEntry().getRelations());
 								JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
 								childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 							}
@@ -676,7 +676,7 @@ public class EntryResource extends BaseResource {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
-		Graph deserializedGraph = null;
+		Model deserializedGraph = null;
 		if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 			try {
 				JSONObject rdfJSON = new JSONObject(graphString);

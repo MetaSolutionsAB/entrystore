@@ -16,6 +16,11 @@
 
 package org.entrystore.transforms.empty;
 
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
@@ -24,14 +29,10 @@ import org.entrystore.repository.util.NS;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.Transform;
 import org.entrystore.transforms.TransformParameters;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.impl.LinkedHashModel;
-import org.openrdf.model.impl.URIImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Iterator;
+import java.net.URI;
 
 /**
  * Creates an empty pipeline result that can be further processed by external services.
@@ -45,33 +46,30 @@ public class EmptyTransform extends Transform {
 
 	@Override
 	public Object transform(Pipeline pipeline, Entry sourceEntry) {
+		ValueFactory vf = SimpleValueFactory.getInstance();
 		String pipelineURI = pipeline.getEntry().getEntryURI().toString();
 
 		Entry newEntry = pipeline.getEntry().getContext().createResource(null, GraphType.PipelineResult, ResourceType.InformationResource, null);
-		newEntry.setStatus(java.net.URI.create(RepositoryProperties.Pending.toString()));
+		newEntry.setStatus(URI.create(RepositoryProperties.Pending.toString()));
 		String newEntryURI = newEntry.getEntryURI().toString();
-		Graph newEntryGraph = newEntry.getGraph();
-		newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipeline, new URIImpl(pipelineURI));
+		Model newEntryGraph = newEntry.getGraph();
+		newEntryGraph.add(vf.createIRI(newEntryURI), RepositoryProperties.pipeline, vf.createIRI(pipelineURI));
 		if (sourceEntry != null) {
 			String sourceURI = sourceEntry.getEntryURI().toString();
-			newEntryGraph.add(new URIImpl(newEntryURI), RepositoryProperties.pipelineData, new URIImpl(sourceURI));
+			newEntryGraph.add(vf.createIRI(newEntryURI), RepositoryProperties.pipelineData, vf.createIRI(sourceURI));
 		}
 		newEntry.setGraph(newEntryGraph);
 
-		Graph pipelineMd = pipeline.getEntry().getMetadataGraph();
-		Graph pipelineResultMd = new LinkedHashModel();
+		Model pipelineMd = pipeline.getEntry().getMetadataGraph();
+		Model pipelineResultMd = new LinkedHashModel();
 
 		//Copy over title, to make presentation nicer from the start (already when pending)
-		Iterator<Statement> titles = pipelineMd.match(null, new URIImpl(NS.dcterms + "title"), null);
-		while (titles.hasNext()) {
-			Statement titleStmnt = titles.next();
-			pipelineResultMd.add(new URIImpl(newEntry.getResourceURI().toString()), titleStmnt.getPredicate(), titleStmnt.getObject());
+		for (Statement titleStmnt : pipelineMd.filter(null, vf.createIRI(NS.dcterms + "title"), null)) {
+			pipelineResultMd.add(vf.createIRI(newEntry.getResourceURI().toString()), titleStmnt.getPredicate(), titleStmnt.getObject());
 		}
 		//Copy over tags, to make it easier to find specific pipelineresults
-		Iterator<Statement> tags = pipelineMd.match(null, new URIImpl(NS.dcterms + "subject"), null);
-		while (tags.hasNext()) {
-			Statement tagStmnt = tags.next();
-			pipelineResultMd.add(new URIImpl(newEntry.getResourceURI().toString()), tagStmnt.getPredicate(), tagStmnt.getObject());
+		for (Statement tagStmnt : pipelineMd.filter(null, vf.createIRI(NS.dcterms + "subject"), null)) {
+			pipelineResultMd.add(vf.createIRI(newEntry.getResourceURI().toString()), tagStmnt.getPredicate(), tagStmnt.getObject());
 		}
 		if (!pipelineResultMd.isEmpty()) {
 			newEntry.getLocalMetadata().setGraph(pipelineResultMd);

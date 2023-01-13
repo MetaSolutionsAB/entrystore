@@ -48,7 +48,7 @@ public interface User extends Resource, java.security.Principal {
 	boolean setExternalID(String id);
 	
 	/**
-	 * @return a list of groups, each group represented by a java.net.URI
+	 * @return a list of groups, each group represented by a URI
 	 * referring the resource of the group entry.
 	 */
 	Set<URI> getGroups();

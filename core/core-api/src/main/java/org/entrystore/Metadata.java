@@ -16,12 +16,12 @@
 
 package org.entrystore;
 
-import org.openrdf.model.Graph;
+import org.eclipse.rdf4j.model.Model;
 
 import java.net.URI;
 
 /**
- * Represents an RDF graph (Sesame {@link Graph}) for the metadata.
+ * Represents an RDF graph (Sesame {@link Model}) for the metadata.
  * If {@link EntryType} is {@link EntryType#Reference} the RDF
  * graph is a cache of an RDF graph found outside of the repository.
  * 
@@ -35,9 +35,8 @@ public interface Metadata {
 	URI getResourceURI();
 	
 	/**
-	 * @return URI within the context for the metadata, if reference 
-	 * ({@link Entry#isReference()}) the URI for the cached
-	 * metadata in the repository is returned, not the URI to the original 
+	 * @return URI within the context for the metadata, if reference the URI for
+	 * the cached metadata in the repository is returned, not the URI to the original
 	 * metadata. Same as {@link Entry#getLocalMetadataURI()}.
 	 * 
 	 * @see Entry#getLocalMetadataURI()
@@ -46,16 +45,16 @@ public interface Metadata {
 	URI getURI();
 	
 	/**
-	 * @return a RDF graph (Sesame {@link Graph}) for the metadata.
+	 * @return a RDF graph (Sesame {@link Model}) for the metadata.
 	 */
-	Graph getGraph();
+	Model getGraph();
 
 	/**
 	 * Does not work for cached metadata, i.e. check if
 	 * ({@link Entry#getEntryType()}) returns {@link EntryType#Reference}.
-	 * @param replace the old metadata with the new {@link Graph}. 
+	 * @param graph replace the old metadata with the new {@link Model}.
 	 */
-	void setGraph(Graph graph);
+	void setGraph(Model graph);
 	
 	public boolean isCached(); 
 }

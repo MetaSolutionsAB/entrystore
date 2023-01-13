@@ -16,8 +16,9 @@
 
 package org.entrystore;
 
-import org.openrdf.repository.RepositoryException;
-import org.openrdf.rio.RDFWriter;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.rio.RDFWriter;
+import org.entrystore.repository.RepositoryException;
 
 import java.io.File;
 import java.io.IOException;
@@ -164,7 +165,7 @@ public interface ContextManager extends Context {
 	 *         occurences of the search terms in the metadata of the matching
 	 *         entry.
 	 */
-	Map<Entry, Integer> searchLiterals(Set<org.openrdf.model.URI> predicates, String[] terms, String lang, List<URI> context, boolean andOperation);
+	Map<Entry, Integer> searchLiterals(Set<IRI> predicates, String[] terms, String lang, List<URI> context, boolean andOperation);
 	
 	// TODO: not implemented.
 	List<Entry> search(String pattern, List<URI> list);

@@ -16,6 +16,12 @@
 
 package org.entrystore.impl;
 
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -24,11 +30,6 @@ import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryException;
 import org.junit.Before;
 import org.junit.Test;
-import org.openrdf.model.Graph;
-import org.openrdf.model.Statement;
-import org.openrdf.model.ValueFactory;
-import org.openrdf.model.impl.GraphImpl;
-import org.openrdf.model.vocabulary.RDF;
 
 import java.io.File;
 import java.net.URI;
@@ -149,28 +150,28 @@ public class EntryImplTest extends AbstractCoreTest {
 
 	@Test
 	public void rdf() {
-		Graph mmdGraph = listEntry.getGraph();
+		Model mmdGraph = listEntry.getGraph();
 //		assertTrue(mmdGraph.size() == 6);
-		assertTrue(mmdGraph.match(null, RepositoryProperties.resource, null).hasNext());
-		assertTrue(mmdGraph.match(null, RepositoryProperties.metadata, null).hasNext());
-		assertTrue(mmdGraph.match(null, RepositoryProperties.Created, null).hasNext());
-		assertTrue(mmdGraph.match(null, RDF.TYPE, null).hasNext());
+		assertTrue(!mmdGraph.filter(null, RepositoryProperties.resource, null).isEmpty());
+		assertTrue(!mmdGraph.filter(null, RepositoryProperties.metadata, null).isEmpty());
+		assertTrue(!mmdGraph.filter(null, RepositoryProperties.Created, null).isEmpty());
+		assertTrue(!mmdGraph.filter(null, RDF.TYPE, null).isEmpty());
 
 		assertTrue(refEntry.getExternalMetadataCacheDate() == null);
-		refEntry.getCachedExternalMetadata().setGraph(new GraphImpl());
+		refEntry.getCachedExternalMetadata().setGraph(new LinkedHashModel());
 		assertTrue(refEntry.getExternalMetadataCacheDate() != null);
 
 		assertTrue(refLinkEntry.getExternalMetadataCacheDate() == null);
-		refLinkEntry.getCachedExternalMetadata().setGraph(new GraphImpl());
+		refLinkEntry.getCachedExternalMetadata().setGraph(new LinkedHashModel());
 		assertTrue(refLinkEntry.getExternalMetadataCacheDate() != null);
 
 	}
 
 	@Test
 	public void setEntryGraph() {
-		Graph mmdGraph = listEntry.getGraph();
+		Model mmdGraph = listEntry.getGraph();
 		listEntry.setGraph(mmdGraph);
-		Graph mmdGraph2 = listEntry.getGraph();
+		Model mmdGraph2 = listEntry.getGraph();
 		assertTrue(mmdGraph.size() == mmdGraph2.size());
 	}
 
@@ -185,11 +186,11 @@ public class EntryImplTest extends AbstractCoreTest {
         EntryImpl sourceEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
         EntryImpl targetEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
         ValueFactory vf = sourceEntry.getRepository().getValueFactory();
-        org.openrdf.model.URI pred = vf.createURI("http://example.com/related");
+        IRI pred = vf.createIRI("http://example.com/related");
         Statement stm = vf.createStatement(sourceEntry.getSesameResourceURI(), pred, targetEntry.getSesameResourceURI());
         EntryImpl guestE = (EntryImpl) pm.getGuestUser().getEntry();
         Statement readStm = vf.createStatement(sourceEntry.getSesameResourceURI(), RepositoryProperties.Read, guestE.getSesameResourceURI());
-        Graph g = sourceEntry.getGraph();
+        Model g = sourceEntry.getGraph();
 
         //No relations in target entry
         assertTrue(targetEntry.getRelations().isEmpty());
