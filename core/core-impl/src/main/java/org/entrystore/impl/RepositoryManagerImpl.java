@@ -510,7 +510,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					try {
 						solrServer.close();
 					} catch (IOException e) {
-						log.error("Error when shutting Solr Server");
+						log.error("Error when shutting down Solr Server");
 					}
 				}
 				shutdown = true;

@@ -525,14 +525,14 @@ public class EntryStoreApplication extends Application {
 
 	public void shutdownServer() {
 		if (this.component.isPresent()) {
-			log.info("Shutting down Jetty server");
+			log.info("Shutting down server");
 			try {
 				this.component.get().stop();
 			} catch (Exception e) {
 				throw new RuntimeException("Failed to stop server", e);
 			}
 		} else {
-				log.info("Failed to shutdown Jetty server, component not set");
+				log.info("Failed to shutdown server, component not set");
 		}
 	}
 }
