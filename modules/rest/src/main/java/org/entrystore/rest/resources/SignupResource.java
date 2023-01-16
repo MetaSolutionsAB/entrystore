@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.resources;
 
+import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
+
 import com.google.common.base.Joiner;
 import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
@@ -66,11 +68,11 @@ import java.util.Set;
 
 /**
  * Resource to handle manual sign-ups.
- * 
+ *
  * @author Hannes Ebner
  */
 public class SignupResource extends BaseResource {
-	
+
 	private static final Logger log = LoggerFactory.getLogger(SignupResource.class);
 
 	protected SimpleHTML html = new SimpleHTML("Sign-up");
@@ -196,7 +198,9 @@ public class SignupResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		if (HttpUtil.isLargerThan(r, 32768)) {
-			log.warn("The size of the representation is larger than 32KB or unknown, similar requests may be blocked in future versions");
+			log.warn("The size of the representation is larger than 32KB or unknown, request blocked");
+			getResponse().setStatus(CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
+			return;
 		}
 
 		SignupInfo ci = new SignupInfo();
