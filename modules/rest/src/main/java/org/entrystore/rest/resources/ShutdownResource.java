@@ -16,10 +16,14 @@
 
 package org.entrystore.rest.resources;
 
+import java.net.URI;
+import org.entrystore.PrincipalManager;
 import org.entrystore.rest.EntryStoreApplication;
+import org.restlet.data.Status;
 import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
+import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,10 +34,13 @@ public class ShutdownResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(ShutdownResource.class);
 
-	@Get
-	public Representation represent() throws Exception {
-		if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
-			return unauthorizedGET();
+	@Post
+	public void represent() throws Exception {
+		PrincipalManager pm = getRM().getPrincipalManager();
+		URI authUser = pm.getAuthenticatedUserURI();
+		if (!pm.getAdminUser().getURI().equals(authUser) && !pm.getAdminGroup().isMember(pm.getUser(authUser))) {
+			unauthorizedPOST();
+			return;
 		}
 
 		if (getApplication() instanceof EntryStoreApplication application) {
@@ -45,6 +52,6 @@ public class ShutdownResource extends BaseResource {
 			log.warn("Shutdown of server not supported, Application not instance "
 							 + "of EntryStoreApplication but of [{}]", getApplication().getClass());
 		}
-		return new EmptyRepresentation();
+		getResponse().setStatus(Status.SUCCESS_ACCEPTED);
 	}
 }
