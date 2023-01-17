@@ -42,7 +42,7 @@ import org.entrystore.rest.filter.CacheControlFilter;
 import org.entrystore.rest.filter.IgnoreAuthFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
-import org.entrystore.rest.filter.PerfomanceMetricsFilter;
+import org.entrystore.rest.filter.PerformanceMetricsFilter;
 import org.entrystore.rest.resources.CasLoginResource;
 import org.entrystore.rest.resources.ContextResource;
 import org.entrystore.rest.resources.CookieLoginResource;
@@ -368,7 +368,7 @@ public class EntryStoreApplication extends Application {
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
 		CacheControlFilter cacheControl = new CacheControlFilter();
-		PerfomanceMetricsFilter performanceMetrics = new PerfomanceMetricsFilter();
+		PerformanceMetricsFilter performanceMetrics = new PerformanceMetricsFilter();
 
 		ignoreAuth.setNext(cookieAuth);
 

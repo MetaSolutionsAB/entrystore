@@ -8,10 +8,8 @@ import static org.restlet.data.Method.PUT;
 import static org.restlet.data.Status.CLIENT_ERROR_FORBIDDEN;
 import static org.restlet.data.Status.SUCCESS_OK;
 
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
-import org.entrystore.rest.micrometer.EntryscapeSimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -23,7 +21,7 @@ class PerfomanceMetricsFilterTest {
 
 	@Test
 	void testDifferentResourceTypes() {
-		PerfomanceMetricsFilter filter = new PerfomanceMetricsFilter(true);
+		PerformanceMetricsFilter filter = new PerformanceMetricsFilter(true);
 		callFilter(filter, GET, "http://uri:0/search?type=solr&query=title:Bamse", APPLICATION_JSON, SUCCESS_OK);
 		callFilter(filter, GET, "http://uri:0/search/?type=solr&query=title:Bamse", APPLICATION_JSON, SUCCESS_OK);
 		callFilter(filter, GET, "http://uri:0/search", APPLICATION_JSON, SUCCESS_OK);
@@ -39,7 +37,7 @@ class PerfomanceMetricsFilterTest {
 
 	@Test
 	void testDifferentMethodsAndResourceTypesAndMediaTypesAndStatuses() {
-		PerfomanceMetricsFilter filter = new PerfomanceMetricsFilter(true);
+		PerformanceMetricsFilter filter = new PerformanceMetricsFilter(true);
 		callFilter(filter, GET, "http://uri:0/search?type=solr&query=title:Bamse", APPLICATION_JSON, SUCCESS_OK);
 		callFilter(filter, GET, "http://uri:0/search/?type=solr&query=title:Bamse", TEXT_PLAIN, SUCCESS_OK);
 		callFilter(filter, GET, "http://uri:0/search", APPLICATION_JSON, CLIENT_ERROR_FORBIDDEN);
@@ -55,7 +53,7 @@ class PerfomanceMetricsFilterTest {
 						"PUT-resource-json-200");
 	}
 
-	private void callFilter(PerfomanceMetricsFilter filter, Method method, String uri, MediaType mediaType, Status status) {
+	private void callFilter(PerformanceMetricsFilter filter, Method method, String uri, MediaType mediaType, Status status) {
 		Request request = new Request(method, uri);
 		Response response = new Response(request);
 		response.setEntity(null, mediaType);

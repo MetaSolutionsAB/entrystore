@@ -18,20 +18,16 @@ package org.entrystore.rest.filter;
 
 import static org.entrystore.repository.config.Settings.METRICS;
 
-import io.micrometer.core.instrument.Clock;
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.search.Search;
-import io.micrometer.core.instrument.simple.CountingMode;
-import io.micrometer.core.instrument.simple.SimpleConfig;
 import java.io.IOException;
 import java.net.URI;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import org.entrystore.repository.config.ConfigurationManager;
-import org.entrystore.rest.micrometer.EntryscapeSimpleMeterRegistry;
+import org.entrystore.rest.micrometer.EntryStoreSimpleMeterRegistry;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.routing.Filter;
@@ -41,7 +37,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Filter for gathering performance metrics
  */
-public class PerfomanceMetricsFilter extends Filter {
+public class PerformanceMetricsFilter extends Filter {
 
 	final static private List<String> allowedTypes = List.of(
 			"resource",
@@ -49,16 +45,16 @@ public class PerfomanceMetricsFilter extends Filter {
 			"metadata",
 			"search"
 	);
-	static private final Logger log = LoggerFactory.getLogger(PerfomanceMetricsFilter.class);
+	static private final Logger log = LoggerFactory.getLogger(PerformanceMetricsFilter.class);
 	final private boolean disableCallToSuperDoHandle;
 	final private boolean enableMetrics;
 
 	/**
 	 * Only use this constructor for JUnit tests, as it will disable all services of the Web Rest API!
 	 */
-	protected PerfomanceMetricsFilter(boolean testMode) {
+	protected PerformanceMetricsFilter(boolean testMode) {
 		this.disableCallToSuperDoHandle = testMode;
-		EntryscapeSimpleMeterRegistry registry = new EntryscapeSimpleMeterRegistry();
+		EntryStoreSimpleMeterRegistry registry = new EntryStoreSimpleMeterRegistry();
 		Metrics.addRegistry(registry);
 
 		ConfigurationManager configurationManager;
@@ -71,7 +67,7 @@ public class PerfomanceMetricsFilter extends Filter {
 		this.enableMetrics = configurationManager.getConfiguration().getBoolean(METRICS, false);
 	}
 
-	public PerfomanceMetricsFilter() {
+	public PerformanceMetricsFilter() {
 		this(false);
 	}
 

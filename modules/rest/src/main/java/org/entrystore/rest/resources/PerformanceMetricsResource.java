@@ -40,7 +40,6 @@ import org.slf4j.LoggerFactory;
 /**
  * Provides methods to retrieve performance metrics.
  *
- * @author Hannes Ebner
  */
 public class PerformanceMetricsResource extends BaseResource {
 
