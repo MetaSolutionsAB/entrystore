@@ -16,6 +16,17 @@
 
 package org.entrystore.rest;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+import javax.servlet.ServletContext;
 import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.apache.commons.io.FileCleaningTracker;
 import org.entrystore.ContextManager;
@@ -72,6 +83,7 @@ import org.entrystore.rest.resources.RelationResource;
 import org.entrystore.rest.resources.ResourceResource;
 import org.entrystore.rest.resources.SamlLoginResource;
 import org.entrystore.rest.resources.SearchResource;
+import org.entrystore.rest.resources.ShutdownResource;
 import org.entrystore.rest.resources.SignupResource;
 import org.entrystore.rest.resources.SolrResource;
 import org.entrystore.rest.resources.SparqlResource;
@@ -81,6 +93,7 @@ import org.entrystore.rest.resources.UserResource;
 import org.entrystore.rest.resources.ValidatorResource;
 import org.entrystore.rest.util.CORSUtil;
 import org.restlet.Application;
+import org.restlet.Component;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -92,17 +105,6 @@ import org.restlet.routing.Router;
 import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.naming.InitialContext;
-import javax.naming.NamingException;
-import javax.servlet.ServletContext;
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Main class to start EntryStore as Restlet Application.
@@ -129,6 +131,8 @@ public class EntryStoreApplication extends Application {
 
 	private BackupScheduler backupScheduler;
 
+	private final Optional<Component> component;
+
 	private static Date startupDate = null;
 
 	public static String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
@@ -138,12 +142,13 @@ public class EntryStoreApplication extends Application {
 	private final Set<String> reservedNames = new HashSet<>();
 
 	public EntryStoreApplication(Context parentContext) {
-		this(null, parentContext);
+		this(null, parentContext, Optional.empty());
 	}
 
-	public EntryStoreApplication(URI configPath, Context parentContext) {
+	public EntryStoreApplication(URI configPath, Context parentContext, Optional<Component> component) {
 		super(parentContext);
 		Date startupBegin = new Date();
+		this.component = component;
 		this.configURI = configPath;
 		getContext().getAttributes().put(KEY, this);
 
@@ -331,7 +336,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
 		router.attach("/management/metrics", PerformanceMetricsResource.class);
-
+		router.attach("/management/shutdown", ShutdownResource.class);
 
 		// context scope
 		router.attach("/{context-id}", ContextResource.class);
@@ -524,4 +529,16 @@ public class EntryStoreApplication extends Application {
 		return sc;
 	}
 
+	public void shutdownServer() {
+		if (this.component.isPresent()) {
+			log.info("Shutting down server");
+			try {
+				this.component.get().stop();
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to stop server", e);
+			}
+		} else {
+				log.info("Failed to shutdown server, component not set");
+		}
+	}
 }

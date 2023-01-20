@@ -122,5 +122,5 @@ entrystore.repository.rewrite-basereference=true
 ## Only for development and/or migration purposes
 # entrystore.repository.store.correct-metadata=true|false (default: false)
 
-# Enable collection of metrics data (default: off)
+## Enable collection of metrics data (default: off)
 # entrystore.metrics=on|off

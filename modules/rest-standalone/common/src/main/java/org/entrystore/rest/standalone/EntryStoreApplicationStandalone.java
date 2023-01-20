@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.standalone;
 
+import java.util.Optional;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -160,7 +161,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 		component.getClients().add(Protocol.HTTPS);
 		server.getContext().getParameters().add("useForwardedForHeader", "true");
 		Context childContext = component.getContext().createChildContext();
-		EntryStoreApplication esApp = new EntryStoreApplication(config, childContext);
+		EntryStoreApplication esApp = new EntryStoreApplication(config, childContext, Optional.of(component));
 		childContext.getAttributes().put(EntryStoreApplication.KEY, esApp);
 		component.getDefaultHost().attach(esApp);
 
