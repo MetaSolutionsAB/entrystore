@@ -53,6 +53,7 @@ import org.entrystore.rest.filter.CacheControlFilter;
 import org.entrystore.rest.filter.IgnoreAuthFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
+import org.entrystore.rest.filter.PerformanceMetricsFilter;
 import org.entrystore.rest.resources.CasLoginResource;
 import org.entrystore.rest.resources.ContextResource;
 import org.entrystore.rest.resources.CookieLoginResource;
@@ -75,6 +76,7 @@ import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
 import org.entrystore.rest.resources.NameResource;
 import org.entrystore.rest.resources.PasswordResetResource;
+import org.entrystore.rest.resources.PerformanceMetricsResource;
 import org.entrystore.rest.resources.ProxyResource;
 import org.entrystore.rest.resources.QuotaResource;
 import org.entrystore.rest.resources.RelationResource;
@@ -333,6 +335,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/management/logging", LoggingResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
+		router.attach("/management/metrics", PerformanceMetricsResource.class);
 		router.attach("/management/shutdown", ShutdownResource.class);
 
 		// context scope
@@ -370,6 +373,7 @@ public class EntryStoreApplication extends Application {
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
 		CacheControlFilter cacheControl = new CacheControlFilter();
+		PerformanceMetricsFilter performanceMetrics = new PerformanceMetricsFilter();
 
 		ignoreAuth.setNext(cookieAuth);
 
@@ -383,8 +387,10 @@ public class EntryStoreApplication extends Application {
 			basicAuth.setNext(jsCallback);
 		}
 
-		jsCallback.setNext(cacheControl);
+		jsCallback.setNext(performanceMetrics);
+		performanceMetrics.setNext(cacheControl);
 		cacheControl.setNext(modLockOut);
+
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
 			log.info("Enabling CORS");
