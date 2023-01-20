@@ -30,6 +30,8 @@ public class MetadataUtil {
 
 	public static Set<String> dateDataTypes;
 
+	public static Set<String> stringDataTypes;
+
 	static {
 		integerDataTypes = new HashSet<>();
 		integerDataTypes.add(NS.expand("xsd:byte").toString());
@@ -52,6 +54,10 @@ public class MetadataUtil {
 		dateDataTypes.add(NS.expand("xsd:dateTime").toString());
 		dateDataTypes.add(NS.expand("xsd:gYear").toString());
 		dateDataTypes.add(NS.expand("xsd:gYearMonth").toString());
+
+		stringDataTypes = new HashSet<>();
+		stringDataTypes.add(NS.expand("rdf:langString").toString());
+		stringDataTypes.add(NS.expand("xsd:string").toString());
 	}
 
 	/**
@@ -110,6 +116,14 @@ public class MetadataUtil {
 		}
 
 		return dateDataTypes.contains(l.getDatatype().stringValue());
+	}
+
+	public static boolean isStringLiteral(Literal l) {
+		if (l == null) {
+			throw new IllegalArgumentException("Literal must not be null");
+		}
+
+		return (l.getDatatype() == null) || stringDataTypes.contains(l.getDatatype().stringValue());
 	}
 
 }

@@ -759,10 +759,9 @@ public class SolrSearchIndex implements SearchIndex {
 
 				// predicate value is included in the parameter name, the object value is the field value
 				addFieldValueOnce(doc,prefix + "metadata.predicate.uri." + predMD5Trunc8, objString);
-			} else if (s.getObject() instanceof Literal) {
-				Literal l = (Literal) s.getObject();
+			} else if (s.getObject() instanceof Literal l) {
 				if (!related) {
-					if (l.getDatatype() == null) { // we only index plain literals (human-readable text)
+					if (MetadataUtil.isStringLiteral(l)) { // we only index plain literals (human-readable text)
 						addFieldValueOnce(doc,prefix + "metadata.object.literal", l.getLabel());
 					}
 				}
