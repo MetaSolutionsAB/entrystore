@@ -16,6 +16,17 @@
 
 package org.entrystore.rest;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+import javax.servlet.ServletContext;
 import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.apache.commons.io.FileCleaningTracker;
 import org.entrystore.ContextManager;
@@ -70,6 +81,7 @@ import org.entrystore.rest.resources.RelationResource;
 import org.entrystore.rest.resources.ResourceResource;
 import org.entrystore.rest.resources.SamlLoginResource;
 import org.entrystore.rest.resources.SearchResource;
+import org.entrystore.rest.resources.ShutdownResource;
 import org.entrystore.rest.resources.SignupResource;
 import org.entrystore.rest.resources.SolrResource;
 import org.entrystore.rest.resources.SparqlResource;
@@ -79,6 +91,7 @@ import org.entrystore.rest.resources.UserResource;
 import org.entrystore.rest.resources.ValidatorResource;
 import org.entrystore.rest.util.CORSUtil;
 import org.restlet.Application;
+import org.restlet.Component;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -91,17 +104,6 @@ import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.naming.InitialContext;
-import javax.naming.NamingException;
-import javax.servlet.ServletContext;
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Set;
-
 /**
  * Main class to start EntryStore as Restlet Application.
  *
@@ -110,22 +112,24 @@ import java.util.Set;
 public class EntryStoreApplication extends Application {
 
 	public static String KEY = EntryStoreApplication.class.getCanonicalName();
-	
+
 	/** Logger */
 	static Logger log = LoggerFactory.getLogger(EntryStoreApplication.class);
-	
+
 	/** Central point for accessing a repository */
 	private RepositoryManagerImpl rm;
-	
+
 	private ContextManager cm;
-	
+
 	private PrincipalManager pm;
-	
+
 	private String baseURI;
 
 	private ArrayList<Harvester> harvesters = new ArrayList<>();
 
 	private BackupScheduler backupScheduler;
+
+	private final Optional<Component> component;
 
 	private static Date startupDate = null;
 
@@ -136,12 +140,13 @@ public class EntryStoreApplication extends Application {
 	private final Set<String> reservedNames = new HashSet<>();
 
 	public EntryStoreApplication(Context parentContext) {
-		this(null, parentContext);
+		this(null, parentContext, Optional.empty());
 	}
 
-	public EntryStoreApplication(URI configPath, Context parentContext) {
+	public EntryStoreApplication(URI configPath, Context parentContext, Optional<Component> component) {
 		super(parentContext);
 		Date startupBegin = new Date();
+		this.component = component;
 		this.configURI = configPath;
 		getContext().getAttributes().put(KEY, this);
 
@@ -156,13 +161,13 @@ public class EntryStoreApplication extends Application {
 			// Application created by ServerServlet, try to get RepositoryManager from ServletContext
 			rm = (RepositoryManagerImpl) getServletContext(getContext()).getAttribute("RepositoryManager");
 		}
-	
+
 		if (rm != null) {
 			// Initialized by a ServletContextListener
 			log.info("EntryStore initialized with a ServletContextListener");
 			cm = rm.getContextManager();
 			pm = rm.getPrincipalManager();
-			
+
 			// The following objects are fetched from the context attributes,
 			// after they have been set in the ContextLoaderListener
 			harvesters = (ArrayList) getContext().getAttributes().get("Harvesters");
@@ -186,7 +191,7 @@ public class EntryStoreApplication extends Application {
 					}
 				}
 			}
-			
+
 			// Initialize EntryStore
 			ConfigurationManager confManager = null;
 			try {
@@ -201,9 +206,9 @@ public class EntryStoreApplication extends Application {
 				log.error("Unable to load configuration: " + e.getMessage());
 				return;
 			}
-		
+
 			Config config = confManager.getConfiguration();
-		
+
 			baseURI = config.getString(Settings.BASE_URL);
 			if (baseURI == null) {
 				log.error("No Base URI specified, exiting");
@@ -236,7 +241,7 @@ public class EntryStoreApplication extends Application {
 
 			// Load and start harvesters
 			startHarvesters();
-		
+
 			// Load and start backup scheduler
 			boolean backup = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.BACKUP_SCHEDULER, "off"));
 			if (backup) {
@@ -253,8 +258,8 @@ public class EntryStoreApplication extends Application {
 
 	/**
 	 * Creates a root Restlet that will receive all incoming calls.
-	 * 
-	 * Because Restlets impose no restrictions on resource design, 
+	 *
+	 * Because Restlets impose no restrictions on resource design,
 	 * the resource classes and the URIs they expose flow naturally
 	 * from considerations of ROA design. Below you have a mapping from
 	 * URIs to the resources in the REST module.
@@ -270,7 +275,7 @@ public class EntryStoreApplication extends Application {
 		// to prevent unnecessary context-id lookups we route favicon.ico to a real icon
 		reservedNames.add("favicon.ico");
 		router.attach("/favicon.ico", FaviconResource.class);
-		
+
 		// global scope
 		reservedNames.add("echo");
 		router.attach("/echo", EchoResource.class);
@@ -328,7 +333,8 @@ public class EntryStoreApplication extends Application {
 		router.attach("/management/logging", LoggingResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
-		
+		router.attach("/management/shutdown", ShutdownResource.class);
+
 		// context scope
 		router.attach("/{context-id}", ContextResource.class);
 		router.attach("/{context-id}/sparql", SparqlResource.class);
@@ -415,7 +421,7 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public ContextManager getCM() {
-		return this.cm; 
+		return this.cm;
 	}
 
 	public PrincipalManager getPM() {
@@ -423,7 +429,7 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public RepositoryManagerImpl getRM() {
-		return this.rm; 
+		return this.rm;
 	}
 
 	public Set<String> getReservedNames() {
@@ -445,19 +451,19 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public ArrayList<Harvester> getHarvesters() {
-		return harvesters; 
+		return harvesters;
 	}
 
 	private void startHarvesters() {
 		URI realURI = getPM().getAuthenticatedUserURI();
 		try {
 			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
-			Set<URI> entries = getCM().getEntries(); 
-			java.util.Iterator<URI> iter = entries.iterator(); 
+			Set<URI> entries = getCM().getEntries();
+			java.util.Iterator<URI> iter = entries.iterator();
 			while (iter.hasNext()) {
 				URI entryURI = iter.next();
 				Entry entry = getCM().getByEntryURI(entryURI);
-				
+
 				if (entry == null) {
 					log.warn("Entry with URI " + entryURI + " cannot be found and is null");
 					continue;
@@ -517,4 +523,16 @@ public class EntryStoreApplication extends Application {
 		return sc;
 	}
 
+	public void shutdownServer() {
+		if (this.component.isPresent()) {
+			log.info("Shutting down server");
+			try {
+				this.component.get().stop();
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to stop server", e);
+			}
+		} else {
+				log.info("Failed to shutdown server, component not set");
+		}
+	}
 }
