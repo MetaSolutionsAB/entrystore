@@ -556,12 +556,16 @@ public class SolrSearchIndex implements SearchIndex {
 		doc.setField("resourceType", entry.getResourceType().name());
 
 		// profile
+		if (entry.getLocalMetadataURI() != null) {
 		Set<IRI> profilePreds = new HashSet<>();
 		profilePreds.add(valueFactory.createIRI("http://entryscape.com/terms/entityType"));
 		profilePreds.add(valueFactory.createIRI("http://entrystore.org/terms/profile"));
 		for (String profileURI : EntryUtil.getResourceValues(entryGraph, entry.getLocalMetadataURI(), profilePreds)) {
 			doc.setField("profile", profileURI);
 			break; // we only need the first match
+		}
+		} else {
+			log.warn("Local metadata URI of entry is null:" + entry.getEntryURI());
 		}
 
 		// creator
