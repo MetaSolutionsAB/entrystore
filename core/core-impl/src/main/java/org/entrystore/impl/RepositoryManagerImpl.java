@@ -927,16 +927,18 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				newTripleCount = rcNew.size();
 				oldContextCount = rcOld.getContextIDs().stream().count();
 				newContextCount = rcNew.getContextIDs().stream().count();
+			} finally {
+				newRepo.shutDown();
 			}
-			newRepo.shutDown();
+		} finally {
+			oldRepo.shutDown();
 		}
-		oldRepo.shutDown();
 
 		if (oldTripleCount != newTripleCount || oldContextCount != newContextCount) {
 			throw new RuntimeException("Amount of triples or contexts in migrated Native Store at " + path + " is not the same as in original Native Store");
 		}
 
-		log.info("Repository statistics for {}: " + newTripleCount + " triples, " + newContextCount + " named graphs", path);
+		log.info("Repository statistics for {}: {} triples, {} named graphs", path, newTripleCount, newContextCount);
 
 		try {
 			FileUtils.deleteDirectory(backupPath);
