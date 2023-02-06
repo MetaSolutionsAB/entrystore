@@ -30,6 +30,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Resource;
 import org.entrystore.User;
+import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
@@ -65,7 +66,7 @@ import java.util.Set;
 
 /**
  * Handles entries.
- * 
+ *
  * @author Eric Johansson
  * @author Hannes Ebner
  */
@@ -108,13 +109,13 @@ public class EntryResource extends BaseResource {
 
 	/**
 	 * GET
-	 * 
+	 *
 	 * From the REST API:
-	 * 
+	 *
 	 * <pre>
 	 * GET {baseURI}/{portfolio-id}/entry/{entry-id}
 	 * </pre>
-	 * 
+	 *
 	 * @return The Representation as JSON
 	 */
 	@Get
@@ -204,7 +205,7 @@ public class EntryResource extends BaseResource {
 
 	/* Temporarily disabled code, see ENTRYSTORE-435 for details
 	private Representation getEntryInHTML() {
-		try {	
+		try {
 			if (parameters != null) {
 				parameters.put("includeAll", "true");
 			}
@@ -227,14 +228,14 @@ public class EntryResource extends BaseResource {
 		return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 	}
 	*/
-	
+
 	/**
 	 * Gets the entry JSON
-	 * 
+	 *
 	 * @return JSON representation
 	 */
 	private Representation getEntryInJSON() {
-		try {	
+		try {
 			JSONObject jobj = this.getEntryAsJSONObject();
 			if (jobj != null) {
 				return new JsonRepresentation(jobj.toString(2));
@@ -247,7 +248,7 @@ public class EntryResource extends BaseResource {
 		return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 	}
 
-	
+
 	private JSONObject getEntryAsJSONObject() throws JSONException {
 		/*
 		 * Create a JSONObject to accumulate properties
@@ -293,7 +294,7 @@ public class EntryResource extends BaseResource {
 			 */
 
 			EntryType lt = entry.getEntryType();
-			
+
 			/*
 			 * Cached External Metadata
 			 */
@@ -333,14 +334,14 @@ public class EntryResource extends BaseResource {
 			}
 
 			/*
-			 *	Relation 
+			 *	Relation
 			 */
 			if (entry.getRelations() != null) {
 				JSONObject relationObj = new JSONObject();
 				relationObj = new JSONObject(RDFJSON.graphToRdfJson(new LinkedHashModel(entry.getRelations())));
 				jdilObj.accumulate(RepositoryProperties.RELATION, relationObj);
 			}
-			
+
 			/*
 			 * Rights
 			 */
@@ -351,12 +352,26 @@ public class EntryResource extends BaseResource {
 			 */
 			JSONObject resourceObj = null;
 			if (entry.getEntryType() == EntryType.Local) {
-                GraphType graphType = entry.getGraphType();
+				GraphType graphType = entry.getGraphType();
+
+				/*
+				 *  None
+				 */
+				if (graphType == GraphType.None) {
+					DataImpl data = new DataImpl(entry);
+					String digest = data.readDigest();
+					if (digest != null) {
+						jdilObj.put("sha256", digest);
+					} else {
+						log.error("Digest does not exist for [{}]", entry.getEntryURI());
+					}
+				}
+
 				/*
 				 *  String
 				 */
 				if (graphType == GraphType.String) {
-					StringResource stringResource = (StringResource) entry.getResource(); 
+					StringResource stringResource = (StringResource) entry.getResource();
 					jdilObj.put("resource", stringResource.getString());
 				}
 
@@ -364,10 +379,10 @@ public class EntryResource extends BaseResource {
 				 *  Graph
 				 */
 				if (graphType == GraphType.Graph || graphType == GraphType.Pipeline) {
-					RDFResource rdfResource = (RDFResource) entry.getResource(); 
+					RDFResource rdfResource = (RDFResource) entry.getResource();
 					jdilObj.put("resource", new JSONObject(RDFJSON.graphToRdfJson(rdfResource.getGraph())));
 				}
-				
+
 				/*
 				 * List
 				 */
@@ -455,7 +470,7 @@ public class EntryResource extends BaseResource {
 						for (int i = offset; i < maxPos && i < childrenEntries.size(); i++) {
 							JSONObject childJSON = new JSONObject();
 							Entry childEntry = childrenEntries.get(i);
-							
+
 							/*
 							 * Children-rights
 							 */
@@ -481,9 +496,9 @@ public class EntryResource extends BaseResource {
 							} else if (btChild == GraphType.User && locChild == EntryType.Local) {
 								childJSON.put("name", ((User) childEntry.getResource()).getName());
 							} else if (btChild == GraphType.Group && locChild == EntryType.Local) {
-								childJSON.put("name", ((Group) childEntry.getResource()).getName());								
+								childJSON.put("name", ((Group) childEntry.getResource()).getName());
 							}
-							
+
 							try {
 								EntryType ltC = childEntry.getEntryType();
 								if (EntryType.Reference.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
@@ -497,7 +512,7 @@ public class EntryResource extends BaseResource {
 										}
 									}
 								}
-								
+
 								if (EntryType.Link.equals(ltC) || EntryType.Local.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 									// get the local metadata
 									Metadata localMD = childEntry.getLocalMetadata();
@@ -524,13 +539,13 @@ public class EntryResource extends BaseResource {
 								childJSON.accumulate("info", new JSONObject());
 							}
 							//							childrenObjects.add(childJSON);
-							
+
 							if (childEntry.getRelations() != null) {
 								Model childRelationsGraph = new LinkedHashModel(childEntry.getRelations());
 								JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
 								childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 							}
-							
+
 							childrenArray.put(childJSON);
 						}
 
@@ -539,8 +554,8 @@ public class EntryResource extends BaseResource {
 						resourceObj.put("size", childrenURIs.size());
 						resourceObj.put("limit", limit);
 						resourceObj.put("offset", offset);
-						
-						
+
+
 						JSONArray childrenIDArray = new JSONArray();
 						for (String id : childrenIDs) {
 							childrenIDArray.put(id);
@@ -638,15 +653,15 @@ public class EntryResource extends BaseResource {
 				}
 
 				// TODO other types, for example Context, SystemContext, PrincipalManager, etc
-				
+
 				if (resourceObj != null) {
 					jdilObj.accumulate("resource", resourceObj);
 				}
 			}
 			return jdilObj;
 	}
-	
-	
+
+
 	private void accumulateRights(Entry entry, JSONObject jdilObj) throws JSONException {
 		PrincipalManager pm = this.getPM();
 		Set<AccessProperty> rights = pm.getRights(entry);
