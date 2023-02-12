@@ -54,6 +54,9 @@ public class Settings {
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
 	public static String AUTH_PASSWORD_BLACKLIST = "entrystore.auth.password.blacklist";
 
+	public static String AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS = "entrystore.auth.temp.lockout.max.attempts";
+	public static String AUTH_TEMP_LOCKOUT_DURATION = "entrystore.auth.temp.lockout.duration";
+
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
 	public static String BACKUP_TIMEREGEXP_DEPRECATED = "entrystore.backup.timeregexp";

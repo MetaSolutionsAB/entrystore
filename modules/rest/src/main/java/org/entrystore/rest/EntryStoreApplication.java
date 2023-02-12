@@ -48,6 +48,7 @@ import org.entrystore.repository.test.TestSuite;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.SimpleAuthenticator;
+import org.entrystore.rest.auth.UserTempLockoutCache;
 import org.entrystore.rest.filter.CORSFilter;
 import org.entrystore.rest.filter.CacheControlFilter;
 import org.entrystore.rest.filter.IgnoreAuthFilter;
@@ -131,6 +132,8 @@ public class EntryStoreApplication extends Application {
 
 	private BackupScheduler backupScheduler;
 
+	private UserTempLockoutCache userTempLockoutCache;
+
 	private final Optional<Component> component;
 
 	private static Date startupDate = null;
@@ -206,7 +209,7 @@ public class EntryStoreApplication extends Application {
 				}
 			} catch (IOException e) {
 				log.error("Unable to load configuration: " + e.getMessage());
-				return;
+				System.exit(1);
 			}
 
 			Config config = confManager.getConfiguration();
@@ -224,6 +227,7 @@ public class EntryStoreApplication extends Application {
 			rm = new RepositoryManagerImpl(baseURI, confManager.getConfiguration());
 			cm = rm.getContextManager();
 			pm = rm.getPrincipalManager();
+			userTempLockoutCache = new UserTempLockoutCache(rm, pm);
 
 			if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
 				// Check for existence of Donald
@@ -440,6 +444,10 @@ public class EntryStoreApplication extends Application {
 
 	public Set<String> getReservedNames() {
 		return this.reservedNames;
+	}
+
+	public UserTempLockoutCache getUserTempLockoutCache() {
+		return this.userTempLockoutCache;
 	}
 
 	private void startBackupScheduler() {
