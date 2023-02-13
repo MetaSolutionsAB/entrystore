@@ -16,39 +16,36 @@
 
 package org.entrystore.repository.backup;
 
-import org.entrystore.impl.AbstractCoreTest;
-import org.junit.Ignore;
-import org.junit.Test;
-
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class BackupFactoryTest {
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetBackupEntryURI() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testCreateBackupScheduler() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetBackupScheduler() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testDeleteBackupInformation() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testIsBackupEntry() throws Exception {
 		// TODO

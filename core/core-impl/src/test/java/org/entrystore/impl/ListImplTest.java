@@ -16,36 +16,41 @@
 
 package org.entrystore.impl;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.List;
 import org.entrystore.QuotaException;
 import org.entrystore.repository.RepositoryException;
-import org.junit.Test;
-
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-
-import static org.junit.Assert.assertTrue;
+import org.junit.jupiter.api.Test;
 
 /**
  */
 public class ListImplTest extends AbstractCoreTest {
 
-	@Test (expected=RepositoryException.class)
+	@Test
 	public void singleOccurenceOfChild() {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
 		Entry list = duck.createResource(null, GraphType.List, null, null);
 		Entry child = duck.createLink(null, URI.create("http://slashdot.org/"), null);
-		((List) list.getResource()).addChild(child.getEntryURI()); //Ok first time
-		((List) list.getResource()).addChild(child.getEntryURI()); //Should fail second time.
+
+		//Ok first time
+		((List) list.getResource()).addChild(child.getEntryURI());
+
+		//Should fail second time.
+		Exception exception = assertThrows(RepositoryException.class, () -> (
+				(List) list.getResource()).addChild(child.getEntryURI()));
 	}
 
-	@Test (expected=RepositoryException.class)
+	@Test
 	public void singleOccurenceOfChild2() {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
@@ -55,10 +60,11 @@ public class ListImplTest extends AbstractCoreTest {
 		java.util.List<URI> children = new ArrayList<URI>();
 		children.add(child.getEntryURI());
 		children.add(child.getEntryURI());
-		((List) list.getResource()).setChildren(children);
+
+		assertThrows(RepositoryException.class, () -> ((List) list.getResource()).setChildren(children));
 	}
 
-	@Test (expected=RepositoryException.class)
+	@Test
 	public void singleParentOfList() {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
@@ -66,11 +72,17 @@ public class ListImplTest extends AbstractCoreTest {
 		Entry parentList1 = duck.createResource(null, GraphType.List, null, null);
 		Entry parentList2 = duck.createResource(null, GraphType.List, null, null);
 		Entry childList = duck.createResource(null, GraphType.List, null, null);
-		((List) parentList1.getResource()).addChild(childList.getEntryURI()); //Adding list to parent list, should be ok.
-		((List) parentList2.getResource()).addChild(childList.getEntryURI()); //Adding list to second parent list, should fail.
+
+		//Adding list to parent list, should be ok.
+		((List) parentList1.getResource()).addChild(childList.getEntryURI());
+
+		//Adding list to second parent list, should fail.
+		assertThrows(RepositoryException.class,
+				() -> ((List) parentList2.getResource()).addChild(childList.getEntryURI()));
+
 	}
 
-	@Test (expected=RepositoryException.class)
+	@Test
 	public void singleParentOfLis2() {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
@@ -79,9 +91,11 @@ public class ListImplTest extends AbstractCoreTest {
 		Entry parentList2 = duck.createResource(null, GraphType.List, null, null);
 		Entry childList = duck.createResource(null, GraphType.List, null, null);
 		((List) parentList1.getResource()).addChild(childList.getEntryURI()); //Adding list to parent list, should be ok.
-		java.util.List<URI> children = new ArrayList<URI>();
+		java.util.List<URI> children = new ArrayList<>();
 		children.add(childList.getEntryURI());
-		((List) parentList2.getResource()).setChildren(children);
+
+		assertThrows(RepositoryException.class, () -> ((List) parentList2.getResource()).setChildren(children));
+
 	}
 
 	@Test
@@ -96,7 +110,7 @@ public class ListImplTest extends AbstractCoreTest {
 		assertTrue(((List) listE1.getResource()).getChildren().size() == 0);
 		assertTrue(((List) listE2.getResource()).getChildren().size() == 1);
 	}
-	
+
 	@Test
 	public void moveEntryBetweenListsInDifferentContexts() throws IOException, QuotaException {
 		// Use the Donald user.
@@ -112,7 +126,7 @@ public class ListImplTest extends AbstractCoreTest {
 		assertTrue(newEntry.getContext().equals(mouse));
 		assertTrue(((List) listE2.getResource()).getChildren().size() == 1);
 	}
-	
+
 	@Test
 	public void ownerRemoveTree() {
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());

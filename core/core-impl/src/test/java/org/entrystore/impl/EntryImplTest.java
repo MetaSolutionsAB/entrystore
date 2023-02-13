@@ -16,6 +16,10 @@
 
 package org.entrystore.impl;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.File;
+import java.net.URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
@@ -28,13 +32,8 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryException;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.io.File;
-import java.net.URI;
-
-import static org.junit.Assert.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class EntryImplTest extends AbstractCoreTest {
 
@@ -50,7 +49,7 @@ public class EntryImplTest extends AbstractCoreTest {
 
 	private Entry resourceEntry;
 
-	@Before
+	@BeforeEach
 	public void setUp() {
 		super.setUp();
 		rm.setCheckForAuthorization(false);
@@ -73,7 +72,7 @@ public class EntryImplTest extends AbstractCoreTest {
 		// Checking that builtintype cannot be changed for local resources
 		try {
 			listEntry.setGraphType(GraphType.None);
-			assertTrue("Successfully (and erroneously) changed the builtin type" + " of a local resource!", false);
+			assertTrue(false, "Successfully (and erroneously) changed the builtin type" + " of a local resource!");
 		} catch (RepositoryException re) {
 		}
 
@@ -102,7 +101,7 @@ public class EntryImplTest extends AbstractCoreTest {
 		// resources
 		try {
 			listEntry.setResourceType(ResourceType.NamedResource);
-			assertTrue("Succesfully (and erronously) changed the representationtype" + " of a local resource!", false);
+			assertTrue(false, "Succesfully (and erronously) changed the representationtype" + " of a local resource!");
 		} catch (RepositoryException re) {
 		}
 

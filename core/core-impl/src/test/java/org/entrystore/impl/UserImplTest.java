@@ -16,86 +16,84 @@
 
 package org.entrystore.impl;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class UserImplTest extends AbstractCoreTest {
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetName() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testSetName() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetSecret() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetSaltedHashedSecret() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testSetSecret() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testSetMetadata() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetHomeContext() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testSetHomeContext() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetLanguage() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testSetLanguage() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetExternalID() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testSetExternalID() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetGroups() throws Exception {
 		// TODO

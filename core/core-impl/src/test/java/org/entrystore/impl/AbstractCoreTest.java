@@ -19,15 +19,11 @@ package org.entrystore.impl;
 import org.entrystore.ContextManager;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
-import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
-import org.junit.After;
-import org.junit.Before;
-
-import java.io.IOException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 
 /**
  * Manages EntryStore instance(s) as preparation for the tests in entrystore-core-impl.
@@ -42,7 +38,7 @@ public abstract class AbstractCoreTest {
 
 	PrincipalManager pm;
 
-	@Before
+	@BeforeEach
 	public void setUp() {
 		Config config = new PropertiesConfiguration("EntryStore Configuration");
 		config.setProperty(Settings.STORE_TYPE, "memory");
@@ -58,7 +54,7 @@ public abstract class AbstractCoreTest {
 		TestSuite.initDisneySuite(rm);
 	}
 
-	@After
+	@AfterEach
 	public void tearDown() {
 		rm.shutdown();
 		rm = null;

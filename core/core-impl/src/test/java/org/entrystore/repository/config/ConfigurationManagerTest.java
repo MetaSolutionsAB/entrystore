@@ -16,39 +16,36 @@
 
 package org.entrystore.repository.config;
 
-import org.entrystore.impl.AbstractCoreTest;
-import org.junit.Ignore;
-import org.junit.Test;
-
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class ConfigurationManagerTest {
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testClone() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetType() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetConfigurationURI() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetConfigurationURI1() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetConfiguration() throws Exception {
 		// TODO

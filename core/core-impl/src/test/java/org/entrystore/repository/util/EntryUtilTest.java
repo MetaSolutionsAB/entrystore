@@ -16,135 +16,132 @@
 
 package org.entrystore.repository.util;
 
-import org.entrystore.impl.AbstractCoreTest;
-import org.junit.Ignore;
-import org.junit.Test;
-
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class EntryUtilTest {
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testSortAfterModificationDate() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testSortAfterCreationDate() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testSortAfterFileSize() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testSortAfterTitle() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testPrioritizeBuiltinType() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetLabel() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetLabel1() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetResource() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetTitle() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetTitle1() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetName() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetStructuredName() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetFirstName() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetLastName() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetEmail() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetMemberOf() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetFOAFTitle() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetTitles() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetDescriptions() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetKeywords() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testIsDeleted() throws Exception {
 		// TODO

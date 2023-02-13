@@ -16,14 +16,12 @@
 
 package org.entrystore.impl;
 
-import org.junit.Ignore;
-import org.junit.Test;
-
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class RepositoryPropertiesTest {
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetResourcePath() throws Exception {
 		// TODO

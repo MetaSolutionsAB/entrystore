@@ -16,6 +16,9 @@
 
 package org.entrystore.impl;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.net.URI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.vocabulary.RDFS;
@@ -25,11 +28,7 @@ import org.entrystore.GraphType;
 import org.entrystore.List;
 import org.entrystore.Metadata;
 import org.entrystore.User;
-import org.junit.Test;
-
-import java.net.URI;
-
-import static org.junit.Assert.assertTrue;
+import org.junit.jupiter.api.Test;
 
 public class RelationTest extends AbstractCoreTest {
 
