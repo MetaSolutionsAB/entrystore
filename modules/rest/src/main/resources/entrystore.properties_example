@@ -47,6 +47,10 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.recaptcha.public-key=your-public-recaptcha-key
 # entrystore.auth.recaptcha.private-key=your-private-recaptcha-key
 
+# Every time a logged in user performs an operation, the expiry date
+# is renewed based on the current time/date. (default: off)
+# entrystore.auth.cookie.update.expiry=on|off
+
 ## User-initiated sign-up (default: off)
 # entrystore.auth.signup=off
 # entrystore.auth.signup.email.subject=User sign-up request
