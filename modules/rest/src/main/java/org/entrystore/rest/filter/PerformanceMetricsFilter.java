@@ -22,11 +22,10 @@ import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.search.Search;
-import java.io.IOException;
-import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
-import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.config.Config;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.micrometer.EntryStoreSimpleMeterRegistry;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -47,7 +46,6 @@ public class PerformanceMetricsFilter extends Filter {
 	);
 	static private final Logger log = LoggerFactory.getLogger(PerformanceMetricsFilter.class);
 	final private boolean disableCallToSuperDoHandle;
-	final private boolean enableMetrics;
 
 	/**
 	 * Only use this constructor for JUnit tests, as it will disable all services of the Web Rest API!
@@ -56,15 +54,6 @@ public class PerformanceMetricsFilter extends Filter {
 		this.disableCallToSuperDoHandle = testMode;
 		EntryStoreSimpleMeterRegistry registry = new EntryStoreSimpleMeterRegistry();
 		Metrics.addRegistry(registry);
-
-		ConfigurationManager configurationManager;
-		try {
-			URI uri = ConfigurationManager.getConfigurationURI();
-			configurationManager = new ConfigurationManager(uri);
-		} catch (IOException e) {
-			configurationManager = null;
-		}
-		this.enableMetrics = configurationManager.getConfiguration().getBoolean(METRICS, false);
 	}
 
 	public PerformanceMetricsFilter() {
@@ -74,7 +63,11 @@ public class PerformanceMetricsFilter extends Filter {
 	@Override
 	protected int doHandle(Request request, Response response) {
 
-		if (!enableMetrics) {
+		EntryStoreApplication app = getEntryStoreApplication();
+		Config config = app.getRM().getConfiguration();
+		boolean configEnableMetrics = config.getBoolean(METRICS, false);
+
+		if (!configEnableMetrics) {
 			super.doHandle(request, response);
 			return CONTINUE;
 		}
@@ -105,6 +98,11 @@ public class PerformanceMetricsFilter extends Filter {
 		sample.stop(registry.timer(metricName));
 
 		return returnStatus;
+	}
+
+	private EntryStoreApplication getEntryStoreApplication() {
+		EntryStoreApplication app = (EntryStoreApplication) getApplication();
+		return app;
 	}
 
 	private String extractType(String requestPath) {
