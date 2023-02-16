@@ -16,50 +16,48 @@
 
 package org.entrystore.impl;
 
-import org.junit.Ignore;
-import org.junit.Test;
-
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class SoftCacheTest {
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testClear() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testPut() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testRemove() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetByEntryURI() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testGetByURI() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testShutdown() throws Exception {
 		// TODO
 	}
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testIsShutdown() throws Exception {
 		// TODO

@@ -16,22 +16,22 @@
 
 package org.entrystore.impl;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.test.TestSuite;
-import org.junit.Before;
-import org.junit.Test;
-
-import static org.junit.Assert.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  */
 public class RDFLoadTest extends AbstractCoreTest {
 
-	@Before
+	@BeforeEach
 	public void setUp() {
 		super.setUp();
 		TestSuite.addEntriesInDisneySuite(rm);
@@ -55,7 +55,8 @@ public class RDFLoadTest extends AbstractCoreTest {
 		assertTrue(duck.getEntry().getResourceType() == ResourceType.InformationResource);
 
 		Entry entry = duck.get("3");
-		assertTrue("Locationtype should be LinkReference, it is now: " + entry.getEntryType(), entry.getEntryType() == EntryType.Link);
+		assertTrue(entry.getEntryType() ==
+							 EntryType.Link, "Locationtype should be LinkReference, it is now: " + entry.getEntryType());
 		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
 
 		entry = duck.get("4");

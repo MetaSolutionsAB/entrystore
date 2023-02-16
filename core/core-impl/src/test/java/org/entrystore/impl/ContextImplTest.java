@@ -17,25 +17,24 @@
 
 package org.entrystore.impl;
 
-import org.entrystore.Context;
-import org.entrystore.Entry;
-import org.entrystore.GraphType;
-import org.entrystore.List;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Set;
-
-import static org.junit.Assert.assertTrue;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.List;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class ContextImplTest extends AbstractCoreTest {
 
 	private Context context;
 
-	@Before
+	@BeforeEach
 	public void setUp() {
 		super.setUp();
 		rm.setCheckForAuthorization(false);
@@ -83,7 +82,7 @@ public class ContextImplTest extends AbstractCoreTest {
 		assertTrue(refEntry.equals(context.getByEntryURI(refEntry.getEntryURI())));
 	}
 
-	@Ignore("not ready yet")
+	@Disabled("not ready yet")
 	@Test
 	public void quota() {
 		context.getQuota();
