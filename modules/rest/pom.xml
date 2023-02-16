@@ -14,10 +14,6 @@
     <version>5.1-SNAPSHOT</version>
     <name>EntryStore REST</name>
 
-	<properties>
-		<mockito.version>5.1.1</mockito.version>
-	</properties>
-
     <build>
         <resources>
             <resource>
