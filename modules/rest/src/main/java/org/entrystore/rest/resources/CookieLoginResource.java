@@ -16,11 +16,13 @@
 
 package org.entrystore.rest.resources;
 
+import static java.lang.Boolean.parseBoolean;
 import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
 
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.util.HttpUtil;
@@ -85,7 +87,7 @@ public class CookieLoginResource extends BaseResource {
 
 		String userName = query.getFirstValue("auth_username");
 		String password = query.getFirstValue("auth_password");
-		String maxAgeStr = query.getFirstValue("auth_maxage");
+		boolean sessionCookie = parseBoolean(query.getFirstValue("auth_session_cookie", true, "false"));
 
 		if (userName == null || password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -123,8 +125,10 @@ public class CookieLoginResource extends BaseResource {
 		boolean userIsEnabled = !BasicVerifier.isUserDisabled(getPM(), userName);
 		try {
 			if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
+				EntryStoreApplication entryStoreApplication =
+						(EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY);
 				if (userIsEnabled) {
-					new CookieVerifier(getRM()).createAuthToken(userName, maxAgeStr, getResponse());
+					new CookieVerifier(getRM()).createAuthToken(userName, sessionCookie, getResponse());
 					getResponse().setStatus(Status.SUCCESS_OK);
 					getUserTempLockoutCache().succeedLogin(userName);
 					if (html) {

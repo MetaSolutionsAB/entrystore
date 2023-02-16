@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.auth;
 
+import java.util.concurrent.ConcurrentHashMap;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
@@ -34,30 +35,29 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 
 /**
  * Does a simple lookup for the secret of a principal.
- * 
+ *
  * @author Hannes Ebner
  */
 public class BasicVerifier implements Verifier {
-	
-	private PrincipalManager pm;
-	
-	private static Logger log = LoggerFactory.getLogger(BasicVerifier.class);
-	
-	private static Map<String, Long> loginCache = new HashMap<String, Long>();
 
-	private List<String> passwordLoginWhitelist;
+	private static Logger log = LoggerFactory.getLogger(BasicVerifier.class);
+
+	private final PrincipalManager pm;
+	private final Map<String, Long> loginCache = new ConcurrentHashMap<>();
+	private final List<String> passwordLoginWhitelist;
 
 	public BasicVerifier(PrincipalManager pm, Config config) {
 		this.pm = pm;
 		if ("whitelist".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD))) {
 			this.passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST, new ArrayList());
+		} else {
+			passwordLoginWhitelist = List.of();
 		}
 	}
 
@@ -119,7 +119,7 @@ public class BasicVerifier implements Verifier {
 		if (authUser != null && !pm.getGuestUser().getURI().equals(authUser)) {
 			return RESULT_VALID;
 		}
-		
+
 		URI userURI = null;
 		boolean challenge = !"false".equalsIgnoreCase(response.getRequest().getResourceRef().getQueryAsForm().getFirstValue("auth_challenge"));
 
@@ -142,7 +142,7 @@ public class BasicVerifier implements Verifier {
 				identifier = "_guest";
 			} else {
 				identifier = request.getChallengeResponse().getIdentifier();
-				secret = new String(request.getChallengeResponse().getSecret());
+				secret = String.valueOf(request.getChallengeResponse().getSecret());
 			}
 
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
@@ -184,6 +184,7 @@ public class BasicVerifier implements Verifier {
 			if (secret != null &&
 					!isUserDisabled(pm, identifier) &&
 					Password.check(secret, getSaltedHashedSecret(pm, identifier))) {
+
 				userURI = userEntry.getResourceURI();
 				addLoginToCache(userEntry.getEntryURI().toString(), secret);
 				return RESULT_VALID;
@@ -195,13 +196,12 @@ public class BasicVerifier implements Verifier {
 					return RESULT_VALID;
 				}
 			}
-
 			return RESULT_INVALID;
 		} finally {
 			pm.setAuthenticatedUserURI(userURI);
 		}
 	}
-	
+
 	private boolean addLoginToCache(String user, String password) {
 		String hash = Password.sha256(user + password);
 		if (hash != null) {
@@ -210,7 +210,7 @@ public class BasicVerifier implements Verifier {
 		}
 		return false;
 	}
-	
+
 	private boolean isLoginCached(String user, String password, long seconds) {
 		String hash = Password.sha256(user + password);
 		if (hash == null || !loginCache.containsKey(hash)) {
@@ -225,5 +225,4 @@ public class BasicVerifier implements Verifier {
 		}
 		return true;
 	}
-
 }
