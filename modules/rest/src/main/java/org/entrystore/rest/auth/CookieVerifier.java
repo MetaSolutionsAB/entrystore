@@ -16,14 +16,6 @@
 
 package org.entrystore.rest.auth;
 
-import static java.lang.String.format;
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR;
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_MAXAGE;
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_PATH;
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_UPDATE_EXPIRY;
-import static org.entrystore.repository.config.Settings.AUTH_TOKEN_MAX_AGE;
-
-import java.time.Duration;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
@@ -43,7 +35,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Date;
+
+import static org.entrystore.repository.config.Settings.*;
 
 
 /**
@@ -75,7 +70,7 @@ public class CookieVerifier implements Verifier {
 		this.corsFilter = corsFilter;
 
 		Config config = rm.getConfiguration();
-		this.configInvalidTokenError = config.getBoolean(AUTH_COOKIE_INVALID_TOKEN_ERROR, false);
+		this.configInvalidTokenError = config.getBoolean(AUTH_COOKIE_INVALID_TOKEN_ERROR, true);
 		this.configCookieUpdateExpiry = config.getBoolean(AUTH_COOKIE_UPDATE_EXPIRY, false);
 		this.configCookieMaxAgeInSeconds = config.getInt(AUTH_TOKEN_MAX_AGE, config.getInt(AUTH_COOKIE_MAXAGE,
 				DEFAULT_MAX_AGE_IN_SECONDS));
