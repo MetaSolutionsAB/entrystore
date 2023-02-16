@@ -65,6 +65,11 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.password-change.email.subject=Your password has been changed
 # entrystore.auth.password-change.email.template=/path/to/template.html
 
+## Temporary user lockout
+entrystore.auth.temp.lockout.max.attempts=0
+entrystore.auth.temp.lockout.duration=0ms
+
+
 ## OpenID (deprecated)
 # entrystore.auth.openid=on|off (default: off)
 # entrystore.auth.openid.google=on
