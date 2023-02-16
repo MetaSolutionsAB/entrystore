@@ -16,6 +16,12 @@
 
 package org.entrystore.impl;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -26,28 +32,21 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.repository.util.CommonQueries;
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Test;
-
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
-import static org.junit.Assert.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 /**
  */
 public class ContextManagerImplTest extends AbstractCoreTest {
 
-	@Before
+	@BeforeEach
 	public void setUp() {
 		super.setUp();
 		rm.setCheckForAuthorization(false);
 	}
 
-	@Ignore("FIXME - does not do any sensible testing now")
+	@Disabled("FIXME - does not do any sensible testing now")
 	@Test
 	public void sparqlSearch() throws Exception {
 		Entry entry = cm.createResource(null, GraphType.Context, null, null);
@@ -119,7 +118,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		}
 	}
 
-	@Ignore("Needs to be implemented")
+	@Disabled("Needs to be implemented")
 	@Test
 	public void solrSearch() {
 

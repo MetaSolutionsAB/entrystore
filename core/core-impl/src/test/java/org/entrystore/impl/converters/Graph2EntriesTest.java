@@ -16,17 +16,13 @@
 
 package org.entrystore.impl.converters;
 
-import org.entrystore.impl.AbstractCoreTest;
-import org.junit.Ignore;
-import org.junit.Test;
-
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 public class Graph2EntriesTest {
 
-	@Ignore("To be implemented")
+	@Disabled("To be implemented")
 	@Test
 	public void testMerge() throws Exception {
-
 	}
 }

@@ -112,6 +112,15 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
+		if (getUserTempLockoutCache().userIsLockedOut(userName)) {
+			getResponse().setStatus(Status.CLIENT_ERROR_TOO_MANY_REQUESTS);
+			if (html) {
+				getResponse().setEntity(new SimpleHTML("Login")
+						.representation("User account is temporarily disabled. Too many failed logins."));
+			}
+			return;
+		}
+
 		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName);
 		boolean userIsEnabled = !BasicVerifier.isUserDisabled(getPM(), userName);
 		try {
@@ -121,6 +130,7 @@ public class CookieLoginResource extends BaseResource {
 				if (userIsEnabled) {
 					new CookieVerifier(getRM()).createAuthToken(userName, sessionCookie, getResponse());
 					getResponse().setStatus(Status.SUCCESS_OK);
+					getUserTempLockoutCache().succeedLogin(userName);
 					if (html) {
 						getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
 					}
@@ -143,6 +153,7 @@ public class CookieLoginResource extends BaseResource {
 		}
 
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+		getUserTempLockoutCache().failLogin(userName);
 		if (html) {
 			getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 		}
