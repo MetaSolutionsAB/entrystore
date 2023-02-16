@@ -16,6 +16,7 @@
 
 package org.entrystore.repository.config;
 
+import java.time.Duration;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.config.Config;
@@ -37,40 +38,41 @@ import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
+import org.entrystore.config.DurationStyle;
 
 /**
  * Wrapper around Java's Properties.
  * Some methods have been simplified, others just wrapped.<br>
- * 
+ *
  * <p>
  * See the static methods of the class Configurations for wrappers around the
  * Config interface, e.g. to get synchronized view of the object.
- * 
+ *
  * <p>
  * If a key maps only to one value, it is done the standard way:<br>
  * <pre>key=value</pre>
- * 
+ *
  * <p>
  * If a key maps to multiple values, the key is numbered:<br>
  * <pre>key.1=value1</pre>
  * <pre>key.2=value2</pre>
- * 
+ *
  * @author Hannes Ebner
  * @version $Id$
  * @see org.entrystore.config.Configurations
  * @see org.entrystore.config.Config
  */
 public class PropertiesConfiguration implements Config {
-	
+
 	Log log = LogFactory.getLog(PropertiesConfiguration.class);
 
 	/**
 	 * The main resource in this object. Contains the configuration.
 	 */
 	private SortedProperties config;
-	
+
 	private PropertyChangeSupport pcs;
-	
+
 	private String configName;
 
 	private boolean modified = false;
@@ -79,7 +81,7 @@ public class PropertiesConfiguration implements Config {
 
 	/**
 	 * Initializes the object with an empty Configuration.
-	 * 
+	 *
 	 * @param configName
 	 *            Name of the configuration (appears as comment in the
 	 *            configuration file).
@@ -94,14 +96,14 @@ public class PropertiesConfiguration implements Config {
 
 	/**
 	 * Sets the modified status of this configuration.
-	 * 
+	 *
 	 * @param modified
 	 *            Status.
 	 */
 	private void setModified(boolean modified) {
 		this.modified = modified;
 	}
-	
+
 	private void checkFirePropertyChange(String key, Object oldValue, Object newValue) {
 		if ((oldValue == null) && (newValue != null)) {
 			pcs.firePropertyChange(key, oldValue, newValue);
@@ -109,15 +111,15 @@ public class PropertiesConfiguration implements Config {
 			pcs.firePropertyChange(key, oldValue, newValue);
 		}
 	}
-	
-	/* 
+
+	/*
 	 * List helpers
 	 */
-	
+
 	private String numberedKey(String key, int number) {
 		return key + "." + number;
 	}
-	
+
 	private int getPropertyValueCount(String key) {
 		int valueCount = 0;
 		if (config.containsKey(key)) {
@@ -129,7 +131,7 @@ public class PropertiesConfiguration implements Config {
 		}
 		return valueCount;
 	}
-	
+
 	private synchronized void addPropertyValue(String key, Object value) {
 		int valueCount = getPropertyValueCount(key);
 		if ((valueCount == 1) && config.containsKey(key)) {
@@ -143,17 +145,17 @@ public class PropertiesConfiguration implements Config {
 			config.setProperty(key, value.toString());
 		}
 	}
-	
+
 	private void addPropertyValues(String key, List values) {
 		addPropertyValues(key, values.iterator());
 	}
-	
+
 	private synchronized void addPropertyValues(String key, Iterator it) {
 		while (it.hasNext()) {
 			addPropertyValue(key, it.next());
 		}
 	}
-	
+
 	private synchronized List<String> getPropertyValues(String key) {
 		int valueCount = getPropertyValueCount(key);
 		List<String> result = new ArrayList<>();
@@ -172,7 +174,7 @@ public class PropertiesConfiguration implements Config {
 		}
 		return result;
 	}
-	
+
 	private synchronized void clearPropertyValues(String key) {
 		int valueCount = getPropertyValueCount(key);
 		if (valueCount > 1) {
@@ -182,35 +184,39 @@ public class PropertiesConfiguration implements Config {
 		}
 		config.remove(key);
 	}
-	
+
 	private void setPropertyValues(String key, List values) {
 		setPropertyValues(key, values.iterator());
 	}
-	
+
 	private synchronized void setPropertyValues(String key, Iterator it) {
 		clearPropertyValues(key);
 		addPropertyValues(key, it);
 	}
-	
+
 	/*
 	 * Interface implementation
 	 */
 
 	/* Generic */
 
+	@Override
 	public void clear() {
 		config.clear();
 		setModified(true);
 	}
 
+	@Override
 	public boolean isEmpty() {
 		return config.isEmpty();
 	}
 
+	@Override
 	public boolean isModified() {
 		return modified;
 	}
 
+	@Override
 	public void load(URL configURL) throws IOException {
 		InputStreamReader isr = null;
 		try {
@@ -224,6 +230,7 @@ public class PropertiesConfiguration implements Config {
 		}
 	}
 
+	@Override
 	public void save(URL configURL) throws IOException {
 		try {
 			String escapedURL = configURL.toString().replaceAll(" ", "%20");
@@ -237,27 +244,32 @@ public class PropertiesConfiguration implements Config {
 		}
 		setModified(false);
 	}
-	
+
 	/* Property Change Listeners */
-	
+
+	@Override
 	public void addPropertyChangeListener(PropertyChangeListener listener) {
 		pcs.addPropertyChangeListener(listener);
 	}
-	
+
+	@Override
 	public void addPropertyChangeListener(String key, PropertyChangeListener listener) {
 		pcs.addPropertyChangeListener(key, listener);
 	}
-	
+
+	@Override
 	public void removePropertyChangeListener(PropertyChangeListener listener) {
 		pcs.removePropertyChangeListener(listener);
 	}
-	
+
+	@Override
 	public void removePropertyChangeListener(String key, PropertyChangeListener listener) {
 		pcs.removePropertyChangeListener(key, listener);
 	}
 
 	/* Properties / Set Values */
 
+	@Override
 	public void clearProperty(String key) {
 		int valueCount = getPropertyValueCount(key);
 		Object oldValue = null;
@@ -273,24 +285,28 @@ public class PropertiesConfiguration implements Config {
 		checkFirePropertyChange(key, oldValue, null);
 	}
 
+	@Override
 	public void addProperty(String key, Object value) {
 		addPropertyValue(key, value);
 		setModified(true);
 		pcs.firePropertyChange(key, null, value);
 	}
 
+	@Override
 	public void addProperties(String key, List values) {
 		addPropertyValues(key, values);
 		setModified(true);
 		pcs.firePropertyChange(key, null, values);
 	}
-	
+
+	@Override
 	public void addProperties(String key, Iterator values) {
 		addPropertyValues(key, values);
 		setModified(true);
 		pcs.firePropertyChange(key, null, values);
 	}
 
+	@Override
 	public void setProperty(String key, Object value) {
 		String oldValue = null;
 		oldValue = getString(key);
@@ -299,13 +315,15 @@ public class PropertiesConfiguration implements Config {
 		checkFirePropertyChange(key, oldValue, value);
 	}
 
+	@Override
 	public void setProperties(String key, List values) {
 		List<String> oldValues = getStringList(key);
 		setPropertyValues(key, values);
 		setModified(true);
 		checkFirePropertyChange(key, oldValues, values);
 	}
-	
+
+	@Override
 	public void setProperties(String key, Iterator values) {
 		List<String> oldValues = getStringList(key);
 		setPropertyValues(key, values);
@@ -315,18 +333,21 @@ public class PropertiesConfiguration implements Config {
 
 	/* Keys */
 
+	@Override
 	public boolean containsKey(String key) {
 		return config.containsKey(key);
 	}
 
+	@Override
 	public List<String> getKeyList() {
 		return getKeyList(null);
 	}
 
+	@Override
 	public List<String> getKeyList(String prefix) {
 		Enumeration keyIterator = config.propertyNames();
 		ArrayList<String> result = new ArrayList<String>();
-		
+
 		while (keyIterator.hasMoreElements()) {
 			String next = (String) keyIterator.nextElement();
 			if ((prefix != null) && !next.startsWith(prefix)) {
@@ -339,18 +360,22 @@ public class PropertiesConfiguration implements Config {
 
 	/* Get Values */
 
+	@Override
 	public String getString(String key) {
 		return config.getProperty(key);
 	}
 
+	@Override
 	public String getString(String key, String defaultValue) {
 		return config.getProperty(key, defaultValue);
 	}
 
+	@Override
 	public List<String> getStringList(String key) {
 		return getPropertyValues(key);
 	}
 
+	@Override
 	public List<String> getStringList(String key, List<String> defaultValues) {
 		List<String> result = getPropertyValues(key);
 		if (result.isEmpty()) {
@@ -359,10 +384,12 @@ public class PropertiesConfiguration implements Config {
 		return result;
 	}
 
+	@Override
 	public boolean getBoolean(String key) {
 		return getBoolean(key, false);
 	}
 
+	@Override
 	public boolean getBoolean(String key, boolean defaultValue) {
 		String strValue = config.getProperty(key);
 		if ("on".equalsIgnoreCase(strValue)) {
@@ -370,7 +397,7 @@ public class PropertiesConfiguration implements Config {
 		} else if ("off".equalsIgnoreCase(strValue)) {
 			return false;
 		}
-		
+
 		if (strValue != null) {
 			return Boolean.parseBoolean(strValue);
 		} else {
@@ -378,150 +405,164 @@ public class PropertiesConfiguration implements Config {
 		}
 	}
 
+	@Override
 	public byte getByte(String key) {
 		String strValue = config.getProperty(key);
 		byte byteValue = 0;
-		
+
 		if (strValue != null) {
 			byteValue = Byte.parseByte(strValue);
 		}
-		
+
 		return byteValue;
 	}
 
+	@Override
 	public byte getByte(String key, byte defaultValue) {
 		String strValue = config.getProperty(key);
 		byte byteValue = 0;
-		
+
 		if (strValue != null) {
 			byteValue = Byte.parseByte(strValue);
 		} else {
 			byteValue = defaultValue;
 		}
-		
+
 		return byteValue;
 	}
 
+	@Override
 	public double getDouble(String key) {
 		String strValue = config.getProperty(key);
 		double doubleValue = 0;
-		
+
 		if (strValue != null) {
 			doubleValue = Double.parseDouble(strValue);
 		}
-		
+
 		return doubleValue;
 	}
 
+	@Override
 	public double getDouble(String key, double defaultValue) {
 		String strValue = config.getProperty(key);
 		double doubleValue = 0;
-		
+
 		if (strValue != null) {
 			doubleValue = Double.parseDouble(strValue);
 		} else {
 			doubleValue = defaultValue;
 		}
-		
+
 		return doubleValue;
 	}
 
+	@Override
 	public float getFloat(String key) {
 		String strValue = config.getProperty(key);
 		float floatValue = 0;
-		
+
 		if (strValue != null) {
 			floatValue = Float.parseFloat(strValue);
 		}
-		
+
 		return floatValue;
 	}
 
+	@Override
 	public float getFloat(String key, float defaultValue) {
 		String strValue = config.getProperty(key);
 		float floatValue = 0;
-		
+
+
 		if (strValue != null) {
 			floatValue = Float.parseFloat(strValue);
 		} else {
 			floatValue = defaultValue;
 		}
-		
+
 		return floatValue;
 	}
 
+	@Override
 	public int getInt(String key) {
 		String strValue = config.getProperty(key);
 		int intValue = 0;
-		
+
 		if (strValue != null) {
 			intValue = Integer.parseInt(strValue);
 		}
-		
+
 		return intValue;
 	}
 
+	@Override
 	public int getInt(String key, int defaultValue) {
 		String strValue = config.getProperty(key);
 		int intValue = 0;
-		
+
 		if (strValue != null) {
 			intValue = Integer.parseInt(strValue);
 		} else {
 			intValue = defaultValue;
 		}
-		
+
 		return intValue;
 	}
 
+	@Override
 	public long getLong(String key) {
 		String strValue = config.getProperty(key);
 		long longValue = 0;
-		
+
 		if (strValue != null) {
 			longValue = Long.parseLong(strValue);
 		}
-		
+
 		return longValue;
 	}
 
+	@Override
 	public long getLong(String key, long defaultValue) {
 		String strValue = config.getProperty(key);
 		long longValue = 0;
-		
+
 		if (strValue != null) {
 			longValue = Long.parseLong(strValue);
 		} else {
 			longValue = defaultValue;
 		}
-		
+
 		return longValue;
 	}
 
+	@Override
 	public short getShort(String key) {
 		String strValue = config.getProperty(key);
 		short shortValue = 0;
-		
+
 		if (strValue != null) {
 			shortValue = Short.parseShort(strValue);
 		}
-		
+
 		return shortValue;
 	}
 
+	@Override
 	public short getShort(String key, short defaultValue) {
 		String strValue = config.getProperty(key);
 		short shortValue = 0;
-		
+
 		if (strValue != null) {
 			shortValue = Short.parseShort(strValue);
 		} else {
 			shortValue = defaultValue;
 		}
-		
+
 		return shortValue;
 	}
-	
+
+	@Override
 	public URI getURI(String key) {
 		try {
 			String uri = config.getProperty(key);
@@ -533,6 +574,7 @@ public class PropertiesConfiguration implements Config {
 		return null;
 	}
 
+	@Override
 	public URI getURI(String key, URI defaultValue) {
 		URI result = getURI(key);
 		if (result == null) {
@@ -541,6 +583,7 @@ public class PropertiesConfiguration implements Config {
 		return result;
 	}
 
+	@Override
 	public URL getURL(String key) {
 		try {
 			String uri = config.getProperty(key);
@@ -552,7 +595,8 @@ public class PropertiesConfiguration implements Config {
 		return null;
 	}
 
-    public URL getURL(String key, URL defaultValue) {
+    @Override
+		public URL getURL(String key, URL defaultValue) {
 		URL result = getURL(key);
 		if (result == null) {
 			return defaultValue;
@@ -560,7 +604,8 @@ public class PropertiesConfiguration implements Config {
 		return result;
     }
 
-    public Color getColor(String key) {
+    @Override
+		public Color getColor(String key) {
 		Color result = null;
 		String value = getString(key);
 
@@ -575,9 +620,10 @@ public class PropertiesConfiguration implements Config {
 			} catch (NumberFormatException ignored) {
 			}
 		}
-        return result;
+		return result;
 	}
 
+	@Override
 	public Color getColor(String key, Color defaultValue) {
 		Color result = getColor(key);
 		if (result == null) {
@@ -586,4 +632,40 @@ public class PropertiesConfiguration implements Config {
 		return result;
 	}
 
+	@Override
+	public Duration getDuration(String key) {
+		String durationString = config.getProperty(key);
+		if (durationString == null) {
+			return null;
+		}
+		return DurationStyle.detectAndParse(durationString);
+	}
+
+	@Override
+	public Duration getDuration(String key, Duration defaultValue) {
+		String durationString = config.getProperty(key);
+		if (durationString == null) {
+			return defaultValue;
+		}
+		return DurationStyle.detectAndParse(durationString);
+	}
+
+	@Override
+	public Duration getDuration(String key, String defaultValue) {
+		String durationString = config.getProperty(key);
+		if (durationString == null) {
+			return DurationStyle.detectAndParse(defaultValue);
+		}
+		return DurationStyle.detectAndParse(durationString);
+	}
+
+	@Override
+	public Duration getDuration(String key, long defaultValue) {
+		String durationString = config.getProperty(key);
+		if (durationString == null) {
+			return Duration.ofMillis(defaultValue);
+		}
+		Duration duration = DurationStyle.detectAndParse(durationString);
+		return duration;
+	}
 }
