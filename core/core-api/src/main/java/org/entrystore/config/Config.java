@@ -21,6 +21,7 @@ import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
+import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
 
@@ -29,17 +30,17 @@ import java.util.List;
  * already existing configuration solutions. The main purpose is to make format
  * independent implementations possible, and to be able to switch the
  * configuration backend at a later point.
- * 
+ *
  * To get a synchronized view of a Config object, the static method
  * Configurations.synchronizedConfig can be called (similar to the Collections
  * framework).
- * 
+ *
  * <p>
  * Property = Key + Value(s)<br>
  * Key = Distinct name of a configuration setting<br>
  * <p>
  * A key may contain dots to indicate a hierarchical separation.
- * 
+ *
  * @author Hannes Ebner
  * @version $Id$
  * @see Configurations
@@ -66,7 +67,7 @@ public interface Config {
 
 	/**
 	 * Saves the configuration at a given location.
-	 * 
+	 *
 	 * @param configURL
 	 *            URL of the location. Right now only local locations are
 	 *            supported.
@@ -76,41 +77,41 @@ public interface Config {
 
 	/**
 	 * Loads a configuration from a given location.
-	 * 
+	 *
 	 * @param configURL
 	 *            URL of the location. Right now only local locations are
 	 *            supported.
 	 * @throws java.io.IOException
 	 */
 	void load(URL configURL) throws IOException;
-	
+
 	/* Property Change Listeners */
-	
+
 	/**
 	 * Adds a PropertyChangeListener to the configuration.
-	 * 
+	 *
 	 * @param listener PropertyChangeListener.
 	 */
 	void addPropertyChangeListener(PropertyChangeListener listener);
-	
+
 	/**
 	 * Adds a PropertyChangeListener to the configuration.
-	 * 
+	 *
 	 * @param key Property key.
 	 * @param listener PropertyChangeListener.
 	 */
 	void addPropertyChangeListener(String key, PropertyChangeListener listener);
-	
+
 	/**
 	 * Adds a PropertyChangeListener from the configuration.
-	 * 
+	 *
 	 * @param listener PropertyChangeListener.
 	 */
 	void removePropertyChangeListener(PropertyChangeListener listener);
-	
+
 	/**
 	 * Adds a PropertyChangeListener from the configuration.
-	 * 
+	 *
 	 * @param key Property key.
 	 * @param listener PropertyChangeListener.
 	 */
@@ -120,7 +121,7 @@ public interface Config {
 
 	/**
 	 * Clears all values of a given key.
-	 * 
+	 *
 	 * @param key
 	 *            Property key.
 	 */
@@ -129,7 +130,7 @@ public interface Config {
 	/**
 	 * Adds a property (key/value mapping) to the configuration. If the property
 	 * already exists an additional value is added.
-	 * 
+	 *
 	 * @param key
 	 *            Property key.
 	 * @param value
@@ -140,18 +141,18 @@ public interface Config {
 	/**
 	 * Adds a List of values to a property. See also addProperty(String,
 	 * Object).
-	 * 
+	 *
 	 * @param key
 	 *            Property key.
 	 * @param values
 	 *            List of objects.
 	 */
 	void addProperties(String key, List values);
-	
+
 	/**
 	 * Adds a List of values to a property. See also addProperty(String,
 	 * Object).
-	 * 
+	 *
 	 * @param key
 	 *            Property key.
 	 * @param values
@@ -161,7 +162,7 @@ public interface Config {
 
 	/**
 	 * Sets the value of a property. Already existing values are overwritten.
-	 * 
+	 *
 	 * @param key
 	 *            Property key.
 	 * @param value
@@ -172,18 +173,18 @@ public interface Config {
 	/**
 	 * Sets a List of values of a property. See also setProperty(String,
 	 * Object).
-	 * 
+	 *
 	 * @param key
 	 *            Property key.
 	 * @param values
 	 *            List of objects.
 	 */
 	void setProperties(String key, List values);
-	
+
 	/**
 	 * Sets a List of values of a property. See also setProperty(String,
 	 * Object).
-	 * 
+	 *
 	 * @param key
 	 *            Property key.
 	 * @param values
@@ -195,7 +196,7 @@ public interface Config {
 
 	/**
 	 * Checks whether the configuration contains a given key.
-	 * 
+	 *
 	 * @param key
 	 *            Property key.
 	 * @return True if the configuration contains the given key.
@@ -204,14 +205,14 @@ public interface Config {
 
 	/**
 	 * Returns a list of all set configuration keys.
-	 * 
+	 *
 	 * @return List of keys as string values.
 	 */
 	List<String> getKeyList();
 
 	/**
 	 * Returns a list of all set configuration keys under a given key.
-	 * 
+	 *
 	 * @param prefix
 	 *            Key prefix to set the point to start from in the configuration
 	 *            tree.
@@ -396,7 +397,7 @@ public interface Config {
 	 * @return Returns a property value as URL.
 	 */
 	URL getURL(String key, URL defaultValue);
-	
+
 	/**
 	 * @param key
 	 *            Property key.
@@ -413,4 +414,45 @@ public interface Config {
 	 */
 	Color getColor(String key, Color defaultValue);
 
+	/**
+	 * @param key
+	 *            Property key.
+	 * @return Returns a property value as Duration.
+	 *         Supports ns, us, ms, s, m, h, d.
+	 *         for instance 10s, 7d. Default is ms.
+	 */
+	Duration getDuration(String key);
+
+	/**
+	 * @param key
+	 *            Property key.
+	 * @param defaultValue
+	 *            Default duration if not configured.
+	 * @return Returns a property value as Duration.
+	 *         Supports ns, us, ms, s, m, h, d.
+	 *         for instance 10s, 7d. Default is ms.
+	 */
+	Duration getDuration(String key, String defaultValue);
+
+	/**
+	 * @param key
+	 *            Property key.
+	 * @param defaultValue
+	 *            Default duration if not configured.
+	 * @return Returns a property value as Duration.
+	 *         Supports ns, us, ms, s, m, h, d.
+	 *         for instance 10s, 7d. Default is ms.
+	 */
+	Duration getDuration(String key, Duration defaultValue);
+
+	/**
+	 * @param key
+	 *            Property key.
+	 * @param defaultValue
+	 *            Default duration if not configured, in ms.
+	 * @return Returns a property value as Duration.
+	 *         Supports ns, us, ms, s, m, h, d.
+	 *         for instance 10s, 7d. Default is ms.
+	 */
+	Duration getDuration(String key, long defaultValue);
 }
