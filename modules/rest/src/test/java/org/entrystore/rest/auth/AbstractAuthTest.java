@@ -9,8 +9,8 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
-import org.junit.After;
-import org.junit.Before;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 
 /**
  * Manages EntryStore instance(s) as preparation for the tests in entrystore-core-impl.
@@ -20,13 +20,11 @@ import org.junit.Before;
 public abstract class AbstractAuthTest {
 
 	RepositoryManagerImpl rm;
-
 	ContextManager cm;
-
 	PrincipalManager pm;
 
-	@Before
-	public void setUp() {
+	@BeforeEach
+	public void beforeEach() {
 		Config config = new PropertiesConfiguration("EntryStore Configuration");
 		config.setProperty(Settings.STORE_TYPE, "memory");
 		config.setProperty(Settings.BASE_URL, "http://localhost:8181/");
@@ -34,8 +32,6 @@ public abstract class AbstractAuthTest {
 		config.setProperty(Settings.SOLR, "off");
 		config.setProperty(Settings.AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS, 5);
 		config.setProperty(Settings.AUTH_TEMP_LOCKOUT_DURATION, "1s");
-		//config.setProperty(Settings.SOLR_REINDEX_ON_STARTUP, "off");
-		//config.setProperty(Settings.SOLR_URL, "/tmp/entrystore-test-solr/");
 
 		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
 		pm = mock(PrincipalManager.class);
@@ -43,8 +39,8 @@ public abstract class AbstractAuthTest {
 		TestSuite.initDisneySuite(rm);
 	}
 
-	@After
-	public void tearDown() {
+	@AfterEach
+	public void afterEach() {
 		rm.shutdown();
 		rm = null;
 	}

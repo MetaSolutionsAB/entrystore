@@ -24,7 +24,7 @@ import static org.reflections.Reflections.log;
 import org.assertj.core.api.Assertions;
 import org.entrystore.Entry;
 import org.entrystore.User;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class UserTempLockoutCacheTest extends AbstractAuthTest {
 
