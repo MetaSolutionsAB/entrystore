@@ -16,6 +16,15 @@
 
 package org.entrystore.impl;
 
+import java.nio.file.Path;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import org.apache.commons.codec.Charsets;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.codec.digest.MessageDigestAlgorithms;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -33,20 +42,23 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 
+import static org.apache.commons.codec.Charsets.UTF_8;
+import static org.apache.commons.codec.digest.MessageDigestAlgorithms.SHA_256;
 import static org.eclipse.rdf4j.model.util.Values.iri;
 
 
 /**
  * Data class to handle binary local resources.
- * 
+ *
  * @author Eric Johansson
  * @author Hannes Ebner
  */
 public class DataImpl extends ResourceImpl implements Data {
 
-	private File file = null;
-	
 	private static final Logger log = LoggerFactory.getLogger(DataImpl.class);
+	public static final String SHA_256_POSTFIX = ".sha256";
+
+	private File file = null;
 
 	public DataImpl(Entry entry) {
 		super((EntryImpl) entry, iri(entry.getResourceURI().toString()));
@@ -56,6 +68,9 @@ public class DataImpl extends ResourceImpl implements Data {
 		if (file == null) {
 			String dataDirStr = entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER);
 			if (dataDirStr != null) {
+				// Workaround to handle allowed "file:" prefixes.
+				dataDirStr = StringUtils.removeStart(dataDirStr, "file://");
+				dataDirStr = StringUtils.removeStart(dataDirStr, "file:");
 				File dataDir = new File(dataDirStr);
 				if (!dataDir.exists()) {
 					if (!dataDir.mkdirs()) {
@@ -90,7 +105,15 @@ public class DataImpl extends ResourceImpl implements Data {
 	public void setData(InputStream is) throws QuotaException, IOException {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 
-		long bytes = FileOperations.copyFile(is, Files.newOutputStream(getFile().toPath()));
+		MessageDigest sha = null;
+		try {
+			sha = MessageDigest.getInstance(SHA_256);
+		} catch (NoSuchAlgorithmException e) {
+			throw new RuntimeException(e);
+		}
+		Path dataPath = getFile().toPath();
+		long bytes = FileOperations.copyFile(new DigestInputStream(is, sha), Files.newOutputStream(dataPath));
+		writeDigest(sha);
 
 		if (entry.getRepositoryManager().hasQuotas()) {
 			try {
@@ -99,14 +122,18 @@ public class DataImpl extends ResourceImpl implements Data {
 				if (file.exists()) {
 					file.delete();
 				}
+				File digestFile = getDigestFile();
+				if (digestFile != null && digestFile.exists()) {
+					digestFile.delete();
+				}
 				throw qe;
 			}
 		}
-		
+
 		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 	}
 
-	public void useData(File file) throws QuotaException, IOException {
+	public void useData(File file) throws IOException {
 		if (file == null) {
 			throw new IllegalArgumentException("File must not be null");
 		}
@@ -123,9 +150,9 @@ public class DataImpl extends ResourceImpl implements Data {
 				sizeAfter = file.length();
 			}
 		}
-		
+
 		FileOperations.copyFile(file, getFile());
-		
+
 		if (entry.getRepositoryManager().hasQuotas()) {
 			entry.getContext().decreaseQuotaFillLevel(sizeBefore);
 			try {
@@ -134,7 +161,7 @@ public class DataImpl extends ResourceImpl implements Data {
 				getFile().delete();
 			}
 		}
-		
+
 		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 	}
 
@@ -148,11 +175,15 @@ public class DataImpl extends ResourceImpl implements Data {
 		boolean success = false;
 		try {
 			File f = getFile();
+			File digestFile = getDigestFile();
 			if (f != null && f.exists()) {
 				long size = f.length();
 				success = f.delete();
 				if (success && entry.getRepositoryManager().hasQuotas()) {
 					entry.getContext().decreaseQuotaFillLevel(size);
+				}
+				if (digestFile != null && digestFile.exists()) {
+					digestFile.delete();
 				}
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceDeleted));
 			}
@@ -175,4 +206,37 @@ public class DataImpl extends ResourceImpl implements Data {
 		return null;
 	}
 
+	private File getDigestFile() {
+		File dataFile = getDataFile();
+		if (dataFile == null) {
+			return null;
+		}
+		String digestFileName = null;
+		try {
+			digestFileName = dataFile.getCanonicalPath() + SHA_256_POSTFIX;
+		} catch (IOException e) {
+			log.error("Could not get canonical path of: " + dataFile.getAbsolutePath(), e);
+			return null;
+		}
+		File digestFile = new File(digestFileName);
+		return digestFile;
+	}
+
+	private void writeDigest(MessageDigest messageDigest) throws IOException {
+		byte[] digest = messageDigest.digest();
+		String s = String.valueOf(Hex.encodeHex(digest));
+		FileUtils.writeStringToFile(getDigestFile(), s, UTF_8);
+	}
+
+	public String readDigest() {
+		File digestFile = getDigestFile();
+		if (digestFile == null) {
+			return null;
+		}
+		try {
+			return FileUtils.readFileToString(digestFile, UTF_8);
+		} catch (IOException e) {
+			return null;
+		}
+	}
 }
