@@ -20,7 +20,6 @@ import static org.entrystore.repository.config.Settings.METRICS;
 
 import io.micrometer.core.instrument.Metrics;
 import io.micrometer.core.instrument.Timer;
-import io.micrometer.core.instrument.composite.CompositeMeterRegistry;
 import io.micrometer.core.instrument.search.Search;
 import java.util.Arrays;
 import java.util.List;
@@ -44,20 +43,15 @@ public class PerformanceMetricsFilter extends Filter {
 			"metadata",
 			"search"
 	);
+
 	static private final Logger log = LoggerFactory.getLogger(PerformanceMetricsFilter.class);
-	final private boolean disableCallToSuperDoHandle;
 
 	/**
 	 * Only use this constructor for JUnit tests, as it will disable all services of the Web Rest API!
 	 */
-	protected PerformanceMetricsFilter(boolean testMode) {
-		this.disableCallToSuperDoHandle = testMode;
+	public PerformanceMetricsFilter() {
 		EntryStoreSimpleMeterRegistry registry = new EntryStoreSimpleMeterRegistry();
 		Metrics.addRegistry(registry);
-	}
-
-	public PerformanceMetricsFilter() {
-		this(false);
 	}
 
 	@Override
@@ -68,18 +62,25 @@ public class PerformanceMetricsFilter extends Filter {
 		boolean configEnableMetrics = config.getBoolean(METRICS, false);
 
 		if (!configEnableMetrics) {
-			super.doHandle(request, response);
-			return CONTINUE;
+			return super.doHandle(request, response);
+//			return CONTINUE;
 		}
 
-		CompositeMeterRegistry registry = Metrics.globalRegistry;
-		Timer.Sample sample = Timer.start(registry);
+		Timer.Sample sample = startTimer();
+		int returnStatus = super.doHandle(request, response);
+		stopTimerAndRegisterMetrics(request, response, sample);
+		return returnStatus;
+	}
 
-		int returnStatus = this.disableCallToSuperDoHandle ? CONTINUE : super.doHandle(request, response);
+	protected Timer.Sample startTimer() {
+		Timer.Sample sample = Timer.start(Metrics.globalRegistry);
+		return sample;
+	}
 
+	protected void stopTimerAndRegisterMetrics(Request request, Response response, Timer.Sample sample) {
 		String type = extractType(request.getResourceRef().getPath());
 		if (type == null) {
-			return returnStatus;
+			return;
 		}
 		String method = request.getMethod().getName();
 		int statusCode = response.getStatus().getCode();
@@ -91,17 +92,15 @@ public class PerformanceMetricsFilter extends Filter {
 		}
 		String metricName = String.format("%s-%s-%s-%d", method, type, mediaSubType, statusCode);
 
-		Search search = registry.find(metricName);
+		Search search = Metrics.globalRegistry.find(metricName);
 		if (search == null) {
-			Timer.builder(metricName).register(registry);
+			Timer.builder(metricName).register(Metrics.globalRegistry);
 		}
-		sample.stop(registry.timer(metricName));
-
-		return returnStatus;
+		sample.stop(Metrics.globalRegistry.timer(metricName));
 	}
 
 	private EntryStoreApplication getEntryStoreApplication() {
-		EntryStoreApplication app = (EntryStoreApplication) getApplication();
+		EntryStoreApplication app = (EntryStoreApplication)getApplication();
 		return app;
 	}
 
