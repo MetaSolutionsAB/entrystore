@@ -363,7 +363,7 @@ public class EntryResource extends BaseResource {
 					if (digest != null) {
 						jdilObj.put("sha256", digest);
 					} else {
-						log.error("Digest does not exist for [{}]", entry.getEntryURI());
+						log.debug("Digest does not exist for [{}]", entry.getEntryURI());
 					}
 				}
 
