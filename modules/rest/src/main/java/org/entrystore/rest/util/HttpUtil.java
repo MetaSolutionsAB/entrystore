@@ -161,10 +161,7 @@ public class HttpUtil {
 	}
 
 	public static boolean isLargerThan(Representation r, long maxSize) {
-		if (r == null) {
-			throw new IllegalArgumentException("Representation must not be null");
-		}
-		if (r.isEmpty()) {
+		if (r == null || r.isEmpty()) {
 			return false;
 		}
 		long repSize = r.getSize();
