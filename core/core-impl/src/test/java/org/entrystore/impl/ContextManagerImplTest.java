@@ -16,7 +16,11 @@
 
 package org.entrystore.impl;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -99,9 +103,9 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		}
 
 
-		String mdQuery = new String("PREFIX dc:<http://purl.org/dc/terms/> " +
-				"SELECT ?src " +
-				"WHERE  { GRAPH ?src {?x dc:title ?y} }");
+		String mdQuery = "PREFIX dc:<http://purl.org/dc/terms/> " +
+										 "SELECT ?src " +
+										 "WHERE  { GRAPH ?src {?x dc:title ?y} }";
 
 		try {
 			List<URI> testList = new ArrayList<URI>();
@@ -120,9 +124,7 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 
 	@Disabled("Needs to be implemented")
 	@Test
-	public void solrSearch() {
-
-	}
+	public void solrSearch() {}
 
 	@Test
 	public void createAndRemoveContext() {
@@ -131,44 +133,44 @@ public class ContextManagerImplTest extends AbstractCoreTest {
 		//Add success?
 		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		URI contextMMdURI = entry.getEntryURI();
-		assertTrue(cm.getResources().size() == nrOfContexts + 1);
+		assertEquals(cm.getResources().size(), nrOfContexts + 1);
 		Entry entryRequested = cm.getByEntryURI(contextMMdURI);
-		assertTrue(entryRequested.equals(entry));
+		assertEquals(entryRequested, entry);
 
 		//Remove success?
 		try {
 			// should go wrong and will produce an ugly stack trace in the testing output, even though we catch it below
 			cm.remove(URI.create("http://exampls.com/nonexistingMMDURI"));
-			assertTrue(false);
+			fail();
 		} catch (Exception e) {
 		}
 		cm.remove(entry.getEntryURI()); //If something goes wrong it throws an exception.
-		assertTrue(cm.getResources().size() == nrOfContexts);
+		assertEquals(cm.getResources().size(), nrOfContexts);
 		entryRequested = cm.getByEntryURI(contextMMdURI);
-		assertTrue(entryRequested == null);
+		assertNull(entryRequested);
 	}
 
 	@Test
 	public void manageContextAliases() {
-		assertTrue(cm.getContextURI("newcontext") == null);
+		assertNull(cm.getContextURI("newcontext"));
 
 		int nrOfAliases = cm.getNames().size();
 
 		//Create a new context, and set it's alias to "newcontext"
 		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		cm.setName(entry.getResource().getURI(), "newcontext");
-		assertTrue(cm.getNames().size() == nrOfAliases + 1);
+		assertEquals(cm.getNames().size(), nrOfAliases + 1);
 
 		//Request the context via it's alias
 		URI cURI = cm.getContextURI("newcontext");
-		assertTrue(cURI != null);
-		assertTrue(entry.getResource().getURI().equals(cURI));
+		assertNotNull(cURI);
+		assertEquals(entry.getResource().getURI(), cURI);
 
 		//Change the alias and make sure the old alias is removed and that the new works.
 		cm.setName(entry.getResource().getURI(), "oldcontext");
-		assertTrue(cm.getContextURI("newcontext") == null);
-		assertTrue(cm.getContextURI("oldcontext") != null);
-		assertTrue(cm.getNames().size() == nrOfAliases + 1);
+		assertNull(cm.getContextURI("newcontext"));
+		assertNotNull(cm.getContextURI("oldcontext"));
+		assertEquals(cm.getNames().size(), nrOfAliases + 1);
 	}
 
 

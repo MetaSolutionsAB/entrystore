@@ -16,6 +16,13 @@
 
 package org.entrystore.rest.resources;
 
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.rio.RDFFormat;
@@ -30,6 +37,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Resource;
 import org.entrystore.User;
+import org.entrystore.exception.EntryMissingException;
 import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryProperties;
@@ -54,14 +62,6 @@ import org.restlet.resource.Get;
 import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 
 
 /**
@@ -153,7 +153,6 @@ public class EntryResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
-
 			modifyEntry((format != null) ? format : getRequestEntity().getMediaType());
 			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
 		} catch (AuthorizationException e) {
@@ -180,6 +179,8 @@ public class EntryResource extends BaseResource {
 			}
 		} catch (AuthorizationException e) {
 			unauthorizedDELETE();
+		} catch (EntryMissingException e) {
+			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		}
 	}
 
@@ -441,10 +442,7 @@ public class EntryResource extends BaseResource {
 
 						if (sort && (childrenEntries.size() < 501)) {
 							Date before = new Date();
-							boolean asc = true;
-							if ("desc".equalsIgnoreCase(parameters.get("order"))) {
-								asc = false;
-							}
+							boolean asc = !"desc".equalsIgnoreCase(parameters.get("order"));
 							GraphType prioritizedResourceType = null;
 							if (parameters.containsKey("prio")) {
 								prioritizedResourceType = GraphType.valueOf(parameters.get("prio"));
@@ -485,8 +483,7 @@ public class EntryResource extends BaseResource {
 								childJSON.put("name", getCM().getName(childEntry.getResourceURI()));
 							} else if (btChild == GraphType.List) {
 								Resource childRes = childEntry.getResource();
-								if (childRes != null && childRes instanceof org.entrystore.List) {
-									org.entrystore.List childList = (org.entrystore.List) childRes;
+								if (childRes != null && childRes instanceof org.entrystore.List childList) {
 									try {
 										childJSON.put("size", childList.getChildren().size());
 									} catch (AuthorizationException ae) {}
@@ -720,7 +717,6 @@ public class EntryResource extends BaseResource {
 				((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			getResponse().setStatus(Status.SUCCESS_OK);
-			return;
 		}
 	}
 
