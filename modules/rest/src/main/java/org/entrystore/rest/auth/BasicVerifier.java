@@ -57,7 +57,7 @@ public class BasicVerifier implements Verifier {
 		if ("whitelist".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD))) {
 			this.passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST, new ArrayList());
 		} else {
-			passwordLoginWhitelist = List.of();
+			passwordLoginWhitelist = null;
 		}
 	}
 
@@ -113,6 +113,7 @@ public class BasicVerifier implements Verifier {
 		return false;
 	}
 
+	@Override
 	public int verify(Request request, Response response) {
 		// to avoid an override of an already existing authentication, e.g. from CookieVerifier
 		URI authUser = pm.getAuthenticatedUserURI();
