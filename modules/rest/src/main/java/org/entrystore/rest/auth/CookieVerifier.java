@@ -93,6 +93,7 @@ public class CookieVerifier implements Verifier {
 		}
 	}
 
+	@Override
 	public int verify(Request request, Response response) {
 		// to avoid an override of an already existing authentication, e.g. from BasicVerifier
 		URI authUser = pm.getAuthenticatedUserURI();

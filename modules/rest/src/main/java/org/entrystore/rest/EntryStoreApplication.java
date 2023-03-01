@@ -395,7 +395,6 @@ public class EntryStoreApplication extends Application {
 		performanceMetrics.setNext(cacheControl);
 		cacheControl.setNext(modLockOut);
 
-
 		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
 			log.info("Enabling CORS");
 			modLockOut.setNext(corsFilter);
