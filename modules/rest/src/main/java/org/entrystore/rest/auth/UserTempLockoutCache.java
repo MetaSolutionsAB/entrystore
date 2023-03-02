@@ -1,7 +1,7 @@
 package org.entrystore.rest.auth;
 
-import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS;
 import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_DURATION;
+import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS;
 
 import java.net.URI;
 import java.time.Duration;
@@ -69,19 +69,23 @@ public class UserTempLockoutCache {
 	}
 
 	public boolean userIsLockedOut(String userName) {
-		UserTemporaryLockout fail = userTempLockoutMap.get(userName);
-		if (fail == null || fail.disableUntil() == null) {
-			return false;
-		} else if (LocalDateTime.now().isAfter(fail.disableUntil())) {
+		return getLockedOutUser(userName) != null;
+	}
+
+	public UserTemporaryLockout getLockedOutUser(String userName) {
+		UserTemporaryLockout lockedOutUser = userTempLockoutMap.get(userName);
+		if (lockedOutUser == null || lockedOutUser.disableUntil() == null) {
+			return null;
+		} else if (LocalDateTime.now().isAfter(lockedOutUser.disableUntil())) {
 			log.info("User [{}] stopped being locked out", userName);
 			userTempLockoutMap.remove(userName);
-			return false;
+			return null;
 		} else {
-			return true;
+			return lockedOutUser;
 		}
 	}
 
-	public List<UserTemporaryLockout> lockedOutUsers() {
+	public List<UserTemporaryLockout> getLockedOutUsers() {
 		List<UserTemporaryLockout> lockedOutUsers = userTempLockoutMap.entrySet().stream()
 				.filter(failedLoginCount -> userIsLockedOut(failedLoginCount.getValue().user().getName()))
 				.map(Map.Entry::getValue)
@@ -89,6 +93,6 @@ public class UserTempLockoutCache {
 		return lockedOutUsers;
 	}
 
-	private record UserTemporaryLockout(User user, int failedLogins, LocalDateTime disableUntil) {}
+	public record UserTemporaryLockout(User user, int failedLogins, LocalDateTime disableUntil) {}
 
 }

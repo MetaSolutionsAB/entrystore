@@ -74,6 +74,8 @@ import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.LoginTokenCache;
+import org.entrystore.rest.auth.UserTempLockoutCache;
+import org.entrystore.rest.auth.UserTempLockoutCache.UserTemporaryLockout;
 import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
@@ -114,10 +116,12 @@ public class ResourceResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(ResourceResource.class);
 
-	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+	private final List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+	private UserTempLockoutCache userTempLockoutCache;
 
 	@Override
 	public void doInit() {
+		this.userTempLockoutCache = getUserTempLockoutCache();
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
@@ -323,7 +327,7 @@ public class ResourceResource extends BaseResource {
 		if (entry.getGraphType() == GraphType.None ) {
 			if(entry.getResourceType() == ResourceType.InformationResource) {
 				Data data = (Data) entry.getResource();
-				if (data.delete() == false) {
+				if (!data.delete()) {
 					log.error("Unable to delete resource of entry " + entry.getEntryURI());
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorUnknownKind));
@@ -526,7 +530,7 @@ public class ResourceResource extends BaseResource {
 			description.setType("text/plain");
 
 			Map<String, String> descriptions = EntryUtil.getDescriptions(e);
-			Set<java.util.Map.Entry<String,String>> descEntrySet = descriptions.entrySet();
+			Set<Map.Entry<String,String>> descEntrySet = descriptions.entrySet();
 			String desc = null;
 			for (Map.Entry<String, String> descEntry : descEntrySet) {
 				desc = descEntry.getKey();
@@ -605,10 +609,7 @@ public class ResourceResource extends BaseResource {
 			}
 
 			Date before = new Date();
-			boolean asc = true;
-			if ("desc".equalsIgnoreCase(parameters.get("order"))) {
-				asc = false;
-			}
+			boolean asc = !"desc".equalsIgnoreCase(parameters.get("order"));
 			GraphType prioritizedResourceType = null;
 			if (parameters.containsKey("prio")) {
 				prioritizedResourceType = GraphType.valueOf(parameters.get("prio"));
@@ -813,8 +814,13 @@ public class ResourceResource extends BaseResource {
 						jsonUserObj.put("disabled", true);
 					}
 
+					UserTemporaryLockout lockedOutUser = userTempLockoutCache.getLockedOutUser(user.getName());
+					if (lockedOutUser != null) {
+						jsonUserObj.put("disabledUntil", lockedOutUser.disableUntil());
+					}
+
 					JSONObject customProperties = new JSONObject();
-					for (java.util.Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
+					for (Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
 						customProperties.put(propEntry.getKey(), propEntry.getValue());
 					}
 					jsonUserObj.put("customProperties", customProperties);
@@ -932,7 +938,7 @@ public class ResourceResource extends BaseResource {
 		 * Data
 		 */
 		if (GraphType.None.equals(gt)){
-			boolean textarea = this.parameters.keySet().contains("textarea");
+			boolean textarea = this.parameters.containsKey("textarea");
 			String error = null;
 
 			if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
@@ -1017,7 +1023,7 @@ public class ResourceResource extends BaseResource {
 			result.put("success", "The file was uploaded");
 			result.put("format", HtmlEscapers.htmlEscaper().escape(entry.getMimetype()));
 			if (textarea) {
-				getResponse().setEntity("<textarea>" + result.toString() + "</textarea>", MediaType.TEXT_HTML);
+				getResponse().setEntity("<textarea>" + result + "</textarea>", MediaType.TEXT_HTML);
 			} else {
 				getResponse().setEntity(new JsonRepresentation(result));
 			}

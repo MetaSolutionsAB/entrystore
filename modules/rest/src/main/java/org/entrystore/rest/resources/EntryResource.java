@@ -43,6 +43,8 @@ import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.EntryUtil;
+import org.entrystore.rest.auth.UserTempLockoutCache;
+import org.entrystore.rest.auth.UserTempLockoutCache.UserTemporaryLockout;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
@@ -76,8 +78,11 @@ public class EntryResource extends BaseResource {
 
 	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
+	private UserTempLockoutCache userTempLockoutCache;
+
 	@Override
 	public void doInit() {
+		this.userTempLockoutCache = getUserTempLockoutCache();
 		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
@@ -586,6 +591,11 @@ public class EntryResource extends BaseResource {
 						boolean disabled = user.isDisabled();
 						if (disabled) {
 							resourceObj.put("disabled", disabled);
+						}
+
+						UserTemporaryLockout lockedOutUser = userTempLockoutCache.getLockedOutUser(user.getName());
+						if (lockedOutUser != null) {
+							resourceObj.put("disabledUntil", lockedOutUser.disableUntil());
 						}
 
 						JSONObject customProperties = new JSONObject();
