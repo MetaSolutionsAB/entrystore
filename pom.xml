@@ -29,7 +29,7 @@
         <jaxb.version>2.3.1</jaxb.version>
         <guava.version>31.1-jre</guava.version>
         <jetty.version>9.4.50.v20221201</jetty.version>
-        <jsonorg.version>20220924</jsonorg.version>
+        <jsonorg.version>20230227</jsonorg.version>
         <jackson.version>2.14.2</jackson.version>
         <jackson-databind.version>2.14.2</jackson-databind.version>
         <mockito.version>5.1.1</mockito.version>
@@ -37,6 +37,8 @@
         <assertj.version>3.24.2</assertj.version>
         <jupiter.version>5.9.2</jupiter.version>
 		<rest-assured.version>5.3.0</rest-assured.version>
+		<zookeeper.version>3.8.1</zookeeper.version>
+		<xmlsec.version>3.0.1</xmlsec.version>
         <site.url>https://entrystore.org</site.url>
         <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
         <distribution.url>https://entrystore.org</distribution.url>
@@ -188,8 +190,31 @@
 					<artifactId>maven-surefire-plugin</artifactId>
 					<version>3.0.0-M9</version>
 				</plugin>
+				<plugin>
+					<groupId>org.owasp</groupId>
+					<artifactId>dependency-check-maven</artifactId>
+					<version>8.1.2</version>
+					<configuration>
+						<skipProvidedScope>true</skipProvidedScope>
+						<skipTestScope>true</skipTestScope>
+						<assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
+						<failBuildOnCVSS>7</failBuildOnCVSS>
+						<excludes>
+							<exclude>xalan:serializer</exclude>
+							<exclude>xalan:xalan</exclude>
+							<exclude>org.json:json</exclude>
+						</excludes>
+					</configuration>
+				</plugin>
             </plugins>
         </pluginManagement>
+
+		<plugins>
+			<plugin>
+				<groupId>org.owasp</groupId>
+				<artifactId>dependency-check-maven</artifactId>
+			</plugin>
+		</plugins>
     </build>
 
     <!-- ================= Repositories ================= -->
@@ -520,6 +545,21 @@
 				<groupId>org.mockito</groupId>
 				<version>${mockito.version}</version>
 				<artifactId>mockito-junit-jupiter</artifactId>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.zookeeper</groupId>
+				<artifactId>zookeeper</artifactId>
+				<version>${zookeeper.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.json</groupId>
+				<artifactId>json</artifactId>
+				<version>${jsonorg.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.santuario</groupId>
+				<artifactId>xmlsec</artifactId>
+				<version>${xmlsec.version}</version>
 			</dependency>
 		</dependencies>
     </dependencyManagement>
