@@ -17,12 +17,14 @@
 package org.entrystore.rest.resources;
 
 import static java.lang.Boolean.parseBoolean;
+import static org.restlet.data.MediaType.TEXT_HTML;
 import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
 
+import java.util.Arrays;
+import java.util.List;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
-import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.util.HttpUtil;
@@ -37,9 +39,6 @@ import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Arrays;
-import java.util.List;
 
 /**
  * This resource checks credentials and sets a cookie.
@@ -75,7 +74,7 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
-		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
+		boolean html = TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(TEXT_HTML, MediaType.APPLICATION_ALL)));
 		Form query;
 		try {
 			query = new Form(r);
@@ -125,8 +124,6 @@ public class CookieLoginResource extends BaseResource {
 		boolean userIsEnabled = !BasicVerifier.isUserDisabled(getPM(), userName);
 		try {
 			if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
-				EntryStoreApplication entryStoreApplication =
-						(EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY);
 				if (userIsEnabled) {
 					new CookieVerifier(getRM()).createAuthToken(userName, sessionCookie, getResponse());
 					getResponse().setStatus(Status.SUCCESS_OK);

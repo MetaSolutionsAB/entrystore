@@ -13,7 +13,7 @@
 	<packaging>war</packaging>
 	<version>4.12-SNAPSHOT</version>
 	<name>EntryStore OAI-PMH Target module</name>
-	
+
 	<build>
 		<resources>
 			<resource>
@@ -42,7 +42,7 @@
 						</goals>
 						<configuration>
 							<excludes>
-								<!-- not store scam.properties in generated jar only in war-->	
+								<!-- not store scam.properties in generated jar only in war-->
 								<exclude>**/entrystore.properties</exclude>
 								<exclude>**/oai-pmh.properties</exclude>
 							</excludes>
@@ -73,7 +73,7 @@
 	</build>
 
 	<dependencies>
-    		<!-- should not be deployed to the web container (hence the scope is 'provided')-->	  
+    		<!-- should not be deployed to the web container (hence the scope is 'provided')-->
 		<dependency>
 			<groupId>javax.servlet</groupId>
 			<artifactId>javax.servlet-api</artifactId>
@@ -98,5 +98,5 @@
 			</exclusions>
 		</dependency>
 	</dependencies>
-   
+
 </project>
