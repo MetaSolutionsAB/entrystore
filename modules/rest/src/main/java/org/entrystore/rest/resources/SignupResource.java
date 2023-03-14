@@ -16,12 +16,11 @@
 
 package org.entrystore.rest.resources;
 
-import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
-
 import com.google.common.base.Joiner;
 import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -52,10 +51,10 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -65,6 +64,8 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+
+import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
 
 /**
  * Resource to handle manual sign-ups.
@@ -142,17 +143,13 @@ public class SignupResource extends BaseResource {
 			// Create user
 			Entry entry = pm.createResource(null, GraphType.User, null, null);
 			if (entry == null) {
-				try {
-					if (ci.urlFailure != null) {
-						getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, "UTF-8"));
-						return new EmptyRepresentation();
-					} else {
-						getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
-					}
-					return html.representation("Unable to create user.");
-				} catch (UnsupportedEncodingException e) {
-					log.warn("Unable to decode URL: " + e.getMessage());
+				if (ci.urlFailure != null) {
+					getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, StandardCharsets.UTF_8));
+					return new EmptyRepresentation();
+				} else {
+					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				}
+				return html.representation("Unable to create user.");
 			}
 
 			// Set alias, metadata and password
@@ -180,19 +177,13 @@ public class SignupResource extends BaseResource {
 			pm.setAuthenticatedUserURI(authUser);
 		}
 
-		try {
-			if (ci.urlSuccess != null) {
-				getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, "UTF-8"));
-				return new EmptyRepresentation();
-			}
-			getResponse().setStatus(Status.SUCCESS_CREATED);
-			return html.representation("Sign-up successful.");
-		} catch (UnsupportedEncodingException e) {
-			log.warn("Unable to decode URL: " + e.getMessage());
+		if (ci.urlSuccess != null) {
+			getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, StandardCharsets.UTF_8));
+			return new EmptyRepresentation();
 		}
+		getResponse().setStatus(Status.SUCCESS_CREATED);
+		return html.representation("Sign-up successful.");
 
-		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		return html.representation("User sign-up failed.");
 	}
 
 	@Post
@@ -244,7 +235,7 @@ public class SignupResource extends BaseResource {
 				}
 
 				// Extract custom properties
-				Iterator siJsonKeyIt = siJson.keys();
+				Iterator<String> siJsonKeyIt = siJson.keys();
 				while (siJsonKeyIt.hasNext()) {
 					String key = (String) siJsonKeyIt.next();
 					if (key.startsWith(customPropPrefix) && (key.length() > customPropPrefix.length())) {
@@ -281,7 +272,7 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
-		if (ci.firstName.trim().length() < 2 || ci.lastName.trim().length() < 2) {
+		if (isInvalidName(ci.firstName) || isInvalidName(ci.lastName)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("Invalid name."));
 			return;
@@ -388,6 +379,19 @@ public class SignupResource extends BaseResource {
 		sb.append(html.footer());
 
 		return sb.toString();
+	}
+
+	boolean isInvalidName(String name) {
+		// must not be null or too short
+		if (name == null || name.length() < 2) {
+			return true;
+		}
+		// must not be a URL (covers mailto: and others with slash)
+		if (name.contains(":") || name.contains("/")) {
+			return true;
+		}
+		// must not consist of more than five words (counting spaces in between words)
+		return StringUtils.countMatches(name, " ") >= 5;
 	}
 
 }
