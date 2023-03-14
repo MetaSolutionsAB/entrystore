@@ -338,7 +338,7 @@ public class SignupResource extends BaseResource {
 				log.info("Valid reCaptcha for " + ci.email);
 			} else {
 				log.info("Invalid reCaptcha for " + ci.email);
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+				getResponse().setStatus(Status.CLIENT_ERROR_EXPECTATION_FAILED);
 				getResponse().setEntity(html.representation("Invalid reCaptcha received."));
 				return;
 			}
