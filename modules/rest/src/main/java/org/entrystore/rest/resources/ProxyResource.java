@@ -147,7 +147,7 @@ public class ProxyResource extends BaseResource {
 		Representation representation = null;
 		if (clientResponse != null && clientResponse.getStatus().isSuccess()) {
 			representation = clientResponse.getEntity();
-			getResponse().getHeaders().set("Content-Security-Policy", "script-src 'none';"); // XSS protection
+			getResponse().getHeaders().set("Content-Security-Policy", "script-src 'none'; form-action 'none';"); // XSS and SSRF protection
 			getResponse().setOnSent((request, response) -> {
 				try {
 					clientResponse.release();
