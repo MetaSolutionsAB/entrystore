@@ -34,7 +34,7 @@ import org.slf4j.LoggerFactory;
  */
 public class CORSFilter extends Filter {
 	
-	static private Logger log = LoggerFactory.getLogger(CORSFilter.class);
+	static private final Logger log = LoggerFactory.getLogger(CORSFilter.class);
 
 	private CORSUtil cors;
 
@@ -65,7 +65,7 @@ public class CORSFilter extends Filter {
 				}
 
 				response.setAccessControlAllowOrigin(origin);
-				response.setAccessControlAllowCredentials(true);
+				response.setAccessControlAllowCredentials(cors.getAllowCredentials());
 				if (cors.getMaxAge() > -1) {
 					response.setAccessControlMaxAge(cors.getMaxAge());
 				}

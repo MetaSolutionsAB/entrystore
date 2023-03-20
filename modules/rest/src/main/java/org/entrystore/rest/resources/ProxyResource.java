@@ -126,7 +126,7 @@ public class ProxyResource extends BaseResource {
 			return null;
 		} else {
 			// For /proxy in general: any user, including _guest may access hosts that are whitelisted,
-			// otherwise access is restricted to logged in users.
+			// otherwise access is restricted to logged-in users.
 			// If the host is blacklisted, nobody is allowed to fetch the URL via the proxy
 			String host = null;
 			try {
