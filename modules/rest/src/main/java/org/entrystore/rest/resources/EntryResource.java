@@ -16,33 +16,35 @@
 
 package org.entrystore.rest.resources;
 
-import static org.entrystore.EntryType.Link;
-import static org.entrystore.EntryType.LinkReference;
-import static org.entrystore.EntryType.Local;
-import static org.entrystore.EntryType.Reference;
-import static org.entrystore.rest.serializer.ResourceJsonSerializer.IMMUTABLE_EMPTY_JSONOBJECT;
-import static org.restlet.data.MediaType.APPLICATION_JSON;
-import static org.restlet.data.MediaType.APPLICATION_RDF_XML;
-import static org.restlet.data.MediaType.TEXT_RDF_N3;
-
 import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
+import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
+import org.entrystore.Group;
 import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Resource;
+import org.entrystore.User;
 import org.entrystore.exception.EntryMissingException;
+import org.entrystore.impl.DataImpl;
+import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.impl.StringResource;
+import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.auth.UserTempLockoutCache;
-import org.entrystore.rest.serializer.ResourceJsonSerializer;
-import org.entrystore.rest.serializer.ResourceJsonSerializer.ListParams;
+import org.entrystore.rest.auth.UserTempLockoutCache.UserTemporaryLockout;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
@@ -50,6 +52,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.MediaType;
+import org.restlet.data.Method;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
@@ -71,25 +74,23 @@ import org.slf4j.LoggerFactory;
  */
 public class EntryResource extends BaseResource {
 
-	private final Logger log = LoggerFactory.getLogger(EntryResource.class);
-	private final List<MediaType> supportedMediaTypes = List.of(
-			APPLICATION_RDF_XML,
-			APPLICATION_JSON,
-			TEXT_RDF_N3,
-			new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()),
-			new MediaType(RDFFormat.TRIX.getDefaultMIMEType()),
-			new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()),
-			new MediaType(RDFFormat.TRIG.getDefaultMIMEType()),
-			new MediaType(RDFFormat.JSONLD.getDefaultMIMEType())
-	);
+	static Logger log = LoggerFactory.getLogger(EntryResource.class);
+
+	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
 	private UserTempLockoutCache userTempLockoutCache;
-	private ResourceJsonSerializer resourceSerializer;
 
 	@Override
 	public void doInit() {
 		this.userTempLockoutCache = getUserTempLockoutCache();
-		this.resourceSerializer = new ResourceJsonSerializer(getPM(), getCM(), userTempLockoutCache);
+		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
+		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
+		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
+		supportedMediaTypes.add(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
+		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
 	}
 
 	@Override
@@ -104,6 +105,7 @@ public class EntryResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				return new EmptyRepresentation();
 			}
+
 			return createEmptyRepresentationWithLastModified(entry.getModifiedDate());
 		} catch (AuthorizationException e) {
 			return unauthorizedHEAD();
@@ -129,22 +131,20 @@ public class EntryResource extends BaseResource {
 				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
-			// the check for resource safety is necessary to avoid an implicit
-			// getMetadata() in the case of a PUT on (not yet) existant metadata
-			// - this is e.g. the case if conditional requests are issued
-			Optional<MediaType> preferredMediaType =
-					Optional.of(getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes));
-
-			Representation result = switch (getRequest().getMethod().getName()) {
-				case "GET" -> getEntry((format != null) ? format : preferredMediaType.orElse(APPLICATION_RDF_XML));
-				default -> new EmptyRepresentation();
-			};
-
+			Representation result = null;
+			if (Method.GET.equals(getRequest().getMethod())) {
+				MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
+				if (preferredMediaType == null) {
+					preferredMediaType = MediaType.APPLICATION_RDF_XML;
+				}
+				result = getEntry((format != null) ? format : preferredMediaType);
+			} else {
+				result = new EmptyRepresentation();
+			}
 			Date lastMod = entry.getModifiedDate();
 			if (lastMod != null) {
 				result.setModificationDate(lastMod);
 			}
-
 			return result;
 		} catch (AuthorizationException e) {
 			return unauthorizedGET();
@@ -191,18 +191,18 @@ public class EntryResource extends BaseResource {
 
 	private Representation getEntry(MediaType mediaType) {
 		String serializedGraph = null;
+		Model graph = entry.getGraph();
 		/* if (MediaType.TEXT_HTML.equals(mediaType)) {
 			return getEntryInHTML();
-		} else */
-		if (mediaType == APPLICATION_JSON) {
+		} else */ if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 			return getEntryInJSON();
 		} else {
-			Model graph = entry.getGraph();
 			serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
-			if (serializedGraph != null) {
-				getResponse().setStatus(Status.SUCCESS_OK);
-				return new StringRepresentation(serializedGraph, mediaType);
-			}
+		}
+
+		if (serializedGraph != null) {
+			getResponse().setStatus(Status.SUCCESS_OK);
+			return new StringRepresentation(serializedGraph, mediaType);
 		}
 
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -242,140 +242,454 @@ public class EntryResource extends BaseResource {
 	 */
 	private Representation getEntryInJSON() {
 		try {
-			JSONObject jobj = getEntryAsJSONObject();
-			return new JsonRepresentation(jobj.toString(2));
+			JSONObject jobj = this.getEntryAsJSONObject();
+			if (jobj != null) {
+				return new JsonRepresentation(jobj.toString(2));
+			}
 		} catch (JSONException e) {
-			log.error(e.getMessage(), e);
-		} catch (IllegalArgumentException e) {
-			log.error(e.getMessage(), e);
-			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
-			return new JsonRepresentation("{\"error\":\"Internal Server Error\"}");
+			log.error(e.getMessage());
 		}
+
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 	}
 
 
 	private JSONObject getEntryAsJSONObject() throws JSONException {
+		/*
+		 * Create a JSONObject to accumulate properties
+		 */
 		JSONObject jdilObj = new JSONObject();
 
-		/*
-		 * Entry id
-		 */
-		jdilObj.put("entryId", entry.getId());
-		GraphType bt = entry.getGraphType();
-		if ((bt == GraphType.Context || bt == GraphType.SystemContext) && Local.equals(entry.getEntryType())) {
-			jdilObj.put("name", getCM().getName(entry.getResourceURI()));
-			if (entry.getRepositoryManager().hasQuotas()) {
-				JSONObject quotaObj = new JSONObject();
-				Context c = getCM().getContext(this.entryId);
-				if (c != null) {
-					quotaObj.put("quota", c.getQuota());
-					quotaObj.put("fillLevel", c.getQuotaFillLevel());
+			/*
+			 * Entry id
+			 */
+			jdilObj.put("entryId", entry.getId());
+			GraphType bt = entry.getGraphType();
+			if ((bt == GraphType.Context || bt == GraphType.SystemContext) && EntryType.Local.equals(entry.getEntryType())) {
+				jdilObj.put("name", getCM().getName(entry.getResourceURI()));
+				if (entry.getRepositoryManager().hasQuotas()) {
+					JSONObject quotaObj = new JSONObject();
+					Context c = getCM().getContext(this.entryId);
+					if (c != null) {
+						quotaObj.put("quota", c.getQuota());
+						quotaObj.put("fillLevel", c.getQuotaFillLevel());
+					}
+					quotaObj.put("hasDefaultQuota", c.hasDefaultQuota());
+					jdilObj.put("quota", quotaObj);
 				}
-				quotaObj.put("hasDefaultQuota", c.hasDefaultQuota());
-				jdilObj.put("quota", quotaObj);
 			}
-		}
 
-		/*
-		 * Entry information
-		 */
-		Model entryGraph = entry.getGraph();
-		JSONObject entryObj = new JSONObject(RDFJSON.graphToRdfJson(entryGraph));
-		jdilObj.accumulate("info", entryObj);
+			/*
+			 * Entry information
+			 */
+			Model entryGraph = entry.getGraph();
+			JSONObject entryObj = new JSONObject(RDFJSON.graphToRdfJson(entryGraph));
+			jdilObj.accumulate("info", entryObj);
 
-		/*
-		 * Return if the parameter includeAll is not set
-		 */
-		if (parameters == null || !parameters.containsKey("includeAll")) {
+			/*
+			 * Return if the parameter includeAll is not set
+			 */
+			if (!(parameters != null && parameters.containsKey("includeAll"))) {
+				return jdilObj;
+			}
+			/*
+			 * If the parameter includeAll is set we must return more JDIl with
+			 * example local metadata, cached external metadata and maybe a
+			 * resource.
+			 */
+
+			EntryType lt = entry.getEntryType();
+
+			/*
+			 * Cached External Metadata
+			 */
+			JSONObject cachedExternalMdObj = null;
+			if (EntryType.LinkReference.equals(lt) || EntryType.Reference.equals(lt)) {
+				try {
+					Metadata cachedExternalMd = entry.getCachedExternalMetadata();
+					Model g = cachedExternalMd.getGraph();
+					if (g != null) {
+						cachedExternalMdObj = new JSONObject(RDFJSON.graphToRdfJson(g));
+						jdilObj.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, cachedExternalMdObj);
+					}
+				} catch (AuthorizationException ae) {
+					//jdilObj.accumulate("noAccessToMetadata", true);
+					//TODO: Replaced by using "rights" in json, do something else in this catch-clause
+				}
+			}
+
+			/*
+			 * Local Metadata
+			 */
+			JSONObject localMdObj = null;
+			if (EntryType.Local.equals(lt) || EntryType.Link.equals(lt) || EntryType.LinkReference.equals(lt)) {
+				try {
+					Metadata localMd = entry.getLocalMetadata();
+					Model g = localMd.getGraph();
+					if (g != null) {
+						localMdObj = new JSONObject(RDFJSON.graphToRdfJson(g));
+						jdilObj.accumulate(RepositoryProperties.MD_PATH, localMdObj);
+					}
+				} catch (AuthorizationException ae) {
+					/*if (!jdilObj.has("noAccessToMetadata")) {
+						jdilObj.accumulate("noAccessToMetadata", true);
+					}*/
+//					TODO: Replaced by using "rights" in json, do something else in this catch-clause
+				}
+			}
+
+			/*
+			 *	Relation
+			 */
+			if (entry.getRelations() != null) {
+				JSONObject relationObj = new JSONObject();
+				relationObj = new JSONObject(RDFJSON.graphToRdfJson(new LinkedHashModel(entry.getRelations())));
+				jdilObj.accumulate(RepositoryProperties.RELATION, relationObj);
+			}
+
+			/*
+			 * Rights
+			 */
+			this.accumulateRights(entry, jdilObj);
+
+			/*
+			 * Resource
+			 */
+			JSONObject resourceObj = null;
+			if (entry.getEntryType() == EntryType.Local) {
+				GraphType graphType = entry.getGraphType();
+
+				/*
+				 *  None
+				 */
+				if (graphType == GraphType.None) {
+					DataImpl data = new DataImpl(entry);
+					String digest = data.readDigest();
+					if (digest != null) {
+						jdilObj.put("sha256", digest);
+					} else {
+						log.debug("Digest does not exist for [{}]", entry.getEntryURI());
+					}
+				}
+
+				/*
+				 *  String
+				 */
+				if (graphType == GraphType.String) {
+					StringResource stringResource = (StringResource) entry.getResource();
+					jdilObj.put("resource", stringResource.getString());
+				}
+
+				/*
+				 *  Graph
+				 */
+				if (graphType == GraphType.Graph || graphType == GraphType.Pipeline) {
+					RDFResource rdfResource = (RDFResource) entry.getResource();
+					jdilObj.put("resource", new JSONObject(RDFJSON.graphToRdfJson(rdfResource.getGraph())));
+				}
+
+				/*
+				 * List
+				 */
+				if (graphType == GraphType.List) {
+
+					int limit = 0;
+					int offset = 0;
+					boolean sort = parameters.containsKey("sort");
+
+					// size of returned entry list
+					if (parameters.containsKey("limit")) {
+						try {
+							limit = Integer.valueOf(parameters.get("limit"));
+							// we don't support more than 100 results per page for now
+							if (limit > 100) {
+								limit = 100;
+							}
+						} catch (NumberFormatException ignored) {}
+					}
+
+					// offset (needed for pagination)
+					if (parameters.containsKey("offset")) {
+						try {
+							offset = Integer.valueOf(parameters.get("offset"));
+						} catch (NumberFormatException ignored) {}
+						if (offset < 0) {
+							offset = 0;
+						}
+					}
+
+					try {
+						// List<JSONObject> childrenObjects = new ArrayList<JSONObject>();
+						JSONArray childrenArray = new JSONArray();
+						Resource res = entry.getResource();
+						org.entrystore.List parent = (org.entrystore.List) res;
+
+						int maxPos = offset + limit;
+						if (limit == 0) {
+							maxPos = Integer.MAX_VALUE;
+						}
+
+						List<URI> childrenURIs = parent.getChildren();
+						Set<String> childrenIDs = new HashSet<String>();
+						List<Entry> childrenEntries = new ArrayList<Entry>();
+						for (int i = 0; i < childrenURIs.size(); i++) {
+							String u = childrenURIs.get(i).toString();
+							String id = u.substring(u.lastIndexOf('/') + 1);
+							childrenIDs.add(id);
+							Entry childEntry = this.context.get(id);
+							if (childEntry != null) {
+								childrenEntries.add(childEntry);
+							} else {
+								log.warn("Child entry " + id + " in context " + context.getURI() + " does not exist, but is referenced by a list.");
+							}
+						}
+
+						if (sort && (childrenEntries.size() < 501)) {
+							Date before = new Date();
+							boolean asc = !"desc".equalsIgnoreCase(parameters.get("order"));
+							GraphType prioritizedResourceType = null;
+							if (parameters.containsKey("prio")) {
+								prioritizedResourceType = GraphType.valueOf(parameters.get("prio"));
+							}
+							String sortType = parameters.get("sort");
+							if ("title".equalsIgnoreCase(sortType)) {
+								String lang = parameters.get("lang");
+								EntryUtil.sortAfterTitle(childrenEntries, lang, asc, prioritizedResourceType);
+							} else if ("modified".equalsIgnoreCase(sortType)) {
+								EntryUtil.sortAfterModificationDate(childrenEntries, asc, prioritizedResourceType);
+							} else if ("created".equalsIgnoreCase(sortType)) {
+								EntryUtil.sortAfterCreationDate(childrenEntries, asc, prioritizedResourceType);
+							} else if ("size".equalsIgnoreCase(sortType)) {
+								EntryUtil.sortAfterFileSize(childrenEntries, asc, prioritizedResourceType);
+							}
+							long sortDuration = new Date().getTime() - before.getTime();
+							log.debug("List entry sorting took " + sortDuration + " ms");
+						} else if (sort && (childrenEntries.size() > 500)) {
+							log.warn("Ignoring sort parameter for performance reasons because list has more than 500 children");
+						}
+
+						//for (int i = 0; i < childrenURIs.size(); i++) {
+						for (int i = offset; i < maxPos && i < childrenEntries.size(); i++) {
+							JSONObject childJSON = new JSONObject();
+							Entry childEntry = childrenEntries.get(i);
+
+							/*
+							 * Children-rights
+							 */
+							this.accumulateRights(childEntry, childJSON);
+
+							String uri = childEntry.getEntryURI().toString();
+							String entryId = uri.substring(uri.lastIndexOf('/') + 1);
+							childJSON.put("entryId", entryId);
+							GraphType btChild = childEntry.getGraphType();
+							EntryType locChild = childEntry.getEntryType();
+							if ((btChild == GraphType.Context || btChild == GraphType.SystemContext) && EntryType.Local.equals(locChild)) {
+								childJSON.put("name", getCM().getName(childEntry.getResourceURI()));
+							} else if (btChild == GraphType.List) {
+								Resource childRes = childEntry.getResource();
+								if (childRes != null && childRes instanceof org.entrystore.List childList) {
+									try {
+										childJSON.put("size", childList.getChildren().size());
+									} catch (AuthorizationException ae) {}
+								} else {
+									log.warn("Entry has ResourceType.List but the resource is either null or not an instance of List");
+								}
+							} else if (btChild == GraphType.User && locChild == EntryType.Local) {
+								childJSON.put("name", ((User) childEntry.getResource()).getName());
+							} else if (btChild == GraphType.Group && locChild == EntryType.Local) {
+								childJSON.put("name", ((Group) childEntry.getResource()).getName());
+							}
+
+							try {
+								EntryType ltC = childEntry.getEntryType();
+								if (EntryType.Reference.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
+									// get the external metadata
+									Metadata cachedExternalMD = childEntry.getCachedExternalMetadata();
+									if (cachedExternalMD != null) {
+										Model cachedExternalMDGraph = cachedExternalMD.getGraph();
+										if (cachedExternalMDGraph != null) {
+											JSONObject childCachedExternalMDJSON = new JSONObject(RDFJSON.graphToRdfJson(cachedExternalMDGraph));
+											childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMDJSON);
+										}
+									}
+								}
+
+								if (EntryType.Link.equals(ltC) || EntryType.Local.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
+									// get the local metadata
+									Metadata localMD = childEntry.getLocalMetadata();
+									if (localMD != null) {
+										Model localMDGraph = localMD.getGraph();
+										if (localMDGraph != null) {
+											JSONObject localMDJSON = new JSONObject(RDFJSON.graphToRdfJson(localMDGraph));
+											childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
+										}
+									}
+								}
+							} catch (AuthorizationException e) {
+								//childJSON.accumulate("noAccessToMetadata", true);
+//								TODO: Replaced by using "rights" in json, do something else in this catch-clause
+								// childJSON.accumulate(RepositoryProperties.MD_PATH_STUB, new JSONObject());
+							}
+
+							Model childEntryGraph = childEntry.getGraph();
+							JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(childEntryGraph));
+
+							if (childInfo != null) {
+								childJSON.accumulate("info", childInfo);
+							} else {
+								childJSON.accumulate("info", new JSONObject());
+							}
+							//							childrenObjects.add(childJSON);
+
+							if (childEntry.getRelations() != null) {
+								Model childRelationsGraph = new LinkedHashModel(childEntry.getRelations());
+								JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
+								childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
+							}
+
+							childrenArray.put(childJSON);
+						}
+
+						resourceObj = new JSONObject();
+						resourceObj.put("children", childrenArray);
+						resourceObj.put("size", childrenURIs.size());
+						resourceObj.put("limit", limit);
+						resourceObj.put("offset", offset);
+
+
+						JSONArray childrenIDArray = new JSONArray();
+						for (String id : childrenIDs) {
+							childrenIDArray.put(id);
+						}
+						resourceObj.put("allUnsorted", childrenIDArray);
+					} catch (AuthorizationException ae) {
+						//jdilObj.accumulate("noAccessToResource", true);
+//						TODO: Replaced by using "rights" in json, do something else in this catch-clause
+					}
+				}
+
+				/*
+				 * User
+				 */
+				if (entry.getGraphType() == GraphType.User) {
+					try {
+						resourceObj = new JSONObject();
+						User user = (User) entry.getResource();
+						resourceObj.put("name", user.getName());
+
+						Context homeContext = user.getHomeContext();
+						if (homeContext != null) {
+							resourceObj.put("homecontext", homeContext.getEntry().getId());
+						}
+
+						String prefLang = user.getLanguage();
+						if (prefLang != null) {
+							resourceObj.put("language", prefLang);
+						}
+
+						boolean disabled = user.isDisabled();
+						if (disabled) {
+							resourceObj.put("disabled", disabled);
+						}
+
+						UserTemporaryLockout lockedOutUser = userTempLockoutCache.getLockedOutUser(user.getName());
+						if (lockedOutUser != null) {
+							resourceObj.put("disabledUntil", lockedOutUser.disableUntil());
+						}
+
+						JSONObject customProperties = new JSONObject();
+						for (java.util.Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
+							customProperties.put(propEntry.getKey(), propEntry.getValue());
+						}
+						resourceObj.put("customProperties", customProperties);
+					} catch (AuthorizationException ae) {
+						//jdilObj.accumulate("noAccessToResource", true);
+//						TODO: Replaced by using "rights" in json, do something else in this catch-clause
+					}
+				}
+
+				/*
+				 * Group
+				 */
+				if (entry.getGraphType() == GraphType.Group) {
+					try {
+						resourceObj = new JSONObject();
+						Group group = (Group) entry.getResource();
+						resourceObj.put("name", group.getName());
+						JSONArray userArray = new JSONArray();
+						for (User u : group.members()) {
+							JSONObject childJSON = new JSONObject();
+							JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getGraph()));
+
+							if (childInfo != null) {
+								childJSON.accumulate("info", childInfo);
+							} else {
+								childJSON.accumulate("info", new JSONObject());
+							}
+
+							this.accumulateRights(u.getEntry(), childJSON);
+							try {
+								JSONObject childMd = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getLocalMetadata().getGraph()));
+								if (childMd != null) {
+									childJSON.accumulate(RepositoryProperties.MD_PATH, childMd);
+								} else {
+									childJSON.accumulate(RepositoryProperties.MD_PATH, new JSONObject());
+								}
+							} catch (AuthorizationException ae) {
+								//childJSON.accumulate("noAccessToMetadata", true);
+//								TODO: Replaced by using "rights" in json, do something else in this catch-clause
+							}
+
+							//Relations for every user in this group.
+							if (u.getEntry().getRelations() != null) {
+								Model childRelationsGraph = new LinkedHashModel(u.getEntry().getRelations());
+								JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
+								childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
+							}
+							childJSON.put("entryId", u.getEntry().getId());
+							childJSON.put("name", u.getName());
+							userArray.put(childJSON);
+						}
+
+						resourceObj.put("children", userArray);
+					} catch (AuthorizationException ae) {
+						//jdilObj.accumulate("noAccessToResource", true);
+//						TODO: Replaced by using "rights" in json, do something else in this catch-clause
+					}
+				}
+
+				// TODO other types, for example Context, SystemContext, PrincipalManager, etc
+
+				if (resourceObj != null) {
+					jdilObj.accumulate("resource", resourceObj);
+				}
+			}
 			return jdilObj;
-		}
+	}
 
-		/*
-		 * If the parameter includeAll is set we must return more JDIl with
-		 * example local metadata, cached external metadata and maybe a
-		 * resource.
-		 */
-		EntryType lt = entry.getEntryType();
 
-		/*
-		 * Cached External Metadata
-		 */
-		JSONObject cachedExternalMdObj = null;
-		if (lt == LinkReference || lt == Reference) {
-			try {
-				Metadata cachedExternalMd = entry.getCachedExternalMetadata();
-				Model g = cachedExternalMd.getGraph();
-				if (g != null) {
-					cachedExternalMdObj = new JSONObject(RDFJSON.graphToRdfJson(g));
-					jdilObj.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, cachedExternalMdObj);
-				}
-			} catch (AuthorizationException ae) {
-				//jdilObj.accumulate("noAccessToMetadata", true);
-				//TODO: Replaced by using "rights" in json, do something else in this catch-clause
+	private void accumulateRights(Entry entry, JSONObject jdilObj) throws JSONException {
+		PrincipalManager pm = this.getPM();
+		Set<AccessProperty> rights = pm.getRights(entry);
+		if(rights.size() >0){
+			for(AccessProperty ap : rights){
+				if(ap == PrincipalManager.AccessProperty.Administer)
+					jdilObj.append("rights", "administer");
+				else if (ap == PrincipalManager.AccessProperty.WriteMetadata)
+					jdilObj.append("rights", "writemetadata");
+				else if (ap == PrincipalManager.AccessProperty.WriteResource)
+					jdilObj.append("rights","writeresource");
+				else if (ap == PrincipalManager.AccessProperty.ReadMetadata)
+					jdilObj.append("rights","readmetadata");
+				else if (ap == PrincipalManager.AccessProperty.ReadResource)
+					jdilObj.append("rights","readresource");
 			}
 		}
 
-		/*
-		 * Local Metadata
-		 */
-		JSONObject localMdObj = null;
-		if (lt == Local || lt == Link || lt == LinkReference) {
-			try {
-				Metadata localMd = entry.getLocalMetadata();
-				Model g = localMd.getGraph();
-				if (g != null) {
-					localMdObj = new JSONObject(RDFJSON.graphToRdfJson(g));
-					jdilObj.accumulate(RepositoryProperties.MD_PATH, localMdObj);
-				}
-			} catch (AuthorizationException ae) {
-				/*if (!jdilObj.has("noAccessToMetadata")) {
-					jdilObj.accumulate("noAccessToMetadata", true);
-				}*/
-				//TODO: Replaced by using "rights" in json, do something else in this catch-clause
-			}
-		}
-
-		/*
-		 *	Relation
-		 */
-		if (entry.getRelations() != null) {
-			JSONObject relationObj = new JSONObject(RDFJSON.graphToRdfJson(new LinkedHashModel(entry.getRelations())));
-			jdilObj.accumulate(RepositoryProperties.RELATION, relationObj);
-		}
-
-		/*
-		 * Rights
-		 */
-		JSONArray rights = resourceSerializer.serializeRights(entry);
-		jdilObj.put("rights", rights);
-
-		/*
-		 * Resource
-		 */
-		if (entry.getEntryType() == Local) {
-			GraphType graphType = entry.getGraphType();
-			Resource resource = entry.getResource();
-
-			JSONObject resourceObj = (graphType == null) ? IMMUTABLE_EMPTY_JSONOBJECT : switch (graphType) {
-				case List -> resourceSerializer.serializeResourceList(entry, new ListParams(parameters));
-				case User -> resourceSerializer.serializeResourceUser(resource);
-				case Group -> resourceSerializer.serializeResourceGroup(resource);
-				case None -> resourceSerializer.serializeResourceNone(resource);
-				case String -> resourceSerializer.serializeResourceString(resource);
-				case Graph -> resourceSerializer.serializeResourceGraph(resource);
-				case Pipeline -> resourceSerializer.serializeResourcePipeline(resource);
-				//TODO other types, for example Context, SystemContext, PrincipalManager, etc
-				case ResultList, PipelineResult, Context, SystemContext -> IMMUTABLE_EMPTY_JSONOBJECT;
-			};
-			jdilObj.accumulate("resource", resourceObj);
-		}
-		return jdilObj;
 	}
 
 	private void modifyEntry(MediaType mediaType) throws AuthorizationException {
-
 		String graphString = null;
 		try {
 			graphString = getRequest().getEntity().getText();
@@ -384,14 +698,15 @@ public class EntryResource extends BaseResource {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
-
 		Model deserializedGraph = null;
-		if (mediaType == APPLICATION_JSON) {
+		if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 			try {
 				JSONObject rdfJSON = new JSONObject(graphString);
-				deserializedGraph = RDFJSON.rdfJsonToGraph(rdfJSON);
-			} catch (JSONException e) {
-				log.info(e.getMessage());
+				if (rdfJSON != null) {
+					deserializedGraph = RDFJSON.rdfJsonToGraph(rdfJSON);
+				}
+			} catch (JSONException jsone) {
+				log.info(jsone.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
@@ -401,14 +716,18 @@ public class EntryResource extends BaseResource {
 
 		if (deserializedGraph == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-		} else {
+			return;
+		}
+
+		if (deserializedGraph != null) {
 			entry.setGraph(deserializedGraph);
 			if (parameters.containsKey("applyACLtoChildren") &&
 					GraphType.List.equals(entry.getGraphType()) &&
-					Local.equals(entry.getEntryType())) {
+					EntryType.Local.equals(entry.getEntryType())) {
 				((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			getResponse().setStatus(Status.SUCCESS_OK);
 		}
 	}
+
 }
