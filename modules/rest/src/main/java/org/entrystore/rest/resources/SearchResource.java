@@ -417,7 +417,7 @@ public class SearchResource extends BaseResource {
 				*/
 
 		long timeDiff = new Date().getTime() - before.getTime();
-		log.debug("Graph fetching and serializer took " + timeDiff + " ms");
+		log.debug("Graph fetching and serialization took " + timeDiff + " ms");
 
 		return new JsonRepresentation(result.toString(2));
 	}
