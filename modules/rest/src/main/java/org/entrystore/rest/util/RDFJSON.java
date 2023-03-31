@@ -28,6 +28,7 @@ import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.rio.RDFParseException;
 import org.entrystore.repository.util.NS;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -40,6 +41,7 @@ import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Objects;
 import java.util.Set;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
@@ -50,29 +52,29 @@ import static org.eclipse.rdf4j.model.util.Values.iri;
  * @author Hannes Ebner <hebner@csc.kth.se>
  */
 public class RDFJSON {
-	
+
 	private static final Logger log = LoggerFactory.getLogger(RDFJSON.class);
 
-	private static IRI dtString = iri(NS.xsd, "string");
+	private static final IRI dtString = iri(NS.xsd, "string");
 
-	private static IRI dtLangString = iri(NS.rdf, "langString");
+	private static final IRI dtLangString = iri(NS.rdf, "langString");
+
+	private static final ValueFactory vf = SimpleValueFactory.getInstance();
 
 	/**
 	 * Implementation using the json.org API.
-	 * 
+	 *
 	 * @param json
 	 *            The RDF/JSON string to be parsed and converted into a Sesame
 	 *            Graph.
 	 * @return A Sesame Graph if successful, otherwise null.
 	 */
-	public static Model rdfJsonToGraph(JSONObject json) {
+	public static Model rdfJsonToGraph(JSONObject json) throws RDFParseException {
 		Model result = new LinkedHashModel();
 		HashMap<String, BNode> id2bnode = new HashMap<>();
-		ValueFactory vf = SimpleValueFactory.getInstance();
 
 		try {
-			JSONObject input = json;
-			Iterator<String> subjects = input.keys();
+			Iterator<String> subjects = json.keys();
 			while (subjects.hasNext()) {
 				String subjStr = subjects.next();
 				Resource subject = null;
@@ -85,16 +87,16 @@ public class RDFJSON {
 							id2bnode.put(subjStr, (BNode) subject);
 						}
 					} else {
-						subject = vf.createIRI(subjStr);
+						subject = parseAndValidateIRI(subjStr);
 					}
 				} catch (IllegalArgumentException iae) {
 					subject = vf.createBNode();
 				}
-				JSONObject pObj = input.getJSONObject(subjStr);
+				JSONObject pObj = json.getJSONObject(subjStr);
 				Iterator<String> predicates = pObj.keys();
 				while (predicates.hasNext()) {
 					String predStr = predicates.next();
-					IRI predicate = vf.createIRI(predStr);
+					IRI predicate = parseAndValidateIRI(predStr);
 					JSONArray predArr = pObj.getJSONArray(predStr);
 					for (int i = 0; i < predArr.length(); i++) {
 						Value object = null;
@@ -116,7 +118,7 @@ public class RDFJSON {
 						}
 						IRI datatype = null;
 						if (obj.has("datatype")) {
-							datatype = vf.createIRI(obj.getString("datatype"));
+							datatype = parseAndValidateIRI(obj.getString("datatype"));
 						}
 						if ("literal".equals(type)) {
 							if (lang != null) {
@@ -134,7 +136,7 @@ public class RDFJSON {
 								id2bnode.put(value, (BNode) object);
 							}
 						} else if ("uri".equals(type)) {
-							object = vf.createIRI(value);
+							object = parseAndValidateIRI(value);
 						}
 						result.add(subject, predicate, object);
 					}
@@ -147,7 +149,7 @@ public class RDFJSON {
 
 		return result;
 	}
-	
+
 	public static Model rdfJsonToGraph(String json) {
 		try {
 			return rdfJsonToGraph(new JSONObject(json));
@@ -232,7 +234,7 @@ public class RDFJSON {
 
 	/**
 	 * Implementation using the org.json API.
-	 * 
+	 *
 	 * @param graph
 	 *            A Sesame Graph.
 	 * @return An RDF/JSON string if successful, otherwise null.
@@ -248,7 +250,7 @@ public class RDFJSON {
 
 	/**
 	 * Implementation using the Streaming API of the Jackson framework.
-	 * 
+	 *
 	 * @param graph
 	 *            A Sesame Graph.
 	 * @return An RDF/JSON string if successful, otherwise null.
@@ -264,7 +266,7 @@ public class RDFJSON {
 			log.error(e.getMessage(), e);
 			return null;
 		}
-		
+
 		try {
 			g.writeStartObject(); // root object
 			Set<Resource> subjects = new HashSet<Resource>();
@@ -275,7 +277,7 @@ public class RDFJSON {
 				if (subject instanceof BNode && !subject.stringValue().startsWith("_:")) {
 					g.writeObjectFieldStart("_:"+subject.stringValue()); // subject
 				} else {
-					g.writeObjectFieldStart(subject.stringValue()); // subject					
+					g.writeObjectFieldStart(subject.stringValue()); // subject
 				}
 				Set<IRI> predicates = new HashSet<>();
 				for (Statement statement : graph.filter(subject, null, null)) {
@@ -306,7 +308,7 @@ public class RDFJSON {
 						g.writeEndObject(); // value
 					}
 					g.writeEndArray(); // predicate
-				} 
+				}
 				g.writeEndObject(); // subject
 			}
 			g.writeEndObject(); // root object
@@ -316,6 +318,26 @@ public class RDFJSON {
 			log.error(e.getMessage(), e);
 		}
 		return null;
+	}
+
+	private static IRI parseAndValidateIRI(String iri) {
+		Objects.requireNonNull(iri);
+
+		int spaceIndex = iri.indexOf(' ');
+		if (spaceIndex > -1) {
+			throw new RDFParseException("IRI includes an unencoded space at index " + spaceIndex + ": " + iri);
+		}
+
+		int escapeIndex = iri.indexOf('\\');
+		if (escapeIndex > -1) {
+			throw new RDFParseException("IRI includes a string escape at index " + escapeIndex + ": " + iri);
+		}
+
+		if (iri.endsWith(".")) {
+			throw new RDFParseException("IRI ends in a period '.': " + iri);
+		}
+
+		return vf.createIRI(iri);
 	}
 
 }
