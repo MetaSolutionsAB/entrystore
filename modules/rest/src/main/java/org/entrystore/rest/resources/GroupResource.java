@@ -22,6 +22,7 @@ import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.repository.config.Settings;
 import org.restlet.data.Status;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
@@ -29,9 +30,9 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 
 /**
@@ -63,16 +64,20 @@ public class GroupResource extends BaseResource {
 				return;
 			}
 
+			if (getRM().getConfiguration().getBoolean(Settings.NONADMIN_GROUPCONTEXT_CREATION, false) &&
+					!getPM().getAdminUser().getURI().equals(requestingUser) &&
+					!getPM().getAdminGroup().isMember(getPM().getUser(requestingUser))) {
+				// only admin users are allowed to create a group in this case
+				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+				return;
+			}
+
 			String name = null;
 			boolean setName = false;
 			// read name, to be used for group and context
 			if (parameters.containsKey("name")) {
-				try {
-					name = URLDecoder.decode(parameters.get("name"), "UTF-8").trim();
-					setName = name.length() > 0;
-				} catch (UnsupportedEncodingException e) {
-					log.debug(e.getMessage());
-				}
+				name = URLDecoder.decode(parameters.get("name"), StandardCharsets.UTF_8).trim();
+				setName = name.length() > 0;
 			}
 
 			// we need admin-rights to create groups and contexts

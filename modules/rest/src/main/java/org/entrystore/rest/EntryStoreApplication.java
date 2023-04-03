@@ -16,17 +16,6 @@
 
 package org.entrystore.rest;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
-import javax.naming.InitialContext;
-import javax.naming.NamingException;
-import javax.servlet.ServletContext;
 import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.apache.commons.io.FileCleaningTracker;
 import org.entrystore.ContextManager;
@@ -106,6 +95,18 @@ import org.restlet.routing.Router;
 import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+import javax.servlet.ServletContext;
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Main class to start EntryStore as Restlet Application.
@@ -363,10 +364,9 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/proxy", ProxyResource.class);
 
 		// principals scope
-		if ("on".equalsIgnoreCase(config.getString(Settings.NONADMIN_GROUPCONTEXT_CREATION, "off"))) {
-			router.attach("/_principals/groups", GroupResource.class);
-		}
+		router.attach("/_principals/groups", GroupResource.class);
 
+		// default resource
 		router.attachDefault(DefaultResource.class);
 
 		CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
