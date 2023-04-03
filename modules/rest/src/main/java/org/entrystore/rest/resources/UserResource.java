@@ -48,7 +48,7 @@ import java.util.Locale;
  */
 public class UserResource extends BaseResource {
 
-	private static Logger log = LoggerFactory.getLogger(UserResource.class);
+	private static final Logger log = LoggerFactory.getLogger(UserResource.class);
 
 	@Get
 	public Representation represent() throws ResourceException {

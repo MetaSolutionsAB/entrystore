@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.auth;
 
-import java.util.concurrent.ConcurrentHashMap;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
@@ -37,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -46,7 +46,7 @@ import java.util.Map;
  */
 public class BasicVerifier implements Verifier {
 
-	private static Logger log = LoggerFactory.getLogger(BasicVerifier.class);
+	private static final Logger log = LoggerFactory.getLogger(BasicVerifier.class);
 
 	private final PrincipalManager pm;
 	private final Map<String, Long> loginCache = new ConcurrentHashMap<>();
@@ -55,7 +55,7 @@ public class BasicVerifier implements Verifier {
 	public BasicVerifier(PrincipalManager pm, Config config) {
 		this.pm = pm;
 		if ("whitelist".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD))) {
-			this.passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST, new ArrayList());
+			this.passwordLoginWhitelist = config.getStringList(Settings.AUTH_PASSWORD_WHITELIST, new ArrayList<>());
 		} else {
 			passwordLoginWhitelist = null;
 		}
@@ -182,10 +182,7 @@ public class BasicVerifier implements Verifier {
 				return RESULT_VALID;
 			}
 
-			if (secret != null &&
-					!isUserDisabled(pm, identifier) &&
-					Password.check(secret, getSaltedHashedSecret(pm, identifier))) {
-
+			if (!isUserDisabled(pm, identifier) && Password.check(secret, getSaltedHashedSecret(pm, identifier))) {
 				userURI = userEntry.getResourceURI();
 				addLoginToCache(userEntry.getEntryURI().toString(), secret);
 				return RESULT_VALID;

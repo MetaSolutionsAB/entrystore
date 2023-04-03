@@ -381,9 +381,10 @@ public class EntryStoreApplication extends Application {
 
 		ignoreAuth.setNext(cookieAuth);
 
-		// if password authentication is disabled we only allow cookie verification (as this may verify auth_tokens
-		// generated through a CAS-login), but not basic authentication (as this always requires username/password)
-		if (passwordAuthOff) {
+		// If password authentication is disabled we only allow cookie verification (as this may verify auth_tokens
+		// generated through a CAS-login), but not basic authentication (as this always requires username/password).
+		// Also, we only allow HTTP Basic authentication if explicitly enabled in configuration.
+		if (passwordAuthOff || !config.getBoolean(Settings.AUTH_HTTP_BASIC, false)) {
 			cookieAuth.setNext(jsCallback);
 		} else {
 			ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm, config), pm);
