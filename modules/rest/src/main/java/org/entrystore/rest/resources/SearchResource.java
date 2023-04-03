@@ -16,14 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static java.lang.String.format;
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.entrystore.rest.util.RDFJSON.graphToRdfJson;
-import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
-import static org.restlet.data.Status.CLIENT_ERROR_METHOD_NOT_ALLOWED;
-import static org.restlet.data.Status.SERVER_ERROR_INTERNAL;
-import static org.restlet.data.Status.SERVER_ERROR_SERVICE_UNAVAILABLE;
-
 import com.rometools.rome.feed.synd.SyndContent;
 import com.rometools.rome.feed.synd.SyndContentImpl;
 import com.rometools.rome.feed.synd.SyndEntry;
@@ -32,21 +24,13 @@ import com.rometools.rome.feed.synd.SyndFeed;
 import com.rometools.rome.feed.synd.SyndFeedImpl;
 import com.rometools.rome.io.FeedException;
 import com.rometools.rome.io.SyndFeedOutput;
-import java.net.URI;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.common.SolrException;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -62,7 +46,9 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
+import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -74,6 +60,21 @@ import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+
+import static java.lang.String.format;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.restlet.data.Status.*;
 
 
 /**
@@ -109,6 +110,11 @@ public class SearchResource extends BaseResource {
 				return new JsonRepresentation("{\"error\":\"Query too short\"}");
 			}
 
+			MediaType rdfFormat = MediaType.APPLICATION_JSON;
+			if (RDFFormat.JSONLD.getDefaultMIMEType().equals(parameters.get("rdfFormat"))) {
+				rdfFormat = new MediaType(RDFFormat.JSONLD.getDefaultMIMEType());
+			}
+
 			// Query parameter: syndication
 			var syndication = decodeOptionalParameter("syndication", null);
 
@@ -122,7 +128,7 @@ public class SearchResource extends BaseResource {
 				log.info(msg);
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation(
-					"{\"error\":\"" + msg + "\"}");
+						"{\"error\":\"" + msg + "\"}");
 			}
 
 			// Query parameter: offset
@@ -132,7 +138,7 @@ public class SearchResource extends BaseResource {
 				log.info(msg);
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation(
-					"{\"error\":\"" + msg + "\"}");
+						"{\"error\":\"" + msg + "\"}");
 			}
 			if (offset < 0) {
 				offset = 0;
@@ -151,7 +157,7 @@ public class SearchResource extends BaseResource {
 			String facetFields = decodeOptionalParameter("facetFields", null);
 
 			// Query parameter: filterQuery
-			List<String> filterQueries = new ArrayList();
+			List<String> filterQueries = new ArrayList<>();
 			{
 				String filterQueriesStr = decodeOptionalParameter("filterQuery", null);
 				if (filterQueriesStr != null) {
@@ -166,7 +172,6 @@ public class SearchResource extends BaseResource {
 			// Query parameter: facetMinCount
 			int facetMinCount = decodeOptionalParameterInteger("facetMinCount", 1);
 
-
 			// Logic
 			QueryResults queryResults = new QueryResults(List.of(), -1, List.of());
 			if ("sparql".equalsIgnoreCase(type)) {
@@ -178,7 +183,7 @@ public class SearchResource extends BaseResource {
 			if (syndication != null) {
 				return writeSyndication(queryResults.entries(), syndication, language, limit);
 			} else {
-				return writeJson(offset, limit, queryResults);
+				return writeJson(offset, limit, queryResults, rdfFormat);
 			}
 		} catch (JsonErrorException e) {
 			return e.getRepresentation();
@@ -187,8 +192,7 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
-	public StringRepresentation writeSyndication(List<Entry> entries, String type, String language, int limit)
-		throws JsonErrorException {
+	public StringRepresentation writeSyndication(List<Entry> entries, String type, String language, int limit) throws JsonErrorException {
 		try {
 
 			SyndFeed feed = new SyndFeedImpl();
@@ -263,10 +267,6 @@ public class SearchResource extends BaseResource {
 				rep = new StringRepresentation(s);
 			}
 
-			if (rep == null) {
-				getResponse().setStatus(CLIENT_ERROR_METHOD_NOT_ALLOWED);
-				throw new JsonErrorException(new JsonRepresentation(JSONErrorMessages.errorNotAContext));
-			}
 			return rep;
 		} catch (IllegalArgumentException e) {
 			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
@@ -274,7 +274,7 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
-	private JsonRepresentation writeJson(int offset, int limit, QueryResults queryResults) {
+	private JsonRepresentation writeJson(int offset, int limit, QueryResults queryResults, MediaType rdfFormat) {
 		Date before = new Date();
 		JSONArray children = new JSONArray();
 		if (queryResults.entries() != null) {
@@ -329,24 +329,19 @@ public class SearchResource extends BaseResource {
 							if (cachedExternalMD != null) {
 								Model cachedExternalMDGraph = cachedExternalMD.getGraph();
 								if (cachedExternalMDGraph != null) {
-									//TODO Might fail with a NullpointerException
-									JSONObject childCachedExternalMDJSON =
-										new JSONObject(graphToRdfJson(cachedExternalMDGraph));
-									childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH,
-										childCachedExternalMDJSON);
+									JSONObject childCachedExternalMDJSON = serializeGraph(cachedExternalMDGraph, rdfFormat);
+									childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMDJSON);
 								}
 							}
 						}
 
-						if (EntryType.Link.equals(ltC) || EntryType.Local.equals(ltC) || EntryType.LinkReference.equals(
-							ltC)) {
+						if (EntryType.Link.equals(ltC) || EntryType.Local.equals(ltC) || EntryType.LinkReference.equals(ltC)) {
 							// get the local metadata
 							Metadata localMD = e.getLocalMetadata();
 							if (localMD != null) {
 								Model localMDGraph = localMD.getGraph();
 								if (localMDGraph != null) {
-									//TODO Might fail with a NullpointerException
-									JSONObject localMDJSON = new JSONObject(graphToRdfJson(localMDGraph));
+									JSONObject localMDJSON = serializeGraph(localMDGraph, rdfFormat);
 									childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
 								}
 							}
@@ -356,13 +351,8 @@ public class SearchResource extends BaseResource {
 					}
 
 					try {
-						//TODO Might fail with a NullpointerException
-						JSONObject childInfo = new JSONObject(graphToRdfJson(e.getGraph()));
-						if (childInfo != null) {
-							childJSON.accumulate("info", childInfo);
-						} else {
-							childJSON.accumulate("info", new JSONObject());
-						}
+						JSONObject childInfo = serializeGraph(e.getGraph(), rdfFormat);
+						childJSON.accumulate("info", Objects.requireNonNullElseGet(childInfo, JSONObject::new));
 					} catch (AuthorizationException ae) {
 						childJSON.accumulate("noAccessToEntryInfo", true);
 					}
@@ -370,8 +360,7 @@ public class SearchResource extends BaseResource {
 					try {
 						if (e.getRelations() != null) {
 							Model childRelationsGraph = new LinkedHashModel(e.getRelations());
-							//TODO Might fail with a NullpointerException
-							JSONObject childRelationObj = new JSONObject(graphToRdfJson(childRelationsGraph));
+							JSONObject childRelationObj = serializeGraph(childRelationsGraph, rdfFormat);
 							childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 						}
 					} catch (AuthorizationException ae) {
@@ -409,7 +398,7 @@ public class SearchResource extends BaseResource {
 		result.put("facetFields", facetFieldsArr);
 
 		// TODO remove the commented four lines below if there is no use found for it
-				/*
+                /*
 				JSONArray jaRights = new JSONArray();
 				jaRights.put("readmetadata");
 				jaRights.put("readresource");
@@ -423,13 +412,13 @@ public class SearchResource extends BaseResource {
 	}
 
 	private QueryResults searchSolr(
-		String queryValue,
-		String sorting,
-		int offset,
-		int limit,
-		String facetFields,
-		List<String> filterQueries,
-		int facetMinCount) throws JsonErrorException {
+			String queryValue,
+			String sorting,
+			int offset,
+			int limit,
+			String facetFields,
+			List<String> filterQueries,
+			int facetMinCount) throws JsonErrorException {
 
 		try {
 
@@ -502,10 +491,10 @@ public class SearchResource extends BaseResource {
 		List<Entry> entries;
 		try {
 			String query =
-				"PREFIX dc:<http://purl.org/dc/terms/> " +
-				"SELECT ?x " +
-				"WHERE { " +
-				"?x " + queryValue + " ?y }";
+					"PREFIX dc:<http://purl.org/dc/terms/> " +
+							"SELECT ?x " +
+							"WHERE { " +
+							"?x " + queryValue + " ?y }";
 			entries = getCM().search(query, null, null);
 		} catch (Exception e) {
 			log.error(e.getMessage());
@@ -516,23 +505,23 @@ public class SearchResource extends BaseResource {
 
 	private String decodeMandatoryParameter(String parameter) throws JsonErrorException {
 		return Optional.ofNullable(parameters.get(parameter))
-			.map(param -> URLDecoder.decode(param, UTF_8))
-			.orElseThrow(() -> {
-				String msg = "Mandatory parameter '" + parameter + "' is missing";
-				log.info(msg);
-				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-				return new JsonErrorException(msg);
-			});
+				.map(param -> URLDecoder.decode(param, UTF_8))
+				.orElseThrow(() -> {
+					String msg = "Mandatory parameter '" + parameter + "' is missing";
+					log.info(msg);
+					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+					return new JsonErrorException(msg);
+				});
 	}
 
 	private String decodeOptionalParameter(String parameter, String defaultValue) {
 		return Optional.ofNullable(parameters.get(parameter))
-			.map(param -> URLDecoder.decode(param, UTF_8))
-			.orElse(defaultValue);
+				.map(param -> URLDecoder.decode(param, UTF_8))
+				.orElse(defaultValue);
 	}
 
 	private Integer decodeOptionalParameterInteger(String parameter, int defaultValue) {
-		String value = decodeOptionalParameter(parameter, defaultValue + "");
+		String value = decodeOptionalParameter(parameter, Integer.valueOf(defaultValue).toString());
 		try {
 			return Integer.valueOf(value);
 		} catch (NumberFormatException e) {
@@ -568,4 +557,17 @@ public class SearchResource extends BaseResource {
 			this(entries, results, List.of());
 		}
 	}
+
+	private JSONObject serializeGraph(Model graph, MediaType rdfFormat) {
+		if (MediaType.APPLICATION_JSON.equals(rdfFormat)) {
+			// We don't use GraphUtil.serializeGraph() because we need a JSONObject here and
+			// converting back and forth between String and JSONObject would be very efficient
+			return RDFJSON.graphToRdfJsonObject(graph);
+		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(rdfFormat.getName())) {
+			return new JSONObject(GraphUtil.serializeGraph(graph, rdfFormat));
+		}
+		log.warn("Model could not be serialized, returning empty JSON object");
+		return new JSONObject();
+	}
+
 }
