@@ -427,14 +427,28 @@ public class SolrSearchIndex implements SearchIndex {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			boolean success = postContextEntriesToQueue(contextURI);
-			if (success) {
-				if (!purgeAllBeforeReindex){
-					clearSolrIndex(solrServer, reindexStart, contextEntry);
+			URI lastIndexedEntryURI = postContextEntriesToQueue(contextURI);
+			if (lastIndexedEntryURI != null) {
+				if (!purgeAllBeforeReindex) {
+					new Thread(() -> {
+						// We need to wait until the last entry of the context is indexed, otherwise this would leave a gap of some time
+						// (between milliseconds to seconds or even minutes) where the entries of that particular context are not in the index
+						while (postQueue.asMap().containsKey(lastIndexedEntryURI)) {
+							try {
+								log.debug("Entries of context {} are still in submission queue, sleeping 5 seconds before attempting new purge of expired entries", contextURI);
+								Thread.sleep(5000);
+							} catch (InterruptedException e) {
+								log.error("Cleanup of context index was interrupted, a full Solr reindex may be necessary: {}", e.getMessage());
+							}
+							postQueue.cleanUp();
+						}
+						clearSolrIndex(solrServer, reindexStart, contextEntry);
+						log.info("Expired entries of context {} have been purged from the index", contextURI);
+					}).start();
 				}
-				log.info("Finished Solr reindexing of context " + contextURI + ", took " + (new Date().getTime() - reindexStart.getTime()) + " ms; the Solr submission queue may still contain yet to be processed documents");
+				log.info("Finished Solr reindexing of context {}, took {} ms; the Solr submission queue may still contain yet to be processed documents", contextURI, new Date().getTime() - reindexStart.getTime());
 			} else {
-				log.debug("Solr reindexing of context " + contextURI + " could not be completed, either the context could not be loaded or (most likely) another process started reindexing the same context before the ongoing process was complete");
+				log.debug("Solr reindexing of context {} could not be completed, either the context could not be loaded or (most likely) another process started reindexing the same context before the ongoing process was complete", contextURI);
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
@@ -484,15 +498,16 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private boolean postContextEntriesToQueue(URI contextURI) {
+	private URI postContextEntriesToQueue(URI contextURI) {
 		String id = contextURI.toString().substring(contextURI.toString().lastIndexOf("/") + 1);
 		ContextManager cm = rm.getContextManager();
 		Context context = cm.getContext(id);
 		if (context != null) {
+			URI lastEntryURI = null;
 			for (URI entryURI : context.getEntries()) {
 				if (interrupted()) {
 					log.info("Indexer thread received interrupt, stopping reindexing of " + contextURI);
-					return false;
+					return null;
 				}
 				if (entryURI != null) {
 					Entry entry = cm.getEntry(entryURI);
@@ -507,11 +522,12 @@ public class SolrSearchIndex implements SearchIndex {
 							log.debug("Not adding deleted entry to post queue: {}", entryURI);
 						}
 					}
+					lastEntryURI = entryURI;
 				}
 			}
-			return true;
+			return lastEntryURI;
 		}
-		return false;
+		return null;
 	}
 
 	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
@@ -557,15 +573,15 @@ public class SolrSearchIndex implements SearchIndex {
 
 		// profile
 		if (entry.getLocalMetadataURI() != null) {
-		Set<IRI> profilePreds = new HashSet<>();
-		profilePreds.add(valueFactory.createIRI("http://entryscape.com/terms/entityType"));
-		profilePreds.add(valueFactory.createIRI("http://entrystore.org/terms/profile"));
-		for (String profileURI : EntryUtil.getResourceValues(entryGraph, entry.getLocalMetadataURI(), profilePreds)) {
-			doc.setField("profile", profileURI);
-			break; // we only need the first match
-		}
+			Set<IRI> profilePreds = new HashSet<>();
+			profilePreds.add(valueFactory.createIRI("http://entryscape.com/terms/entityType"));
+			profilePreds.add(valueFactory.createIRI("http://entrystore.org/terms/profile"));
+			for (String profileURI : EntryUtil.getResourceValues(entryGraph, entry.getLocalMetadataURI(), profilePreds)) {
+				doc.setField("profile", profileURI);
+				break; // we only need the first match
+			}
 		} else {
-			log.warn("Local metadata URI of entry is null:" + entry.getEntryURI());
+			log.warn("Local metadata URI of entry is null: " + entry.getEntryURI());
 		}
 
 		// creator
@@ -642,9 +658,13 @@ public class SolrSearchIndex implements SearchIndex {
 		// user name
 		if (GraphType.User.equals(entry.getGraphType())) {
 			User user = (org.entrystore.User) entry.getResource();
-			String username = user.getName();
-			if (username != null) {
-				doc.addField("username", username);
+			if (user != null) {
+				String username = user.getName();
+				if (username != null) {
+					doc.addField("username", username);
+				}
+			} else {
+				log.warn("User resource of {} is null", entry.getEntryURI().toString());
 			}
 		}
 
@@ -720,7 +740,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// Full text extraction using Apache Tika
-		/* if (extractFulltext && EntryType.Local.equals(entry.getEntryType())
+        /* if (extractFulltext && EntryType.Local.equals(entry.getEntryType())
 				&& ResourceType.InformationResource.equals(entry.getResourceType())
 				&& entry.getResource() instanceof Data) {
 			Data d = (Data) entry.getResource();
