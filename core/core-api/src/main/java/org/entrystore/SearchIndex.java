@@ -47,4 +47,6 @@ public interface SearchIndex {
 
 	public boolean ping();
 
+	public boolean isUp();
+
 }

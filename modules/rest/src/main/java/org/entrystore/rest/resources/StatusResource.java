@@ -103,7 +103,7 @@ public class StatusResource extends BaseResource  {
 					result.put("rowstoreURL", config.getString(Settings.ROWSTORE_URL, "unconfigured"));
 					result.put("solr", config.getBoolean(Settings.SOLR, false));
 					result.put("solrReindexOnStartup", config.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false));
-					result.put("solrStatus", getRM().getIndex().ping() ? "online" : "offline");
+					result.put("solrStatus", getRM().getIndex().isUp() ? "online" : "offline");
 					result.put("version", EntryStoreApplication.getVersion());
 					result.put("startupTime", EntryStoreApplication.getStartupDate());
 
@@ -182,7 +182,7 @@ public class StatusResource extends BaseResource  {
 						return new EmptyRepresentation();
 					}
 				} else {
-					if (getRM() != null && getRM().getIndex() != null && getRM().getIndex().ping()) {
+					if (getRM() != null && getRM().getIndex() != null && getRM().getIndex().isUp()) {
 						return new StringRepresentation("UP", MediaType.TEXT_PLAIN);
 					} else {
 						return new StringRepresentation("DOWN", MediaType.TEXT_PLAIN);

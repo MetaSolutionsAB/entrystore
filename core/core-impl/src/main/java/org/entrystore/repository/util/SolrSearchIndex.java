@@ -476,6 +476,11 @@ public class SolrSearchIndex implements SearchIndex {
 		return false;
 	}
 
+	@Override
+	public boolean isUp() {
+		return ping() && documentSubmitter.isAlive() && delayedContextIndexer.isAlive() && !reindexExecutor.isShutdown();
+	}
+
 	public void submitContextForDelayedReindex(Entry contextEntry, Model entryGraph) {
 		synchronized (delayedReindex) {
 			IRI guestURI = valueFactory.createIRI(rm.getPrincipalManager().getGuestUser().getURI().toString());
