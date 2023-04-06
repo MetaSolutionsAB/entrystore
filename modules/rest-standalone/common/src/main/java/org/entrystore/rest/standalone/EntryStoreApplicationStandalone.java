@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.standalone;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Optional;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -34,9 +36,6 @@ import org.restlet.Context;
 import org.restlet.Server;
 import org.restlet.data.Protocol;
 import org.slf4j.LoggerFactory;
-
-import java.net.URI;
-import java.net.URISyntaxException;
 
 /**
  * Class to provide common functionality for other standalone wrappers.

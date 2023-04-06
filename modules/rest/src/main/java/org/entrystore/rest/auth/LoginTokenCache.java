@@ -16,11 +16,22 @@
 
 package org.entrystore.rest.auth;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static org.entrystore.repository.config.Settings.AUTH_COOKIE_MAX_AGE;
+import static org.entrystore.repository.config.Settings.AUTH_COOKIE_UPDATE_EXPIRY;
+import static org.entrystore.repository.config.Settings.AUTH_TOKEN_MAX_AGE;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
+import org.entrystore.config.Config;
+import org.restlet.Request;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Date;
-import java.util.Map;
 
 /**
  * @author Hannes Ebner
@@ -28,30 +39,39 @@ import java.util.Map;
 public class LoginTokenCache extends TokenCache<String, UserInfo> {
 
 	private static final Logger log = LoggerFactory.getLogger(LoginTokenCache.class);
+	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(7).toSeconds();
 
-	private static LoginTokenCache instance;
+	private final boolean configCookieUpdateExpiry;
+	private final int configCookieMaxAgeInSeconds;
 
-	private LoginTokenCache() {}
-
-	public synchronized static LoginTokenCache getInstance() {
-		if (instance == null) {
-			instance = new LoginTokenCache();
-		}
-		return instance;
+	public LoginTokenCache(Config config) {
+		this.configCookieUpdateExpiry = config.getBoolean(AUTH_COOKIE_UPDATE_EXPIRY, false);
+		this.configCookieMaxAgeInSeconds =
+				config.getInt(AUTH_TOKEN_MAX_AGE, config.getInt(AUTH_COOKIE_MAX_AGE, DEFAULT_MAX_AGE_IN_SECONDS));
 	}
 
 	public void cleanup() {
 		synchronized (tokenCache) {
-			tokenCache.entrySet().removeIf(userInfo -> userInfo.getValue().getLoginExpiration().before(new Date()));
+			tokenCache.entrySet()
+					.removeIf(userInfo -> userInfo.getValue().getLoginExpiration().isBefore(LocalDateTime.now()));
 		}
 	}
 
 	public void removeTokens(String userName) {
-		if (userName == null) {
-			throw new IllegalArgumentException("Username must not be null");
-		}
+		checkArgument(userName != null, "userName must not be null");
 		synchronized (tokenCache) {
 			tokenCache.entrySet().removeIf(userInfo -> userName.equals(userInfo.getValue().getUserName()));
+		}
+	}
+
+	public void removeToken(String token) {
+		checkArgument(token != null, "userInfo must not be null");
+		synchronized (tokenCache) {
+			if (tokenCache.containsKey(token)) {
+				tokenCache.remove(token);
+			} else {
+				log.warn("Token not found in cache");
+			}
 		}
 	}
 
@@ -61,7 +81,7 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 		}
 		synchronized (tokenCache) {
 			if (tokenCache.containsKey(token)) {
-				String userName = tokenCache.get(token).userName;
+				String userName = tokenCache.get(token).getUserName();
 				tokenCache.entrySet().removeIf(userInfo ->
 						(userName.equals(userInfo.getValue().getUserName()) && !token.equals(userInfo.getKey()))
 				);
@@ -76,7 +96,7 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 			throw new IllegalArgumentException("Usernames must not be null");
 		}
 		synchronized (tokenCache) {
-			for (Map.Entry<String, UserInfo> e : tokenCache.entrySet()) {
+			for (Entry<String, UserInfo> e : tokenCache.entrySet()) {
 				UserInfo ui = e.getValue();
 				if (oldUserName.equals(ui.userName)) {
 					ui.setUserName(newUserName);
@@ -86,4 +106,33 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 		}
 	}
 
+	public Map<String, UserInfo> getTokens(String userName) {
+		checkArgument(userName != null, "userName must not be null");
+		synchronized (tokenCache) {
+			return tokenCache.entrySet().stream()
+					.filter(entry -> userName.equals(entry.getValue().getUserName()))
+					.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+		}
+	}
+
+	public UserInfo registerUserInteraction(String token, Request request) {
+		checkArgument(token != null, "token must not be null");
+		UserInfo userInfo = getTokenValue(token);
+		if (userInfo == null) {
+			log.debug("Call to registerUserInteraction with non-existent token [{}]", token);
+			return null;
+		}
+
+		userInfo.setUserAgent(request.getClientInfo().getAgent());
+		userInfo.setLastAccess(LocalDateTime.now());
+		try {
+			userInfo.setInetAddress(InetAddress.getByName(request.getClientInfo().getUpstreamAddress()));
+		} catch (UnknownHostException e) {
+			log.error("Could not resolve IP address " + request.getClientInfo().getUpstreamAddress(), e);
+		}
+		if (configCookieUpdateExpiry) {
+			userInfo.setLoginExpiration(userInfo.getLastAccess().plusSeconds(configCookieMaxAgeInSeconds));
+		}
+		return userInfo;
+	}
 }

@@ -16,33 +16,81 @@
 
 package org.entrystore.rest.auth;
 
-import java.util.Date;
+import java.net.InetAddress;
+import java.time.LocalDateTime;
 
 public class UserInfo {
-	
-	String userName;
-	
-	Date loginExpiration;
 
-	public UserInfo(String userName, Date loginExpiration) {
+	String userName;
+	LocalDateTime loginExpiration;
+	LocalDateTime loginTime;
+	LocalDateTime lastAccess;
+	InetAddress inetAddress;
+	String userAgent;
+
+	public UserInfo() {}
+
+	public UserInfo(String userName, LocalDateTime loginExpiration) {
 		this.userName = userName;
 		this.loginExpiration = loginExpiration;
 	}
-	
+
+	public UserInfo(String userName, LocalDateTime loginExpiration, LocalDateTime loginTime, LocalDateTime lastAccess,
+			InetAddress inetAddress, String userAgent) {
+
+		this.userName = userName;
+		this.loginExpiration = loginExpiration;
+		this.loginTime = loginTime;
+		this.lastAccess = lastAccess;
+		this.inetAddress = inetAddress;
+		this.userAgent = userAgent;
+	}
+
 	public String getUserName() {
 		return userName;
-	}
-	
-	public Date getLoginExpiration() {
-		return loginExpiration;
 	}
 
 	public void setUserName(String userName) {
 		this.userName = userName;
 	}
 
-	public void setLoginExpiration(Date loginExpiration) {
+	public LocalDateTime getLoginExpiration() {
+		return loginExpiration;
+	}
+
+	public void setLoginExpiration(LocalDateTime loginExpiration) {
 		this.loginExpiration = loginExpiration;
 	}
 
+	public LocalDateTime getLoginTime() {
+		return loginTime;
+	}
+
+	public void setLoginTime(LocalDateTime loginTime) {
+		this.loginTime = loginTime;
+	}
+
+	public LocalDateTime getLastAccess() {
+		return lastAccess;
+	}
+
+	public void setLastAccess(LocalDateTime lastAccess) {
+		this.lastAccess = lastAccess;
+	}
+
+	public InetAddress getInetAddress() {
+		return inetAddress;
+	}
+
+	public void setInetAddress(InetAddress inetAddress) {
+		this.inetAddress = inetAddress;
+	}
+
+	public String getUserAgent() {
+		return userAgent;
+	}
+
+	public void setUserAgent(String userAgent) {
+		this.userAgent = userAgent;
+	}
 }

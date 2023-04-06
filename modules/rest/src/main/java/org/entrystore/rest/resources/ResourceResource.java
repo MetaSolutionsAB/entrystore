@@ -87,6 +87,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.UserTempLockoutCache;
@@ -1043,7 +1044,8 @@ public class ResourceResource extends BaseResource {
 					if (resourceUser.setName(newName)) {
 						// the username was successfully changed, so we need to update the UserInfo
 						// objects in the LoginTokenCache to not invalidate logged in user sessions
-						LoginTokenCache.getInstance().renameUser(oldName, newName);
+						LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
+						loginTokenCache.renameUser(oldName, newName);
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Name already taken.\"}"));
@@ -1053,7 +1055,8 @@ public class ResourceResource extends BaseResource {
 				if (entityJSON.has("password")) {
 					String passwd =  entityJSON.getString("password");
 					if (resourceUser.setSecret(passwd)) {
-						LoginTokenCache.getInstance().removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
+						LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
+						loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
 						Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
 						return;
 					} else {
@@ -1094,7 +1097,8 @@ public class ResourceResource extends BaseResource {
 					resourceUser.setDisabled(disabled);
 					if (disabled) {
 						String userName = getPM().getPrincipalName(this.entry.getResourceURI());
-						LoginTokenCache.getInstance().removeTokens(userName);
+						LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
+						loginTokenCache.removeTokens(userName);
 					}
 				}
 				if (entityJSON.has("customProperties")) {
