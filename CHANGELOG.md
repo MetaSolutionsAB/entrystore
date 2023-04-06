@@ -1,5 +1,75 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 5.1.0 (2023-04-xx)
+
+### Improvement
+
+[ENTRYSTORE-316](https://metasolutions.atlassian.net/browse/ENTRYSTORE-316) Add checksum to every local resource
+
+[ENTRYSTORE-493](https://metasolutions.atlassian.net/browse/ENTRYSTORE-493) Refresh auth token upon access
+
+[ENTRYSTORE-670](https://metasolutions.atlassian.net/browse/ENTRYSTORE-670) Activate error for invalid auth tokens by default
+
+[ENTRYSTORE-676](https://metasolutions.atlassian.net/browse/ENTRYSTORE-676) Limit size of accepted request bodies if sent by unauthenticated user
+
+[ENTRYSTORE-732](https://metasolutions.atlassian.net/browse/ENTRYSTORE-732) Add indicator of temporarily disabled user
+
+[ENTRYSTORE-740](https://metasolutions.atlassian.net/browse/ENTRYSTORE-740) Enable GroupResource for admin users independently from Settings.NONADMIN\_GROUPCONTEXT\_CREATION
+
+[ENTRYSTORE-742](https://metasolutions.atlassian.net/browse/ENTRYSTORE-742) Deactivate HTTP Basic Authentication by default
+
+[ENTRYSTORE-751](https://metasolutions.atlassian.net/browse/ENTRYSTORE-751) Restrict form-action in CSP of ProxyResource
+
+[ENTRYSTORE-752](https://metasolutions.atlassian.net/browse/ENTRYSTORE-752) Group members request should include the disabled state
+
+[ENTRYSTORE-757](https://metasolutions.atlassian.net/browse/ENTRYSTORE-757) Change from HTTP 400 to 417 for failed reCaptcha verification
+
+[ENTRYSTORE-758](https://metasolutions.atlassian.net/browse/ENTRYSTORE-758) Disallow sketchy content in signup payloads
+
+[ENTRYSTORE-759](https://metasolutions.atlassian.net/browse/ENTRYSTORE-759) Make Access-Control-Allow-Credentials configurable and deactivate by default
+
+[ENTRYSTORE-762](https://metasolutions.atlassian.net/browse/ENTRYSTORE-762) Improve search index health check to also take threads and executors into consideration
+
+### Task
+
+[ENTRYSTORE-748](https://metasolutions.atlassian.net/browse/ENTRYSTORE-748) Add documentation for new functionality
+
+[ENTRYSTORE-749](https://metasolutions.atlassian.net/browse/ENTRYSTORE-749) Update EntryStore dependencies to resolve potential vulnerabilities
+
+[ENTRYSTORE-754](https://metasolutions.atlassian.net/browse/ENTRYSTORE-754) Make EntryResource and ResourceResource more alike to help in refactoring later
+
+[ENTRYSTORE-761](https://metasolutions.atlassian.net/browse/ENTRYSTORE-761) RDF/JSON implementation should not accept spaces in IRIs
+
+### New Feature
+
+[ENTRYSTORE-351](https://metasolutions.atlassian.net/browse/ENTRYSTORE-351) Measure and expose performance metrics
+
+[ENTRYSTORE-524](https://metasolutions.atlassian.net/browse/ENTRYSTORE-524) Disable user after configurable amount of unsuccessful login attempts
+
+[ENTRYSTORE-657](https://metasolutions.atlassian.net/browse/ENTRYSTORE-657) Allow shutdown/restart via API
+
+[ENTRYSTORE-692](https://metasolutions.atlassian.net/browse/ENTRYSTORE-692) Support JSON-LD in search results
+
+### Bug
+
+[ENTRYSTORE-494](https://metasolutions.atlassian.net/browse/ENTRYSTORE-494) Adding metadata with URI containing space does not work
+
+[ENTRYSTORE-558](https://metasolutions.atlassian.net/browse/ENTRYSTORE-558) Trig export \(backup\) cannot be imported again
+
+[ENTRYSTORE-730](https://metasolutions.atlassian.net/browse/ENTRYSTORE-730) Disallow removal of users from \_users group
+
+[ENTRYSTORE-733](https://metasolutions.atlassian.net/browse/ENTRYSTORE-733) Bug when deleting same entry twice quickly
+
+[ENTRYSTORE-734](https://metasolutions.atlassian.net/browse/ENTRYSTORE-734) HTTP 500 when authenticating with empty request body
+
+[ENTRYSTORE-735](https://metasolutions.atlassian.net/browse/ENTRYSTORE-735) Search index does not contain string literals in field metadata.object.literal
+
+[ENTRYSTORE-738](https://metasolutions.atlassian.net/browse/ENTRYSTORE-738) Config is not fetched properly by PerformanceMetricsFilter
+
+[ENTRYSTORE-739](https://metasolutions.atlassian.net/browse/ENTRYSTORE-739) Asynchronous reindexing deletes context from Solr before updated documents are added
+
+[ENTRYSTORE-746](https://metasolutions.atlassian.net/browse/ENTRYSTORE-746) Solr 9.1.0 introduced an issue where the system property "solr.install.dir" must be set
+
 ## Version 5.0.0 (2023-01-13)
 
 ### Improvement
