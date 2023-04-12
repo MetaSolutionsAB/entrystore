@@ -181,9 +181,9 @@ public class SearchResource extends BaseResource {
 			}
 
 			if (syndication != null) {
-				return writeSyndication(queryResults.entries(), syndication, language, limit);
+				return generateSyndication(queryResults.entries(), syndication, language, limit);
 			} else {
-				return writeJson(offset, limit, queryResults, rdfFormat);
+				return generateJson(offset, limit, queryResults, rdfFormat);
 			}
 		} catch (JsonErrorException e) {
 			return e.getRepresentation();
@@ -192,7 +192,7 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
-	public StringRepresentation writeSyndication(List<Entry> entries, String type, String language, int limit) throws JsonErrorException {
+	public StringRepresentation generateSyndication(List<Entry> entries, String type, String language, int limit) throws JsonErrorException {
 		try {
 
 			SyndFeed feed = new SyndFeedImpl();
@@ -274,7 +274,7 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
-	private JsonRepresentation writeJson(int offset, int limit, QueryResults queryResults, MediaType rdfFormat) {
+	private JsonRepresentation generateJson(int offset, int limit, QueryResults queryResults, MediaType rdfFormat) {
 		Date before = new Date();
 		JSONArray children = new JSONArray();
 		if (queryResults.entries() != null) {
