@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.resources;
 
+import java.io.IOException;
+import java.net.URI;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -29,14 +31,11 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.net.URI;
-
 
 /**
  * Controls the Solr index.
- * 
- * @author Hannes Ebner 
+ *
+ * @author Hannes Ebner
  */
 public class SolrResource extends BaseResource {
 
@@ -46,7 +45,7 @@ public class SolrResource extends BaseResource {
 	public void doInit() {
 
 	}
-	
+
 	@Post
 	public void acceptRepresentation(Representation r) throws ResourceException {
 		if (!MediaType.APPLICATION_JSON.equals(r.getMediaType())) {
@@ -100,5 +99,4 @@ public class SolrResource extends BaseResource {
 
 		getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 	}
-
 }

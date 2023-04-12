@@ -71,6 +71,13 @@ public class ResourceJsonSerializer {
 					JSONObject childJSON = new JSONObject();
 					childJSON.put("entryId", u.getEntry().getId());
 					childJSON.put("name", u.getName());
+					try {
+						if (u.isDisabled()) {
+							childJSON.put("disabled", true);
+						}
+					} catch (AuthorizationException ae) {
+						log.debug("Not allowed to read disabled status of [{}]", u.getEntry().getEntryURI());
+					}
 
 					JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getGraph()));
 					childJSON.accumulate("info", childInfo);
