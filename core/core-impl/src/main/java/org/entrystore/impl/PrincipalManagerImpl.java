@@ -104,20 +104,21 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	public boolean setPrincipalName(URI principal, String newName) {
-		if (principal == null) {
+		if (principal == null || newName == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
+		String noZeroLengthSpaceName = newName.replaceAll("[\\p{Cf}]", "");
+		String trimmedName = org.apache.commons.lang3.StringUtils.trimToNull(noZeroLengthSpaceName);
+		if (trimmedName == null) {
+			throw new IllegalArgumentException("Principal name must not be null");
+		}
+		String normalizedName = trimmedName.toLowerCase();
 		URISplit us = new URISplit(principal, this.entry.getRepositoryManager().getRepositoryURL());
 		Entry principalEntry = getByEntryURI(us.getMetaMetadataURI());
 		if (principalEntry == null) {
 			throw new org.entrystore.repository.RepositoryException("Cannot find an entry for the specified URI");
-		} else if (principalEntry.getGraphType() == GraphType.User) {
-			if (newName == null) {
-				throw new IllegalArgumentException("Name must not be null for user");
-			}
-			return setEntryName(us.getMetaMetadataURI(), newName.toLowerCase());
-		} else if (principalEntry.getGraphType() == GraphType.Group) {
-			return setEntryName(us.getMetaMetadataURI(), newName.toLowerCase());
+		} else if (principalEntry.getGraphType() == GraphType.User || principalEntry.getGraphType() == GraphType.Group) {
+			return setEntryName(us.getMetaMetadataURI(), normalizedName);
 		}
 		throw new org.entrystore.repository.RepositoryException("Given URI does not refer to a Principal.");
 	}

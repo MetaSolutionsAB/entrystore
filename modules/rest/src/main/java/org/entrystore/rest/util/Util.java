@@ -49,7 +49,7 @@ public class Util {
 	 * @return A map with the parameters.
 	 */
 	public static HashMap<String, String> parseRequest(String request) {
-		HashMap<String, String> argsAndVal = new HashMap<String, String>();
+		HashMap<String, String> argsAndVal = new HashMap<>();
 
 		int r = request.lastIndexOf("?");
 		String req = request.substring(r + 1);
