@@ -17,6 +17,7 @@
 package org.entrystore.rest.resources;
 
 import com.google.common.collect.Sets;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -64,12 +65,18 @@ public class GroupResource extends BaseResource {
 				return;
 			}
 
-			if (getRM().getConfiguration().getBoolean(Settings.NONADMIN_GROUPCONTEXT_CREATION, false) &&
-					!getPM().getAdminUser().getURI().equals(requestingUser) &&
-					!getPM().getAdminGroup().isMember(getPM().getUser(requestingUser))) {
-				// only admin users are allowed to create a group in this case
-				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
-				return;
+			if (!getRM().getConfiguration().getBoolean(Settings.NONADMIN_GROUPCONTEXT_CREATION, false)) {
+				try {
+					// only admin users are allowed to create a group in this case
+					if (!getPM().getAdminUser().getURI().equals(requestingUser) &&
+							!getPM().getAdminGroup().isMember(getPM().getUser(requestingUser))) {
+						getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+						return;
+					}
+				} catch (AuthorizationException ae) {
+					getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+					return;
+				}
 			}
 
 			String name = null;
