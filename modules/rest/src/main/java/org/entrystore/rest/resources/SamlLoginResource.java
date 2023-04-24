@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.resources;
 
+import static org.entrystore.repository.config.Settings.AUTH_SAML_MAX_AGE;
+
 import com.coveo.saml.SamlClient;
 import com.coveo.saml.SamlException;
 import com.coveo.saml.SamlResponse;
@@ -218,7 +220,8 @@ public class SamlLoginResource extends BaseResource {
 
 			if (userName != null && BasicVerifier.userExists(getPM(), userName) && !BasicVerifier.isUserDisabled(getPM(), userName)) {
 				EntryStoreApplication app = (EntryStoreApplication) getApplication();
-				new CookieVerifier(app, getRM()).createAuthToken(userName, false, getRequest(), getResponse());
+				new CookieVerifier(app, getRM(), AUTH_SAML_MAX_AGE)
+						.createAuthToken(userName, false, getRequest(), getResponse());
 
 				// TODO cache SAML ticket together with auth_token (probably necessary for logouts originating from SAML)
 

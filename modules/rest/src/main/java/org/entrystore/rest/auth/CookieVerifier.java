@@ -48,29 +48,30 @@ public class CookieVerifier implements Verifier {
 
 	private static final Logger log = LoggerFactory.getLogger(CookieVerifier.class);
 
-//	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(7).toSeconds();
-
 	private static CustomCookieSettings cookieSettings;
 
 	private final PrincipalManager pm;
 	private final RepositoryManager rm;
 	private final CORSFilter corsFilter;
-
 	private final boolean configInvalidTokenError;
-
 	private final LoginTokenCache loginTokenCache;
 
 	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm) {
-		this(app, rm, null);
+		this(app, rm, null, null);
 	}
 
-	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm, CORSFilter corsFilter) {
+	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm, String maxAgeSetting) {
+		this(app, rm, maxAgeSetting, null);
+	}
+
+	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm, String maxAgeSetting, CORSFilter corsFilter) {
 		this.rm = rm;
 		this.pm = rm.getPrincipalManager();
 		this.corsFilter = corsFilter;
 
 		Config config = rm.getConfiguration();
 		this.configInvalidTokenError = config.getBoolean(AUTH_COOKIE_INVALID_TOKEN_ERROR, true);
+
 		this.loginTokenCache = app.getLoginTokenCache();
 
 		if (cookieSettings == null) {
@@ -162,7 +163,7 @@ public class CookieVerifier implements Verifier {
 
 		// Generates a random string without the '+' and '/' chars used in Base64, which can
 		// cause problems if this string is ever needed to be UUDecoded or sent over http,
-		// as a in link or in a form.
+		// as in a link or in a form.
 		String token = RandomStringUtils.random(128, true, true);
 
 		UserInfo userInfo = new UserInfo(userName, LocalDateTime.now());

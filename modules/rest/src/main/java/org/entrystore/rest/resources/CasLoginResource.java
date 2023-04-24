@@ -16,6 +16,9 @@
 
 package org.entrystore.rest.resources;
 
+import static org.entrystore.repository.config.Settings.AUTH_CAS_MAX_AGE;
+import static org.entrystore.repository.config.Settings.AUTH_CAS_USER_AUTO_PROVISIONING;
+
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -159,7 +162,8 @@ public class CasLoginResource extends BaseResource {
 				if ("admin".equalsIgnoreCase(userName)) {
 					userName = null;
 				}
-				boolean autoProvisioning = "on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.AUTH_CAS_USER_AUTO_PROVISIONING, "off"));
+				Config config = getRM().getConfiguration();
+				boolean autoProvisioning = "on".equalsIgnoreCase(config.getString(AUTH_CAS_USER_AUTO_PROVISIONING, "off"));
 
 				if (userName != null && !BasicVerifier.userExists(getPM(), userName)) {
 					if (!autoProvisioning) {
@@ -190,7 +194,8 @@ public class CasLoginResource extends BaseResource {
 
 				if (userName != null && BasicVerifier.userExists(getPM(), userName) && !BasicVerifier.isUserDisabled(getPM(), userName)) {
 					EntryStoreApplication app = (EntryStoreApplication) getApplication();
-					new CookieVerifier(app, getRM()).createAuthToken(userName, false, getRequest(), getResponse());
+					new CookieVerifier(app, getRM(), AUTH_CAS_MAX_AGE)
+							.createAuthToken(userName, false, getRequest(), getResponse());
 
 					// TODO cache CAS ticket together with auth_token (probably
 					// necessary for logouts originating from CAS)
