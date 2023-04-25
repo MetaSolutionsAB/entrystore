@@ -17,17 +17,16 @@
 package org.entrystore.rest.resources;
 
 import static org.entrystore.rest.util.HttpUtil.COOKIE_AUTH_TOKEN;
+import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
 import static org.restlet.data.Status.CLIENT_ERROR_NOT_FOUND;
-import static org.restlet.data.Status.CLIENT_ERROR_UNAUTHORIZED;
 
 import java.util.Map;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.UserInfo;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Cookie;
-import org.restlet.data.Form;
-import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.Representation;
@@ -49,9 +48,8 @@ public class TokenResource extends BaseResource {
 
 	@Get
 	public Representation get() {
-		if (!getClientInfo().isAuthenticated()) {
-			getResponse().setStatus(CLIENT_ERROR_UNAUTHORIZED);
-			return new EmptyRepresentation();
+		if (getPM().currentUserIsGuest()) {
+			return unauthorizedGET();
 		}
 
 		Cookie authTokenCookie = getRequest().getCookies().getFirst(COOKIE_AUTH_TOKEN);
@@ -63,26 +61,26 @@ public class TokenResource extends BaseResource {
 		UserInfo userInfo = loginTokenCache.getTokenValue(authTokenCookie.getValue());
 		Map<String, UserInfo> loginTokens = loginTokenCache.getTokens(userInfo.getUserName());
 		JSONObject json = new JSONObject(loginTokens);
-//		JSONArray jsonArray = new JSONArray(loginTokens);
 		return new JsonRepresentation(json);
 	}
 
 	@Delete
 	public void delete(Representation representation) {
-		if (!getClientInfo().isAuthenticated()) {
+		if (getPM().currentUserIsGuest()) {
 			unauthorizedDELETE();
 		}
 
-		Form query;
 		try {
-			query = new Form(representation);
-		} catch (IllegalArgumentException e) {
-			log.warn(e.getMessage());
-			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			return;
+			if (representation instanceof JsonRepresentation json) {
+				JSONObject jsonObject = json.getJsonObject();
+				String authToken = jsonObject.getString("token");
+				loginTokenCache.removeToken(authToken);
+			} else {
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+			}
+		} catch (JSONException e) {
+			log.debug(e.getMessage(), e);
+			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 		}
-
-		String authToken = query.getFirstValue("auth_token");
-		loginTokenCache.removeToken(authToken);
 	}
 }

@@ -21,14 +21,13 @@ import static org.entrystore.repository.config.Settings.AUTH_COOKIE_MAX_AGE;
 import static org.entrystore.repository.config.Settings.AUTH_COOKIE_UPDATE_EXPIRY;
 import static org.entrystore.repository.config.Settings.AUTH_TOKEN_MAX_AGE;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 import org.entrystore.config.Config;
+import org.entrystore.rest.util.HttpUtil;
 import org.restlet.Request;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,14 +45,20 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 
 	public LoginTokenCache(Config config) {
 		this.configCookieUpdateExpiry = config.getBoolean(AUTH_COOKIE_UPDATE_EXPIRY, false);
-		this.configCookieMaxAgeInSeconds =
-				config.getInt(AUTH_TOKEN_MAX_AGE, config.getInt(AUTH_COOKIE_MAX_AGE, DEFAULT_MAX_AGE_IN_SECONDS));
+		this.configCookieMaxAgeInSeconds = config.getInt(AUTH_TOKEN_MAX_AGE, config.getInt(AUTH_COOKIE_MAX_AGE, DEFAULT_MAX_AGE_IN_SECONDS));
+	}
+
+	public boolean isConfigCookieUpdateExpiry() {
+		return configCookieUpdateExpiry;
+	}
+
+	public int getConfigCookieMaxAgeInSeconds() {
+		return configCookieMaxAgeInSeconds;
 	}
 
 	public void cleanup() {
 		synchronized (tokenCache) {
-			tokenCache.entrySet()
-					.removeIf(userInfo -> userInfo.getValue().getLoginExpiration().isBefore(LocalDateTime.now()));
+			tokenCache.entrySet().removeIf(userInfo -> userInfo.getValue().getLoginExpiration().isBefore(LocalDateTime.now()));
 		}
 	}
 
@@ -65,7 +70,7 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 	}
 
 	public void removeToken(String token) {
-		checkArgument(token != null, "userInfo must not be null");
+		checkArgument(token != null, "token must not be null");
 		synchronized (tokenCache) {
 			if (tokenCache.containsKey(token)) {
 				tokenCache.remove(token);
@@ -97,10 +102,14 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 		}
 		synchronized (tokenCache) {
 			for (Entry<String, UserInfo> e : tokenCache.entrySet()) {
-				UserInfo ui = e.getValue();
-				if (oldUserName.equals(ui.userName)) {
-					ui.setUserName(newUserName);
-					tokenCache.put(e.getKey(), ui);
+				UserInfo oldUi = e.getValue();
+				if (oldUserName.equals(oldUi.userName)) {
+					UserInfo newUi = new UserInfo(newUserName, oldUi.getLoginTime());
+					newUi.setLoginExpiration(oldUi.getLoginExpiration());
+					newUi.setLastAccessTime(oldUi.getLastAccessTime());
+					newUi.setLastUsedIpAddress(oldUi.getLastUsedIpAddress());
+					newUi.setLastUsedUserAgent(oldUi.getLastUsedUserAgent());
+					tokenCache.put(e.getKey(), newUi);
 				}
 			}
 		}
@@ -123,15 +132,11 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 			return null;
 		}
 
-		userInfo.setUserAgent(request.getClientInfo().getAgent());
-		userInfo.setLastAccess(LocalDateTime.now());
-		try {
-			userInfo.setInetAddress(InetAddress.getByName(request.getClientInfo().getUpstreamAddress()));
-		} catch (UnknownHostException e) {
-			log.error("Could not resolve IP address " + request.getClientInfo().getUpstreamAddress(), e);
-		}
+		userInfo.setLastUsedUserAgent(request.getClientInfo().getAgent());
+		userInfo.setLastAccessTime(LocalDateTime.now());
+		userInfo.setLastUsedIpAddress(HttpUtil.getClientIpAddress(request));
 		if (configCookieUpdateExpiry) {
-			userInfo.setLoginExpiration(userInfo.getLastAccess().plusSeconds(configCookieMaxAgeInSeconds));
+			userInfo.setLoginExpiration(userInfo.getLastAccessTime().plusSeconds(configCookieMaxAgeInSeconds));
 		}
 		return userInfo;
 	}

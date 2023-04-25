@@ -17,15 +17,9 @@
 package org.entrystore.rest.auth;
 
 import static org.entrystore.repository.config.Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR;
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_MAX_AGE;
 import static org.entrystore.repository.config.Settings.AUTH_COOKIE_PATH;
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_UPDATE_EXPIRY;
-import static org.entrystore.repository.config.Settings.AUTH_TOKEN_MAX_AGE;
 
-import java.net.InetAddress;
 import java.net.URI;
-import java.net.UnknownHostException;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.entrystore.Entry;
@@ -36,6 +30,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.CustomCookieSettings.SameSite;
 import org.entrystore.rest.filter.CORSFilter;
+import org.entrystore.rest.util.HttpUtil;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Cookie;
@@ -53,7 +48,7 @@ public class CookieVerifier implements Verifier {
 
 	private static final Logger log = LoggerFactory.getLogger(CookieVerifier.class);
 
-	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(7).toSeconds();
+//	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(7).toSeconds();
 
 	private static CustomCookieSettings cookieSettings;
 
@@ -62,10 +57,8 @@ public class CookieVerifier implements Verifier {
 	private final CORSFilter corsFilter;
 
 	private final boolean configInvalidTokenError;
-	private final boolean configCookieUpdateExpiry;
-	private final int configCookieMaxAgeInSeconds;
 
-	private LoginTokenCache loginTokenCache = null;
+	private final LoginTokenCache loginTokenCache;
 
 	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm) {
 		this(app, rm, null);
@@ -78,9 +71,6 @@ public class CookieVerifier implements Verifier {
 
 		Config config = rm.getConfiguration();
 		this.configInvalidTokenError = config.getBoolean(AUTH_COOKIE_INVALID_TOKEN_ERROR, true);
-		this.configCookieUpdateExpiry = config.getBoolean(AUTH_COOKIE_UPDATE_EXPIRY, false);
-		this.configCookieMaxAgeInSeconds =
-				config.getInt(AUTH_TOKEN_MAX_AGE, config.getInt(AUTH_COOKIE_MAX_AGE, DEFAULT_MAX_AGE_IN_SECONDS));
 		this.loginTokenCache = app.getLoginTokenCache();
 
 		if (cookieSettings == null) {
@@ -171,21 +161,15 @@ public class CookieVerifier implements Verifier {
 		// String token = Password.getRandomBase64(128);
 
 		// Generates a random string without the '+' and '/' chars used in Base64, which can
-		// cause problems if this string is ever needed to be UUDECODED orsent over http,
+		// cause problems if this string is ever needed to be UUDecoded or sent over http,
 		// as a in link or in a form.
 		String token = RandomStringUtils.random(128, true, true);
 
-		UserInfo userInfo = new UserInfo();
-		userInfo.setUserName(userName);
-		userInfo.setLoginTime(LocalDateTime.now());
-		userInfo.setLastAccess(userInfo.getLoginTime());
-		userInfo.setLoginExpiration(userInfo.getLastAccess().plusSeconds(configCookieMaxAgeInSeconds));
-		userInfo.setUserAgent(request.getClientInfo().getAgent());
-		try {
-			userInfo.setInetAddress(InetAddress.getByName(request.getClientInfo().getUpstreamAddress()));
-		} catch (UnknownHostException e) {
-			log.error("Could not resolve IP address " + request.getClientInfo().getUpstreamAddress(), e);
-		}
+		UserInfo userInfo = new UserInfo(userName, LocalDateTime.now());
+		userInfo.setLastAccessTime(userInfo.getLoginTime());
+		userInfo.setLoginExpiration(userInfo.getLoginTime().plusSeconds(loginTokenCache.getConfigCookieMaxAgeInSeconds()));
+		userInfo.setLastUsedUserAgent(request.getClientInfo().getAgent());
+		userInfo.setLastUsedIpAddress(HttpUtil.getClientIpAddress(request));
 		loginTokenCache.putToken(token, userInfo);
 		log.debug("User [{}] receives authentication token [{}]", userName, userInfo);
 

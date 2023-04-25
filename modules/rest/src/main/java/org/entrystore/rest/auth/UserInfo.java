@@ -16,42 +16,40 @@
 
 package org.entrystore.rest.auth;
 
-import java.net.InetAddress;
 import java.time.LocalDateTime;
 
 public class UserInfo {
 
-	String userName;
+	final String userName;
+	final LocalDateTime loginTime;
+
 	LocalDateTime loginExpiration;
-	LocalDateTime loginTime;
-	LocalDateTime lastAccess;
-	InetAddress inetAddress;
-	String userAgent;
+	LocalDateTime lastAccessTime;
+	String lastUsedIpAddress;
+	String lastUsedUserAgent;
 
-	public UserInfo() {}
-
-	public UserInfo(String userName, LocalDateTime loginExpiration) {
+	public UserInfo(String userName, LocalDateTime loginTime) {
 		this.userName = userName;
-		this.loginExpiration = loginExpiration;
+		this.loginTime = loginTime;
 	}
 
-	public UserInfo(String userName, LocalDateTime loginExpiration, LocalDateTime loginTime, LocalDateTime lastAccess,
-			InetAddress inetAddress, String userAgent) {
+	public UserInfo(String userName, LocalDateTime loginTime, LocalDateTime loginExpiration, LocalDateTime lastAccessTime,
+			String clientIp, String lastUsedUserAgent) {
 
 		this.userName = userName;
-		this.loginExpiration = loginExpiration;
 		this.loginTime = loginTime;
-		this.lastAccess = lastAccess;
-		this.inetAddress = inetAddress;
-		this.userAgent = userAgent;
+		this.loginExpiration = loginExpiration;
+		this.lastAccessTime = lastAccessTime;
+		this.lastUsedIpAddress = clientIp;
+		this.lastUsedUserAgent = lastUsedUserAgent;
 	}
 
 	public String getUserName() {
 		return userName;
 	}
 
-	public void setUserName(String userName) {
-		this.userName = userName;
+	public LocalDateTime getLoginTime() {
+		return loginTime;
 	}
 
 	public LocalDateTime getLoginExpiration() {
@@ -62,35 +60,27 @@ public class UserInfo {
 		this.loginExpiration = loginExpiration;
 	}
 
-	public LocalDateTime getLoginTime() {
-		return loginTime;
+	public LocalDateTime getLastAccessTime() {
+		return lastAccessTime;
 	}
 
-	public void setLoginTime(LocalDateTime loginTime) {
-		this.loginTime = loginTime;
+	public void setLastAccessTime(LocalDateTime lastAccessTime) {
+		this.lastAccessTime = lastAccessTime;
 	}
 
-	public LocalDateTime getLastAccess() {
-		return lastAccess;
+	public String getLastUsedIpAddress() {
+		return lastUsedIpAddress;
 	}
 
-	public void setLastAccess(LocalDateTime lastAccess) {
-		this.lastAccess = lastAccess;
+	public void setLastUsedIpAddress(String lastUsedIpAddress) {
+		this.lastUsedIpAddress = lastUsedIpAddress;
 	}
 
-	public InetAddress getInetAddress() {
-		return inetAddress;
+	public String getLastUsedUserAgent() {
+		return lastUsedUserAgent;
 	}
 
-	public void setInetAddress(InetAddress inetAddress) {
-		this.inetAddress = inetAddress;
-	}
-
-	public String getUserAgent() {
-		return userAgent;
-	}
-
-	public void setUserAgent(String userAgent) {
-		this.userAgent = userAgent;
+	public void setLastUsedUserAgent(String lastUsedUserAgent) {
+		this.lastUsedUserAgent = lastUsedUserAgent;
 	}
 }

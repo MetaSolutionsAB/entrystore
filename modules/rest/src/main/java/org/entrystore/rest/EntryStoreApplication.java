@@ -16,18 +16,12 @@
 
 package org.entrystore.rest;
 
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_MAX_AGE;
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_UPDATE_EXPIRY;
-import static org.entrystore.repository.config.Settings.AUTH_TOKEN_MAX_AGE;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.Optional;
 import java.util.Set;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
@@ -125,7 +119,6 @@ public class EntryStoreApplication extends Application {
 	static Logger log = LoggerFactory.getLogger(EntryStoreApplication.class);
 
 	public static final String KEY = EntryStoreApplication.class.getCanonicalName();
-	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(7).toSeconds();
 	public static final String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
 	private static Date startupDate;
 
@@ -135,7 +128,7 @@ public class EntryStoreApplication extends Application {
 
 	private BackupScheduler backupScheduler;
 	private ArrayList<Harvester> harvesters = new ArrayList<>();
-	private final Optional<Component> component;
+	private final Component component;
 
 	private final ContextManager cm;
 	private final PrincipalManager pm;
@@ -148,7 +141,7 @@ public class EntryStoreApplication extends Application {
 		this(null, parentContext, null);
 	}
 
-	public EntryStoreApplication(URI configPath, Context parentContext, Optional<Component> component) {
+	public EntryStoreApplication(URI configPath, Context parentContext, Component component) {
 		super(parentContext);
 		Date startupBegin = new Date();
 		this.component = component;
@@ -174,10 +167,6 @@ public class EntryStoreApplication extends Application {
 			pm = rm.getPrincipalManager();
 
 			Config config = rm.getConfiguration();
-//		this.configInvalidTokenError = config.getBoolean(AUTH_COOKIE_INVALID_TOKEN_ERROR, true);
-			boolean configCookieUpdateExpiry = config.getBoolean(AUTH_COOKIE_UPDATE_EXPIRY, false);
-			int configCookieMaxAgeInSeconds =
-					config.getInt(AUTH_TOKEN_MAX_AGE, config.getInt(AUTH_COOKIE_MAX_AGE, DEFAULT_MAX_AGE_IN_SECONDS));
 			this.loginTokenCache = new LoginTokenCache(config);
 
 			// The following objects are fetched from the context attributes,
@@ -206,7 +195,7 @@ public class EntryStoreApplication extends Application {
 			}
 
 			// Initialize EntryStore
-			ConfigurationManager confManager ;
+			ConfigurationManager confManager;
 			try {
 				if (configURI != null) {
 					log.info("Manually specified config location at " + configURI);
@@ -552,10 +541,10 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public void shutdownServer() {
-		if (this.component.isPresent()) {
+		if (this.component != null) {
 			log.info("Shutting down server");
 			try {
-				this.component.get().stop();
+				this.component.stop();
 			} catch (Exception e) {
 				throw new RuntimeException("Failed to stop server", e);
 			}

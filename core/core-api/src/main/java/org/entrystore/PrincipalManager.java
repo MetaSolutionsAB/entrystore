@@ -17,14 +17,14 @@
 package org.entrystore;
 
 import java.net.URI;
-import java.util.Set;
 import java.util.List;
+import java.util.Set;
 
 public interface PrincipalManager extends Context {
 
-	public enum AccessProperty {
+	enum AccessProperty {
 		ReadResource, ReadMetadata, WriteResource, WriteMetadata, Administer
-	};
+	}
 
 	String getPrincipalName(URI principal);
 
@@ -34,35 +34,38 @@ public interface PrincipalManager extends Context {
 
 	boolean setPrincipalName(URI principal, String newName);
 
-	public List<URI> getUsersAsUris();
+	List<URI> getUsersAsUris();
 
-	public List<User> getUsers();
+	List<User> getUsers();
 
-	public User getUser(URI userEntryUri);
+	User getUser(URI userEntryUri);
 
-	public Set<URI> getGroupUris();
+	Set<URI> getGroupUris();
 
-	public Group getGroup(URI groupEntryUri);
+	Group getGroup(URI groupEntryUri);
 
-	public void setAuthenticatedUserURI(URI userUri);
+	void setAuthenticatedUserURI(URI userUri);
 
-	public URI getAuthenticatedUserURI();
+	URI getAuthenticatedUserURI();
 
-	public Set<AccessProperty> getRights(Entry entry);
+	Set<AccessProperty> getRights(Entry entry);
 
-	public void checkAuthenticatedUserAuthorized(Entry entry, AccessProperty accessProperty)
+	void checkAuthenticatedUserAuthorized(Entry entry, AccessProperty accessProperty)
 			throws AuthorizationException;
 
-	public boolean isValidSecret(String name);
+	boolean isValidSecret(String name);
 
-	public User getAdminUser();
+	User getAdminUser();
 
-	public Group getAdminGroup();
+	Group getAdminGroup();
 
-	public User getGuestUser();
+	User getGuestUser();
 
-	public Group getUserGroup();
-	
-	public User getUserByExternalID(String openid);
+	Group getUserGroup();
 
+	User getUserByExternalID(String openid);
+
+	boolean currentUserIsGuest();
+
+	boolean currentUserIsAdminOrAdminGroup();
 }

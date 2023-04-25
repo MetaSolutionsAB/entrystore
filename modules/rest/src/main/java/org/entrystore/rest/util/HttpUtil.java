@@ -16,6 +16,9 @@
 
 package org.entrystore.rest.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static org.restlet.engine.header.HeaderConstants.HEADER_X_FORWARDED_FOR;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -24,6 +27,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.EntryStoreApplication;
 import org.restlet.Client;
 import org.restlet.Context;
@@ -65,6 +70,8 @@ public class HttpUtil {
 				+ ")";
 		log.debug("User-Agent for HTTP requests set to \"" + USERAGENT + "\"");
 	}
+
+	private HttpUtil() {}
 
 	public static Response getResourceFromURL(String url) {
 		return getResourceFromURL(url, 0, 0, 0, null);
@@ -170,4 +177,18 @@ public class HttpUtil {
 		} else return repSize > maxSize;
 	}
 
+	/**
+	 * Returns the client IP, or a comma separated list of
+	 * @param request
+	 * @return
+	 */
+	public static String getClientIpAddress(Request request) {
+		checkArgument(request != null, "request must not be null");
+		String s = request.getHeaders().getFirstValue(HEADER_X_FORWARDED_FOR, true, request.getClientInfo().getAddress());
+		String[] clientIpArray = StringUtils.split(s, ',');
+		if (ArrayUtils.isNotEmpty(clientIpArray)) {
+			return clientIpArray[0];
+		}
+		return null;
+	}
 }
