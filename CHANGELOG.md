@@ -30,6 +30,8 @@
 
 [ENTRYSTORE-762](https://metasolutions.atlassian.net/browse/ENTRYSTORE-762) Improve search index health check to also take threads and executors into consideration
 
+[ENTRYSTORE-764](https://metasolutions.atlassian.net/browse/ENTRYSTORE-764) Improve trim for usernames to also cover unusual whitespaces
+
 ### Task
 
 [ENTRYSTORE-748](https://metasolutions.atlassian.net/browse/ENTRYSTORE-748) Add documentation for new functionality
