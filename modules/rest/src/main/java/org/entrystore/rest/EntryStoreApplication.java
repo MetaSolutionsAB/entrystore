@@ -16,6 +16,16 @@
 
 package org.entrystore.rest;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Set;
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+import javax.servlet.ServletContext;
 import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.apache.commons.io.FileCleaningTracker;
 import org.entrystore.ContextManager;
@@ -36,6 +46,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
+import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.SimpleAuthenticator;
 import org.entrystore.rest.auth.UserTempLockoutCache;
 import org.entrystore.rest.filter.CORSFilter;
@@ -79,6 +90,7 @@ import org.entrystore.rest.resources.SolrResource;
 import org.entrystore.rest.resources.SparqlResource;
 import org.entrystore.rest.resources.StatisticsResource;
 import org.entrystore.rest.resources.StatusResource;
+import org.entrystore.rest.resources.TokenResource;
 import org.entrystore.rest.resources.UserResource;
 import org.entrystore.rest.resources.ValidatorResource;
 import org.entrystore.rest.util.CORSUtil;
@@ -96,18 +108,6 @@ import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.naming.InitialContext;
-import javax.naming.NamingException;
-import javax.servlet.ServletContext;
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
-
 /**
  * Main class to start EntryStore as Restlet Application.
  *
@@ -115,45 +115,37 @@ import java.util.Set;
  */
 public class EntryStoreApplication extends Application {
 
-	public static String KEY = EntryStoreApplication.class.getCanonicalName();
-
 	/** Logger */
 	static Logger log = LoggerFactory.getLogger(EntryStoreApplication.class);
+
+	public static final String KEY = EntryStoreApplication.class.getCanonicalName();
+	public static final String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
+	private static Date startupDate;
+
 
 	/** Central point for accessing a repository */
 	private RepositoryManagerImpl rm;
 
-	private ContextManager cm;
-
-	private PrincipalManager pm;
-
-	private String baseURI;
-
-	private ArrayList<Harvester> harvesters = new ArrayList<>();
-
 	private BackupScheduler backupScheduler;
+	private ArrayList<Harvester> harvesters = new ArrayList<>();
+	private final Component component;
 
-	private UserTempLockoutCache userTempLockoutCache;
+	private final ContextManager cm;
+	private final PrincipalManager pm;
 
-	private final Optional<Component> component;
-
-	private static Date startupDate = null;
-
-	public static String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
-
-	URI configURI;
-
+	private LoginTokenCache loginTokenCache = null;
+	private final UserTempLockoutCache userTempLockoutCache;
 	private final Set<String> reservedNames = new HashSet<>();
 
 	public EntryStoreApplication(Context parentContext) {
-		this(null, parentContext, Optional.empty());
+		this(null, parentContext, null);
 	}
 
-	public EntryStoreApplication(URI configPath, Context parentContext, Optional<Component> component) {
+	public EntryStoreApplication(URI configPath, Context parentContext, Component component) {
 		super(parentContext);
 		Date startupBegin = new Date();
 		this.component = component;
-		this.configURI = configPath;
+		URI configURI = configPath;
 		getContext().getAttributes().put(KEY, this);
 
 		/*
@@ -174,10 +166,14 @@ public class EntryStoreApplication extends Application {
 			cm = rm.getContextManager();
 			pm = rm.getPrincipalManager();
 
+			Config config = rm.getConfiguration();
+			this.loginTokenCache = new LoginTokenCache(config);
+
 			// The following objects are fetched from the context attributes,
 			// after they have been set in the ContextLoaderListener
 			harvesters = (ArrayList) getContext().getAttributes().get("Harvesters");
 			backupScheduler = (BackupScheduler) getContext().getAttributes().get("BackupScheduler");
+			userTempLockoutCache = null;
 		} else {
 			if (configURI == null) {
 				// First we check for a config URI in an environment variable
@@ -199,7 +195,7 @@ public class EntryStoreApplication extends Application {
 			}
 
 			// Initialize EntryStore
-			ConfigurationManager confManager = null;
+			ConfigurationManager confManager;
 			try {
 				if (configURI != null) {
 					log.info("Manually specified config location at " + configURI);
@@ -209,13 +205,13 @@ public class EntryStoreApplication extends Application {
 					confManager = new ConfigurationManager(ConfigurationManager.getConfigurationURI());
 				}
 			} catch (IOException e) {
+				confManager = null;
 				log.error("Unable to load configuration: " + e.getMessage());
 				System.exit(1);
 			}
 
 			Config config = confManager.getConfiguration();
-
-			baseURI = config.getString(Settings.BASE_URL);
+			String baseURI = config.getString(Settings.BASE_URL);
 			if (baseURI == null) {
 				log.error("No Base URI specified, exiting");
 				System.exit(1);
@@ -225,10 +221,11 @@ public class EntryStoreApplication extends Application {
 			ConverterManagerImpl.register("oai_dc", oaiDcRdfConverter);
 			ConverterManagerImpl.register("rdn_dc", oaiDcRdfConverter);
 
-			rm = new RepositoryManagerImpl(baseURI, confManager.getConfiguration());
-			cm = rm.getContextManager();
-			pm = rm.getPrincipalManager();
-			userTempLockoutCache = new UserTempLockoutCache(rm, pm);
+			this.rm = new RepositoryManagerImpl(baseURI, confManager.getConfiguration());
+			this.cm = rm.getContextManager();
+			this.pm = rm.getPrincipalManager();
+			this.userTempLockoutCache = new UserTempLockoutCache(rm, pm);
+			this.loginTokenCache = new LoginTokenCache(confManager.getConfiguration());
 
 			if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
 				// Check for existence of Donald
@@ -258,9 +255,9 @@ public class EntryStoreApplication extends Application {
 				log.warn("Backup is disabled in configuration");
 			}
 
-			this.startupDate = new Date();
-			log.info("EntryStore startup completed in " + (startupDate.getTime() - startupBegin.getTime()) + " ms");
 		}
+		startupDate = new Date();
+		log.info("EntryStore startup completed in " + (startupDate.getTime() - startupBegin.getTime()) + " ms");
 	}
 
 	/**
@@ -312,6 +309,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/auth/user", UserResource.class);
 		router.attach("/auth/basic", UserResource.class);
 		router.attach("/auth/logout", LogoutResource.class);
+		router.attach("/auth/tokens", TokenResource.class);
 
 		// CAS
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_CAS, "off"))) {
@@ -371,7 +369,8 @@ public class EntryStoreApplication extends Application {
 
 		CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
 		boolean optional = !config.getBoolean(Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR, true);
-		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), optional, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm, corsFilter), pm);
+		CookieVerifier cookieVerifier = new CookieVerifier(this, rm, corsFilter);
+		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), optional, ChallengeScheme.HTTP_COOKIE, "EntryStore", cookieVerifier, pm);
 
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
@@ -509,6 +508,10 @@ public class EntryStoreApplication extends Application {
 		return startupDate;
 	}
 
+	public LoginTokenCache getLoginTokenCache() {
+		return loginTokenCache;
+	}
+
 	@Override
 	public synchronized void stop() throws Exception {
 		log.info("Shutting down");
@@ -538,10 +541,10 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public void shutdownServer() {
-		if (this.component.isPresent()) {
+		if (this.component != null) {
 			log.info("Shutting down server");
 			try {
-				this.component.get().stop();
+				this.component.stop();
 			} catch (Exception e) {
 				throw new RuntimeException("Failed to stop server", e);
 			}

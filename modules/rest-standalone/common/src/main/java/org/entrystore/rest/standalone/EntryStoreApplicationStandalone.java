@@ -16,7 +16,8 @@
 
 package org.entrystore.rest.standalone;
 
-import java.util.Optional;
+import java.net.URI;
+import java.net.URISyntaxException;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -34,9 +35,6 @@ import org.restlet.Context;
 import org.restlet.Server;
 import org.restlet.data.Protocol;
 import org.slf4j.LoggerFactory;
-
-import java.net.URI;
-import java.net.URISyntaxException;
 
 /**
  * Class to provide common functionality for other standalone wrappers.
@@ -161,7 +159,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 		component.getClients().add(Protocol.HTTPS);
 		server.getContext().getParameters().add("useForwardedForHeader", "true");
 		Context childContext = component.getContext().createChildContext();
-		EntryStoreApplication esApp = new EntryStoreApplication(config, childContext, Optional.of(component));
+		EntryStoreApplication esApp = new EntryStoreApplication(config, childContext, component);
 		childContext.getAttributes().put(EntryStoreApplication.KEY, esApp);
 		component.getDefaultHost().attach(esApp);
 

@@ -16,15 +16,21 @@
 
 package org.entrystore.rest.auth;
 
+import static org.entrystore.repository.config.Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR;
+import static org.entrystore.repository.config.Settings.AUTH_COOKIE_PATH;
+
+import java.net.URI;
+import java.time.LocalDateTime;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.security.Password;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.CustomCookieSettings.SameSite;
 import org.entrystore.rest.filter.CORSFilter;
-import org.joda.time.DateTime;
+import org.entrystore.rest.util.HttpUtil;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Cookie;
@@ -34,12 +40,6 @@ import org.restlet.util.Series;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
-import java.time.Duration;
-import java.util.Date;
-
-import static org.entrystore.repository.config.Settings.*;
-
 
 /**
  * @author Hannes Ebner
@@ -48,7 +48,7 @@ public class CookieVerifier implements Verifier {
 
 	private static final Logger log = LoggerFactory.getLogger(CookieVerifier.class);
 
-	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(7).toSeconds();
+//	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(7).toSeconds();
 
 	private static CustomCookieSettings cookieSettings;
 
@@ -57,23 +57,21 @@ public class CookieVerifier implements Verifier {
 	private final CORSFilter corsFilter;
 
 	private final boolean configInvalidTokenError;
-	private final boolean configCookieUpdateExpiry;
-	private final int configCookieMaxAgeInSeconds;
 
-	public CookieVerifier(RepositoryManager rm) {
-		this(rm, null);
+	private final LoginTokenCache loginTokenCache;
+
+	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm) {
+		this(app, rm, null);
 	}
 
-	public CookieVerifier(RepositoryManager rm, CORSFilter corsFilter) {
+	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm, CORSFilter corsFilter) {
 		this.rm = rm;
 		this.pm = rm.getPrincipalManager();
 		this.corsFilter = corsFilter;
 
 		Config config = rm.getConfiguration();
 		this.configInvalidTokenError = config.getBoolean(AUTH_COOKIE_INVALID_TOKEN_ERROR, true);
-		this.configCookieUpdateExpiry = config.getBoolean(AUTH_COOKIE_UPDATE_EXPIRY, false);
-		this.configCookieMaxAgeInSeconds = config.getInt(AUTH_TOKEN_MAX_AGE, config.getInt(AUTH_COOKIE_MAXAGE,
-				DEFAULT_MAX_AGE_IN_SECONDS));
+		this.loginTokenCache = app.getLoginTokenCache();
 
 		if (cookieSettings == null) {
 			SameSite sameSite = SameSite.Strict;
@@ -86,7 +84,7 @@ public class CookieVerifier implements Verifier {
 			} catch (IllegalArgumentException iae) {
 				log.warn("Invalid value for setting " + Settings.AUTH_COOKIE_SAMESITE + ": " + iae.getMessage());
 			}
-			this.cookieSettings = new CustomCookieSettings(
+			cookieSettings = new CustomCookieSettings(
 					config.getBoolean(Settings.AUTH_COOKIE_SECURE, true),
 					config.getBoolean(Settings.AUTH_COOKIE_HTTPONLY, true),
 					sameSite);
@@ -105,23 +103,18 @@ public class CookieVerifier implements Verifier {
 
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			Cookie authTokenCookie = request.getCookies().getFirst("auth_token");
-			TokenCache<String, UserInfo> tc = LoginTokenCache.getInstance();
-			if (authTokenCookie != null) {
-				String authToken = authTokenCookie.getValue();
-				UserInfo ui = tc.getTokenValue(authToken);
+			String authToken = getAuthToken(request);
+			if (authToken != null) {
+				UserInfo ui = loginTokenCache.registerUserInteraction(authToken, request);
+
 				if (ui != null) {
 					String userName = ui.getUserName();
 					Entry userEntry = pm.getPrincipalEntry(userName);
 					if (userEntry != null) {
 						userURI = userEntry.getResourceURI();
-						if (configCookieUpdateExpiry) {
-							tc.putToken(authToken,
-									new UserInfo(userName, DateTime.now().plusSeconds(configCookieMaxAgeInSeconds).toDate()));
-						}
 					} else {
 						log.error("Auth token maps to non-existing user, removing token");
-						tc.removeToken(authToken);
+						loginTokenCache.removeToken(authToken);
 						cleanCookies(rm,"auth_token", request, response);
 					}
 				} else {
@@ -164,12 +157,21 @@ public class CookieVerifier implements Verifier {
 		}
 	}
 
-	public void createAuthToken(String userName, boolean sessionCookie, Response response) {
-		String token = Password.getRandomBase64(128);
+	public void createAuthToken(String userName, boolean sessionCookie, Request request, Response response) {
+		// String token = Password.getRandomBase64(128);
 
-		Date loginExpiration = DateTime.now().plusSeconds(configCookieMaxAgeInSeconds).toDate();
-		LoginTokenCache.getInstance().putToken(token, new UserInfo(userName, loginExpiration));
-		log.debug("User [{}] receives authentication token that will expire on [{}]", userName, loginExpiration);
+		// Generates a random string without the '+' and '/' chars used in Base64, which can
+		// cause problems if this string is ever needed to be UUDecoded or sent over http,
+		// as a in link or in a form.
+		String token = RandomStringUtils.random(128, true, true);
+
+		UserInfo userInfo = new UserInfo(userName, LocalDateTime.now());
+		userInfo.setLastAccessTime(userInfo.getLoginTime());
+		userInfo.setLoginExpiration(userInfo.getLoginTime().plusSeconds(loginTokenCache.getConfigCookieMaxAgeInSeconds()));
+		userInfo.setLastUsedUserAgent(request.getClientInfo().getAgent());
+		userInfo.setLastUsedIpAddress(HttpUtil.getClientIpAddress(request));
+		loginTokenCache.putToken(token, userInfo);
+		log.debug("User [{}] receives authentication token [{}]", userName, userInfo);
 
 		// We hack the mechanism and set additional properties as part of the Cookie value since
 		// there is no direct way to set properties such as Max-Age, SameSite, etc.

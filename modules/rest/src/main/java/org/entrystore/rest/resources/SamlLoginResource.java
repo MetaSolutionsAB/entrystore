@@ -19,6 +19,22 @@ package org.entrystore.rest.resources;
 import com.coveo.saml.SamlClient;
 import com.coveo.saml.SamlException;
 import com.coveo.saml.SamlResponse;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.Security;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.entrystore.Entry;
@@ -27,6 +43,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.util.HttpUtil;
@@ -44,23 +61,6 @@ import org.restlet.resource.Get;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.net.URI;
-import java.net.URL;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.security.Security;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * TODO Support logout via IdP
@@ -217,7 +217,8 @@ public class SamlLoginResource extends BaseResource {
 			}
 
 			if (userName != null && BasicVerifier.userExists(getPM(), userName) && !BasicVerifier.isUserDisabled(getPM(), userName)) {
-				new CookieVerifier(getRM()).createAuthToken(userName, false, getResponse());
+				EntryStoreApplication app = (EntryStoreApplication) getApplication();
+				new CookieVerifier(app, getRM()).createAuthToken(userName, false, getRequest(), getResponse());
 
 				// TODO cache SAML ticket together with auth_token (probably necessary for logouts originating from SAML)
 
@@ -270,7 +271,7 @@ public class SamlLoginResource extends BaseResource {
 
 		for (String key : values.keySet()) {
 			String encodedKey = StringEscapeUtils.escapeHtml(key);
-			String encodedValue = StringEscapeUtils.escapeHtml((String) values.get(key));
+			String encodedValue = StringEscapeUtils.escapeHtml(values.get(key));
 			sb.append("<input type='hidden' id='").append(encodedKey).
 					append("' name='").append(encodedKey).
 					append("' value='").append(encodedValue).

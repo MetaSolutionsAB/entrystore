@@ -16,33 +16,71 @@
 
 package org.entrystore.rest.auth;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 public class UserInfo {
-	
-	String userName;
-	
-	Date loginExpiration;
 
-	public UserInfo(String userName, Date loginExpiration) {
+	final String userName;
+	final LocalDateTime loginTime;
+
+	LocalDateTime loginExpiration;
+	LocalDateTime lastAccessTime;
+	String lastUsedIpAddress;
+	String lastUsedUserAgent;
+
+	public UserInfo(String userName, LocalDateTime loginTime) {
 		this.userName = userName;
-		this.loginExpiration = loginExpiration;
+		this.loginTime = loginTime;
 	}
-	
+
+	public UserInfo(String userName, LocalDateTime loginTime, LocalDateTime loginExpiration, LocalDateTime lastAccessTime,
+			String clientIp, String lastUsedUserAgent) {
+
+		this.userName = userName;
+		this.loginTime = loginTime;
+		this.loginExpiration = loginExpiration;
+		this.lastAccessTime = lastAccessTime;
+		this.lastUsedIpAddress = clientIp;
+		this.lastUsedUserAgent = lastUsedUserAgent;
+	}
+
 	public String getUserName() {
 		return userName;
 	}
-	
-	public Date getLoginExpiration() {
+
+	public LocalDateTime getLoginTime() {
+		return loginTime;
+	}
+
+	public LocalDateTime getLoginExpiration() {
 		return loginExpiration;
 	}
 
-	public void setUserName(String userName) {
-		this.userName = userName;
-	}
-
-	public void setLoginExpiration(Date loginExpiration) {
+	public void setLoginExpiration(LocalDateTime loginExpiration) {
 		this.loginExpiration = loginExpiration;
 	}
 
+	public LocalDateTime getLastAccessTime() {
+		return lastAccessTime;
+	}
+
+	public void setLastAccessTime(LocalDateTime lastAccessTime) {
+		this.lastAccessTime = lastAccessTime;
+	}
+
+	public String getLastUsedIpAddress() {
+		return lastUsedIpAddress;
+	}
+
+	public void setLastUsedIpAddress(String lastUsedIpAddress) {
+		this.lastUsedIpAddress = lastUsedIpAddress;
+	}
+
+	public String getLastUsedUserAgent() {
+		return lastUsedUserAgent;
+	}
+
+	public void setLastUsedUserAgent(String lastUsedUserAgent) {
+		this.lastUsedUserAgent = lastUsedUserAgent;
+	}
 }

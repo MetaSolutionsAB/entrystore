@@ -16,8 +16,13 @@
 
 package org.entrystore.rest.resources;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
 
+import java.net.URI;
+import java.net.URLDecoder;
+import java.security.SecureRandom;
+import java.util.Date;
 import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
@@ -27,6 +32,7 @@ import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.SignupInfo;
 import org.entrystore.rest.auth.SignupTokenCache;
@@ -49,12 +55,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URI;
-import java.net.URLDecoder;
-import java.security.SecureRandom;
-import java.util.Date;
-
 /**
  * Supports resetting a user's password. Based on SignupResource.
  *
@@ -62,9 +62,9 @@ import java.util.Date;
  */
 public class PasswordResetResource extends BaseResource {
 
-	private static Logger log = LoggerFactory.getLogger(PasswordResetResource.class);
+	private static final Logger log = LoggerFactory.getLogger(PasswordResetResource.class);
 
-	private SimpleHTML html = new SimpleHTML("Password reset");
+	private final SimpleHTML html = new SimpleHTML("Password reset");
 
 	@Get
 	public Representation represent() throws ResourceException {
@@ -99,12 +99,7 @@ public class PasswordResetResource extends BaseResource {
 			if (u == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				if (ci.urlFailure != null) {
-					try {
-						getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, "UTF-8"));
-						return new EmptyRepresentation();
-					} catch (UnsupportedEncodingException use) {
-						log.warn("Unable to decode URL: " + use.getMessage());
-					}
+					getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, UTF_8));
 					return new EmptyRepresentation();
 				} else {
 					return html.representation("User with provided email address does not exist.");
@@ -113,7 +108,8 @@ public class PasswordResetResource extends BaseResource {
 
 			// Reset password
 			if (u.setSaltedHashedSecret(ci.saltedHashedPassword)) {
-				LoginTokenCache.getInstance().removeTokens(ci.email);
+				LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
+				loginTokenCache.removeTokens(ci.email);
 				log.debug("Removed any authentication tokens belonging to user " + u.getURI());
 				Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), u.getEntry());
 				log.info("Reset password for user " + u.getURI());
@@ -121,12 +117,7 @@ public class PasswordResetResource extends BaseResource {
 				log.error("Error when resetting password for user " + u.getURI());
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				if (ci.urlFailure != null) {
-					try {
-						getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, "UTF-8"));
-						return new EmptyRepresentation();
-					} catch (UnsupportedEncodingException use) {
-						log.warn("Unable to decode URL: " + use.getMessage());
-					}
+					getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, UTF_8));
 					return new EmptyRepresentation();
 				} else {
 					return html.representation("Unable to reset password due to internal error.");
@@ -137,12 +128,7 @@ public class PasswordResetResource extends BaseResource {
 		}
 
 		if (ci.urlSuccess != null) {
-			try {
-				getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, "UTF-8"));
-				return new EmptyRepresentation();
-			} catch (UnsupportedEncodingException e) {
-				log.warn("Unable to decode URL: " + e.getMessage());
-			}
+			getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, UTF_8));
 			return new EmptyRepresentation();
 		} else {
 			return html.representation("Password reset was successful.");

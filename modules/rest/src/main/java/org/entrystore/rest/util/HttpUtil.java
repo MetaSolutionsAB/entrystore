@@ -16,6 +16,19 @@
 
 package org.entrystore.rest.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static org.restlet.engine.header.HeaderConstants.HEADER_X_FORWARDED_FOR;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.EntryStoreApplication;
 import org.restlet.Client;
 import org.restlet.Context;
@@ -30,42 +43,35 @@ import org.restlet.representation.Representation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
 /**
  * @author Hannes Ebner
  */
 public class HttpUtil {
 
-	private static Logger log = LoggerFactory.getLogger(HttpUtil.class);
+	public static final String COOKIE_AUTH_TOKEN = "auth_token";
 
-	private static Client client;
+	private static final Logger log = LoggerFactory.getLogger(HttpUtil.class);
 
-	private static String USERAGENT;
+	private static final Client client;
+
+	private static final String USERAGENT;
 
 	static {
 		Context clientContext = new Context();
 		client = new Client(clientContext, Arrays.asList(Protocol.HTTP, Protocol.HTTPS));
 		setTimeouts(10000);
 		log.debug("Initialized HTTP client");
-		USERAGENT = new StringBuffer().
-				append("EntryStore/").append(EntryStoreApplication.getVersion().trim()).
-				append(" (").
-				append(System.getProperty("os.arch")).append("; ").
-				append(System.getProperty("os.name")).append(" ").append(System.getProperty("os.version")).append("; ").
-				append("Java; ").
-				append(System.getProperty("java.vendor")).append(" ").append(System.getProperty("java.version")).
-				append(")").
-				toString();
+		USERAGENT = "EntryStore/" + EntryStoreApplication.getVersion().trim()
+				+ " ("
+				+ System.getProperty("os.arch") + "; "
+				+ System.getProperty("os.name") + " " + System.getProperty("os.version") + "; "
+				+ "Java; "
+				+ System.getProperty("java.vendor") + " " + System.getProperty("java.version")
+				+ ")";
 		log.debug("User-Agent for HTTP requests set to \"" + USERAGENT + "\"");
 	}
+
+	private HttpUtil() {}
 
 	public static Response getResourceFromURL(String url) {
 		return getResourceFromURL(url, 0, 0, 0, null);
@@ -171,4 +177,18 @@ public class HttpUtil {
 		} else return repSize > maxSize;
 	}
 
+	/**
+	 * Returns the client IP, or a comma separated list of
+	 * @param request
+	 * @return
+	 */
+	public static String getClientIpAddress(Request request) {
+		checkArgument(request != null, "request must not be null");
+		String s = request.getHeaders().getFirstValue(HEADER_X_FORWARDED_FOR, true, request.getClientInfo().getAddress());
+		String[] clientIpArray = StringUtils.split(s, ',');
+		if (ArrayUtils.isNotEmpty(clientIpArray)) {
+			return clientIpArray[0];
+		}
+		return null;
+	}
 }
