@@ -20,6 +20,7 @@ import static org.entrystore.rest.util.HttpUtil.COOKIE_AUTH_TOKEN;
 import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
 import static org.restlet.data.Status.CLIENT_ERROR_NOT_FOUND;
 
+import java.io.IOException;
 import java.util.Map;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.LoginTokenCache;
@@ -71,13 +72,13 @@ public class TokenResource extends BaseResource {
 		}
 
 		try {
-			if (representation instanceof JsonRepresentation json) {
-				JSONObject jsonObject = json.getJsonObject();
-				String authToken = jsonObject.getString("token");
-				loginTokenCache.removeToken(authToken);
-			} else {
-				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-			}
+			String json = representation.getText();
+			JSONObject jsonObject = new JSONObject(json);
+			String authToken = jsonObject.getString("token");
+			loginTokenCache.removeToken(authToken);
+		} catch (IOException e) {
+			log.debug(e.getMessage(), e);
+			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 		} catch (JSONException e) {
 			log.debug(e.getMessage(), e);
 			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
