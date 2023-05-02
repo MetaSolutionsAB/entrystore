@@ -369,7 +369,7 @@ public class EntryStoreApplication extends Application {
 
 		CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
 		boolean optional = !config.getBoolean(Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR, true);
-		CookieVerifier cookieVerifier = new CookieVerifier(this, rm, corsFilter);
+		CookieVerifier cookieVerifier = new CookieVerifier(this, rm, null, corsFilter);
 		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), optional, ChallengeScheme.HTTP_COOKIE, "EntryStore", cookieVerifier, pm);
 
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
