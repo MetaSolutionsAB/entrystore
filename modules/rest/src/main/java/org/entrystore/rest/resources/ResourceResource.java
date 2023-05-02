@@ -79,6 +79,7 @@ import org.entrystore.QuotaException;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
+import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.ListImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
@@ -498,6 +499,15 @@ public class ResourceResource extends BaseResource {
 				} else {
 					disp.setType(Disposition.TYPE_INLINE);
 				}
+
+				DataImpl data = new DataImpl(entry);
+				String digest = data.readDigest();
+				if (digest != null) {
+					getResponse().getHeaders().set("Digest", "sha-256=" + digest);
+				} else {
+					log.debug("Digest does not exist for [{}]", entry.getResourceURI());
+				}
+
 				return rep;
 			}
 		} else if (entry.getResourceType() == NamedResource) {
