@@ -220,8 +220,7 @@ public class SamlLoginResource extends BaseResource {
 
 			if (userName != null && BasicVerifier.userExists(getPM(), userName) && !BasicVerifier.isUserDisabled(getPM(), userName)) {
 				EntryStoreApplication app = (EntryStoreApplication) getApplication();
-				new CookieVerifier(app, getRM(), AUTH_SAML_MAX_AGE)
-						.createAuthToken(userName, false, getRequest(), getResponse());
+				new CookieVerifier(app, getRM(), AUTH_SAML_MAX_AGE).createAuthToken(userName, false, getRequest(), getResponse());
 
 				// TODO cache SAML ticket together with auth_token (probably necessary for logouts originating from SAML)
 
