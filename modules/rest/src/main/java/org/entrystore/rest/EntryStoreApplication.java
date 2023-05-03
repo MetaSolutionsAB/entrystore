@@ -75,6 +75,7 @@ import org.entrystore.rest.resources.LoginResource;
 import org.entrystore.rest.resources.LogoutResource;
 import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
+import org.entrystore.rest.resources.MessageResource;
 import org.entrystore.rest.resources.NameResource;
 import org.entrystore.rest.resources.PasswordResetResource;
 import org.entrystore.rest.resources.PerformanceMetricsResource;
@@ -298,6 +299,9 @@ public class EntryStoreApplication extends Application {
 
 		reservedNames.add("validator");
 		router.attach("/validator", ValidatorResource.class);
+
+		reservedNames.add("message");
+		router.attach("/message", MessageResource.class);
 
 		// authentication resources
 		reservedNames.add("auth");
