@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
  */
 public class LoginResource extends BaseResource {
 	
-	private static Logger log = LoggerFactory.getLogger(LoginResource.class);
+	private static final Logger log = LoggerFactory.getLogger(LoginResource.class);
 
 	@Get
 	public Representation represent() throws ResourceException {

@@ -17,6 +17,29 @@
 
 package org.entrystore.impl;
 
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.zip.GZIPOutputStream;
 import net.sf.ehcache.CacheManager;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -74,31 +97,6 @@ import org.quartz.impl.StdSchedulerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.zip.GZIPOutputStream;
-
-
 public class RepositoryManagerImpl implements RepositoryManager {
 
 	private static final Logger log = LoggerFactory.getLogger(RepositoryManagerImpl.class);
@@ -114,37 +112,37 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private boolean checkForAuthorization = true;
 
 	private final ArrayList<String> systemContextAliasList = new ArrayList<>();
-	
+
 	private final static Map<String, RepositoryManagerImpl> instances = Collections.synchronizedMap(new HashMap<>());
 
 	private final Map<String, Class> alias2Class = new HashMap<>();
 
 	private boolean modificationLockout = false;
-	
+
 	private boolean shutdown = false;
-	
+
 	private final Object mutex = new Object();
-	
+
 	private final SoftCache softCache;
 
 	private final Config config;
-	
+
 	private CacheManager cacheManager;
-	
+
 	private boolean quotaEnabled = false;
-	
+
 	private long defaultQuota = Quota.VALUE_UNLIMITED;
 
 	private long maximumFileSize = Quota.VALUE_UNLIMITED;
-	
+
 	//ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
-	
+
 	private final Map<RepositoryEvent, Set<RepositoryListener>> repositoryListeners = new EnumMap<>(RepositoryEvent.class);
-	
+
 	private SolrClient solrServer;
-	
+
 	private SolrSearchIndex solrIndex;
-	
+
 	private PublicRepository publicRepository;
 
 	private Repository provenanceRepository;
@@ -157,9 +155,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		System.setProperty("org.openrdf.repository.debug", "true");
 		this.config = config;
 		String storeType = config.getString(Settings.STORE_TYPE, "memory").trim();
-				
+
 		log.info("Store type: " + storeType);
-		
+
 		if (storeType.equalsIgnoreCase("memory")) {
 			log.info("Using Memory Store");
 			if (config.containsKey(Settings.STORE_PATH)) {
@@ -218,7 +216,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			}
 		}
-		
+
 		if (this.repository == null) {
 			log.error("Failed to create SailRepository");
 			throw new IllegalStateException("Failed to create SailRepository");
@@ -246,7 +244,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		} else {
 			log.info("Disk cache not activated");
 		}
-		
+
 		quotaEnabled = config.getString(Settings.DATA_QUOTA, "off").equalsIgnoreCase("on");
 		if (quotaEnabled) {
 			log.info("Context quotas enabled");
@@ -268,7 +266,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			maximumFileSize = StringUtils.convertUnitStringToByteSize(maxFileSizeValue);
 			log.info("Maximum file size set to " + maxFileSizeValue + " bytes");
 		}
-		
+
 		setCheckForAuthorization(false);
 		try {
 			try {
@@ -280,7 +278,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 			systemContextAliasList.add("_contexts");
 			systemContextAliasList.add("_principals");
-			
+
 			alias2Class.put("_contexts", ContextManagerImpl.class);
 			alias2Class.put("_principals", PrincipalManagerImpl.class);
 
@@ -293,9 +291,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PROVENANCE, "off"))) {
 				initializeProvenanceRepository();
 			}
-			
+
 			this.initialize();
-			
+
 			String baseURI = config.getString(Settings.BASE_URL);
 			if (instances.containsKey(baseURI) || instances.containsValue(this)) {
 				log.warn("This RepositoryManager instance has already been created, something is wrong");
@@ -372,7 +370,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		this.contextManager = new ContextManagerImpl(this, repository);
 		this.contextManager.initializeSystemEntries();
 	}
-	
+
 	/**
 	 * @return Returns a named instance of RepositoryManagerImpl. The method may
 	 *         return null if the RepositoryManager for the given base URI has
@@ -382,21 +380,21 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		// in a more complex setup (like applications running in several
 		// different JVMs) it is safe to use JNDI or JMX instead. For now we
 		// should be safe with this parametrized Singleton.
-		
+
 		RepositoryManagerImpl rm = instances.get(baseURI);
-		if (rm != null) {		
+		if (rm != null) {
 			log.info("Instance found for " + baseURI);
 		} else {
 			log.info("No instance found for " + baseURI);
 		}
-		
+
 		return rm;
 	}
 
 	public Repository getRepository() {
 		return this.repository;
 	}
-	
+
 	public PublicRepository getPublicRepository() {
 		return this.publicRepository;
 	}
@@ -404,10 +402,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	public Repository getProvenanceRepository() {
 		return this.provenanceRepository;
 	}
-	
+
 	/**
 	 * Export the whole repository.
-	 * 
+	 *
 	 * @param file File to export repository to.
 	 */
 	public void exportToFile(Repository repo, URI file, boolean gzip, RDFFormat format) {
@@ -461,6 +459,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		log.info("Export finished after " + timeDiff + " ms");
 	}
 
+	@Override
 	public void shutdown() {
 		synchronized (mutex) {
 			if (!shutdown) {
@@ -470,11 +469,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				} catch (SchedulerException se) {
 					log.error("Cannot shutdown Quartz scheduler: " + se.getMessage());
 				}
-				if (repositoryListeners != null) {
-					log.info("Shutting down repository listeners and executor");
-					//listenerExecutor.shutdown();
-					repositoryListeners.clear();
-				}
+				log.info("Shutting down repository listeners and executor");
+				//listenerExecutor.shutdown();
+				repositoryListeners.clear();
 				if (softCache != null) {
 					softCache.shutdown();
 				}
@@ -507,7 +504,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 						log.error("Error when shutting down Sesame provenance repository: " + re.getMessage());
 					}
 				}
-
+				if (solrServer != null) {
+					try {
+						solrServer.close();
+					} catch (IOException e) {
+						log.error("Error when shutting down Solr Server");
+					}
+				}
 				shutdown = true;
 			}
 		}
@@ -545,24 +548,24 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	public Class getSystemContextClassForAlias(String alias) {
 		return alias2Class.get(alias);
 	}
-	
+
 	public Class getRegularContextClass() {
 		return RegularContext.class;
 	}
-	
+
 	public boolean hasModificationLockOut() {
 		return modificationLockout;
 	}
-	
+
 	public void setModificationLockOut(boolean lockout) {
 		log.info("Lock out set to " + lockout);
 		this.modificationLockout = lockout;
 	}
-	
+
 	public Config getConfiguration() {
 		return config;
 	}
-	
+
 	public SoftCache getSoftCache() {
 		return softCache;
 	}
@@ -627,7 +630,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		}
 	}
-	
+
 	private void initSolr() {
 		log.info("Manually setting property \"javax.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");
 		System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
@@ -640,7 +643,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (!reindex && "memory".equalsIgnoreCase(config.getString(Settings.STORE_TYPE)) &&	!config.containsKey(Settings.STORE_PATH)) {
 			reindex = true;
 		}
-		
+
 		String solrURL = config.getString(Settings.SOLR_URL);
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at " + solrURL);
@@ -706,7 +709,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					if (solrVersion == null) {
 						solrVersion = "<unknown>";
 					}
-					log.warn("Solr index was created with: EntryStore {} (running version is {}) and Solr {} (running version is {})", schemaVersion, getVersion(), solrVersion, SolrVersion.LATEST.toString());
+					log.warn("Solr index was created with: EntryStore {} (running version is {}) and Solr {} (running version is {})", schemaVersion, getVersion(), solrVersion,
+							SolrVersion.LATEST);
 					log.warn("Deleting contents of Solr directory at {} to trigger a clean reindex with current Solr schema", solrDir);
 					try {
 						FileUtils.cleanDirectory(solrDir);
@@ -752,6 +756,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 
 			try {
+				System.setProperty("solr.install.dir", solrDir.getCanonicalPath());
 				NodeConfig config = new NodeConfig.NodeConfigBuilder("embeddedSolrServerNode", solrDir.toPath())
 						.setConfigSetBaseDirectory(solrURL)
 						.build();
@@ -789,7 +794,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			this.shutdown();
 		}
 	}
-	
+
 	private void registerSolrListeners() {
 		if (solrServer != null) {
 			RepositoryListener updater = new RepositoryListener() {
@@ -805,7 +810,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
 			registerListener(updater, RepositoryEvent.ResourceUpdated);
-			
+
 			RepositoryListener remover = new RepositoryListener() {
 				@Override
 				public void repositoryUpdated(RepositoryEventObject eventObject) {
@@ -829,7 +834,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			registerListener(contextIndexer, RepositoryEvent.EntryAclGuestUpdated);
 		}
 	}
-	
+
 	public SearchIndex getIndex() {
 		return this.solrIndex;
 	}
@@ -849,7 +854,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
 			registerListener(updater, RepositoryEvent.ResourceUpdated);
-			
+
 			// delete
 			RepositoryListener remover = new RepositoryListener() {
 				@Override
@@ -862,7 +867,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			registerListener(remover, RepositoryEvent.EntryDeleted);
 		}
 	}
-	
+
 	public ValueFactory getValueFactory() {
 		if (repository != null) {
 			return repository.getValueFactory();
@@ -922,16 +927,18 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				newTripleCount = rcNew.size();
 				oldContextCount = rcOld.getContextIDs().stream().count();
 				newContextCount = rcNew.getContextIDs().stream().count();
+			} finally {
+				newRepo.shutDown();
 			}
-			newRepo.shutDown();
+		} finally {
+			oldRepo.shutDown();
 		}
-		oldRepo.shutDown();
 
 		if (oldTripleCount != newTripleCount || oldContextCount != newContextCount) {
 			throw new RuntimeException("Amount of triples or contexts in migrated Native Store at " + path + " is not the same as in original Native Store");
 		}
 
-		log.info("Repository statistics for {}: " + newTripleCount + " triples, " + newContextCount + " named graphs", path);
+		log.info("Repository statistics for {}: {} triples, {} named graphs", path, newTripleCount, newContextCount);
 
 		try {
 			FileUtils.deleteDirectory(backupPath);

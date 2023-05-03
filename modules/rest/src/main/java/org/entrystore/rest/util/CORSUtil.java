@@ -36,32 +36,38 @@ import java.util.Set;
  */
 public class CORSUtil {
 
-	private static Logger log = LoggerFactory.getLogger(CORSUtil.class);
+	private static final Logger log = LoggerFactory.getLogger(CORSUtil.class);
 
-	private static Map<Config, CORSUtil> instances = new HashMap<>();
+	private static final Map<Config, CORSUtil> instances = new HashMap<>();
 
-	private List<String> allowedOriginPatterns;
+	private final List<String> allowedOriginPatterns;
 
 	private Set<String> allowedHeaders;
 
 	private int maxAge = -1;
 
+	private boolean allowCredentials = false;
+
 	private CORSUtil(Config config) {
 		String origins = config.getString(Settings.CORS_ORIGINS, "*");
-		allowedOriginPatterns = new ArrayList<String>();
-		List<String> patterns = Arrays.asList(origins.split(","));
+		allowedOriginPatterns = new ArrayList<>();
+		String[] patterns = origins.split(",");
 		for (String p : patterns) {
 			log.info("CORS allowed origins: " + origins);
 			allowedOriginPatterns.add(p.trim().toLowerCase());
 		}
 		if (config.containsKey(Settings.CORS_HEADERS)) {
 			String confAllHeaders = config.getString(Settings.CORS_HEADERS);
-			allowedHeaders = new HashSet(Arrays.asList(confAllHeaders.split(",")));
+			allowedHeaders = new HashSet<>(Arrays.asList(confAllHeaders.split(",")));
 			log.info("CORS allowed/exposed headers: " + confAllHeaders);
 		}
 		if (config.containsKey(Settings.CORS_MAX_AGE)) {
 			maxAge = config.getInt(Settings.CORS_MAX_AGE, -1);
 			log.info("CORS max age: " + maxAge);
+		}
+		if (config.containsKey(Settings.CORS_ALLOW_CREDENTIALS)) {
+			allowCredentials = config.getBoolean(Settings.CORS_ALLOW_CREDENTIALS, false);
+			log.info("CORS allow credentials: " + allowCredentials);
 		}
 	}
 
@@ -103,6 +109,10 @@ public class CORSUtil {
 
 	public int getMaxAge() {
 		return maxAge;
+	}
+
+	public boolean getAllowCredentials() {
+		return allowCredentials;
 	}
 
 }

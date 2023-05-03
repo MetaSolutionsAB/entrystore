@@ -18,7 +18,7 @@ package org.entrystore.repository.config;
 
 /**
  * Contains most of the property keys used within EntryStore.
- * 
+ *
  * @author Hannes Ebner
  */
 public class Settings {
@@ -47,13 +47,19 @@ public class Settings {
 	public static String AUTH_COOKIE_SECURE = "entrystore.auth.cookie.secure";
 	public static String AUTH_COOKIE_SAMESITE = "entrystore.auth.cookie.samesite";
 	public static String AUTH_COOKIE_MAXAGE = "entrystore.auth.cookie.max-age";
+	public static String AUTH_COOKIE_UPDATE_EXPIRY = "entrystore.auth.cookie.update.expiry";
 	public static String AUTH_COOKIE_INVALID_TOKEN_ERROR = "entrystore.auth.cookie.invalid-token-error";
 	@Deprecated public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.cookie.max-age";
 
 	public static String AUTH_PASSWORD = "entrystore.auth.password";
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
 	public static String AUTH_PASSWORD_BLACKLIST = "entrystore.auth.password.blacklist";
-	
+
+	public static String AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS = "entrystore.auth.temp.lockout.max.attempts";
+	public static String AUTH_TEMP_LOCKOUT_DURATION = "entrystore.auth.temp.lockout.duration";
+
+	public static String AUTH_HTTP_BASIC = "entrystore.auth.http-basic";
+
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
 	public static String BACKUP_TIMEREGEXP_DEPRECATED = "entrystore.backup.timeregexp";
@@ -62,27 +68,27 @@ public class Settings {
 	public static String BACKUP_FORMAT = "entrystore.backup.format";
 	public static String BACKUP_DELETE_AFTER = "entrystore.backup.delete-after";
 	public static String BACKUP_INCLUDE_FILES = "entrystore.backup.include-files";
-	
+
 	public static String BACKUP_MAINTENANCE = "entrystore.backup.maintenance";
 	public static String BACKUP_MAINTENANCE_UPPER_LIMIT = "entrystore.backup.maintenance.upper-limit";
 	public static String BACKUP_MAINTENANCE_LOWER_LIMIT = "entrystore.backup.maintenance.lower-limit";
 	public static String BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS = "entrystore.backup.maintenance.expires-after-days";
-	
+
 	public static String DATA_FOLDER = "entrystore.data.folder";
 	public static String DATA_QUOTA = "entrystore.data.quota";
 	public static String DATA_QUOTA_DEFAULT = "entrystore.data.quota.default";
 	public static String DATA_MAX_FILE_SIZE = "entrystore.data.max-file-size";
-	
+
 	public static String BASE_URL = "entrystore.baseurl.folder";
-	
+
 	public static String HARVESTER_OAI = "entrystore.harvester.oai";
 	public static String HARVESTER_OAI_MULTITHREADED = "entrystore.harvester.oai.multithreaded";
 	public static String HARVESTER_OAI_METADATA_POLICY = "entrystore.harvester.oai.policy"; // skip | replace
 	public static String HARVESTER_OAI_FROM_AUTO_DETECT = "entrystore.harvester.oai.from.auto-detect";
 	public static String HARVESTER_FAO = "entrystore.harvester.fao";
-	
+
 	public static String HARVESTING_TARGET_OAI_BASE_URI = "Identify.scam.baseuri";
-	
+
 	public static String STORE_USER = "entrystore.repository.store.user";
 	public static String STORE_PWD = "entrystore.repository.store.password";
 	public static String STORE_DBNAME = "entrystore.repository.store.database.name";
@@ -98,7 +104,7 @@ public class Settings {
 
 	public static String STOREJS_JS = "entrystore.repository.storejs.js";
 	public static String STOREJS_CSS = "entrystore.repository.storejs.css";
-	
+
 	public static String SOLR = "entrystore.solr";
 	public static String SOLR_URL = "entrystore.solr.url";
 	public static String SOLR_REINDEX_ON_STARTUP = "entrystore.solr.reindex-on-startup";
@@ -116,10 +122,10 @@ public class Settings {
 	public static String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";
 
 	public static String REPOSITORY_REWRITE_BASEREFERENCE = "entrystore.repository.rewrite-basereference";
-	
+
 	public static String REPOSITORY_CACHE = "entrystore.repository.cache";
 	public static String REPOSITORY_CACHE_PATH = "entrystore.repository.cache.path";
-	
+
 	public static String REPOSITORY_PUBLIC = "entrystore.repository.public";
 	public static String REPOSITORY_PUBLIC_PATH = "entrystore.repository.public.path";
 	public static String REPOSITORY_PUBLIC_INDEXES = "entrystore.repository.public.indexes";
@@ -170,6 +176,7 @@ public class Settings {
 	public static String CORS_ORIGINS = "entrystore.cors.origins";
 	public static String CORS_HEADERS = "entrystore.cors.headers";
 	public static String CORS_MAX_AGE = "entrystore.cors.max-age";
+	public static String CORS_ALLOW_CREDENTIALS = "entrystore.cors.allow-credentials";
 
 	public static String NONADMIN_GROUPCONTEXT_CREATION = "entrystore.nonadmin.group-context-creation";
 
@@ -181,7 +188,9 @@ public class Settings {
 	public static String HTTPS_DISABLE_VERIFICATION = "entrystore.https.disable-verification";
 
 	public static String HTTP_ALLOW_CONTENT_DISPOSITION_INLINE = "entrystore.http.allow-content-disposition-inline";
-	
+
+	public static String METRICS = "entrystore.metrics";
+
 	private Settings() {
 	}
 

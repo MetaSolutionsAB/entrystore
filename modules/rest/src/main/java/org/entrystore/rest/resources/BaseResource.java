@@ -26,6 +26,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.EntryStoreApplication;
+import org.entrystore.rest.auth.UserTempLockoutCache;
 import org.entrystore.rest.util.CORSUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.Util;
@@ -55,28 +56,28 @@ import java.util.Set;
 /**
  *<p> Base resource class that supports common behaviours or attributes shared by
  * all resources.</p>
- * 
+ *
  * @author Eric Johansson
- * @author Hannes Ebner 
+ * @author Hannes Ebner
  */
 public abstract class BaseResource extends ServerResource {
-	
+
 	protected HashMap<String, String> parameters;
-	
+
 	MediaType format;
-	
+
 	protected String contextId;
-	
+
 	protected String entryId;
-	
+
 	protected org.entrystore.Context context;
-	
+
 	protected Entry entry;
-	
+
 	private static final Logger log = LoggerFactory.getLogger(BaseResource.class);
 
 	private static ServerInfo serverInfo;
-	
+
 	@Override
 	public void init(Context c, Request request, Response response) {
 		parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
@@ -84,7 +85,7 @@ public abstract class BaseResource extends ServerResource {
 
 		// we set a custom Server header in the HTTP response
 		setServerInfo(this.getServerInfo());
-		
+
 		contextId = (String) request.getAttributes().get("context-id");
 		if (getCM() != null && contextId != null) {
 			if (getReservedNames().contains(contextId.toLowerCase())) {
@@ -96,7 +97,7 @@ public abstract class BaseResource extends ServerResource {
 				}
 			}
 		}
-		
+
 		entryId = (String) request.getAttributes().get("entry-id");
 		if (context != null && entryId != null) {
 			entry = context.get(entryId);
@@ -104,7 +105,7 @@ public abstract class BaseResource extends ServerResource {
 				log.info("There is no entry " + entryId + " in context " + contextId);
 			}
 		}
-		
+
 		if (parameters.containsKey("format")) {
 			String format = parameters.get("format");
 			if (format != null) {
@@ -168,16 +169,15 @@ public abstract class BaseResource extends ServerResource {
 	 * @return The current {@link ContextManager} for the contexts.
 	 */
 	public ContextManager getCM() {
-		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getCM();
+		return getEntryStoreApplication().getCM();
 	}
 
 	/**
-	 * Gets the current {@link ContextManager}
-	 * @return The current {@link ContextManager} for the contexts.
+	 * Gets the current {@link PrincipalManager}
+	 * @return The current {@link PrincipalManager} for the contexts.
 	 */
 	public PrincipalManager getPM() {
-		Map<String, Object> map = getContext().getAttributes();
-		return ((EntryStoreApplication) map.get(EntryStoreApplication.KEY)).getPM();
+		return getEntryStoreApplication().getPM();
 	}
 
 	/**
@@ -185,15 +185,23 @@ public abstract class BaseResource extends ServerResource {
 	 * @return the current {@link RepositoryManager}.
 	 */
 	public RepositoryManagerImpl getRM() {
-		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getRM();
+		return getEntryStoreApplication().getRM();
 	}
 
 	public ArrayList<Harvester> getHarvesters() {
-		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getHarvesters();
+		return getEntryStoreApplication().getHarvesters();
 	}
 
 	public Set<String> getReservedNames() {
-		return ((EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY)).getReservedNames();
+		return getEntryStoreApplication().getReservedNames();
+	}
+
+	public UserTempLockoutCache getUserTempLockoutCache() {
+		return getEntryStoreApplication().getUserTempLockoutCache();
+	}
+
+	private EntryStoreApplication getEntryStoreApplication() {
+		return (EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY);
 	}
 
 	public Representation unauthorizedHEAD() {
@@ -205,7 +213,7 @@ public abstract class BaseResource extends ServerResource {
 	public Representation unauthorizedGET() {
 		log.info("Unauthorized GET");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		
+
 		List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);

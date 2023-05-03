@@ -19,6 +19,7 @@ package org.entrystore.rest.util;
 import org.eclipse.rdf4j.common.xml.XMLReaderFactory;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.rio.ParserConfig;
 import org.eclipse.rdf4j.rio.RDFFormat;
@@ -59,6 +60,7 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -98,18 +100,9 @@ public class GraphUtil {
 		}
 
 		StringWriter stringWriter = new StringWriter();
+		Map<String, String> namespaces = NS.getMap();
 		RDFWriter rdfWriter = null;
 		try {
-			/*
-			Constructor<? extends RDFWriter> constructor = null;
-			if (writer.equals(JSONLDWriter.class) && NS.getMap().containsKey("store")) {
-				constructor = writer.getConstructor(Writer.class, String.class);
-				rdfWriter = constructor.newInstance(stringWriter, NS.getMap().get("store"));
-			} else {
-				constructor = writer.getConstructor(Writer.class);
-				rdfWriter = constructor.newInstance(stringWriter);
-			}
-			*/
 			Constructor<? extends RDFWriter> constructor = writer.getConstructor(Writer.class);
 			rdfWriter = constructor.newInstance(stringWriter);
 
@@ -129,6 +122,16 @@ public class GraphUtil {
 				rdfWriter.getWriterConfig().set(JSONLDSettings.HIERARCHICAL_VIEW, true);
 			}
 			rdfWriter.getWriterConfig().set(JSONLDSettings.JSONLD_MODE, JSONLDMode.COMPACT);
+
+			if (rdfWriter instanceof JSONLDWriter) {
+				// we optimize to include only the used namespaces as contexts in JSON-LD
+				namespaces = new HashMap<>();
+				for (Statement s : graph) {
+					namespaces.putAll(findNS(s.getSubject()));
+					namespaces.putAll(findNS(s.getPredicate()));
+					namespaces.putAll(findNS(s.getObject()));
+				}
+			}
 		} catch (Exception e) {
 			log.error(e.getMessage());
 		}
@@ -139,13 +142,7 @@ public class GraphUtil {
 
 		try {
 			rdfWriter.startRDF();
-			Map<String, String> namespaces = NS.getMap();
 			for (String nsName : namespaces.keySet()) {
-				/*
-				if ("store".equals(nsName)) {
-					continue;
-				}
-				*/
 				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
 			}
 			for (Statement statement : graph) {
@@ -375,6 +372,18 @@ public class GraphUtil {
 		}
 
 		return pc;
+	}
+
+	private static Map<String, String> findNS(Value value) {
+		Map<String, String> result = new HashMap<>();
+		if (value.isIRI()) {
+			for (String ns : NS.getMap().keySet()) {
+				if (value.stringValue().startsWith(NS.getMap().get(ns))) {
+					result.put(ns, NS.getMap().get(ns));
+				}
+			}
+		}
+		return result;
 	}
 
 }

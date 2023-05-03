@@ -16,6 +16,12 @@
 
 package org.entrystore.rest.resources;
 
+import static java.lang.Boolean.parseBoolean;
+import static org.restlet.data.MediaType.TEXT_HTML;
+import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
+
+import java.util.Arrays;
+import java.util.List;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
@@ -34,15 +40,12 @@ import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
-import java.util.List;
-
 /**
  * This resource checks credentials and sets a cookie.
- * 
+ *
  * It only allows POST requests to avoid user/password in URL and therefore
  * logging in clear-text.
- * 
+ *
  * @author Hannes Ebner
  */
 public class CookieLoginResource extends BaseResource {
@@ -66,10 +69,12 @@ public class CookieLoginResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		if (HttpUtil.isLargerThan(r, 32768)) {
-			log.warn("The size of the representation is larger than 32KB or unknown, similar requests may be blocked in future versions");
+			log.warn("The size of the representation is larger than 32KB or unknown, request blocked");
+			getResponse().setStatus(CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
+			return;
 		}
 
-		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
+		boolean html = TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(TEXT_HTML, MediaType.APPLICATION_ALL)));
 		Form query;
 		try {
 			query = new Form(r);
@@ -81,8 +86,8 @@ public class CookieLoginResource extends BaseResource {
 
 		String userName = query.getFirstValue("auth_username");
 		String password = query.getFirstValue("auth_password");
-		String maxAgeStr = query.getFirstValue("auth_maxage");
-		
+		boolean sessionCookie = parseBoolean(query.getFirstValue("auth_session_cookie", true, "false"));
+
 		if (userName == null || password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
@@ -106,13 +111,23 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
+		if (getUserTempLockoutCache().userIsLockedOut(userName)) {
+			getResponse().setStatus(Status.CLIENT_ERROR_TOO_MANY_REQUESTS);
+			if (html) {
+				getResponse().setEntity(new SimpleHTML("Login")
+						.representation("User account is temporarily disabled. Too many failed logins."));
+			}
+			return;
+		}
+
 		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName);
 		boolean userIsEnabled = !BasicVerifier.isUserDisabled(getPM(), userName);
 		try {
 			if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
 				if (userIsEnabled) {
-					new CookieVerifier(getRM()).createAuthToken(userName, maxAgeStr, getResponse());
+					new CookieVerifier(getRM()).createAuthToken(userName, sessionCookie, getResponse());
 					getResponse().setStatus(Status.SUCCESS_OK);
+					getUserTempLockoutCache().succeedLogin(userName);
 					if (html) {
 						getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
 					}
@@ -135,6 +150,7 @@ public class CookieLoginResource extends BaseResource {
 		}
 
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
+		getUserTempLockoutCache().failLogin(userName);
 		if (html) {
 			getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 		}

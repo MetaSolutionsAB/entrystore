@@ -22,7 +22,9 @@ import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.auth.CustomCookieSettings.SameSite;
 import org.entrystore.rest.filter.CORSFilter;
+import org.joda.time.DateTime;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.Cookie;
@@ -33,7 +35,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.time.Duration;
 import java.util.Date;
+
+import static org.entrystore.repository.config.Settings.*;
 
 
 /**
@@ -41,19 +46,19 @@ import java.util.Date;
  */
 public class CookieVerifier implements Verifier {
 
-	private final PrincipalManager pm;
+	private static final Logger log = LoggerFactory.getLogger(CookieVerifier.class);
 
-	private final RepositoryManager rm;
-
-	private final CORSFilter corsFilter;
+	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(7).toSeconds();
 
 	private static CustomCookieSettings cookieSettings;
 
-	private static final int DEFAULT_MAX_AGE = 24 * 3600;
+	private final PrincipalManager pm;
+	private final RepositoryManager rm;
+	private final CORSFilter corsFilter;
 
-	private static boolean invalidTokenError;
-
-	private static final Logger log = LoggerFactory.getLogger(CookieVerifier.class);
+	private final boolean configInvalidTokenError;
+	private final boolean configCookieUpdateExpiry;
+	private final int configCookieMaxAgeInSeconds;
 
 	public CookieVerifier(RepositoryManager rm) {
 		this(rm, null);
@@ -63,38 +68,43 @@ public class CookieVerifier implements Verifier {
 		this.rm = rm;
 		this.pm = rm.getPrincipalManager();
 		this.corsFilter = corsFilter;
-		invalidTokenError = rm.getConfiguration().getBoolean(Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR, false);
+
+		Config config = rm.getConfiguration();
+		this.configInvalidTokenError = config.getBoolean(AUTH_COOKIE_INVALID_TOKEN_ERROR, true);
+		this.configCookieUpdateExpiry = config.getBoolean(AUTH_COOKIE_UPDATE_EXPIRY, false);
+		this.configCookieMaxAgeInSeconds = config.getInt(AUTH_TOKEN_MAX_AGE, config.getInt(AUTH_COOKIE_MAXAGE,
+				DEFAULT_MAX_AGE_IN_SECONDS));
+
 		if (cookieSettings == null) {
-			Config config = rm.getConfiguration();
-			CustomCookieSettings.SameSite sameSite = CustomCookieSettings.SameSite.Strict;
+			SameSite sameSite = SameSite.Strict;
 			try {
-				String sameSiteStr = config.getString(Settings.AUTH_COOKIE_SAMESITE, CustomCookieSettings.SameSite.Strict.name()).toLowerCase();
+				String sameSiteStr = config.getString(Settings.AUTH_COOKIE_SAMESITE, SameSite.Strict.name()).toLowerCase();
 				if (sameSiteStr.length() > 1) {
 					sameSiteStr = sameSiteStr.substring(0, 1).toUpperCase() + sameSiteStr.substring(1);
 				}
-				sameSite = CustomCookieSettings.SameSite.valueOf(sameSiteStr);
+				sameSite = SameSite.valueOf(sameSiteStr);
 			} catch (IllegalArgumentException iae) {
 				log.warn("Invalid value for setting " + Settings.AUTH_COOKIE_SAMESITE + ": " + iae.getMessage());
 			}
-			cookieSettings = new CustomCookieSettings(
+			this.cookieSettings = new CustomCookieSettings(
 					config.getBoolean(Settings.AUTH_COOKIE_SECURE, true),
 					config.getBoolean(Settings.AUTH_COOKIE_HTTPONLY, true),
 					sameSite);
 		}
 	}
 
+	@Override
 	public int verify(Request request, Response response) {
 		// to avoid an override of an already existing authentication, e.g. from BasicVerifier
 		URI authUser = pm.getAuthenticatedUserURI();
 		if (authUser != null && !pm.getGuestUser().getURI().equals(authUser)) {
 			return RESULT_VALID;
 		}
-		
+
 		URI userURI = null;
 
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			
 			Cookie authTokenCookie = request.getCookies().getFirst("auth_token");
 			TokenCache<String, UserInfo> tc = LoginTokenCache.getInstance();
 			if (authTokenCookie != null) {
@@ -105,6 +115,10 @@ public class CookieVerifier implements Verifier {
 					Entry userEntry = pm.getPrincipalEntry(userName);
 					if (userEntry != null) {
 						userURI = userEntry.getResourceURI();
+						if (configCookieUpdateExpiry) {
+							tc.putToken(authToken,
+									new UserInfo(userName, DateTime.now().plusSeconds(configCookieMaxAgeInSeconds).toDate()));
+						}
 					} else {
 						log.error("Auth token maps to non-existing user, removing token");
 						tc.removeToken(authToken);
@@ -118,7 +132,7 @@ public class CookieVerifier implements Verifier {
 					if (corsFilter != null) {
 						corsFilter.addCorsHeader(request, response);
 					}
-					if (invalidTokenError) {
+					if (configInvalidTokenError) {
 						return RESULT_INVALID;
 					}
 				}
@@ -136,7 +150,7 @@ public class CookieVerifier implements Verifier {
 
 	public static void cleanCookies(RepositoryManager rm, String cookieName, Request request, Response response) {
 		response.getCookieSettings().removeAll(cookieName);
-		Series<Cookie> cookies = request.getCookies();		
+		Series<Cookie> cookies = request.getCookies();
 		for (Cookie c : cookies) {
 			if (c.getName().equals(cookieName)) {
 				// The following is a hack, explained in createAuthToken() below
@@ -150,42 +164,24 @@ public class CookieVerifier implements Verifier {
 		}
 	}
 
-	public void createAuthToken(String userName, String maxAgeStr, Response response) {
-		Config config = rm.getConfiguration();
-		// 24h default, lifetime in seconds
-		long maxAge = config.getLong(Settings.AUTH_TOKEN_MAX_AGE, config.getLong(Settings.AUTH_COOKIE_MAXAGE, DEFAULT_MAX_AGE));
-		if (maxAgeStr != null) {
-			try {
-				maxAge = Long.parseLong(maxAgeStr);
-			} catch (NumberFormatException ignored) {}
-		}
-
+	public void createAuthToken(String userName, boolean sessionCookie, Response response) {
 		String token = Password.getRandomBase64(128);
-		Date loginExpiration = new Date(new Date().getTime() + (DEFAULT_MAX_AGE * 1000));
-		if (maxAge >= 0) { // negative value means session cookie, see below
-			loginExpiration = new Date(new Date().getTime() + (maxAge * 1000));
-		}
+
+		Date loginExpiration = DateTime.now().plusSeconds(configCookieMaxAgeInSeconds).toDate();
 		LoginTokenCache.getInstance().putToken(token, new UserInfo(userName, loginExpiration));
-		log.debug("User " + userName + " receives authentication token that will expire on " + loginExpiration);
+		log.debug("User [{}] receives authentication token that will expire on [{}]", userName, loginExpiration);
 
 		// We hack the mechanism and set additional properties as part of the Cookie value since
 		// there is no direct way to set properties such as Max-Age, SameSite, etc.
 		// This works since Restlet does not parse or process the value; this hack might break in the future.
-		// We only set Max-Age for positive values; omission of Max-Age and Expires makes it a session cookie.
-		if (maxAge >= 0) {
-			token += "; Max-Age=" + maxAge;
-		}
-		token += "; " + cookieSettings.toString();
-		CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
-		// CookieSetting.setMaxAge() actually materializes as an "Expires" setting for some strange reason,
-		// that's why we set "Max-Age" (which takes precedent over "Expires") above instead.
-		// tokenCookieSetting.setMaxAge(maxAge);
+		String cookieValue = token + "; Max-Age=" + (sessionCookie ? -1 : Integer.MAX_VALUE) + "; " + cookieSettings;
+		CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", cookieValue);
 		tokenCookieSetting.setPath(getCookiePath(rm));
 		response.getCookieSettings().add(tokenCookieSetting);
 	}
 
 	private static String getCookiePath(RepositoryManager rm) {
-		String cookiePath = rm.getConfiguration().getString(Settings.AUTH_COOKIE_PATH, "auto");
+		String cookiePath = rm.getConfiguration().getString(AUTH_COOKIE_PATH, "auto");
 		if ("auto".equalsIgnoreCase(cookiePath)) {
 			return rm.getRepositoryURL().getPath();
 		}
@@ -199,5 +195,4 @@ public class CookieVerifier implements Verifier {
 		}
 		return null;
 	}
-
 }

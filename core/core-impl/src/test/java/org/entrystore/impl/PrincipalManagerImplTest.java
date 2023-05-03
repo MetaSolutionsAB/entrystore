@@ -16,6 +16,13 @@
 
 package org.entrystore.impl;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import java.net.URI;
+import java.util.HashSet;
+import java.util.Set;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
@@ -25,21 +32,14 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.net.URI;
-import java.util.HashSet;
-import java.util.Set;
-
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 /**
  */
 public class PrincipalManagerImplTest extends AbstractCoreTest {
 
-	@Before
+	@BeforeEach
 	public void setUp() {
 		super.setUp();
 		TestSuite.addEntriesInDisneySuite(rm);
@@ -98,12 +98,13 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 		assertTrue(duck.get("1") != null); // since guest access is allowed on duck
 	}
 
-	@Test(expected = AuthorizationException.class)
+	@Test
 	public void guestNoAccessCheck() {
 		// Guest, check public access to duck and none to mouse.
 		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 		Context mouse = cm.getContext("mouse");
-		mouse.get("1").getMetadataGraph(); //No guest access on Mouse context.
+		//No guest access on Mouse context.
+		assertThrows(AuthorizationException.class, () -> mouse.get("1").getMetadataGraph());
 	}
 
 	@Test
@@ -127,12 +128,13 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 				pm.getPrincipalEntry("Daisy").getResourceURI());
 	}
 
-	@Test(expected = AuthorizationException.class)
+	@Test
 	public void noAdministratorAccessToEntry() {
 		Context mouse = cm.getContext("mouse");
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		//	Donald is not owner of mouse context, hence should not be allowed to change it's ACL.
-		mouse.getEntry().setAllowedPrincipalsFor(AccessProperty.ReadResource, new HashSet());
+		assertThrows(AuthorizationException.class, () ->
+				mouse.getEntry().setAllowedPrincipalsFor(AccessProperty.ReadResource, new HashSet()));
 	}
 
 	@Test

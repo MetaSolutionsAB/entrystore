@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.resources;
 
+import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
+
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.query.MalformedQueryException;
 import org.eclipse.rdf4j.query.QueryEvaluationException;
@@ -54,13 +56,13 @@ import java.util.List;
 
 /**
  * Provides a SPARQL interface to contexts.
- * 
+ *
  * @author Hannes Ebner
  */
 public class SparqlResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(SparqlResource.class);
-	
+
 	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
 
 	@Override
@@ -78,14 +80,14 @@ public class SparqlResource extends BaseResource {
 				getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
 				return null;
 			}
-			
+
 			if (format == null) {
 				format = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
 				if (format == null) {
 					format = MediaType.ALL;
 				}
 			}
-			
+
 			String queryString = null;
 			if (parameters.containsKey("query")) {
 				queryString = URLDecoder.decode(parameters.get("query"), StandardCharsets.UTF_8);
@@ -93,23 +95,25 @@ public class SparqlResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return null;
 			}
-			
+
 			Representation result = getSparqlResponse(format, queryString);
 			if (result != null) {
 				return result;
 			} else {
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				return null;
-			} 
+			}
 		} catch (AuthorizationException ae) {
 			return unauthorizedGET();
 		}
 	}
-	
+
 	@Post
 	public void acceptRepresentation(Representation r) {
 		if (HttpUtil.isLargerThan(r, 32768)) {
-			log.warn("The size of the representation is larger than 32KB or unknown, similar requests may be blocked in future versions");
+			log.warn("The size of the representation is larger than 32KB or unknown, request blocked");
+			getResponse().setStatus(CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
+			return;
 		}
 
 		try {
@@ -142,7 +146,7 @@ public class SparqlResource extends BaseResource {
 			unauthorizedPOST();
 		}
 	}
-	
+
 	private Representation getSparqlResponse(MediaType format, String queryString) {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 		boolean success = false;
@@ -167,7 +171,7 @@ public class SparqlResource extends BaseResource {
 			return null;
 		}
 	}
-	
+
 	private boolean runSparqlQuery(String queryString, Context context, TupleQueryResultHandler resultHandler) throws RepositoryException, MalformedQueryException, QueryEvaluationException, TupleQueryResultHandlerException {
 		try (RepositoryConnection rc = this.getRM().getPublicRepository().getConnection()) {
 			if (rc == null) {

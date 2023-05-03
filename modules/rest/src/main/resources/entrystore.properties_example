@@ -47,6 +47,10 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.recaptcha.public-key=your-public-recaptcha-key
 # entrystore.auth.recaptcha.private-key=your-private-recaptcha-key
 
+# Every time a logged in user performs an operation, the expiry date
+# is renewed based on the current time/date. (default: off)
+# entrystore.auth.cookie.update.expiry=on|off
+
 ## User-initiated sign-up (default: off)
 # entrystore.auth.signup=off
 # entrystore.auth.signup.email.subject=User sign-up request
@@ -64,6 +68,11 @@ entrystore.data.folder=/srv/entrystore/files/
 ## Information about changed password
 # entrystore.auth.password-change.email.subject=Your password has been changed
 # entrystore.auth.password-change.email.template=/path/to/template.html
+
+## Temporary user lockout
+entrystore.auth.temp.lockout.max.attempts=0
+entrystore.auth.temp.lockout.duration=0ms
+
 
 ## OpenID (deprecated)
 # entrystore.auth.openid=on|off (default: off)
@@ -121,3 +130,6 @@ entrystore.repository.rewrite-basereference=true
 ## Run metadata correction methods
 ## Only for development and/or migration purposes
 # entrystore.repository.store.correct-metadata=true|false (default: false)
+
+## Enable collection of metrics data (default: off)
+# entrystore.metrics=on|off

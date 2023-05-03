@@ -37,11 +37,13 @@ import org.entrystore.repository.test.TestSuite;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.SimpleAuthenticator;
+import org.entrystore.rest.auth.UserTempLockoutCache;
 import org.entrystore.rest.filter.CORSFilter;
 import org.entrystore.rest.filter.CacheControlFilter;
 import org.entrystore.rest.filter.IgnoreAuthFilter;
 import org.entrystore.rest.filter.JSCallbackFilter;
 import org.entrystore.rest.filter.ModificationLockOutFilter;
+import org.entrystore.rest.filter.PerformanceMetricsFilter;
 import org.entrystore.rest.resources.CasLoginResource;
 import org.entrystore.rest.resources.ContextResource;
 import org.entrystore.rest.resources.CookieLoginResource;
@@ -64,12 +66,14 @@ import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
 import org.entrystore.rest.resources.NameResource;
 import org.entrystore.rest.resources.PasswordResetResource;
+import org.entrystore.rest.resources.PerformanceMetricsResource;
 import org.entrystore.rest.resources.ProxyResource;
 import org.entrystore.rest.resources.QuotaResource;
 import org.entrystore.rest.resources.RelationResource;
 import org.entrystore.rest.resources.ResourceResource;
 import org.entrystore.rest.resources.SamlLoginResource;
 import org.entrystore.rest.resources.SearchResource;
+import org.entrystore.rest.resources.ShutdownResource;
 import org.entrystore.rest.resources.SignupResource;
 import org.entrystore.rest.resources.SolrResource;
 import org.entrystore.rest.resources.SparqlResource;
@@ -79,6 +83,7 @@ import org.entrystore.rest.resources.UserResource;
 import org.entrystore.rest.resources.ValidatorResource;
 import org.entrystore.rest.util.CORSUtil;
 import org.restlet.Application;
+import org.restlet.Component;
 import org.restlet.Context;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -100,6 +105,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -110,22 +116,26 @@ import java.util.Set;
 public class EntryStoreApplication extends Application {
 
 	public static String KEY = EntryStoreApplication.class.getCanonicalName();
-	
+
 	/** Logger */
 	static Logger log = LoggerFactory.getLogger(EntryStoreApplication.class);
-	
+
 	/** Central point for accessing a repository */
 	private RepositoryManagerImpl rm;
-	
+
 	private ContextManager cm;
-	
+
 	private PrincipalManager pm;
-	
+
 	private String baseURI;
 
 	private ArrayList<Harvester> harvesters = new ArrayList<>();
 
 	private BackupScheduler backupScheduler;
+
+	private UserTempLockoutCache userTempLockoutCache;
+
+	private final Optional<Component> component;
 
 	private static Date startupDate = null;
 
@@ -136,12 +146,13 @@ public class EntryStoreApplication extends Application {
 	private final Set<String> reservedNames = new HashSet<>();
 
 	public EntryStoreApplication(Context parentContext) {
-		this(null, parentContext);
+		this(null, parentContext, Optional.empty());
 	}
 
-	public EntryStoreApplication(URI configPath, Context parentContext) {
+	public EntryStoreApplication(URI configPath, Context parentContext, Optional<Component> component) {
 		super(parentContext);
 		Date startupBegin = new Date();
+		this.component = component;
 		this.configURI = configPath;
 		getContext().getAttributes().put(KEY, this);
 
@@ -156,13 +167,13 @@ public class EntryStoreApplication extends Application {
 			// Application created by ServerServlet, try to get RepositoryManager from ServletContext
 			rm = (RepositoryManagerImpl) getServletContext(getContext()).getAttribute("RepositoryManager");
 		}
-	
+
 		if (rm != null) {
 			// Initialized by a ServletContextListener
 			log.info("EntryStore initialized with a ServletContextListener");
 			cm = rm.getContextManager();
 			pm = rm.getPrincipalManager();
-			
+
 			// The following objects are fetched from the context attributes,
 			// after they have been set in the ContextLoaderListener
 			harvesters = (ArrayList) getContext().getAttributes().get("Harvesters");
@@ -186,7 +197,7 @@ public class EntryStoreApplication extends Application {
 					}
 				}
 			}
-			
+
 			// Initialize EntryStore
 			ConfigurationManager confManager = null;
 			try {
@@ -199,11 +210,11 @@ public class EntryStoreApplication extends Application {
 				}
 			} catch (IOException e) {
 				log.error("Unable to load configuration: " + e.getMessage());
-				return;
+				System.exit(1);
 			}
-		
+
 			Config config = confManager.getConfiguration();
-		
+
 			baseURI = config.getString(Settings.BASE_URL);
 			if (baseURI == null) {
 				log.error("No Base URI specified, exiting");
@@ -217,6 +228,7 @@ public class EntryStoreApplication extends Application {
 			rm = new RepositoryManagerImpl(baseURI, confManager.getConfiguration());
 			cm = rm.getContextManager();
 			pm = rm.getPrincipalManager();
+			userTempLockoutCache = new UserTempLockoutCache(rm, pm);
 
 			if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
 				// Check for existence of Donald
@@ -236,7 +248,7 @@ public class EntryStoreApplication extends Application {
 
 			// Load and start harvesters
 			startHarvesters();
-		
+
 			// Load and start backup scheduler
 			boolean backup = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.BACKUP_SCHEDULER, "off"));
 			if (backup) {
@@ -253,8 +265,8 @@ public class EntryStoreApplication extends Application {
 
 	/**
 	 * Creates a root Restlet that will receive all incoming calls.
-	 * 
-	 * Because Restlets impose no restrictions on resource design, 
+	 *
+	 * Because Restlets impose no restrictions on resource design,
 	 * the resource classes and the URIs they expose flow naturally
 	 * from considerations of ROA design. Below you have a mapping from
 	 * URIs to the resources in the REST module.
@@ -270,7 +282,7 @@ public class EntryStoreApplication extends Application {
 		// to prevent unnecessary context-id lookups we route favicon.ico to a real icon
 		reservedNames.add("favicon.ico");
 		router.attach("/favicon.ico", FaviconResource.class);
-		
+
 		// global scope
 		reservedNames.add("echo");
 		router.attach("/echo", EchoResource.class);
@@ -328,7 +340,9 @@ public class EntryStoreApplication extends Application {
 		router.attach("/management/logging", LoggingResource.class);
 		router.attach("/management/status", StatusResource.class);
 		router.attach("/management/solr", SolrResource.class);
-		
+		router.attach("/management/metrics", PerformanceMetricsResource.class);
+		router.attach("/management/shutdown", ShutdownResource.class);
+
 		// context scope
 		router.attach("/{context-id}", ContextResource.class);
 		router.attach("/{context-id}/sparql", SparqlResource.class);
@@ -350,26 +364,27 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/proxy", ProxyResource.class);
 
 		// principals scope
-		if ("on".equalsIgnoreCase(config.getString(Settings.NONADMIN_GROUPCONTEXT_CREATION, "off"))) {
-			router.attach("/_principals/groups", GroupResource.class);
-		}
+		router.attach("/_principals/groups", GroupResource.class);
 
+		// default resource
 		router.attachDefault(DefaultResource.class);
 
 		CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
-		boolean optional = !config.getBoolean(Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR, false);
+		boolean optional = !config.getBoolean(Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR, true);
 		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), optional, ChallengeScheme.HTTP_COOKIE, "EntryStore", new CookieVerifier(rm, corsFilter), pm);
 
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
 		JSCallbackFilter jsCallback = new JSCallbackFilter();
 		CacheControlFilter cacheControl = new CacheControlFilter();
+		PerformanceMetricsFilter performanceMetrics = new PerformanceMetricsFilter();
 
 		ignoreAuth.setNext(cookieAuth);
 
-		// if password authentication is disabled we only allow cookie verification (as this may verify auth_tokens
-		// generated through a CAS-login), but not basic authentication (as this always requires username/password)
-		if (passwordAuthOff) {
+		// If password authentication is disabled we only allow cookie verification (as this may verify auth_tokens
+		// generated through a CAS-login), but not basic authentication (as this always requires username/password).
+		// Also, we only allow HTTP Basic authentication if explicitly enabled in configuration.
+		if (passwordAuthOff || !config.getBoolean(Settings.AUTH_HTTP_BASIC, false)) {
 			cookieAuth.setNext(jsCallback);
 		} else {
 			ChallengeAuthenticator basicAuth = new SimpleAuthenticator(getContext(), false, ChallengeScheme.HTTP_BASIC, "EntryStore", new BasicVerifier(pm, config), pm);
@@ -377,7 +392,8 @@ public class EntryStoreApplication extends Application {
 			basicAuth.setNext(jsCallback);
 		}
 
-		jsCallback.setNext(cacheControl);
+		jsCallback.setNext(performanceMetrics);
+		performanceMetrics.setNext(cacheControl);
 		cacheControl.setNext(modLockOut);
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.CORS, "off"))) {
@@ -415,7 +431,7 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public ContextManager getCM() {
-		return this.cm; 
+		return this.cm;
 	}
 
 	public PrincipalManager getPM() {
@@ -423,11 +439,15 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public RepositoryManagerImpl getRM() {
-		return this.rm; 
+		return this.rm;
 	}
 
 	public Set<String> getReservedNames() {
 		return this.reservedNames;
+	}
+
+	public UserTempLockoutCache getUserTempLockoutCache() {
+		return this.userTempLockoutCache;
 	}
 
 	private void startBackupScheduler() {
@@ -445,19 +465,19 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public ArrayList<Harvester> getHarvesters() {
-		return harvesters; 
+		return harvesters;
 	}
 
 	private void startHarvesters() {
 		URI realURI = getPM().getAuthenticatedUserURI();
 		try {
 			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
-			Set<URI> entries = getCM().getEntries(); 
-			java.util.Iterator<URI> iter = entries.iterator(); 
+			Set<URI> entries = getCM().getEntries();
+			java.util.Iterator<URI> iter = entries.iterator();
 			while (iter.hasNext()) {
 				URI entryURI = iter.next();
 				Entry entry = getCM().getByEntryURI(entryURI);
-				
+
 				if (entry == null) {
 					log.warn("Entry with URI " + entryURI + " cannot be found and is null");
 					continue;
@@ -517,4 +537,16 @@ public class EntryStoreApplication extends Application {
 		return sc;
 	}
 
+	public void shutdownServer() {
+		if (this.component.isPresent()) {
+			log.info("Shutting down server");
+			try {
+				this.component.get().stop();
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to stop server", e);
+			}
+		} else {
+				log.info("Failed to shutdown server, component not set");
+		}
+	}
 }
