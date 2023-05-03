@@ -34,6 +34,8 @@
 
 ### Task
 
+[ENTRYSTORE-736](https://metasolutions.atlassian.net/browse/ENTRYSTORE-736) Upgrade all Junit tests to JUnit5
+
 [ENTRYSTORE-748](https://metasolutions.atlassian.net/browse/ENTRYSTORE-748) Add documentation for new functionality
 
 [ENTRYSTORE-749](https://metasolutions.atlassian.net/browse/ENTRYSTORE-749) Update EntryStore dependencies to resolve potential vulnerabilities
@@ -69,6 +71,8 @@
 [ENTRYSTORE-738](https://metasolutions.atlassian.net/browse/ENTRYSTORE-738) Config is not fetched properly by PerformanceMetricsFilter
 
 [ENTRYSTORE-739](https://metasolutions.atlassian.net/browse/ENTRYSTORE-739) Asynchronous reindexing deletes context from Solr before updated documents are added
+
+[ENTRYSTORE-745](https://metasolutions.atlassian.net/browse/ENTRYSTORE-745) Logging in with Basic Auth does not work anymore in git commit 8f07a7bf5a6a6d1831d469da51f7d5721c7650d3
 
 [ENTRYSTORE-746](https://metasolutions.atlassian.net/browse/ENTRYSTORE-746) Solr 9.1.0 introduced an issue where the system property "solr.install.dir" must be set
 
