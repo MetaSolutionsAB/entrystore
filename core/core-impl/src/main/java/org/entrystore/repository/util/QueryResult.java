@@ -16,31 +16,37 @@
 
 package org.entrystore.repository.util;
 
+import java.util.List;
+import java.util.Set;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.entrystore.Entry;
 
-import java.util.List;
-import java.util.Set;
-
 
 public class QueryResult {
-	
-	private Set<Entry> entries;
-	
-	private long hits;
 
-	private List<FacetField> facetFields;
-	
+	private final Set<Entry> entries;
+
+	private final long hits;
+
+	private final List<FacetField> facetFields;
+
+	private final String nextCursorMark;
+
 	public QueryResult(Set<Entry> entries, long hits, List<FacetField> facetFields) {
+		this(entries, hits, facetFields, null);
+	}
+
+	public QueryResult(Set<Entry> entries, long hits, List<FacetField> facetFields, String nextCursorMark) {
 		this.entries = entries;
 		this.hits = hits;
 		this.facetFields = facetFields;
+		this.nextCursorMark = nextCursorMark;
 	}
-	
+
 	public Set<Entry> getEntries() {
 		return entries;
 	}
-	
+
 	public long getHits() {
 		return hits;
 	}
@@ -48,5 +54,8 @@ public class QueryResult {
 	public List<FacetField> getFacetFields() {
 		return facetFields;
 	}
-	
+
+	public String getNextCursorMark() {
+		return nextCursorMark;
+	}
 }

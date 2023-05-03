@@ -16,9 +16,39 @@
 
 package org.entrystore.repository.util;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static java.lang.Thread.interrupted;
+import static org.apache.solr.common.params.CursorMarkParams.CURSOR_MARK_PARAM;
+import static org.entrystore.PrincipalManager.AccessProperty.ReadMetadata;
+
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.TimeZone;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import javax.xml.datatype.DatatypeConstants;
+import javax.xml.datatype.XMLGregorianCalendar;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -56,34 +86,6 @@ import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.xml.datatype.DatatypeConstants;
-import javax.xml.datatype.XMLGregorianCalendar;
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.text.SimpleDateFormat;
-import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
-import java.util.TimeZone;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-
-import static java.lang.Thread.interrupted;
 
 
 /**
@@ -129,7 +131,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private final Map<URI, DelayedContextIndexerInfo> delayedReindex = Collections.synchronizedMap(new HashMap<>());
 
-	private ValueFactory valueFactory;
+	private final ValueFactory valueFactory;
 
 	public class SolrInputDocumentSubmitter extends Thread {
 
@@ -609,7 +611,7 @@ public class SolrSearchIndex implements SearchIndex {
 		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.Administer)) {
 			doc.addField("acl.admin", p.toString());
 		}
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata)) {
+		for (URI p : entry.getAllowedPrincipalsFor(ReadMetadata)) {
 			doc.addField("acl.metadata.r", p.toString());
 		}
 		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata)) {
@@ -731,7 +733,7 @@ public class SolrSearchIndex implements SearchIndex {
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
 		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 		try {
-			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+			pm.checkAuthenticatedUserAuthorized(entry, ReadMetadata);
 			guestReadable = true;
 		} catch (AuthorizationException ignored) {
 		}
@@ -859,9 +861,9 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		if (!relatedEntries.isEmpty()) {
-			Set<URI> mainEntryACL = entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata);
+			Set<URI> mainEntryACL = entry.getAllowedPrincipalsFor(ReadMetadata);
 			for (Entry relE : relatedEntries) {
-				if (mainEntryACL.equals(relE.getAllowedPrincipalsFor(AccessProperty.ReadMetadata))) {
+				if (mainEntryACL.equals(relE.getAllowedPrincipalsFor(ReadMetadata))) {
 					log.debug("Adding " + relE.getEntryURI() + " to related property index of " + entry.getEntryURI());
 					addGenericMetadataFields(doc, relE.getMetadataGraph(), true);
 				} else {
@@ -924,14 +926,40 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrClient solrServer, int offset, int limit) {
-		if (query == null) {
-			throw new IllegalArgumentException("Query object must not be null");
+	private record EntryStoreQueryResponse(Set<URI> result, List<FacetField> facetFields, long hits, String nextCursorMark) {
+
+		EntryStoreQueryResponse {
+			result = (result == null ? new HashSet<>() : result);
+			facetFields = (facetFields == null ? new ArrayList<>() : facetFields);
 		}
 
-		if (offset > -1) {
+		EntryStoreQueryResponse(long hits) {
+			this(null, null, hits, null);
+		}
+
+		EntryStoreQueryResponse(long hits, String nextCursorMark) {
+			this(null, null, hits, nextCursorMark);
+		}
+	}
+
+	private EntryStoreQueryResponse sendQueryForEntryURIs(SolrQuery query, SolrClient solrServer, int offset, int limit) {
+		return this.sendQueryForEntryURIs(query, solrServer, offset, null, limit);
+	}
+
+	private EntryStoreQueryResponse sendQueryForEntryURIs(SolrQuery query, SolrClient solrServer, String cursorMark, int limit) {
+		return this.sendQueryForEntryURIs(query, solrServer, -1, cursorMark, limit);
+	}
+
+	private EntryStoreQueryResponse sendQueryForEntryURIs(SolrQuery query, SolrClient solrServer, int offset, String cursorMark, int limit) {
+		checkArgument(query != null, "Query object must not be null");
+		checkArgument(!(offset > -1 && cursorMark != null), "You cannot set both offset and cursorMark, they are mutually exclusive");
+
+		if (cursorMark != null) {
+			query.set(CURSOR_MARK_PARAM, cursorMark);
+		} else if (offset > -1) {
 			query.setStart(offset);
 		}
+
 		if (limit > -1) {
 			query.setRows(limit);
 		}
@@ -940,11 +968,16 @@ public class SolrSearchIndex implements SearchIndex {
 		// so we skip the rest (default is "*")
 		query.setFields("uri");
 
+		Set<URI> uris = new HashSet<>();
+		List<FacetField> facetFields = new ArrayList<>();
 		long hits = -1;
-		QueryResponse r = null;
+		String nextCursorMark = null;
+		QueryResponse r;
+
 		try {
 			r = solrServer.query(query);
 			r.getElapsedTime();
+			nextCursorMark = r.getNextCursorMark();
 			if (r.getFacetFields() != null) {
 				facetFields.addAll(r.getFacetFields());
 			}
@@ -954,7 +987,7 @@ public class SolrSearchIndex implements SearchIndex {
 				if (solrDocument.containsKey("uri")) {
 					String uri = (String) solrDocument.getFieldValue("uri");
 					if (uri != null) {
-						result.add(URI.create(uri));
+						uris.add(URI.create(uri));
 					}
 				}
 			}
@@ -967,19 +1000,22 @@ public class SolrSearchIndex implements SearchIndex {
 			}
 		}
 
-		return hits;
+		return new EntryStoreQueryResponse(uris, facetFields, hits, nextCursorMark);
 	}
 
 	public QueryResult sendQuery(SolrQuery query) throws SolrException {
-		Set<URI> entries = new LinkedHashSet<>();
+		EntryStoreQueryResponse queryResponse = null;
+//		Set<URI> entries = new LinkedHashSet<>();
 		Set<Entry> result = new LinkedHashSet<>();
-		long hits = -1;
+//		long hits = -1;
 		long inaccessibleHits = 0;
-		int limit = query.getRows();
 		int offset = query.getStart();
-		List<FacetField> facetFields = new ArrayList<>();
+		String cursorMark = query.get(CURSOR_MARK_PARAM);
+		int limit = query.getRows();
+//		List<FacetField> facetFields = new ArrayList<>();
 		query.setIncludeScore(true);
 		int resultFillIteration = 0;
+
 		do {
 			if (resultFillIteration++ > 0) {
 				// We have a small limit and we don't get enough results with permissive ACL per iteration,
@@ -996,24 +1032,22 @@ public class SolrSearchIndex implements SearchIndex {
 				offset += Math.min(limit, 50);
 				log.warn("Increasing offset to " + offset + " in an attempt to fill the result limit");
 			}
-			hits = sendQueryForEntryURIs(query, entries, facetFields, solrServer, offset, -1);
+			queryResponse = sendQueryForEntryURIs(query, solrServer, offset, -1);
 			Date before = new Date();
-			for (URI uri : entries) {
+			for (URI uri : queryResponse.result()) {
 				try {
 					Entry entry = rm.getContextManager().getEntry(uri);
 					if (entry != null) {
 						PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
-						// If linkReference or reference to a entry in the same
-						// repository
+						// If linkReference or reference to a entry in the same repository
 						// check that the referenced metadata is accessible.
 						if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
 								&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
-							Entry refEntry = entry.getRepositoryManager().getContextManager()
-									.getEntry(entry.getExternalMetadataURI());
-							pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);
+							Entry refEntry = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
+							pm.checkAuthenticatedUserAuthorized(refEntry, ReadMetadata);
 						} else {
 							// Check that the local metadata is accessible.
-							pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+							pm.checkAuthenticatedUserAuthorized(entry, ReadMetadata);
 						}
 						result.add(entry);
 						if (result.size() == limit) {
@@ -1023,13 +1057,12 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 				} catch (AuthorizationException ae) {
 					inaccessibleHits++;
-					continue;
 				}
 			}
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");
 		} while ((limit > result.size()) && (hits > (offset + limit)));
 
-		long adjustedHitCount = hits - inaccessibleHits;
+		long adjustedHitCount = queryResponse.hits() - inaccessibleHits;
 
 		// We prevent possible information leakage (i.e., "Can we get to know whether a resource
 		// with a certain name exists even though we are not allowed to access it?") by manually
@@ -1037,11 +1070,15 @@ public class SolrSearchIndex implements SearchIndex {
 		// probing requests.
 		//
 		// Test if the condition covers to much and add "offset == 0 &&" if necessary
-		if (result.size() == 0 && hits > 0) {
+		if (result.size() == 0 && queryResponse.hits() > 0) {
 			adjustedHitCount = 0;
 		}
 
-		return new QueryResult(result, adjustedHitCount, facetFields);
+		return new QueryResult(
+				result,
+				adjustedHitCount,
+				queryResponse.facetFields(),
+				queryResponse.nextCursorMark());
 	}
 
 	public SolrDocument fetchDocument(String uri) {
@@ -1074,7 +1111,7 @@ public class SolrSearchIndex implements SearchIndex {
 		 * InputStream mimeIS = null; try { mimeIS = Files.newInputStream(f.toPath());
 		 * mimeType = tc.getMimeRepository().getMimeType(mimeIS).getName(); }
 		 * finally { if (mimeIS != null) { mimeIS.close(); } }
-		 * 
+		 *
 		 * if (mimeType != null) { stream = new BufferedInputStream(
 		 * Files.newInputStream(f.toPath())); Parser parser = tc.getParser(mimeType); if
 		 * (parser != null) { ContentHandler handler = new BodyContentHandler();

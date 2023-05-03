@@ -18,6 +18,9 @@ package org.entrystore.rest.resources;
 
 import static java.lang.String.format;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.solr.client.solrj.SolrQuery.ORDER.asc;
+import static org.apache.solr.common.params.CursorMarkParams.CURSOR_MARK_PARAM;
+import static org.apache.solr.common.params.CursorMarkParams.CURSOR_MARK_START;
 import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
 import static org.restlet.data.Status.SERVER_ERROR_INTERNAL;
 import static org.restlet.data.Status.SERVER_ERROR_SERVICE_UNAVAILABLE;
@@ -213,13 +216,13 @@ public class SearchResource extends BaseResource {
 					break;
 				}
 
-				SyndContent syndConcentDescription = new SyndContentImpl();
-				syndConcentDescription.setType("text/plain");
-				syndConcentDescription.setValue(description);
+				SyndContent syndContentDescription = new SyndContentImpl();
+				syndContentDescription.setType("text/plain");
+				syndContentDescription.setValue(description);
 
 				SyndEntry syndEntry = new SyndEntryImpl();
 				syndEntry.setTitle(title);
-				syndEntry.setDescription(syndConcentDescription);
+				syndEntry.setDescription(syndContentDescription);
 
 				syndEntry.setPublishedDate(entry.getCreationDate());
 				syndEntry.setUpdatedDate(entry.getModifiedDate());
@@ -443,7 +446,7 @@ public class SearchResource extends BaseResource {
 						if (field.startsWith("title.")) {
 							field = field.replace("title.", "title_sort.");
 						}
-						ORDER order = ORDER.asc;
+						ORDER order = asc;
 						try {
 							order = ORDER.valueOf(fieldAndOrder[1].toLowerCase());
 						} catch (IllegalArgumentException iae) {
@@ -474,6 +477,98 @@ public class SearchResource extends BaseResource {
 				entries = new LinkedList<>(qResult.getEntries());
 				results = qResult.getHits();
 				responseFacetFields = qResult.getFacetFields();
+			} catch (SolrException se) {
+				log.warn(se.getMessage());
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+				throw new JsonErrorException("Search failed due to wrong parameters");
+			}
+			return new QueryResults(entries, results, responseFacetFields);
+		} catch (JSONException e) {
+			log.error(e.getMessage());
+			getResponse().setStatus(SERVER_ERROR_INTERNAL);
+			throw new JsonErrorException("\"error\"");
+		}
+	}
+
+	private QueryResults searchSolrWithCursor(
+			String queryValue,
+			String sorting,
+			String cursorMark,
+			int limit,
+			String facetFields,
+			List<String> filterQueries,
+			int facetMinCount) throws JsonErrorException {
+
+		try {
+			List<Entry> entries;
+			long results ;
+			List<FacetField> responseFacetFields;
+
+			if (getRM().getIndex() == null) {
+				getResponse().setStatus(SERVER_ERROR_SERVICE_UNAVAILABLE, "Solr search deactivated");
+				throw new JsonErrorException("Solr search is deactivated");
+			}
+
+			////////////////
+//			SolrQuery q = (new SolrQuery(some_query)).setRows(r).setSort(SortClause.asc("id"));
+//			String cursorMark = CursorMarkParams.CURSOR_MARK_START;
+//			boolean done = false;
+//			while (! done) {
+//				q.set(CURSOR_MARK_PARAM, cursorMark);
+//				QueryResponse rsp = solrServer.query(q);
+//				String nextCursorMark = rsp.getNextCursorMark();
+//				doCustomProcessingOfResults(rsp);
+//				if (cursorMark.equals(nextCursorMark)) {
+//					done = true;
+//				}
+//				cursorMark = nextCursorMark;
+//			}
+			//////////////
+
+			SolrQuery q = new SolrQuery(queryValue);
+			q.set(CURSOR_MARK_PARAM, cursorMark == null ? CURSOR_MARK_START : cursorMark);
+			q.setRows(limit);
+
+			if (sorting != null) {
+				for (String string : sorting.split(",")) {
+					String[] fieldAndOrder = string.split(" ");
+					if (fieldAndOrder.length == 2) {
+						String field = fieldAndOrder[0];
+						if (field.startsWith("title.")) {
+							field = field.replace("title.", "title_sort.");
+						}
+						ORDER order = asc;
+						try {
+							order = ORDER.valueOf(fieldAndOrder[1].toLowerCase());
+						} catch (IllegalArgumentException iae) {
+							log.warn("Unable to parse sorting value, using ascending by default");
+						}
+						q.addSort(field, order);
+					}
+				}
+			} else {
+				q.addSort("score", ORDER.desc);
+				q.addSort("modified", ORDER.desc);
+			}
+
+			if (facetFields != null) {
+				q.setFacet(true);
+				q.setFacetMinCount(facetMinCount);
+				for (String ff : facetFields.split(",")) {
+					q.addFacetField(ff.replace("metadata.predicate.literal.", "metadata.predicate.literal_s."));
+				}
+			}
+
+			for (String fq : filterQueries) {
+				q.addFilterQuery(fq);
+			}
+
+			try {
+				QueryResult qResult = ((SolrSearchIndex) getRM().getIndex()).sendQuery(q);
+				entries = new LinkedList<>(qResult.getEntries());
+				results = qResult.getHits();
+				responseFacetFields = qResult.getFacetFields();
+				String nextCursorMark = qResult.getNextCursorMark();
 			} catch (SolrException se) {
 				log.warn(se.getMessage());
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
