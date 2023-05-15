@@ -2,30 +2,34 @@
 package org.entrystore.rest.resources;
 
 import java.io.IOException;
-import java.util.Map;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.RestletTestJunit5;
+import org.entrystore.rest.TestEntryStoreServer;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.DisplayNameGeneration;
+import org.junit.jupiter.api.DisplayNameGenerator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.restlet.Component;
 import org.restlet.Context;
-import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.data.Protocol;
 import org.restlet.representation.Representation;
 import org.restlet.resource.ClientResource;
-import org.restlet.resource.Finder;
 import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @ExtendWith(MockitoExtension.class)
+@DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
 public class StatusResourceRestletJunit5Test extends RestletTestJunit5 {
+
+	private final Logger log = LoggerFactory.getLogger(StatusResourceRestletJunit5Test.class);
 
 	private ClientResource clientResource;
 	private StatusResourceInterface statusResource;
@@ -33,24 +37,9 @@ public class StatusResourceRestletJunit5Test extends RestletTestJunit5 {
 	private Component component;
 	@Mock Context restletContext;
 
-//	@BeforeEach
-	public void setUp() throws Exception {
-		Context context = new Context();
-		Map<String, Object> attributes = Map.of(
-				"", ""
-		);
-		context.setAttributes(attributes);
-
-		this.component = new Component();
-		this.component.getDefaultHost().attach("/", new EntryStoreApplication(context));
-		this.component.getServers().add(Protocol.HTTP, getPort());
-		this.component.start();
-	}
-
-
-//	@BeforeEach
-	public void beforeEach() {
-		Config config = new PropertiesConfiguration("EntryStore Configuration");
+	@BeforeEach
+	public void beforeEach() throws Exception {
+		Config config = new PropertiesConfiguration("Test EntryStore Configuration");
 		config.setProperty(Settings.STORE_TYPE, "memory");
 		config.setProperty(Settings.BASE_URL, "http://localhost:8181/");
 		config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
@@ -59,9 +48,12 @@ public class StatusResourceRestletJunit5Test extends RestletTestJunit5 {
 		config.setProperty(Settings.SMTP_EMAIL_FROM, "info@meta.se");
 		config.setProperty(Settings.SMTP_HOST, "localhost");
 
-		Request request = new Request();
-		request.setResourceRef("");
-		this.response = new Response(request);
+		TestEntryStoreServer server = new TestEntryStoreServer();
+		server.start();
+
+//		Request request = new Request();
+//		request.setResourceRef("");
+//		this.response = new Response(request);
 
 //		lenient().when(statusResource.getPM()).thenReturn(pm);
 //		lenient().when(statusResource.getRM()).thenReturn(rm);
@@ -80,14 +72,16 @@ public class StatusResourceRestletJunit5Test extends RestletTestJunit5 {
 //	}
 
 	@Test
-	@Disabled
-	public void testGet() throws IOException, ResourceException {
-		Finder finder = new Finder(restletContext, StatusResource.class);
-		finder.setTargetClass(StatusResource.class);
-		this.clientResource = new ClientResource("http://local");
-		this.clientResource.setNext(finder);
-		StatusResourceInterface statusResource = clientResource.wrap(StatusResourceInterface.class);
-		Representation representation = statusResource.represent();
+	@Disabled("To make compile go through")
+	public void test_get() throws IOException, ResourceException {
+		log.info("Port: " + getPort());
+
+//		Finder finder = new Finder(restletContext, StatusResource.class);
+//		finder.setTargetClass(StatusResource.class);
+//		this.clientResource = new ClientResource("http://local");
+//		this.clientResource.setNext(finder);
+//		StatusResourceInterface statusResource = clientResource.wrap(StatusResourceInterface.class);
+//		Representation representation = statusResource.represent();
 //		assertNotNull(representation);
 //
 //		String result = clientResource.get(MediaType.TEXT_XML).getText();

@@ -1,29 +1,18 @@
-/**
- * Copyright 2005-2020 Talend
- *
- * The contents of this file are subject to the terms of one of the following open source licenses: Apache 2.0 or or EPL
- * 1.0 (the "Licenses"). You can select the license that you prefer but you may not use this file except in compliance
- * with one of these Licenses.
- *
- * You can obtain a copy of the Apache 2.0 license at http://www.opensource.org/licenses/apache-2.0
- *
- * You can obtain a copy of the EPL 1.0 license at http://www.opensource.org/licenses/eclipse-1.0
- *
- * See the Licenses for the specific language governing permissions and limitations under the Licenses.
- *
- * Alternatively, you can obtain a royalty free commercial license with less limitations, transferable or
- * non-transferable, directly at https://restlet.talend.com/
- *
- * Restlet is a registered trademark of Talend S.A.
- */
-
 package org.entrystore.rest;
+
+import static java.lang.System.out;
 
 import java.io.IOException;
 import java.net.ServerSocket;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInfo;
+import org.restlet.Component;
+import org.restlet.Context;
+import org.restlet.Server;
+import org.restlet.data.Protocol;
 import org.restlet.engine.Engine;
 import org.restlet.representation.ObjectRepresentation;
 
@@ -47,7 +36,8 @@ public abstract class RestletTestJunit5 {
 
 	@BeforeEach
 	void beforeEach(TestInfo testInfo) {
-		System.out.println("Setting up test " + getClass().getName() + "#" + testInfo.getDisplayName());
+		out.println("Setting up test " + getClass().getName() + "#" + testInfo.getDisplayName());
+		setupApplication();
 		setUpEngine();
 	}
 
@@ -62,8 +52,8 @@ public abstract class RestletTestJunit5 {
 				.getRegisteredServers()
 				.add(0, new org.restlet.engine.connector.HttpServerHelper(null));
 		// FIXME turn on the internal connector.
-		Engine.getInstance().getRegisteredClients()
-				.add(0, new org.restlet.ext.httpclient.HttpClientHelper(null));
+//		Engine.getInstance().getRegisteredClients()
+//				.add(0, new org.restlet.ext.httpclient.HttpClientHelper(null));
 
 		// Enable object serialization
 		ObjectRepresentation.VARIANT_OBJECT_XML_SUPPORTED = true;
@@ -78,9 +68,42 @@ public abstract class RestletTestJunit5 {
 //			component.start();
 	}
 
+	protected void setupApplication() {
+		Component component = new Component();
+		Server server = component.getServers().add(Protocol.HTTP, port);
+
+		component.getLogService().setResponseLogFormat("{ciua} \"{m} {rp} {rq}\" {S} {ES} {es} {hh} {cig} {fi}");
+//		component.getClients().add(Protocol.FILE);
+//		component.getClients().add(Protocol.HTTP);
+//		component.getClients().add(Protocol.HTTPS);
+		server.getContext().getParameters().add("useForwardedForHeader", "true");
+		Context childContext = component.getContext().createChildContext();
+		EntryStoreApplication esApp = new EntryStoreApplication(null, childContext, component);
+//		EntryStoreApplication esApp = new EntryStoreApplication(config, childContext, component);
+		childContext.getAttributes().put(EntryStoreApplication.KEY, esApp);
+		component.getDefaultHost().attach(esApp);
+
+		try {
+			component.start();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+	private static void configureLogging(String logLevel) {
+		Level l = Level.toLevel(logLevel, Level.INFO);
+		Configurator.setRootLevel(l);
+		out.println("Log level set to " + l);
+	}
+
+
 	@AfterEach
 	protected void afterEach() throws Exception {
 		tearDownEngine();
+	}
+
+	@AfterEach
+	protected void tearDownApplication() throws Exception {
 	}
 
 	protected void tearDownEngine() {
