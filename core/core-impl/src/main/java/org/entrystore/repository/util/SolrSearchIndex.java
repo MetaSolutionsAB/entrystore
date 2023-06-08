@@ -606,20 +606,24 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// ACL: admin, metadata r/w, resource r/w
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.Administer)) {
-			doc.addField("acl.admin", p.toString());
-		}
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata)) {
-			doc.addField("acl.metadata.r", p.toString());
-		}
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata)) {
-			doc.addField("acl.metadata.rw", p.toString());
-		}
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadResource)) {
-			doc.addField("acl.resource.r", p.toString());
-		}
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteResource)) {
-			doc.addField("acl.resource.rw", p.toString());
+		try {
+			for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.Administer)) {
+				doc.addField("acl.admin", p.toString());
+			}
+			for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata)) {
+				doc.addField("acl.metadata.r", p.toString());
+			}
+			for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata)) {
+				doc.addField("acl.metadata.rw", p.toString());
+			}
+			for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadResource)) {
+				doc.addField("acl.resource.r", p.toString());
+			}
+			for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteResource)) {
+				doc.addField("acl.resource.rw", p.toString());
+			}
+		} catch (IllegalArgumentException iae) {
+			log.warn("Unable to index ACL for entry {}: {}", entry.getEntryURI().toString(), iae.getMessage());
 		}
 
 		// status
