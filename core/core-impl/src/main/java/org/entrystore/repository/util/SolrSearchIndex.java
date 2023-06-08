@@ -522,7 +522,11 @@ public class SolrSearchIndex implements SearchIndex {
 					synchronized (postQueue) {
 						if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
 							log.info("Adding entry to Solr post queue: {}", entryURI);
-							postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+							try {
+								postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+							} catch (Exception e) {
+								log.error("Not indexing {} due to error: {}", entryURI, e.getMessage());
+							}
 						} else {
 							log.debug("Not adding deleted entry to post queue: {}", entryURI);
 						}
@@ -903,7 +907,11 @@ public class SolrSearchIndex implements SearchIndex {
 				}
 				if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
 					log.info("Adding document to Solr post queue: {}", entryURI);
-					postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+					try {
+						postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+					} catch (Exception e) {
+						log.error("Not indexing {} due to error: {}", entryURI, e.getMessage());
+					}
 				} else {
 					log.debug("Not adding deleted entry to post queue: {}", entryURI);
 				}
