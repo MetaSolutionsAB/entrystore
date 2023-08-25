@@ -163,7 +163,6 @@
 		<dependency>
 			<groupId>commons-io</groupId>
 			<artifactId>commons-io</artifactId>
-			<version>2.11.0</version>
 			<type>jar</type>
 		</dependency>
 		<dependency>
@@ -220,12 +219,12 @@
 		<dependency>
 			<groupId>com.ibm.icu</groupId>
 			<artifactId>icu4j</artifactId>
-			<version>71.1</version>
+			<version>73.2</version>
 		</dependency>
 		<dependency>
 			<groupId>com.github.ben-manes.caffeine</groupId>
 			<artifactId>caffeine</artifactId>
-			<version>3.1.1</version>
+			<version>3.1.8</version>
 		</dependency>
 		<dependency>
 			<groupId>com.google.guava</groupId>
