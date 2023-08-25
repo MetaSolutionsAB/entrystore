@@ -16,8 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
-
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.query.MalformedQueryException;
 import org.eclipse.rdf4j.query.QueryEvaluationException;
@@ -53,6 +51,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
+
 
 /**
  * Provides a SPARQL interface to contexts.
@@ -63,7 +63,7 @@ public class SparqlResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(SparqlResource.class);
 
-	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+	List<MediaType> supportedMediaTypes = new ArrayList<>();
 
 	@Override
 	public void doInit() {
@@ -75,36 +75,32 @@ public class SparqlResource extends BaseResource {
 
 	@Get
 	public Representation represent() throws ResourceException {
-		try {
-			if (this.getRM().getPublicRepository() == null) {
-				getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
-				return null;
-			}
+		if (this.getRM().getPublicRepository() == null) {
+			getResponse().setStatus(Status.SERVER_ERROR_NOT_IMPLEMENTED);
+			return null;
+		}
 
+		if (format == null) {
+			format = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
 			if (format == null) {
-				format = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
-				if (format == null) {
-					format = MediaType.ALL;
-				}
+				format = MediaType.ALL;
 			}
+		}
 
-			String queryString = null;
-			if (parameters.containsKey("query")) {
-				queryString = URLDecoder.decode(parameters.get("query"), StandardCharsets.UTF_8);
-			} else {
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				return null;
-			}
+		String queryString = null;
+		if (parameters.containsKey("query")) {
+			queryString = URLDecoder.decode(parameters.get("query"), StandardCharsets.UTF_8);
+		} else {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			return null;
+		}
 
-			Representation result = getSparqlResponse(format, queryString);
-			if (result != null) {
-				return result;
-			} else {
-				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
-				return null;
-			}
-		} catch (AuthorizationException ae) {
-			return unauthorizedGET();
+		Representation result = getSparqlResponse(format, queryString);
+		if (result != null) {
+			return result;
+		} else {
+			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			return null;
 		}
 	}
 
