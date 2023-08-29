@@ -1188,7 +1188,7 @@ public class EntryImpl implements Entry {
 		//Also adding the one who update using dcterms:contributor
 		if (this.repositoryManager != null &&
 				this.repositoryManager.getPrincipalManager() != null &&
-				this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI() != null){
+				this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI() != null) {
 			URI contrib = this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI();
 			String contributor = contrib.toString();
 			IRI contributorURI = vf.createIRI(contributor);
