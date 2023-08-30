@@ -16,21 +16,20 @@
 
 package org.entrystore.rest.auth;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_MAX_AGE;
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_UPDATE_EXPIRY;
-import static org.entrystore.repository.config.Settings.AUTH_TOKEN_MAX_AGE;
+import org.entrystore.config.Config;
+import org.entrystore.rest.util.HttpUtil;
+import org.restlet.Request;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
-import org.entrystore.config.Config;
-import org.entrystore.rest.util.HttpUtil;
-import org.restlet.Request;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static org.entrystore.repository.config.Settings.*;
 
 /**
  * @author Hannes Ebner
@@ -82,7 +81,8 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 
 	public void removeTokensButOne(String token) {
 		if (token == null) {
-			throw new IllegalArgumentException("Token must not be null");
+			log.warn("Token is null, authenticated via HTTP Basic?");
+			return;
 		}
 		synchronized (tokenCache) {
 			if (tokenCache.containsKey(token)) {
@@ -98,7 +98,7 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 
 	public void renameUser(String oldUserName, String newUserName) {
 		if (oldUserName == null || newUserName == null) {
-			throw new IllegalArgumentException("Usernames must not be null");
+			throw new IllegalArgumentException("Username must not be null");
 		}
 		synchronized (tokenCache) {
 			for (Entry<String, UserInfo> e : tokenCache.entrySet()) {
@@ -116,7 +116,7 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 	}
 
 	public Map<String, UserInfo> getTokens(String userName) {
-		checkArgument(userName != null, "userName must not be null");
+		checkArgument(userName != null, "Username must not be null");
 		synchronized (tokenCache) {
 			return tokenCache.entrySet().stream()
 					.filter(entry -> userName.equals(entry.getValue().getUserName()))
@@ -125,7 +125,7 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 	}
 
 	public UserInfo registerUserInteraction(String token, Request request) {
-		checkArgument(token != null, "token must not be null");
+		checkArgument(token != null, "Token must not be null");
 		UserInfo userInfo = getTokenValue(token);
 		if (userInfo == null) {
 			log.debug("Call to registerUserInteraction with non-existent token [{}]", token);
@@ -140,4 +140,5 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 		}
 		return userInfo;
 	}
+
 }

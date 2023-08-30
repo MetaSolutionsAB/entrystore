@@ -50,10 +50,12 @@ import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.EntryStoreApplication;
+import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.UserTempLockoutCache;
@@ -939,7 +941,7 @@ public class ResourceResource extends BaseResource {
 						}
 						entry.setMimetype(mimeType);
 						String name = item.getName();
-						if (name != null && name.length() != 0) {
+						if (name != null && !name.isEmpty()) {
 							entry.setFilename(name.trim());
 						}
 					}
@@ -1008,7 +1010,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** String  ***/
-		if(gt == GraphType.String) {
+		if (gt == GraphType.String) {
 			try {
 				StringResource stringResource = (StringResource)entry.getResource();
 				stringResource.setString(getRequest().getEntity().getText());
@@ -1058,13 +1060,36 @@ public class ResourceResource extends BaseResource {
 						loginTokenCache.renameUser(oldName, newName);
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Name already taken.\"}"));
+						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Name is already in use\"}"));
 						return;
 					}
 				}
 				if (entityJSON.has("password")) {
-					String passwd =  entityJSON.getString("password");
-					if (resourceUser.setSecret(passwd)) {
+					boolean requireCurrentPassword = getRM().getConfiguration().getBoolean(Settings.AUTH_PASSWORD_REQUIRE_CURRENT_PASSWORD, false);
+					String newPassword =  entityJSON.getString("password");
+
+					if (requireCurrentPassword) {
+						// we require the current password if:
+						// (1) the user is a non-admin user, or
+						// (2) the user is an admin user and wants to set her own password
+						if (!getPM().currentUserIsAdminOrAdminGroup() ||
+								(getPM().currentUserIsAdminOrAdminGroup() && getPM().getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
+							if (!entityJSON.has("currentPassword")) {
+								getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+								getResponse().setEntity(new JsonRepresentation("{\"error\":\"Current password is required\"}"));
+								return;
+							}
+							String currentPassword = entityJSON.getString("currentPassword");
+							String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), resourceUser.getName());
+							if (saltedHashedSecret == null || !Password.check(currentPassword, saltedHashedSecret)) {
+								getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+								getResponse().setEntity(new JsonRepresentation("{\"error\":\"No password set or incorrect current password provided\"}"));
+								return;
+							}
+						}
+					}
+
+					if (resourceUser.setSecret(newPassword)) {
 						LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
 						loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
 						Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
@@ -1077,7 +1102,7 @@ public class ResourceResource extends BaseResource {
 				}
 				if (entityJSON.has("language")) {
 					String prefLang = entityJSON.getString("language");
-					if (prefLang.equals("")) {
+					if (prefLang.isEmpty()) {
 						resourceUser.setLanguage(null);
 					} else if (!resourceUser.setLanguage(prefLang)) {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -1114,15 +1139,15 @@ public class ResourceResource extends BaseResource {
 				if (entityJSON.has("customProperties")) {
 					Map<String, String> customPropMap = new HashMap<>();
 					JSONObject customPropJson = entityJSON.getJSONObject("customProperties");
-					for (Iterator cPIt = customPropJson.keys(); cPIt.hasNext();) {
-						String key = (String) cPIt.next();
+					for (Iterator<String> cPIt = customPropJson.keys(); cPIt.hasNext();) {
+						String key = cPIt.next();
 						customPropMap.put(key, customPropJson.getString(key));
 					}
 					resourceUser.setCustomProperties(customPropMap);
 				}
 				getResponse().setStatus(Status.SUCCESS_OK);
 			} catch (JSONException e) {
-				log.debug("Wrong JSON syntax: " + e.getMessage());
+				log.debug("Wrong JSON syntax: {}", e.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
 			} catch (IOException e) {

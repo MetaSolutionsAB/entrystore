@@ -55,6 +55,8 @@ public class Settings {
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
 	public static String AUTH_PASSWORD_BLACKLIST = "entrystore.auth.password.blacklist";
 
+	public static String AUTH_PASSWORD_REQUIRE_CURRENT_PASSWORD = "entrystore.auth.password.require-current-password";
+
 	public static String AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS = "entrystore.auth.temp.lockout.max.attempts";
 	public static String AUTH_TEMP_LOCKOUT_DURATION = "entrystore.auth.temp.lockout.duration";
 

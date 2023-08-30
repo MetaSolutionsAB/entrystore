@@ -16,15 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.Set;
-import java.util.regex.Pattern;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
@@ -46,10 +37,6 @@ import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
-import org.entrystore.rest.EntryStoreApplication;
-import org.entrystore.rest.auth.CookieVerifier;
-import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
@@ -65,6 +52,16 @@ import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 
 /**
@@ -507,23 +504,15 @@ public class ContextResource extends BaseResource {
 			} else {
 				return false;
 			}
+
 			if (jsonObj.has("homecontext")) {
 				Entry homeContextEntry = getCM().get(jsonObj.getString("homecontext"));
 				if (homeContextEntry != null) {
 					user.setHomeContext((Context) homeContextEntry.getResource());
 				}
 			}
-			if (jsonObj.has("password")) {
-				if (user.setSecret(jsonObj.getString("password"))) {
-					LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
-					loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
-					Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
-				} else {
-					log.warn("Password could not be set");
-				}
-			}
 
-			if(parameters.containsKey("groupURI")) {
+			if (parameters.containsKey("groupURI")) {
 				Entry groupEntry;
 				try {
 					groupEntry = getCM().getEntry(new URI(parameters.get("groupURI")));
