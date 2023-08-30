@@ -130,7 +130,7 @@ public class ResourceResource extends BaseResource {
 	private final Logger log = LoggerFactory.getLogger(ResourceResource.class);
 
 	private  final EmptyRepresentation EMPTY_REPRESENTATION = new EmptyRepresentation();
-	private final List<MediaType> supportedMediaTypes = List.of(
+	private final List<MediaType> supportedMediaTypes = java.util.List.of(
 			APPLICATION_RDF_XML,
 			APPLICATION_JSON,
 			TEXT_RDF_N3,
