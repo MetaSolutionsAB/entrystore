@@ -16,21 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.entrystore.EntryType.Link;
-import static org.entrystore.EntryType.LinkReference;
-import static org.entrystore.EntryType.Local;
-import static org.entrystore.GraphType.Graph;
-import static org.entrystore.GraphType.None;
-import static org.entrystore.GraphType.Pipeline;
-import static org.entrystore.ResourceType.InformationResource;
-import static org.entrystore.ResourceType.NamedResource;
-import static org.restlet.data.MediaType.APPLICATION_JSON;
-import static org.restlet.data.MediaType.APPLICATION_RDF_XML;
-import static org.restlet.data.MediaType.APPLICATION_ZIP;
-import static org.restlet.data.MediaType.TEXT_RDF_N3;
-import static org.restlet.data.Method.GET;
-
 import com.google.common.html.HtmlEscapers;
 import com.rometools.rome.feed.synd.SyndContent;
 import com.rometools.rome.feed.synd.SyndContentImpl;
@@ -40,26 +25,6 @@ import com.rometools.rome.feed.synd.SyndFeed;
 import com.rometools.rome.feed.synd.SyndFeedImpl;
 import com.rometools.rome.io.FeedException;
 import com.rometools.rome.io.SyndFeedOutput;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.StringWriter;
-import java.net.URI;
-import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Vector;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.io.IOUtils;
@@ -123,6 +88,36 @@ import org.restlet.resource.Post;
 import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.StringWriter;
+import java.lang.String;
+import java.net.URI;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Vector;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.entrystore.EntryType.*;
+import static org.entrystore.GraphType.*;
+import static org.entrystore.ResourceType.InformationResource;
+import static org.entrystore.ResourceType.NamedResource;
+import static org.restlet.data.MediaType.*;
+import static org.restlet.data.Method.GET;
 
 /**
  * This class is the resource for entries.
@@ -436,7 +431,7 @@ public class ResourceResource extends BaseResource {
 			try {
 				Resource resource = entry.getResource();
 				return switch (graphType) {
-					case None -> serializeFileRepresentationResouceNone(entry);
+					case None -> serializeFileRepresentationResourceNone(entry);
 					case List -> serializeJsonRepresentationResourceList(entry, new ListParams(parameters));
 
 					case User -> new JsonRepresentation(resourceSerializer.serializeResourceUser(resource));
@@ -475,7 +470,7 @@ public class ResourceResource extends BaseResource {
 		return EMPTY_REPRESENTATION;
 	}
 
-	private FileRepresentation serializeFileRepresentationResouceNone(Entry entry) {
+	private FileRepresentation serializeFileRepresentationResourceNone(Entry entry) {
 		if(entry.getResourceType() == InformationResource) {
 			// Local data
 			File file = ((Data)entry.getResource()).getDataFile();
@@ -483,7 +478,12 @@ public class ResourceResource extends BaseResource {
 				String medTyp = entry.getMimetype();
 				FileRepresentation rep = null;
 				if (medTyp != null) {
-					rep = new FileRepresentation(file, MediaType.valueOf(medTyp));
+					try {
+						rep = new FileRepresentation(file, MediaType.valueOf(medTyp));
+					} catch (IllegalArgumentException iae) {
+						log.warn("Invalid media type for {}: {}", entry.getEntryURI().toString(), iae.getMessage());
+						rep = new FileRepresentation(file, MediaType.ALL);
+					}
 				} else {
 					rep = new FileRepresentation(file, MediaType.ALL);
 				}
