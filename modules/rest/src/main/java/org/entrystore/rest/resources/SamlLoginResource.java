@@ -16,27 +16,9 @@
 
 package org.entrystore.rest.resources;
 
-import static org.entrystore.repository.config.Settings.AUTH_SAML_MAX_AGE;
-
 import com.coveo.saml.SamlClient;
 import com.coveo.saml.SamlException;
 import com.coveo.saml.SamlResponse;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.net.URI;
-import java.net.URL;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.security.Security;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.entrystore.Entry;
@@ -63,6 +45,23 @@ import org.restlet.resource.Get;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.Security;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * TODO Support logout via IdP
@@ -220,7 +219,7 @@ public class SamlLoginResource extends BaseResource {
 
 			if (userName != null && BasicVerifier.userExists(getPM(), userName) && !BasicVerifier.isUserDisabled(getPM(), userName)) {
 				EntryStoreApplication app = (EntryStoreApplication) getApplication();
-				new CookieVerifier(app, getRM(), AUTH_SAML_MAX_AGE).createAuthToken(userName, false, getRequest(), getResponse());
+				new CookieVerifier(app, getRM()).createAuthToken(userName, false, getRequest(), getResponse());
 
 				// TODO cache SAML ticket together with auth_token (probably necessary for logouts originating from SAML)
 

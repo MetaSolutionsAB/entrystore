@@ -16,16 +16,6 @@
 
 package org.entrystore.rest;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Set;
-import javax.naming.InitialContext;
-import javax.naming.NamingException;
-import javax.servlet.ServletContext;
 import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.apache.commons.io.FileCleaningTracker;
 import org.entrystore.ContextManager;
@@ -108,6 +98,17 @@ import org.restlet.routing.Router;
 import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+import javax.servlet.ServletContext;
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Main class to start EntryStore as Restlet Application.
@@ -373,7 +374,7 @@ public class EntryStoreApplication extends Application {
 
 		CORSFilter corsFilter = new CORSFilter(CORSUtil.getInstance(config));
 		boolean optional = !config.getBoolean(Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR, true);
-		CookieVerifier cookieVerifier = new CookieVerifier(this, rm, null, corsFilter);
+		CookieVerifier cookieVerifier = new CookieVerifier(this, rm, corsFilter);
 		ChallengeAuthenticator cookieAuth = new SimpleAuthenticator(getContext(), optional, ChallengeScheme.HTTP_COOKIE, "EntryStore", cookieVerifier, pm);
 
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();

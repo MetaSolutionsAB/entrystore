@@ -16,23 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static org.entrystore.repository.config.Settings.AUTH_CAS_MAX_AGE;
-import static org.entrystore.repository.config.Settings.AUTH_CAS_USER_AUTO_PROVISIONING;
-
-import java.net.URI;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.X509Certificate;
-import java.util.Arrays;
-import java.util.Map;
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
@@ -62,6 +45,23 @@ import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.X509Certificate;
+import java.util.Arrays;
+import java.util.Map;
+
+import static org.entrystore.repository.config.Settings.AUTH_CAS_USER_AUTO_PROVISIONING;
 
 /**
  * @author Hannes Ebner
@@ -194,8 +194,7 @@ public class CasLoginResource extends BaseResource {
 
 				if (userName != null && BasicVerifier.userExists(getPM(), userName) && !BasicVerifier.isUserDisabled(getPM(), userName)) {
 					EntryStoreApplication app = (EntryStoreApplication) getApplication();
-					new CookieVerifier(app, getRM(), AUTH_CAS_MAX_AGE)
-							.createAuthToken(userName, false, getRequest(), getResponse());
+					new CookieVerifier(app, getRM()).createAuthToken(userName, false, getRequest(), getResponse());
 
 					// TODO cache CAS ticket together with auth_token (probably
 					// necessary for logouts originating from CAS)

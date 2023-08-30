@@ -16,11 +16,6 @@
 
 package org.entrystore.rest.auth;
 
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR;
-import static org.entrystore.repository.config.Settings.AUTH_COOKIE_PATH;
-
-import java.net.URI;
-import java.time.LocalDateTime;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -40,6 +35,12 @@ import org.restlet.util.Series;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.time.LocalDateTime;
+
+import static org.entrystore.repository.config.Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR;
+import static org.entrystore.repository.config.Settings.AUTH_COOKIE_PATH;
+
 
 /**
  * @author Hannes Ebner
@@ -57,14 +58,10 @@ public class CookieVerifier implements Verifier {
 	private final LoginTokenCache loginTokenCache;
 
 	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm) {
-		this(app, rm, null, null);
+		this(app, rm, null);
 	}
 
-	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm, String maxAgeSetting) {
-		this(app, rm, maxAgeSetting, null);
-	}
-
-	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm, String maxAgeSetting, CORSFilter corsFilter) {
+	public CookieVerifier(EntryStoreApplication app, RepositoryManager rm, CORSFilter corsFilter) {
 		this.rm = rm;
 		this.pm = rm.getPrincipalManager();
 		this.corsFilter = corsFilter;
