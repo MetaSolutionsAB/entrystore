@@ -225,6 +225,20 @@ public class SolrSearchIndex implements SearchIndex {
 
 	}
 
+	public static class FacetSettings {
+
+		public String fields;
+
+		public int minCount;
+
+		public int limit;
+
+		public String matches;
+
+		public boolean missing;
+
+	}
+
 	public class DelayedContextIndexer extends Thread {
 
 		@Override

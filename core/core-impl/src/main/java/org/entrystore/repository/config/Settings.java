@@ -113,6 +113,7 @@ public class Settings {
 	public static String SOLR_REINDEX_ON_STARTUP_WAIT = "entrystore.solr.reindex-on-startup.wait";
 	public static String SOLR_EXTRACT_FULLTEXT = "entrystore.solr.extract-fulltext";
 	public static String SOLR_MAX_LIMIT = "entrystore.solr.max-limit";
+	public static String SOLR_FACET_MAX_LIMIT = "entrystore.solr.facet-max-limit";
 	public static String SOLR_SCHEMA_URL = "entrystore.solr.schema.url";
 	public static String SOLR_CONFIG_URL = "entrystore.solr.config.url";
 
