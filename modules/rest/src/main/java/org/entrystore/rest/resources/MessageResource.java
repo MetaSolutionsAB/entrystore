@@ -28,6 +28,7 @@ public class MessageResource extends BaseResource {
 		String subject;
 		String to;
 		String body;
+		String replyTo;
 		try {
 			JSONObject json = new JSONObject(representation.getText());
 			transportType = json.getString("transport");
@@ -40,6 +41,11 @@ public class MessageResource extends BaseResource {
 				getResponse().setStatus(CLIENT_ERROR_FORBIDDEN);
 				return;
 			}
+
+			replyTo = getPM().getPrincipalName(getPM().getAuthenticatedUserURI());
+			if (replyTo != null && !replyTo.contains("@")) {
+				replyTo = null; // in case the sender does not have proper e-mail address set
+			}
 		} catch (IOException e) {
 			log.debug("Error when parsing request", e);
 			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
@@ -47,7 +53,7 @@ public class MessageResource extends BaseResource {
 		}
 
 		if ("email".equalsIgnoreCase(transportType)) {
-			Email.sendMessage(getRM().getConfiguration(), to, subject, body);
+			Email.sendMessage(getRM().getConfiguration(), to, subject, body, null, replyTo);
 		} else {
 			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 		}
