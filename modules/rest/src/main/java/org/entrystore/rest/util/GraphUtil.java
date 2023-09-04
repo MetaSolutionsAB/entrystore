@@ -48,6 +48,7 @@ import org.eclipse.rdf4j.rio.trix.TriXWriter;
 import org.eclipse.rdf4j.rio.turtle.TurtleParser;
 import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.repository.util.NS;
+import org.json.JSONObject;
 import org.restlet.data.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -260,6 +261,18 @@ public class GraphUtil {
 			serializedGraph = serializeGraph(graph, TurtleWriter.class);
 		}
 		return serializedGraph;
+	}
+
+	public static JSONObject serializeGraphToJson(Model graph, MediaType rdfFormat) {
+		if (rdfFormat == null || MediaType.APPLICATION_JSON.equals(rdfFormat)) {
+			// We don't use GraphUtil.serializeGraph() because we need a JSONObject here and
+			// converting back and forth between String and JSONObject would not be very efficient
+			return RDFJSON.graphToRdfJsonObject(graph);
+		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(rdfFormat.getName())) {
+			return new JSONObject(GraphUtil.serializeGraph(graph, rdfFormat));
+		}
+		log.warn("Model could not be serialized, returning empty JSON object");
+		return new JSONObject();
 	}
 
 	public static boolean isSupported(MediaType mediaType) {

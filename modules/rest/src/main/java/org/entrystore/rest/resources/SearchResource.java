@@ -348,7 +348,7 @@ public class SearchResource extends BaseResource {
 							if (cachedExternalMD != null) {
 								Model cachedExternalMDGraph = cachedExternalMD.getGraph();
 								if (cachedExternalMDGraph != null) {
-									JSONObject childCachedExternalMDJSON = serializeGraph(cachedExternalMDGraph, rdfFormat);
+									JSONObject childCachedExternalMDJSON = GraphUtil.serializeGraphToJson(cachedExternalMDGraph, rdfFormat);
 									childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMDJSON);
 								}
 							}
@@ -360,7 +360,7 @@ public class SearchResource extends BaseResource {
 							if (localMD != null) {
 								Model localMDGraph = localMD.getGraph();
 								if (localMDGraph != null) {
-									JSONObject localMDJSON = serializeGraph(localMDGraph, rdfFormat);
+									JSONObject localMDJSON = GraphUtil.serializeGraphToJson(localMDGraph, rdfFormat);
 									childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
 								}
 							}
@@ -370,7 +370,7 @@ public class SearchResource extends BaseResource {
 					}
 
 					try {
-						JSONObject childInfo = serializeGraph(e.getGraph(), rdfFormat);
+						JSONObject childInfo = GraphUtil.serializeGraphToJson(e.getGraph(), rdfFormat);
 						childJSON.accumulate("info", Objects.requireNonNullElseGet(childInfo, JSONObject::new));
 					} catch (AuthorizationException ae) {
 						childJSON.accumulate("noAccessToEntryInfo", true);
@@ -379,7 +379,7 @@ public class SearchResource extends BaseResource {
 					try {
 						if (e.getRelations() != null) {
 							Model childRelationsGraph = new LinkedHashModel(e.getRelations());
-							JSONObject childRelationObj = serializeGraph(childRelationsGraph, rdfFormat);
+							JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
 							childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 						}
 					} catch (AuthorizationException ae) {
@@ -582,18 +582,6 @@ public class SearchResource extends BaseResource {
 		public QueryResults(List<Entry> entries, long results) {
 			this(entries, results, List.of());
 		}
-	}
-
-	private JSONObject serializeGraph(Model graph, MediaType rdfFormat) {
-		if (MediaType.APPLICATION_JSON.equals(rdfFormat)) {
-			// We don't use GraphUtil.serializeGraph() because we need a JSONObject here and
-			// converting back and forth between String and JSONObject would be very efficient
-			return RDFJSON.graphToRdfJsonObject(graph);
-		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(rdfFormat.getName())) {
-			return new JSONObject(GraphUtil.serializeGraph(graph, rdfFormat));
-		}
-		log.warn("Model could not be serialized, returning empty JSON object");
-		return new JSONObject();
 	}
 
 }

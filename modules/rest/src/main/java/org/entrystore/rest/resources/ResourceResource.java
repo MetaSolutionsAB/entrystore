@@ -360,6 +360,11 @@ public class ResourceResource extends BaseResource {
 		 * Resource
 		 */
 
+		MediaType rdfFormat = MediaType.APPLICATION_JSON;
+		if (RDFFormat.JSONLD.getDefaultMIMEType().equals(parameters.get("rdfFormat"))) {
+			rdfFormat = new MediaType(RDFFormat.JSONLD.getDefaultMIMEType());
+		}
+
 		EntryType entryType = entry.getEntryType();
 		GraphType graphType = entry.getGraphType();
 		ResourceType resourceType = entry.getResourceType();
@@ -437,7 +442,7 @@ public class ResourceResource extends BaseResource {
 					case List -> serializeJsonRepresentationResourceList(entry, new ListParams(parameters));
 
 					case User -> new JsonRepresentation(resourceSerializer.serializeResourceUser(resource));
-					case Group -> new JsonRepresentation(resourceSerializer.serializeResourceGroup(resource));
+					case Group -> new JsonRepresentation(resourceSerializer.serializeResourceGroup(resource, rdfFormat));
 					case String -> new JsonRepresentation(resourceSerializer.serializeResourceString(resource));
 					case Context -> new JsonRepresentation(resourceSerializer.serializeResourceContext(resource));
 					case SystemContext -> new JsonRepresentation(resourceSerializer.serializeResourceSystemContext(resource));
@@ -447,7 +452,7 @@ public class ResourceResource extends BaseResource {
 								getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 								yield new JsonRepresentation("{\"error\":\"The graph has not been set\"}");
 							}
-							yield new JsonRepresentation(resourceSerializer.serializeResourceGraph(graph));
+							yield new JsonRepresentation(resourceSerializer.serializeResourceGraph(graph, rdfFormat));
 						}
 						yield EMPTY_REPRESENTATION;
 					}
@@ -457,7 +462,7 @@ public class ResourceResource extends BaseResource {
 								getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 								yield new JsonRepresentation("{\"error\":\"The pipeline has not been set\"}");
 							}
-							yield new JsonRepresentation(resourceSerializer.serializeResourcePipeline(pipeline));
+							yield new JsonRepresentation(resourceSerializer.serializeResourcePipeline(pipeline, rdfFormat));
 						}
 						yield EMPTY_REPRESENTATION;
 					}
