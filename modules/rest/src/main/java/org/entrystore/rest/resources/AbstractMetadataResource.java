@@ -19,7 +19,6 @@ package org.entrystore.rest.resources;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
 import org.eclipse.rdf4j.common.iteration.Iterations;
-import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
@@ -325,12 +324,12 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 */
 	private EntryUtil.TraversalResult traverse(URI entryURI, Set<URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth) {
 		return EntryUtil.traverseAndLoadEntryMetadata(
-			ImmutableSet.of((IRI) getRM().getValueFactory().createIRI(entryURI.toString())),
+			ImmutableSet.of(getRM().getValueFactory().createIRI(entryURI.toString())),
 			predToFollow,
 			blacklist,
 			0,
 			depth,
-			HashMultimap.<IRI, Integer>create(),
+			HashMultimap.create(),
 			repository ? null : context,
 			getRM()
 		);

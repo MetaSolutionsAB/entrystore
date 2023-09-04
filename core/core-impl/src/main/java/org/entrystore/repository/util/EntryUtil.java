@@ -16,20 +16,7 @@
 
 package org.entrystore.repository.util;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 import com.google.common.collect.Multimap;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -49,6 +36,20 @@ import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.RepositoryManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 
 /**
@@ -688,6 +689,7 @@ public class EntryUtil {
 	 */
 	public static TraversalResult traverseAndLoadEntryMetadata(Set<IRI> entries, Set<URI> propertiesToFollow, Map<String, String> blacklist, int level, int depth, Multimap<IRI, Integer> visited, Context context, RepositoryManager rm) {
 		Model resultGraph = new LinkedHashModel();
+		Set<IRI> accessDenied = new HashSet<>();
 		Date latestModified = null;
 		for (IRI r : entries) {
 	/*		if (!r.toString().startsWith(rm.getRepositoryURL().toString())) {
@@ -695,7 +697,7 @@ public class EntryUtil {
 				continue;
 			}*/
 			if (visited.containsEntry(r, level)) {
-				log.debug("Skipping <" + r + ">, entry already fetched and traversed on level " + level);
+				log.debug("Skipping <{}>, entry already fetched and traversed on level {}", r, level);
 				continue;
 			}
 
@@ -707,7 +709,7 @@ public class EntryUtil {
 				if (context != null) {
 					//By Resource URI, may be a non-repository URI.
 					Set<Entry> resEntries = context.getByResourceURI(uri);
-					if (resEntries != null && resEntries.size() > 0) {
+					if (resEntries != null && !resEntries.isEmpty()) {
 						fetchedEntry = (Entry) resEntries.toArray()[0];
 						if (resEntries.size() > 1) {
 							log.warn("Resource URI {} is used by {} entries in context {}; only using first matching entry for traversal result", uri, resEntries.size(), context.getURI());
@@ -724,7 +726,7 @@ public class EntryUtil {
 					if (fetchedEntry == null) {
 						// fallback in case we are not referring to repository URIs.
 						Set<Entry> resEntries = cm.getLinks(uri);
-						if (resEntries != null && resEntries.size() > 0) {
+						if (resEntries != null && !resEntries.isEmpty()) {
 							fetchedEntry = (Entry) resEntries.toArray()[0];
 						}
 					}
@@ -753,15 +755,16 @@ public class EntryUtil {
 				if (level == 0) {
 					throw ae;
 				} else {
-					log.info("Unable to load entry due to ACL restrictions: " + r);
+					accessDenied.add(r);
+					log.info("Unable to load entry due to ACL restrictions: {}", r);
 					continue;
 				}
 			}
 
 			if (graph != null) {
-				visited.put((IRI) r, level);
+				visited.put(r, level);
 				if (graphContainsPredicateObjectTuple(graph, blacklist)) {
-					log.debug("Found blacklisted predicate/object tuple in graph, excluding " + r);
+					log.debug("Found blacklisted predicate/object tuple in graph, excluding {}", r);
 				} else {
 					resultGraph.addAll(graph);
 					if (propertiesToFollow != null && level < depth) {
@@ -770,7 +773,7 @@ public class EntryUtil {
 							objects.addAll(valueToURI(graph.filter(null, valueFactory.createIRI(prop.toString()), null).objects()));
 						}
 						objects.remove(r);
-						if (objects.size() > 0) {
+						if (!objects.isEmpty()) {
 							log.debug("Fetching " + objects.size() + " entr" + (objects.size() == 1 ? "y" : "ies") + " linked from <" + r + ">: " + objects);
 							TraversalResult nextLevel = traverseAndLoadEntryMetadata(
 									objects,
@@ -782,6 +785,7 @@ public class EntryUtil {
 									context,
 									rm);
 							resultGraph.addAll(nextLevel.getGraph());
+							accessDenied.addAll(nextLevel.getAccessDenied());
 							if (nextLevel.getLatestModified() != null) {
 								if (latestModified == null || latestModified.before(nextLevel.getLatestModified())) {
 									latestModified = nextLevel.getLatestModified();
@@ -794,7 +798,11 @@ public class EntryUtil {
 				}
 			}
 		}
-		return new TraversalResult(resultGraph, latestModified);
+
+		for (IRI objectToRemove : accessDenied) {
+			resultGraph.removeIf(s -> objectToRemove.equals(s.getObject()));
+		}
+		return new TraversalResult(resultGraph, latestModified, accessDenied);
 	}
 
 	/**
@@ -831,7 +839,7 @@ public class EntryUtil {
 	public static Set<IRI> valueToURI(Set<Value> values) {
 		Set<IRI> result = new HashSet<>();
 		for (Value v : values) {
-			if (v != null && v instanceof IRI) {
+			if (v instanceof IRI) {
 				result.add((IRI) v);
 			}
 		}
@@ -840,13 +848,16 @@ public class EntryUtil {
 
 	public static class TraversalResult {
 
-		private Model graph;
+		private final Model graph;
 
-		private Date latestModified;
+		private final Date latestModified;
 
-		private TraversalResult(Model graph, Date latestModified) {
+		private final Set<IRI> accessDenied;
+
+		private TraversalResult(Model graph, Date latestModified, Set<IRI> accessDenied) {
 			this.graph = graph;
 			this.latestModified = latestModified;
+			this.accessDenied = accessDenied;
 		}
 
 		public Model getGraph() {
@@ -855,6 +866,10 @@ public class EntryUtil {
 
 		public Date getLatestModified() {
 			return latestModified;
+		}
+
+		public Set<IRI> getAccessDenied() {
+			return accessDenied;
 		}
 
 	}
