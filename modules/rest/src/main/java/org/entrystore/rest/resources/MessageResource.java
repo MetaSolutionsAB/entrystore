@@ -1,21 +1,17 @@
 package org.entrystore.rest.resources;
 
-import static org.entrystore.rest.util.MessageTransportType.EMAIL;
-import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
-import static org.restlet.data.Status.CLIENT_ERROR_FORBIDDEN;
-import static org.restlet.data.Status.SERVER_ERROR_INTERNAL;
-
-import java.io.IOException;
 import org.entrystore.rest.util.Email;
-import org.entrystore.rest.util.MessageTransportType;
-import org.json.JSONException;
 import org.json.JSONObject;
-import org.restlet.ext.json.JsonRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+
+import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
+import static org.restlet.data.Status.CLIENT_ERROR_FORBIDDEN;
 
 public class MessageResource extends BaseResource {
 
@@ -28,23 +24,13 @@ public class MessageResource extends BaseResource {
 			return;
 		}
 
-		JsonRepresentation jsonRepresentation;
-		try {
-			jsonRepresentation = new JsonRepresentation(representation);
-		} catch (IOException e) {
-			log.info("Caught exception while creating JsonRepresentation", e);
-			getResponse().setStatus(SERVER_ERROR_INTERNAL);
-			return;
-		}
-
-		MessageTransportType transportType;
+		String transportType;
 		String subject;
 		String to;
 		String body;
 		try {
-			JSONObject json = jsonRepresentation.getJsonObject();
-
-			transportType = json.has("transport") ? json.getEnum(MessageTransportType.class, "transport") : EMAIL;
+			JSONObject json = new JSONObject(representation.getText());
+			transportType = json.getString("transport");
 			subject = json.getString("subject");
 			to = json.getString("to");
 			body = json.getString("body");
@@ -54,14 +40,17 @@ public class MessageResource extends BaseResource {
 				getResponse().setStatus(CLIENT_ERROR_FORBIDDEN);
 				return;
 			}
-		} catch (JSONException e) {
-			log.debug("Error in json from client", e);
+		} catch (IOException e) {
+			log.debug("Error when parsing request", e);
 			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
 
-		if (transportType == EMAIL) {
+		if ("email".equalsIgnoreCase(transportType)) {
 			Email.sendMessage(getRM().getConfiguration(), to, subject, body);
+		} else {
+			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 		}
 	}
+
 }
