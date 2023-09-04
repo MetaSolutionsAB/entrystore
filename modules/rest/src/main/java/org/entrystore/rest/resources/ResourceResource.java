@@ -1075,14 +1075,14 @@ public class ResourceResource extends BaseResource {
 						if (!getPM().currentUserIsAdminOrAdminGroup() ||
 								(getPM().currentUserIsAdminOrAdminGroup() && getPM().getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
 							if (!entityJSON.has("currentPassword")) {
-								getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+								getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 								getResponse().setEntity(new JsonRepresentation("{\"error\":\"Current password is required\"}"));
 								return;
 							}
 							String currentPassword = entityJSON.getString("currentPassword");
 							String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), resourceUser.getName());
 							if (saltedHashedSecret == null || !Password.check(currentPassword, saltedHashedSecret)) {
-								getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+								getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 								getResponse().setEntity(new JsonRepresentation("{\"error\":\"No password set or incorrect current password provided\"}"));
 								return;
 							}
