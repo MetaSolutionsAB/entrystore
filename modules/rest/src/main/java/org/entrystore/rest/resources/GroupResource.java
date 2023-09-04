@@ -80,11 +80,20 @@ public class GroupResource extends BaseResource {
 			}
 
 			String name = null;
+			String contextId = null;
 			boolean setName = false;
 			// read name, to be used for group and context
 			if (parameters.containsKey("name")) {
 				name = URLDecoder.decode(parameters.get("name"), StandardCharsets.UTF_8).trim();
-				setName = name.length() > 0;
+				setName = !name.isEmpty();
+			}
+
+			// we allow to manually set the context entry ID
+			if (parameters.containsKey("contextId")) {
+				contextId = URLDecoder.decode(parameters.get("contextId"), StandardCharsets.UTF_8).trim();
+				if (contextId.isEmpty()) {
+					contextId = null;
+				}
 			}
 
 			// we need admin-rights to create groups and contexts
@@ -93,6 +102,11 @@ public class GroupResource extends BaseResource {
 			// check whether context or group with desired name already exists
 			// and abort execution of request if necessary
 			if (setName && getPM().getPrincipalEntry(name) != null || getCM().getContextURI(name) != null) {
+				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
+				return;
+			}
+
+			if (getCM().getContext(contextId) != null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 				return;
 			}
@@ -114,7 +128,7 @@ public class GroupResource extends BaseResource {
 			}
 
 			// create entry for new context
-			Entry newContextEntry = getCM().getContext("_contexts").createResource(null, GraphType.Context, null, null);
+			Entry newContextEntry = getCM().getContext("_contexts").createResource(contextId, GraphType.Context, null, null);
 			// make the requesting user admin for context
 			newContextEntry.setAllowedPrincipalsFor(AccessProperty.Administer, Sets.newHashSet(requestingUser));
 			// new group gets write access for context
@@ -136,8 +150,6 @@ public class GroupResource extends BaseResource {
 			getResponse().setStatus(Status.SUCCESS_CREATED);
 			getResponse().setLocationRef(newGroupEntry.getEntryURI().toString());
 			getResponse().setEntity(createEmptyRepresentationWithLastModified(newGroupEntry.getModifiedDate()));
-
-			return;
 		} finally {
 			getPM().setAuthenticatedUserURI(requestingUser);
 		}
