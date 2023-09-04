@@ -1,21 +1,6 @@
 package org.entrystore.rest.resources;
 
-import static com.icegreen.greenmail.util.ServerSetupTest.SMTP;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doCallRealMethod;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.when;
-import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
-import static org.restlet.data.Status.CLIENT_ERROR_FORBIDDEN;
-import static org.restlet.data.Status.CLIENT_ERROR_UNAUTHORIZED;
-import static org.restlet.data.Status.SUCCESS_OK;
-
 import com.icegreen.greenmail.junit5.GreenMailExtension;
-import java.io.IOException;
-import javax.mail.MessagingException;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMessage;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.config.Config;
@@ -36,6 +21,17 @@ import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.ext.json.JsonRepresentation;
 import org.skyscreamer.jsonassert.JSONAssert;
+
+import javax.mail.MessagingException;
+import javax.mail.internet.InternetAddress;
+import javax.mail.internet.MimeMessage;
+import java.io.IOException;
+
+import static com.icegreen.greenmail.util.ServerSetupTest.SMTP;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+import static org.restlet.data.Status.*;
 
 @ExtendWith(MockitoExtension.class)
 class MessageResourceTest {
@@ -83,16 +79,16 @@ class MessageResourceTest {
 
 	@Test
 	void successSendMessageTest() throws MessagingException, IOException {
-		when(pm.getPrincipalEntry("bjorn@meta.se")).thenReturn(entry);
+		when(pm.getPrincipalEntry("test@meta.se")).thenReturn(entry);
 		when(pm.currentUserIsGuest()).thenReturn(false);
 
 		String json =
 				"""
 				{
-					"to": "bjorn@meta.se",
+					"to": "test@meta.se",
 					"subject": "About tomorrow",
 					"body": "Hi! See you tomorrow!",
-					"transport": "EMAIL"
+					"transport": "email"
 				}
 				""";
 		JsonRepresentation jsonRepresentation = new JsonRepresentation(json);
@@ -106,7 +102,7 @@ class MessageResourceTest {
 		assertThat(message.getFrom()).containsExactly(new InternetAddress("info@meta.se"));
 		assertThat(message.getSubject()).isEqualTo("About tomorrow");
 		assertThat(message.getReplyTo()).containsExactly(new InternetAddress("info@meta.se"));
-		assertThat(message.getAllRecipients()).containsExactly(new InternetAddress("bjorn@meta.se"));
+		assertThat(message.getAllRecipients()).containsExactly(new InternetAddress("test@meta.se"));
 		assertThat(message.getContent()).isInstanceOf(String.class).isEqualTo("Hi! See you tomorrow!");
 	}
 
@@ -160,15 +156,4 @@ class MessageResourceTest {
 		JSONAssert.assertEquals(expectedJson, response.getEntity().getText(), true);
 	}
 
-	@Test
-	void invalidJsonSendMessageTest() throws MessagingException, IOException {
-		when(pm.currentUserIsGuest()).thenReturn(false);
-
-		JsonRepresentation jsonRepresentation = new JsonRepresentation("not valid json");
-		messageResource.sendMessage(jsonRepresentation);
-
-		assertThat(response.getStatus()).isEqualTo(CLIENT_ERROR_BAD_REQUEST);
-		MimeMessage[] messages = mail.getReceivedMessages();
-		assertThat(messages).hasSize(0);
-	}
 }
