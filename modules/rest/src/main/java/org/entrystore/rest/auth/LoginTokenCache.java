@@ -37,13 +37,13 @@ import static org.entrystore.repository.config.Settings.*;
 public class LoginTokenCache extends TokenCache<String, UserInfo> {
 
 	private static final Logger log = LoggerFactory.getLogger(LoginTokenCache.class);
-	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(7).toSeconds();
+	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(1).toSeconds();
 
 	private final boolean configCookieUpdateExpiry;
 	private final int configCookieMaxAgeInSeconds;
 
 	public LoginTokenCache(Config config) {
-		this.configCookieUpdateExpiry = config.getBoolean(AUTH_COOKIE_UPDATE_EXPIRY, false);
+		this.configCookieUpdateExpiry = config.getBoolean(AUTH_COOKIE_REFRESH_EXPIRATION_ON_ACCESS, true);
 		this.configCookieMaxAgeInSeconds = config.getInt(AUTH_TOKEN_MAX_AGE, config.getInt(AUTH_COOKIE_MAX_AGE, DEFAULT_MAX_AGE_IN_SECONDS));
 	}
 

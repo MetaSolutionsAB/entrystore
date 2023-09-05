@@ -47,7 +47,7 @@ public class Settings {
 	public static String AUTH_COOKIE_SECURE = "entrystore.auth.cookie.secure";
 	public static String AUTH_COOKIE_SAMESITE = "entrystore.auth.cookie.samesite";
 	public static String AUTH_COOKIE_MAX_AGE = "entrystore.auth.cookie.max-age";
-	public static String AUTH_COOKIE_UPDATE_EXPIRY = "entrystore.auth.cookie.update.expiry";
+	public static String AUTH_COOKIE_REFRESH_EXPIRATION_ON_ACCESS = "entrystore.auth.cookie.refresh-expiration-on-access";
 	public static String AUTH_COOKIE_INVALID_TOKEN_ERROR = "entrystore.auth.cookie.invalid-token-error";
 	@Deprecated public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.cookie.max-age";
 

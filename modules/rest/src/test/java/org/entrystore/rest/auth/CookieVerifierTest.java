@@ -1,12 +1,5 @@
 package org.entrystore.rest.auth;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.entrystore.rest.util.HttpUtil.COOKIE_AUTH_TOKEN;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import java.time.LocalDateTime;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -20,6 +13,14 @@ import org.junit.jupiter.api.Test;
 import org.restlet.Request;
 import org.restlet.Response;
 import org.restlet.data.CookieSetting;
+
+import java.time.LocalDateTime;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.entrystore.rest.util.HttpUtil.COOKIE_AUTH_TOKEN;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class CookieVerifierTest {
 
@@ -80,7 +81,7 @@ class CookieVerifierTest {
 		config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
 		config.setProperty(Settings.SOLR, "off");
 		config.setProperty(Settings.AUTH_COOKIE_PATH, "/");
-		config.setProperty(Settings.AUTH_COOKIE_UPDATE_EXPIRY, authCookieUpdateExpiry);
+		config.setProperty(Settings.AUTH_COOKIE_REFRESH_EXPIRATION_ON_ACCESS, authCookieUpdateExpiry);
 		return config;
 	}
 
