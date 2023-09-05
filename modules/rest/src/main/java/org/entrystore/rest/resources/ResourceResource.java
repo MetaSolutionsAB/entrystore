@@ -1070,7 +1070,7 @@ public class ResourceResource extends BaseResource {
 					}
 				}
 				if (entityJSON.has("password")) {
-					boolean requireCurrentPassword = getRM().getConfiguration().getBoolean(Settings.AUTH_PASSWORD_REQUIRE_CURRENT_PASSWORD, false);
+					boolean requireCurrentPassword = getRM().getConfiguration().getBoolean(Settings.AUTH_PASSWORD_REQUIRE_CURRENT_PASSWORD, true);
 					String newPassword =  entityJSON.getString("password");
 
 					if (requireCurrentPassword) {
