@@ -28,6 +28,8 @@ import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -125,7 +127,7 @@ public class EntryNamesContext extends ContextImpl {
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
 					ValueFactory vf = entry.repository.getValueFactory();
-					rc.setAutoCommit(false);
+					rc.begin();
 					IRI cURI = vf.createIRI(entryURI.toString());
 					if (entryURI2Name.containsKey(entryURI)) {
 						String oldName = entryURI2Name.get(entryURI);
@@ -143,6 +145,7 @@ public class EntryNamesContext extends ContextImpl {
 						((EntryImpl) forEntry).updateModifiedDateSynchronized(rc, vf);
 					}
 					rc.commit();
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					return true;
 				} catch (Exception e) {
 					rc.rollback();

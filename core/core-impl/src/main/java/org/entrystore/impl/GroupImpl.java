@@ -27,6 +27,8 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -135,6 +137,7 @@ public class GroupImpl extends ListImpl implements Group {
                     ((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
                 }
                 rc.commit();
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
             } catch (org.eclipse.rdf4j.repository.RepositoryException e) {
                 log.error(e.getMessage(), e);
                 try {

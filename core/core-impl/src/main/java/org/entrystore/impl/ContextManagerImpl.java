@@ -404,7 +404,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			RepositoryConnection rc = null;
 			try {
 				rc = entry.getRepository().getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				
 				TriGParser parser = new TriGParser();
 				parser.getParserConfig().set(BasicParserSettings.VERIFY_DATATYPE_VALUES, false);

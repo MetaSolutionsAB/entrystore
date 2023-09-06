@@ -1226,7 +1226,7 @@ public class EntryImpl implements Entry {
 			synchronized (this.repository) {
 				RepositoryConnection rc = this.repository.getConnection();
 				ValueFactory vf = this.repository.getValueFactory();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
 					rc.clear(entryURI);
 					rc.add(metametadata, entryURI);
@@ -1279,7 +1279,7 @@ public class EntryImpl implements Entry {
 			synchronized (this.repository) {
 				ValueFactory vf = this.repository.getValueFactory();
 				RepositoryConnection rc = this.repository.getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				Model minimalProvenanceGraph = null;
 				if (this.provenance != null) {
 					minimalProvenanceGraph = this.provenance.getMinimalGraph(rc);
@@ -1734,28 +1734,27 @@ public class EntryImpl implements Entry {
 		return true;
 	}
 	
-	public boolean replaceStatementSynchronized(IRI subject, IRI predicate, Value object) {
+	private boolean replaceStatementSynchronized(IRI subject, IRI predicate, Value object) {
 		try {
 			RepositoryConnection rc = this.repository.getConnection();
-			rc.setAutoCommit(false);
+			rc.begin();
 			try {
 				boolean result = this.replaceStatementSynchronized(subject, predicate, object, rc, this.repository.getValueFactory());
 				rc.commit();
+				getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
 				return result;
 			} catch (Exception e) {
 				rc.rollback();
-				e.printStackTrace();
 				throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}		
 	}
 	
-	public boolean replaceStatement(IRI subject, IRI predicate, Value object) {
+	private boolean replaceStatement(IRI subject, IRI predicate, Value object) {
 		synchronized (this.repository) {
 			return this.replaceStatementSynchronized(subject, predicate, object);
 		}
@@ -1784,7 +1783,6 @@ public class EntryImpl implements Entry {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
@@ -1816,7 +1814,6 @@ public class EntryImpl implements Entry {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
@@ -1853,7 +1850,7 @@ public class EntryImpl implements Entry {
 	public void setOriginalListSynchronized(String list) {
 		try {
 			RepositoryConnection rc = this.repository.getConnection();
-			rc.setAutoCommit(false);
+			rc.begin();
 			try {
 				rc.remove(this.entryURI, RepositoryProperties.originallyCreatedIn, null, this.entryURI);
 				if (list != null) {
@@ -1865,13 +1862,11 @@ public class EntryImpl implements Entry {
 				rc.commit();
 			} catch (Exception e) {
 				rc.rollback();
-				e.printStackTrace();
 				throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}		
 	}
@@ -1934,7 +1929,7 @@ public class EntryImpl implements Entry {
 	
 	@Override
 	public String toString() {
-		return new StringBuffer(entryURI.toString()).append(",").append(super.toString()).toString();
+		return entryURI.toString() + "," + super.toString();
 	}
 
 }
