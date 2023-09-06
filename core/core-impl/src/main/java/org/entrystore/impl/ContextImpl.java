@@ -17,25 +17,6 @@
 
 package org.entrystore.impl;
 
-import static org.eclipse.rdf4j.model.util.Values.iri;
-import static org.eclipse.rdf4j.model.util.Values.literal;
-
-import java.io.File;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
-import java.util.GregorianCalendar;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.StringTokenizer;
-import javax.xml.datatype.DatatypeConfigurationException;
-import javax.xml.datatype.DatatypeFactory;
-import javax.xml.datatype.XMLGregorianCalendar;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -66,6 +47,26 @@ import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.URISplit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.xml.datatype.DatatypeConfigurationException;
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.XMLGregorianCalendar;
+import java.io.File;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.StringTokenizer;
+
+import static org.eclipse.rdf4j.model.util.Values.iri;
+import static org.eclipse.rdf4j.model.util.Values.literal;
 
 
 public class ContextImpl extends ResourceImpl implements Context {
@@ -118,7 +119,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
 					ValueFactory vf = entry.repository.getValueFactory();
-					rc.setAutoCommit(false);
+					rc.begin();
 
 					// delete old index
 					rc.remove((Resource) null, RepositoryProperties.mdHasEntry, null, this.resourceURI);
@@ -427,10 +428,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 	synchronized protected EntryImpl createNewMinimalItem(URI resourceURI, URI metadataURI, EntryType lType, GraphType bType, ResourceType rType, String entryId) {
 		try {
 			//Factory and connection.
-			RepositoryConnection rc = entry.repository.getConnection();
-			try {
+			try (RepositoryConnection rc = entry.repository.getConnection()) {
 				ValueFactory vf = entry.repository.getValueFactory();
-				rc.setAutoCommit(false);
+				rc.begin();
 
 				//Find current counter
 				if (counter == -1) {
@@ -441,7 +441,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 							false,
 							this.resourceURI).asList();
 
-					if (counters.size() > 0) {
+					if (!counters.isEmpty()) {
 						counter = ((Literal) counters.get(0).getObject()).intValue();
 					} else {
 						counter = 0;
@@ -513,8 +513,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 					}
 					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 				}
-			} finally {
-				rc.close();
 			}
 		} catch (RepositoryException e) {
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
@@ -1002,6 +1000,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				rc.add(this.resourceURI, RepositoryProperties.Quota, rc.getValueFactory().createLiteral(quotaInBytes), this.resourceURI);
 				rc.commit();
 				this.quota = quotaInBytes;
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.EntryUpdated));
 			} catch (RepositoryException re) {
 				log.error(re.getMessage(), re);
 				try {
@@ -1038,6 +1037,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			RepositoryConnection rc = null;
 			try {
 				rc = entry.repository.getConnection();
+				// TODO add transaction
 				rc.remove(rc.getStatements(this.resourceURI, RepositoryProperties.Quota, null, false, this.resourceURI), this.resourceURI);
 				this.quota = Quota.VALUE_UNCACHED;
 			} catch (RepositoryException re) {
@@ -1152,7 +1152,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			RepositoryConnection rc = null;
 			try {
 				rc = entry.repository.getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				rc.remove(rc.getStatements(this.resourceURI, RepositoryProperties.QuotaFillLevel, null, false, this.resourceURI), this.resourceURI);
 				rc.add(this.resourceURI, RepositoryProperties.QuotaFillLevel, rc.getValueFactory().createLiteral(bytes), this.resourceURI);
 				rc.commit();
