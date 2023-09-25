@@ -16,6 +16,10 @@
 
 [ENTRYSTORE-778](https://metasolutions.atlassian.net/browse/ENTRYSTORE-778) Allow graphs in entry and resource responses to be serialized in JSON-LD
 
+[ENTRYSTORE-779](https://metasolutions.atlassian.net/browse/ENTRYSTORE-779) Make sure Repository Events are fired for all changes to entries
+
+[ENTRYSTORE-780](https://metasolutions.atlassian.net/browse/ENTRYSTORE-780) Set creator for entries with an ID that starts with underscore
+
 ### Test
 
 [ENTRYSTORE-765](https://metasolutions.atlassian.net/browse/ENTRYSTORE-765) Test new settings for SAML and CAS
