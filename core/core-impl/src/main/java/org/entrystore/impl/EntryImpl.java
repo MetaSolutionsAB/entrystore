@@ -17,8 +17,6 @@
 
 package org.entrystore.impl;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
@@ -49,6 +47,8 @@ import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.util.URISplit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
@@ -90,7 +90,7 @@ public class EntryImpl implements Entry {
 	protected volatile Set<IRI> contributors = new HashSet<>();
 	protected volatile URI status;
 
-	Log log = LogFactory.getLog(EntryImpl.class);
+	Logger log = LoggerFactory.getLogger(EntryImpl.class);
 	private volatile Set<URI> administerPrincipals;
 	private volatile Set<URI> readMetadataPrincipals;
 	private volatile Set<URI> writeMetadataPrincipals;
@@ -248,14 +248,12 @@ public class EntryImpl implements Entry {
 			rc.add(entryURI, RepositoryProperties.cachedExternalMetadata, this.cachedExternalMdURI, entryURI);			
 		}
 
-		if (!this.id.startsWith("_")) { //System entries don't have creators, because they're created by the system.
-			PrincipalManager pm = this.repositoryManager.getPrincipalManager();
-			if (pm != null) {
-				URI userURI = pm.getAuthenticatedUserURI();
-				if (userURI != null) {
-					this.creator = vf.createIRI(userURI.toString());
-					rc.add(entryURI, RepositoryProperties.Creator, this.creator, entryURI);				
-				}
+		PrincipalManager pm = this.repositoryManager.getPrincipalManager();
+		if (pm != null) {
+			URI userURI = pm.getAuthenticatedUserURI();
+			if (userURI != null) {
+				this.creator = vf.createIRI(userURI.toString());
+				rc.add(entryURI, RepositoryProperties.Creator, this.creator, entryURI);
 			}
 		}
 
@@ -334,7 +332,7 @@ public class EntryImpl implements Entry {
 						//log.info(statement.getObject().stringValue());
 						modified = ((Literal) statement.getObject()).calendarValue();
 					} catch (NullPointerException e) {
-						log.error(e);
+						log.error(e.getMessage());
 					}
 				} else {
 					//Check if statement refer other entries that affect their inv-rel cache.
