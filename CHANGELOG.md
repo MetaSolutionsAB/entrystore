@@ -4,6 +4,8 @@
 
 ### Improvement
 
+[ENTRYSTORE-523](https://metasolutions.atlassian.net/browse/ENTRYSTORE-523) Optimize indexing of entries that are modified multiple times during a short period of time
+
 [ENTRYSTORE-755](https://metasolutions.atlassian.net/browse/ENTRYSTORE-755) Add Digest header when accessing resources with checksum
 
 [ENTRYSTORE-756](https://metasolutions.atlassian.net/browse/ENTRYSTORE-756) Add requirement of providing existing password upon password change
@@ -19,6 +21,8 @@
 [ENTRYSTORE-779](https://metasolutions.atlassian.net/browse/ENTRYSTORE-779) Make sure Repository Events are fired for all changes to entries
 
 [ENTRYSTORE-780](https://metasolutions.atlassian.net/browse/ENTRYSTORE-780) Set creator for entries with an ID that starts with underscore
+
+[ENTRYSTORE-782](https://metasolutions.atlassian.net/browse/ENTRYSTORE-782) Do not update modification date of context entry upon creation of new entry
 
 ### Test
 
@@ -45,6 +49,8 @@
 [ENTRYSTORE-774](https://metasolutions.atlassian.net/browse/ENTRYSTORE-774) Error when URI is used for dcterms:format in metadata
 
 [ENTRYSTORE-775](https://metasolutions.atlassian.net/browse/ENTRYSTORE-775) Modified date is not updated on username change
+
+[ENTRYSTORE-781](https://metasolutions.atlassian.net/browse/ENTRYSTORE-781) Reindex context entry when modification date is updated
 
 ## Version 5.1.0 (2023-05-03)
 
