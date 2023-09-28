@@ -499,15 +499,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 					rc.remove(counters, this.resourceURI);
 					rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(counter), this.resourceURI);
 
-					if (bType != GraphType.SystemContext) {
-						this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
-					}
 					rc.commit();
 					cache.put(newEntry);
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
-					if (bType != GraphType.SystemContext) {
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.EntryUpdated));
-					}
 					return newEntry;
 				} catch (Exception e) {
 					rc.rollback();
