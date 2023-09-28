@@ -505,6 +505,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 					rc.commit();
 					cache.put(newEntry);
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
+					if (bType != GraphType.SystemContext) {
+						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.EntryUpdated));
+					}
 					return newEntry;
 				} catch (Exception e) {
 					rc.rollback();
