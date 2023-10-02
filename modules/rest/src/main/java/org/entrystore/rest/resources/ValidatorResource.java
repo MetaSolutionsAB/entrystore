@@ -108,12 +108,12 @@ public class ValidatorResource extends BaseResource  {
 			try {
 				deserializedGraph = GraphUtil.deserializeGraphUnsafe(graphString, mt);
 			} catch (RDFHandlerException | RDFParseException | IOException e) {
-				setRepresentation(getResponse(), Status.SUCCESS_OK, e.getMessage());
+				setRepresentation(getResponse(), Status.CLIENT_ERROR_BAD_REQUEST, e.getMessage());
 				return;
 			}
 
 			if (deserializedGraph == null) {
-				setRepresentation(getResponse(), Status.SUCCESS_OK, "An error occured when trying to deserialize the input graph");
+				setRepresentation(getResponse(), Status.CLIENT_ERROR_BAD_REQUEST, "An error occured when trying to deserialize the input graph");
 				return;
 			}
 			// Test 1 end
@@ -127,7 +127,7 @@ public class ValidatorResource extends BaseResource  {
 				testIRI(s.getContext(), errors);
 			}
 			if (!errors.isEmpty()) {
-				setRepresentation(getResponse(), Status.SUCCESS_OK, errors);
+				setRepresentation(getResponse(), Status.CLIENT_ERROR_BAD_REQUEST, errors);
 				return;
 			}
 			// Test 2 end
@@ -138,7 +138,7 @@ public class ValidatorResource extends BaseResource  {
 				tmpPath = Files.createTempDirectory( "entrystore");
 			} catch (IOException e) {
 				log.error(e.getMessage());
-				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+				setRepresentation(getResponse(), Status.CLIENT_ERROR_BAD_REQUEST, e.getMessage());
 				return;
 			}
 
@@ -151,7 +151,7 @@ public class ValidatorResource extends BaseResource  {
 				rc.add(deserializedGraph);
 			} catch (RepositoryException e) {
 				log.warn(e.getMessage());
-				setRepresentation(getResponse(), Status.SUCCESS_OK, e.getMessage());
+				setRepresentation(getResponse(), Status.CLIENT_ERROR_BAD_REQUEST, e.getMessage());
 				return;
 			} finally {
 				try {

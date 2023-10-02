@@ -25,6 +25,7 @@ import java.util.List;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.util.HttpUtil;
@@ -114,8 +115,7 @@ public class CookieLoginResource extends BaseResource {
 		if (getUserTempLockoutCache().userIsLockedOut(userName)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_TOO_MANY_REQUESTS);
 			if (html) {
-				getResponse().setEntity(new SimpleHTML("Login")
-						.representation("User account is temporarily disabled. Too many failed logins."));
+				getResponse().setEntity(new SimpleHTML("Login").representation("User account is temporarily disabled. Too many failed logins."));
 			}
 			return;
 		}
@@ -125,7 +125,8 @@ public class CookieLoginResource extends BaseResource {
 		try {
 			if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
 				if (userIsEnabled) {
-					new CookieVerifier(getRM()).createAuthToken(userName, sessionCookie, getResponse());
+					EntryStoreApplication app = (EntryStoreApplication) getApplication();
+					new CookieVerifier(app, getRM()).createAuthToken(userName, sessionCookie, getRequest(), getResponse());
 					getResponse().setStatus(Status.SUCCESS_OK);
 					getUserTempLockoutCache().succeedLogin(userName);
 					if (html) {
@@ -155,5 +156,4 @@ public class CookieLoginResource extends BaseResource {
 			getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 		}
 	}
-
 }

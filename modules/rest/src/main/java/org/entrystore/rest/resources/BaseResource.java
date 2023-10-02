@@ -18,6 +18,11 @@ package org.entrystore.rest.resources;
 
 
 import com.google.common.collect.Sets;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Set;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -45,13 +50,6 @@ import org.restlet.resource.ServerResource;
 import org.restlet.util.Series;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  *<p> Base resource class that supports common behaviours or attributes shared by
@@ -200,7 +198,7 @@ public abstract class BaseResource extends ServerResource {
 		return getEntryStoreApplication().getUserTempLockoutCache();
 	}
 
-	private EntryStoreApplication getEntryStoreApplication() {
+	public EntryStoreApplication getEntryStoreApplication() {
 		return (EntryStoreApplication) getContext().getAttributes().get(EntryStoreApplication.KEY);
 	}
 

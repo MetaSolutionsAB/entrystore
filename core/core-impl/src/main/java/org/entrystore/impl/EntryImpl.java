@@ -17,8 +17,6 @@
 
 package org.entrystore.impl;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
@@ -49,6 +47,8 @@ import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.util.URISplit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
@@ -90,7 +90,7 @@ public class EntryImpl implements Entry {
 	protected volatile Set<IRI> contributors = new HashSet<>();
 	protected volatile URI status;
 
-	Log log = LogFactory.getLog(EntryImpl.class);
+	Logger log = LoggerFactory.getLogger(EntryImpl.class);
 	private volatile Set<URI> administerPrincipals;
 	private volatile Set<URI> readMetadataPrincipals;
 	private volatile Set<URI> writeMetadataPrincipals;
@@ -248,14 +248,12 @@ public class EntryImpl implements Entry {
 			rc.add(entryURI, RepositoryProperties.cachedExternalMetadata, this.cachedExternalMdURI, entryURI);			
 		}
 
-		if (!this.id.startsWith("_")) { //System entries don't have creators, because they're created by the system.
-			PrincipalManager pm = this.repositoryManager.getPrincipalManager();
-			if (pm != null) {
-				URI userURI = pm.getAuthenticatedUserURI();
-				if (userURI != null) {
-					this.creator = vf.createIRI(userURI.toString());
-					rc.add(entryURI, RepositoryProperties.Creator, this.creator, entryURI);				
-				}
+		PrincipalManager pm = this.repositoryManager.getPrincipalManager();
+		if (pm != null) {
+			URI userURI = pm.getAuthenticatedUserURI();
+			if (userURI != null) {
+				this.creator = vf.createIRI(userURI.toString());
+				rc.add(entryURI, RepositoryProperties.Creator, this.creator, entryURI);
 			}
 		}
 
@@ -334,7 +332,7 @@ public class EntryImpl implements Entry {
 						//log.info(statement.getObject().stringValue());
 						modified = ((Literal) statement.getObject()).calendarValue();
 					} catch (NullPointerException e) {
-						log.error(e);
+						log.error(e.getMessage());
 					}
 				} else {
 					//Check if statement refer other entries that affect their inv-rel cache.
@@ -1188,7 +1186,7 @@ public class EntryImpl implements Entry {
 		//Also adding the one who update using dcterms:contributor
 		if (this.repositoryManager != null &&
 				this.repositoryManager.getPrincipalManager() != null &&
-				this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI() != null){
+				this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI() != null) {
 			URI contrib = this.repositoryManager.getPrincipalManager().getAuthenticatedUserURI();
 			String contributor = contrib.toString();
 			IRI contributorURI = vf.createIRI(contributor);
@@ -1226,7 +1224,7 @@ public class EntryImpl implements Entry {
 			synchronized (this.repository) {
 				RepositoryConnection rc = this.repository.getConnection();
 				ValueFactory vf = this.repository.getValueFactory();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
 					rc.clear(entryURI);
 					rc.add(metametadata, entryURI);
@@ -1279,7 +1277,7 @@ public class EntryImpl implements Entry {
 			synchronized (this.repository) {
 				ValueFactory vf = this.repository.getValueFactory();
 				RepositoryConnection rc = this.repository.getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				Model minimalProvenanceGraph = null;
 				if (this.provenance != null) {
 					minimalProvenanceGraph = this.provenance.getMinimalGraph(rc);
@@ -1734,28 +1732,27 @@ public class EntryImpl implements Entry {
 		return true;
 	}
 	
-	public boolean replaceStatementSynchronized(IRI subject, IRI predicate, Value object) {
+	private boolean replaceStatementSynchronized(IRI subject, IRI predicate, Value object) {
 		try {
 			RepositoryConnection rc = this.repository.getConnection();
-			rc.setAutoCommit(false);
+			rc.begin();
 			try {
 				boolean result = this.replaceStatementSynchronized(subject, predicate, object, rc, this.repository.getValueFactory());
 				rc.commit();
+				getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
 				return result;
 			} catch (Exception e) {
 				rc.rollback();
-				e.printStackTrace();
 				throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}		
 	}
 	
-	public boolean replaceStatement(IRI subject, IRI predicate, Value object) {
+	private boolean replaceStatement(IRI subject, IRI predicate, Value object) {
 		synchronized (this.repository) {
 			return this.replaceStatementSynchronized(subject, predicate, object);
 		}
@@ -1784,7 +1781,6 @@ public class EntryImpl implements Entry {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
@@ -1816,7 +1812,6 @@ public class EntryImpl implements Entry {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
@@ -1853,7 +1848,7 @@ public class EntryImpl implements Entry {
 	public void setOriginalListSynchronized(String list) {
 		try {
 			RepositoryConnection rc = this.repository.getConnection();
-			rc.setAutoCommit(false);
+			rc.begin();
 			try {
 				rc.remove(this.entryURI, RepositoryProperties.originallyCreatedIn, null, this.entryURI);
 				if (list != null) {
@@ -1865,13 +1860,11 @@ public class EntryImpl implements Entry {
 				rc.commit();
 			} catch (Exception e) {
 				rc.rollback();
-				e.printStackTrace();
 				throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			e.printStackTrace();
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}		
 	}
@@ -1934,7 +1927,7 @@ public class EntryImpl implements Entry {
 	
 	@Override
 	public String toString() {
-		return new StringBuffer(entryURI.toString()).append(",").append(super.toString()).toString();
+		return entryURI.toString() + "," + super.toString();
 	}
 
 }

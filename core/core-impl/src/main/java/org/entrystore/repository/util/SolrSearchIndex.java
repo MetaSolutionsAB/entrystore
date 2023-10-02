@@ -225,6 +225,20 @@ public class SolrSearchIndex implements SearchIndex {
 
 	}
 
+	public static class FacetSettings {
+
+		public String fields;
+
+		public int minCount;
+
+		public int limit;
+
+		public String matches;
+
+		public boolean missing;
+
+	}
+
 	public class DelayedContextIndexer extends Thread {
 
 		@Override
@@ -522,7 +536,11 @@ public class SolrSearchIndex implements SearchIndex {
 					synchronized (postQueue) {
 						if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
 							log.info("Adding entry to Solr post queue: {}", entryURI);
-							postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+							try {
+								postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+							} catch (Exception e) {
+								log.error("Not indexing {} due to error: {}", entryURI, e.getMessage());
+							}
 						} else {
 							log.debug("Not adding deleted entry to post queue: {}", entryURI);
 						}
@@ -606,20 +624,24 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// ACL: admin, metadata r/w, resource r/w
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.Administer)) {
-			doc.addField("acl.admin", p.toString());
-		}
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata)) {
-			doc.addField("acl.metadata.r", p.toString());
-		}
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata)) {
-			doc.addField("acl.metadata.rw", p.toString());
-		}
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadResource)) {
-			doc.addField("acl.resource.r", p.toString());
-		}
-		for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteResource)) {
-			doc.addField("acl.resource.rw", p.toString());
+		try {
+			for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.Administer)) {
+				doc.addField("acl.admin", p.toString());
+			}
+			for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadMetadata)) {
+				doc.addField("acl.metadata.r", p.toString());
+			}
+			for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteMetadata)) {
+				doc.addField("acl.metadata.rw", p.toString());
+			}
+			for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.ReadResource)) {
+				doc.addField("acl.resource.r", p.toString());
+			}
+			for (URI p : entry.getAllowedPrincipalsFor(AccessProperty.WriteResource)) {
+				doc.addField("acl.resource.rw", p.toString());
+			}
+		} catch (IllegalArgumentException iae) {
+			log.warn("Unable to index ACL for entry {}: {}", entry.getEntryURI().toString(), iae.getMessage());
 		}
 
 		// status
@@ -734,6 +756,8 @@ public class SolrSearchIndex implements SearchIndex {
 			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
 			guestReadable = true;
 		} catch (AuthorizationException ignored) {
+		} catch (IllegalArgumentException iae) {
+			log.warn(iae.getMessage());
 		}
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		doc.setField("public", guestReadable);
@@ -897,7 +921,11 @@ public class SolrSearchIndex implements SearchIndex {
 				}
 				if (!entry.isDeleted() && !entry.getContext().isDeleted()) {
 					log.info("Adding document to Solr post queue: {}", entryURI);
-					postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+					try {
+						postQueue.put(entryURI, constructSolrInputDocument(entry, extractFulltext));
+					} catch (Exception e) {
+						log.error("Not indexing {} due to error: {}", entryURI, e.getMessage());
+					}
 				} else {
 					log.debug("Not adding deleted entry to post queue: {}", entryURI);
 				}

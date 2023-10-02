@@ -22,6 +22,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.util.SimpleHTML;
@@ -59,6 +60,8 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Map;
+
+import static org.entrystore.repository.config.Settings.AUTH_CAS_USER_AUTO_PROVISIONING;
 
 /**
  * @author Hannes Ebner
@@ -159,7 +162,8 @@ public class CasLoginResource extends BaseResource {
 				if ("admin".equalsIgnoreCase(userName)) {
 					userName = null;
 				}
-				boolean autoProvisioning = "on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.AUTH_CAS_USER_AUTO_PROVISIONING, "off"));
+				Config config = getRM().getConfiguration();
+				boolean autoProvisioning = "on".equalsIgnoreCase(config.getString(AUTH_CAS_USER_AUTO_PROVISIONING, "off"));
 
 				if (userName != null && !BasicVerifier.userExists(getPM(), userName)) {
 					if (!autoProvisioning) {
@@ -189,7 +193,8 @@ public class CasLoginResource extends BaseResource {
 				}
 
 				if (userName != null && BasicVerifier.userExists(getPM(), userName) && !BasicVerifier.isUserDisabled(getPM(), userName)) {
-					new CookieVerifier(getRM()).createAuthToken(userName, false, getResponse());
+					EntryStoreApplication app = (EntryStoreApplication) getApplication();
+					new CookieVerifier(app, getRM()).createAuthToken(userName, false, getRequest(), getResponse());
 
 					// TODO cache CAS ticket together with auth_token (probably
 					// necessary for logouts originating from CAS)

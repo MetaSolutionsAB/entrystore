@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.resources;
 
+import java.util.Arrays;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.util.SimpleHTML;
@@ -26,12 +28,10 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
-
 /**
  * This resource removes cookies and performs other actions necessary for
  * logging out.
- * 
+ *
  * @author Hannes Ebner
  */
 public class LogoutResource extends BaseResource {
@@ -44,10 +44,11 @@ public class LogoutResource extends BaseResource {
 		// one, but they may be stale cookies left from previous successful
 		// authentication attempts
 		String[] tokens = getRequest().getCookies().getValuesArray("auth_token");
+		LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
 		for (String t : tokens) {
-			LoginTokenCache.getInstance().removeToken(t);
+			loginTokenCache.removeToken(t);
 		}
-		
+
 		// remove all auth_token cookies
 		CookieVerifier.cleanCookies(getRM(), "auth_token", getRequest(), getResponse());
 

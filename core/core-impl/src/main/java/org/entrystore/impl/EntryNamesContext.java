@@ -28,6 +28,8 @@ import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -42,7 +44,7 @@ import java.util.Set;
  *
  */
 public class EntryNamesContext extends ContextImpl {
-	private static Log log = LogFactory.getLog(EntryNamesContext.class);
+	private static final Log log = LogFactory.getLog(EntryNamesContext.class);
 
 	HashMap<String, URI> names2EntryURI;
 	HashMap<URI, String> entryURI2Name;
@@ -125,7 +127,7 @@ public class EntryNamesContext extends ContextImpl {
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
 					ValueFactory vf = entry.repository.getValueFactory();
-					rc.setAutoCommit(false);
+					rc.begin();
 					IRI cURI = vf.createIRI(entryURI.toString());
 					if (entryURI2Name.containsKey(entryURI)) {
 						String oldName = entryURI2Name.get(entryURI);
@@ -134,18 +136,20 @@ public class EntryNamesContext extends ContextImpl {
 						Literal oldAliasLiteral = vf.createLiteral(oldName);
 						rc.remove(cURI, RepositoryProperties.alias, oldAliasLiteral, this.resourceURI);
 					}
-                    if (newName != null) {
-                        names2EntryURI.put(newName, entryURI);
-                        entryURI2Name.put(entryURI, newName);
-                        Literal nameLiteral = vf.createLiteral(newName);
-                        rc.add(cURI, RepositoryProperties.alias, nameLiteral, this.resourceURI);
-                        this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
-                    }
+					if (newName != null) {
+						names2EntryURI.put(newName, entryURI);
+						entryURI2Name.put(entryURI, newName);
+						Literal nameLiteral = vf.createLiteral(newName);
+						rc.add(cURI, RepositoryProperties.alias, nameLiteral, this.resourceURI);
+						this.entry.updateModifiedDateSynchronized(rc, vf);
+						((EntryImpl) forEntry).updateModifiedDateSynchronized(rc, vf);
+					}
 					rc.commit();
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(forEntry, RepositoryEvent.ResourceUpdated));
 					return true;
 				} catch (Exception e) {
 					rc.rollback();
-					e.printStackTrace();
 					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 				} finally {
 					log.info("Successfully set the name " + newName + " for entry with URI: " + entryURI);

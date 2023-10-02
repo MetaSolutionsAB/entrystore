@@ -1,5 +1,57 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 5.2.0 (2023-09-xx)
+
+### Improvement
+
+[ENTRYSTORE-523](https://metasolutions.atlassian.net/browse/ENTRYSTORE-523) Optimize indexing of entries that are modified multiple times during a short period of time
+
+[ENTRYSTORE-755](https://metasolutions.atlassian.net/browse/ENTRYSTORE-755) Add Digest header when accessing resources with checksum
+
+[ENTRYSTORE-756](https://metasolutions.atlassian.net/browse/ENTRYSTORE-756) Add requirement of providing existing password upon password change
+
+[ENTRYSTORE-763](https://metasolutions.atlassian.net/browse/ENTRYSTORE-763) Recursive metadata fetching can expose partially private information
+
+[ENTRYSTORE-771](https://metasolutions.atlassian.net/browse/ENTRYSTORE-771) Add support for advanced facet settings in Solr searches
+
+[ENTRYSTORE-776](https://metasolutions.atlassian.net/browse/ENTRYSTORE-776) Improve robustness of validator
+
+[ENTRYSTORE-778](https://metasolutions.atlassian.net/browse/ENTRYSTORE-778) Allow graphs in entry and resource responses to be serialized in JSON-LD
+
+[ENTRYSTORE-779](https://metasolutions.atlassian.net/browse/ENTRYSTORE-779) Make sure Repository Events are fired for all changes to entries
+
+[ENTRYSTORE-780](https://metasolutions.atlassian.net/browse/ENTRYSTORE-780) Set creator for entries with an ID that starts with underscore
+
+[ENTRYSTORE-782](https://metasolutions.atlassian.net/browse/ENTRYSTORE-782) Do not update modification date of context entry upon creation of new entry
+
+### Test
+
+[ENTRYSTORE-765](https://metasolutions.atlassian.net/browse/ENTRYSTORE-765) Test new settings for SAML and CAS
+
+### New Feature
+
+[ENTRYSTORE-390](https://metasolutions.atlassian.net/browse/ENTRYSTORE-390) Keep more details for every authentication token/session
+
+[ENTRYSTORE-516](https://metasolutions.atlassian.net/browse/ENTRYSTORE-516) Introduce a generic message resource for sending notifications/emails
+
+[ENTRYSTORE-693](https://metasolutions.atlassian.net/browse/ENTRYSTORE-693) Develop a special JSON-LD context for the entry-information graph
+
+[ENTRYSTORE-744](https://metasolutions.atlassian.net/browse/ENTRYSTORE-744) Allow configuration of max age for auth tokens originating from SSO logins
+
+[ENTRYSTORE-773](https://metasolutions.atlassian.net/browse/ENTRYSTORE-773) Set entryId for context and group in the combined create step
+
+### Bug
+
+[ENTRYSTORE-770](https://metasolutions.atlassian.net/browse/ENTRYSTORE-770) Overriding admin password does not work anymore
+
+[ENTRYSTORE-772](https://metasolutions.atlassian.net/browse/ENTRYSTORE-772) Indexing process breaks if ACL contains invalid data
+
+[ENTRYSTORE-774](https://metasolutions.atlassian.net/browse/ENTRYSTORE-774) Error when URI is used for dcterms:format in metadata
+
+[ENTRYSTORE-775](https://metasolutions.atlassian.net/browse/ENTRYSTORE-775) Modified date is not updated on username change
+
+[ENTRYSTORE-781](https://metasolutions.atlassian.net/browse/ENTRYSTORE-781) Reindex context entry when modification date is updated
+
 ## Version 5.1.0 (2023-05-03)
 
 ### Improvement

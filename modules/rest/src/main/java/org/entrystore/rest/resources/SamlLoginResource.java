@@ -27,6 +27,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.util.HttpUtil;
@@ -217,7 +218,8 @@ public class SamlLoginResource extends BaseResource {
 			}
 
 			if (userName != null && BasicVerifier.userExists(getPM(), userName) && !BasicVerifier.isUserDisabled(getPM(), userName)) {
-				new CookieVerifier(getRM()).createAuthToken(userName, false, getResponse());
+				EntryStoreApplication app = (EntryStoreApplication) getApplication();
+				new CookieVerifier(app, getRM()).createAuthToken(userName, false, getRequest(), getResponse());
 
 				// TODO cache SAML ticket together with auth_token (probably necessary for logouts originating from SAML)
 
@@ -270,7 +272,7 @@ public class SamlLoginResource extends BaseResource {
 
 		for (String key : values.keySet()) {
 			String encodedKey = StringEscapeUtils.escapeHtml(key);
-			String encodedValue = StringEscapeUtils.escapeHtml((String) values.get(key));
+			String encodedValue = StringEscapeUtils.escapeHtml(values.get(key));
 			sb.append("<input type='hidden' id='").append(encodedKey).
 					append("' name='").append(encodedKey).
 					append("' value='").append(encodedValue).

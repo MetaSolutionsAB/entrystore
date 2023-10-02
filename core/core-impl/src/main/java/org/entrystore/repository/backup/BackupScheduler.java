@@ -142,7 +142,7 @@ public class BackupScheduler {
 			int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
 			RDFFormat format = getFormat(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
 			if (format == null) {
-				log.warn("Invalid backup format " + config.getString(Settings.BACKUP_FORMAT + ", falling back to TriX"));
+				log.warn("Invalid backup format {}, falling back to TriX", config.getString(Settings.BACKUP_FORMAT));
 				format = RDFFormat.TRIX;
 			}
 

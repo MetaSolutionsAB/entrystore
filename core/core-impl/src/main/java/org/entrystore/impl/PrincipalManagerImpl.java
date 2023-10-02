@@ -16,6 +16,12 @@
 
 package org.entrystore.impl;
 
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -33,16 +39,9 @@ import org.entrystore.repository.util.URISplit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-
 
 /**
- * Creates a 
+ * Creates a
  * @author Olov Wikberg, IML Umeå University
  * @author matthias
  * @author Hannes Ebner
@@ -59,17 +58,17 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	private EntryImpl allPrincipals;
 
 	private static final String ENV_ADMIN_PASSWORD = "ENTRYSTORE_ADMIN_PASSWORD";
-	
+
 	/**
 	 * Creates a principal manager
 	 * @param entry this principal managers entry
-	 * @param uri this principal managers URI 
+	 * @param uri this principal managers URI
 	 * @param cache
 	 */
 	public PrincipalManagerImpl(EntryImpl entry, String uri, SoftCache cache) {
 		super(entry, uri, cache);
 	}
-	
+
 
 	public String getPrincipalName(URI principal) {
 		Entry principalEntry = null;
@@ -173,7 +172,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		//sort out the users
 		while(entryIterator.hasNext()) {
 			URI nextURI = entryIterator.next();
-			
+
 			Entry nextEntry = getByEntryURI(nextURI);
 			if(nextEntry.getGraphType() == GraphType.User) {
 				userUris.add((User) nextEntry.getResource());
@@ -183,7 +182,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		return userUris;
 	}
 
-	
+
 	/**
 	 * Returns a User object representing a user.
 	 * @param userUri The URI to the user.
@@ -211,7 +210,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		}
 		return null;
 	}
-	
+
 	public Set <URI> getGroupUris() {
 		Iterator <URI> entryIterator = getEntries().iterator();
 		Set <URI> groupUris = new HashSet<>();
@@ -237,7 +236,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		if (user != null) {
 			while(entryIterator.hasNext()) {
 				URI nextURI = entryIterator.next();
-				Entry nextEntry = getByEntryURI(nextURI); 
+				Entry nextEntry = getByEntryURI(nextURI);
 				if(GraphType.Group.equals(nextEntry.getGraphType())) {
 					Group nextGroup = (Group) nextEntry.getResource();
 					if(nextGroup != null) {
@@ -259,7 +258,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		//sort out the groups
 		while(entryIterator.hasNext()) {
 			URI nextURI = entryIterator.next();
-			Entry e = getByEntryURI(nextURI); 
+			Entry e = getByEntryURI(nextURI);
 			if(e.getGraphType() == GraphType.Group) {
 				groupUris.add(nextURI);
 			}
@@ -278,6 +277,18 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 
 	public URI getAuthenticatedUserURI() {
 		return authenticatedUserURI.get();
+	}
+
+	@Override
+	public boolean currentUserIsGuest() {
+		URI currentUserUri = authenticatedUserURI.get();
+		return currentUserUri == null || getGuestUser().getURI().equals(currentUserUri);
+	}
+
+	@Override
+	public boolean currentUserIsAdminOrAdminGroup() {
+		URI currentUserUri = authenticatedUserURI.get();
+		return isUserAdminOrAdminGroup(currentUserUri);
 	}
 
 	/**
@@ -313,9 +324,9 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		//Switch to admin so that the PrincipalManager can perform all
 		//neccessary checks without being hindered by itself (results in loops).
 		setAuthenticatedUserURI(getAdminUser().getURI());
-		
+
 		try {
-			
+
 			//Fetch the current user from thread local.
 			User currentUser = getUser(currentUserURI);
 
@@ -355,14 +366,14 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 					}
 				}
 			}
-			
+
 			throw new AuthorizationException(currentUser, entry, accessProperty);
 		} finally {
 			//Switch back to the current user.
 			setAuthenticatedUserURI(currentUserURI);
 		}
 	}
-	
+
 	protected boolean hasAccess(User currentUser, Entry entry, AccessProperty prop) {
 		Set<URI> principals = entry.getAllowedPrincipalsFor(prop);
 		if (!principals.isEmpty()) {
@@ -389,7 +400,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 				return true;
 			}
 		}
-			
+
 		if (prop != AccessProperty.Administer) {
 			principals = entry.getAllowedPrincipalsFor(AccessProperty.Administer);
 			if (!principals.isEmpty()) {
@@ -402,9 +413,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 				//Check if any of the groups the user belongs to is in principals
 				Set<URI> groups = getGroupUris(currentUser.getURI());
 				groups.retainAll(principals);
-				if (!groups.isEmpty()) {
-					return true;
-				}
+				return !groups.isEmpty();
 			}
 		}
 		return false;
@@ -436,9 +445,9 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		//Switch to admin so that the PrincipalManager can perform all
 		//neccessary checks without being hindered by itself (results in loops).
 		setAuthenticatedUserURI(getAdminUser().getURI());
-		
+
 		try {
-			
+
 			//Fetch the current user from thread local.
 			User currentUser = getUser(currentUserURI);
 
@@ -457,12 +466,12 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 				if(entry.hasAllowedPrincipals()) {
 					if (hasAccess(currentUser, entry, AccessProperty.Administer)) {
 						set.add(AccessProperty.Administer);
-						return set;						
+						return set;
 					} else {
 						if (hasAccess(currentUser, entry, AccessProperty.WriteMetadata)) {
 							set.add(AccessProperty.WriteMetadata);
 						} else if (hasAccess(currentUser, entry, AccessProperty.ReadMetadata)) {
-							set.add(AccessProperty.ReadMetadata);							
+							set.add(AccessProperty.ReadMetadata);
 						}
 						if (hasAccess(currentUser, entry, AccessProperty.WriteResource)) {
 							set.add(AccessProperty.WriteResource);
@@ -486,7 +495,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		return set;
 	}
 
-	
+
 	/**
 	 * Checks if a secret is valid.
 	 * @param secret Secret to be checked.
@@ -547,9 +556,9 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			guestUserEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, guestUser.getURI());
 			log.info("Successfully added the guest user");
 		}
-		addSystemEntryToSystemEntries(guestUserEntry.getEntryURI());				
+		addSystemEntryToSystemEntries(guestUserEntry.getEntryURI());
 
-		
+
 		adminUserEntry = get("_admin");
 		if (adminUserEntry != null) {
 			adminUser = (User) adminUserEntry.getResource();
@@ -615,11 +624,11 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
                 return getUsersAsUris();
 			}
 		});
-		
+
 		userGroup = (Group) userGroupEntry.getResource();
 		addSystemEntryToSystemEntries(userGroupEntry.getEntryURI());
 	}
-	
+
 	/**
 	 * @param externalID
 	 *            An E-Mail address

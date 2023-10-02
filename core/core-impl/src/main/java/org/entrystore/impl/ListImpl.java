@@ -141,7 +141,7 @@ public class ListImpl extends RDFResource implements List {
 		try {
 			RepositoryConnection rc = entry.repository.getConnection();
 			try {
-				rc.setAutoCommit(false);
+				rc.begin();
 				saveChildren(rc);
 				rc.commit();
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
@@ -160,7 +160,7 @@ public class ListImpl extends RDFResource implements List {
 		ValueFactory vf = entry.repository.getValueFactory();
 		children.trimToSize();
 		rc.clear(this.resourceURI);
-		if (children.size() > 0) {
+		if (!children.isEmpty()) {
 			rc.add(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
 			for (int i = 0; i < children.size(); i++) {
 				IRI li = vf.createIRI(RDF.NAMESPACE+"_" + Integer.toString(i + 1));
@@ -207,12 +207,12 @@ public class ListImpl extends RDFResource implements List {
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
 					ValueFactory vf = entry.repository.getValueFactory();
-					rc.setAutoCommit(false);
+					rc.begin();
 
 					if (isOwnerOfContext) {
 						childEntry.setOriginalListSynchronized(null, rc, vf);
 					}
-					if (children.size() == 0) {
+					if (children.isEmpty()) {
 						rc.add(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
 					}
 					
@@ -504,7 +504,7 @@ public class ListImpl extends RDFResource implements List {
 				RepositoryConnection rc = entry.repository.getConnection();
 				Vector<URI> oldChildrenList = children;
 				try {
-					rc.setAutoCommit(false);
+					rc.begin();
 					children = new Vector<URI>(newChildren);
 					saveChildren(rc);
 					for (URI uri : toAdd) {
@@ -621,7 +621,7 @@ public class ListImpl extends RDFResource implements List {
 					RepositoryConnection rc = entry.repository.getConnection();
 					ValueFactory vf = entry.repository.getValueFactory();
 					try {
-						rc.setAutoCommit(false);
+						rc.begin();
 						if (checkOrphaned && isOwnerOfContext) {
 							childEntry.setOriginalListSynchronized(null, rc, vf); //remains to do the same for list case.
 						}

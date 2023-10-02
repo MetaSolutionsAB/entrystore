@@ -16,10 +16,14 @@
 
 package org.entrystore.rest.resources;
 
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
+import java.util.Locale;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.UserInfo;
 import org.json.JSONException;
@@ -36,14 +40,10 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.math.RoundingMode;
-import java.text.DecimalFormat;
-import java.util.Locale;
-
 
 /**
  * This resource provides basic information about the currently logged in user.
- * 
+ *
  * @author Hannes Ebner
  */
 public class UserResource extends BaseResource {
@@ -101,7 +101,8 @@ public class UserResource extends BaseResource {
 			Cookie authTokenCookie = getRequest().getCookies().getFirst("auth_token");
 			if (authTokenCookie != null) {
 				String authToken = authTokenCookie.getValue();
-				UserInfo ui = LoginTokenCache.getInstance().getTokenValue(authToken);
+				LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
+				UserInfo ui = loginTokenCache.getTokenValue(authToken);
 				if (ui != null && ui.getLoginExpiration() != null) {
 					result.put("authTokenExpires", ui.getLoginExpiration());
 				}

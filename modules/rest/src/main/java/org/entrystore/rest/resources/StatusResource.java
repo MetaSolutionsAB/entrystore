@@ -16,6 +16,11 @@
 
 package org.entrystore.rest.resources;
 
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
@@ -38,12 +43,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.management.GarbageCollectorMXBean;
-import java.lang.management.ManagementFactory;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.List;
-
 
 /**
  * @author Hannes Ebner
@@ -51,7 +50,7 @@ import java.util.List;
 public class StatusResource extends BaseResource  {
 
 	static Logger log = LoggerFactory.getLogger(StatusResource.class);
-	
+
 	Config config;
 
 	List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
@@ -63,7 +62,7 @@ public class StatusResource extends BaseResource  {
 
 		config = getRM().getConfiguration();
 	}
-	
+
 	@Get
 	public Representation represent() throws ResourceException {
 		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
@@ -120,7 +119,8 @@ public class StatusResource extends BaseResource  {
 					auth.put("signupWhitelist", signupWhitelist);
 					auth.put("passwordReset", config.getBoolean(Settings.PASSWORD_RESET, false));
 					auth.put("passwordMaxLength", Password.PASSWORD_MAX_LENGTH);
-					auth.put("authTokenCount", LoginTokenCache.getInstance().size());
+					LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
+					auth.put("authTokenCount", loginTokenCache.size());
 					result.put("auth", auth);
 
 					// Backup

@@ -1,24 +1,5 @@
 package org.entrystore.rest.serializer;
 
-import static org.entrystore.EntryType.Link;
-import static org.entrystore.EntryType.LinkReference;
-import static org.entrystore.EntryType.Local;
-import static org.entrystore.EntryType.Reference;
-import static org.entrystore.GraphType.SystemContext;
-import static org.entrystore.PrincipalManager.AccessProperty.Administer;
-import static org.entrystore.PrincipalManager.AccessProperty.ReadMetadata;
-import static org.entrystore.PrincipalManager.AccessProperty.ReadResource;
-import static org.entrystore.PrincipalManager.AccessProperty.WriteMetadata;
-import static org.entrystore.PrincipalManager.AccessProperty.WriteResource;
-
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
@@ -39,12 +20,26 @@ import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.auth.UserTempLockoutCache;
 import org.entrystore.rest.auth.UserTempLockoutCache.UserTemporaryLockout;
-import org.entrystore.rest.util.RDFJSON;
+import org.entrystore.rest.util.GraphUtil;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.restlet.data.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.entrystore.EntryType.*;
+import static org.entrystore.GraphType.SystemContext;
+import static org.entrystore.PrincipalManager.AccessProperty.*;
 
 public class ResourceJsonSerializer {
 
@@ -61,7 +56,7 @@ public class ResourceJsonSerializer {
 		this.userTempLockoutCache = userTempLockoutCache;
 	}
 
-	public JSONObject serializeResourceGroup(Resource resource) {
+	public JSONObject serializeResourceGroup(Resource resource, MediaType rdfFormat) {
 		JSONObject resourceObj = new JSONObject();
 		if (resource instanceof Group group) {
 			try {
@@ -79,13 +74,13 @@ public class ResourceJsonSerializer {
 						log.debug("Not allowed to read disabled status of [{}]", u.getEntry().getEntryURI());
 					}
 
-					JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getGraph()));
+					JSONObject childInfo = GraphUtil.serializeGraphToJson(u.getEntry().getGraph(), rdfFormat);
 					childJSON.accumulate("info", childInfo);
 
 					JSONArray rights = this.serializeRights(u.getEntry());
 					childJSON.put("rights", rights);
 					try {
-						JSONObject childMd = new JSONObject(RDFJSON.graphToRdfJson(u.getEntry().getLocalMetadata().getGraph()));
+						JSONObject childMd = GraphUtil.serializeGraphToJson(u.getEntry().getLocalMetadata().getGraph(), rdfFormat);
 						childJSON.accumulate(RepositoryProperties.MD_PATH, childMd);
 					} catch (AuthorizationException ae) {
 						//childJSON.accumulate("noAccessToMetadata", true);
@@ -95,7 +90,7 @@ public class ResourceJsonSerializer {
 					//Relations for every user in this group.
 					if (u.getEntry().getRelations() != null) {
 						Model childRelationsGraph = new LinkedHashModel(u.getEntry().getRelations());
-						JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
+						JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
 						childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 					}
 					userArray.put(childJSON);
@@ -151,7 +146,7 @@ public class ResourceJsonSerializer {
 		return resourceObj;
 	}
 
-	public JSONObject serializeResourceList(Resource resource, ResourceJsonSerializer.ListParams params) {
+	public JSONObject serializeResourceList(Resource resource, ResourceJsonSerializer.ListParams params, MediaType rdfFormat) {
 		JSONObject resourceObj = new JSONObject();
 		if (resource instanceof org.entrystore.List list) {
 			int limit = Math.min(params.limit(), 100);
@@ -246,7 +241,7 @@ public class ResourceJsonSerializer {
 							if (cachedExternalMetaData != null) {
 								Model cachedExternalMetaDataGraph = cachedExternalMetaData.getGraph();
 								if (cachedExternalMetaDataGraph != null) {
-									JSONObject childCachedExternalMetaDataJSON = new JSONObject(RDFJSON.graphToRdfJson(cachedExternalMetaDataGraph));
+									JSONObject childCachedExternalMetaDataJSON = GraphUtil.serializeGraphToJson(cachedExternalMetaDataGraph, rdfFormat);
 									childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMetaDataJSON);
 								}
 							}
@@ -257,7 +252,7 @@ public class ResourceJsonSerializer {
 							if (localMetadata != null) {
 								Model localMetadataGraph = localMetadata.getGraph();
 								if (localMetadataGraph != null) {
-									JSONObject localMDJSON = new JSONObject(RDFJSON.graphToRdfJson(localMetadataGraph));
+									JSONObject localMDJSON = GraphUtil.serializeGraphToJson(localMetadataGraph, rdfFormat);
 									childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
 								}
 							}
@@ -269,12 +264,12 @@ public class ResourceJsonSerializer {
 					}
 
 					Model childEntryGraph = childEntry.getGraph();
-					JSONObject childInfo = new JSONObject(RDFJSON.graphToRdfJson(childEntryGraph));
+					JSONObject childInfo = GraphUtil.serializeGraphToJson(childEntryGraph, rdfFormat);
 					childJSON.accumulate("info", childInfo);
 
 					if (childEntry.getRelations() != null) {
 						Model childRelationsGraph = new LinkedHashModel(childEntry.getRelations());
-						JSONObject childRelationObj = new JSONObject(RDFJSON.graphToRdfJson(childRelationsGraph));
+						JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
 						childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 					}
 
@@ -302,10 +297,10 @@ public class ResourceJsonSerializer {
 		return resourceObj;
 	}
 
-	public JSONObject serializeResourceGraph(Resource resource) {
+	public JSONObject serializeResourceGraph(Resource resource, MediaType rdfFormat) {
 		if (resource instanceof RDFResource rdf) {
 			if (rdf.getGraph() != null) {
-				return new JSONObject(RDFJSON.graphToRdfJson(rdf.getGraph()));
+				return GraphUtil.serializeGraphToJson(rdf.getGraph(), rdfFormat);
 			} else {
 				throw new IllegalArgumentException("Graph is empty in RDFResource");
 			}
@@ -314,8 +309,8 @@ public class ResourceJsonSerializer {
 		}
 	}
 
-	public JSONObject serializeResourcePipeline(Resource resource) {
-		return serializeResourceGraph(resource);
+	public JSONObject serializeResourcePipeline(Resource resource, MediaType rdfFormat) {
+		return serializeResourceGraph(resource, rdfFormat);
 	}
 
 	public String serializeResourceString(Resource resource) {

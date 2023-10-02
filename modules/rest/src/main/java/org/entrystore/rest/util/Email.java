@@ -60,15 +60,23 @@ public class Email {
 	private static String messageBodyPasswordChanged;
 
 	public static boolean sendMessage(Config config, String msgTo, String msgSubject, String msgBody) {
-		String msgFrom = config.getString(Settings.SMTP_EMAIL_FROM);
-		if (msgFrom == null) {
-			msgFrom = config.getString(Settings.AUTH_FROM_EMAIL_DEPRECATED); // fallback to deprecated setting
+		return sendMessage(config, msgTo, msgSubject, msgBody, null, null);
+	}
+
+	public static boolean sendMessage(Config config, String msgTo, String msgSubject, String msgBody, String msgFrom, String msgReplyTo) {
+		if (msgFrom == null || msgFrom.isEmpty()) {
+			msgFrom = config.getString(Settings.SMTP_EMAIL_FROM);
+			if (msgFrom == null) {
+				msgFrom = config.getString(Settings.AUTH_FROM_EMAIL_DEPRECATED); // fallback to deprecated setting
+			}
 		}
 		String msgBcc = config.getString(Settings.SMTP_EMAIL_BCC);
 		if (msgBcc == null) {
 			msgBcc = config.getString(Settings.AUTH_BCC_EMAIL_DEPRECATED); // fallback to deprecated setting
 		}
-		String msgReplyTo = config.getString(Settings.SMTP_EMAIL_REPLYTO);
+		if (msgReplyTo == null || msgReplyTo.isEmpty()) {
+			msgReplyTo = config.getString(Settings.SMTP_EMAIL_REPLYTO);
+		}
 		String host = config.getString(Settings.SMTP_HOST);
 		int port = config.getInt(Settings.SMTP_PORT, 25);
 		boolean ssl = "ssl".equalsIgnoreCase(config.getString(Settings.SMTP_SECURITY));

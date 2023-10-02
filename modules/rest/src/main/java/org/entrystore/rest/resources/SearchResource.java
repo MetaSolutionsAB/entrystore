@@ -16,12 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static java.lang.String.format;
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
-import static org.restlet.data.Status.SERVER_ERROR_INTERNAL;
-import static org.restlet.data.Status.SERVER_ERROR_SERVICE_UNAVAILABLE;
-
 import com.rometools.rome.feed.synd.SyndContent;
 import com.rometools.rome.feed.synd.SyndContentImpl;
 import com.rometools.rome.feed.synd.SyndEntry;
@@ -30,16 +24,6 @@ import com.rometools.rome.feed.synd.SyndFeed;
 import com.rometools.rome.feed.synd.SyndFeedImpl;
 import com.rometools.rome.io.FeedException;
 import com.rometools.rome.io.SyndFeedOutput;
-import java.net.URI;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.response.FacetField;
@@ -76,6 +60,21 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+
+import static java.lang.String.format;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.restlet.data.Status.*;
+
 
 /**
  * Handles searches
@@ -88,12 +87,19 @@ public class SearchResource extends BaseResource {
 
 	static int DEFAULT_LIMIT = 50;
 
+	static int DEFAULT_FACET_LIMIT = 100;
+
 	static int MAX_LIMIT = -1;
+
+	static int MAX_FACET_LIMIT = -1;
 
 	@Override
 	public void doInit() {
 		if (MAX_LIMIT == -1) {
 			MAX_LIMIT = getRM().getConfiguration().getInt(Settings.SOLR_MAX_LIMIT, 100);
+		}
+		if (MAX_FACET_LIMIT == -1) {
+			MAX_FACET_LIMIT = getRM().getConfiguration().getInt(Settings.SOLR_FACET_MAX_LIMIT, 1000);
 		}
 	}
 
@@ -153,9 +159,6 @@ public class SearchResource extends BaseResource {
 				limit = DEFAULT_LIMIT;
 			}
 
-			// Query parameter: facetFields
-			String facetFields = decodeOptionalParameter("facetFields", null);
-
 			// Query parameter: filterQuery
 			List<String> filterQueries = new ArrayList<>();
 			{
@@ -169,15 +172,32 @@ public class SearchResource extends BaseResource {
 				}
 			}
 
+			SolrSearchIndex.FacetSettings facetSettings = new SolrSearchIndex.FacetSettings();
+
+			// Query parameter: facetFields
+			facetSettings.fields = decodeOptionalParameter("facetFields", null);
+
 			// Query parameter: facetMinCount
-			int facetMinCount = decodeOptionalParameterInteger("facetMinCount", 1);
+			facetSettings.minCount = decodeOptionalParameterInteger("facetMinCount", 1);
+
+			// Query parameter: facetLimit
+			facetSettings.limit = Math.min(decodeOptionalParameterInteger("facetLimit", DEFAULT_FACET_LIMIT), MAX_FACET_LIMIT);
+			if (facetSettings.limit < 1) {
+				facetSettings.limit = DEFAULT_FACET_LIMIT;
+			}
+
+			// Query parameter: facetMatches
+			facetSettings.matches = decodeOptionalParameter("facetMatches", null);
+
+			// Query parameter: missing
+			facetSettings.missing = decodeOptionalParameterBoolean("facetMissing", false);
 
 			// Logic
 			QueryResults queryResults = new QueryResults(List.of(), -1, List.of());
 			if ("sparql".equalsIgnoreCase(type)) {
 				queryResults = searchSparql(queryValue);
 			} else if ("solr".equalsIgnoreCase(type)) {
-				queryResults = searchSolr(queryValue, sorting, offset, limit, facetFields, filterQueries, facetMinCount);
+				queryResults = searchSolr(queryValue, sorting, offset, limit, filterQueries, facetSettings);
 			}
 
 			if (syndication != null) {
@@ -192,9 +212,8 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
-	public StringRepresentation generateSyndication(List<Entry> entries, String type, String language, int limit) throws JsonErrorException {
+	public Representation generateSyndication(List<Entry> entries, String type, String language, int limit) {
 		try {
-
 			SyndFeed feed = new SyndFeedImpl();
 			feed.setFeedType(type);
 
@@ -270,7 +289,7 @@ public class SearchResource extends BaseResource {
 			return rep;
 		} catch (IllegalArgumentException e) {
 			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-			throw new JsonErrorException(new JsonRepresentation("{\"error\":\"" + e.getMessage() + "\"}"));
+			return new JsonRepresentation(new JSONObject().put("error", e.getMessage()));
 		}
 	}
 
@@ -305,7 +324,7 @@ public class SearchResource extends BaseResource {
 					}
 					PrincipalManager PM = this.getPM();
 					Set<AccessProperty> rights = PM.getRights(e);
-					if (rights.size() > 0) {
+					if (!rights.isEmpty()) {
 						for (AccessProperty ap : rights) {
 							if (ap == AccessProperty.Administer) {
 								childJSON.append("rights", "administer");
@@ -329,7 +348,7 @@ public class SearchResource extends BaseResource {
 							if (cachedExternalMD != null) {
 								Model cachedExternalMDGraph = cachedExternalMD.getGraph();
 								if (cachedExternalMDGraph != null) {
-									JSONObject childCachedExternalMDJSON = serializeGraph(cachedExternalMDGraph, rdfFormat);
+									JSONObject childCachedExternalMDJSON = GraphUtil.serializeGraphToJson(cachedExternalMDGraph, rdfFormat);
 									childJSON.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, childCachedExternalMDJSON);
 								}
 							}
@@ -341,7 +360,7 @@ public class SearchResource extends BaseResource {
 							if (localMD != null) {
 								Model localMDGraph = localMD.getGraph();
 								if (localMDGraph != null) {
-									JSONObject localMDJSON = serializeGraph(localMDGraph, rdfFormat);
+									JSONObject localMDJSON = GraphUtil.serializeGraphToJson(localMDGraph, rdfFormat);
 									childJSON.accumulate(RepositoryProperties.MD_PATH, localMDJSON);
 								}
 							}
@@ -351,7 +370,7 @@ public class SearchResource extends BaseResource {
 					}
 
 					try {
-						JSONObject childInfo = serializeGraph(e.getGraph(), rdfFormat);
+						JSONObject childInfo = GraphUtil.serializeGraphToJson(e.getGraph(), rdfFormat);
 						childJSON.accumulate("info", Objects.requireNonNullElseGet(childInfo, JSONObject::new));
 					} catch (AuthorizationException ae) {
 						childJSON.accumulate("noAccessToEntryInfo", true);
@@ -360,7 +379,7 @@ public class SearchResource extends BaseResource {
 					try {
 						if (e.getRelations() != null) {
 							Model childRelationsGraph = new LinkedHashModel(e.getRelations());
-							JSONObject childRelationObj = serializeGraph(childRelationsGraph, rdfFormat);
+							JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
 							childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 						}
 					} catch (AuthorizationException ae) {
@@ -416,9 +435,8 @@ public class SearchResource extends BaseResource {
 			String sorting,
 			int offset,
 			int limit,
-			String facetFields,
 			List<String> filterQueries,
-			int facetMinCount) throws JsonErrorException {
+			SolrSearchIndex.FacetSettings facetSettings) throws JsonErrorException {
 
 		try {
 
@@ -457,10 +475,15 @@ public class SearchResource extends BaseResource {
 				q.addSort("modified", ORDER.desc);
 			}
 
-			if (facetFields != null) {
+			if (facetSettings.fields != null) {
 				q.setFacet(true);
-				q.setFacetMinCount(facetMinCount);
-				for (String ff : facetFields.split(",")) {
+				q.setFacetMinCount(facetSettings.minCount);
+				q.setFacetLimit(facetSettings.limit);
+				q.setFacetMissing(facetSettings.missing);
+				if (facetSettings.matches != null) {
+					q.setParam("facet.matches", facetSettings.matches);
+				}
+				for (String ff : facetSettings.fields.split(",")) {
 					q.addFacetField(ff.replace("metadata.predicate.literal.", "metadata.predicate.literal_s."));
 				}
 			}
@@ -521,14 +544,17 @@ public class SearchResource extends BaseResource {
 	}
 
 	private Integer decodeOptionalParameterInteger(String parameter, int defaultValue) {
-		String value = decodeOptionalParameter(parameter, Integer.valueOf(defaultValue).toString());
 		try {
-			return Integer.valueOf(value);
+			return Integer.valueOf(decodeOptionalParameter(parameter, Integer.valueOf(defaultValue).toString()));
 		} catch (NumberFormatException e) {
 			log.info(e.getMessage());
 			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 			return defaultValue;
 		}
+	}
+
+	private Boolean decodeOptionalParameterBoolean(String parameter, boolean defaultValue) {
+		return Boolean.valueOf(decodeOptionalParameter(parameter, Boolean.valueOf(defaultValue).toString()));
 	}
 
 	static class JsonErrorException extends Throwable {
@@ -556,18 +582,6 @@ public class SearchResource extends BaseResource {
 		public QueryResults(List<Entry> entries, long results) {
 			this(entries, results, List.of());
 		}
-	}
-
-	private JSONObject serializeGraph(Model graph, MediaType rdfFormat) {
-		if (MediaType.APPLICATION_JSON.equals(rdfFormat)) {
-			// We don't use GraphUtil.serializeGraph() because we need a JSONObject here and
-			// converting back and forth between String and JSONObject would be very efficient
-			return RDFJSON.graphToRdfJsonObject(graph);
-		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(rdfFormat.getName())) {
-			return new JSONObject(GraphUtil.serializeGraph(graph, rdfFormat));
-		}
-		log.warn("Model could not be serialized, returning empty JSON object");
-		return new JSONObject();
 	}
 
 }

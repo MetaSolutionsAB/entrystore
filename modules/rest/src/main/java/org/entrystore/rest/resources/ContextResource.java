@@ -37,9 +37,6 @@ import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
-import org.entrystore.rest.auth.CookieVerifier;
-import org.entrystore.rest.auth.LoginTokenCache;
-import org.entrystore.rest.util.Email;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
@@ -57,26 +54,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 
 /**
- * This Resource contains information of all contexts. 
- * 
+ * This Resource contains information of all contexts.
+ *
  * @author Hannes Ebner
  * @see BaseResource
  */
 public class ContextResource extends BaseResource {
 
-	static Logger log = LoggerFactory.getLogger(ContextResource.class); 
-	
+	static Logger log = LoggerFactory.getLogger(ContextResource.class);
+
 	private String requestText = null;
 
 	@Override
@@ -90,19 +87,19 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * GET
-	 * 
+	 *
 	 * List entries in a portfolio.
 	 *
-	 * This URL can be requested from a Web browser etc. This method will 
+	 * This URL can be requested from a Web browser etc. This method will
 	 * execute a requests and deliver a response.
 	 * <ul>
 	 * <li>GET {base-uri}/{context-id}</li>
 	 * </ul>
-	 * 
+	 *
 	 * return {@link Representation}
 	 */
 	@Get
-	public Representation represent() throws ResourceException {	
+	public Representation represent() throws ResourceException {
 		if (context == null) {
 			log.debug("The given context id does not exist.");
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
@@ -145,10 +142,10 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * POST
-	 * 
-	 * Creates new entries. 
-	 * 
-	 * These URL:s can be requested from a Web browser etc. This method will 
+	 *
+	 * Creates new entries.
+	 *
+	 * These URL:s can be requested from a Web browser etc. This method will
 	 * execute these requests and deliver a response.
 	 * <ul>
 	 * <li>POST {base-uri}/{portfolio-id}?entryType=local&resourcetype={resourcetype}[&listURI={uri}]</li>
@@ -187,7 +184,7 @@ public class ContextResource extends BaseResource {
 					return;
 				}
 			}
-			
+
 			Entry entry = null; // A variable to store the new entry in.
 
 			try {
@@ -217,11 +214,11 @@ public class ContextResource extends BaseResource {
 				getResponse().setEntity(new JsonRepresentation(new JSONObject().put("error", iae.getMessage())));
 				return;
 			}
-			
+
 			if (entry != null) {
 				ResourceType rt = getResourceType(parameters.get("informationresource"));
 				entry.setResourceType(rt);
-				
+
 				String template = parameters.get("template");
 				if (template != null) {
 					URI templateEntryURI = null;
@@ -241,14 +238,14 @@ public class ContextResource extends BaseResource {
 							ValueFactory vf = getRM().getValueFactory();
 							IRI oldResURI = vf.createIRI(templateEntry.getResourceURI().toString());
 							IRI newResURI = vf.createIRI(entry.getResourceURI().toString());
-							
+
 							java.util.List<IRI> predicateBlackList = new ArrayList<>();
 							predicateBlackList.add(vf.createIRI(NS.dc, "title"));
 							predicateBlackList.add(vf.createIRI(NS.dcterms, "title"));
 							predicateBlackList.add(vf.createIRI(NS.dc, "description"));
 							predicateBlackList.add(vf.createIRI(NS.dcterms, "description"));
 							java.util.List<Value> subjectBlackList = new ArrayList<Value>();
-							
+
 							for (Statement statement : templateMD) {
 								if (predicateBlackList.contains(statement.getPredicate())) {
 									subjectBlackList.add(statement.getObject());
@@ -276,7 +273,7 @@ public class ContextResource extends BaseResource {
 
 			if (entry == null) {
 				log.debug("Cannot create an entry with provided JSON");
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST); 
+				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(JSONErrorMessages.errorCantCreateEntry, MediaType.APPLICATION_JSON);
 			} else {
 				// Success, return 201 and the new entry ID/URI in response and header
@@ -291,7 +288,7 @@ public class ContextResource extends BaseResource {
 	}
 
 	/**
-	 * Creates a LinkReference entry. 
+	 * Creates a LinkReference entry.
 	 * @param entry a reference to a entry object.
 	 * @return the new created entry object.
 	 */
@@ -305,17 +302,12 @@ public class ContextResource extends BaseResource {
 					&& "linkreference".equalsIgnoreCase(parameters.get("entrytype"))) {
 				URI resourceURI = null;
 				URI metadataURI = null;
-				try {
-					resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), "UTF-8"));
-					metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), "UTF-8"));
-				} catch (UnsupportedEncodingException e) {
-					log.warn(e.getMessage());
-					return null;
-				}
-				
+				resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
+				metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), UTF_8));
+
 				if (parameters.containsKey("list")) {
-					entry = context.createLinkReference(parameters.get("id"), resourceURI, metadataURI, new URI(((String) parameters.get("list"))));
-				} else { 
+					entry = context.createLinkReference(parameters.get("id"), resourceURI, metadataURI, new URI(parameters.get("list")));
+				} else {
 					entry = context.createLinkReference(parameters.get("id"), resourceURI, metadataURI, null);
 				}
 
@@ -343,7 +335,7 @@ public class ContextResource extends BaseResource {
 			log.warn(e.getMessage());
 		}
 
-		return null; 
+		return null;
 	}
 
 	/**
@@ -362,16 +354,11 @@ public class ContextResource extends BaseResource {
 					("reference".equalsIgnoreCase(parameters.get("entrytype")))) {
 				URI resourceURI = null;
 				URI metadataURI = null;
-				try {
-					resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), "UTF-8"));
-					metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), "UTF-8"));
-				} catch (UnsupportedEncodingException e) {
-					log.warn(e.getMessage());
-					return null;
-				}
+				resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
+				metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), UTF_8));
 
 				if (parameters.containsKey("list")) {
-					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, new URI(((String) parameters.get("list"))));
+					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, new URI(parameters.get("list")));
 				} else {
 					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, null);
 				}
@@ -411,8 +398,8 @@ public class ContextResource extends BaseResource {
 			return ResourceType.NamedResource;
 		}
 	}
-	
-	
+
+
 	private GraphType getGraphType(String gt) {
 		if (gt == null || "".equals(gt)) {
 			return GraphType.None;
@@ -425,7 +412,7 @@ public class ContextResource extends BaseResource {
 		}
 		if (gt.equalsIgnoreCase("context")) {
 			return GraphType.Context;
-		}		
+		}
 		if (gt.equalsIgnoreCase("user")) {
 			return GraphType.User;
 		}
@@ -478,9 +465,9 @@ public class ContextResource extends BaseResource {
 				if (listURI != null) {
 					((ContextImpl) context).copyACL(listURI, entry);
 				}
-				return entry; 
+				return entry;
 			} else {
-				context.remove(entry.getEntryURI()); 
+				context.remove(entry.getEntryURI());
 				return null;
 			}
 		} catch (JSONException e) {
@@ -509,35 +496,28 @@ public class ContextResource extends BaseResource {
 		case User:
 			jsonObj = jsonObj.getJSONObject("resource");
 			User user = (User) entry.getResource();
-			
+
 			if (jsonObj.has("name")) {
 				if (!user.setName(jsonObj.getString("name"))) {
 					return false;
 				}
 			} else {
-				return false; 
+				return false;
 			}
+
 			if (jsonObj.has("homecontext")) {
 				Entry homeContextEntry = getCM().get(jsonObj.getString("homecontext"));
 				if (homeContextEntry != null) {
 					user.setHomeContext((Context) homeContextEntry.getResource());
 				}
 			}
-			if (jsonObj.has("password")) {
-				if (user.setSecret(jsonObj.getString("password"))) {
-					LoginTokenCache.getInstance().removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
-					Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
-				} else {
-					log.warn("Password could not be set");
-				}
-			}
 
-			if(parameters.containsKey("groupURI")) {
+			if (parameters.containsKey("groupURI")) {
 				Entry groupEntry;
 				try {
 					groupEntry = getCM().getEntry(new URI(parameters.get("groupURI")));
 					Group group = (Group) groupEntry.getResource();
-					group.addMember(user); 
+					group.addMember(user);
 				} catch (URISyntaxException e) {
 					log.warn(e.getMessage());
 				}
@@ -578,7 +558,7 @@ public class ContextResource extends BaseResource {
 			break;
 		case String:
 			StringResource stringRes = (StringResource) entry.getResource();
-			stringRes.setString(jsonObj.getString("resource")); 
+			stringRes.setString(jsonObj.getString("resource"));
 			break;
         case Graph:
         case Pipeline:
@@ -605,7 +585,7 @@ public class ContextResource extends BaseResource {
 
 		//check the request
 		URI resourceURI = null;
-		resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), StandardCharsets.UTF_8));
+		resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
 
 		if (parameters.containsKey("list")) {
 			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("list")));
@@ -637,7 +617,7 @@ public class ContextResource extends BaseResource {
 	 */
 	private void setLocalMetadataGraph(Entry entry) {
 		if (requestText == null) {
-			return; 
+			return;
 		}
 
 		if (EntryType.Reference.equals(entry.getEntryType())) {
@@ -666,7 +646,7 @@ public class ContextResource extends BaseResource {
 		if (requestText == null) {
 			return;
 		}
-		
+
 		if (EntryType.Reference.equals(entry.getEntryType()) ||
 				EntryType.LinkReference.equals(entry.getEntryType())) {
 			try {
@@ -686,10 +666,10 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * Extracts entryinfo from the request and sets it as the entrys local metadata graph.
-	 * Since it assumes this is the creation step, the Entries URIs was not available 
+	 * Since it assumes this is the creation step, the Entries URIs was not available
 	 * on the client, hence the special "_newId" entryId has been used.
 	 * Make sure this is replaced with the new entryId first.
-	 * 
+	 *
 	 * @param entry The entry to set the metadata on.
 	 */
 	private void setEntryGraph(Entry entry) {
@@ -716,7 +696,7 @@ public class ContextResource extends BaseResource {
 		try {
 			if (context == null) {
 				log.debug("Unable to find context with ID " + contextId);
-				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND); 
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				return;
 			}
 

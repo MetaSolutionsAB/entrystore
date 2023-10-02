@@ -31,6 +31,8 @@ import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
+import org.entrystore.repository.RepositoryEvent;
+import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
@@ -218,8 +220,10 @@ public class UserImpl extends RDFResource implements User {
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.secret, null, false, resourceURI), resourceURI);
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.saltedHashedSecret, null, false, resourceURI), resourceURI);
 					rc.add(resourceURI, RepositoryProperties.saltedHashedSecret, vf.createLiteral(shSecret), resourceURI);
+					this.entry.updateModifiedDateSynchronized(rc, vf);
 					rc.commit();
 					this.saltedHashedSecret = shSecret;
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					return true;
 				} catch (Exception e) {
 					log.error(e.getMessage(), e);
@@ -296,7 +300,7 @@ public class UserImpl extends RDFResource implements User {
 			synchronized (this.entry.repository) {
 				RepositoryConnection rc = this.entry.repository.getConnection();
 				ValueFactory vf = this.entry.repository.getValueFactory();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
 					//Remove homecontext and remove inverse relation cache.
 					RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
@@ -320,7 +324,9 @@ public class UserImpl extends RDFResource implements User {
 						rc.add(newStatement);
 						((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
 					}
+					this.entry.updateModifiedDateSynchronized(rc, vf);
 					rc.commit();
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					return true;
 				} catch (Exception e) {
 					log.error(e.getMessage(), e);
@@ -370,13 +376,15 @@ public class UserImpl extends RDFResource implements User {
 			synchronized (this.entry.repository) {
 				RepositoryConnection rc = this.entry.repository.getConnection();
 				ValueFactory vf = this.entry.repository.getValueFactory();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.language, null, false, resourceURI), resourceURI);
 					if (language != null) {
 						rc.add(resourceURI, RepositoryProperties.language, vf.createLiteral(language), resourceURI);
 					}
+					this.entry.updateModifiedDateSynchronized(rc, vf);
 					rc.commit();
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					return true;
 				} catch (Exception e) {
 					log.error(e.getMessage(), e);
@@ -438,13 +446,15 @@ public class UserImpl extends RDFResource implements User {
 			synchronized (this.entry.repository) {
 				RepositoryConnection rc = this.entry.repository.getConnection();
 				ValueFactory vf = this.entry.repository.getValueFactory();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
 					rc.remove(rc.getStatements(resourceURI, RepositoryProperties.externalID, null, false, resourceURI), resourceURI);
 					if (eid != null) {
 						rc.add(resourceURI, RepositoryProperties.externalID, vf.createIRI("mailto:", eid), resourceURI);
+						this.entry.updateModifiedDateSynchronized(rc, vf);
 					}
 					rc.commit();
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					return true;
 				} catch (Exception e) {
 					log.error(e.getMessage(), e);
@@ -477,9 +487,7 @@ public class UserImpl extends RDFResource implements User {
 
 		Map<String, String> result = new HashMap<>();
 		Model userResourceGraph = getGraph();
-		Iterator<Statement> args = userResourceGraph.filter(resourceURI, customProperty, null).iterator();
-		while (args.hasNext()) {
-			Statement s = args.next();
+		for (Statement s : userResourceGraph.filter(resourceURI, customProperty, null)) {
 			if (s.getObject() instanceof BNode) {
 				String keyStr = null;
 				String valueStr = null;
@@ -530,7 +538,10 @@ public class UserImpl extends RDFResource implements User {
 						rc.add(bnode, customPropertyValue, vf.createLiteral(e.getValue()), resourceURI);
 					}
 
+					this.entry.updateModifiedDateSynchronized(rc, vf);
+
 					rc.commit();
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 					return true;
 				} catch (Exception e) {
 					log.error(e.getMessage(), e);
@@ -583,7 +594,9 @@ public class UserImpl extends RDFResource implements User {
 					if (disabled) {
 						rc.add(resourceURI, RepositoryProperties.disabled, vf.createLiteral(disabled), resourceURI);
 					}
+					this.entry.updateModifiedDateSynchronized(rc, vf);
 					rc.commit();
+					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 				} catch (Exception e) {
 					log.error(e.getMessage(), e);
 					rc.rollback();

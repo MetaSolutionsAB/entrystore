@@ -16,21 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.entrystore.EntryType.Link;
-import static org.entrystore.EntryType.LinkReference;
-import static org.entrystore.EntryType.Local;
-import static org.entrystore.GraphType.Graph;
-import static org.entrystore.GraphType.None;
-import static org.entrystore.GraphType.Pipeline;
-import static org.entrystore.ResourceType.InformationResource;
-import static org.entrystore.ResourceType.NamedResource;
-import static org.restlet.data.MediaType.APPLICATION_JSON;
-import static org.restlet.data.MediaType.APPLICATION_RDF_XML;
-import static org.restlet.data.MediaType.APPLICATION_ZIP;
-import static org.restlet.data.MediaType.TEXT_RDF_N3;
-import static org.restlet.data.Method.GET;
-
 import com.google.common.html.HtmlEscapers;
 import com.rometools.rome.feed.synd.SyndContent;
 import com.rometools.rome.feed.synd.SyndContentImpl;
@@ -40,26 +25,6 @@ import com.rometools.rome.feed.synd.SyndFeed;
 import com.rometools.rome.feed.synd.SyndFeedImpl;
 import com.rometools.rome.io.FeedException;
 import com.rometools.rome.io.SyndFeedOutput;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.StringWriter;
-import java.net.URI;
-import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Vector;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileUploadException;
 import org.apache.commons.io.IOUtils;
@@ -79,14 +44,18 @@ import org.entrystore.QuotaException;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
+import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.ListImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.SolrSearchIndex;
+import org.entrystore.rest.EntryStoreApplication;
+import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.UserTempLockoutCache;
@@ -122,6 +91,36 @@ import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.StringWriter;
+import java.lang.String;
+import java.net.URI;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Vector;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.entrystore.EntryType.*;
+import static org.entrystore.GraphType.*;
+import static org.entrystore.ResourceType.InformationResource;
+import static org.entrystore.ResourceType.NamedResource;
+import static org.restlet.data.MediaType.*;
+import static org.restlet.data.Method.GET;
+
 /**
  * This class is the resource for entries.
  *
@@ -133,7 +132,7 @@ public class ResourceResource extends BaseResource {
 	private final Logger log = LoggerFactory.getLogger(ResourceResource.class);
 
 	private  final EmptyRepresentation EMPTY_REPRESENTATION = new EmptyRepresentation();
-	private final List<MediaType> supportedMediaTypes = List.of(
+	private final List<MediaType> supportedMediaTypes = java.util.List.of(
 			APPLICATION_RDF_XML,
 			APPLICATION_JSON,
 			TEXT_RDF_N3,
@@ -361,6 +360,11 @@ public class ResourceResource extends BaseResource {
 		 * Resource
 		 */
 
+		MediaType rdfFormat = MediaType.APPLICATION_JSON;
+		if (RDFFormat.JSONLD.getDefaultMIMEType().equals(parameters.get("rdfFormat"))) {
+			rdfFormat = new MediaType(RDFFormat.JSONLD.getDefaultMIMEType());
+		}
+
 		EntryType entryType = entry.getEntryType();
 		GraphType graphType = entry.getGraphType();
 		ResourceType resourceType = entry.getResourceType();
@@ -434,11 +438,11 @@ public class ResourceResource extends BaseResource {
 			try {
 				Resource resource = entry.getResource();
 				return switch (graphType) {
-					case None -> serializeFileRepresentationResouceNone(entry);
+					case None -> serializeFileRepresentationResourceNone(entry);
 					case List -> serializeJsonRepresentationResourceList(entry, new ListParams(parameters));
 
 					case User -> new JsonRepresentation(resourceSerializer.serializeResourceUser(resource));
-					case Group -> new JsonRepresentation(resourceSerializer.serializeResourceGroup(resource));
+					case Group -> new JsonRepresentation(resourceSerializer.serializeResourceGroup(resource, rdfFormat));
 					case String -> new JsonRepresentation(resourceSerializer.serializeResourceString(resource));
 					case Context -> new JsonRepresentation(resourceSerializer.serializeResourceContext(resource));
 					case SystemContext -> new JsonRepresentation(resourceSerializer.serializeResourceSystemContext(resource));
@@ -448,7 +452,7 @@ public class ResourceResource extends BaseResource {
 								getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 								yield new JsonRepresentation("{\"error\":\"The graph has not been set\"}");
 							}
-							yield new JsonRepresentation(resourceSerializer.serializeResourceGraph(graph));
+							yield new JsonRepresentation(resourceSerializer.serializeResourceGraph(graph, rdfFormat));
 						}
 						yield EMPTY_REPRESENTATION;
 					}
@@ -458,7 +462,7 @@ public class ResourceResource extends BaseResource {
 								getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 								yield new JsonRepresentation("{\"error\":\"The pipeline has not been set\"}");
 							}
-							yield new JsonRepresentation(resourceSerializer.serializeResourcePipeline(pipeline));
+							yield new JsonRepresentation(resourceSerializer.serializeResourcePipeline(pipeline, rdfFormat));
 						}
 						yield EMPTY_REPRESENTATION;
 					}
@@ -473,7 +477,7 @@ public class ResourceResource extends BaseResource {
 		return EMPTY_REPRESENTATION;
 	}
 
-	private FileRepresentation serializeFileRepresentationResouceNone(Entry entry) {
+	private FileRepresentation serializeFileRepresentationResourceNone(Entry entry) {
 		if(entry.getResourceType() == InformationResource) {
 			// Local data
 			File file = ((Data)entry.getResource()).getDataFile();
@@ -481,7 +485,12 @@ public class ResourceResource extends BaseResource {
 				String medTyp = entry.getMimetype();
 				FileRepresentation rep = null;
 				if (medTyp != null) {
-					rep = new FileRepresentation(file, MediaType.valueOf(medTyp));
+					try {
+						rep = new FileRepresentation(file, MediaType.valueOf(medTyp));
+					} catch (IllegalArgumentException iae) {
+						log.warn("Invalid media type for {}: {}", entry.getEntryURI().toString(), iae.getMessage());
+						rep = new FileRepresentation(file, MediaType.ALL);
+					}
 				} else {
 					rep = new FileRepresentation(file, MediaType.ALL);
 				}
@@ -497,6 +506,15 @@ public class ResourceResource extends BaseResource {
 				} else {
 					disp.setType(Disposition.TYPE_INLINE);
 				}
+
+				DataImpl data = new DataImpl(entry);
+				String digest = data.readDigest();
+				if (digest != null) {
+					getResponse().getHeaders().set("Digest", "sha-256=" + digest);
+				} else {
+					log.debug("Digest does not exist for [{}]", entry.getResourceURI());
+				}
+
 				return rep;
 			}
 		} else if (entry.getResourceType() == NamedResource) {
@@ -928,7 +946,7 @@ public class ResourceResource extends BaseResource {
 						}
 						entry.setMimetype(mimeType);
 						String name = item.getName();
-						if (name != null && name.length() != 0) {
+						if (name != null && !name.isEmpty()) {
 							entry.setFilename(name.trim());
 						}
 					}
@@ -997,7 +1015,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** String  ***/
-		if(gt == GraphType.String) {
+		if (gt == GraphType.String) {
 			try {
 				StringResource stringResource = (StringResource)entry.getResource();
 				stringResource.setString(getRequest().getEntity().getText());
@@ -1043,17 +1061,42 @@ public class ResourceResource extends BaseResource {
 					if (resourceUser.setName(newName)) {
 						// the username was successfully changed, so we need to update the UserInfo
 						// objects in the LoginTokenCache to not invalidate logged in user sessions
-						LoginTokenCache.getInstance().renameUser(oldName, newName);
+						LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
+						loginTokenCache.renameUser(oldName, newName);
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Name already taken.\"}"));
+						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Name is already in use\"}"));
 						return;
 					}
 				}
 				if (entityJSON.has("password")) {
-					String passwd =  entityJSON.getString("password");
-					if (resourceUser.setSecret(passwd)) {
-						LoginTokenCache.getInstance().removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
+					boolean requireCurrentPassword = getRM().getConfiguration().getBoolean(Settings.AUTH_PASSWORD_REQUIRE_CURRENT_PASSWORD, true);
+					String newPassword =  entityJSON.getString("password");
+
+					if (requireCurrentPassword) {
+						// we require the current password if:
+						// (1) the user is a non-admin user, or
+						// (2) the user is an admin user and wants to set her own password
+						if (!getPM().currentUserIsAdminOrAdminGroup() ||
+								(getPM().currentUserIsAdminOrAdminGroup() && getPM().getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
+							if (!entityJSON.has("currentPassword")) {
+								getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+								getResponse().setEntity(new JsonRepresentation("{\"error\":\"Current password is required\"}"));
+								return;
+							}
+							String currentPassword = entityJSON.getString("currentPassword");
+							String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), resourceUser.getName());
+							if (saltedHashedSecret == null || !Password.check(currentPassword, saltedHashedSecret)) {
+								getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+								getResponse().setEntity(new JsonRepresentation("{\"error\":\"No password set or incorrect current password provided\"}"));
+								return;
+							}
+						}
+					}
+
+					if (resourceUser.setSecret(newPassword)) {
+						LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
+						loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
 						Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
 						return;
 					} else {
@@ -1064,7 +1107,7 @@ public class ResourceResource extends BaseResource {
 				}
 				if (entityJSON.has("language")) {
 					String prefLang = entityJSON.getString("language");
-					if (prefLang.equals("")) {
+					if (prefLang.isEmpty()) {
 						resourceUser.setLanguage(null);
 					} else if (!resourceUser.setLanguage(prefLang)) {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -1094,21 +1137,22 @@ public class ResourceResource extends BaseResource {
 					resourceUser.setDisabled(disabled);
 					if (disabled) {
 						String userName = getPM().getPrincipalName(this.entry.getResourceURI());
-						LoginTokenCache.getInstance().removeTokens(userName);
+						LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
+						loginTokenCache.removeTokens(userName);
 					}
 				}
 				if (entityJSON.has("customProperties")) {
 					Map<String, String> customPropMap = new HashMap<>();
 					JSONObject customPropJson = entityJSON.getJSONObject("customProperties");
-					for (Iterator cPIt = customPropJson.keys(); cPIt.hasNext();) {
-						String key = (String) cPIt.next();
+					for (Iterator<String> cPIt = customPropJson.keys(); cPIt.hasNext();) {
+						String key = cPIt.next();
 						customPropMap.put(key, customPropJson.getString(key));
 					}
 					resourceUser.setCustomProperties(customPropMap);
 				}
 				getResponse().setStatus(Status.SUCCESS_OK);
 			} catch (JSONException e) {
-				log.debug("Wrong JSON syntax: " + e.getMessage());
+				log.debug("Wrong JSON syntax: {}", e.getMessage());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorJSONSyntax));
 			} catch (IOException e) {
@@ -1118,4 +1162,5 @@ public class ResourceResource extends BaseResource {
 			}
 		}
 	}
+
 }

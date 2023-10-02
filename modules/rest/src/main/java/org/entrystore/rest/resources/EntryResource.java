@@ -16,19 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static org.entrystore.EntryType.Link;
-import static org.entrystore.EntryType.LinkReference;
-import static org.entrystore.EntryType.Local;
-import static org.entrystore.EntryType.Reference;
-import static org.entrystore.rest.serializer.ResourceJsonSerializer.IMMUTABLE_EMPTY_JSONOBJECT;
-import static org.restlet.data.MediaType.APPLICATION_JSON;
-import static org.restlet.data.MediaType.APPLICATION_RDF_XML;
-import static org.restlet.data.MediaType.TEXT_RDF_N3;
-
-import java.io.IOException;
-import java.util.Date;
-import java.util.List;
-import java.util.Optional;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
@@ -62,6 +49,15 @@ import org.restlet.resource.Get;
 import org.restlet.resource.Put;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.util.Date;
+import java.util.List;
+import java.util.Optional;
+
+import static org.entrystore.EntryType.*;
+import static org.entrystore.rest.serializer.ResourceJsonSerializer.IMMUTABLE_EMPTY_JSONOBJECT;
+import static org.restlet.data.MediaType.*;
 
 
 /**
@@ -133,11 +129,15 @@ public class EntryResource extends BaseResource {
 			// the check for resource safety is necessary to avoid an implicit
 			// getMetadata() in the case of a PUT on (not yet) existant metadata
 			// - this is e.g. the case if conditional requests are issued
-			Optional<MediaType> preferredMediaType =
-					Optional.of(getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes));
+			Optional<MediaType> preferredMediaType = Optional.of(getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes));
+
+			MediaType rdfFormat = MediaType.APPLICATION_JSON;
+			if (RDFFormat.JSONLD.getDefaultMIMEType().equals(parameters.get("rdfFormat"))) {
+				rdfFormat = new MediaType(RDFFormat.JSONLD.getDefaultMIMEType());
+			}
 
 			Representation result = switch (getRequest().getMethod().getName()) {
-				case "GET" -> getEntry((format != null) ? format : preferredMediaType.orElse(APPLICATION_RDF_XML));
+				case "GET" -> getEntry((format != null) ? format : preferredMediaType.orElse(APPLICATION_RDF_XML), rdfFormat);
 				default -> new EmptyRepresentation();
 			};
 
@@ -190,13 +190,13 @@ public class EntryResource extends BaseResource {
 		}
 	}
 
-	private Representation getEntry(MediaType mediaType) {
+	private Representation getEntry(MediaType mediaType, MediaType rdfFormat) {
 		String serializedGraph = null;
 		/* if (MediaType.TEXT_HTML.equals(mediaType)) {
 			return getEntryInHTML();
 		} else */
 		if (APPLICATION_JSON.equals(mediaType)) {
-			return getEntryInJSON();
+			return getEntryInJSON(rdfFormat);
 		} else {
 			Model graph = entry.getGraph();
 			serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
@@ -241,23 +241,23 @@ public class EntryResource extends BaseResource {
 	 *
 	 * @return JSON representation
 	 */
-	private Representation getEntryInJSON() {
+	private Representation getEntryInJSON(MediaType rdfFormat) {
 		try {
-			JSONObject jobj = getEntryAsJSONObject();
+			JSONObject jobj = getEntryAsJSONObject(rdfFormat);
 			return new JsonRepresentation(jobj.toString(2));
 		} catch (JSONException e) {
 			log.error(e.getMessage(), e);
 		} catch (IllegalArgumentException e) {
 			log.error(e.getMessage(), e);
 			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
-			return new JsonRepresentation("{\"error\":\"Internal Server Error\"}");
+			return new JsonRepresentation(new JSONObject().put("error", e.getMessage()));
 		}
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 		return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 	}
 
 
-	private JSONObject getEntryAsJSONObject() throws JSONException {
+	private JSONObject getEntryAsJSONObject(MediaType rdfFormat) throws JSONException {
 		JSONObject mainJsonObject = new JSONObject();
 
 		GraphType graphType = entry.getGraphType();
@@ -289,7 +289,7 @@ public class EntryResource extends BaseResource {
 		 * Entry information
 		 */
 		Model entryGraph = entry.getGraph();
-		JSONObject entryObj = new JSONObject(RDFJSON.graphToRdfJson(entryGraph));
+		JSONObject entryObj = GraphUtil.serializeGraphToJson(entryGraph, rdfFormat);
 		mainJsonObject.accumulate("info", entryObj);
 
 		/*
@@ -309,7 +309,7 @@ public class EntryResource extends BaseResource {
 				Metadata cachedExternalMetadata = entry.getCachedExternalMetadata();
 				Model cachedMetadataGraph = cachedExternalMetadata.getGraph();
 				if (cachedMetadataGraph != null) {
-					JSONObject cachedExternalMetadataJsonObject = new JSONObject(RDFJSON.graphToRdfJson(cachedMetadataGraph));
+					JSONObject cachedExternalMetadataJsonObject = GraphUtil.serializeGraphToJson(cachedMetadataGraph, rdfFormat);
 					mainJsonObject.accumulate(RepositoryProperties.EXTERNAL_MD_PATH, cachedExternalMetadataJsonObject);
 				}
 			} catch (AuthorizationException ae) {
@@ -326,7 +326,7 @@ public class EntryResource extends BaseResource {
 				Metadata localMetadata = entry.getLocalMetadata();
 				Model localMetadataGraph = localMetadata.getGraph();
 				if (localMetadataGraph != null) {
-					JSONObject localMetaDataJsonObject = new JSONObject(RDFJSON.graphToRdfJson(localMetadataGraph));
+					JSONObject localMetaDataJsonObject = GraphUtil.serializeGraphToJson(localMetadataGraph, rdfFormat);
 					mainJsonObject.accumulate(RepositoryProperties.MD_PATH, localMetaDataJsonObject);
 				}
 			} catch (AuthorizationException ae) {
@@ -342,7 +342,7 @@ public class EntryResource extends BaseResource {
 		 */
 		List<Statement> relations = entry.getRelations();
 		if (relations != null) {
-			JSONObject relationsJsonObject = new JSONObject(RDFJSON.graphToRdfJson(new LinkedHashModel(relations)));
+			JSONObject relationsJsonObject = GraphUtil.serializeGraphToJson(new LinkedHashModel(relations), rdfFormat);
 			mainJsonObject.accumulate(RepositoryProperties.RELATION, relationsJsonObject);
 		}
 
@@ -359,13 +359,13 @@ public class EntryResource extends BaseResource {
 			Resource resource = entry.getResource();
 			// As serializeResourceString must return a String, not a JSONObject, we must define this as Object.
 			Object resourceObject = (graphType == null) ? IMMUTABLE_EMPTY_JSONOBJECT : switch (graphType) {
-				case List -> resourceSerializer.serializeResourceList(resource, new ListParams(parameters));
+				case List -> resourceSerializer.serializeResourceList(resource, new ListParams(parameters), rdfFormat);
 				case User -> resourceSerializer.serializeResourceUser(resource);
-				case Group -> resourceSerializer.serializeResourceGroup(resource);
+				case Group -> resourceSerializer.serializeResourceGroup(resource, rdfFormat);
 				case None -> resourceSerializer.serializeResourceNone(resource);
 				case String -> resourceSerializer.serializeResourceString(resource);
-				case Graph -> resourceSerializer.serializeResourceGraph(resource);
-				case Pipeline -> resourceSerializer.serializeResourcePipeline(resource);
+				case Graph -> resourceSerializer.serializeResourceGraph(resource, rdfFormat);
+				case Pipeline -> resourceSerializer.serializeResourcePipeline(resource, rdfFormat);
 				//TODO other types, for example Context, SystemContext, PrincipalManager, etc
 				case ResultList, PipelineResult, Context, SystemContext -> IMMUTABLE_EMPTY_JSONOBJECT;
 			};
@@ -411,4 +411,5 @@ public class EntryResource extends BaseResource {
 			getResponse().setStatus(Status.SUCCESS_OK);
 		}
 	}
+
 }

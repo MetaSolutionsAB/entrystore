@@ -53,7 +53,7 @@ public class CORSUtil {
 		allowedOriginPatterns = new ArrayList<>();
 		String[] patterns = origins.split(",");
 		for (String p : patterns) {
-			log.info("CORS allowed origins: " + origins);
+			log.info("CORS allowed origin: {}", p);
 			allowedOriginPatterns.add(p.trim().toLowerCase());
 		}
 		if (config.containsKey(Settings.CORS_HEADERS)) {

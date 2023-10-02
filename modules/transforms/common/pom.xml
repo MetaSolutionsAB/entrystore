@@ -7,28 +7,18 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-transforms</artifactId>
-		<version>5.1.0</version>
+		<version>5.2.0</version>
 	</parent>
 	<artifactId>entrystore-transforms-common</artifactId>
 	<packaging>jar</packaging>
-	<version>5.1.0</version>
+	<version>5.2.0</version>
 	<name>EntryStore Transforms Common</name>
 
 	<dependencies>
 		<dependency>
 			<groupId>org.reflections</groupId>
 			<artifactId>reflections</artifactId>
-			<version>0.9.11</version>
-			<exclusions>
-                                <exclusion>
-                                        <groupId>org.checkerframework</groupId>
-                                        <artifactId>checker-qual</artifactId>
-				</exclusion>
-                                <exclusion>
-                                        <groupId>com.google.errorprone</groupId>
-                                        <artifactId>error_prone_annotations</artifactId>
-				</exclusion>
-			</exclusions>
+			<version>0.10.2</version>
 		</dependency>
 		<dependency>
 			<groupId>org.restlet.jee</groupId>
@@ -36,5 +26,5 @@
 			<version>${restlet.version}</version>
 		</dependency>
 	</dependencies>
-    
+
 </project>
