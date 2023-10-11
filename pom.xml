@@ -36,7 +36,7 @@
         <junit.version>5.10.0</junit.version>
         <assertj.version>3.24.2</assertj.version>
         <rest-assured.version>5.3.1</rest-assured.version>
-        <zookeeper.version>3.9.0</zookeeper.version>
+        <zookeeper.version>3.9.1</zookeeper.version>
         <xmlsec.version>3.0.2</xmlsec.version>
         <httpmime.version>4.5.14</httpmime.version>
         <commonscli.version>1.5.0</commonscli.version>
