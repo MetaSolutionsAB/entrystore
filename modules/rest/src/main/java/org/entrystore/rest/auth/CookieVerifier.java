@@ -155,17 +155,23 @@ public class CookieVerifier implements Verifier {
 		}
 	}
 
-	public void createAuthToken(String userName, boolean sessionCookie, Request request, Response response) {
-		// String token = Password.getRandomBase64(128);
-
+	public void createAuthToken(String userName, String maxAgeStr, Request request, Response response) {
 		// Generates a random string without the '+' and '/' chars used in Base64, which can
 		// cause problems if this string is ever needed to be UUDecoded or sent over http,
 		// as in a link or in a form.
 		String token = RandomStringUtils.random(128, true, true);
 
+		Config config = rm.getConfiguration();
+		long maxAge = loginTokenCache.MAX_AGE_IN_SECONDS;
+		if (maxAgeStr != null) {
+			try {
+				maxAge = Math.min(maxAge, Long.parseLong(maxAgeStr));
+			} catch (NumberFormatException ignored) {}
+		}
+
 		UserInfo userInfo = new UserInfo(userName, LocalDateTime.now());
 		userInfo.setLastAccessTime(userInfo.getLoginTime());
-		userInfo.setLoginExpiration(userInfo.getLoginTime().plusSeconds(loginTokenCache.getConfigCookieMaxAgeInSeconds()));
+		userInfo.setLoginExpiration(userInfo.getLoginTime().plusSeconds(maxAge));
 		userInfo.setLastUsedUserAgent(request.getClientInfo().getAgent());
 		userInfo.setLastUsedIpAddress(HttpUtil.getClientIpAddress(request));
 		loginTokenCache.putToken(token, userInfo);
@@ -174,8 +180,12 @@ public class CookieVerifier implements Verifier {
 		// We hack the mechanism and set additional properties as part of the Cookie value since
 		// there is no direct way to set properties such as Max-Age, SameSite, etc.
 		// This works since Restlet does not parse or process the value; this hack might break in the future.
-		String cookieValue = token + "; Max-Age=" + (sessionCookie ? -1 : Integer.MAX_VALUE) + "; " + cookieSettings;
-		CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", cookieValue);
+		// We only set Max-Age for positive values; omission of Max-Age and Expires makes it a session cookie.
+		if (maxAge >= 0) {
+			token += "; Max-Age=" + maxAge;
+		}
+		token += "; " + cookieSettings;
+		CookieSetting tokenCookieSetting = new CookieSetting(0, "auth_token", token);
 		tokenCookieSetting.setPath(getCookiePath(rm));
 		response.getCookieSettings().add(tokenCookieSetting);
 	}
