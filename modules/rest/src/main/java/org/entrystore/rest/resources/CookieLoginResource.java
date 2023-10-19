@@ -16,12 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static java.lang.Boolean.parseBoolean;
-import static org.restlet.data.MediaType.TEXT_HTML;
-import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
-
-import java.util.Arrays;
-import java.util.List;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
@@ -40,6 +34,12 @@ import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Arrays;
+import java.util.List;
+
+import static org.restlet.data.MediaType.TEXT_HTML;
+import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
 
 /**
  * This resource checks credentials and sets a cookie.
@@ -87,7 +87,7 @@ public class CookieLoginResource extends BaseResource {
 
 		String userName = query.getFirstValue("auth_username");
 		String password = query.getFirstValue("auth_password");
-		boolean sessionCookie = parseBoolean(query.getFirstValue("auth_session_cookie", true, "false"));
+		String maxAgeStr = query.getFirstValue("auth_maxage");
 
 		if (userName == null || password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -126,7 +126,7 @@ public class CookieLoginResource extends BaseResource {
 			if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
 				if (userIsEnabled) {
 					EntryStoreApplication app = (EntryStoreApplication) getApplication();
-					new CookieVerifier(app, getRM()).createAuthToken(userName, sessionCookie, getRequest(), getResponse());
+					new CookieVerifier(app, getRM()).createAuthToken(userName, maxAgeStr, getRequest(), getResponse());
 					getResponse().setStatus(Status.SUCCESS_OK);
 					getUserTempLockoutCache().succeedLogin(userName);
 					if (html) {

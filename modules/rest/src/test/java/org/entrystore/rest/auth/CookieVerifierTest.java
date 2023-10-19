@@ -59,7 +59,7 @@ class CookieVerifierTest {
 		request.setResourceRef("");
 		Response response = new Response(request);
 
-		cookieVerifier.createAuthToken("test", false, request, response);
+		cookieVerifier.createAuthToken("test", "3600", request, response);
 
 		CookieSetting authToken = response.getCookieSettings().getFirst(COOKIE_AUTH_TOKEN);
 		String tokenValue = StringUtils.substringBefore(authToken.getValue(), ";");
