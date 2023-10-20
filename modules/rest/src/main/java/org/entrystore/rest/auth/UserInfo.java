@@ -22,26 +22,26 @@ public class UserInfo {
 
 	final String userName;
 	final LocalDateTime loginTime;
-
 	LocalDateTime loginExpiration;
 	LocalDateTime lastAccessTime;
 	String lastUsedIpAddress;
 	String lastUsedUserAgent;
+	int loginTokenMaxAge;
 
-	public UserInfo(String userName, LocalDateTime loginTime) {
+	public UserInfo(String userName, LocalDateTime loginTime, int loginTokenMaxAge) {
 		this.userName = userName;
 		this.loginTime = loginTime;
+		this.loginTokenMaxAge = loginTokenMaxAge;
 	}
 
-	public UserInfo(String userName, LocalDateTime loginTime, LocalDateTime loginExpiration, LocalDateTime lastAccessTime,
-			String clientIp, String lastUsedUserAgent) {
-
+	public UserInfo(String userName, LocalDateTime loginTime, int loginTokenMaxAge, LocalDateTime loginExpiration, LocalDateTime lastAccessTime, String clientIp, String lastUsedUserAgent) {
 		this.userName = userName;
 		this.loginTime = loginTime;
 		this.loginExpiration = loginExpiration;
 		this.lastAccessTime = lastAccessTime;
 		this.lastUsedIpAddress = clientIp;
 		this.lastUsedUserAgent = lastUsedUserAgent;
+		this.loginTokenMaxAge = loginTokenMaxAge;
 	}
 
 	public String getUserName() {
@@ -83,4 +83,13 @@ public class UserInfo {
 	public void setLastUsedUserAgent(String lastUsedUserAgent) {
 		this.lastUsedUserAgent = lastUsedUserAgent;
 	}
+
+	public int getLoginTokenMaxAge() {
+		return loginTokenMaxAge;
+	}
+
+	public void setLoginTokenMaxAge(int loginTokenMaxAge) {
+		this.loginTokenMaxAge = loginTokenMaxAge;
+	}
+
 }
