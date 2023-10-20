@@ -39,19 +39,19 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 	private static final Logger log = LoggerFactory.getLogger(LoginTokenCache.class);
 	private static final int DEFAULT_MAX_AGE_IN_SECONDS = (int) Duration.ofDays(1).toSeconds();
 
-	private final boolean configCookieUpdateExpiry;
+	private final boolean configTokenUpdateExpiry;
 	public final int MAX_AGE_IN_SECONDS;
 
 	public LoginTokenCache(Config config) {
-		this.configCookieUpdateExpiry = config.getBoolean(AUTH_COOKIE_REFRESH_EXPIRATION_ON_ACCESS, true);
+		this.configTokenUpdateExpiry = config.getBoolean(AUTH_COOKIE_REFRESH_EXPIRATION_ON_ACCESS, true);
 		this.MAX_AGE_IN_SECONDS = config.getInt(AUTH_TOKEN_MAX_AGE, config.getInt(AUTH_COOKIE_MAX_AGE, DEFAULT_MAX_AGE_IN_SECONDS));
 	}
 
-	public boolean isConfigCookieUpdateExpiry() {
-		return configCookieUpdateExpiry;
+	public boolean isTokenUpdateExpiry() {
+		return configTokenUpdateExpiry;
 	}
 
-	public int getConfigCookieMaxAgeInSeconds() {
+	public int getMaxAgeInSeconds() {
 		return MAX_AGE_IN_SECONDS;
 	}
 
@@ -104,7 +104,7 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 			for (Entry<String, UserInfo> e : tokenCache.entrySet()) {
 				UserInfo oldUi = e.getValue();
 				if (oldUserName.equals(oldUi.userName)) {
-					UserInfo newUi = new UserInfo(newUserName, oldUi.getLoginTime());
+					UserInfo newUi = new UserInfo(newUserName, oldUi.getLoginTime(), oldUi.getLoginTokenMaxAge());
 					newUi.setLoginExpiration(oldUi.getLoginExpiration());
 					newUi.setLastAccessTime(oldUi.getLastAccessTime());
 					newUi.setLastUsedIpAddress(oldUi.getLastUsedIpAddress());
@@ -135,8 +135,8 @@ public class LoginTokenCache extends TokenCache<String, UserInfo> {
 		userInfo.setLastUsedUserAgent(request.getClientInfo().getAgent());
 		userInfo.setLastAccessTime(LocalDateTime.now());
 		userInfo.setLastUsedIpAddress(HttpUtil.getClientIpAddress(request));
-		if (configCookieUpdateExpiry) {
-			userInfo.setLoginExpiration(userInfo.getLastAccessTime().plusSeconds(this.MAX_AGE_IN_SECONDS));
+		if (configTokenUpdateExpiry) {
+			userInfo.setLoginExpiration(userInfo.getLastAccessTime().plusSeconds(userInfo.getLoginTokenMaxAge()));
 		}
 		return userInfo;
 	}

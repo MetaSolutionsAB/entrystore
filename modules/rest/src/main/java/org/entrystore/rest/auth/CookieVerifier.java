@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 import static org.entrystore.repository.config.Settings.AUTH_COOKIE_INVALID_TOKEN_ERROR;
@@ -162,14 +163,14 @@ public class CookieVerifier implements Verifier {
 		String token = RandomStringUtils.random(128, true, true);
 
 		Config config = rm.getConfiguration();
-		long maxAge = loginTokenCache.MAX_AGE_IN_SECONDS;
+		int maxAge = loginTokenCache.MAX_AGE_IN_SECONDS;
 		if (maxAgeStr != null) {
 			try {
-				maxAge = Math.min(maxAge, Long.parseLong(maxAgeStr));
+				maxAge = Math.min(maxAge, Integer.parseInt(maxAgeStr));
 			} catch (NumberFormatException ignored) {}
 		}
 
-		UserInfo userInfo = new UserInfo(userName, LocalDateTime.now());
+		UserInfo userInfo = new UserInfo(userName, LocalDateTime.now(), maxAge);
 		userInfo.setLastAccessTime(userInfo.getLoginTime());
 		userInfo.setLoginExpiration(userInfo.getLoginTime().plusSeconds(maxAge));
 		userInfo.setLastUsedUserAgent(request.getClientInfo().getAgent());
@@ -182,6 +183,11 @@ public class CookieVerifier implements Verifier {
 		// This works since Restlet does not parse or process the value; this hack might break in the future.
 		// We only set Max-Age for positive values; omission of Max-Age and Expires makes it a session cookie.
 		if (maxAge >= 0) {
+			if (loginTokenCache.isTokenUpdateExpiry()) {
+				// we set a long duration because the token's expiration will be extended upon access, but it would
+				// be difficult to always send a "set-cookie" header to also extend the cookie's lifetime.
+				maxAge = (int) Duration.ofDays(365).toSeconds();
+			}
 			token += "; Max-Age=" + maxAge;
 		}
 		token += "; " + cookieSettings;
