@@ -177,9 +177,9 @@ public class Settings {
 
 	public static String CORS = "entrystore.cors";
 	public static String CORS_ORIGINS = "entrystore.cors.origins";
+	public static String CORS_ORIGINS_ALLOW_CREDENTIALS = "entrystore.cors.origins.allow-credentials";
 	public static String CORS_HEADERS = "entrystore.cors.headers";
 	public static String CORS_MAX_AGE = "entrystore.cors.max-age";
-	public static String CORS_ALLOW_CREDENTIALS = "entrystore.cors.allow-credentials";
 
 	public static String NONADMIN_GROUPCONTEXT_CREATION = "entrystore.nonadmin.group-context-creation";
 

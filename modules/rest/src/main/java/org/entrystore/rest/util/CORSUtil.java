@@ -42,11 +42,11 @@ public class CORSUtil {
 
 	private final List<String> allowedOriginPatterns;
 
+	private final List<String> allowedOriginPatternsWithCredentials;
+
 	private Set<String> allowedHeaders;
 
 	private int maxAge = -1;
-
-	private boolean allowCredentials = false;
 
 	private CORSUtil(Config config) {
 		String origins = config.getString(Settings.CORS_ORIGINS, "*");
@@ -56,18 +56,24 @@ public class CORSUtil {
 			log.info("CORS allowed origin: {}", p);
 			allowedOriginPatterns.add(p.trim().toLowerCase());
 		}
+
+		String originsAllowCredentials = config.getString(Settings.CORS_ORIGINS_ALLOW_CREDENTIALS, "");
+		allowedOriginPatternsWithCredentials = new ArrayList<>();
+		patterns = originsAllowCredentials.split(",");
+		for (String p : patterns) {
+			log.info("CORS allowed origin (with credentials): {}", p);
+			allowedOriginPatternsWithCredentials.add(p.trim().toLowerCase());
+		}
+
 		if (config.containsKey(Settings.CORS_HEADERS)) {
 			String confAllHeaders = config.getString(Settings.CORS_HEADERS);
 			allowedHeaders = new HashSet<>(Arrays.asList(confAllHeaders.split(",")));
 			log.info("CORS allowed/exposed headers: " + confAllHeaders);
 		}
+
 		if (config.containsKey(Settings.CORS_MAX_AGE)) {
 			maxAge = config.getInt(Settings.CORS_MAX_AGE, -1);
 			log.info("CORS max age: " + maxAge);
-		}
-		if (config.containsKey(Settings.CORS_ALLOW_CREDENTIALS)) {
-			allowCredentials = config.getBoolean(Settings.CORS_ALLOW_CREDENTIALS, false);
-			log.info("CORS allow credentials: " + allowCredentials);
 		}
 	}
 
@@ -79,11 +85,19 @@ public class CORSUtil {
 	}
 
 	public boolean isValidOrigin(String origin) {
-		if (allowedOriginPatterns == null || origin == null) {
+		return isAllowedOrigin(origin, allowedOriginPatterns);
+	}
+
+	public boolean isValidOriginWithCredentials(String origin) {
+		return isAllowedOrigin(origin, allowedOriginPatternsWithCredentials);
+	}
+
+	private boolean isAllowedOrigin(String origin, List<String> patterns) {
+		if (origin == null || patterns == null) {
 			return false;
 		}
 		origin = origin.toLowerCase();
-		for (String pattern : allowedOriginPatterns) {
+		for (String pattern : patterns) {
 			if ("*".equals(pattern)) {
 				return true;
 			} else if (pattern.equals(origin)) {
@@ -109,10 +123,6 @@ public class CORSUtil {
 
 	public int getMaxAge() {
 		return maxAge;
-	}
-
-	public boolean getAllowCredentials() {
-		return allowCredentials;
 	}
 
 }
