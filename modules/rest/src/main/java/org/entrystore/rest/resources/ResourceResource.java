@@ -96,7 +96,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
-import java.lang.String;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -123,9 +122,6 @@ import static org.restlet.data.Method.GET;
 
 /**
  * This class is the resource for entries.
- *
- * @author Eric Johansson
- * @author Hannes Ebner
  */
 public class ResourceResource extends BaseResource {
 
@@ -140,7 +136,8 @@ public class ResourceResource extends BaseResource {
 			new MediaType(RDFFormat.TRIX.getDefaultMIMEType()),
 			new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()),
 			new MediaType(RDFFormat.TRIG.getDefaultMIMEType()),
-			new MediaType(RDFFormat.JSONLD.getDefaultMIMEType())
+			new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()),
+			new MediaType("application/rdf+json")
 	);
 
 	private UserTempLockoutCache userTempLockoutCache;
@@ -225,7 +222,7 @@ public class ResourceResource extends BaseResource {
 		EntryType entryType = entry.getEntryType();
 
 		try {
-			if ((entryType == Link || entryType == EntryType.Reference || entryType == LinkReference)
+			if ((entryType == Link || entryType == Reference || entryType == LinkReference)
 					 && "true".equalsIgnoreCase(parameters.get("proxy"))) {
 
 				final Response delResponse = deleteRemoteResource(entry.getResourceURI().toString(), 0);
@@ -262,12 +259,12 @@ public class ResourceResource extends BaseResource {
 		GraphType graphType = entry.getGraphType();
 
 		try {
-			if (graphType == GraphType.List
+			if (graphType == List
 				 && parameters.containsKey("import")
 				 && APPLICATION_ZIP.equals(getRequestEntity().getMediaType())) {
 
 			getResponse().setStatus(importFromZIP(getRequestEntity()));
-		} else if (graphType == GraphType.List
+		} else if (graphType == List
 							 && parameters.containsKey("moveEntry")
 							 && parameters.containsKey("fromList")) {
 
@@ -360,7 +357,7 @@ public class ResourceResource extends BaseResource {
 		 * Resource
 		 */
 
-		MediaType rdfFormat = MediaType.APPLICATION_JSON;
+		MediaType rdfFormat = APPLICATION_JSON;
 		if (RDFFormat.JSONLD.getDefaultMIMEType().equals(parameters.get("rdfFormat"))) {
 			rdfFormat = new MediaType(RDFFormat.JSONLD.getDefaultMIMEType());
 		}
@@ -379,11 +376,12 @@ public class ResourceResource extends BaseResource {
 		if (preferredMediaType == null) {
 			preferredMediaType = APPLICATION_RDF_XML;
 		}
+		preferredMediaType = (format != null) ? format : preferredMediaType;
 
 		// Graph and List resource
 
-		if (graphType == Graph || graphType == GraphType.List) {
-			boolean isList = (entry.getGraphType() == GraphType.List);
+		if (graphType == Graph || graphType == List) {
+			boolean isList = (entry.getGraphType() == List);
 			Model graph = null;
 
 			if (isList) {
@@ -415,7 +413,7 @@ public class ResourceResource extends BaseResource {
 
 		// Remote Document (GraphType == None) Resource
 
-		if (entryType == Link || entryType == LinkReference || entryType == EntryType.Reference) {
+		if (entryType == Link || entryType == LinkReference || entryType == Reference) {
 			if (graphType == None) {
 				getResponse().setLocationRef(new Reference(entry.getResourceURI().toString()));
 				getResponse().setStatus(Status.REDIRECTION_SEE_OTHER);
@@ -439,23 +437,11 @@ public class ResourceResource extends BaseResource {
 				Resource resource = entry.getResource();
 				return switch (graphType) {
 					case None -> serializeFileRepresentationResourceNone(entry);
-					case List -> serializeJsonRepresentationResourceList(entry, new ListParams(parameters));
-
 					case User -> new JsonRepresentation(resourceSerializer.serializeResourceUser(resource));
 					case Group -> new JsonRepresentation(resourceSerializer.serializeResourceGroup(resource, rdfFormat));
 					case String -> new JsonRepresentation(resourceSerializer.serializeResourceString(resource));
 					case Context -> new JsonRepresentation(resourceSerializer.serializeResourceContext(resource));
 					case SystemContext -> new JsonRepresentation(resourceSerializer.serializeResourceSystemContext(resource));
-					case Graph -> {
-						if (resource instanceof RDFResource graph) {
-							if (graph.getGraph() == null) {
-								getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-								yield new JsonRepresentation("{\"error\":\"The graph has not been set\"}");
-							}
-							yield new JsonRepresentation(resourceSerializer.serializeResourceGraph(graph, rdfFormat));
-						}
-						yield EMPTY_REPRESENTATION;
-					}
 					case Pipeline -> {
 						if (resource instanceof RDFResource pipeline) {
 							if (pipeline.getGraph() == null) {
@@ -467,7 +453,8 @@ public class ResourceResource extends BaseResource {
 						yield EMPTY_REPRESENTATION;
 					}
 					case ResultList, PipelineResult -> EMPTY_REPRESENTATION;
-				};
+                    default -> EMPTY_REPRESENTATION;
+                };
 			} catch (IllegalArgumentException e){
 				log.error(e.getMessage(), e);
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
@@ -489,10 +476,10 @@ public class ResourceResource extends BaseResource {
 						rep = new FileRepresentation(file, MediaType.valueOf(medTyp));
 					} catch (IllegalArgumentException iae) {
 						log.warn("Invalid media type for {}: {}", entry.getEntryURI().toString(), iae.getMessage());
-						rep = new FileRepresentation(file, MediaType.ALL);
+						rep = new FileRepresentation(file, ALL);
 					}
 				} else {
-					rep = new FileRepresentation(file, MediaType.ALL);
+					rep = new FileRepresentation(file, ALL);
 				}
 				String fileName = entry.getFilename();
 				if (fileName == null) {
@@ -586,13 +573,13 @@ public class ResourceResource extends BaseResource {
 
 	public Set<Entry> getListChildrenRecursively(Entry listEntry) {
 		Set<Entry> result = new HashSet<Entry>();
-		if (GraphType.List.equals(listEntry.getGraphType()) && Local.equals(listEntry.getEntryType())) {
+		if (List.equals(listEntry.getGraphType()) && Local.equals(listEntry.getEntryType())) {
 			org.entrystore.List l = (org.entrystore.List) listEntry.getResource();
 			List<URI> c = l.getChildren();
 			for (URI uri : c) {
 				Entry e = getRM().getContextManager().getEntry(uri);
 				if (e != null) {
-					if (GraphType.List.equals(e.getGraphType())) {
+					if (List.equals(e.getGraphType())) {
 						result.addAll(getListChildrenRecursively(e));
 					} else {
 						result.add(e);
@@ -612,7 +599,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * List
 		 */
-		if (entry.getGraphType() == GraphType.List) {
+		if (entry.getGraphType() == List) {
 			ListImpl l = (ListImpl) entry.getResource();
 			if (parameters.containsKey("recursive")) {
 				l.removeTree();
@@ -753,14 +740,14 @@ public class ResourceResource extends BaseResource {
 		feed.setFeedType(type);
 
 		GraphType bt = entry.getGraphType();
-		if (!GraphType.Context.equals(bt) && !GraphType.List.equals(bt)) {
+		if (!Context.equals(bt) && !List.equals(bt)) {
 			return null;
 		}
 
 		String solrQueryValue;
 		String alias;
 
-		if (GraphType.Context.equals(bt)) {
+		if (Context.equals(bt)) {
 			alias = getCM().getName(entry.getResourceURI());
 			solrQueryValue = "context:";
 		} else {
@@ -843,9 +830,9 @@ public class ResourceResource extends BaseResource {
 		MediaType mediaType = null;
 		if (feedType != null) {
 			if (feedType.startsWith("rss_")) {
-				mediaType = MediaType.APPLICATION_RSS;
+				mediaType = APPLICATION_RSS;
 			} else if (feedType.startsWith("atom_")) {
-				mediaType = MediaType.APPLICATION_ATOM;
+				mediaType = APPLICATION_ATOM;
 			}
 		}
 
@@ -864,7 +851,7 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * List and Group
 		 */
-		if (GraphType.List.equals(gt) || GraphType.Group.equals(gt)) {
+		if (List.equals(gt) || Group.equals(gt)) {
 			String requestBody = null;
 			try {
 				requestBody = getRequest().getEntity().getText();
@@ -890,7 +877,7 @@ public class ResourceResource extends BaseResource {
 						}
 					}
 
-					if (entry.getGraphType() == GraphType.List) {
+					if (entry.getGraphType() == List) {
 						org.entrystore.List resourceList = (org.entrystore.List) entry.getResource();
 						resourceList.setChildren(newResource);
 					} else {
@@ -909,7 +896,7 @@ public class ResourceResource extends BaseResource {
 				return; // success!
 			} else {
 				Model graph = GraphUtil.deserializeGraph(requestBody, mediaType);
-				if (graph != null && GraphType.List.equals(entry.getGraphType())) {
+				if (graph != null && List.equals(entry.getGraphType())) {
 					((org.entrystore.List) entry.getResource()).setGraph(graph);
 				} else {
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -925,7 +912,7 @@ public class ResourceResource extends BaseResource {
 			boolean textarea = this.parameters.containsKey("textarea");
 			String error = null;
 
-			if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
+			if (MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 				try {
 					List<FileItem> items = Util.createRestletFileUpload(getContext()).parseRepresentation(getRequest().getEntity());
 					Iterator<FileItem> iter = items.iterator();
@@ -965,7 +952,7 @@ public class ResourceResource extends BaseResource {
 				try {
 					((Data) entry.getResource()).setData(req.getEntity().getStream());
 					entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
-					String mimeType = MediaType.APPLICATION_OCTET_STREAM.toString();
+					String mimeType = APPLICATION_OCTET_STREAM.toString();
 					if (parameters.containsKey("mimeType")) {
 						mimeType = parameters.get("mimeType");
 					} else if (req.getEntity().getMediaType() != null) {
@@ -990,7 +977,7 @@ public class ResourceResource extends BaseResource {
 
 			if (error != null) {
 				if (textarea) {
-					getResponse().setEntity("<textarea>{\"error\":\"" + error + "\"}</textarea>", MediaType.TEXT_HTML);
+					getResponse().setEntity("<textarea>{\"error\":\"" + error + "\"}</textarea>", TEXT_HTML);
 				} else {
 					JSONObject jsonError = new JSONObject();
 					try {
@@ -1007,7 +994,7 @@ public class ResourceResource extends BaseResource {
 			result.put("success", "The file was uploaded");
 			result.put("format", HtmlEscapers.htmlEscaper().escape(entry.getMimetype()));
 			if (textarea) {
-				getResponse().setEntity("<textarea>" + result + "</textarea>", MediaType.TEXT_HTML);
+				getResponse().setEntity("<textarea>" + result + "</textarea>", TEXT_HTML);
 			} else {
 				getResponse().setEntity(new JsonRepresentation(result));
 			}
@@ -1049,7 +1036,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** User ***/
-		if (GraphType.User.equals(gt)) {
+		if (User.equals(gt)) {
 			JSONObject entityJSON = null;
 			try {
 				entityJSON = new JSONObject(getRequest().getEntity().getText());
