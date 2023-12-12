@@ -477,6 +477,19 @@ public class SolrSearchIndex implements SearchIndex {
 		return reindexing.containsKey(contextURI);
 	}
 
+	public Set<URI> getIndexingContexts() {
+		return reindexing.keySet();
+	}
+
+	public long getPostQueueSize() {
+		postQueue.cleanUp();
+		return postQueue.estimatedSize();
+	}
+
+	public long getDeleteQueueSize() {
+		return deleteQueue.size();
+	}
+
 	@Override
 	public boolean ping() {
 		try {
