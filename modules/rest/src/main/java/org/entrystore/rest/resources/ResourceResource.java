@@ -192,13 +192,8 @@ public class ResourceResource extends BaseResource {
 			return;
 		}
 
-		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
-		if (preferredMediaType == null) {
-			preferredMediaType = MediaType.APPLICATION_RDF_XML;
-		}
-
 		try {
-			modifyResource(preferredMediaType);
+			modifyResource();
 			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
 		} catch(AuthorizationException e) {
 			unauthorizedPUT();
@@ -839,8 +834,9 @@ public class ResourceResource extends BaseResource {
 	/**
 	 * Set a resource to an entry.
 	 */
-	private void modifyResource(MediaType mediaType) throws AuthorizationException {
+	private void modifyResource() throws AuthorizationException {
 		GraphType gt = entry.getGraphType();
+		MediaType mediaType = getRequestEntity().getMediaType();
 		/*
 		 * List and Group
 		 */
@@ -852,10 +848,11 @@ public class ResourceResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
+
 			if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 				try {
 					JSONArray childrenJSONArray = new JSONArray(requestBody);
-					ArrayList<URI> newResource = new ArrayList<URI>();
+					ArrayList<URI> newResource = new ArrayList<>();
 
 					// Add new entries to the list.
 					for (int i = 0; i < childrenJSONArray.length(); i++) {
@@ -901,11 +898,11 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * Data
 		 */
-		if (gt == GraphType.None){
+		if (gt == GraphType.None) {
 			boolean textarea = this.parameters.containsKey("textarea");
 			String error = null;
 
-			if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
+			if (MediaType.MULTIPART_FORM_DATA.equals(mediaType, true)) {
 				try {
 					List<FileItem> items = Util.createRestletFileUpload(getContext()).parseRepresentation(getRequest().getEntity());
 					Iterator<FileItem> iter = items.iterator();
@@ -948,8 +945,8 @@ public class ResourceResource extends BaseResource {
 					String mimeType = MediaType.APPLICATION_OCTET_STREAM.toString();
 					if (parameters.containsKey("mimeType")) {
 						mimeType = parameters.get("mimeType");
-					} else if (req.getEntity().getMediaType() != null) {
-						mimeType = req.getEntity().getMediaType().toString();
+					} else if (mediaType != null) {
+						mimeType = mediaType.toString();
 					}
 					entry.setMimetype(mimeType);
 					Disposition disp = req.getEntity().getDisposition();
