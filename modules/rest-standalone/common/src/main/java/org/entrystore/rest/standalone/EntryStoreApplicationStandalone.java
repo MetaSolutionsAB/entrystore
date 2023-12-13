@@ -61,8 +61,6 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				desc("URL of configuration file, may be omitted if environment variable ENTRYSTORE_CONFIG_URI is set").
 				hasArg().
 				argName("URL").
-				optionalArg(false).
-				numberOfArgs(1).
 				type(PatternOptionBuilder.URL_VALUE).
 				build());
 		options.addOption(Option.builder("p").
@@ -70,8 +68,6 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				desc("port to listen on; default: 8181").
 				hasArg().
 				argName("PORT").
-				optionalArg(false).
-				numberOfArgs(1).
 				type(PatternOptionBuilder.NUMBER_VALUE).
 				build());
 		options.addOption(Option.builder("l").
@@ -79,8 +75,6 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				desc("log level, one of: ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF; default: INFO").
 				hasArg().
 				argName("LEVEL").
-				optionalArg(false).
-				numberOfArgs(1).
 				build());
 		options.addOption(Option.builder().
 				longOpt("connector-params").
@@ -90,8 +84,6 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 						"see the JavaDoc of JettyServerHelper for available parameters").
 				hasArg().
 				argName("SETTINGS").
-				optionalArg(false).
-				numberOfArgs(1).
 				build());
 		options.addOption(Option.builder("h").longOpt("help").desc("display this help").build());
 
