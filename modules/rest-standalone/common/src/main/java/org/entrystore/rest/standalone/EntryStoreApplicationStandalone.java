@@ -16,8 +16,6 @@
 
 package org.entrystore.rest.standalone;
 
-import java.net.URI;
-import java.net.URISyntaxException;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -35,6 +33,9 @@ import org.restlet.Context;
 import org.restlet.Server;
 import org.restlet.data.Protocol;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.net.URISyntaxException;
 
 /**
  * Class to provide common functionality for other standalone wrappers.
@@ -61,6 +62,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				hasArg().
 				argName("URL").
 				optionalArg(false).
+				numberOfArgs(1).
 				type(PatternOptionBuilder.URL_VALUE).
 				build());
 		options.addOption(Option.builder("p").
@@ -69,6 +71,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				hasArg().
 				argName("PORT").
 				optionalArg(false).
+				numberOfArgs(1).
 				type(PatternOptionBuilder.NUMBER_VALUE).
 				build());
 		options.addOption(Option.builder("l").
@@ -77,6 +80,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				hasArg().
 				argName("LEVEL").
 				optionalArg(false).
+				numberOfArgs(1).
 				build());
 		options.addOption(Option.builder().
 				longOpt("connector-params").
@@ -87,6 +91,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				hasArg().
 				argName("SETTINGS").
 				optionalArg(false).
+				numberOfArgs(1).
 				build());
 		options.addOption(Option.builder("h").longOpt("help").desc("display this help").build());
 
