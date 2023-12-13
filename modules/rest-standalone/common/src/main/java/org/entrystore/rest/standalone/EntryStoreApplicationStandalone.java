@@ -181,6 +181,13 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 	private static void configureLogging(String logLevel) {
 		Level l = Level.toLevel(logLevel, Level.INFO);
 		Configurator.setRootLevel(l);
+
+		// the next line is commented because in most cases we don't want to have debug info for namespaces that
+		// are explicitly defined in log4j2.properties, e.g. org.apache.solr - if more info is needed for org.apache.solr
+		// then this should be changed in the configuration file instead of here.
+		// Leaving it here for documentation purposes.
+		//Configurator.setAllLevels(LogManager.getRootLogger().getName(), l);
+
 		out("Log level set to " + l);
 	}
 
