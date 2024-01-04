@@ -18,6 +18,7 @@ stepdefinitions:
   - deploy: &deploy
       name: Deploy
       script:
+        - apt update && apt install gnupg openssh-client
         - gpg --version
         - echo $GPG_SIGN_KEY | base64 -d | gpg --import
         - gpg --list-secret-keys
