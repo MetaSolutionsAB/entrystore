@@ -38,6 +38,7 @@ stepdefinitions:
         - docker version
         - export VERSION=`cat VERSION.txt` && echo $VERSION
         - export VERSION_MAJOR_MINOR=${VERSION%.*} && echo $VERSION_MAJOR_MINOR
+        - apt update && apt install -y openssh-client
         - git clone -b master git@bitbucket.org:metasolutions/docker.git
         - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
         - cd docker/entrystore
