@@ -32,9 +32,9 @@
         <jsonorg.version>20231013</jsonorg.version>
         <jackson.version>2.16.0</jackson.version>
         <jackson-databind.version>2.16.0</jackson-databind.version>
-        <mockito.version>5.5.0</mockito.version>
+        <mockito.version>5.8.0</mockito.version>
         <junit.version>5.10.0</junit.version>
-        <assertj.version>3.24.2</assertj.version>
+        <assertj.version>3.25.1</assertj.version>
         <rest-assured.version>5.3.1</rest-assured.version>
         <zookeeper.version>3.9.1</zookeeper.version>
         <xmlsec.version>3.0.3</xmlsec.version>
@@ -46,7 +46,7 @@
         <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
         <distribution.url>https://entrystore.org</distribution.url>
         <license.licenseName>apache_v2</license.licenseName>
-        <maven.compiler.release>17</maven.compiler.release>
+        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
