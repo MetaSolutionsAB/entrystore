@@ -350,10 +350,14 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		for (String s : predCSV.split(",")) {
 			Set<URI> pSet = loadTraversalProfile(s);
 			if (pSet.isEmpty()) {
-				URI expanded = NS.expand(s);
-				// we add it to the result if it could be expanded
-				if (!s.equals(expanded.toString())) {
-					result.add(URI.create(NS.expand(s).toString()));
+				try {
+					URI expanded = NS.expand(s);
+					// we add it to the result if it could be expanded
+					if (!s.equals(expanded.toString())) {
+						result.add(URI.create(NS.expand(s).toString()));
+					}
+				} catch (IllegalArgumentException iae) {
+					log.warn("Unable to expand namespace: {}", iae.getMessage());
 				}
 			} else {
 				result.addAll(pSet);
