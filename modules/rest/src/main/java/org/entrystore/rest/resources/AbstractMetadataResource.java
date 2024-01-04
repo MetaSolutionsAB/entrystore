@@ -39,6 +39,7 @@ import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
+import org.entrystore.rest.util.Util;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
@@ -205,6 +206,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			Date lastMod = getModificationDate();
 			if (lastMod != null && result.getModificationDate() == null) {
 				result.setModificationDate(lastMod);
+				result.setTag(Util.createTag(lastMod));
 			}
 
 			return result;

@@ -176,6 +176,7 @@ public class ResourceResource extends BaseResource {
 				Date lastMod = entry.getModifiedDate();
 				if (lastMod != null) {
 					result.setModificationDate(lastMod);
+					result.setTag(Util.createTag(lastMod));
 				}
 			}
 
@@ -194,6 +195,7 @@ public class ResourceResource extends BaseResource {
 
 		try {
 			modifyResource();
+			entry.updateModificationDate();
 			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
 		} catch(AuthorizationException e) {
 			unauthorizedPUT();

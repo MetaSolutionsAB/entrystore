@@ -39,6 +39,7 @@ import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
+import org.entrystore.rest.util.Util;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -281,6 +282,7 @@ public class ContextResource extends BaseResource {
 				getResponse().setLocationRef(entry.getEntryURI().toString());
 				getResponse().setEntity(new JsonRepresentation("{\"entryId\":\"" + entry.getId() + "\"}"));
 				getResponse().getEntity().setModificationDate(entry.getModifiedDate());
+				getResponse().getEntity().setTag(Util.createTag(entry.getModifiedDate()));
 			}
 		} catch (AuthorizationException e) {
 			unauthorizedPOST();

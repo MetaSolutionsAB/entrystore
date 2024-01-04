@@ -1167,7 +1167,7 @@ public class EntryImpl implements Entry {
 		repType = resType;
 	}
 
-	protected void updateModifiedDateSynchronized(RepositoryConnection rc, ValueFactory vf) throws RepositoryException, DatatypeConfigurationException {
+	protected void updateModifiedDateSynchronized(RepositoryConnection rc, ValueFactory vf) throws RepositoryException {
 		synchronized (this.repository) {
 			registerEntryModified(rc, vf);
 		}
@@ -1178,7 +1178,6 @@ public class EntryImpl implements Entry {
 			modified = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
 		} catch (DatatypeConfigurationException e) {
 			log.error(e.getMessage());
-			throw new RepositoryException(e.getMessage(), e);
 		}
 		rc.remove(rc.getStatements(entryURI, RepositoryProperties.Modified, null, false, entryURI), entryURI);
 		rc.add(entryURI, RepositoryProperties.Modified, vf.createLiteral(modified), entryURI);
@@ -1196,6 +1195,12 @@ public class EntryImpl implements Entry {
 		    	rc.add(this.entryURI,RepositoryProperties.Contributor,contributorURI, this.entryURI);
 		    	contributors.add(contributorURI);
 		    }
+		}
+	}
+
+	public void updateModificationDate() {
+		try (RepositoryConnection rc = repository.getConnection()) {
+			this.updateModifiedDateSynchronized(rc, getRepositoryManager().getValueFactory());
 		}
 	}
 
