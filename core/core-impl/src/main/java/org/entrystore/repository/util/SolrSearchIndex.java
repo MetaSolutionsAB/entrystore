@@ -139,9 +139,9 @@ public class SolrSearchIndex implements SearchIndex {
 				postQueue.cleanUp();
 				int batchCount = 0;
 
-				if (postQueue.estimatedSize() > 0 || deleteQueue.size() > 0) {
+				if (postQueue.estimatedSize() > 0 || !deleteQueue.isEmpty()) {
 
-					if (deleteQueue.size() > 0) {
+					if (!deleteQueue.isEmpty()) {
 						StringBuilder deleteQuery = new StringBuilder("uri:(");
 						synchronized (deleteQueue) {
 							while (batchCount < BATCH_SIZE_DELETE) {
@@ -950,15 +950,18 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public void removeEntry(Entry entry) {
 		URI entryURI = entry.getEntryURI();
-		synchronized (deleteQueue) {
-			log.info("Adding entry to Solr delete queue: " + entryURI);
-			deleteQueue.add(entryURI);
-		}
+
 		synchronized (postQueue) {
 			// we make sure that the entry is not added again after deletion
 			// if the queues are handled at different times
 			postQueue.invalidate(entryURI);
 		}
+
+		synchronized (deleteQueue) {
+			log.info("Adding entry to Solr delete queue: " + entryURI);
+			deleteQueue.add(entryURI);
+		}
+
 		// if entry is a context, also remove all entries inside
 		if (GraphType.Context.equals(entry.getGraphType())) {
 			clearSolrIndex(solrServer, null, entry);
@@ -1043,14 +1046,18 @@ public class SolrSearchIndex implements SearchIndex {
 				try {
 					Entry entry = rm.getContextManager().getEntry(uri);
 					if (entry != null) {
+						if (entry.isDeleted()) {
+							log.warn("Deleted entry {} is still in Solr index, removing it now", uri);
+							removeEntry(entry);
+							throw new IllegalStateException("Cannot return deleted entry in search result: " + uri);
+						}
 						PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
 						// If linkReference or reference to a entry in the same
 						// repository
 						// check that the referenced metadata is accessible.
 						if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
 								&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
-							Entry refEntry = entry.getRepositoryManager().getContextManager()
-									.getEntry(entry.getExternalMetadataURI());
+							Entry refEntry = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
 							pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);
 						} else {
 							// Check that the local metadata is accessible.
@@ -1062,7 +1069,7 @@ public class SolrSearchIndex implements SearchIndex {
 							break;
 						}
 					}
-				} catch (AuthorizationException ae) {
+				} catch (AuthorizationException | IllegalStateException e) {
 					inaccessibleHits++;
 					continue;
 				}
@@ -1078,7 +1085,7 @@ public class SolrSearchIndex implements SearchIndex {
 		// probing requests.
 		//
 		// Test if the condition covers to much and add "offset == 0 &&" if necessary
-		if (result.size() == 0 && hits > 0) {
+		if (result.isEmpty() && hits > 0) {
 			adjustedHitCount = 0;
 		}
 
