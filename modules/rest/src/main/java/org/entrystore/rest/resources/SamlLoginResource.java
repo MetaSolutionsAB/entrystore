@@ -236,6 +236,7 @@ public class SamlLoginResource extends BaseResource {
 			}
 
 			if (!authSuccess) {
+				log.info("Login failed with username {}", userName);
 				if (redirFailure != null) {
 					getResponse().redirectTemporary(URLDecoder.decode(redirFailure, StandardCharsets.UTF_8));
 				} else {
