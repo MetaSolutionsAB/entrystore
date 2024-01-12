@@ -1100,7 +1100,7 @@ public class SolrSearchIndex implements SearchIndex {
 			QueryResponse r = solrServer.query(q);
 			SolrDocumentList docs = r.getResults();
 			if (!docs.isEmpty()) {
-				return docs.get(0);
+				return docs.getFirst();
 			}
 		} catch (SolrServerException | IOException e) {
 			log.error(e.getMessage());
