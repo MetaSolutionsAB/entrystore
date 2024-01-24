@@ -40,7 +40,7 @@
         <xmlsec.version>3.0.3</xmlsec.version>
         <httpmime.version>4.5.14</httpmime.version>
         <commonscli.version>1.6.0</commonscli.version>
-        <snappy.version>1.1.10.4</snappy.version>
+        <snappy.version>1.1.10.5</snappy.version>
         <activation.version>1.2.2</activation.version>
         <site.url>https://entrystore.org</site.url>
         <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
