@@ -136,10 +136,15 @@ public class ResourceResource extends BaseResource {
 	private UserTempLockoutCache userTempLockoutCache;
 	private ResourceJsonSerializer resourceSerializer;
 
+	private static Boolean rewriteMediaTypeJavaScript;
+
 	@Override
 	public void doInit() {
 		this.userTempLockoutCache = getUserTempLockoutCache();
 		this.resourceSerializer = new ResourceJsonSerializer(getPM(), getCM(), userTempLockoutCache);
+		if (rewriteMediaTypeJavaScript == null) {
+			rewriteMediaTypeJavaScript = getRM().getConfiguration().getBoolean(Settings.HTTP_ALLOW_MEDIA_TYPE_JAVASCRIPT, false);
+		}
 	}
 
 	/**
@@ -460,12 +465,18 @@ public class ResourceResource extends BaseResource {
 			File file = ((Data)entry.getResource()).getDataFile();
 			if  (file != null) {
 				String medTyp = entry.getMimetype();
-				FileRepresentation rep = null;
+				FileRepresentation rep;
 				if (medTyp != null) {
 					try {
+						if (rewriteMediaTypeJavaScript) {
+							if (medTyp.toLowerCase().contains("javascript")) {
+								log.info("Rewriting media type {} to text/plain for {}", medTyp, entry.getResourceURI());
+								medTyp = MediaType.TEXT_PLAIN.toString();
+							}
+						}
 						rep = new FileRepresentation(file, MediaType.valueOf(medTyp));
 					} catch (IllegalArgumentException iae) {
-						log.warn("Invalid media type for {}: {}", entry.getEntryURI().toString(), iae.getMessage());
+						log.warn("Invalid media type for {}: {}", entry.getEntryURI(), iae.getMessage());
 						rep = new FileRepresentation(file, MediaType.ALL);
 					}
 				} else {
