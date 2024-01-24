@@ -101,6 +101,8 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final int SOLR_COMMIT_WITHIN_MAX = 10000;
 
+	private String defaultSortLang = null;
+
 	private boolean extractFulltext = false;
 
 	private boolean related = false;
@@ -276,6 +278,7 @@ public class SolrSearchIndex implements SearchIndex {
 		this.solrServer = solrServer;
 		extractFulltext = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_EXTRACT_FULLTEXT, "off"));
 		related = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_RELATED, "off"));
+		defaultSortLang = rm.getConfiguration().getString(Settings.SOLR_DEFAULT_SORTING_LANG);
 		if (related) {
 			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>());
 			if (relPropsSetting.isEmpty()) {
@@ -341,7 +344,7 @@ public class SolrSearchIndex implements SearchIndex {
 			deleteQuery += "indexedAt:[* TO " + solrExpirationDate + "}";
 		}
 		if (contextEntry != null) {
-			if (deleteQuery.length() > 0) {
+			if (!deleteQuery.isEmpty()) {
 				deleteQuery += " AND ";
 			}
 			deleteQuery += "context:" + ClientUtils.escapeQueryChars(contextEntry.getResourceURI().toString());
@@ -381,7 +384,7 @@ public class SolrSearchIndex implements SearchIndex {
 			if (reindexing.containsKey(contextURI)) {
 				Future existingIndexer = reindexing.get(contextURI);
 				if (!existingIndexer.isDone()) {
-					log.info("Cancelling existing indexer thread for " + contextURI);
+					log.info("Cancelling existing indexer thread for {}", contextURI);
 					existingIndexer.cancel(true);
 				}
 				reindexing.remove(contextURI);
@@ -665,7 +668,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 		// titles
 		Map<String, String> titles = EntryUtil.getTitles(entry);
-		if (titles != null && titles.size() > 0) {
+		if (titles != null && !titles.isEmpty()) {
 			Set<String> langs = new HashSet<>();
 			for (String title : titles.keySet()) {
 				doc.addField("title", title);
@@ -674,6 +677,10 @@ public class SolrSearchIndex implements SearchIndex {
 				String lang = titles.get(title);
 				if (lang == null) {
 					lang = "nolang";
+				} else if (lang.equalsIgnoreCase(defaultSortLang) && !langs.contains("default")) {
+					// if a default sorting language is configured, we create a field for that
+					doc.addField("title.default", title);
+					langs.add("default");
 				}
 				// we only want one title per language, otherwise sorting will not work
 				if (!langs.contains(lang)) {
@@ -691,7 +698,7 @@ public class SolrSearchIndex implements SearchIndex {
 		if (lastName != null) {
 			name += " " + lastName;
 		}
-		if (name.length() > 0) {
+		if (!name.isEmpty()) {
 			doc.addField("title", name);
 		}
 
@@ -718,7 +725,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 		// description
 		Map<String, String> descriptions = EntryUtil.getDescriptions(entry);
-		if (descriptions != null && descriptions.size() > 0) {
+		if (descriptions != null && !descriptions.isEmpty()) {
 			for (String description : descriptions.keySet()) {
 				doc.addField("description", description);
 				String lang = descriptions.get(description);
