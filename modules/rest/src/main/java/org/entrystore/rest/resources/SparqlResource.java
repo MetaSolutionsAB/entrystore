@@ -23,7 +23,7 @@ import org.eclipse.rdf4j.query.QueryLanguage;
 import org.eclipse.rdf4j.query.TupleQuery;
 import org.eclipse.rdf4j.query.TupleQueryResultHandler;
 import org.eclipse.rdf4j.query.TupleQueryResultHandlerException;
-import org.eclipse.rdf4j.query.impl.DatasetImpl;
+import org.eclipse.rdf4j.query.impl.SimpleDataset;
 import org.eclipse.rdf4j.query.resultio.binary.BinaryQueryResultWriter;
 import org.eclipse.rdf4j.query.resultio.sparqljson.SPARQLResultsJSONWriter;
 import org.eclipse.rdf4j.query.resultio.sparqlxml.SPARQLResultsXMLWriter;
@@ -32,6 +32,7 @@ import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.util.HttpUtil;
 import org.restlet.data.Form;
 import org.restlet.data.MediaType;
@@ -65,12 +66,15 @@ public class SparqlResource extends BaseResource {
 
 	List<MediaType> supportedMediaTypes = new ArrayList<>();
 
+	int maxExecutionTime;
+
 	@Override
 	public void doInit() {
 		supportedMediaTypes.add(MediaType.APPLICATION_XML);
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		supportedMediaTypes.add(MediaType.TEXT_CSV);
 		supportedMediaTypes.add(MediaType.ALL);
+		maxExecutionTime = getRM().getConfiguration().getInt(Settings.REPOSITORY_PUBLIC_SPARQL_MAX_EXECUTION_TIME, 10);
 	}
 
 	@Get
@@ -175,10 +179,14 @@ public class SparqlResource extends BaseResource {
 			}
 
 			TupleQuery query = rc.prepareTupleQuery(QueryLanguage.SPARQL, queryString);
-			query.setMaxQueryTime(600); // setting a max query time of 10 minutes
+			log.debug("Using max execution time of {} seconds", maxExecutionTime);
+			query.setMaxExecutionTime(maxExecutionTime);
+			query.setIncludeInferred(false);
+
 			if (context != null) {
 				IRI contextURI = rc.getValueFactory().createIRI(context.getURI().toString());
-				DatasetImpl ds = new DatasetImpl();
+				log.info("Restricting query to named graph {}", contextURI);
+				SimpleDataset ds = new SimpleDataset();
 				ds.addDefaultGraph(contextURI);
 				ds.addNamedGraph(contextURI);
 				// TODO for queries including named graphs to work properly, all
@@ -188,7 +196,10 @@ public class SparqlResource extends BaseResource {
 				query.setDataset(ds);
 			}
 
+			log.debug("Executing query: {}", queryString);
+			long before = System.currentTimeMillis();
 			query.evaluate(resultHandler);
+			log.debug("SPARQL query execution took {} ms", System.currentTimeMillis() - before);
 		}
 		return true;
 	}
