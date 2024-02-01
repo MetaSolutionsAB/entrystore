@@ -888,11 +888,21 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 	//Retrieve functions
 	public Entry getEntry(URI uri) {
+		return getEntry(uri, true);
+	}
+
+	protected Entry getEntryIgnoreACL(URI uri) {
+		return getEntry(uri, false);
+	}
+
+	private Entry getEntry(URI uri, boolean withACL) {
 		URISplit usplit = new URISplit(uri, entry.getRepositoryManager().getRepositoryURL());
 		if (usplit.getURIType() != URIType.Unknown) {
 			Entry item = cache.getByEntryURI(usplit.getMetaMetadataURI());
 			if (item != null) {
-				((ContextImpl) item.getContext()).checkAccess(item, AccessProperty.ReadMetadata);
+				if (withACL) {
+					((ContextImpl) item.getContext()).checkAccess(item, AccessProperty.ReadMetadata);
+				}
 				return item;
 			}
 			Entry contextEntry = getByEntryURI(usplit.getContextMetaMetadataURI());
