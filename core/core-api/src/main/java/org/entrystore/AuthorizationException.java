@@ -17,31 +17,23 @@
 
 package org.entrystore;
 
+import lombok.Getter;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.jetbrains.annotations.Nullable;
 
 
+@Getter
 public class AuthorizationException extends RuntimeException {
 	
-	private Entry entry;
-	private AccessProperty accessProperty;
-	private User user;
+	private final Entry entry;
+	private final AccessProperty accessProperty;
+	private final User user;
 
-	public AuthorizationException(User user, Entry entry, AccessProperty ap) {
-		super();
+	public AuthorizationException(@Nullable User user, @Nullable Entry entry, @Nullable AccessProperty ap) {
+		super(String.format("User %s not authorized for: %s %s", user != null ? user.getURI() : null, ap, entry != null ? entry.getEntryURI() : null));
 		this.user = user;
 		this.accessProperty = ap;
 		this.entry = entry;
 	}
 
-	public AccessProperty getAccessProperty() {
-		return accessProperty;
-	}
-
-	public Entry getEntry() {
-		return entry;
-	}
-
-	public User getUser() {
-		return user;
-	}
 }
