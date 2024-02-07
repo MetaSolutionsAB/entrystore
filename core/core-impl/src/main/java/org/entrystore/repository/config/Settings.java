@@ -116,11 +116,9 @@ public class Settings {
 	public static String SOLR_FACET_MAX_LIMIT = "entrystore.solr.facet-max-limit";
 	public static String SOLR_SCHEMA_URL = "entrystore.solr.schema.url";
 	public static String SOLR_CONFIG_URL = "entrystore.solr.config.url";
-
+	public static String SOLR_DEFAULT_SORTING_LANG = "entrystore.solr.default-sorting-lang";
 	public static String SOLR_AUTH_USERNAME = "entrystore.solr.auth.username";
-
 	public static String SOLR_AUTH_PASSWORD = "entrystore.solr.auth.password";
-
 	public static String SOLR_RELATED = "entrystore.solr.related";
 	public static String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";
 
@@ -134,6 +132,7 @@ public class Settings {
 	public static String REPOSITORY_PUBLIC_INDEXES = "entrystore.repository.public.indexes";
 	public static String REPOSITORY_PUBLIC_TYPE = "entrystore.repository.public.type";
 	public static String REPOSITORY_PUBLIC_REBUILD_ON_STARTUP = "entrystore.repository.public.rebuild-on-startup";
+	public static String REPOSITORY_PUBLIC_SPARQL_MAX_EXECUTION_TIME = "entrystore.repository.public.sparql.max-execution-time";
 
 	public static String REPOSITORY_PROVENANCE = "entrystore.repository.provenance";
 	public static String REPOSITORY_PROVENANCE_PATH = "entrystore.repository.provenance.path";
@@ -177,9 +176,9 @@ public class Settings {
 
 	public static String CORS = "entrystore.cors";
 	public static String CORS_ORIGINS = "entrystore.cors.origins";
+	public static String CORS_ORIGINS_ALLOW_CREDENTIALS = "entrystore.cors.origins.allow-credentials";
 	public static String CORS_HEADERS = "entrystore.cors.headers";
 	public static String CORS_MAX_AGE = "entrystore.cors.max-age";
-	public static String CORS_ALLOW_CREDENTIALS = "entrystore.cors.allow-credentials";
 
 	public static String NONADMIN_GROUPCONTEXT_CREATION = "entrystore.nonadmin.group-context-creation";
 
@@ -191,6 +190,8 @@ public class Settings {
 	public static String HTTPS_DISABLE_VERIFICATION = "entrystore.https.disable-verification";
 
 	public static String HTTP_ALLOW_CONTENT_DISPOSITION_INLINE = "entrystore.http.allow-content-disposition-inline";
+
+	public static String HTTP_ALLOW_MEDIA_TYPE_JAVASCRIPT = "entrystore.http.allow-media-type-javascript";
 
 	public static String METRICS = "entrystore.metrics";
 

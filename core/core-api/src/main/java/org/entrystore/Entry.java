@@ -142,6 +142,8 @@ public interface Entry {
 	 * described in any of the set methods in this interface.
 	 */
 	void setGraph(Model entryInfo);
+
+	void updateModificationDate();
 	
 	/**
 	 * The list of lists is updated automatically when the resource is 

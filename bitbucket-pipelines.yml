@@ -1,4 +1,4 @@
-image: maven:3.6-openjdk-17
+image: maven:3-eclipse-temurin-21-jammy
 
 options:
   max-time: 12
@@ -18,6 +18,7 @@ stepdefinitions:
   - deploy: &deploy
       name: Deploy
       script:
+        - apt update && apt install -y gnupg openssh-client
         - gpg --version
         - echo $GPG_SIGN_KEY | base64 -d | gpg --import
         - gpg --list-secret-keys
@@ -37,6 +38,7 @@ stepdefinitions:
         - docker version
         - export VERSION=`cat VERSION.txt` && echo $VERSION
         - export VERSION_MAJOR_MINOR=${VERSION%.*} && echo $VERSION_MAJOR_MINOR
+        - apt update && apt install -y openssh-client
         - git clone -b master git@bitbucket.org:metasolutions/docker.git
         - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
         - cd docker/entrystore
@@ -44,6 +46,11 @@ stepdefinitions:
         - docker push metasolutions/entrystore:$VERSION
         - if [ $BITBUCKET_BRANCH == "develop" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:develop ; docker push metasolutions/entrystore:develop ; fi
         - if [ $BITBUCKET_BRANCH == "master" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:$VERSION_MAJOR_MINOR ; docker push metasolutions/entrystore:$VERSION_MAJOR_MINOR ; fi
+        # buildx is currently only supported with self-hosted runners, see https://confluence.atlassian.com/bbkb/building-multi-architecture-docker-images-with-bitbucket-pipelines-1252329371.html
+        # - docker buildx create --use --platform=linux/arm64,linux/amd64 --name multi-platform-builder
+        # - docker buildx build --build-arg ENTRYSTORE_VERSION=$VERSION --no-cache --pull --platform=linux/arm64,linux/amd64 --progress=plain --tag=$VERSION --push .
+        # - if [ $BITBUCKET_BRANCH == "develop" ]; then docker buildx imagetools create -t metasolutions/entrystore:develop metasolutions/entrystore:$VERSION ; fi
+        # - if [ $BITBUCKET_BRANCH == "master" ]; then docker buildx imagetools create -t metasolutions/entrystore:$VERSION_MAJOR_MINOR metasolutions/entrystore:$VERSION ; fi
       services:
         - docker
       caches:

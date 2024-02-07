@@ -784,7 +784,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			solrIndex = new SolrSearchIndex(this, solrServer);
 			if (reindex) {
 				if (reindexWait) {
-					solrIndex.reindexSync(true);
+					solrIndex.clearSolrIndex(solrServer);
+					solrIndex.reindexSync(false);
 				} else {
 					solrIndex.reindex(false);
 				}

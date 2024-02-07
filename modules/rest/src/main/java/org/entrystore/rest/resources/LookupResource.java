@@ -28,6 +28,7 @@ import org.entrystore.EntryType;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.GraphUtil;
+import org.entrystore.rest.util.Util;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.representation.EmptyRepresentation;
@@ -149,6 +150,7 @@ public class LookupResource extends BaseResource {
 			Date lastMod = entry.getModifiedDate();
 			if (lastMod != null) {
 				r.setModificationDate(lastMod);
+				r.setTag(Util.createTag(lastMod));
 			}
 		}
 		

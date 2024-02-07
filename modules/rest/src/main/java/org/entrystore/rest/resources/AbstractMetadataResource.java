@@ -39,6 +39,7 @@ import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
+import org.entrystore.rest.util.Util;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
@@ -205,6 +206,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			Date lastMod = getModificationDate();
 			if (lastMod != null && result.getModificationDate() == null) {
 				result.setModificationDate(lastMod);
+				result.setTag(Util.createTag(lastMod));
 			}
 
 			return result;
@@ -348,10 +350,14 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		for (String s : predCSV.split(",")) {
 			Set<URI> pSet = loadTraversalProfile(s);
 			if (pSet.isEmpty()) {
-				URI expanded = NS.expand(s);
-				// we add it to the result if it could be expanded
-				if (!s.equals(expanded.toString())) {
-					result.add(URI.create(NS.expand(s).toString()));
+				try {
+					URI expanded = NS.expand(s);
+					// we add it to the result if it could be expanded
+					if (!s.equals(expanded.toString())) {
+						result.add(URI.create(NS.expand(s).toString()));
+					}
+				} catch (IllegalArgumentException iae) {
+					log.warn("Unable to expand namespace: {}", iae.getMessage());
 				}
 			} else {
 				result.addAll(pSet);

@@ -21,6 +21,7 @@ import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
+import org.entrystore.rest.util.Util;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
@@ -86,6 +87,7 @@ public class RelationResource extends BaseResource {
 			Date lastMod = entry.getModifiedDate();
 			if (lastMod != null) {
 				result.setModificationDate(lastMod);
+				result.setTag(Util.createTag(lastMod));
 			}
 
 			return result;

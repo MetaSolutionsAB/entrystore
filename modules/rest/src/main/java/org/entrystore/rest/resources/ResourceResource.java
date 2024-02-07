@@ -96,8 +96,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
-import java.lang.String;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Date;
@@ -113,19 +113,8 @@ import java.util.Vector;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.entrystore.EntryType.*;
-import static org.entrystore.GraphType.*;
-import static org.entrystore.ResourceType.InformationResource;
-import static org.entrystore.ResourceType.NamedResource;
-import static org.restlet.data.MediaType.*;
-import static org.restlet.data.Method.GET;
-
 /**
  * This class is the resource for entries.
- *
- * @author Eric Johansson
- * @author Hannes Ebner
  */
 public class ResourceResource extends BaseResource {
 
@@ -133,23 +122,29 @@ public class ResourceResource extends BaseResource {
 
 	private  final EmptyRepresentation EMPTY_REPRESENTATION = new EmptyRepresentation();
 	private final List<MediaType> supportedMediaTypes = java.util.List.of(
-			APPLICATION_RDF_XML,
-			APPLICATION_JSON,
-			TEXT_RDF_N3,
+			MediaType.APPLICATION_RDF_XML,
+			MediaType.APPLICATION_JSON,
+			MediaType.TEXT_RDF_N3,
 			new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()),
 			new MediaType(RDFFormat.TRIX.getDefaultMIMEType()),
 			new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()),
 			new MediaType(RDFFormat.TRIG.getDefaultMIMEType()),
-			new MediaType(RDFFormat.JSONLD.getDefaultMIMEType())
+			new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()),
+			new MediaType("application/rdf+json")
 	);
 
 	private UserTempLockoutCache userTempLockoutCache;
 	private ResourceJsonSerializer resourceSerializer;
 
+	private static Boolean rewriteMediaTypeJavaScript;
+
 	@Override
 	public void doInit() {
 		this.userTempLockoutCache = getUserTempLockoutCache();
 		this.resourceSerializer = new ResourceJsonSerializer(getPM(), getCM(), userTempLockoutCache);
+		if (rewriteMediaTypeJavaScript == null) {
+			rewriteMediaTypeJavaScript = getRM().getConfiguration().getBoolean(Settings.HTTP_ALLOW_MEDIA_TYPE_JAVASCRIPT, false);
+		}
 	}
 
 	/**
@@ -176,7 +171,7 @@ public class ResourceResource extends BaseResource {
 			// the check for resource safety is necessary to avoid an implicit
 			// getMetadata() in the case of a PUT on (not yet) existant metadata
 			// - this is e.g. the case if conditional requests are issued
-			if (GET.equals(getRequest().getMethod())) {
+			if (Method.GET.equals(getRequest().getMethod())) {
 				result = getResource();
 			} else {
 				result = new EmptyRepresentation();
@@ -186,6 +181,7 @@ public class ResourceResource extends BaseResource {
 				Date lastMod = entry.getModifiedDate();
 				if (lastMod != null) {
 					result.setModificationDate(lastMod);
+					result.setTag(Util.createTag(lastMod));
 				}
 			}
 
@@ -202,13 +198,9 @@ public class ResourceResource extends BaseResource {
 			return;
 		}
 
-		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
-		if (preferredMediaType == null) {
-			preferredMediaType = APPLICATION_RDF_XML;
-		}
-
 		try {
-			modifyResource(preferredMediaType);
+			modifyResource();
+			entry.updateModificationDate();
 			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
 		} catch(AuthorizationException e) {
 			unauthorizedPUT();
@@ -225,7 +217,7 @@ public class ResourceResource extends BaseResource {
 		EntryType entryType = entry.getEntryType();
 
 		try {
-			if ((entryType == Link || entryType == EntryType.Reference || entryType == LinkReference)
+			if ((entryType == EntryType.Link || entryType == EntryType.Reference || entryType == EntryType.LinkReference)
 					 && "true".equalsIgnoreCase(parameters.get("proxy"))) {
 
 				final Response delResponse = deleteRemoteResource(entry.getResourceURI().toString(), 0);
@@ -264,7 +256,7 @@ public class ResourceResource extends BaseResource {
 		try {
 			if (graphType == GraphType.List
 				 && parameters.containsKey("import")
-				 && APPLICATION_ZIP.equals(getRequestEntity().getMediaType())) {
+				 && MediaType.APPLICATION_ZIP.equals(getRequestEntity().getMediaType())) {
 
 			getResponse().setStatus(importFromZIP(getRequestEntity()));
 		} else if (graphType == GraphType.List
@@ -377,12 +369,13 @@ public class ResourceResource extends BaseResource {
 
 		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
 		if (preferredMediaType == null) {
-			preferredMediaType = APPLICATION_RDF_XML;
+			preferredMediaType = MediaType.APPLICATION_RDF_XML;
 		}
+		preferredMediaType = (format != null) ? format : preferredMediaType;
 
 		// Graph and List resource
 
-		if (graphType == Graph || graphType == GraphType.List) {
+		if (graphType == GraphType.Graph || graphType == GraphType.List) {
 			boolean isList = (entry.getGraphType() == GraphType.List);
 			Model graph = null;
 
@@ -394,7 +387,7 @@ public class ResourceResource extends BaseResource {
 
 			if (graph != null) {
 				String serializedGraph = null;
-				if (APPLICATION_JSON.equals(preferredMediaType)) {
+				if (MediaType.APPLICATION_JSON.equals(preferredMediaType)) {
 					if (isList) {
 						return serializeJsonRepresentationResourceList(entry, new ListParams(parameters));
 					}
@@ -415,8 +408,8 @@ public class ResourceResource extends BaseResource {
 
 		// Remote Document (GraphType == None) Resource
 
-		if (entryType == Link || entryType == LinkReference || entryType == EntryType.Reference) {
-			if (graphType == None) {
+		if (entryType == EntryType.Link || entryType == EntryType.LinkReference || entryType == EntryType.Reference) {
+			if (graphType == GraphType.None) {
 				getResponse().setLocationRef(new Reference(entry.getResourceURI().toString()));
 				getResponse().setStatus(Status.REDIRECTION_SEE_OTHER);
 				return null;
@@ -427,10 +420,10 @@ public class ResourceResource extends BaseResource {
 		 * Local Resource
 		 */
 
-		if (entryType == Local) {
+		if (entryType == EntryType.Local) {
 
 			// Named Local Resource
-			if (resourceType == NamedResource) {
+			if (resourceType == ResourceType.NamedResource) {
 				redirectSeeOther(entry.getLocalMetadataURI().toString());
 				return new EmptyRepresentation();
 			}
@@ -439,23 +432,11 @@ public class ResourceResource extends BaseResource {
 				Resource resource = entry.getResource();
 				return switch (graphType) {
 					case None -> serializeFileRepresentationResourceNone(entry);
-					case List -> serializeJsonRepresentationResourceList(entry, new ListParams(parameters));
-
 					case User -> new JsonRepresentation(resourceSerializer.serializeResourceUser(resource));
 					case Group -> new JsonRepresentation(resourceSerializer.serializeResourceGroup(resource, rdfFormat));
 					case String -> new JsonRepresentation(resourceSerializer.serializeResourceString(resource));
 					case Context -> new JsonRepresentation(resourceSerializer.serializeResourceContext(resource));
 					case SystemContext -> new JsonRepresentation(resourceSerializer.serializeResourceSystemContext(resource));
-					case Graph -> {
-						if (resource instanceof RDFResource graph) {
-							if (graph.getGraph() == null) {
-								getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-								yield new JsonRepresentation("{\"error\":\"The graph has not been set\"}");
-							}
-							yield new JsonRepresentation(resourceSerializer.serializeResourceGraph(graph, rdfFormat));
-						}
-						yield EMPTY_REPRESENTATION;
-					}
 					case Pipeline -> {
 						if (resource instanceof RDFResource pipeline) {
 							if (pipeline.getGraph() == null) {
@@ -467,7 +448,8 @@ public class ResourceResource extends BaseResource {
 						yield EMPTY_REPRESENTATION;
 					}
 					case ResultList, PipelineResult -> EMPTY_REPRESENTATION;
-				};
+                    default -> EMPTY_REPRESENTATION;
+                };
 			} catch (IllegalArgumentException e){
 				log.error(e.getMessage(), e);
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
@@ -478,17 +460,23 @@ public class ResourceResource extends BaseResource {
 	}
 
 	private FileRepresentation serializeFileRepresentationResourceNone(Entry entry) {
-		if(entry.getResourceType() == InformationResource) {
+		if (entry.getResourceType() == ResourceType.InformationResource) {
 			// Local data
 			File file = ((Data)entry.getResource()).getDataFile();
 			if  (file != null) {
 				String medTyp = entry.getMimetype();
-				FileRepresentation rep = null;
+				FileRepresentation rep;
 				if (medTyp != null) {
 					try {
+						if (rewriteMediaTypeJavaScript) {
+							if (medTyp.toLowerCase().contains("javascript")) {
+								log.info("Rewriting media type {} to text/plain for {}", medTyp, entry.getResourceURI());
+								medTyp = MediaType.TEXT_PLAIN.toString();
+							}
+						}
 						rep = new FileRepresentation(file, MediaType.valueOf(medTyp));
 					} catch (IllegalArgumentException iae) {
-						log.warn("Invalid media type for {}: {}", entry.getEntryURI().toString(), iae.getMessage());
+						log.warn("Invalid media type for {}: {}", entry.getEntryURI(), iae.getMessage());
 						rep = new FileRepresentation(file, MediaType.ALL);
 					}
 				} else {
@@ -517,7 +505,7 @@ public class ResourceResource extends BaseResource {
 
 				return rep;
 			}
-		} else if (entry.getResourceType() == NamedResource) {
+		} else if (entry.getResourceType() == ResourceType.NamedResource) {
 			// If there is no resource we redirect to the metadata
 			getResponse().setLocationRef(new Reference(entry.getLocalMetadataURI()));
 			getResponse().setStatus(Status.REDIRECTION_SEE_OTHER);
@@ -585,8 +573,8 @@ public class ResourceResource extends BaseResource {
 	}
 
 	public Set<Entry> getListChildrenRecursively(Entry listEntry) {
-		Set<Entry> result = new HashSet<Entry>();
-		if (GraphType.List.equals(listEntry.getGraphType()) && Local.equals(listEntry.getEntryType())) {
+		Set<Entry> result = new HashSet<>();
+		if (GraphType.List.equals(listEntry.getGraphType()) && EntryType.Local.equals(listEntry.getEntryType())) {
 			org.entrystore.List l = (org.entrystore.List) listEntry.getResource();
 			List<URI> c = l.getChildren();
 			for (URI uri : c) {
@@ -624,8 +612,8 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * None
 		 */
-		if (entry.getGraphType() == None ) {
-			if(entry.getResourceType() == InformationResource) {
+		if (entry.getGraphType() == GraphType.None ) {
+			if (entry.getResourceType() == ResourceType.InformationResource) {
 				Data data = (Data) entry.getResource();
 				if (!data.delete()) {
 					log.error("Unable to delete resource of entry " + entry.getEntryURI());
@@ -692,7 +680,7 @@ public class ResourceResource extends BaseResource {
 						String fileString = null;
 						try {
 							StringWriter writer = new StringWriter();
-							IOUtils.copy(fileIS, writer, UTF_8);
+							IOUtils.copy(fileIS, writer, StandardCharsets.UTF_8);
 							fileString = writer.toString();
 							if (fileString == null) {
 								log.error("[IMPORT] Problem with reading ZipEntry into String");
@@ -752,15 +740,15 @@ public class ResourceResource extends BaseResource {
 		SyndFeed feed = new SyndFeedImpl();
 		feed.setFeedType(type);
 
-		GraphType bt = entry.getGraphType();
-		if (!GraphType.Context.equals(bt) && !GraphType.List.equals(bt)) {
+		GraphType gt = entry.getGraphType();
+		if (!GraphType.Context.equals(gt) && !GraphType.List.equals(gt)) {
 			return null;
 		}
 
 		String solrQueryValue;
 		String alias;
 
-		if (GraphType.Context.equals(bt)) {
+		if (GraphType.Context.equals(gt)) {
 			alias = getCM().getName(entry.getResourceURI());
 			solrQueryValue = "context:";
 		} else {
@@ -859,8 +847,9 @@ public class ResourceResource extends BaseResource {
 	/**
 	 * Set a resource to an entry.
 	 */
-	private void modifyResource(MediaType mediaType) throws AuthorizationException {
+	private void modifyResource() throws AuthorizationException {
 		GraphType gt = entry.getGraphType();
+		MediaType mediaType = getRequestEntity().getMediaType();
 		/*
 		 * List and Group
 		 */
@@ -872,10 +861,11 @@ public class ResourceResource extends BaseResource {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
-			if (APPLICATION_JSON.equals(mediaType)) {
+
+			if (MediaType.APPLICATION_JSON.equals(mediaType)) {
 				try {
 					JSONArray childrenJSONArray = new JSONArray(requestBody);
-					ArrayList<URI> newResource = new ArrayList<URI>();
+					ArrayList<URI> newResource = new ArrayList<>();
 
 					// Add new entries to the list.
 					for (int i = 0; i < childrenJSONArray.length(); i++) {
@@ -921,11 +911,11 @@ public class ResourceResource extends BaseResource {
 		/*
 		 * Data
 		 */
-		if (gt == None){
+		if (gt == GraphType.None) {
 			boolean textarea = this.parameters.containsKey("textarea");
 			String error = null;
 
-			if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
+			if (MediaType.MULTIPART_FORM_DATA.equals(mediaType, true)) {
 				try {
 					List<FileItem> items = Util.createRestletFileUpload(getContext()).parseRepresentation(getRequest().getEntity());
 					Iterator<FileItem> iter = items.iterator();
@@ -968,8 +958,8 @@ public class ResourceResource extends BaseResource {
 					String mimeType = MediaType.APPLICATION_OCTET_STREAM.toString();
 					if (parameters.containsKey("mimeType")) {
 						mimeType = parameters.get("mimeType");
-					} else if (req.getEntity().getMediaType() != null) {
-						mimeType = req.getEntity().getMediaType().toString();
+					} else if (mediaType != null) {
+						mimeType = mediaType.toString();
 					}
 					entry.setMimetype(mimeType);
 					Disposition disp = req.getEntity().getDisposition();
@@ -1026,7 +1016,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		/*** Graph and Pipeline ***/
-		if (gt == Graph || gt == Pipeline) {
+		if (gt == GraphType.Graph || gt == GraphType.Pipeline) {
 			RDFResource graphResource = (RDFResource) entry.getResource();
 			if (graphResource != null) {
 				Model graph = null;

@@ -16,9 +16,6 @@
 
 package org.entrystore.rest.util;
 
-import java.util.Date;
-import java.util.HashMap;
-import javax.servlet.ServletContext;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.entrystore.Entry;
@@ -27,9 +24,14 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.Context;
 import org.restlet.Request;
+import org.restlet.data.Tag;
 import org.restlet.ext.fileupload.RestletFileUpload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.servlet.ServletContext;
+import java.util.Date;
+import java.util.HashMap;
 
 
 /**
@@ -130,4 +132,9 @@ public class Util {
 		}
 		return upload;
 	}
+
+	public static Tag createTag(Date date) {
+		return new Tag(Long.toString(date.getTime()), false);
+	}
+
 }

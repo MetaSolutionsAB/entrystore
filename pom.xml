@@ -7,7 +7,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.entrystore</groupId>
     <artifactId>entrystore-parent</artifactId>
-    <version>5.2.3</version>
+    <version>5.3.0</version>
     <packaging>pom</packaging>
     <name>EntryStore</name>
     <url>https://entrystore.org</url>
@@ -20,32 +20,35 @@
     <!-- ================= Default Properties ================= -->
     <properties>
         <restlet.version>2.4.3</restlet.version>
-        <rdf4j.version>4.3.5</rdf4j.version>
+        <rdf4j.version>4.3.9</rdf4j.version>
         <solr.version>9.1.1</solr.version>
-        <slf4j.version>2.0.7</slf4j.version>
-        <log4j.version>2.20.0</log4j.version>
+        <slf4j.version>2.0.11</slf4j.version>
+        <log4j.version>2.22.1</log4j.version>
         <servlet.version>3.1.0</servlet.version>
         <xerces.version>2.12.2</xerces.version>
         <jaxb.version>2.3.1</jaxb.version>
-        <guava.version>32.1.2-jre</guava.version>
+        <guava.version>33.0.0-jre</guava.version>
         <jetty.version>9.4.53.v20231009</jetty.version>
         <jsonorg.version>20231013</jsonorg.version>
-        <jackson.version>2.15.2</jackson.version>
-        <jackson-databind.version>2.15.2</jackson-databind.version>
-        <mockito.version>5.5.0</mockito.version>
-        <junit.version>5.10.0</junit.version>
-        <assertj.version>3.24.2</assertj.version>
-        <rest-assured.version>5.3.1</rest-assured.version>
+        <jackson.version>2.16.1</jackson.version>
+        <jackson-databind.version>2.16.1</jackson-databind.version>
+        <mockito.version>5.8.0</mockito.version>
+        <junit.version>5.10.1</junit.version>
+        <assertj.version>3.25.1</assertj.version>
+        <rest-assured.version>5.3.2</rest-assured.version>
         <zookeeper.version>3.9.1</zookeeper.version>
         <xmlsec.version>3.0.3</xmlsec.version>
         <httpmime.version>4.5.14</httpmime.version>
-        <commonscli.version>1.5.0</commonscli.version>
-        <snappy.version>1.1.10.4</snappy.version>
+        <commonscli.version>1.6.0</commonscli.version>
+        <snappy.version>1.1.10.5</snappy.version>
+        <activation.version>1.2.2</activation.version>
+        <lombok.version>1.18.30</lombok.version>
+        <jetbrains-annotations.version>24.1.0</jetbrains-annotations.version>
         <site.url>https://entrystore.org</site.url>
         <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
         <distribution.url>https://entrystore.org</distribution.url>
         <license.licenseName>apache_v2</license.licenseName>
-        <maven.compiler.release>17</maven.compiler.release>
+        <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -187,36 +190,36 @@
                         </execution>
                     </executions>
                 </plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-surefire-plugin</artifactId>
-					<version>3.0.0-M9</version>
-				</plugin>
-				<plugin>
-					<groupId>org.owasp</groupId>
-					<artifactId>dependency-check-maven</artifactId>
-					<version>8.1.2</version>
-					<configuration>
-						<skipProvidedScope>true</skipProvidedScope>
-						<skipTestScope>true</skipTestScope>
-						<assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
-						<failBuildOnCVSS>7</failBuildOnCVSS>
-						<excludes>
-							<exclude>xalan:serializer</exclude>
-							<exclude>xalan:xalan</exclude>
-							<exclude>org.json:json</exclude>
-						</excludes>
-					</configuration>
-				</plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.0.0-M9</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.owasp</groupId>
+                    <artifactId>dependency-check-maven</artifactId>
+                    <version>8.1.2</version>
+                    <configuration>
+                        <skipProvidedScope>true</skipProvidedScope>
+                        <skipTestScope>true</skipTestScope>
+                        <assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
+                        <failBuildOnCVSS>7</failBuildOnCVSS>
+                        <excludes>
+                            <exclude>xalan:serializer</exclude>
+                            <exclude>xalan:xalan</exclude>
+                            <exclude>org.json:json</exclude>
+                        </excludes>
+                    </configuration>
+                </plugin>
             </plugins>
         </pluginManagement>
 
-		<plugins>
-			<plugin>
-				<groupId>org.owasp</groupId>
-				<artifactId>dependency-check-maven</artifactId>
-			</plugin>
-		</plugins>
+        <plugins>
+            <plugin>
+                <groupId>org.owasp</groupId>
+                <artifactId>dependency-check-maven</artifactId>
+            </plugin>
+        </plugins>
     </build>
 
     <!-- ================= Repositories ================= -->
@@ -265,15 +268,10 @@
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-reload4j</artifactId>
-            <version>${slf4j.version}</version>
-        </dependency>
         <!-- using log4j as backend -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j-impl</artifactId>
+            <artifactId>log4j-slf4j2-impl</artifactId>
             <version>${log4j.version}</version>
         </dependency>
         <dependency>
@@ -287,6 +285,16 @@
             <artifactId>cargo-ant</artifactId>
             <version>0.9</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains</groupId>
+            <artifactId>annotations</artifactId>
+            <version>${jetbrains-annotations.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
         </dependency>
     </dependencies>
 
@@ -577,6 +585,11 @@
                 <groupId>org.xerial.snappy</groupId>
                 <artifactId>snappy-java</artifactId>
                 <version>${snappy.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>jakarta.activation</groupId>
+                <artifactId>jakarta.activation-api</artifactId>
+                <version>${activation.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

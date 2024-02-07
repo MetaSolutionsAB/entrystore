@@ -16,8 +16,6 @@
 
 package org.entrystore.rest.standalone;
 
-import java.net.URI;
-import java.net.URISyntaxException;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -35,6 +33,9 @@ import org.restlet.Context;
 import org.restlet.Server;
 import org.restlet.data.Protocol;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.net.URISyntaxException;
 
 /**
  * Class to provide common functionality for other standalone wrappers.
@@ -60,7 +61,6 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				desc("URL of configuration file, may be omitted if environment variable ENTRYSTORE_CONFIG_URI is set").
 				hasArg().
 				argName("URL").
-				optionalArg(false).
 				type(PatternOptionBuilder.URL_VALUE).
 				build());
 		options.addOption(Option.builder("p").
@@ -68,7 +68,6 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				desc("port to listen on; default: 8181").
 				hasArg().
 				argName("PORT").
-				optionalArg(false).
 				type(PatternOptionBuilder.NUMBER_VALUE).
 				build());
 		options.addOption(Option.builder("l").
@@ -76,7 +75,6 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 				desc("log level, one of: ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF; default: INFO").
 				hasArg().
 				argName("LEVEL").
-				optionalArg(false).
 				build());
 		options.addOption(Option.builder().
 				longOpt("connector-params").
@@ -86,7 +84,6 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 						"see the JavaDoc of JettyServerHelper for available parameters").
 				hasArg().
 				argName("SETTINGS").
-				optionalArg(false).
 				build());
 		options.addOption(Option.builder("h").longOpt("help").desc("display this help").build());
 
@@ -184,6 +181,13 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 	private static void configureLogging(String logLevel) {
 		Level l = Level.toLevel(logLevel, Level.INFO);
 		Configurator.setRootLevel(l);
+
+		// the next line is commented because in most cases we don't want to have debug info for namespaces that
+		// are explicitly defined in log4j2.properties, e.g. org.apache.solr - if more info is needed for org.apache.solr
+		// then this should be changed in the configuration file instead of here.
+		// Leaving it here for documentation purposes.
+		//Configurator.setAllLevels(LogManager.getRootLogger().getName(), l);
+
 		out("Log level set to " + l);
 	}
 

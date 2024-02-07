@@ -16,17 +16,13 @@
 
 package org.entrystore.rest.resources;
 
-import java.lang.management.GarbageCollectorMXBean;
-import java.lang.management.ManagementFactory;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.List;
 import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.json.JSONArray;
@@ -42,6 +38,12 @@ import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 
 /**
@@ -85,10 +87,6 @@ public class StatusResource extends BaseResource  {
 					}
 
 					result.put("baseURI", getRM().getRepositoryURL().toString());
-					result.put("cors", config.getBoolean(Settings.CORS, false));
-					result.put("corsHeaders", config.getString(Settings.CORS_HEADERS, "unconfigured"));
-					result.put("corsMaxAge", config.getString(Settings.CORS_MAX_AGE, "unconfigured"));
-					result.put("corsOrigins", config.getString(Settings.CORS_ORIGINS, "unconfigured"));
 					result.put("echoMaxEntitySize", EchoResource.MAX_ENTITY_SIZE);
 					result.put("oaiHarvester", config.getBoolean(Settings.HARVESTER_OAI, false));
 					result.put("oaiHarvesterMultiThreaded", config.getBoolean(Settings.HARVESTER_OAI_MULTITHREADED, false));
@@ -100,9 +98,6 @@ public class StatusResource extends BaseResource  {
 					result.put("repositoryStatus", getRM() != null ? "online" : "offline");
 					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));
 					result.put("rowstoreURL", config.getString(Settings.ROWSTORE_URL, "unconfigured"));
-					result.put("solr", config.getBoolean(Settings.SOLR, false));
-					result.put("solrReindexOnStartup", config.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false));
-					result.put("solrStatus", getRM().getIndex().isUp() ? "online" : "offline");
 					result.put("version", EntryStoreApplication.getVersion());
 					result.put("startupTime", EntryStoreApplication.getStartupDate());
 
@@ -122,6 +117,26 @@ public class StatusResource extends BaseResource  {
 					LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
 					auth.put("authTokenCount", loginTokenCache.size());
 					result.put("auth", auth);
+
+					// CORS
+					JSONObject cors = new JSONObject();
+					cors.put("enabled", config.getBoolean(Settings.CORS, false));
+					cors.put("headers", config.getString(Settings.CORS_HEADERS, "unconfigured"));
+					cors.put("maxAge", config.getString(Settings.CORS_MAX_AGE, "unconfigured"));
+					cors.put("origins", config.getString(Settings.CORS_ORIGINS, "unconfigured"));
+					cors.put("originsAllowCredentials", config.getString(Settings.CORS_ORIGINS, "unconfigured"));
+					result.put("cors", cors);
+
+					// Solr
+					JSONObject solr = new JSONObject();
+					SolrSearchIndex searchIndex = (SolrSearchIndex) getRM().getIndex();
+					solr.put("enabled", config.getBoolean(Settings.SOLR, false));
+					solr.put("reindexOnStartup", config.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false));
+					solr.put("status", searchIndex.isUp() ? "online" : "offline");
+					solr.put("postQueueSize", searchIndex.getPostQueueSize());
+					solr.put("deleteQueueSize", searchIndex.getDeleteQueueSize());
+					solr.put("indexingContexts", searchIndex.getIndexingContexts());
+					result.put("solr", solr);
 
 					// Backup
 					JSONObject backup = new JSONObject();
@@ -151,16 +166,18 @@ public class StatusResource extends BaseResource  {
 					result.put("jvm", jvm);
 
 					if (parameters.containsKey("includeStats")) {
+						JSONObject stats = new JSONObject();
 						try {
 							pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-							result.put("contextCount", getRM().getContextManager().getEntries().size());
-							result.put("groupCount", pm.getGroupUris().size());
-							result.put("userCount", pm.getUsersAsUris().size());
-							result.put("namedGraphCount", getRM().getNamedGraphCount());
-							result.put("tripleCount", getRM().getTripleCount());
+							stats.put("contextCount", getRM().getContextManager().getEntries().size());
+							stats.put("groupCount", pm.getGroupUris().size());
+							stats.put("userCount", pm.getUsersAsUris().size());
+							stats.put("namedGraphCount", getRM().getNamedGraphCount());
+							stats.put("tripleCount", getRM().getTripleCount());
 						} finally {
 							pm.setAuthenticatedUserURI(currentUser);
 						}
+						result.put("stats", stats);
 					}
 
 					return new JsonRepresentation(result);

@@ -34,6 +34,7 @@ import org.entrystore.rest.serializer.ResourceJsonSerializer.ListParams;
 import org.entrystore.rest.util.GraphUtil;
 import org.entrystore.rest.util.JSONErrorMessages;
 import org.entrystore.rest.util.RDFJSON;
+import org.entrystore.rest.util.Util;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -55,9 +56,14 @@ import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
-import static org.entrystore.EntryType.*;
+import static org.entrystore.EntryType.Link;
+import static org.entrystore.EntryType.LinkReference;
+import static org.entrystore.EntryType.Local;
+import static org.entrystore.EntryType.Reference;
 import static org.entrystore.rest.serializer.ResourceJsonSerializer.IMMUTABLE_EMPTY_JSONOBJECT;
-import static org.restlet.data.MediaType.*;
+import static org.restlet.data.MediaType.APPLICATION_JSON;
+import static org.restlet.data.MediaType.APPLICATION_RDF_XML;
+import static org.restlet.data.MediaType.TEXT_RDF_N3;
 
 
 /**
@@ -144,6 +150,7 @@ public class EntryResource extends BaseResource {
 			Date lastMod = entry.getModifiedDate();
 			if (lastMod != null) {
 				result.setModificationDate(lastMod);
+				result.setTag(Util.createTag(lastMod));
 			}
 
 			return result;

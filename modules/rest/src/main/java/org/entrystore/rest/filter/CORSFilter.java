@@ -36,7 +36,7 @@ public class CORSFilter extends Filter {
 	
 	static private final Logger log = LoggerFactory.getLogger(CORSFilter.class);
 
-	private CORSUtil cors;
+	private final CORSUtil cors;
 
 	public CORSFilter(CORSUtil cors) {
 		this.cors = cors;
@@ -57,7 +57,7 @@ public class CORSFilter extends Filter {
 			Series reqHeaders = (Series) request.getAttributes().get("org.restlet.http.headers");
 			String origin = reqHeaders.getFirstValue("Origin", true);
 			if (origin != null) {
-				if (!cors.isValidOrigin(origin)) {
+				if (!cors.isValidOrigin(origin) && !cors.isValidOriginWithCredentials(origin)) {
 					// logging this only on debug-level because some browsers send an
 					// Origin-header even on same-origin PUT/POST/DELETE (Chrome e.g.)
 					log.debug("Received CORS request with disallowed origin");
@@ -65,7 +65,7 @@ public class CORSFilter extends Filter {
 				}
 
 				response.setAccessControlAllowOrigin(origin);
-				response.setAccessControlAllowCredentials(cors.getAllowCredentials());
+				response.setAccessControlAllowCredentials(cors.isValidOriginWithCredentials(origin));
 				if (cors.getMaxAge() > -1) {
 					response.setAccessControlMaxAge(cors.getMaxAge());
 				}
