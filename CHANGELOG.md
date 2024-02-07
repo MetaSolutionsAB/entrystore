@@ -1,6 +1,50 @@
 # ENTRYSTORE CHANGELOG
 
-## Version 5.2.0 (2023-09-xx)
+## Version 5.3.0 (2024-02-07)
+
+### Improvement
+
+[ENTRYSTORE-526](https://metasolutions.atlassian.net/browse/ENTRYSTORE-526) Make it possible to sort by title with a repository specific language fallback
+
+[ENTRYSTORE-783](https://metasolutions.atlassian.net/browse/ENTRYSTORE-783) Improve handling of illegal values for recursive parameter
+
+[ENTRYSTORE-784](https://metasolutions.atlassian.net/browse/ENTRYSTORE-784) Make ResourceResource more resilient for unspecific Accept headers
+
+[ENTRYSTORE-785](https://metasolutions.atlassian.net/browse/ENTRYSTORE-785) Introduce the use of ETags to minimize collisions
+
+[ENTRYSTORE-787](https://metasolutions.atlassian.net/browse/ENTRYSTORE-787) Improve structure for Solr related information in status resource
+
+[ENTRYSTORE-788](https://metasolutions.atlassian.net/browse/ENTRYSTORE-788) Dependency jsonld-java depends on httpclient-osgi which causes problems with commons-codec
+
+[ENTRYSTORE-789](https://metasolutions.atlassian.net/browse/ENTRYSTORE-789) Allow configuration of CORS origins with credentials allowed
+
+[ENTRYSTORE-790](https://metasolutions.atlassian.net/browse/ENTRYSTORE-790) Support format parameter on Resource REST resource
+
+[ENTRYSTORE-792](https://metasolutions.atlassian.net/browse/ENTRYSTORE-792) Resolve conflicting logging dependencies
+
+[ENTRYSTORE-793](https://metasolutions.atlassian.net/browse/ENTRYSTORE-793) Upgrade to Java 21
+
+[ENTRYSTORE-795](https://metasolutions.atlassian.net/browse/ENTRYSTORE-795) Update modification date of entry when modifying resource
+
+[ENTRYSTORE-799](https://metasolutions.atlassian.net/browse/ENTRYSTORE-799) ResourceResource should respond with content type text/plain in case the resource is JavaScript
+
+[ENTRYSTORE-802](https://metasolutions.atlassian.net/browse/ENTRYSTORE-802) Reduce maximum execution time of SPARQL queries
+
+[ENTRYSTORE-804](https://metasolutions.atlassian.net/browse/ENTRYSTORE-804) Improve message handling of AuthorizationException
+
+### Bug
+
+[ENTRYSTORE-786](https://metasolutions.atlassian.net/browse/ENTRYSTORE-786) Possibility for client to set max age of auth cookie needs to be readded
+
+[ENTRYSTORE-796](https://metasolutions.atlassian.net/browse/ENTRYSTORE-796) Deleted entries are returned via Solr queries
+
+[ENTRYSTORE-797](https://metasolutions.atlassian.net/browse/ENTRYSTORE-797) Synchronous Solr reindexing doesn't remove entries from non-existing contexts
+
+[ENTRYSTORE-798](https://metasolutions.atlassian.net/browse/ENTRYSTORE-798) Solr should not return deleted entries
+
+[ENTRYSTORE-803](https://metasolutions.atlassian.net/browse/ENTRYSTORE-803) Ignore ACL when fetching Entry for update of Inverse Relational Cache
+
+## Version 5.2.0 (2023-10-02)
 
 ### Improvement
 
