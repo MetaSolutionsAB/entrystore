@@ -786,13 +786,17 @@ public class ResourceResource extends BaseResource {
 			SyndContent description = new SyndContentImpl();
 			description.setType("text/plain");
 
-			Map<String, String> descriptions = EntryUtil.getDescriptions(e);
-			Set<Map.Entry<String,String>> descEntrySet = descriptions.entrySet();
+			Map<String, Set<String>> descriptions = EntryUtil.getDescriptions(e);
+			Set<Map.Entry<String, Set<String>>> descEntrySet = descriptions.entrySet();
 			String desc = null;
-			for (Map.Entry<String, String> descEntry : descEntrySet) {
+			for (Map.Entry<String, Set<String>> descEntry : descEntrySet) {
 				desc = descEntry.getKey();
-				if ("en".equals(descEntry.getValue())) {
-					break;
+				Set<String> descriptionLangs = descEntry.getValue();
+
+				for (String lang : descriptionLangs) {
+					if ("en".equals(lang)) {
+						break;
+					}
 				}
 			}
 

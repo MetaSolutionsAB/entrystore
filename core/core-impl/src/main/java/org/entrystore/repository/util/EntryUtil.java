@@ -149,8 +149,6 @@ public class EntryUtil {
 						long size2 = e2.getFileSize();
 						if (size1 < size2) {
 							result = -1;
-						} else if (size1 == size2) {
-							result = 0;
 						} else if (size1 > size2) {
 							result = 1;
 						}
@@ -171,13 +169,9 @@ public class EntryUtil {
 						int size2 = e2List.getChildren().size();
 						if (size1 < size2) {
 							result = -1;
-						} else if (size1 == size2) {
-							result = 0;
 						} else if (size1 > size2) {
 							result = 1;
 						}
-					} else {
-						result = 0;
 					}
 					if (!ascending) {
 						result *= -1;
@@ -262,8 +256,6 @@ public class EntryUtil {
 						result = -1;
 					} else if (!resourceType.equals(e1BT) && resourceType.equals(e2BT)) {
 						result = 1;
-					} else {
-						result = 0;
 					}
 					if (!top) {
 						result *= -1;
@@ -489,7 +481,7 @@ public class EntryUtil {
 	 * @return Returns all key/value (title/language) pairs for dcterms:title
 	 *         and dc:title
 	 */
-	public static Map<String, String> getTitles(Entry entry) {
+	public static Map<String, Set<String>> getTitles(Entry entry) {
 		List<IRI> titlePredicates = new ArrayList<>();
 		titlePredicates.add(valueFactory.createIRI(NS.foaf, "name"));
 		titlePredicates.add(valueFactory.createIRI(NS.vcard, "fn"));
@@ -500,6 +492,7 @@ public class EntryUtil {
 		titlePredicates.add(valueFactory.createIRI(NS.skos, "hiddenLabel"));
 		titlePredicates.add(valueFactory.createIRI(NS.rdfs, "label"));
 		titlePredicates.add(valueFactory.createIRI(NS.schema, "name"));
+
 		return getLiteralValues(entry, titlePredicates);
 	}
 
@@ -512,7 +505,7 @@ public class EntryUtil {
 	 * @return Returns all key/value (description/language) pairs for dcterms:description
 	 *         and dc:description
 	 */
-	public static Map<String, String> getDescriptions(Entry entry) {
+	public static Map<String, Set<String>> getDescriptions(Entry entry) {
 		List<IRI> descPreds = new ArrayList<>();
 		descPreds.add(valueFactory.createIRI(NS.dcterms, "description"));
 		descPreds.add(valueFactory.createIRI(NS.dc, "description"));
@@ -545,7 +538,7 @@ public class EntryUtil {
 	 * @param entry Entry from where the keywords should be returned.
 	 * @return Returns all matching literal-language pairs.
 	 */
-	public static Map<String, String> getTagLiterals(Entry entry) {
+	public static Map<String, Set<String>> getTagLiterals(Entry entry) {
 		List<IRI> preds = new ArrayList<>();
 		preds.add(valueFactory.createIRI(NS.dcterms, "subject"));
 		preds.add(valueFactory.createIRI(NS.dc, "subject"));
@@ -574,7 +567,7 @@ public class EntryUtil {
 	 * @param predicates A list of predicates to use for statement matching.
 	 * @return Returns all matching literal-language pairs.
 	 */
-	public static Map<String, String> getLiteralValues(Entry entry, List<IRI> predicates) {
+	public static Map<String, Set<String>> getLiteralValues(Entry entry, List<IRI> predicates) {
 		if (entry == null || predicates == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
@@ -588,18 +581,28 @@ public class EntryUtil {
 
 		if (graph != null) {
 			IRI resourceURI = valueFactory.createIRI(entry.getResourceURI().toString());
-			Map<String, String> result = new LinkedHashMap<>();
+			Map<String, Set<String>> result = new LinkedHashMap<>();
 			for (IRI pred : predicates) {
 				for (Statement statement : graph.filter(resourceURI, pred, null)) {
 					Value value = statement.getObject();
+					Set<String> valuesSet;
+
 					if (value instanceof Literal lit) {
-						result.put(lit.stringValue(), lit.getLanguage().orElse(null));
+
+						valuesSet = result.get(lit.stringValue()) == null ? new HashSet<>() : result.get(lit.stringValue());
+
+						valuesSet.add(lit.getLanguage().orElse(null));
+						result.put(lit.stringValue(), valuesSet);
+
+						System.out.println(result);
 					} else if (value instanceof org.eclipse.rdf4j.model.Resource) {
 						Iterator<Statement> stmnts2 = graph.filter((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null).iterator();
 						if (stmnts2.hasNext()) {
 							Value value2 = stmnts2.next().getObject();
 							if (value2 instanceof Literal lit2) {
-								result.put(lit2.stringValue(), lit2.getLanguage().orElse(null));
+								valuesSet = result.get(lit2.stringValue()) == null ? new HashSet<>() : result.get(lit2.stringValue());
+								valuesSet.add(lit2.getLanguage().orElse(null));
+								result.put(lit2.stringValue(), valuesSet);
 							}
 						}
 					}
