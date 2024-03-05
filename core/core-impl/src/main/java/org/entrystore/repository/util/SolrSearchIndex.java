@@ -280,12 +280,12 @@ public class SolrSearchIndex implements SearchIndex {
 		related = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_RELATED, "off"));
 		defaultSortLang = rm.getConfiguration().getString(Settings.SOLR_DEFAULT_SORTING_LANG);
 		if (related) {
-			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>());
+			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<>());
 			if (relPropsSetting.isEmpty()) {
 				related = false;
 			} else {
 				relatedProperties = new HashMap<>();
-				for (String relProp : rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>())) {
+				for (String relProp : rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<>())) {
 					if (relProp.endsWith(",global")) {
 						relatedProperties.put(valueFactory.createIRI(relProp.substring(0, relProp.indexOf(","))), true);
 					} else {
@@ -579,11 +579,10 @@ public class SolrSearchIndex implements SearchIndex {
 			// sort after titles in a specific language
 			Set<String> literalLangs = literals.get(literal);
 
-			// is that possible?
 			if (literalLangs.isEmpty()) {
 				String noLang = "nolang";
 				if (!langs.contains(noLang)) {
-					doc.addField("title." + noLang, literal);
+					doc.addField(literalType + "." + noLang, literal);
 					langs.add(noLang);
 				}
 			} else {
@@ -595,9 +594,8 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 
 					// we only want one title per language, otherwise sorting will not work
-					// but which predicate has precedence?
 					if (!langs.contains(lang)) {
-						doc.addField("title." + lang, literal);
+						doc.addField(literalType + "." + lang, literal);
 						langs.add(lang);
 					}
 				}
@@ -999,7 +997,7 @@ public class SolrSearchIndex implements SearchIndex {
 		query.setFields("uri");
 
 		long hits = -1;
-		QueryResponse r = null;
+		QueryResponse r;
 		try {
 			r = solrServer.query(query);
 			r.getElapsedTime();
@@ -1085,7 +1083,6 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 				} catch (AuthorizationException | IllegalStateException e) {
 					inaccessibleHits++;
-					continue;
 				}
 			}
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");

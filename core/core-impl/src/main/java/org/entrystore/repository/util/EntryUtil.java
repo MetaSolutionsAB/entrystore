@@ -17,6 +17,7 @@
 package org.entrystore.repository.util;
 
 import com.google.common.collect.Multimap;
+import lombok.Getter;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -40,7 +41,6 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -75,20 +75,17 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterModificationDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
-		Collections.sort(entries, new Comparator<Entry>() {
 
-			public int compare(Entry e1, Entry e2) {
-				int result = 0;
-				if (e1 != null && e2 != null) {
-					result = e1.getModifiedDate().compareTo(e2.getModifiedDate());
-					if (!ascending) {
-						result *= -1;
-					}
-				}
-				return result;
-			}
-
-		});
+		Collections.sort(entries, (e1, e2) -> {
+            int result = 0;
+            if (e1 != null && e2 != null) {
+                result = e1.getModifiedDate().compareTo(e2.getModifiedDate());
+                if (!ascending) {
+                    result *= -1;
+                }
+            }
+            return result;
+        });
 
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
@@ -105,20 +102,17 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterCreationDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
-		Collections.sort(entries, new Comparator<Entry>() {
 
-			public int compare(Entry e1, Entry e2) {
-				int result = 0;
-				if (e1 != null && e2 != null) {
-					result = e1.getCreationDate().compareTo(e2.getCreationDate());
-					if (!ascending) {
-						result *= -1;
-					}
-				}
-				return result;
-			}
-
-		});
+		Collections.sort(entries, (e1, e2) -> {
+            int result = 0;
+            if (e1 != null && e2 != null) {
+                result = e1.getCreationDate().compareTo(e2.getCreationDate());
+                if (!ascending) {
+                    result *= -1;
+                }
+            }
+            return result;
+        });
 
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
@@ -137,50 +131,47 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterFileSize(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
-		Collections.sort(entries, new Comparator<Entry>() {
 
-			public int compare(Entry e1, Entry e2) {
-				int result = 0;
-				if (e1 != null && e2 != null) {
-					GraphType e1BT = e1.getGraphType();
-					GraphType e2BT = e2.getGraphType();
-					if (GraphType.None.equals(e1BT) && GraphType.None.equals(e2BT)) {
-						long size1 = e1.getFileSize();
-						long size2 = e2.getFileSize();
-						if (size1 < size2) {
-							result = -1;
-						} else if (size1 > size2) {
-							result = 1;
-						}
-					} else if (GraphType.List.equals(e1BT) && GraphType.List.equals(e2BT)) {
-						Resource e1Res = e1.getResource();
-						Resource e2Res = e2.getResource();
-						if (e1Res == null) {
-							log.warn("No resource found for List: " + e1.getEntryURI());
-							return 0;
-						}
-						if (e2Res == null) {
-							log.warn("No resource found for List: " + e2.getEntryURI());
-							return 0;
-						}
-						org.entrystore.List e1List = (org.entrystore.List) e1Res;
-						org.entrystore.List e2List = (org.entrystore.List) e2Res;
-						int size1 = e1List.getChildren().size();
-						int size2 = e2List.getChildren().size();
-						if (size1 < size2) {
-							result = -1;
-						} else if (size1 > size2) {
-							result = 1;
-						}
-					}
-					if (!ascending) {
-						result *= -1;
-					}
-				}
-				return result;
-			}
-
-		});
+		Collections.sort(entries, (e1, e2) -> {
+            int result = 0;
+            if (e1 != null && e2 != null) {
+                GraphType e1BT = e1.getGraphType();
+                GraphType e2BT = e2.getGraphType();
+                if (GraphType.None.equals(e1BT) && GraphType.None.equals(e2BT)) {
+                    long size1 = e1.getFileSize();
+                    long size2 = e2.getFileSize();
+                    if (size1 < size2) {
+                        result = -1;
+                    } else if (size1 > size2) {
+                        result = 1;
+                    }
+                } else if (GraphType.List.equals(e1BT) && GraphType.List.equals(e2BT)) {
+                    Resource e1Res = e1.getResource();
+                    Resource e2Res = e2.getResource();
+                    if (e1Res == null) {
+                        log.warn("No resource found for List: " + e1.getEntryURI());
+                        return 0;
+                    }
+                    if (e2Res == null) {
+                        log.warn("No resource found for List: " + e2.getEntryURI());
+                        return 0;
+                    }
+                    org.entrystore.List e1List = (org.entrystore.List) e1Res;
+                    org.entrystore.List e2List = (org.entrystore.List) e2Res;
+                    int size1 = e1List.getChildren().size();
+                    int size2 = e2List.getChildren().size();
+                    if (size1 < size2) {
+                        result = -1;
+                    } else if (size1 > size2) {
+                        result = 1;
+                    }
+                }
+                if (!ascending) {
+                    result *= -1;
+                }
+            }
+            return result;
+        });
 
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
@@ -202,28 +193,25 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterTitle(List<Entry> entries, final String language, final boolean ascending, final GraphType prioritizedResourceType) {
-		Collections.sort(entries, new Comparator<Entry>() {
 
-			public int compare(Entry e1, Entry e2) {
-				int result = 0;
-				if (e1 != null && e2 != null) {
-					String title1 = getTitle(e1, language);
-					String title2 = getTitle(e2, language);
-					if (title1 != null && title2 != null) {
-						result = title1.compareToIgnoreCase(title2);
-					} else if (title1 == null && title2 != null) {
-						result = 1;
-					} else if (title1 != null && title2 == null) {
-						result = -1;
-					}
-					if (!ascending) {
-						result *= -1;
-					}
-				}
-				return result;
-			}
-
-		});
+		Collections.sort(entries, (e1, e2) -> {
+            int result = 0;
+            if (e1 != null && e2 != null) {
+                String title1 = getTitle(e1, language);
+                String title2 = getTitle(e2, language);
+                if (title1 != null && title2 != null) {
+                    result = title1.compareToIgnoreCase(title2);
+                } else if (title1 == null && title2 != null) {
+                    result = 1;
+                } else if (title1 != null) {
+                    result = -1;
+                }
+                if (!ascending) {
+                    result *= -1;
+                }
+            }
+            return result;
+        });
 
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
@@ -245,26 +233,22 @@ public class EntryUtil {
 			return;
 		}
 
-		Collections.sort(entries, new Comparator<Entry>() {
-
-			public int compare(Entry e1, Entry e2) {
-				int result = 0;
-				if (e1 != null && e2 != null) {
-					GraphType e1BT = e1.getGraphType();
-					GraphType e2BT = e2.getGraphType();
-					if (resourceType.equals(e1BT) && !resourceType.equals(e2BT)) {
-						result = -1;
-					} else if (!resourceType.equals(e1BT) && resourceType.equals(e2BT)) {
-						result = 1;
-					}
-					if (!top) {
-						result *= -1;
-					}
-				}
-				return result;
-			}
-
-		});
+		Collections.sort(entries, (e1, e2) -> {
+            int result = 0;
+            if (e1 != null && e2 != null) {
+                GraphType e1BT = e1.getGraphType();
+                GraphType e2BT = e2.getGraphType();
+                if (resourceType.equals(e1BT) && !resourceType.equals(e2BT)) {
+                    result = -1;
+                } else if (!resourceType.equals(e1BT) && resourceType.equals(e2BT)) {
+                    result = 1;
+                }
+                if (!top) {
+                    result *= -1;
+                }
+            }
+            return result;
+        });
 	}
 
 	/**
@@ -515,15 +499,23 @@ public class EntryUtil {
 	public static String getDescription(Entry entry, String language) {
 		checkArgument(language != null, "language parameter must not be null");
 
-		var descriptions = getDescriptions(entry).entrySet();
+		Map<String, Set<String>> descriptions = getDescriptions(entry);
+
 		if (descriptions.isEmpty()) {
 			return null;
 		}
 
 		String description = null;
-		for (var descEntry : descriptions) {
-			description = descEntry.getKey();
-			if (language.equals(descEntry.getValue())) {
+		for (String key : descriptions.keySet()) {
+
+			for (String lang : descriptions.get(key)) {
+				if (language.equals(lang)) {
+					description = key;
+					break;
+				}
+			}
+
+			if (description != null) {
 				break;
 			}
 		}
@@ -593,8 +585,6 @@ public class EntryUtil {
 
 						valuesSet.add(lit.getLanguage().orElse(null));
 						result.put(lit.stringValue(), valuesSet);
-
-						System.out.println(result);
 					} else if (value instanceof org.eclipse.rdf4j.model.Resource) {
 						Iterator<Statement> stmnts2 = graph.filter((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null).iterator();
 						if (stmnts2.hasNext()) {
@@ -666,11 +656,8 @@ public class EntryUtil {
 		String contextID = entry.getContext().getEntry().getId();
 		URI trashURI = URISplit.fabricateURI(repoURL, contextID, RepositoryProperties.LIST_PATH, "_trash");
 		Set<URI> referredBy = entry.getReferringListsInSameContext();
-		if ((referredBy.size() == 1) && (referredBy.contains(trashURI))) {
-			return true;
-		}
-		return false;
-	}
+        return (referredBy.size() == 1) && (referredBy.contains(trashURI));
+    }
 
 	/**
 	 * Fetches entries and recursively traverses the graph by following a provided set
@@ -849,6 +836,7 @@ public class EntryUtil {
 		return result;
 	}
 
+	@Getter
 	public static class TraversalResult {
 
 		private final Model graph;
@@ -861,18 +849,6 @@ public class EntryUtil {
 			this.graph = graph;
 			this.latestModified = latestModified;
 			this.accessDenied = accessDenied;
-		}
-
-		public Model getGraph() {
-			return graph;
-		}
-
-		public Date getLatestModified() {
-			return latestModified;
-		}
-
-		public Set<IRI> getAccessDenied() {
-			return accessDenied;
 		}
 
 	}
