@@ -280,12 +280,12 @@ public class SolrSearchIndex implements SearchIndex {
 		related = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_RELATED, "off"));
 		defaultSortLang = rm.getConfiguration().getString(Settings.SOLR_DEFAULT_SORTING_LANG);
 		if (related) {
-			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>());
+			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<>());
 			if (relPropsSetting.isEmpty()) {
 				related = false;
 			} else {
 				relatedProperties = new HashMap<>();
-				for (String relProp : rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>())) {
+				for (String relProp : rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<>())) {
 					if (relProp.endsWith(",global")) {
 						relatedProperties.put(valueFactory.createIRI(relProp.substring(0, relProp.indexOf(","))), true);
 					} else {
@@ -569,6 +569,40 @@ public class SolrSearchIndex implements SearchIndex {
 		return null;
 	}
 
+	private void storeLiteralsWithLanguages(SolrInputDocument doc, Map<String, Set<String>> literals, String literalType) {
+		Set<String> langs = new HashSet<>();
+
+		for (String literal : literals.keySet()) {
+			doc.addField(literalType, literal);
+
+			// we also store title.{lang} as dynamic field to be able to
+			// sort after titles in a specific language
+			Set<String> literalLangs = literals.get(literal);
+
+			if (literalLangs.isEmpty()) {
+				String noLang = "nolang";
+				if (!langs.contains(noLang)) {
+					doc.addField(literalType + "." + noLang, literal);
+					langs.add(noLang);
+				}
+			} else {
+				for (String lang : literalLangs) {
+					if (lang.equalsIgnoreCase(defaultSortLang) && !langs.contains("default")) {
+						// if a default sorting language is configured, we create a field for that
+						doc.addField(literalType + ".default", literal);
+						langs.add("default");
+					}
+
+					// we only want one title per language, otherwise sorting will not work
+					if (!langs.contains(lang)) {
+						doc.addField(literalType + "." + lang, literal);
+						langs.add(lang);
+					}
+				}
+			}
+		}
+	}
+
 	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
 		Model mdGraph = entry.getMetadataGraph();
 		Model entryGraph = entry.getGraph();
@@ -667,28 +701,11 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// titles
-		Map<String, String> titles = EntryUtil.getTitles(entry);
+		Map<String, Set<String>> titles = EntryUtil.getTitles(entry);
 		if (titles != null && !titles.isEmpty()) {
-			Set<String> langs = new HashSet<>();
-			for (String title : titles.keySet()) {
-				doc.addField("title", title);
-				// we also store title.{lang} as dynamic field to be able to
-				// sort after titles in a specific language
-				String lang = titles.get(title);
-				if (lang == null) {
-					lang = "nolang";
-				} else if (lang.equalsIgnoreCase(defaultSortLang) && !langs.contains("default")) {
-					// if a default sorting language is configured, we create a field for that
-					doc.addField("title.default", title);
-					langs.add("default");
-				}
-				// we only want one title per language, otherwise sorting will not work
-				if (!langs.contains(lang)) {
-					doc.addField("title." + lang, title);
-					langs.add(lang);
-				}
-			}
+			storeLiteralsWithLanguages(doc, titles, "title");
 		}
+
 		String firstName = EntryUtil.getFirstName(entry);
 		String lastName = EntryUtil.getLastName(entry);
 		String name = "";
@@ -724,27 +741,15 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// description
-		Map<String, String> descriptions = EntryUtil.getDescriptions(entry);
+		Map<String, Set<String>> descriptions = EntryUtil.getDescriptions(entry);
 		if (descriptions != null && !descriptions.isEmpty()) {
-			for (String description : descriptions.keySet()) {
-				doc.addField("description", description);
-				String lang = descriptions.get(description);
-				if (lang != null) {
-					doc.addField("description." + lang, description);
-				}
-			}
+			storeLiteralsWithLanguages(doc, descriptions, "description");
 		}
 
 		// tag.literal[.*]
-		Map<String, String> tagLiterals = EntryUtil.getTagLiterals(entry);
+		Map<String, Set<String>> tagLiterals = EntryUtil.getTagLiterals(entry);
 		if (tagLiterals != null) {
-			for (String tag : tagLiterals.keySet()) {
-				doc.addField("tag.literal", tag);
-				String lang = tagLiterals.get(tag);
-				if (lang != null) {
-					doc.addField("tag.literal." + lang, tag);
-				}
-			}
+			storeLiteralsWithLanguages(doc, tagLiterals, "tag.literal");
 		}
 
 		// tag.uri
@@ -992,7 +997,7 @@ public class SolrSearchIndex implements SearchIndex {
 		query.setFields("uri");
 
 		long hits = -1;
-		QueryResponse r = null;
+		QueryResponse r;
 		try {
 			r = solrServer.query(query);
 			r.getElapsedTime();
@@ -1078,7 +1083,6 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 				} catch (AuthorizationException | IllegalStateException e) {
 					inaccessibleHits++;
-					continue;
 				}
 			}
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");
@@ -1129,7 +1133,7 @@ public class SolrSearchIndex implements SearchIndex {
 		 * InputStream mimeIS = null; try { mimeIS = Files.newInputStream(f.toPath());
 		 * mimeType = tc.getMimeRepository().getMimeType(mimeIS).getName(); }
 		 * finally { if (mimeIS != null) { mimeIS.close(); } }
-		 * 
+		 *
 		 * if (mimeType != null) { stream = new BufferedInputStream(
 		 * Files.newInputStream(f.toPath())); Parser parser = tc.getParser(mimeType); if
 		 * (parser != null) { ContentHandler handler = new BodyContentHandler();

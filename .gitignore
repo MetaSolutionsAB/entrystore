@@ -14,3 +14,4 @@ _testdata
 package-lock.json
 templates/out/
 templates/node_modules/
+/testdata/
