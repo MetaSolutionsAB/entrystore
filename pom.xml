@@ -29,7 +29,7 @@
         <jaxb.version>2.3.1</jaxb.version>
         <guava.version>33.0.0-jre</guava.version>
         <jetty.version>9.4.54.v20240208</jetty.version>
-        <jsonorg.version>20231013</jsonorg.version>
+        <jsonorg.version>20240303</jsonorg.version>
         <jackson.version>2.16.1</jackson.version>
         <jackson-databind.version>2.16.1</jackson-databind.version>
         <mockito.version>5.8.0</mockito.version>
