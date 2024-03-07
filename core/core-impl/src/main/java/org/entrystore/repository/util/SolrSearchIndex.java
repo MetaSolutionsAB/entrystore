@@ -19,6 +19,7 @@ package org.entrystore.repository.util;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -570,33 +571,35 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	private void storeLiteralsWithLanguages(SolrInputDocument doc, Map<String, Set<String>> literals, String literalType) {
-		Set<String> langs = new HashSet<>();
+		final String missingLanguageString = "nolang";
+		final String defaultString = "default";
+
+		Set<String> alreadySetLanguages = new HashSet<>();
 
 		for (String literal : literals.keySet()) {
 			doc.addField(literalType, literal);
 
 			// we also store title.{lang} as dynamic field to be able to
 			// sort after titles in a specific language
-			Set<String> literalLangs = literals.get(literal);
+			Set<String> literalLanguages = literals.get(literal);
 
-			if (literalLangs.isEmpty()) {
-				String noLang = "nolang";
-				if (!langs.contains(noLang)) {
-					doc.addField(literalType + "." + noLang, literal);
-					langs.add(noLang);
+			if (literalLanguages.isEmpty() || ObjectUtils.allNull(literalLanguages)) {
+				if (!alreadySetLanguages.contains(missingLanguageString)) {
+					doc.addField(String.format("%s.%s", literalType, missingLanguageString), literal);
+					alreadySetLanguages.add(missingLanguageString);
 				}
 			} else {
-				for (String lang : literalLangs) {
-					if (lang.equalsIgnoreCase(defaultSortLang) && !langs.contains("default")) {
+				for (String language : literalLanguages) {
+					if (language != null && language.equalsIgnoreCase(defaultSortLang) && !alreadySetLanguages.contains(defaultString)) {
 						// if a default sorting language is configured, we create a field for that
-						doc.addField(literalType + ".default", literal);
-						langs.add("default");
+						doc.addField(String.format("%s.%s", literalType, defaultString), literal);
+						alreadySetLanguages.add(defaultString);
 					}
 
 					// we only want one title per language, otherwise sorting will not work
-					if (!langs.contains(lang)) {
-						doc.addField(literalType + "." + lang, literal);
-						langs.add(lang);
+					if (!alreadySetLanguages.contains(language)) {
+						doc.addField(String.format("%s.%s", literalType, language == null ? missingLanguageString : language), literal);
+						alreadySetLanguages.add(language);
 					}
 				}
 			}
