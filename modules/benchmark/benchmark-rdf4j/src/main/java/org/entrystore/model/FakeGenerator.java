@@ -3,14 +3,17 @@ package org.entrystore.model;
 import com.github.javafaker.Address;
 import com.github.javafaker.Faker;
 import com.github.javafaker.Name;
+import org.entrystore.LogUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.IntStream;
 
 public class FakeGenerator {
 
+    Faker faker = new Faker();
+
     public FakePerson createPerson(int i) {
-        Faker faker = new Faker();
         Name name = faker.name();
         FakeAddress address = createAddress(i);
 
@@ -33,8 +36,23 @@ public class FakeGenerator {
         return list;
     }
 
+    public List<FakePerson> createPersonListParallel(int size) {
+        List<FakePerson> list = new ArrayList<>();
+
+        IntStream.range(0, size)
+                .parallel()
+                .forEach(i -> {
+                    try {
+                        list.add(createPerson(i));
+                    } catch (Exception e) {
+                        LogUtils.log.error(e.getMessage());
+                    }
+                });
+
+        return list;
+    }
+
     public FakeAddress createAddress(int i) {
-        Faker faker = new Faker();
         Address address = faker.address();
 
         return new FakeAddress.FakeAddressBuilder()

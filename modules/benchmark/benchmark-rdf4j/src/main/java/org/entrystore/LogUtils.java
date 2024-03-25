@@ -9,20 +9,53 @@ import java.time.format.DateTimeFormatter;
 
 public class LogUtils {
 
-
-    private static final Logger log = LoggerFactory.getLogger(Benchmark.class);
+    public static final Logger log = LoggerFactory.getLogger(Benchmark.class);
 
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
-    protected void logDate(String benchmarkType, String dateType, LocalDateTime date) {
-        log.info("======================================================================");
-        log.info("Benchmark for " + benchmarkType + " storage " + dateType + "ing at " + dateTimeFormatter.format(date));
-        log.info("======================================================================");
+    protected static void logWelcome(String benchmarkType, int size) {
+
+        String endStars               = "     ***";
+        if (size < 1000000) endStars += "*";
+        if (size < 100000)  endStars += "*";
+        if (size < 10000)   endStars += "*";
+        if (size < 1000)    endStars += "*";
+        if (size < 100)     endStars += "*";
+        if (size < 10)      endStars += "*";
+
+        log.info("******************************************************************************");
+        log.info("******************************************************************************");
+        log.info("*****                                                                    *****");
+        log.info("*****              !!! WELCOME TO ENTRYSCAPE BENCHMARK !!!               *****");
+        log.info("*****                                                                    *****");
+        log.info("******************************************************************************");
+        log.info("*****       Running Benchmark for " + benchmarkType + " storage with " + size + " persons " + endStars);
+        log.info("******************************************************************************");
     }
 
-    protected void logTimeDifference(String benchmarkType, LocalDateTime start, LocalDateTime end) {
-        log.info("======================================================================");
-        log.info("Benchmark for " + benchmarkType + " storage time elapsed: " + Duration.between(start, end).toMillis() + " milliseconds.");
-        log.info("======================================================================");
+    protected static void logGoodbye() {
+
+        log.info("******************************************************************************");
+        log.info("******************************************************************************");
+        log.info("*****                                                                    *****");
+        log.info("*****              !!!             GOODBYE             !!!               *****");
+        log.info("*****                                                                    *****");
+        log.info("******************************************************************************");
+        log.info("******************************************************************************");
+    }
+
+    protected static void logType(String operationType) {
+
+        log.info("******************************************************************************");
+        log.info("***********                     " + operationType + " DATA                      ***********");
+        log.info("******************************************************************************");
+    }
+
+    protected static void logDate(String message, LocalDateTime date) {
+        log.info(message + " " + dateTimeFormatter.format(date));
+    }
+
+    protected static void logTimeDifference(String message, LocalDateTime start, LocalDateTime end) {
+        log.info(message + " " + Duration.between(start, end).toMillis() + " milliseconds.");
     }
 }
