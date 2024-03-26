@@ -9,11 +9,11 @@ import java.time.format.DateTimeFormatter;
 
 public class LogUtils {
 
-    public static final Logger log = LoggerFactory.getLogger(Benchmark.class);
+    public static final Logger log = LoggerFactory.getLogger(SingleTransaction.class);
 
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
-    protected static void logWelcome(String benchmarkType, int size) {
+    protected static void logWelcome(String benchmarkType, boolean withTransactions, int size) {
 
         String endStars               = "     ***";
         if (size < 1000000) endStars += "*";
@@ -30,6 +30,7 @@ public class LogUtils {
         log.info("*****                                                                    *****");
         log.info("******************************************************************************");
         log.info("*****       Running Benchmark for " + benchmarkType + " storage with " + size + " persons " + endStars);
+        log.info("*****                        Transactions are " + (withTransactions ? "ON " : "OFF") + "                       ******");
         log.info("******************************************************************************");
     }
 
@@ -44,18 +45,18 @@ public class LogUtils {
         log.info("******************************************************************************");
     }
 
-    protected static void logType(String operationType) {
+    public static void logType(String operationType) {
 
         log.info("******************************************************************************");
         log.info("***********                     " + operationType + " DATA                      ***********");
         log.info("******************************************************************************");
     }
 
-    protected static void logDate(String message, LocalDateTime date) {
+    public static void logDate(String message, LocalDateTime date) {
         log.info(message + " " + dateTimeFormatter.format(date));
     }
 
-    protected static void logTimeDifference(String message, LocalDateTime start, LocalDateTime end) {
+    public static void logTimeDifference(String message, LocalDateTime start, LocalDateTime end) {
         log.info(message + " " + Duration.between(start, end).toMillis() + " milliseconds.");
     }
 }

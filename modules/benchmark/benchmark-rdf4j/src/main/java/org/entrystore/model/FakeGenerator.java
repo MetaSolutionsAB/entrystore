@@ -3,7 +3,11 @@ package org.entrystore.model;
 import com.github.javafaker.Address;
 import com.github.javafaker.Faker;
 import com.github.javafaker.Name;
+import org.eclipse.rdf4j.model.util.ModelBuilder;
+import org.eclipse.rdf4j.model.vocabulary.FOAF;
+import org.eclipse.rdf4j.model.vocabulary.RDF;
 import org.entrystore.LogUtils;
+import org.entrystore.vocabulary.BenchmarkOntology;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,32 +15,9 @@ import java.util.stream.IntStream;
 
 public class FakeGenerator {
 
-    Faker faker = new Faker();
+    private static final Faker faker = new Faker();
 
-    public FakePerson createPerson(int i) {
-        Name name = faker.name();
-        FakeAddress address = createAddress(i);
-
-        return new FakePerson.FakePersonBuilder()
-                .iterator(i)
-                .identifier(Math.abs(name.firstName().hashCode()))
-                .firstName(name.firstName())
-                .lastName(name.lastName())
-                .address(address)
-                .build();
-    }
-
-    public List<FakePerson> createPersonList(int size) {
-        List<FakePerson> list = new ArrayList<>();
-
-        for (int i = 0; i < size; i++) {
-            list.add(createPerson(i));
-        }
-
-        return list;
-    }
-
-    public List<FakePerson> createPersonListParallel(int size) {
+    public static List<FakePerson> createPersonList(int size) {
         List<FakePerson> list = new ArrayList<>();
 
         IntStream.range(0, size)
@@ -52,7 +33,20 @@ public class FakeGenerator {
         return list;
     }
 
-    public FakeAddress createAddress(int i) {
+    private static FakePerson createPerson(int i) {
+        Name name = faker.name();
+        FakeAddress address = createAddress(i);
+
+        return new FakePerson.FakePersonBuilder()
+                .iterator(i)
+                .identifier(Math.abs(name.firstName().hashCode()))
+                .firstName(name.firstName())
+                .lastName(name.lastName())
+                .address(address)
+                .build();
+    }
+
+    private static FakeAddress createAddress(int i) {
         Address address = faker.address();
 
         return new FakeAddress.FakeAddressBuilder()
@@ -64,13 +58,22 @@ public class FakeGenerator {
                 .build();
     }
 
-    public List<FakeAddress> createAddressList(int size) {
-        List<FakeAddress> list = new ArrayList<>();
+    public static void mapToBuilder(FakePerson person, ModelBuilder builder) {
 
-        for (int i = 0; i < size; i++) {
-            list.add(createAddress(i));
-        }
+        builder
+                .namedGraph(BenchmarkOntology.NAMED_GRAPH_PREFIX + String.valueOf(person.getIdentifier()))
+                .subject(BenchmarkOntology.INDIVIDUAL_PREFIX + person.getIdentifier())
+                .add(RDF.TYPE, BenchmarkOntology.ARTIST)
+                .add(FOAF.FIRST_NAME, person.getFirstName())
+                .add(FOAF.LAST_NAME, person.getLastName())
+                .add(BenchmarkOntology.HAS_ITERATOR, person.getIterator())
+                .add(BenchmarkOntology.HAS_ADDRESS, BenchmarkOntology.INDIVIDUAL_PREFIX + person.getAddress().getIdentifier())
 
-        return list;
+                .namedGraph(BenchmarkOntology.NAMED_GRAPH_PREFIX + String.valueOf(person.getAddress().getIdentifier()))
+                .subject(BenchmarkOntology.INDIVIDUAL_PREFIX + person.getAddress().getIdentifier())
+                .add(BenchmarkOntology.HAS_ITERATOR, person.getAddress().getIterator())
+                .add(BenchmarkOntology.HAS_STREET, person.getAddress().getStreet())
+                .add(BenchmarkOntology.HAS_CITY, person.getAddress().getCity())
+                .add(BenchmarkOntology.HAS_ZIP_CODE, person.getAddress().getZipCode());
     }
 }
