@@ -33,7 +33,7 @@ public class FakeGenerator {
         return list;
     }
 
-    private static FakePerson createPerson(int i) {
+    public static FakePerson createPerson(int i) {
         Name name = faker.name();
         FakeAddress address = createAddress(i);
 

@@ -1,5 +1,6 @@
 package org.entrystore;
 
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -10,6 +11,7 @@ import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.entrystore.model.FakeGenerator;
 import org.entrystore.model.FakePerson;
+import org.entrystore.vocabulary.BenchmarkOntology;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
@@ -40,23 +42,50 @@ public class Benchmark {
         return persons;
     }
 
-    public static void readFromDatabase(RepositoryConnection connection) {
+    public static void readFromDatabase(RepositoryConnection connection, int modulo) {
 
         LogUtils.logType(" READING");
 
         LocalDateTime start = LocalDateTime.now();
         LogUtils.logDate("Starting reading from database at", start);
 
-        try (RepositoryResult<Statement> result = connection.getStatements(null, null, null)) {
+        if (modulo > 0) {
 
-            for (Statement statement : result) {
-                //System.out.printf("Database contains: %s\n", statement);
+            String namedGraph = BenchmarkOntology.NAMED_GRAPH_PREFIX + "" + (-modulo);
+            IRI context = connection.getValueFactory().createIRI(namedGraph);
+
+            try (RepositoryResult<Statement> result = connection.getStatements(null, null, null, context)) {
+
+                for (Statement statement : result) {
+                    System.out.printf("Database contains: %s\n", statement);
+                }
+            }
+        } else {
+            try (RepositoryResult<Statement> result = connection.getStatements(null, null, null)) {
+
+                for (Statement statement : result) {
+                    //System.out.printf("Database contains: %s\n", statement);
+                }
             }
         }
 
         LocalDateTime end = LocalDateTime.now();
         LogUtils.logDate("Ended reading from database at", end);
         LogUtils.logTimeDifference("Reading from database took", start, end);
+    }
+
+    @NotNull
+    private static Repository getDatabase(String benchmarkType) {
+
+        String tripleIndexes = "cspo,spoc";
+
+        // choose a storage type NATIVE | MEMORY
+        return switch (benchmarkType) {
+            case MEMORY -> new SailRepository(new MemoryStore());
+            case NATIVE -> new SailRepository(new NativeStore(NATIVE_PATH, tripleIndexes));
+            case LMDB -> new SailRepository(new LmdbStore(LMDB_PATH));
+            case null, default -> throw new IllegalArgumentException();
+        };
     }
 
     public static void main(String[] args) {
@@ -67,6 +96,12 @@ public class Benchmark {
             String benchmarkType = args[0];
             boolean withTransactions = "true".equals(args[1]);
             int sizeToGenerate = Integer.parseInt(args[2]);
+            boolean withInterRequests = "true".equals(args[3]);
+            int interRequestsModulo = -1;
+
+            if (withInterRequests) {
+                interRequestsModulo = Integer.parseInt(args[4]);
+            }
 
             Repository database = getDatabase(benchmarkType);
 
@@ -76,17 +111,17 @@ public class Benchmark {
             // generate list of Persons with Addresses, 1 Person has exactly 1 Address
             List<FakePerson> persons = generateData(sizeToGenerate);
 
-            // run either a mutli-transaction or single-transaction benchmark
+            // run either a multi-transaction or single-transaction benchmark
             try (RepositoryConnection connection = database.getConnection()) {
 
                 if (withTransactions) {
-                    MultipleTransactions.runBenchmark(connection, persons);
+                    MultipleTransactions.runBenchmark(connection, persons, interRequestsModulo);
                 } else {
                     SingleTransaction.runBenchmark(connection, persons);
                 }
 
                 // read statements from database
-                readFromDatabase(connection);
+                readFromDatabase(connection, interRequestsModulo);
             } finally {
 
                 // close the connection and shutDown the database
@@ -99,17 +134,5 @@ public class Benchmark {
         } catch (IllegalArgumentException | ArrayIndexOutOfBoundsException ex) {
             LogUtils.log.warn("No or bad arguments provided.");
         }
-    }
-
-    @NotNull
-    private static Repository getDatabase(String benchmarkType) {
-
-        // choose a storage type NATIVE | MEMORY
-        return switch (benchmarkType) {
-            case MEMORY -> new SailRepository(new MemoryStore());
-            case NATIVE -> new SailRepository(new NativeStore(NATIVE_PATH));
-            case LMDB -> new SailRepository(new LmdbStore(LMDB_PATH));
-            case null, default -> throw new IllegalArgumentException();
-        };
     }
 }
