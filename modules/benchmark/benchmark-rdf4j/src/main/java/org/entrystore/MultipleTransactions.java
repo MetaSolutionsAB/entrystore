@@ -1,8 +1,11 @@
 package org.entrystore;
 
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.util.ModelBuilder;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.entrystore.model.FakeGenerator;
 import org.entrystore.model.FakePerson;
 import org.entrystore.vocabulary.BenchmarkOntology;
@@ -15,7 +18,7 @@ import java.util.function.Consumer;
 
 public class MultipleTransactions {
 
-    public static <T> Consumer<T> withCounter(BiConsumer<Integer, T> consumer) {
+    private static <T> Consumer<T> withCounter(BiConsumer<Integer, T> consumer) {
         AtomicInteger counter = new AtomicInteger(0);
         return item -> consumer.accept(counter.getAndIncrement(), item);
     }
@@ -42,6 +45,40 @@ public class MultipleTransactions {
         }
     }
 
+    public static void readSpecificPerson(RepositoryConnection connection, int i) {
+
+        LocalDateTime startRead = LocalDateTime.now();
+        //LogUtils.logDate("Start reading Peter Griffin #" + i, startRead);
+
+        String namedGraph = BenchmarkOntology.NAMED_GRAPH_PREFIX + "" + (-i);
+        IRI context = connection.getValueFactory().createIRI(namedGraph);
+
+        try (RepositoryResult<Statement> result = connection.getStatements(null, null, null, context)) {
+
+            for (Statement statement : result) {
+                //System.out.printf("Database contains: %s\n", statement);
+            }
+        }
+
+        LocalDateTime endRead = LocalDateTime.now();
+        //LogUtils.logDate("End reading Peter Griffin #" + i + " at", endRead);
+        LogUtils.logTimeDifference("Reading Peter Griffin #" + i + " took", startRead, endRead);
+    }
+
+    private static void insertAndReadTransaction(RepositoryConnection connection, FakePerson person) {
+        Model model = populateSinglePerson(person);
+
+        try {
+            connection.begin();
+            connection.add(model);
+            connection.commit();
+
+
+        } catch (Exception ex) {
+            LogUtils.log.error(ex.getMessage());
+        }
+    }
+
     public static void runBenchmark(RepositoryConnection connection, List<FakePerson> persons, int modulo) {
 
         LogUtils.logType("POPULATE");
@@ -57,7 +94,7 @@ public class MultipleTransactions {
                 } else {
 
                     LocalDateTime startInsert = LocalDateTime.now();
-                    LogUtils.logDate("Start inserting Peter Griffin #" + i, startInsert);
+                    //LogUtils.logDate("Start inserting Peter Griffin #" + i, startInsert);
 
                     FakePerson injectedPerson = FakeGenerator.createPerson(i);
                     injectedPerson.setIdentifier(-i);
@@ -65,11 +102,14 @@ public class MultipleTransactions {
                     injectedPerson.setLastName("Griffin" + (i / modulo));
 
 
-                    insertTransaction(connection, injectedPerson);
+                    insertAndReadTransaction(connection, injectedPerson);
 
                     LocalDateTime endInsert = LocalDateTime.now();
-                    LogUtils.logDate("End inserting Peter Griffin #" + i + " at", endInsert);
+                    //LogUtils.logDate("End inserting Peter Griffin #" + i + " at", endInsert);
                     LogUtils.logTimeDifference("Inserting Peter Griffin #" + i + " took", startInsert, endInsert);
+
+                    readSpecificPerson(connection, i);
+                    readSpecificPerson(connection, modulo);
                 }
             }
         }));

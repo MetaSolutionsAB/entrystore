@@ -2,7 +2,6 @@ package org.entrystore.vocabulary;
 
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.base.InternedIRI;
-import org.eclipse.rdf4j.model.vocabulary.FOAF;
 
 public class BenchmarkOntology {
 
@@ -23,7 +22,7 @@ public class BenchmarkOntology {
 
     static {
         NAMED_GRAPH_PREFIX = createIRI(NAMESPACE, "namedGraph#");
-        ARTIST = createIRI(FOAF.NAMESPACE, "Artist");
+        ARTIST = createIRI(NAMESPACE, "Artist");
         HAS_ITERATOR = createIRI(NAMESPACE, "hasIterator");
         HAS_ADDRESS = createIRI(NAMESPACE, "hasAddress");
         HAS_STREET = createIRI(NAMESPACE, "hasStreet");
