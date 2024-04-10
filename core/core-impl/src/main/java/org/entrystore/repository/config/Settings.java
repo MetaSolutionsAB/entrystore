@@ -193,6 +193,8 @@ public class Settings {
 
 	public static String HTTP_ALLOW_MEDIA_TYPE_JAVASCRIPT = "entrystore.http.allow-media-type-javascript";
 
+	public static String HTTP_HEADER_SERVER = "entrystore.http.header.server";
+
 	public static String METRICS = "entrystore.metrics";
 
 	private Settings() {
