@@ -71,6 +71,7 @@ public class Util {
 		dangerousFileExtensions.add("isu");
 		dangerousFileExtensions.add("js");
 		dangerousFileExtensions.add("jse");
+		dangerousFileExtensions.add("jsp");
 		dangerousFileExtensions.add("jsx");
 		dangerousFileExtensions.add("ksh");
 		dangerousFileExtensions.add("lnk");
