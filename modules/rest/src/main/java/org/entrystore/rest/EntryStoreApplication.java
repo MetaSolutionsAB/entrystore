@@ -65,6 +65,7 @@ import org.entrystore.rest.resources.LoginResource;
 import org.entrystore.rest.resources.LogoutResource;
 import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
+import org.entrystore.rest.resources.MergedMetadataResource;
 import org.entrystore.rest.resources.MessageResource;
 import org.entrystore.rest.resources.NameResource;
 import org.entrystore.rest.resources.PasswordResetResource;
@@ -359,6 +360,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/resource/{entry-id}", ResourceResource.class);
 		router.attach("/{context-id}/metadata/{entry-id}", LocalMetadataResource.class);
 		router.attach("/{context-id}/cached-external-metadata/{entry-id}", ExternalMetadataResource.class);
+		router.attach("/{context-id}/merged-metadata/{entry-id}", MergedMetadataResource.class);
 		router.attach("/{context-id}/harvester", HarvesterResource.class);
 		router.attach("/{context-id}/relations/{entry-id}", RelationResource.class);
 		router.attach("/{context-id}/quota", QuotaResource.class);
