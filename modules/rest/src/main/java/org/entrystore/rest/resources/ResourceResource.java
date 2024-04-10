@@ -941,7 +941,7 @@ public class ResourceResource extends BaseResource {
 						entry.setMimetype(mimeType);
 						String name = item.getName();
 						if (name != null && !name.isEmpty()) {
-							entry.setFilename(name.trim());
+							entry.setFilename(Util.sanitizeFilename(name.trim()));
 						}
 					}
 				} catch (FileUploadException e) {
@@ -969,8 +969,8 @@ public class ResourceResource extends BaseResource {
 					Disposition disp = req.getEntity().getDisposition();
 					if (disp != null) {
 						String name = disp.getFilename();
-						if (name != null && name.length() != 0) {
-							entry.setFilename(name.trim());
+						if (name != null && !name.isEmpty()) {
+							entry.setFilename(Util.sanitizeFilename(name.trim()));
 						}
 					}
 				} catch (QuotaException qe) {
