@@ -197,10 +197,10 @@ public class Email {
 	}
 
 	public static boolean sendPasswordResetConfirmation(Config config, String recipientEmail, String confirmationLink) {
-		String subject = config.getString(Settings.PASSWORD_RESET_SUBJECT, "Password reset request");
+		String subject = config.getString(Settings.AUTH_PASSWORD_RESET_SUBJECT, "Password reset request");
 
 		if (messageBodyPasswordReset == null) {
-			String templatePath = config.getString(Settings.PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+			String templatePath = config.getString(Settings.AUTH_PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
 			if (templatePath == null) {
 				templatePath = new File(ConfigurationManager.getConfigurationURI("email_pwreset.html")).getAbsolutePath();
 			}
@@ -238,7 +238,7 @@ public class Email {
 		}
 
 		if (messageBodyPasswordChanged == null) {
-			String templatePath = config.getString(Settings.PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+			String templatePath = config.getString(Settings.AUTH_PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
 			if (templatePath == null) {
 				templatePath = new File(ConfigurationManager.getConfigurationURI("email_pwchange.html")).getAbsolutePath();
 			}
@@ -254,7 +254,7 @@ public class Email {
 
 		String messageText = messageBodyPasswordChanged.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
 		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
-		String msgSubject = config.getString(Settings.PASSWORD_CHANGE_SUBJECT, "Your password has been changed");
+		String msgSubject = config.getString(Settings.AUTH_PASSWORD_CHANGE_SUBJECT, "Your password has been changed");
 		String recipientName = EntryUtil.getName(userEntry);
 		if (recipientName == null) {
 			recipientName = "";

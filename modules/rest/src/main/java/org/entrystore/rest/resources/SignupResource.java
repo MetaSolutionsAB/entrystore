@@ -272,15 +272,17 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
+		password = password.trim();
+
 		if (isInvalidName(ci.firstName) || isInvalidName(ci.lastName)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("Invalid name."));
 			return;
 		}
 
-		if (password.trim().length() < 8) {
+		if (!Password.conformsToRules(password)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(html.representation("The password has to consist of at least 8 characters."));
+			getResponse().setEntity(html.representation("The password must conform to the configured rules."));
 			return;
 		}
 
@@ -290,7 +292,7 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
-		if (domainWhitelist.size() > 0) {
+		if (!domainWhitelist.isEmpty()) {
 			String emailDomain = ci.email.substring(ci.email.indexOf("@") + 1).toLowerCase();
 			if (!domainWhitelist.contains(emailDomain)) {
 				getResponse().setStatus(Status.CLIENT_ERROR_EXPECTATION_FAILED);

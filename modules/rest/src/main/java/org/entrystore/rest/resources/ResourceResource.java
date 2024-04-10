@@ -1095,7 +1095,7 @@ public class ResourceResource extends BaseResource {
 						return;
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Password needs to be at least 8 characters long.\"}"));
+						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Password must conform to configured rules.\"}"));
 						return;
 					}
 				}

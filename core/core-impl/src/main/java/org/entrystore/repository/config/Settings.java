@@ -57,11 +57,32 @@ public class Settings {
 
 	public static String AUTH_PASSWORD_REQUIRE_CURRENT_PASSWORD = "entrystore.auth.password.require-current-password";
 
+	public static String AUTH_PASSWORD_RULE_LOWERCASE = "entrystore.auth.password.rule.lowercase";
+	public static String AUTH_PASSWORD_RULE_UPPERCASE = "entrystore.auth.password.rule.uppercase";
+	public static String AUTH_PASSWORD_RULE_NUMBER = "entrystore.auth.password.rule.number";
+	public static String AUTH_PASSWORD_RULE_SYMBOL = "entrystore.auth.password.rule.symbol";
+	public static String AUTH_PASSWORD_RULE_MINLENGTH = "entrystore.auth.password.rule.min-length";
+	public static String AUTH_PASSWORD_RULE_CUSTOM = "entrystore.auth.password.rule.custom";
+
+	public static String AUTH_PASSWORD_RESET = "entrystore.auth.password-reset";
+	public static String AUTH_PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-reset.email.template";
+	public static String AUTH_PASSWORD_RESET_SUBJECT = "entrystore.auth.password-reset.email.subject";
+
+	public static String AUTH_PASSWORD_CHANGE_SUBJECT = "entrystore.auth.password-change.email.subject";
+	public static String AUTH_PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-change.email.template";
+
 	public static String AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS = "entrystore.auth.temp.lockout.max.attempts";
 	public static String AUTH_TEMP_LOCKOUT_DURATION = "entrystore.auth.temp.lockout.duration";
 	public static String AUTH_TEMP_LOCKOUT_ADMIN = "entrystore.auth.temp.lockout.admin";
 
 	public static String AUTH_HTTP_BASIC = "entrystore.auth.http-basic";
+
+	public static String AUTH_FROM_EMAIL_DEPRECATED = "entrystore.auth.email.from";
+	public static String AUTH_BCC_EMAIL_DEPRECATED = "entrystore.auth.email.bcc";
+
+	public static String AUTH_RECAPTCHA = "entrystore.auth.recaptcha";
+	public static String AUTH_RECAPTCHA_PRIVATE_KEY = "entrystore.auth.recaptcha.private-key";
+	public static String AUTH_RECAPTCHA_PUBLIC_KEY = "entrystore.auth.recaptcha.public-key";
 
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
@@ -155,25 +176,11 @@ public class Settings {
 	public static String SMTP_EMAIL_BCC = "entrystore.smtp.email.bcc";
 	public static String SMTP_EMAIL_REPLYTO = "entrystore.smtp.email.reply-to";
 
-	public static String AUTH_FROM_EMAIL_DEPRECATED = "entrystore.auth.email.from";
-	public static String AUTH_BCC_EMAIL_DEPRECATED = "entrystore.auth.email.bcc";
-
-	public static String AUTH_RECAPTCHA = "entrystore.auth.recaptcha";
-	public static String AUTH_RECAPTCHA_PRIVATE_KEY = "entrystore.auth.recaptcha.private-key";
-	public static String AUTH_RECAPTCHA_PUBLIC_KEY = "entrystore.auth.recaptcha.public-key";
-
 	public static String SIGNUP = "entrystore.auth.signup";
 	public static String SIGNUP_SUBJECT = "entrystore.auth.signup.email.subject";
 	public static String SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.signup.email.template";
 	public static String SIGNUP_WHITELIST = "entrystore.auth.signup.whitelist";
 	public static String SIGNUP_CREATE_HOME_CONTEXT = "entrystore.auth.signup.create-home-context";
-
-	public static String PASSWORD_RESET = "entrystore.auth.password-reset";
-	public static String PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-reset.email.template";
-	public static String PASSWORD_RESET_SUBJECT = "entrystore.auth.password-reset.email.subject";
-
-	public static String PASSWORD_CHANGE_SUBJECT = "entrystore.auth.password-change.email.subject";
-	public static String PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-change.email.template";
 
 	public static String CORS = "entrystore.cors";
 	public static String CORS_ORIGINS = "entrystore.cors.origins";

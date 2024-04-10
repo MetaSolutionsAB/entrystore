@@ -33,6 +33,7 @@ import org.entrystore.impl.converters.OAI_DC2RDFGraphConverter;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
@@ -229,6 +230,7 @@ public class EntryStoreApplication extends Application {
 			this.pm = rm.getPrincipalManager();
 			this.userTempLockoutCache = new UserTempLockoutCache(rm, pm);
 			this.loginTokenCache = new LoginTokenCache(confManager.getConfiguration());
+			Password.loadRules(config);
 
 			if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
 				// Check for existence of Donald
@@ -335,7 +337,7 @@ public class EntryStoreApplication extends Application {
 		}
 
 		// password reset
-		if ("on".equalsIgnoreCase(config.getString(Settings.PASSWORD_RESET, "off"))) {
+		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD_RESET, "off"))) {
 			router.attach("/auth/pwreset", PasswordResetResource.class);
 		}
 

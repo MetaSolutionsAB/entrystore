@@ -16,12 +16,6 @@
 
 package org.entrystore.impl;
 
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -35,9 +29,17 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.URISplit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 
 
 /**
@@ -502,7 +504,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 * @return true If the secret fullfils minimum requirements, currently a minimum length of 8 characters.
 	 */
 	public boolean isValidSecret(String secret) {
-		return secret != null && secret.length() >= 8;
+		return Password.conformsToRules(secret);
 	}
 
 	public User getAdminUser() {
@@ -569,11 +571,9 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			adminUser.setName("admin");
 			String adminSecret = System.getenv(ENV_ADMIN_PASSWORD);
 			if (adminSecret != null) {
-				if (adminSecret.length() < 8) {
-					log.warn("Password in environment variable {} is too short (must have at least 8 characters), initializing admin user without password", ENV_ADMIN_PASSWORD);
-				} else {
-					log.info("Setting admin password based on environment variable {}", ENV_ADMIN_PASSWORD);
-					adminUser.setSecret(adminSecret);
+				log.info("Setting admin password based on environment variable {}", ENV_ADMIN_PASSWORD);
+				if (!adminUser.setSecret(adminSecret)) {
+					log.warn("Password in environment variable does not conform to configured rules, initializing admin user without password");
 				}
 			} else {
 				log.warn("Environment variable {} not found, initializing admin user without password", ENV_ADMIN_PASSWORD);
