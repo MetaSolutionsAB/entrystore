@@ -657,7 +657,7 @@ public class SolrSearchIndex implements SearchIndex {
 				break; // we only need the first match
 			}
 		} else {
-			log.warn("Local metadata URI of entry is null: " + entry.getEntryURI());
+			log.warn("Local metadata URI of entry is null: {}", entry.getEntryURI());
 		}
 
 		// creator
