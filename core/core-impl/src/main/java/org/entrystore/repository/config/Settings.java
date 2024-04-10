@@ -59,6 +59,7 @@ public class Settings {
 
 	public static String AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS = "entrystore.auth.temp.lockout.max.attempts";
 	public static String AUTH_TEMP_LOCKOUT_DURATION = "entrystore.auth.temp.lockout.duration";
+	public static String AUTH_TEMP_LOCKOUT_ADMIN = "entrystore.auth.temp.lockout.admin";
 
 	public static String AUTH_HTTP_BASIC = "entrystore.auth.http-basic";
 
