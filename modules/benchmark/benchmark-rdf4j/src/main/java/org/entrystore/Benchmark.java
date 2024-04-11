@@ -20,8 +20,8 @@ import java.util.List;
 
 public class Benchmark {
 
-    private static final File NATIVE_PATH = new File("modules/benchmark/benchmark-rdf4j/src/main/resources/native_store");
-    private static final File LMDB_PATH = new File("modules/benchmark/benchmark-rdf4j/src/main/resources/lmdb_store");
+    private static final File NATIVE_PATH = new File("./testdata/native_store");
+    private static final File LMDB_PATH = new File("./testdata/lmdb_store");
     private static final String NATIVE = "native";
     private static final String MEMORY = "memory";
     private static final String LMDB = "lmdb";
