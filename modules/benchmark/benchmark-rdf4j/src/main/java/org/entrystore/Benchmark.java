@@ -8,12 +8,14 @@ import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.sail.lmdb.LmdbStore;
 import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
+import org.entrystore.model.FakeComplexPerson;
 import org.entrystore.model.FakeGenerator;
 import org.entrystore.model.FakePerson;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 public class Benchmark {
@@ -24,14 +26,14 @@ public class Benchmark {
     private static final String MEMORY = "memory";
     private static final String LMDB = "lmdb";
 
-    private static List<FakePerson> generateData(int sizeToGenerate) {
+    private static List<FakePerson> generateSimpleData(int sizeToGenerate) {
 
         LogUtils.logType("GENERATE");
 
         LocalDateTime start = LocalDateTime.now();
         LogUtils.logDate("Starting generating data at", start);
 
-        List<FakePerson> persons = FakeGenerator.createPersonList(sizeToGenerate);
+        List<FakePerson> persons = FakeGenerator.createSimplePersonList(sizeToGenerate);
 
         LocalDateTime end = LocalDateTime.now();
         LogUtils.logDate("Ended generating data at", end);
@@ -40,7 +42,23 @@ public class Benchmark {
         return persons;
     }
 
-    public static void readAllFromDatabase(RepositoryConnection connection) {
+    private static List<FakeComplexPerson> generateComplexData(int sizeToGenerate) {
+
+        LogUtils.logType("GENERATE");
+
+        LocalDateTime start = LocalDateTime.now();
+        LogUtils.logDate("Starting generating data at", start);
+
+        List<FakeComplexPerson> persons = FakeGenerator.createComplexPersonList(sizeToGenerate);
+
+        LocalDateTime end = LocalDateTime.now();
+        LogUtils.logDate("Ended generating data at", end);
+        LogUtils.logTimeDifference("Generating data took", start, end);
+
+        return persons;
+    }
+
+    private static void readAllFromDatabase(RepositoryConnection connection) {
 
         LogUtils.logType(" READING");
 
@@ -81,11 +99,12 @@ public class Benchmark {
             String benchmarkType = args[0];
             boolean withTransactions = "true".equals(args[1]);
             int sizeToGenerate = Integer.parseInt(args[2]);
-            boolean withInterRequests = "true".equals(args[3]);
+            boolean isComplex = "true".equals(args[3]);
+            boolean withInterRequests = "true".equals(args[4]);
             int interRequestsModulo = -1;
 
             if (withInterRequests) {
-                interRequestsModulo = Integer.parseInt(args[4]);
+                interRequestsModulo = Integer.parseInt(args[5]);
                 if (interRequestsModulo > sizeToGenerate) {
                     throw new IllegalArgumentException("Modulo cannot be larger then total size.");
                 }
@@ -96,16 +115,32 @@ public class Benchmark {
             // welcome message
             LogUtils.logWelcome(benchmarkType, withTransactions, sizeToGenerate);
 
-            // generate list of Persons with Addresses, 1 Person has exactly 1 Address
-            List<FakePerson> persons = generateData(sizeToGenerate);
+            List<FakePerson> simplePersons = new ArrayList<>();
+            List<FakeComplexPerson> complexPersons = new ArrayList<>();
+
+            if (isComplex) {
+                // generate list of Persons with Addresses, Spouses and Companies. Spouse has also a Company and Address. Company has also an Address.
+                complexPersons = generateComplexData(sizeToGenerate);
+            } else {
+                // generate list of Persons with Addresses, 1 Person has exactly 1 Address
+                simplePersons = generateSimpleData(sizeToGenerate);
+            }
 
             // run either a multi-transaction or single-transaction benchmark
             try (RepositoryConnection connection = database.getConnection()) {
 
                 if (withTransactions) {
-                    MultipleTransactions.runBenchmark(connection, persons, interRequestsModulo);
+                    if (isComplex) {
+                        MultipleTransactions.runComplexObjectsBenchmark(connection, complexPersons, interRequestsModulo);
+                    } else {
+                        MultipleTransactions.runSimpleObjectsBenchmark(connection, simplePersons, interRequestsModulo);
+                    }
                 } else {
-                    SingleTransaction.runBenchmark(connection, persons);
+                    if (isComplex) {
+                        SingleTransaction.runComplexObjectsBenchmark(connection, complexPersons);
+                    } else {
+                        SingleTransaction.runSimpleObjectsBenchmark(connection, simplePersons);
+                    }
                 }
 
                 // read statements from database

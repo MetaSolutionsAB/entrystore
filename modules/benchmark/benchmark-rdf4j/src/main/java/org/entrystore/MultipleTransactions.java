@@ -6,6 +6,7 @@ import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.util.ModelBuilder;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryResult;
+import org.entrystore.model.FakeComplexPerson;
 import org.entrystore.model.FakeGenerator;
 import org.entrystore.model.FakePerson;
 import org.entrystore.vocabulary.BenchmarkOntology;
@@ -23,19 +24,27 @@ public class MultipleTransactions {
         return item -> consumer.accept(counter.getAndIncrement(), item);
     }
 
-    private static Model populateSinglePerson(FakePerson person) {
+    private static Model populateSingleSimplePerson(FakePerson person) {
         ModelBuilder builder = new ModelBuilder().setNamespace(BenchmarkOntology.PREFIX, BenchmarkOntology.NAMESPACE);
 
         if (person != null) {
-            FakeGenerator.mapToBuilder(person, builder);
+            FakeGenerator.mapSimplePersonToBuilder(person, builder);
         }
 
         return builder.build();
     }
 
-    private static void insertTransaction(RepositoryConnection connection, FakePerson person) {
-        Model model = populateSinglePerson(person);
+    private static Model populateSingleComplexPerson(FakeComplexPerson person) {
+        ModelBuilder builder = new ModelBuilder().setNamespace(BenchmarkOntology.PREFIX, BenchmarkOntology.NAMESPACE);
 
+        if (person != null) {
+            FakeGenerator.mapComplexPersonToBuilder(person, builder);
+        }
+
+        return builder.build();
+    }
+
+    private static void insertTransaction(RepositoryConnection connection, Model model) {
         try {
             connection.begin();
             connection.add(model);
@@ -65,44 +74,74 @@ public class MultipleTransactions {
         LogUtils.logTimeDifference("Reading Peter Griffin #" + i + " took", startRead, endRead);
     }
 
-    private static void insertAndReadTransaction(RepositoryConnection connection, FakePerson person) {
-        Model model = populateSinglePerson(person);
-
-        try {
-            connection.begin();
-            connection.add(model);
-            connection.commit();
-
-
-        } catch (Exception ex) {
-            LogUtils.log.error(ex.getMessage());
-        }
-    }
-
-    public static void runBenchmark(RepositoryConnection connection, List<FakePerson> persons, int modulo) {
+    public static void runSimpleObjectsBenchmark(RepositoryConnection connection, List<FakePerson> persons, int modulo) {
 
         LogUtils.logType("POPULATE");
-        LogUtils.logType("INSERT");
+        LogUtils.logType(" INSERT ");
 
         LocalDateTime start = LocalDateTime.now();
         LogUtils.logDate("Starting populating the model/inserting into database at", start);
 
         persons.forEach(withCounter((i, person) -> {
             if (person != null) {
-                if (modulo > 0 && i % modulo > 0) {
-                    insertTransaction(connection, person);
+                Model model;
+
+                if (modulo == -1 || i % modulo > 0) {
+                    model = populateSingleSimplePerson(person);
+                    insertTransaction(connection, model);
+                } else {
+                    LocalDateTime startInsert = LocalDateTime.now();
+                    //LogUtils.logDate("Start inserting Peter Griffin #" + i, startInsert);
+
+                    FakePerson injectedPerson = FakeGenerator.createSimplePerson(i);
+                    injectedPerson.setIdentifier(-i);
+                    injectedPerson.setFirstName("Peter" + (i / modulo));
+                    injectedPerson.setLastName("Griffin" + (i / modulo));
+
+                    model = populateSingleSimplePerson(injectedPerson);
+                    insertTransaction(connection, model);
+                    readSpecificPerson(connection, i);
+                    readSpecificPerson(connection, modulo);
+
+                    LocalDateTime endInsert = LocalDateTime.now();
+                    //LogUtils.logDate("End inserting Peter Griffin #" + i + " at", endInsert);
+                    LogUtils.logTimeDifference("Inserting Peter Griffin #" + i + " took", startInsert, endInsert);
+                }
+            }
+        }));
+
+        LocalDateTime end = LocalDateTime.now();
+        LogUtils.logDate("Ending populating the model/inserting into database at", end);
+        LogUtils.logTimeDifference("Populating the model/inserting into database took", start, end);
+    }
+
+    public static void runComplexObjectsBenchmark(RepositoryConnection connection, List<FakeComplexPerson> persons, int modulo) {
+
+        LogUtils.logType("POPULATE");
+        LogUtils.logType(" INSERT ");
+
+        LocalDateTime start = LocalDateTime.now();
+        LogUtils.logDate("Starting populating the model/inserting into database at", start);
+
+        persons.forEach(withCounter((i, person) -> {
+            if (person != null) {
+                Model model;
+
+                if (modulo == -1 || i % modulo > 0) {
+                    model = populateSingleComplexPerson(person);
+                    insertTransaction(connection, model);
                 } else {
 
                     LocalDateTime startInsert = LocalDateTime.now();
                     //LogUtils.logDate("Start inserting Peter Griffin #" + i, startInsert);
 
-                    FakePerson injectedPerson = FakeGenerator.createPerson(i);
+                    FakeComplexPerson injectedPerson = FakeGenerator.createComplexPerson(i);
                     injectedPerson.setIdentifier(-i);
                     injectedPerson.setFirstName("Peter" + (i / modulo));
                     injectedPerson.setLastName("Griffin" + (i / modulo));
 
-
-                    insertAndReadTransaction(connection, injectedPerson);
+                    model = populateSingleComplexPerson(injectedPerson);
+                    insertTransaction(connection, model);
 
                     LocalDateTime endInsert = LocalDateTime.now();
                     //LogUtils.logDate("End inserting Peter Griffin #" + i + " at", endInsert);

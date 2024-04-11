@@ -7,10 +7,9 @@ import lombok.experimental.SuperBuilder;
 @SuperBuilder
 @Getter
 @Setter
-public class FakePerson {
-    int identifier;
-    int iterator;
-    String firstName;
-    String lastName;
-    FakeAddress address;
+public class FakeComplexPerson extends FakePerson {
+    int age;
+    String phoneNumber;
+    FakeComplexPerson spouse;
+    FakeCompany company;
 }
