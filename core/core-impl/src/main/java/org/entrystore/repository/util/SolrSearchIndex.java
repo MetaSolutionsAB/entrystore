@@ -512,6 +512,11 @@ public class SolrSearchIndex implements SearchIndex {
 		return ping() && documentSubmitter.isAlive() && delayedContextIndexer.isAlive() && !reindexExecutor.isShutdown();
 	}
 
+	/**
+	 * This method was originally developed for ACL changes, but we also use it for project types now. If ACL changes
+	 * are reverted within a short period of time then the context is removed from the reindexing queue again. This
+	 * does not apply for other reindexing triggers such as a changed project type.
+	 */
 	public void submitContextForDelayedReindex(Entry contextEntry, Model entryGraph) {
 		synchronized (delayedReindex) {
 			IRI guestURI = valueFactory.createIRI(rm.getPrincipalManager().getGuestUser().getURI().toString());
@@ -520,8 +525,7 @@ public class SolrSearchIndex implements SearchIndex {
 			boolean newGuestReadable = m.contains(valueFactory.createIRI(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Read, guestURI) ||
 					m.contains(valueFactory.createIRI(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Write, guestURI);
 			if (delayedReindex.containsKey(contextURI) && (delayedReindex.get(contextURI).guestReadable != newGuestReadable)) {
-				// the context has been switched back to the previous
-				// status and does not need to be reindexed anymore
+				// the context has been switched back to the previous guest ACL and does not need to be reindexed anymore
 				log.info("Removing context from delayed reindexing queue due to reverted ACL change within grace period");
 				delayedReindex.remove(contextURI);
 			} else {
@@ -658,6 +662,19 @@ public class SolrSearchIndex implements SearchIndex {
 			}
 		} else {
 			log.warn("Local metadata URI of entry is null: {}", entry.getEntryURI());
+		}
+
+		// project type
+		// FIXME this can be optimized by not checking the context for every single indexed entry, perhaps we can
+		// remember the context status for a limited amount of time instead of fetching and querying the context graph
+		// every time
+		Entry contextEntry = entry.getContext().getEntry();
+		Model contextEntryGraph = contextEntry.getGraph();
+		Set<IRI> projectTypePreds = new HashSet<>();
+		projectTypePreds.add(valueFactory.createIRI("http://entryscape.com/terms/projectType"));
+		for (String projectTypeURI : EntryUtil.getResourceValues(contextEntryGraph, contextEntry.getEntryURI(), projectTypePreds)) {
+			doc.setField("projectType", projectTypeURI);
+			break; // we only need the first match
 		}
 
 		// creator
