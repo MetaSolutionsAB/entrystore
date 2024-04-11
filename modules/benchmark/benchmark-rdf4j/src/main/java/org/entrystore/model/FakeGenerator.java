@@ -43,7 +43,8 @@ public class FakeGenerator {
                 .parallel()
                 .forEach(i -> {
                     try {
-                        list.add(createComplexPerson(i));
+                        FakeComplexPerson spouse = createComplexPerson(0, null);
+                        list.add(createComplexPerson(i, spouse));
                     } catch (Exception e) {
                         LogUtils.log.error(e.getMessage());
                     }
@@ -65,28 +66,35 @@ public class FakeGenerator {
                 .build();
     }
 
-    public static FakeComplexPerson.FakeComplexPersonBuilder createComplexPersonBuilderWithoutSpouse(int i) {
+    public static FakeComplexPerson createComplexPerson(int i, FakeComplexPerson spouse) {
         Name name = faker.name();
         FakeAddress address = createAddress(i);
         FakeCompany company = createCompany(i);
 
-        return FakeComplexPerson.builder()
-                .iterator(i)
-                .identifier(Math.abs(name.firstName().hashCode()))
-                .firstName(name.firstName())
-                .lastName(name.lastName())
-                .age(random.nextInt(100 - 15) + 15)
-                .phoneNumber(faker.phoneNumber().cellPhone())
-                .address(address)
-                .company(company);
-    }
-
-    public static FakeComplexPerson createComplexPerson(int i) {
-        FakeComplexPerson spouse = createComplexPersonBuilderWithoutSpouse(0).build();
-
-        return createComplexPersonBuilderWithoutSpouse(i)
-                .spouse(spouse)
-                .build();
+        if (spouse != null) {
+            return FakeComplexPerson.builder()
+                    .iterator(i)
+                    .identifier(Math.abs(name.firstName().hashCode()))
+                    .firstName(name.firstName())
+                    .lastName(name.lastName())
+                    .age(random.nextInt(100 - 15) + 15)
+                    .phoneNumber(faker.phoneNumber().cellPhone())
+                    .address(address)
+                    .company(company)
+                    .spouse(spouse)
+                    .build();
+        } else {
+            return FakeComplexPerson.builder()
+                    .iterator(i)
+                    .identifier(Math.abs(name.firstName().hashCode()))
+                    .firstName(name.firstName())
+                    .lastName(name.lastName())
+                    .age(random.nextInt(100 - 15) + 15)
+                    .phoneNumber(faker.phoneNumber().cellPhone())
+                    .address(address)
+                    .company(company)
+                    .build();
+        }
     }
 
     private static FakeAddress createAddress(int i) {

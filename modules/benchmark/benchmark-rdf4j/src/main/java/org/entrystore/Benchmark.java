@@ -68,7 +68,7 @@ public class Benchmark {
         try (RepositoryResult<Statement> result = connection.getStatements(null, null, null)) {
 
             for (Statement statement : result) {
-                //System.out.printf("Database contains: %s\n", statement);
+                System.out.printf("Database contains: %s\n", statement);
             }
         }
 

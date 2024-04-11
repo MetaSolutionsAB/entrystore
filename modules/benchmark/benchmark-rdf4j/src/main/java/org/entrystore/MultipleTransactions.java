@@ -135,7 +135,8 @@ public class MultipleTransactions {
                     LocalDateTime startInsert = LocalDateTime.now();
                     //LogUtils.logDate("Start inserting Peter Griffin #" + i, startInsert);
 
-                    FakeComplexPerson injectedPerson = FakeGenerator.createComplexPerson(i);
+                    FakeComplexPerson injectedSpouse = FakeGenerator.createComplexPerson(0, null);
+                    FakeComplexPerson injectedPerson = FakeGenerator.createComplexPerson(i, injectedSpouse);
                     injectedPerson.setIdentifier(-i);
                     injectedPerson.setFirstName("Peter" + (i / modulo));
                     injectedPerson.setLastName("Griffin" + (i / modulo));
