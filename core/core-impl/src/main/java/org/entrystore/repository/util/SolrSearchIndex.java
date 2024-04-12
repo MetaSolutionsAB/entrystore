@@ -668,11 +668,21 @@ public class SolrSearchIndex implements SearchIndex {
 		// FIXME this can be optimized by not checking the context for every single indexed entry, perhaps we can
 		// remember the context status for a limited amount of time instead of fetching and querying the context graph
 		// every time
-		Entry contextEntry = entry.getContext().getEntry();
-		Model contextEntryGraph = contextEntry.getGraph();
-		Set<IRI> projectTypePreds = new HashSet<>();
-		projectTypePreds.add(valueFactory.createIRI("http://entryscape.com/terms/projectType"));
-		for (String projectTypeURI : EntryUtil.getResourceValues(contextEntryGraph, contextEntry.getEntryURI(), projectTypePreds)) {
+		Model graphWithProjectType;
+		URI resourceUriForProjectType;
+		if (GraphType.Context.equals(entry.getGraphType())) {
+			graphWithProjectType = entryGraph;
+			resourceUriForProjectType = resourceURI;
+		} else {
+			Entry contextEntry = entry.getContext().getEntry();
+			graphWithProjectType = contextEntry.getGraph();
+			resourceUriForProjectType = contextEntry.getResourceURI();
+		}
+
+		for (String projectTypeURI : EntryUtil.getResourceValues(
+				graphWithProjectType,
+				resourceUriForProjectType,
+				Collections.singleton(valueFactory.createIRI("http://entryscape.com/terms/projectType")))) {
 			doc.setField("projectType", projectTypeURI);
 			break; // we only need the first match
 		}
