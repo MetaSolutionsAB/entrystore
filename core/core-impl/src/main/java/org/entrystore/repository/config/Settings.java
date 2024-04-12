@@ -84,6 +84,8 @@ public class Settings {
 	public static String AUTH_RECAPTCHA_PRIVATE_KEY = "entrystore.auth.recaptcha.private-key";
 	public static String AUTH_RECAPTCHA_PUBLIC_KEY = "entrystore.auth.recaptcha.public-key";
 
+	public static String AUTH_PERMITTED_REDIRECTS = "entrystore.auth.permitted.redirects";
+
 	public static String BACKUP_FOLDER = "entrystore.backup.folder";
 	public static String BACKUP_SCHEDULER = "entrystore.backup.scheduler";
 	public static String BACKUP_TIMEREGEXP_DEPRECATED = "entrystore.backup.timeregexp";
