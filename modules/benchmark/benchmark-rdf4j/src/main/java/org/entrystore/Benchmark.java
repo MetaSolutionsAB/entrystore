@@ -97,10 +97,25 @@ public class Benchmark {
 
             // process arguments
             String benchmarkType = args[0];
+
+            if (NATIVE.equals(benchmarkType) || MEMORY.equals(benchmarkType) || LMDB.equals(benchmarkType)) {
+                System.setProperty("log.benchmarkType", benchmarkType);
+            } else {
+                throw new IllegalArgumentException("Benchmark type not supported.");
+            }
+
             boolean withTransactions = "true".equals(args[1]);
+            System.setProperty("log.transactions", withTransactions ? "multi" : "single");
+
             int sizeToGenerate = Integer.parseInt(args[2]);
+            System.setProperty("log.size", sizeToGenerate + "");
+
             boolean isComplex = "true".equals(args[3]);
+            System.setProperty("log.complexity", isComplex ? "complex" : "simple");
+
             boolean withInterRequests = "true".equals(args[4]);
+            System.setProperty("log.interRequests", withInterRequests ? "requests" : "no-requests");
+
             int interRequestsModulo = -1;
 
             if (withInterRequests) {
@@ -109,6 +124,7 @@ public class Benchmark {
                     throw new IllegalArgumentException("Modulo cannot be larger then total size.");
                 }
             }
+            System.setProperty("log.modulo", interRequestsModulo + "");
 
             Repository database = getDatabase(benchmarkType);
 

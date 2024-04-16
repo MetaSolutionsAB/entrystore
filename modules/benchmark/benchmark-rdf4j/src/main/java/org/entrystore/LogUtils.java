@@ -9,19 +9,18 @@ import java.time.format.DateTimeFormatter;
 
 public class LogUtils {
 
-    public static final Logger log = LoggerFactory.getLogger(SingleTransaction.class);
+    public static final Logger log = LoggerFactory.getLogger(Benchmark.class);
 
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
     protected static void logWelcome(String benchmarkType, boolean withTransactions, int size) {
-
-        String endStars               = "     ***";
+        String endStars = "     ***";
         if (size < 1000000) endStars += "*";
-        if (size < 100000)  endStars += "*";
-        if (size < 10000)   endStars += "*";
-        if (size < 1000)    endStars += "*";
-        if (size < 100)     endStars += "*";
-        if (size < 10)      endStars += "*";
+        if (size < 100000) endStars += "*";
+        if (size < 10000) endStars += "*";
+        if (size < 1000) endStars += "*";
+        if (size < 100) endStars += "*";
+        if (size < 10) endStars += "*";
 
         log.info("******************************************************************************");
         log.info("******************************************************************************");
@@ -35,7 +34,6 @@ public class LogUtils {
     }
 
     protected static void logGoodbye() {
-
         log.info("******************************************************************************");
         log.info("******************************************************************************");
         log.info("*****                                                                    *****");
@@ -46,7 +44,6 @@ public class LogUtils {
     }
 
     public static void logType(String operationType) {
-
         log.info("******************************************************************************");
         log.info("***********                     " + operationType + " DATA                      ***********");
         log.info("******************************************************************************");
