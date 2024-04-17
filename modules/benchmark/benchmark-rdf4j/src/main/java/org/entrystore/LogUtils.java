@@ -13,6 +13,14 @@ public class LogUtils {
 
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
+    private static void logStars(boolean withSpace) {
+        if (withSpace) {
+            log.info("*****                                                                    *****");
+        } else {
+            log.info("*******************************************************************************");
+        }
+    }
+
     protected static void logWelcome(String benchmarkType, boolean withTransactions, int size) {
         String endStars = "     ***";
         if (size < 1000000) endStars += "*";
@@ -22,38 +30,38 @@ public class LogUtils {
         if (size < 100) endStars += "*";
         if (size < 10) endStars += "*";
 
-        log.info("******************************************************************************");
-        log.info("******************************************************************************");
-        log.info("*****                                                                    *****");
+
+        logStars(false);
+        logStars(true);
         log.info("*****              !!! WELCOME TO ENTRYSCAPE BENCHMARK !!!               *****");
-        log.info("*****                                                                    *****");
-        log.info("******************************************************************************");
-        log.info("*****       Running Benchmark for " + benchmarkType + " storage with " + size + " persons " + endStars);
-        log.info("*****                        Transactions are " + (withTransactions ? "ON " : "OFF") + "                       ******");
-        log.info("******************************************************************************");
+        logStars(true);
+        logStars(false);
+        log.info("*****       Running Benchmark for {} storage with {} persons {}", benchmarkType, size, endStars);
+        log.info("*****                        Transactions are {}                       ******", withTransactions ? "ON " : "OFF");
+        logStars(false);
     }
 
     protected static void logGoodbye() {
-        log.info("******************************************************************************");
-        log.info("******************************************************************************");
-        log.info("*****                                                                    *****");
+        logStars(false);
+        logStars(false);
+        logStars(true);
         log.info("*****              !!!             GOODBYE             !!!               *****");
-        log.info("*****                                                                    *****");
-        log.info("******************************************************************************");
-        log.info("******************************************************************************");
+        logStars(true);
+        logStars(false);
+        logStars(false);
     }
 
     public static void logType(String operationType) {
-        log.info("******************************************************************************");
-        log.info("***********                     " + operationType + " DATA                      ***********");
-        log.info("******************************************************************************");
+        logStars(false);
+        log.info("***********                     {} DATA                      ***********", operationType);
+        logStars(false);
     }
 
     public static void logDate(String message, LocalDateTime date) {
-        log.info(message + " " + dateTimeFormatter.format(date));
+        log.info("{} {}", message, dateTimeFormatter.format(date));
     }
 
     public static void logTimeDifference(String message, LocalDateTime start, LocalDateTime end) {
-        log.info(message + " " + Duration.between(start, end).toMillis() + " milliseconds.");
+        log.info("{} {} milliseconds.", message, Duration.between(start, end).toMillis());
     }
 }
