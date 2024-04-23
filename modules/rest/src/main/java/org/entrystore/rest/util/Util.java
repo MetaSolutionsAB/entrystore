@@ -204,7 +204,7 @@ public class Util {
 	public static String sanitizeFilename(String filename) {
 		String fileExt = FilenameUtils.getExtension(filename);
 		if (fileExt != null && dangerousFileExtensions.contains(fileExt.toLowerCase())) {
-			return filename + "_safe";
+			return filename + "_dangerous";
 		}
 		return filename;
 	}
