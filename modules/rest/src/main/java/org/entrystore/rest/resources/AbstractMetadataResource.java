@@ -418,15 +418,13 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			rc = sr.getConnection();
 			rc.add(graph);
 			GraphQuery gq = rc.prepareGraphQuery(QueryLanguage.SPARQL, query);
-			gq.setMaxQueryTime(10); // 10 seconds, TODO: make this configurable
+			gq.setMaxExecutionTime(10); // 10 seconds, TODO: make this configurable
 			result = Iterations.addAll(gq.evaluate(), new LinkedHashModel());
 			log.info("Graph query took " + (new Date().getTime() - before.getTime()) + " ms");
-		} catch (RepositoryException e) {
+		} catch (RepositoryException | QueryEvaluationException e) {
 			log.error(e.getMessage());
 		} catch (MalformedQueryException mfqe) {
 			log.debug(mfqe.getMessage());
-		} catch (QueryEvaluationException qee) {
-			log.error(qee.getMessage());
 		} finally {
 			if (rc != null) {
 				try {
@@ -444,7 +442,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		return result;
 	}
 
-	private static RDFFormat RDFJSON_WITH_APPLICATION_JSON
+	private static final RDFFormat RDFJSON_WITH_APPLICATION_JSON
 		= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("json"), SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
 
 	protected static String getFileExtensionForMediaType(MediaType mt) {
