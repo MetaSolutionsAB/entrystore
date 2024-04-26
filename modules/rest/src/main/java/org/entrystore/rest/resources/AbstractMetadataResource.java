@@ -162,13 +162,14 @@ public abstract class AbstractMetadataResource extends BaseResource {
 						result.setModificationDate(travResult.getLatestModified());
 					}
 				} else {
-					if (getMetadata() == null) {
+					// MergedMetadataResource does not implement getMetadata()
+					if (getMetadata() == null && getMetadataGraph() == null) {
 						getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 						return null;
 					}
 
 					if (graphQuery != null) {
-						Model graphQueryResult = applyGraphQuery(graphQuery, getMetadata().getGraph());
+						Model graphQueryResult = applyGraphQuery(graphQuery, getMetadataGraph());
 						if (graphQueryResult != null) {
 							result = getRepresentation(graphQueryResult, prefFormat);
 						} else {
@@ -176,7 +177,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 							return null;
 						}
 					} else {
-						result = getRepresentation(getMetadata().getGraph(), prefFormat);
+						result = getRepresentation(getMetadataGraph(), prefFormat);
 					}
 				}
 
@@ -225,7 +226,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			}
 
 			if (getMetadata() == null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+				getResponse().setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
 				return;
 			}
 
@@ -247,7 +248,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			}
 
 			if (getMetadata() == null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+				getResponse().setStatus(Status.CLIENT_ERROR_METHOD_NOT_ALLOWED);
 				return;
 			}
 
@@ -299,9 +300,19 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	}
 
 	/**
-	 * @return Returns the relevant metadata graph. May be null.
+	 * @return Returns the metadata object. May be null.
 	 */
 	protected abstract Metadata getMetadata();
+
+	/**
+	 * @return Returns the metadata graph. May be null.
+	 */
+	protected Model getMetadataGraph() {
+		if (getMetadata() != null) {
+			return getMetadata().getGraph();
+		}
+		return null;
+	}
 
 	/**
 	 * @return Returns the modification date of the metadata graph. Only external metadata has its own date;
