@@ -96,10 +96,10 @@ public class Benchmark {
         try {
 
             // process arguments
-            String benchmarkType = args[0];
+            String storeType = args[0];
 
-            if (NATIVE.equals(benchmarkType) || MEMORY.equals(benchmarkType) || LMDB.equals(benchmarkType)) {
-                System.setProperty("log.benchmarkType", benchmarkType);
+            if (NATIVE.equals(storeType) || MEMORY.equals(storeType) || LMDB.equals(storeType)) {
+                System.setProperty("log.storeType", storeType);
             } else {
                 throw new IllegalArgumentException("Benchmark type not supported.");
             }
@@ -126,13 +126,12 @@ public class Benchmark {
             }
             System.setProperty("log.modulo", interRequestsModulo + "");
 
-            Repository database = getDatabase(benchmarkType);
-
             // welcome message
-            LogUtils.logWelcome(benchmarkType, withTransactions, sizeToGenerate);
+            LogUtils.logWelcome(storeType, withTransactions, sizeToGenerate);
 
             List<FakePerson> simplePersons = new ArrayList<>();
             List<FakeComplexPerson> complexPersons = new ArrayList<>();
+            Repository database = getDatabase(storeType);
 
             if (isComplex) {
                 // generate list of Persons with Addresses, Spouses and Companies. Spouse has also a Company and Address. Company has also an Address.
@@ -162,7 +161,6 @@ public class Benchmark {
                 // read statements from database
                 readAllFromDatabase(connection);
             } finally {
-
                 // close the connection and shutDown the database
                 database.shutDown();
             }

@@ -23,15 +23,21 @@ public class FakeGenerator {
     public static List<FakePerson> createSimplePersonList(int size) {
         List<FakePerson> list = new ArrayList<>();
 
-        IntStream.range(0, size)
-                .parallel()
-                .forEach(i -> {
-                    try {
-                        list.add(createSimplePerson(i));
-                    } catch (Exception e) {
-                        LogUtils.log.error(e.getMessage());
-                    }
-                });
+        while (list.size() < size) {
+            IntStream.range(list.size(), size)
+                    .parallel()
+                    .forEach(i -> {
+                        FakePerson person = null;
+                        while (person == null) {
+                            try {
+                                person = createSimplePerson(i);
+                                list.add(person);
+                            } catch (Exception e) {
+                                LogUtils.log.error(e.getMessage());
+                            }
+                        }
+                    });
+        }
 
         return list;
     }
@@ -39,16 +45,29 @@ public class FakeGenerator {
     public static List<FakeComplexPerson> createComplexPersonList(int size) {
         List<FakeComplexPerson> list = new ArrayList<>();
 
-        IntStream.range(0, size)
-                .parallel()
-                .forEach(i -> {
-                    try {
-                        FakeComplexPerson spouse = createComplexPerson(0, null);
-                        list.add(createComplexPerson(i, spouse));
-                    } catch (Exception e) {
-                        LogUtils.log.error(e.getMessage());
-                    }
-                });
+        while (list.size() < size) {
+            IntStream.range(list.size(), size)
+                    .parallel()
+                    .forEach(i -> {
+                        FakeComplexPerson person = null;
+                        while (person == null) {
+                            try {
+                                FakeComplexPerson spouse = null;
+                                while (spouse == null) {
+                                    try {
+                                        spouse = createComplexPerson(0, null);
+                                    } catch (Exception e) {
+                                        LogUtils.log.error(e.getMessage());
+                                    }
+                                }
+                                person = createComplexPerson(i, spouse);
+                                list.add(person);
+                            } catch (Exception e) {
+                                LogUtils.log.error(e.getMessage());
+                            }
+                        }
+                    });
+        }
 
         return list;
     }
