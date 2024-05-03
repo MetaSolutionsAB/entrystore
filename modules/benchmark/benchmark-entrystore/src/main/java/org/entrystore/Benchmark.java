@@ -7,6 +7,7 @@ import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -62,6 +63,28 @@ public class Benchmark {
         LogUtils.logTimeDifference("Generating data took", start, end);
 
         return persons;
+    }
+
+    private static void readAllFromDatabase(Context context) {
+
+        LogUtils.logType(" READING");
+
+        LocalDateTime start = LocalDateTime.now();
+        LogUtils.logDate("Starting reading from database at", start);
+
+        for (URI entryURI : context.getEntries()) {
+            Entry entry = context.getByEntryURI(entryURI);
+            try {
+                String dump = entry.getResourceURI() + ": " + entry.getMetadataGraph().objects();
+                //System.out.println(dump);
+            } catch (Exception e) {
+                System.out.println(e.getMessage());
+            }
+        }
+
+        LocalDateTime end = LocalDateTime.now();
+        LogUtils.logDate("Ended reading from database at", end);
+        LogUtils.logTimeDifference("Reading from database took", start, end);
     }
 
     public static void main(String[] args) {
@@ -121,17 +144,7 @@ public class Benchmark {
 
                 // reading
                 Context context = repositoryManager.getContextManager().getContext(CONTEXT_ALIAS);
-
-                for (int i = 1; i <= (persons.size() * 8); i++) {
-                    Entry entry = context.get(i + "");
-                    try {
-                        System.out.println(entry.getResourceURI() + ": " + entry.getMetadataGraph().objects());
-                    } catch (Exception e) {
-                        System.out.println(e.getMessage());
-                    }
-                }
-
-
+                readAllFromDatabase(context);
             } finally {
                 // close the connection and shutDown the database
                 tearDown(repositoryManager);
