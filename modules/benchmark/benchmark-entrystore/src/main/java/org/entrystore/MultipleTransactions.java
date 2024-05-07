@@ -1,6 +1,6 @@
 package org.entrystore;
 
-import org.entrystore.model.FakeGenerator;
+import org.entrystore.mapper.ObjectMapper;
 import org.entrystore.repository.RepositoryManager;
 
 import java.time.LocalDateTime;
@@ -19,7 +19,10 @@ public class MultipleTransactions {
 
         persons.forEach(person -> {
             if (person != null) {
-                FakeGenerator.mapObjectToContext(context, person);
+                ObjectMapper.mapObjectToContext(context, person);
+                /*if (((FakePerson) person).getIterator() % 5000 == 0) {
+                    System.out.printf("Inserting person %s\n", ((FakePerson) person).getIterator());
+                }*/
             }
         });
 

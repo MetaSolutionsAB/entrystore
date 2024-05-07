@@ -8,14 +8,11 @@ import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.sail.lmdb.LmdbStore;
 import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
-import org.entrystore.model.FakeComplexPerson;
-import org.entrystore.model.FakeGenerator;
-import org.entrystore.model.FakePerson;
+import org.entrystore.generator.ObjectGenerator;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 public class Benchmark {
@@ -25,57 +22,6 @@ public class Benchmark {
     private static final String NATIVE = "native";
     private static final String MEMORY = "memory";
     private static final String LMDB = "lmdb";
-
-    private static List<FakePerson> generateSimpleData(int sizeToGenerate) {
-
-        LogUtils.logType("GENERATE");
-
-        LocalDateTime start = LocalDateTime.now();
-        LogUtils.logDate("Starting generating data at", start);
-
-        List<FakePerson> persons = FakeGenerator.createSimplePersonList(sizeToGenerate);
-
-        LocalDateTime end = LocalDateTime.now();
-        LogUtils.logDate("Ended generating data at", end);
-        LogUtils.logTimeDifference("Generating data took", start, end);
-
-        return persons;
-    }
-
-    private static List<FakeComplexPerson> generateComplexData(int sizeToGenerate) {
-
-        LogUtils.logType("GENERATE");
-
-        LocalDateTime start = LocalDateTime.now();
-        LogUtils.logDate("Starting generating data at", start);
-
-        List<FakeComplexPerson> persons = FakeGenerator.createComplexPersonList(sizeToGenerate);
-
-        LocalDateTime end = LocalDateTime.now();
-        LogUtils.logDate("Ended generating data at", end);
-        LogUtils.logTimeDifference("Generating data took", start, end);
-
-        return persons;
-    }
-
-    private static void readAllFromDatabase(RepositoryConnection connection) {
-
-        LogUtils.logType(" READING");
-
-        LocalDateTime start = LocalDateTime.now();
-        LogUtils.logDate("Starting reading from database at", start);
-
-        try (RepositoryResult<Statement> result = connection.getStatements(null, null, null)) {
-
-            for (Statement statement : result) {
-                //System.out.printf("Database contains: %s\n", statement);
-            }
-        }
-
-        LocalDateTime end = LocalDateTime.now();
-        LogUtils.logDate("Ended reading from database at", end);
-        LogUtils.logTimeDifference("Reading from database took", start, end);
-    }
 
     @NotNull
     private static Repository getDatabase(String benchmarkType) {
@@ -91,6 +37,46 @@ public class Benchmark {
         };
     }
 
+    private static List<Object> generateData(int sizeToGenerate, boolean isComplex) {
+
+        LogUtils.logType("GENERATE");
+
+        LocalDateTime start = LocalDateTime.now();
+        LogUtils.logDate("Starting generating data at", start);
+
+        List<Object> objects = ObjectGenerator.createPersonList(sizeToGenerate, isComplex);
+
+        LocalDateTime end = LocalDateTime.now();
+        LogUtils.logDate("Ended generating data at", end);
+        LogUtils.logTimeDifference("Generating data took", start, end);
+
+        return objects;
+    }
+
+    private static void readAllFromDatabase(RepositoryConnection connection, int sizeToGenerate) {
+
+        LogUtils.logType(" READING");
+
+        LocalDateTime start = LocalDateTime.now();
+        LogUtils.logDate("Starting reading from database at", start);
+
+        try (RepositoryResult<Statement> result = connection.getStatements(null, null, null)) {
+            String foo;
+
+            for (Statement statement : result) {
+                foo = statement.getObject().stringValue();
+
+                if (sizeToGenerate < 11) {
+                    System.out.printf("Database contains: %s\n", statement);
+                }
+            }
+        }
+
+        LocalDateTime end = LocalDateTime.now();
+        LogUtils.logDate("Ended reading from database at", end);
+        LogUtils.logTimeDifference("Reading from database took", start, end);
+    }
+
     public static void main(String[] args) {
 
         try {
@@ -98,27 +84,39 @@ public class Benchmark {
             // process arguments
             String storeType = args[0];
 
+            // type of store
+            // NATIVE | MEMORY | LMDB
             if (NATIVE.equals(storeType) || MEMORY.equals(storeType) || LMDB.equals(storeType)) {
                 System.setProperty("log.storeType", storeType);
             } else {
-                throw new IllegalArgumentException("Benchmark type not supported.");
+                throw new IllegalArgumentException("Benchmark store type not supported.");
             }
 
+            // type of transactions TRUE (multi) | FALSE (simple)
             boolean withTransactions = "true".equals(args[1]);
             System.setProperty("log.transactions", withTransactions ? "multi" : "single");
 
+            // size of universe to process
+            // int
             int sizeToGenerate = Integer.parseInt(args[2]);
             System.setProperty("log.size", sizeToGenerate + "");
 
+            // complexity of objects
+            // TRUE (complex) | FALSE (simple)
             boolean isComplex = "true".equals(args[3]);
             System.setProperty("log.complexity", isComplex ? "complex" : "simple");
 
+
+            // intermediate requests
+            // TRUE | FALSE
             boolean withInterRequests = "true".equals(args[4]);
             System.setProperty("log.interRequests", withInterRequests ? "requests" : "no-requests");
 
             int interRequestsModulo = -1;
 
             if (withInterRequests) {
+                // how often to do an intermediate request
+                // int modulo
                 interRequestsModulo = Integer.parseInt(args[5]);
                 if (interRequestsModulo > sizeToGenerate) {
                     throw new IllegalArgumentException("Modulo cannot be larger then total size.");
@@ -129,37 +127,23 @@ public class Benchmark {
             // welcome message
             LogUtils.logWelcome(storeType, withTransactions, sizeToGenerate);
 
-            List<FakePerson> simplePersons = new ArrayList<>();
-            List<FakeComplexPerson> complexPersons = new ArrayList<>();
+            // get the Repository instance based on store type
             Repository database = getDatabase(storeType);
 
-            if (isComplex) {
-                // generate list of Persons with Addresses, Spouses and Companies. Spouse has also a Company and Address. Company has also an Address.
-                complexPersons = generateComplexData(sizeToGenerate);
-            } else {
-                // generate list of Persons with Addresses, 1 Person has exactly 1 Address
-                simplePersons = generateSimpleData(sizeToGenerate);
-            }
+            // generate list of objects
+            List<Object> objects = generateData(sizeToGenerate, isComplex);
 
             // run either a multi-transaction or single-transaction benchmark
             try (RepositoryConnection connection = database.getConnection()) {
 
                 if (withTransactions) {
-                    if (isComplex) {
-                        MultipleTransactions.runComplexObjectsBenchmark(connection, complexPersons, interRequestsModulo);
-                    } else {
-                        MultipleTransactions.runSimpleObjectsBenchmark(connection, simplePersons, interRequestsModulo);
-                    }
+                    MultipleTransactions.runBenchmark(connection, objects, interRequestsModulo);
                 } else {
-                    if (isComplex) {
-                        SingleTransaction.runComplexObjectsBenchmark(connection, complexPersons);
-                    } else {
-                        SingleTransaction.runSimpleObjectsBenchmark(connection, simplePersons);
-                    }
+                    SingleTransaction.runBenchmark(connection, objects);
                 }
 
                 // read statements from database
-                readAllFromDatabase(connection);
+                readAllFromDatabase(connection, sizeToGenerate);
             } finally {
                 // close the connection and shutDown the database
                 database.shutDown();

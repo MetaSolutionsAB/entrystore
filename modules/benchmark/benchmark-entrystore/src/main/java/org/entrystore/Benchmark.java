@@ -2,7 +2,7 @@ package org.entrystore;
 
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.model.FakeGenerator;
+import org.entrystore.generator.ObjectGenerator;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
@@ -33,30 +33,14 @@ public class Benchmark {
         return config;
     }
 
-    private static List<Object> generateSimpleData(int sizeToGenerate) {
+    private static List<Object> generateData(int sizeToGenerate, boolean isComplex) {
 
         LogUtils.logType("GENERATE");
 
         LocalDateTime start = LocalDateTime.now();
         LogUtils.logDate("Starting generating data at", start);
 
-        List<Object> persons = FakeGenerator.createSimplePersonList(sizeToGenerate);
-
-        LocalDateTime end = LocalDateTime.now();
-        LogUtils.logDate("Ended generating data at", end);
-        LogUtils.logTimeDifference("Generating data took", start, end);
-
-        return persons;
-    }
-
-    private static List<Object> generateComplexData(int sizeToGenerate) {
-
-        LogUtils.logType("GENERATE");
-
-        LocalDateTime start = LocalDateTime.now();
-        LogUtils.logDate("Starting generating data at", start);
-
-        List<Object> persons = FakeGenerator.createComplexPersonList(sizeToGenerate);
+        List<Object> persons = ObjectGenerator.createPersonList(sizeToGenerate, isComplex);
 
         LocalDateTime end = LocalDateTime.now();
         LogUtils.logDate("Ended generating data at", end);
@@ -129,15 +113,11 @@ public class Benchmark {
 
             Config configuration = createConfiguration(storeType);
             RepositoryManagerImpl repositoryManager = new RepositoryManagerImpl(BASE_URL, configuration);
+
+            // admin
             repositoryManager.setCheckForAuthorization(false);
 
-            if (isComplex) {
-                // generate list of Persons with Addresses, Spouses and Companies. Spouse has also a Company and Address. Company has also an Address.
-                persons = generateComplexData(sizeToGenerate);
-            } else {
-                // generate list of Persons with Addresses, 1 Person has exactly 1 Address
-                persons = generateSimpleData(sizeToGenerate);
-            }
+            persons = generateData(sizeToGenerate, isComplex);
 
             try {
                 MultipleTransactions.runBenchmark(repositoryManager, persons);

@@ -99,6 +99,7 @@
         <module>core</module>
         <module>modules</module>
         <module>modules/benchmark/benchmark-entrystore</module>
+        <module>modules/benchmark/benchmark-common</module>
         <!--<module>apps</module>-->
     </modules>
 

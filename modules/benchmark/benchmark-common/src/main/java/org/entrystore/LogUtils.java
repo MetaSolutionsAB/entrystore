@@ -9,7 +9,7 @@ import java.time.format.DateTimeFormatter;
 
 public class LogUtils {
 
-    public static final Logger log = LoggerFactory.getLogger(Benchmark.class);
+    public static final Logger log = LoggerFactory.getLogger(LogUtils.class);
 
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
@@ -22,7 +22,7 @@ public class LogUtils {
     }
 
     protected static void logWelcome(String benchmarkType, boolean withTransactions, int size) {
-        String endStars = "     ***";
+        String endStars = "      ***";
         if (size < 1000000) endStars += "*";
         if (size < 100000) endStars += "*";
         if (size < 10000) endStars += "*";
@@ -33,11 +33,11 @@ public class LogUtils {
 
         logStars(false);
         logStars(true);
-        log.info("*****               !!! WELCOME TO ENTRYSCAPE BENCHMARK !!!                *****");
+        log.info("*****               !!! WELCOME TO ENTRYSCAPE BENCHMARK !!!               *****");
         logStars(true);
         logStars(false);
         log.info("*****       Running Benchmark for {} storage with {} persons {} ", benchmarkType, size, endStars);
-        log.info("*****                         Transactions are {}                        ******", withTransactions ? "ON " : "OFF");
+        log.info("*****                         Transactions are {}                       ******", withTransactions ? "ON " : "OFF");
         logStars(false);
     }
 
@@ -53,7 +53,7 @@ public class LogUtils {
 
     public static void logType(String operationType) {
         logStars(false);
-        log.info("***********                     {} DATA                      ***********", operationType);
+        log.info("***********                     {} DATA                       ***********", operationType);
         logStars(false);
     }
 
