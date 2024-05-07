@@ -9,19 +9,13 @@ import org.eclipse.rdf4j.sail.lmdb.LmdbStore;
 import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.entrystore.generator.ObjectGenerator;
+import org.entrystore.model.Arguments;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.File;
 import java.time.LocalDateTime;
 import java.util.List;
 
 public class Benchmark {
-
-    private static final File NATIVE_PATH = new File("./testdata/native_store");
-    private static final File LMDB_PATH = new File("./testdata/lmdb_store");
-    private static final String NATIVE = "native";
-    private static final String MEMORY = "memory";
-    private static final String LMDB = "lmdb";
 
     @NotNull
     private static Repository getDatabase(String benchmarkType) {
@@ -30,9 +24,9 @@ public class Benchmark {
 
         // choose a storage type NATIVE | MEMORY
         return switch (benchmarkType) {
-            case MEMORY -> new SailRepository(new MemoryStore());
-            case NATIVE -> new SailRepository(new NativeStore(NATIVE_PATH, tripleIndexes));
-            case LMDB -> new SailRepository(new LmdbStore(LMDB_PATH));
+            case BenchmarkCommons.MEMORY -> new SailRepository(new MemoryStore());
+            case BenchmarkCommons.NATIVE -> new SailRepository(new NativeStore(BenchmarkCommons.NATIVE_PATH, tripleIndexes));
+            case BenchmarkCommons.LMDB -> new SailRepository(new LmdbStore(BenchmarkCommons.LMDB_PATH));
             case null, default -> throw new IllegalArgumentException("Not a valid storage type provided.");
         };
     }
@@ -81,69 +75,25 @@ public class Benchmark {
 
         try {
 
-            // process arguments
-            String storeType = args[0];
-
-            // type of store
-            // NATIVE | MEMORY | LMDB
-            if (NATIVE.equals(storeType) || MEMORY.equals(storeType) || LMDB.equals(storeType)) {
-                System.setProperty("log.storeType", storeType);
-            } else {
-                throw new IllegalArgumentException("Benchmark store type not supported.");
-            }
-
-            // type of transactions TRUE (multi) | FALSE (simple)
-            boolean withTransactions = "true".equals(args[1]);
-            System.setProperty("log.transactions", withTransactions ? "multi" : "single");
-
-            // size of universe to process
-            // int
-            int sizeToGenerate = Integer.parseInt(args[2]);
-            System.setProperty("log.size", sizeToGenerate + "");
-
-            // complexity of objects
-            // TRUE (complex) | FALSE (simple)
-            boolean isComplex = "true".equals(args[3]);
-            System.setProperty("log.complexity", isComplex ? "complex" : "simple");
-
-
-            // intermediate requests
-            // TRUE | FALSE
-            boolean withInterRequests = "true".equals(args[4]);
-            System.setProperty("log.interRequests", withInterRequests ? "requests" : "no-requests");
-
-            int interRequestsModulo = -1;
-
-            if (withInterRequests) {
-                // how often to do an intermediate request
-                // int modulo
-                interRequestsModulo = Integer.parseInt(args[5]);
-                if (interRequestsModulo > sizeToGenerate) {
-                    throw new IllegalArgumentException("Modulo cannot be larger then total size.");
-                }
-            }
-            System.setProperty("log.modulo", interRequestsModulo + "");
-
-            // welcome message
-            LogUtils.logWelcome(storeType, withTransactions, sizeToGenerate);
+            Arguments arguments = BenchmarkCommons.processArguments(args);
 
             // get the Repository instance based on store type
-            Repository database = getDatabase(storeType);
+            Repository database = getDatabase(arguments.getStoreType());
 
             // generate list of objects
-            List<Object> objects = generateData(sizeToGenerate, isComplex);
+            List<Object> objects = generateData(arguments.getSizeToGenerate(), arguments.isComplex());
 
             // run either a multi-transaction or single-transaction benchmark
             try (RepositoryConnection connection = database.getConnection()) {
 
-                if (withTransactions) {
-                    MultipleTransactions.runBenchmark(connection, objects, interRequestsModulo);
+                if (arguments.isWithTransactions()) {
+                    MultipleTransactions.runBenchmark(connection, objects, arguments.getInterRequestsModulo());
                 } else {
                     SingleTransaction.runBenchmark(connection, objects);
                 }
 
                 // read statements from database
-                readAllFromDatabase(connection, sizeToGenerate);
+                readAllFromDatabase(connection, arguments.getSizeToGenerate());
             } finally {
                 // close the connection and shutDown the database
                 database.shutDown();
