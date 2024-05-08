@@ -1,8 +1,8 @@
 package org.entrystore;
 
 import org.entrystore.config.Config;
-import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.generator.ObjectGenerator;
+import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.model.Arguments;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.PropertiesConfiguration;
@@ -21,6 +21,11 @@ public class Benchmark {
     private static Config createConfiguration(String storeType) {
         Config config = new PropertiesConfiguration("EntryStore Configuration");
         config.setProperty(Settings.STORE_TYPE, storeType);
+        if (storeType.equalsIgnoreCase("native")) {
+            String storePath = "file:///" + BenchmarkCommons.ENTRY_STORE_NATIVE_PATH.getAbsolutePath().replace('\\', '/');
+            config.addProperty(Settings.STORE_PATH, storePath);
+            config.addProperty(Settings.STORE_INDEXES, BenchmarkCommons.INDEXES);
+        }
         config.setProperty(Settings.BASE_URL, BenchmarkCommons.BASE_URL);
         config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
         config.setProperty(Settings.SOLR, "off");

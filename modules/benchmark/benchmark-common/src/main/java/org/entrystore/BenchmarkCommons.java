@@ -7,10 +7,13 @@ import java.io.File;
 public class BenchmarkCommons {
 
     public static final File NATIVE_PATH = new File("./testdata/native_store");
+    public static final File ENTRY_STORE_NATIVE_PATH = new File("testdata/native_store");
     public static final File LMDB_PATH = new File("./testdata/lmdb_store");
+    public static final File ENTRY_STORE_LMDB_PATH = new File("testdata/lmdb_store");
     public static final String NATIVE = "native";
     public static final String MEMORY = "memory";
     public static final String LMDB = "lmdb";
+    public static final String INDEXES = "cspo,spoc";
     public static final String BASE_URL = "http://localhost:8181/";
     public static final String CONTEXT_ALIAS = "benchmark";
 

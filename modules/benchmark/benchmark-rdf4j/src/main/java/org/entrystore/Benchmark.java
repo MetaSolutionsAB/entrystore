@@ -20,12 +20,10 @@ public class Benchmark {
     @NotNull
     private static Repository getDatabase(String benchmarkType) {
 
-        String tripleIndexes = "cspo,spoc";
-
         // choose a storage type NATIVE | MEMORY
         return switch (benchmarkType) {
             case BenchmarkCommons.MEMORY -> new SailRepository(new MemoryStore());
-            case BenchmarkCommons.NATIVE -> new SailRepository(new NativeStore(BenchmarkCommons.NATIVE_PATH, tripleIndexes));
+            case BenchmarkCommons.NATIVE -> new SailRepository(new NativeStore(BenchmarkCommons.NATIVE_PATH, BenchmarkCommons.INDEXES));
             case BenchmarkCommons.LMDB -> new SailRepository(new LmdbStore(BenchmarkCommons.LMDB_PATH));
             case null, default -> throw new IllegalArgumentException("Not a valid storage type provided.");
         };
