@@ -3,6 +3,9 @@ package org.entrystore;
 import org.entrystore.model.Arguments;
 
 import java.io.File;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 public class BenchmarkCommons {
 
@@ -16,6 +19,11 @@ public class BenchmarkCommons {
     public static final String INDEXES = "cspo,spoc";
     public static final String BASE_URL = "http://localhost:8181/";
     public static final String CONTEXT_ALIAS = "benchmark";
+
+    public static <T> Consumer<T> withCounter(BiConsumer<Integer, T> consumer) {
+        AtomicInteger counter = new AtomicInteger(0);
+        return item -> consumer.accept(counter.getAndIncrement(), item);
+    }
 
     public static Arguments processArguments(String[] args) {
 

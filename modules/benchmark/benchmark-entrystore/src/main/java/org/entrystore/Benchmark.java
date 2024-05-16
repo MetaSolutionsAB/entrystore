@@ -88,7 +88,7 @@ public class Benchmark {
             List<Object> persons = generateData(arguments.getSizeToGenerate(), arguments.isComplex());
 
             try {
-                MultipleTransactions.runBenchmark(repositoryManager, persons);
+                MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo());
 
                 // reading
                 Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS);

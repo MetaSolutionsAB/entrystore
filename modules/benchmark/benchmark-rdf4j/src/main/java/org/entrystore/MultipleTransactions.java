@@ -13,16 +13,8 @@ import org.entrystore.vocabulary.BenchmarkOntology;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 public class MultipleTransactions {
-
-    private static <T> Consumer<T> withCounter(BiConsumer<Integer, T> consumer) {
-        AtomicInteger counter = new AtomicInteger(0);
-        return item -> consumer.accept(counter.getAndIncrement(), item);
-    }
 
     private static void insertTransaction(RepositoryConnection connection, Model model) {
         try {
@@ -62,7 +54,7 @@ public class MultipleTransactions {
         LocalDateTime start = LocalDateTime.now();
         LogUtils.logDate("Starting populating the model/inserting into database at", start);
 
-        persons.forEach(withCounter((i, person) -> {
+        persons.forEach(BenchmarkCommons.withCounter((i, person) -> {
             if (person != null) {
                 Model model;
 
