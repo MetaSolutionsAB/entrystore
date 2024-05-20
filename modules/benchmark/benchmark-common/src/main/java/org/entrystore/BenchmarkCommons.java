@@ -67,6 +67,9 @@ public class BenchmarkCommons {
             if (arguments.getInterRequestsModulo() > arguments.getSizeToGenerate()) {
                 throw new IllegalArgumentException("Modulo cannot be larger then total size.");
             }
+
+            // multiple contexts
+            arguments.setWithInterContexts("true".equals(args[6]));
         }
         System.setProperty("log.modulo", arguments.getInterRequestsModulo() + "");
 

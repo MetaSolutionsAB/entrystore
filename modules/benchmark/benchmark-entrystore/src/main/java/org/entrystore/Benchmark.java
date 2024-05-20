@@ -88,11 +88,14 @@ public class Benchmark {
             List<Object> persons = generateData(arguments.getSizeToGenerate(), arguments.isComplex());
 
             try {
-                MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo());
+
+                MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts());
 
                 // reading
-                Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS);
-                readAllFromDatabase(context, arguments.getSizeToGenerate());
+                if (!arguments.isWithInterContexts()) {
+                    Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS);
+                    readAllFromDatabase(context, arguments.getSizeToGenerate());
+                }
             } finally {
                 // close the connection and shutDown the database
                 tearDown(repositoryManager);

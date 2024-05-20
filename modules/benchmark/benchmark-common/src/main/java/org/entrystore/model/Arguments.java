@@ -12,4 +12,5 @@ public class Arguments {
     boolean withTransactions = false;
     boolean withInterRequests = false;
     int interRequestsModulo = -1;
+    boolean withInterContexts = false;
 }
