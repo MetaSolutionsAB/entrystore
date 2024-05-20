@@ -16,7 +16,12 @@
 
 package org.entrystore.repository.security;
 
+import com.google.common.collect.Sets;
+import lombok.Getter;
+import lombok.Setter;
 import org.apache.commons.codec.binary.Base64;
+import org.entrystore.config.Config;
+import org.entrystore.repository.config.Settings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,12 +29,15 @@ import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Date;
+import java.util.Set;
+import java.util.function.IntPredicate;
+import java.util.regex.Pattern;
 
 /**
  * Helper methods for handling hashed and salted passwords, using PBKDF2.
@@ -40,7 +48,7 @@ import java.util.Date;
  */
 public class Password {
 	
-	private static Logger log = LoggerFactory.getLogger(Password.class);
+	private static final Logger log = LoggerFactory.getLogger(Password.class);
 
 	// Higher number of iterations causes more work for both the attacker and
 	// our system when checking passwords. Optimally this should be dynamically
@@ -65,7 +73,51 @@ public class Password {
 	private static SecureRandom random;
 	
 	private static SecretKeyFactory secretKeyFactory;
-	
+
+	@Getter
+	@Setter
+	private static Rules rules;
+
+	@Getter
+	private static final Rules defaultRules = new Rules(true, true, false, true, 10, null);
+
+	@lombok.AllArgsConstructor
+	@lombok.Getter
+	@lombok.NoArgsConstructor
+	public static class Rules {
+
+		/**
+		 * Upper case character required
+		 */
+		boolean uppercase;
+
+		/**
+		 * Lower case character required
+		 */
+		boolean lowercase;
+
+		/**
+		 * Symbol required
+		 */
+		boolean symbol;
+
+		/**
+		 * Number character required
+		 */
+		boolean number;
+
+		/**
+		 * Minimum password length
+		 */
+		int minLength;
+
+		/**
+		 * A set of regular expressions to match against
+		 */
+		Set<String> custom;
+
+	}
+
 	static {
 		try {
 			random = SecureRandom.getInstance("SHA1PRNG");
@@ -73,7 +125,7 @@ public class Password {
 			
 			long before = new Date().getTime();
 			random.setSeed(random.generateSeed(saltLen));
-			log.info("Seeding of SecureRandom took " + (new Date().getTime()-before) + " ms");
+			log.info("Seeding of SecureRandom took {} ms", new Date().getTime() - before);
 		} catch (NoSuchAlgorithmException e) {
 			log.error(e.getMessage());
 		}
@@ -83,7 +135,7 @@ public class Password {
 	 * Computes a salted PBKDF2. Empty passwords are not supported.
 	 */
 	public static String getSaltedHash(String password) {
-		checkAgainstRules(password);
+		checkMinimumRequirements(password);
 
 		byte[] salt = new byte[saltLen];
 		random.nextBytes(salt);
@@ -97,7 +149,7 @@ public class Password {
 	 * hash of the password.
 	 */
 	public static boolean check(String password, String stored) {
-		checkAgainstRules(password);
+		checkMinimumRequirements(password);
 
 		if (stored == null) {
 			throw new IllegalArgumentException("Stored password must not be null");
@@ -114,7 +166,7 @@ public class Password {
 	}
 
 	private static String hash(String password, byte[] salt) {
-		checkAgainstRules(password);
+		checkMinimumRequirements(password);
 
 		try {
 			long before = new Date().getTime();
@@ -137,25 +189,95 @@ public class Password {
 		MessageDigest digester;
 		try {
 			digester = MessageDigest.getInstance("SHA-256");
-			digester.update(s.getBytes("UTF-8"));
+			digester.update(s.getBytes(StandardCharsets.UTF_8));
 			byte[] key = digester.digest();
 			SecretKeySpec spec = new SecretKeySpec(key, "AES");
 			return Base64.encodeBase64String(spec.getEncoded());
 		} catch (NoSuchAlgorithmException nsae) {
 			log.error(nsae.getMessage());
-		} catch (UnsupportedEncodingException uee) {
-			log.error(uee.getMessage());
 		}
 		return null;
 	}
 
-	private static void checkAgainstRules(String password) {
-		if (password == null || password.length() == 0) {
+	private static void checkMinimumRequirements(String password) {
+		if (password == null || password.isEmpty()) {
 			throw new IllegalArgumentException("Empty passwords are not supported");
 		}
 		if (password.length() > PASSWORD_MAX_LENGTH) {
 			throw new IllegalArgumentException("The length of the password must not exceed " + PASSWORD_MAX_LENGTH + " characters");
 		}
+	}
+
+	public static boolean conformsToRules(String password) {
+		try {
+			checkMinimumRequirements(password);
+		} catch (IllegalArgumentException iae) {
+			return false;
+		}
+
+		if (rules == null) {
+			rules = defaultRules;
+		}
+
+		if (password.length() < rules.getMinLength()) {
+			return false;
+		}
+
+		if (rules.isUppercase() && !containsUpperCase(password)) {
+			return false;
+		}
+
+		if (rules.isLowercase() && !containsLowerCase(password)) {
+			return false;
+		}
+
+		if (rules.isNumber() && !containsNumber(password)) {
+			return false;
+		}
+
+		if (rules.isSymbol() && !containsSymbol(password)) {
+			return false;
+		}
+
+		if (rules.getCustom() != null) {
+			for (String expression : rules.getCustom()) {
+				if (!expression.isEmpty() && !Pattern.compile(expression).matcher(password).find()) {
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	private static boolean containsLowerCase(String value) {
+		return contains(value, i -> Character.isLetter(i) && Character.isLowerCase(i));
+	}
+
+	private static boolean containsUpperCase(String value) {
+		return contains(value, i -> Character.isLetter(i) && Character.isUpperCase(i));
+	}
+
+	private static boolean containsNumber(String value) {
+		return contains(value, Character::isDigit);
+	}
+
+	private static boolean containsSymbol(String value) {
+		return Pattern.compile("[^a-zA-Z\\d]").matcher(value).find();
+	}
+
+	private static boolean contains(String value, IntPredicate predicate) {
+		return value.chars().anyMatch(predicate);
+	}
+
+	public static void loadRules(Config config) {
+		Rules rules = new Rules();
+		rules.lowercase = config.getBoolean(Settings.AUTH_PASSWORD_RULE_LOWERCASE, defaultRules.isLowercase());
+		rules.uppercase = config.getBoolean(Settings.AUTH_PASSWORD_RULE_UPPERCASE, defaultRules.isUppercase());
+		rules.number = config.getBoolean(Settings.AUTH_PASSWORD_RULE_NUMBER, defaultRules.isNumber());
+		rules.symbol = config.getBoolean(Settings.AUTH_PASSWORD_RULE_SYMBOL, defaultRules.isSymbol());
+		rules.minLength = config.getInt(Settings.AUTH_PASSWORD_RULE_MINLENGTH, defaultRules.getMinLength());
+		rules.custom = Sets.newHashSet(config.getStringList(Settings.AUTH_PASSWORD_RULE_CUSTOM));
 	}
 
 }

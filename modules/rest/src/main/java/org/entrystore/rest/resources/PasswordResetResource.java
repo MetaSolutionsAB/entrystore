@@ -16,13 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
-
-import java.net.URI;
-import java.net.URLDecoder;
-import java.security.SecureRandom;
-import java.util.Date;
 import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
@@ -54,6 +47,14 @@ import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.net.URLDecoder;
+import java.security.SecureRandom;
+import java.util.Date;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
 
 /**
  * Supports resetting a user's password. Based on SignupResource.
@@ -87,19 +88,19 @@ public class PasswordResetResource extends BaseResource {
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
-			Entry userEntry = pm.getPrincipalEntry(ci.email);
+			Entry userEntry = pm.getPrincipalEntry(ci.getEmail());
 			User u = null;
 			if (userEntry != null) {
 				log.debug("Loaded user entry via email adress");
 				u = (User) userEntry.getResource();
 			} else {
 				log.debug("Trying to load user entry via external ID");
-				u = pm.getUserByExternalID(ci.email);
+				u = pm.getUserByExternalID(ci.getEmail());
 			}
 			if (u == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-				if (ci.urlFailure != null) {
-					getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, UTF_8));
+				if (ci.getUrlFailure() != null) {
+					getResponse().redirectTemporary(URLDecoder.decode(ci.getUrlFailure(), UTF_8));
 					return new EmptyRepresentation();
 				} else {
 					return html.representation("User with provided email address does not exist.");
@@ -107,17 +108,17 @@ public class PasswordResetResource extends BaseResource {
 			}
 
 			// Reset password
-			if (u.setSaltedHashedSecret(ci.saltedHashedPassword)) {
+			if (u.setSaltedHashedSecret(ci.getSaltedHashedPassword())) {
 				LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
-				loginTokenCache.removeTokens(ci.email);
+				loginTokenCache.removeTokens(ci.getEmail());
 				log.debug("Removed any authentication tokens belonging to user " + u.getURI());
 				Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), u.getEntry());
 				log.info("Reset password for user " + u.getURI());
 			} else {
 				log.error("Error when resetting password for user " + u.getURI());
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
-				if (ci.urlFailure != null) {
-					getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, UTF_8));
+				if (ci.getUrlFailure() != null) {
+					getResponse().redirectTemporary(URLDecoder.decode(ci.getUrlFailure(), UTF_8));
 					return new EmptyRepresentation();
 				} else {
 					return html.representation("Unable to reset password due to internal error.");
@@ -127,8 +128,8 @@ public class PasswordResetResource extends BaseResource {
 			pm.setAuthenticatedUserURI(authUser);
 		}
 
-		if (ci.urlSuccess != null) {
-			getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, UTF_8));
+		if (ci.getUrlSuccess() != null) {
+			getResponse().redirectTemporary(URLDecoder.decode(ci.getUrlSuccess(), UTF_8));
 			return new EmptyRepresentation();
 		} else {
 			return html.representation("Password reset was successful.");
@@ -143,8 +144,8 @@ public class PasswordResetResource extends BaseResource {
 			return;
 		}
 
-		SignupInfo ci = new SignupInfo();
-		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
+		SignupInfo ci = new SignupInfo(getRM());
+		ci.setExpirationDate(new Date(new Date().getTime() + (24 * 3600 * 1000))); // 24 hours later
 		String rcChallenge = null;
 		String rcResponse = null;
 		String rcResponseV2 = null;
@@ -154,7 +155,7 @@ public class PasswordResetResource extends BaseResource {
 			try {
 				JSONObject siJson = new JSONObject(r.getText());
 				if (siJson.has("email")) {
-					ci.email = siJson.getString("email");
+					ci.setEmail(siJson.getString("email"));
 				}
 				if (siJson.has("password")) {
 					password = siJson.getString("password");
@@ -169,10 +170,10 @@ public class PasswordResetResource extends BaseResource {
 					rcResponseV2 = siJson.getString("grecaptcharesponse");
 				}
 				if (siJson.has("urlfailure")) {
-					ci.urlFailure = siJson.getString("urlfailure");
+					ci.setUrlFailure(siJson.getString("urlfailure"));
 				}
 				if (siJson.has("urlsuccess")) {
-					ci.urlSuccess = siJson.getString("urlsuccess");
+					ci.setUrlSuccess(siJson.getString("urlsuccess"));
 				}
 			} catch (Exception e) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -180,24 +181,20 @@ public class PasswordResetResource extends BaseResource {
 			}
 		} else {
 			Form form = new Form(getRequest().getEntity());
-			ci.email = form.getFirstValue("email", true);
+			ci.setEmail(form.getFirstValue("email", true));
 			password = form.getFirstValue("password", true);
 			rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
 			rcResponse = form.getFirstValue("recaptcha_response_field", true);
 			rcResponseV2 = form.getFirstValue("g-recaptcha-response", true);
-			ci.urlFailure = form.getFirstValue("urlfailure", true);
-			ci.urlSuccess = form.getFirstValue("urlsuccess", true);
+			ci.setUrlFailure(form.getFirstValue("urlfailure", true));
+			ci.setUrlSuccess(form.getFirstValue("urlsuccess", true));
 		}
 
-		if (ci.email == null || password == null) {
+		if (ci.getEmail() == null || password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("One or more parameters are missing."));
 			return;
 		}
-
-		// we have to store it in lower case only to avoid problems with different cases in
-		// different steps of the process (if the user provides inconsistent information)
-		ci.email = ci.email.toLowerCase();
 
 		if (password.trim().length() < 8) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -205,15 +202,15 @@ public class PasswordResetResource extends BaseResource {
 			return;
 		}
 
-		if (!EmailValidator.getInstance().isValid(ci.email)) {
+		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(html.representation("Invalid email address: " + ci.email));
+			getResponse().setEntity(html.representation("Invalid email address: " + ci.getEmail()));
 			return;
 		}
 
 		Config config = getRM().getConfiguration();
 
-		log.info("Received password reset request for " + ci.email);
+		log.info("Received password reset request for " + ci.getEmail());
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
@@ -222,7 +219,7 @@ public class PasswordResetResource extends BaseResource {
 				getResponse().setEntity(html.representation("reCaptcha information missing"));
 				return;
 			}
-			log.info("Checking reCaptcha for " + ci.email);
+			log.info("Checking reCaptcha for " + ci.getEmail());
 
 			String remoteAddr = getRequest().getClientInfo().getUpstreamAddress();
 			boolean reCaptchaIsValid = false;
@@ -238,9 +235,9 @@ public class PasswordResetResource extends BaseResource {
 			}
 
 			if (reCaptchaIsValid) {
-				log.info("Valid reCaptcha for " + ci.email);
+				log.info("Valid reCaptcha for " + ci.getEmail());
 			} else {
-				log.info("Invalid reCaptcha for " + ci.email);
+				log.info("Invalid reCaptcha for " + ci.getEmail());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(html.representation("Invalid reCaptcha received."));
 				return;
@@ -252,41 +249,41 @@ public class PasswordResetResource extends BaseResource {
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
-			Entry userEntry = pm.getPrincipalEntry(ci.email);
+			Entry userEntry = pm.getPrincipalEntry(ci.getEmail());
 			User u = null;
 			if (userEntry != null) {
 				log.debug("Loaded user entry via email adress");
 				u = (User) userEntry.getResource();
 			} else {
 				log.debug("Trying to load user entry via external ID");
-				u = pm.getUserByExternalID(ci.email);
+				u = pm.getUserByExternalID(ci.getEmail());
 			}
 
 			// to avoid spamming etc we only send emails to users that exist
 			if (u != null) {
 				String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 				String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
-				log.info("Generated password reset token for " + ci.email);
+				log.info("Generated password reset token for " + ci.getEmail());
 
-				boolean sendSuccessful = Email.sendPasswordResetConfirmation(getRM().getConfiguration(), ci.email, confirmationLink);
+				boolean sendSuccessful = Email.sendPasswordResetConfirmation(getRM().getConfiguration(), ci.getEmail(), confirmationLink);
 				if (sendSuccessful) {
-					ci.saltedHashedPassword = Password.getSaltedHash(password);
+					ci.setSaltedHashedPassword(Password.getSaltedHash(password));
 					SignupTokenCache.getInstance().putToken(token, ci);
-					log.info("Sent confirmation request to " + ci.email);
+					log.info("Sent confirmation request to " + ci.getEmail());
 				} else {
-					log.info("Failed to send confirmation request to " + ci.email);
+					log.info("Failed to send confirmation request to " + ci.getEmail());
 					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 					return;
 				}
 			} else {
-				log.info("Ignoring password reset attempt for non-existing user " + ci.email);
+				log.info("Ignoring password reset attempt for non-existing user " + ci.getEmail());
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(authUser);
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);
-		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.email + " if the user exists."));
+		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.getEmail() + " if the user exists."));
 	}
 
 	private String constructHtmlForm(boolean reCaptcha) {

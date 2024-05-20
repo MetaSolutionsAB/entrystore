@@ -77,7 +77,7 @@ public interface Entry {
 	 * <li>ExternalMetadata if {@link EntryType#Reference}</li>
 	 * <li>A merge between LocalMetadata and ExternalMetadata if {@link EntryType#LinkReference}.</li></ul>
 	 * 
-	 * The above requires that the ExternalMetadata is cahced locally, if not an empty graph is returned.
+	 * The above requires that the ExternalMetadata is cached locally, if not an empty graph is returned.
 	 * 
 	 * 
 	 * @return {@link Model}, never null.

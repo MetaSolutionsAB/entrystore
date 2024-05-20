@@ -1,5 +1,37 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 5.4.0 (2024-05-20)
+
+### Improvement
+
+[ENTRYSTORE-805](https://metasolutions.atlassian.net/browse/ENTRYSTORE-805) Improve temporary user lockout
+
+[ENTRYSTORE-806](https://metasolutions.atlassian.net/browse/ENTRYSTORE-806) Add resource graphs to public repository
+
+[ENTRYSTORE-808](https://metasolutions.atlassian.net/browse/ENTRYSTORE-808) Validation of advanced password rules
+
+[ENTRYSTORE-809](https://metasolutions.atlassian.net/browse/ENTRYSTORE-809) Improve handling of uploaded executables
+
+[ENTRYSTORE-810](https://metasolutions.atlassian.net/browse/ENTRYSTORE-810) Allow configuration of Server header
+
+[ENTRYSTORE-811](https://metasolutions.atlassian.net/browse/ENTRYSTORE-811) Restrict the redirect URLs for signup and password reset
+
+[ENTRYSTORE-814](https://metasolutions.atlassian.net/browse/ENTRYSTORE-814) Evaluate whether schema:name should be added to the title field in Solr
+
+[ENTRYSTORE-815](https://metasolutions.atlassian.net/browse/ENTRYSTORE-815) Activate login brute force protection by default
+
+### New Feature
+
+[ENTRYSTORE-816](https://metasolutions.atlassian.net/browse/ENTRYSTORE-816) Index ProjectType in Solr
+
+[ENTRYSTORE-817](https://metasolutions.atlassian.net/browse/ENTRYSTORE-817) Introduce resource to access merged metadata graphs
+
+### Bug
+
+[ENTRYSTORE-498](https://metasolutions.atlassian.net/browse/ENTRYSTORE-498) Same literal values in different languages are not indexed properly
+
+[ENTRYSTORE-813](https://metasolutions.atlassian.net/browse/ENTRYSTORE-813) Incoming metadata graphs with invalid URIs are not handled properly
+
 ## Version 5.3.0 (2024-02-07)
 
 ### Improvement

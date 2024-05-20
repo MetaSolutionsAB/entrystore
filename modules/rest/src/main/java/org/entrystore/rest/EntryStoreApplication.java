@@ -33,6 +33,7 @@ import org.entrystore.impl.converters.OAI_DC2RDFGraphConverter;
 import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.security.Password;
 import org.entrystore.repository.test.TestSuite;
 import org.entrystore.rest.auth.BasicVerifier;
 import org.entrystore.rest.auth.CookieVerifier;
@@ -65,6 +66,7 @@ import org.entrystore.rest.resources.LoginResource;
 import org.entrystore.rest.resources.LogoutResource;
 import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
+import org.entrystore.rest.resources.MergedMetadataResource;
 import org.entrystore.rest.resources.MessageResource;
 import org.entrystore.rest.resources.NameResource;
 import org.entrystore.rest.resources.PasswordResetResource;
@@ -228,6 +230,7 @@ public class EntryStoreApplication extends Application {
 			this.pm = rm.getPrincipalManager();
 			this.userTempLockoutCache = new UserTempLockoutCache(rm, pm);
 			this.loginTokenCache = new LoginTokenCache(confManager.getConfiguration());
+			Password.loadRules(config);
 
 			if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
 				// Check for existence of Donald
@@ -334,7 +337,7 @@ public class EntryStoreApplication extends Application {
 		}
 
 		// password reset
-		if ("on".equalsIgnoreCase(config.getString(Settings.PASSWORD_RESET, "off"))) {
+		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_PASSWORD_RESET, "off"))) {
 			router.attach("/auth/pwreset", PasswordResetResource.class);
 		}
 
@@ -359,6 +362,7 @@ public class EntryStoreApplication extends Application {
 		router.attach("/{context-id}/resource/{entry-id}", ResourceResource.class);
 		router.attach("/{context-id}/metadata/{entry-id}", LocalMetadataResource.class);
 		router.attach("/{context-id}/cached-external-metadata/{entry-id}", ExternalMetadataResource.class);
+		router.attach("/{context-id}/merged-metadata/{entry-id}", MergedMetadataResource.class);
 		router.attach("/{context-id}/harvester", HarvesterResource.class);
 		router.attach("/{context-id}/relations/{entry-id}", RelationResource.class);
 		router.attach("/{context-id}/quota", QuotaResource.class);

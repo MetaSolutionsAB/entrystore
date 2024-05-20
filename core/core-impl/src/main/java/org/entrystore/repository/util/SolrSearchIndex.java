@@ -19,6 +19,7 @@ package org.entrystore.repository.util;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -280,12 +281,12 @@ public class SolrSearchIndex implements SearchIndex {
 		related = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.SOLR_RELATED, "off"));
 		defaultSortLang = rm.getConfiguration().getString(Settings.SOLR_DEFAULT_SORTING_LANG);
 		if (related) {
-			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>());
+			List<String> relPropsSetting = rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<>());
 			if (relPropsSetting.isEmpty()) {
 				related = false;
 			} else {
 				relatedProperties = new HashMap<>();
-				for (String relProp : rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<String>())) {
+				for (String relProp : rm.getConfiguration().getStringList(Settings.SOLR_RELATED_PROPERTIES, new ArrayList<>())) {
 					if (relProp.endsWith(",global")) {
 						relatedProperties.put(valueFactory.createIRI(relProp.substring(0, relProp.indexOf(","))), true);
 					} else {
@@ -511,6 +512,11 @@ public class SolrSearchIndex implements SearchIndex {
 		return ping() && documentSubmitter.isAlive() && delayedContextIndexer.isAlive() && !reindexExecutor.isShutdown();
 	}
 
+	/**
+	 * This method was originally developed for ACL changes, but we also use it for project types now. If ACL changes
+	 * are reverted within a short period of time then the context is removed from the reindexing queue again. This
+	 * does not apply for other reindexing triggers such as a changed project type.
+	 */
 	public void submitContextForDelayedReindex(Entry contextEntry, Model entryGraph) {
 		synchronized (delayedReindex) {
 			IRI guestURI = valueFactory.createIRI(rm.getPrincipalManager().getGuestUser().getURI().toString());
@@ -519,8 +525,7 @@ public class SolrSearchIndex implements SearchIndex {
 			boolean newGuestReadable = m.contains(valueFactory.createIRI(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Read, guestURI) ||
 					m.contains(valueFactory.createIRI(contextEntry.getLocalMetadataURI().toString()), RepositoryProperties.Write, guestURI);
 			if (delayedReindex.containsKey(contextURI) && (delayedReindex.get(contextURI).guestReadable != newGuestReadable)) {
-				// the context has been switched back to the previous
-				// status and does not need to be reindexed anymore
+				// the context has been switched back to the previous guest ACL and does not need to be reindexed anymore
 				log.info("Removing context from delayed reindexing queue due to reverted ACL change within grace period");
 				delayedReindex.remove(contextURI);
 			} else {
@@ -567,6 +572,42 @@ public class SolrSearchIndex implements SearchIndex {
 			return lastEntryURI;
 		}
 		return null;
+	}
+
+	private void storeLiteralsWithLanguages(SolrInputDocument doc, Map<String, Set<String>> literals, String literalType) {
+		final String missingLanguageString = "nolang";
+		final String defaultString = "default";
+
+		Set<String> alreadySetLanguages = new HashSet<>();
+
+		for (String literal : literals.keySet()) {
+			doc.addField(literalType, literal);
+
+			// we also store title.{lang} as dynamic field to be able to
+			// sort after titles in a specific language
+			Set<String> literalLanguages = literals.get(literal);
+
+			if (literalLanguages.isEmpty() || ObjectUtils.allNull(literalLanguages)) {
+				if (!alreadySetLanguages.contains(missingLanguageString)) {
+					doc.addField(String.format("%s.%s", literalType, missingLanguageString), literal);
+					alreadySetLanguages.add(missingLanguageString);
+				}
+			} else {
+				for (String language : literalLanguages) {
+					if (language != null && language.equalsIgnoreCase(defaultSortLang) && !alreadySetLanguages.contains(defaultString)) {
+						// if a default sorting language is configured, we create a field for that
+						doc.addField(String.format("%s.%s", literalType, defaultString), literal);
+						alreadySetLanguages.add(defaultString);
+					}
+
+					// we only want one title per language, otherwise sorting will not work
+					if (!alreadySetLanguages.contains(language)) {
+						doc.addField(String.format("%s.%s", literalType, language == null ? missingLanguageString : language), literal);
+						alreadySetLanguages.add(language);
+					}
+				}
+			}
+		}
 	}
 
 	public SolrInputDocument constructSolrInputDocument(Entry entry, boolean extractFulltext) {
@@ -620,7 +661,30 @@ public class SolrSearchIndex implements SearchIndex {
 				break; // we only need the first match
 			}
 		} else {
-			log.warn("Local metadata URI of entry is null: " + entry.getEntryURI());
+			log.warn("Local metadata URI of entry is null: {}", entry.getEntryURI());
+		}
+
+		// project type
+		// FIXME this can be optimized by not checking the context for every single indexed entry, perhaps we can
+		// remember the context status for a limited amount of time instead of fetching and querying the context graph
+		// every time
+		Model graphWithProjectType;
+		URI resourceUriForProjectType;
+		if (GraphType.Context.equals(entry.getGraphType())) {
+			graphWithProjectType = entryGraph;
+			resourceUriForProjectType = resourceURI;
+		} else {
+			Entry contextEntry = entry.getContext().getEntry();
+			graphWithProjectType = contextEntry.getGraph();
+			resourceUriForProjectType = contextEntry.getResourceURI();
+		}
+
+		for (String projectTypeURI : EntryUtil.getResourceValues(
+				graphWithProjectType,
+				resourceUriForProjectType,
+				Collections.singleton(valueFactory.createIRI("http://entryscape.com/terms/projectType")))) {
+			doc.setField("projectType", projectTypeURI);
+			break; // we only need the first match
 		}
 
 		// creator
@@ -667,28 +731,11 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// titles
-		Map<String, String> titles = EntryUtil.getTitles(entry);
+		Map<String, Set<String>> titles = EntryUtil.getTitles(entry);
 		if (titles != null && !titles.isEmpty()) {
-			Set<String> langs = new HashSet<>();
-			for (String title : titles.keySet()) {
-				doc.addField("title", title);
-				// we also store title.{lang} as dynamic field to be able to
-				// sort after titles in a specific language
-				String lang = titles.get(title);
-				if (lang == null) {
-					lang = "nolang";
-				} else if (lang.equalsIgnoreCase(defaultSortLang) && !langs.contains("default")) {
-					// if a default sorting language is configured, we create a field for that
-					doc.addField("title.default", title);
-					langs.add("default");
-				}
-				// we only want one title per language, otherwise sorting will not work
-				if (!langs.contains(lang)) {
-					doc.addField("title." + lang, title);
-					langs.add(lang);
-				}
-			}
+			storeLiteralsWithLanguages(doc, titles, "title");
 		}
+
 		String firstName = EntryUtil.getFirstName(entry);
 		String lastName = EntryUtil.getLastName(entry);
 		String name = "";
@@ -724,27 +771,15 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// description
-		Map<String, String> descriptions = EntryUtil.getDescriptions(entry);
+		Map<String, Set<String>> descriptions = EntryUtil.getDescriptions(entry);
 		if (descriptions != null && !descriptions.isEmpty()) {
-			for (String description : descriptions.keySet()) {
-				doc.addField("description", description);
-				String lang = descriptions.get(description);
-				if (lang != null) {
-					doc.addField("description." + lang, description);
-				}
-			}
+			storeLiteralsWithLanguages(doc, descriptions, "description");
 		}
 
 		// tag.literal[.*]
-		Map<String, String> tagLiterals = EntryUtil.getTagLiterals(entry);
+		Map<String, Set<String>> tagLiterals = EntryUtil.getTagLiterals(entry);
 		if (tagLiterals != null) {
-			for (String tag : tagLiterals.keySet()) {
-				doc.addField("tag.literal", tag);
-				String lang = tagLiterals.get(tag);
-				if (lang != null) {
-					doc.addField("tag.literal." + lang, tag);
-				}
-			}
+			storeLiteralsWithLanguages(doc, tagLiterals, "tag.literal");
 		}
 
 		// tag.uri
@@ -992,7 +1027,7 @@ public class SolrSearchIndex implements SearchIndex {
 		query.setFields("uri");
 
 		long hits = -1;
-		QueryResponse r = null;
+		QueryResponse r;
 		try {
 			r = solrServer.query(query);
 			r.getElapsedTime();
@@ -1078,7 +1113,6 @@ public class SolrSearchIndex implements SearchIndex {
 					}
 				} catch (AuthorizationException | IllegalStateException e) {
 					inaccessibleHits++;
-					continue;
 				}
 			}
 			log.info("Entry fetching took " + (new Date().getTime() - before.getTime()) + " ms");
@@ -1129,7 +1163,7 @@ public class SolrSearchIndex implements SearchIndex {
 		 * InputStream mimeIS = null; try { mimeIS = Files.newInputStream(f.toPath());
 		 * mimeType = tc.getMimeRepository().getMimeType(mimeIS).getName(); }
 		 * finally { if (mimeIS != null) { mimeIS.close(); } }
-		 * 
+		 *
 		 * if (mimeType != null) { stream = new BufferedInputStream(
 		 * Files.newInputStream(f.toPath())); Parser parser = tc.getParser(mimeType); if
 		 * (parser != null) { ContentHandler handler = new BodyContentHandler();

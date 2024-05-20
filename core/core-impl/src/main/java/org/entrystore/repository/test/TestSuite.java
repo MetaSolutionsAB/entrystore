@@ -99,7 +99,7 @@ public class TestSuite {
 			//donaldE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			setMetadata(donaldE, "Donald Duck", "I am easily provoked and have an occasionally explosive temper, so thread carefully around me.", "duck", null, null);
 			User donald = (User) donaldE.getResource();
-			donald.setSecret("donalddonald");
+			donald.setSecret("donaldDonald12");
 
 			//Daisy Duck user
 			Entry daisyE = pm.createResource(null, GraphType.User, null, null);
@@ -107,7 +107,7 @@ public class TestSuite {
 			setMetadata(daisyE, "Daisy Duck", "I am Donald's girlfriend, but I am far more sophisticated!", "duck", null, null);
 			//daisyE.addAllowedPrinccontextipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			User daisy = (User) daisyE.getResource();
-			daisy.setSecret("daisydaisy");
+			daisy.setSecret("daisyDaisy34");
 
 			//Mickey Mouse user
 			Entry mickeyE = pm.createResource(null, GraphType.User, null, null);
@@ -115,7 +115,7 @@ public class TestSuite {
 			setMetadata(mickeyE, "Mickey Mouse", "I am older than I look although I still speek in a famously shy, falsetto voice.", "mouse", null, null);
 			//mickeyE.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, pm.getGuestUser().getURI());
 			User mickey = (User) mickeyE.getResource();
-			mickey.setSecret("mickeymickey");
+			mickey.setSecret("mickeyMickey56");
 
 			//Friends of Mickey group
 			Entry friendsOfMickeyE = pm.createResource(null, GraphType.Group, null, null);

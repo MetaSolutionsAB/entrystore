@@ -38,6 +38,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.StringWriter;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -77,7 +79,7 @@ public class RDFJSON {
 			Iterator<String> subjects = json.keys();
 			while (subjects.hasNext()) {
 				String subjStr = subjects.next();
-				Resource subject = null;
+				Resource subject;
 				try {
 					if (subjStr.startsWith("_:")) {
 						if (id2bnode.containsKey(subjStr)) {
@@ -202,12 +204,8 @@ public class RDFJSON {
 					values.put(getValue(object));
 					continue;
 				}
-				JSONArray values = pred2values.get(predicate);
-				if (values == null) {
-					values = new JSONArray();
-					pred2values.put(predicate, values);
-				}
-				values.put(getValue(object));
+                JSONArray values = pred2values.computeIfAbsent(predicate, k -> new JSONArray());
+                values.put(getValue(object));
 			}
 
 			//Now construct the JSONObject graph from the structure
@@ -258,7 +256,7 @@ public class RDFJSON {
 	public static String graphToRdfJsonJackson(Model graph) {
 		JsonFactory f = new JsonFactory();
 		StringWriter sw = new StringWriter();
-		JsonGenerator g = null;
+		JsonGenerator g;
 		try {
 			g = f.createJsonGenerator(sw);
 			g.useDefaultPrettyPrinter();
@@ -269,7 +267,7 @@ public class RDFJSON {
 
 		try {
 			g.writeStartObject(); // root object
-			Set<Resource> subjects = new HashSet<Resource>();
+			Set<Resource> subjects = new HashSet<>();
 			for (Statement s1 : graph) {
 				subjects.add(s1.getSubject());
 			}
@@ -323,21 +321,19 @@ public class RDFJSON {
 	private static IRI parseAndValidateIRI(String iri) {
 		Objects.requireNonNull(iri);
 
-		int spaceIndex = iri.indexOf(' ');
-		if (spaceIndex > -1) {
-			throw new RDFParseException("IRI includes an unencoded space at index " + spaceIndex + ": " + iri);
-		}
+		try {
+			URI uri = new URI(iri);
 
-		int escapeIndex = iri.indexOf('\\');
-		if (escapeIndex > -1) {
-			throw new RDFParseException("IRI includes a string escape at index " + escapeIndex + ": " + iri);
-		}
+			if (uri.toString().endsWith(".")) {
+				String messageTemplate = "Provided string \"%s\" is not a valid URI. Error: %s";
+				throw new RDFParseException(String.format(messageTemplate, iri, "String ends in a period '.'"));
+			}
 
-		if (iri.endsWith(".")) {
-			throw new RDFParseException("IRI ends in a period '.': " + iri);
+			return vf.createIRI(iri);
+		} catch (IllegalArgumentException | URISyntaxException ex) {
+			String messageTemplate = "Provided string \"%s\" is not a valid URI. Error: %s";
+			throw new RDFParseException(String.format(messageTemplate, iri, ex.getMessage()));
 		}
-
-		return vf.createIRI(iri);
 	}
 
 }

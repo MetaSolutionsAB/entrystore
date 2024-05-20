@@ -786,13 +786,17 @@ public class ResourceResource extends BaseResource {
 			SyndContent description = new SyndContentImpl();
 			description.setType("text/plain");
 
-			Map<String, String> descriptions = EntryUtil.getDescriptions(e);
-			Set<Map.Entry<String,String>> descEntrySet = descriptions.entrySet();
+			Map<String, Set<String>> descriptions = EntryUtil.getDescriptions(e);
+			Set<Map.Entry<String, Set<String>>> descEntrySet = descriptions.entrySet();
 			String desc = null;
-			for (Map.Entry<String, String> descEntry : descEntrySet) {
+			for (Map.Entry<String, Set<String>> descEntry : descEntrySet) {
 				desc = descEntry.getKey();
-				if ("en".equals(descEntry.getValue())) {
-					break;
+				Set<String> descriptionLangs = descEntry.getValue();
+
+				for (String lang : descriptionLangs) {
+					if ("en".equals(lang)) {
+						break;
+					}
 				}
 			}
 
@@ -937,7 +941,7 @@ public class ResourceResource extends BaseResource {
 						entry.setMimetype(mimeType);
 						String name = item.getName();
 						if (name != null && !name.isEmpty()) {
-							entry.setFilename(name.trim());
+							entry.setFilename(Util.sanitizeFilename(name.trim()));
 						}
 					}
 				} catch (FileUploadException e) {
@@ -965,8 +969,8 @@ public class ResourceResource extends BaseResource {
 					Disposition disp = req.getEntity().getDisposition();
 					if (disp != null) {
 						String name = disp.getFilename();
-						if (name != null && name.length() != 0) {
-							entry.setFilename(name.trim());
+						if (name != null && !name.isEmpty()) {
+							entry.setFilename(Util.sanitizeFilename(name.trim()));
 						}
 					}
 				} catch (QuotaException qe) {
@@ -1091,7 +1095,7 @@ public class ResourceResource extends BaseResource {
 						return;
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Password needs to be at least 8 characters long.\"}"));
+						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Password must conform to configured rules.\"}"));
 						return;
 					}
 				}

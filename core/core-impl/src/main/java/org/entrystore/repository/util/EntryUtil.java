@@ -17,6 +17,7 @@
 package org.entrystore.repository.util;
 
 import com.google.common.collect.Multimap;
+import lombok.Getter;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -39,8 +40,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -75,21 +74,16 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterModificationDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
-		Collections.sort(entries, new Comparator<Entry>() {
-
-			public int compare(Entry e1, Entry e2) {
-				int result = 0;
-				if (e1 != null && e2 != null) {
-					result = e1.getModifiedDate().compareTo(e2.getModifiedDate());
-					if (!ascending) {
-						result *= -1;
-					}
+		entries.sort((e1, e2) -> {
+			int result = 0;
+			if (e1 != null && e2 != null) {
+				result = e1.getModifiedDate().compareTo(e2.getModifiedDate());
+				if (!ascending) {
+					result *= -1;
 				}
-				return result;
 			}
-
+			return result;
 		});
-
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
@@ -105,21 +99,16 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterCreationDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
-		Collections.sort(entries, new Comparator<Entry>() {
-
-			public int compare(Entry e1, Entry e2) {
-				int result = 0;
-				if (e1 != null && e2 != null) {
-					result = e1.getCreationDate().compareTo(e2.getCreationDate());
-					if (!ascending) {
-						result *= -1;
-					}
+		entries.sort((e1, e2) -> {
+			int result = 0;
+			if (e1 != null && e2 != null) {
+				result = e1.getCreationDate().compareTo(e2.getCreationDate());
+				if (!ascending) {
+					result *= -1;
 				}
-				return result;
 			}
-
+			return result;
 		});
-
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
@@ -137,57 +126,46 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterFileSize(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
-		Collections.sort(entries, new Comparator<Entry>() {
-
-			public int compare(Entry e1, Entry e2) {
-				int result = 0;
-				if (e1 != null && e2 != null) {
-					GraphType e1BT = e1.getGraphType();
-					GraphType e2BT = e2.getGraphType();
-					if (GraphType.None.equals(e1BT) && GraphType.None.equals(e2BT)) {
-						long size1 = e1.getFileSize();
-						long size2 = e2.getFileSize();
-						if (size1 < size2) {
-							result = -1;
-						} else if (size1 == size2) {
-							result = 0;
-						} else if (size1 > size2) {
-							result = 1;
-						}
-					} else if (GraphType.List.equals(e1BT) && GraphType.List.equals(e2BT)) {
-						Resource e1Res = e1.getResource();
-						Resource e2Res = e2.getResource();
-						if (e1Res == null) {
-							log.warn("No resource found for List: " + e1.getEntryURI());
-							return 0;
-						}
-						if (e2Res == null) {
-							log.warn("No resource found for List: " + e2.getEntryURI());
-							return 0;
-						}
-						org.entrystore.List e1List = (org.entrystore.List) e1Res;
-						org.entrystore.List e2List = (org.entrystore.List) e2Res;
-						int size1 = e1List.getChildren().size();
-						int size2 = e2List.getChildren().size();
-						if (size1 < size2) {
-							result = -1;
-						} else if (size1 == size2) {
-							result = 0;
-						} else if (size1 > size2) {
-							result = 1;
-						}
-					} else {
-						result = 0;
+		entries.sort((e1, e2) -> {
+			int result = 0;
+			if (e1 != null && e2 != null) {
+				GraphType e1BT = e1.getGraphType();
+				GraphType e2BT = e2.getGraphType();
+				if (GraphType.None.equals(e1BT) && GraphType.None.equals(e2BT)) {
+					long size1 = e1.getFileSize();
+					long size2 = e2.getFileSize();
+					if (size1 < size2) {
+						result = -1;
+					} else if (size1 > size2) {
+						result = 1;
 					}
-					if (!ascending) {
-						result *= -1;
+				} else if (GraphType.List.equals(e1BT) && GraphType.List.equals(e2BT)) {
+					Resource e1Res = e1.getResource();
+					Resource e2Res = e2.getResource();
+					if (e1Res == null) {
+						log.warn("No resource found for list: {}", e1.getEntryURI());
+						return 0;
+					}
+					if (e2Res == null) {
+						log.warn("No resource found for list: {}", e2.getEntryURI());
+						return 0;
+					}
+					org.entrystore.List e1List = (org.entrystore.List) e1Res;
+					org.entrystore.List e2List = (org.entrystore.List) e2Res;
+					int size1 = e1List.getChildren().size();
+					int size2 = e2List.getChildren().size();
+					if (size1 < size2) {
+						result = -1;
+					} else if (size1 > size2) {
+						result = 1;
 					}
 				}
-				return result;
+				if (!ascending) {
+					result *= -1;
+				}
 			}
-
+			return result;
 		});
-
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
@@ -208,29 +186,24 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterTitle(List<Entry> entries, final String language, final boolean ascending, final GraphType prioritizedResourceType) {
-		Collections.sort(entries, new Comparator<Entry>() {
-
-			public int compare(Entry e1, Entry e2) {
-				int result = 0;
-				if (e1 != null && e2 != null) {
-					String title1 = getTitle(e1, language);
-					String title2 = getTitle(e2, language);
-					if (title1 != null && title2 != null) {
-						result = title1.compareToIgnoreCase(title2);
-					} else if (title1 == null && title2 != null) {
-						result = 1;
-					} else if (title1 != null && title2 == null) {
-						result = -1;
-					}
-					if (!ascending) {
-						result *= -1;
-					}
+		entries.sort((e1, e2) -> {
+			int result = 0;
+			if (e1 != null && e2 != null) {
+				String title1 = getTitle(e1, language);
+				String title2 = getTitle(e2, language);
+				if (title1 != null && title2 != null) {
+					result = title1.compareToIgnoreCase(title2);
+				} else if (title1 == null && title2 != null) {
+					result = 1;
+				} else if (title1 != null) {
+					result = -1;
 				}
-				return result;
+				if (!ascending) {
+					result *= -1;
+				}
 			}
-
+			return result;
 		});
-
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
@@ -251,27 +224,21 @@ public class EntryUtil {
 			return;
 		}
 
-		Collections.sort(entries, new Comparator<Entry>() {
-
-			public int compare(Entry e1, Entry e2) {
-				int result = 0;
-				if (e1 != null && e2 != null) {
-					GraphType e1BT = e1.getGraphType();
-					GraphType e2BT = e2.getGraphType();
-					if (resourceType.equals(e1BT) && !resourceType.equals(e2BT)) {
-						result = -1;
-					} else if (!resourceType.equals(e1BT) && resourceType.equals(e2BT)) {
-						result = 1;
-					} else {
-						result = 0;
-					}
-					if (!top) {
-						result *= -1;
-					}
+		entries.sort((e1, e2) -> {
+			int result = 0;
+			if (e1 != null && e2 != null) {
+				GraphType e1BT = e1.getGraphType();
+				GraphType e2BT = e2.getGraphType();
+				if (resourceType.equals(e1BT) && !resourceType.equals(e2BT)) {
+					result = -1;
+				} else if (!resourceType.equals(e1BT) && resourceType.equals(e2BT)) {
+					result = 1;
 				}
-				return result;
+				if (!top) {
+					result *= -1;
+				}
 			}
-
+			return result;
 		});
 	}
 
@@ -489,7 +456,7 @@ public class EntryUtil {
 	 * @return Returns all key/value (title/language) pairs for dcterms:title
 	 *         and dc:title
 	 */
-	public static Map<String, String> getTitles(Entry entry) {
+	public static Map<String, Set<String>> getTitles(Entry entry) {
 		List<IRI> titlePredicates = new ArrayList<>();
 		titlePredicates.add(valueFactory.createIRI(NS.foaf, "name"));
 		titlePredicates.add(valueFactory.createIRI(NS.vcard, "fn"));
@@ -500,6 +467,7 @@ public class EntryUtil {
 		titlePredicates.add(valueFactory.createIRI(NS.skos, "hiddenLabel"));
 		titlePredicates.add(valueFactory.createIRI(NS.rdfs, "label"));
 		titlePredicates.add(valueFactory.createIRI(NS.schema, "name"));
+
 		return getLiteralValues(entry, titlePredicates);
 	}
 
@@ -512,7 +480,7 @@ public class EntryUtil {
 	 * @return Returns all key/value (description/language) pairs for dcterms:description
 	 *         and dc:description
 	 */
-	public static Map<String, String> getDescriptions(Entry entry) {
+	public static Map<String, Set<String>> getDescriptions(Entry entry) {
 		List<IRI> descPreds = new ArrayList<>();
 		descPreds.add(valueFactory.createIRI(NS.dcterms, "description"));
 		descPreds.add(valueFactory.createIRI(NS.dc, "description"));
@@ -522,15 +490,23 @@ public class EntryUtil {
 	public static String getDescription(Entry entry, String language) {
 		checkArgument(language != null, "language parameter must not be null");
 
-		var descriptions = getDescriptions(entry).entrySet();
+		Map<String, Set<String>> descriptions = getDescriptions(entry);
+
 		if (descriptions.isEmpty()) {
 			return null;
 		}
 
 		String description = null;
-		for (var descEntry : descriptions) {
-			description = descEntry.getKey();
-			if (language.equals(descEntry.getValue())) {
+		for (String key : descriptions.keySet()) {
+
+			for (String lang : descriptions.get(key)) {
+				if (language.equals(lang)) {
+					description = key;
+					break;
+				}
+			}
+
+			if (description != null) {
 				break;
 			}
 		}
@@ -545,7 +521,7 @@ public class EntryUtil {
 	 * @param entry Entry from where the keywords should be returned.
 	 * @return Returns all matching literal-language pairs.
 	 */
-	public static Map<String, String> getTagLiterals(Entry entry) {
+	public static Map<String, Set<String>> getTagLiterals(Entry entry) {
 		List<IRI> preds = new ArrayList<>();
 		preds.add(valueFactory.createIRI(NS.dcterms, "subject"));
 		preds.add(valueFactory.createIRI(NS.dc, "subject"));
@@ -574,7 +550,7 @@ public class EntryUtil {
 	 * @param predicates A list of predicates to use for statement matching.
 	 * @return Returns all matching literal-language pairs.
 	 */
-	public static Map<String, String> getLiteralValues(Entry entry, List<IRI> predicates) {
+	public static Map<String, Set<String>> getLiteralValues(Entry entry, List<IRI> predicates) {
 		if (entry == null || predicates == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
@@ -588,18 +564,26 @@ public class EntryUtil {
 
 		if (graph != null) {
 			IRI resourceURI = valueFactory.createIRI(entry.getResourceURI().toString());
-			Map<String, String> result = new LinkedHashMap<>();
+			Map<String, Set<String>> result = new LinkedHashMap<>();
 			for (IRI pred : predicates) {
 				for (Statement statement : graph.filter(resourceURI, pred, null)) {
 					Value value = statement.getObject();
+					Set<String> valuesSet;
+
 					if (value instanceof Literal lit) {
-						result.put(lit.stringValue(), lit.getLanguage().orElse(null));
+
+						valuesSet = result.get(lit.stringValue()) == null ? new HashSet<>() : result.get(lit.stringValue());
+
+						valuesSet.add(lit.getLanguage().orElse(null));
+						result.put(lit.stringValue(), valuesSet);
 					} else if (value instanceof org.eclipse.rdf4j.model.Resource) {
 						Iterator<Statement> stmnts2 = graph.filter((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null).iterator();
 						if (stmnts2.hasNext()) {
 							Value value2 = stmnts2.next().getObject();
 							if (value2 instanceof Literal lit2) {
-								result.put(lit2.stringValue(), lit2.getLanguage().orElse(null));
+								valuesSet = result.get(lit2.stringValue()) == null ? new HashSet<>() : result.get(lit2.stringValue());
+								valuesSet.add(lit2.getLanguage().orElse(null));
+								result.put(lit2.stringValue(), valuesSet);
 							}
 						}
 					}
@@ -645,8 +629,7 @@ public class EntryUtil {
 		for (IRI pred : predicates) {
 			for (Statement statement : graph.filter(valueFactory.createIRI(resourceURI.toString()), pred, null)) {
 				Value value = statement.getObject();
-				if (value instanceof IRI) {
-					org.eclipse.rdf4j.model.Resource res = (org.eclipse.rdf4j.model.Resource) value;
+				if (value instanceof IRI res) {
 					result.add(res.stringValue());
 				}
 			}
@@ -663,11 +646,8 @@ public class EntryUtil {
 		String contextID = entry.getContext().getEntry().getId();
 		URI trashURI = URISplit.fabricateURI(repoURL, contextID, RepositoryProperties.LIST_PATH, "_trash");
 		Set<URI> referredBy = entry.getReferringListsInSameContext();
-		if ((referredBy.size() == 1) && (referredBy.contains(trashURI))) {
-			return true;
-		}
-		return false;
-	}
+        return (referredBy.size() == 1) && (referredBy.contains(trashURI));
+    }
 
 	/**
 	 * Fetches entries and recursively traverses the graph by following a provided set
@@ -809,9 +789,6 @@ public class EntryUtil {
 	 * Checks whether a graph contains a predicate/object tuple. A simple String
 	 * comparison is performed, therefore it does not matter of which type
 	 * (Literal, Resource) the object is.
-	 * @param graph
-	 * @param tuples
-	 * @return
 	 */
 	private static boolean graphContainsPredicateObjectTuple(Model graph, Map<String, String> tuples) {
 		if (tuples != null && !tuples.isEmpty()) {
@@ -846,6 +823,7 @@ public class EntryUtil {
 		return result;
 	}
 
+	@Getter
 	public static class TraversalResult {
 
 		private final Model graph;
@@ -858,18 +836,6 @@ public class EntryUtil {
 			this.graph = graph;
 			this.latestModified = latestModified;
 			this.accessDenied = accessDenied;
-		}
-
-		public Model getGraph() {
-			return graph;
-		}
-
-		public Date getLatestModified() {
-			return latestModified;
-		}
-
-		public Set<IRI> getAccessDenied() {
-			return accessDenied;
 		}
 
 	}

@@ -122,7 +122,7 @@ public abstract class BaseResource extends ServerResource {
 	public ServerInfo getServerInfo() {
 		if (serverInfo == null) {
 			ServerInfo si = super.getServerInfo();
-			si.setAgent("EntryStore/" + EntryStoreApplication.getVersion());
+			si.setAgent(getRM().getConfiguration().getString(Settings.HTTP_HEADER_SERVER, "EntryStore/" + EntryStoreApplication.getVersion()));
 			serverInfo = si;
 		}
 		return serverInfo;

@@ -61,6 +61,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import static org.eclipse.rdf4j.model.util.Values.iri;
+
 
 //TODO change expression to match paper.
 public class EntryImpl implements Entry {
@@ -1411,8 +1413,13 @@ public class EntryImpl implements Entry {
 					initMetadataObjects();
 					
 					getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
-					if (hasAclChangedForGuest(oldGraph, metametadata)) {
-						getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryAclGuestUpdated, metametadata));
+					if (GraphType.Context.equals(this.getGraphType())) {
+						if (hasAclChangedForGuest(oldGraph, metametadata)) {
+							getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryAclGuestUpdated, metametadata));
+						}
+						if (hasProjectTypeChanged(oldGraph, metametadata)) {
+							getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryProjectTypeUpdated, metametadata));
+						}
 					}
 				} catch (Exception e) {
 					rc.rollback();
@@ -1449,7 +1456,15 @@ public class EntryImpl implements Entry {
 		return !Models.isomorphic(oldAcl, newAcl);
 	}
 
-    private boolean isStatementInvRelationCandidate(Statement statement, String base) {
+	private boolean hasProjectTypeChanged(Model oldGraph, Model newGraph) {
+		if (oldGraph == null || newGraph == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
+		IRI projectTypeProperty = iri("http://entryscape.com/terms/projectType");
+		return !Models.isomorphic(oldGraph.filter(null, projectTypeProperty, null), newGraph.filter(null, projectTypeProperty, null));
+	}
+
+	private boolean isStatementInvRelationCandidate(Statement statement, String base) {
 		IRI predicate = statement.getPredicate();
         if (!predicate.equals(RepositoryProperties.resource)
                 && !predicate.equals(RepositoryProperties.metadata)

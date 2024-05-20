@@ -112,7 +112,7 @@ public class StatusResource extends BaseResource  {
 						}
 					}
 					auth.put("signupWhitelist", signupWhitelist);
-					auth.put("passwordReset", config.getBoolean(Settings.PASSWORD_RESET, false));
+					auth.put("passwordReset", config.getBoolean(Settings.AUTH_PASSWORD_RESET, false));
 					auth.put("passwordMaxLength", Password.PASSWORD_MAX_LENGTH);
 					LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
 					auth.put("authTokenCount", loginTokenCache.size());
