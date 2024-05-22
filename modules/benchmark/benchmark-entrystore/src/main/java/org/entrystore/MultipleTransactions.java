@@ -10,17 +10,23 @@ import java.util.List;
 
 public class MultipleTransactions {
 
-    private static void addToContext(ContextManager contextManager, Context context, List<Object> persons, int modulo, boolean withMultiContext) {
+    public static void runBenchmark(RepositoryManager repositoryManager, List<Object> persons, int modulo, boolean withMultiContext) {
 
         LogUtils.logType("   ADD  ");
 
         LocalDateTime start = LocalDateTime.now();
         LogUtils.logDate("Starting adding to context at", start);
 
+        ContextManager contextManager = repositoryManager.getContextManager();
+        Entry newContext = contextManager.createResource(null, GraphType.Context, null, null);
+        contextManager.setName(newContext.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS + "_0");
+
         persons.forEach(BenchmarkCommons.withCounter((i, person) -> {
             if (person != null) {
-                if (modulo == -1 || i % modulo > 0) {
-                    ObjectMapper.mapObjectToContext(context, person);
+                Context moduloContext = contextManager.getContext(BenchmarkCommons.CONTEXT_ALIAS + "_" + (withMultiContext && modulo > 0 ? i / modulo : 0));
+
+                if (modulo < 0 || i % modulo > 0) {
+                    ObjectMapper.mapObjectToContext(moduloContext, person);
                 } else {
                     LocalDateTime startInsert = LocalDateTime.now();
 
@@ -30,11 +36,11 @@ public class MultipleTransactions {
                     injectedPerson.setLastName("Griffin" + (i / modulo));
 
                     if (withMultiContext) {
-                        Entry contextEntry = contextManager.createResource(null, GraphType.Context, null, null);
-                        contextManager.setName(contextEntry.getResource().getURI(), "benchmark_" + (i+1));
-                        ObjectMapper.mapObjectToContext((Context) contextEntry.getResource(), person);
+                        Entry newModuloContext = contextManager.createResource(null, GraphType.Context, null, null);
+                        contextManager.setName(newModuloContext.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS + "_" + (i + 1) / modulo);
+                        ObjectMapper.mapObjectToContext((Context) newModuloContext.getResource(), person);
                     } else {
-                        ObjectMapper.mapObjectToContext(context, injectedPerson);
+                        ObjectMapper.mapObjectToContext(moduloContext, injectedPerson);
                     }
 
                     LocalDateTime endInsert = LocalDateTime.now();
@@ -46,14 +52,5 @@ public class MultipleTransactions {
         LocalDateTime end = LocalDateTime.now();
         LogUtils.logDate("Ending adding to context at", end);
         LogUtils.logTimeDifference("Adding to context took", start, end);
-    }
-
-    public static void runBenchmark(RepositoryManager repositoryManager, List<Object> persons, int modulo, boolean withMultiContext) {
-
-        // A new single Context
-        Entry contextEntry = repositoryManager.getContextManager().createResource(null, GraphType.Context, null, null);
-        Context context = (Context) contextEntry.getResource();
-        repositoryManager.getContextManager().setName(contextEntry.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS);
-        addToContext(repositoryManager.getContextManager(), context, persons, modulo, withMultiContext);
     }
 }

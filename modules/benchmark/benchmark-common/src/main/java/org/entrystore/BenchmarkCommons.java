@@ -41,8 +41,8 @@ public class BenchmarkCommons {
             throw new IllegalArgumentException("Benchmark store type not supported.");
         }
 
-        // type of transactions TRUE (multi) | FALSE (simple)
-        arguments.setWithTransactions("true".equals(args[1]));
+        // type of transactions m (multi) | s (simple)
+        arguments.setWithTransactions("m".equals(args[1]));
         System.setProperty("log.transactions", arguments.isWithTransactions() ? "multi" : "single");
 
         // size of universe to process
@@ -51,25 +51,25 @@ public class BenchmarkCommons {
         System.setProperty("log.size", arguments.getSizeToGenerate() + "");
 
         // complexity of objects
-        // TRUE (complex) | FALSE (simple)
-        arguments.setComplex("true".equals(args[3]));
+        // c (complex) | s (simple)
+        arguments.setComplex("c".equals(args[3]));
         System.setProperty("log.complexity", arguments.isComplex() ? "complex" : "simple");
 
         // intermediate requests
-        // TRUE | FALSE
-        arguments.setWithInterRequests("true".equals(args[4]));
+        // if number is higher then 0
+        arguments.setInterRequestsModulo(Integer.parseInt(args[4]));
+        arguments.setWithInterRequests(Integer.parseInt(args[4]) > 0);
         System.setProperty("log.interRequests", arguments.isWithInterRequests() ? "requests" : "no-requests");
 
         if (arguments.isWithInterRequests()) {
             // how often to do an intermediate request
             // int modulo
-            arguments.setInterRequestsModulo(Integer.parseInt(args[5]));
             if (arguments.getInterRequestsModulo() > arguments.getSizeToGenerate()) {
                 throw new IllegalArgumentException("Modulo cannot be larger then total size.");
             }
 
             // multiple contexts
-            arguments.setWithInterContexts("true".equals(args[6]));
+            arguments.setWithInterContexts("true".equals(args[5]));
         }
         System.setProperty("log.modulo", arguments.getInterRequestsModulo() + "");
 
