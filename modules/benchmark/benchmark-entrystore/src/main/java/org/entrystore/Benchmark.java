@@ -25,6 +25,9 @@ public class Benchmark {
             String storePath = "file:///" + BenchmarkCommons.ENTRY_STORE_NATIVE_PATH.getAbsolutePath().replace('\\', '/');
             config.addProperty(Settings.STORE_PATH, storePath);
             config.addProperty(Settings.STORE_INDEXES, BenchmarkCommons.INDEXES);
+        } else if (storeType.equalsIgnoreCase("lmdb")) {
+            String storePath = "file:///" + BenchmarkCommons.ENTRY_STORE_LMDB_PATH.getAbsolutePath().replace('\\', '/');
+            config.addProperty(Settings.STORE_PATH, storePath);
         }
         config.setProperty(Settings.BASE_URL, BenchmarkCommons.BASE_URL);
         config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);

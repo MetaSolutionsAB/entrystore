@@ -231,6 +231,12 @@
 			<artifactId>assertj-core</artifactId>
 			<version>${assertj.version}</version>
 		</dependency>
+		<dependency>
+			<groupId>org.eclipse.rdf4j</groupId>
+			<artifactId>rdf4j-sail-lmdb</artifactId>
+			<version>5.0.0-M2</version>
+			<scope>compile</scope>
+		</dependency>
 		<!--
 		<dependency>
 			<groupId>org.apache.tika</groupId>

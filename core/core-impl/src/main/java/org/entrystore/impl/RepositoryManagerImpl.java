@@ -49,6 +49,8 @@ import org.eclipse.rdf4j.rio.binary.BinaryRDFWriterFactory;
 import org.eclipse.rdf4j.rio.nquads.NQuadsWriterFactory;
 import org.eclipse.rdf4j.rio.trig.TriGWriterFactory;
 import org.eclipse.rdf4j.rio.trix.TriXWriterFactory;
+import org.eclipse.rdf4j.sail.lmdb.LmdbStore;
+import org.eclipse.rdf4j.sail.lmdb.config.LmdbStoreConfig;
 import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.entrystore.ContextManager;
@@ -228,6 +230,22 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				if (user != null && password != null) {
 					((SPARQLRepository) this.repository).setUsernameAndPassword(user, password);
 				}
+			}
+		} else if (storeType.equalsIgnoreCase("lmdb")) {
+			if (!configuration.containsKey(Settings.STORE_PATH)) {
+				log.error("Incomplete configuration for LMDB store");
+				throw new IllegalStateException("Incomplete configuration");
+			} else {
+				File path = new File(configuration.getURI(Settings.STORE_PATH));
+				String indexes = configuration.getString(Settings.STORE_INDEXES);
+				log.info("Main repository: using LMDB Store at {} with indexes {}", path, indexes);
+				LmdbStore store;
+				if (indexes != null) {
+					store = new LmdbStore(path, new LmdbStoreConfig().setTripleIndexes(indexes));
+				} else {
+					store = new LmdbStore(path);
+				}
+				this.repository = new SailRepository(store);
 			}
 		}
 
