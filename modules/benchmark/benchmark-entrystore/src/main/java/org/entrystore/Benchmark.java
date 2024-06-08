@@ -85,14 +85,18 @@ public class Benchmark {
             Config configuration = createConfiguration(arguments.getStoreType());
             RepositoryManagerImpl repositoryManager = new RepositoryManagerImpl(BenchmarkCommons.BASE_URL, configuration);
 
-            // admin
-            repositoryManager.setCheckForAuthorization(false);
+            // turn acl off or use admin
+            if (!arguments.isWithAcl()) {
+                repositoryManager.setCheckForAuthorization(false);
+            } else {
+                repositoryManager.getPrincipalManager().setAuthenticatedUserURI(repositoryManager.getPrincipalManager().getAdminUser().getURI());
+            }
 
             List<Object> persons = generateData(arguments.getSizeToGenerate(), arguments.isComplex());
 
             try {
 
-                MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts());
+                MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
 
                 // reading
                 if (!arguments.isWithInterContexts()) {

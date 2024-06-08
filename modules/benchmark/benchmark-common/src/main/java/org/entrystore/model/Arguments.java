@@ -13,4 +13,5 @@ public class Arguments {
     boolean withInterRequests = false;
     int interRequestsModulo = -1;
     boolean withInterContexts = false;
+    boolean withAcl = false;
 }

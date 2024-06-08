@@ -82,7 +82,7 @@ public class TestSuite {
 	 * <li> The contexts "duck" and "mouse".</li></nl>
 	 * Where the duck context is owned (administrative rights) by both Donald and Daisy,
 	 * while the mouse context is owned only by Mickey.
-	 * In addition, the Orgininals group is given rights to work with the 
+	 * In addition, the Originals group is given rights to work with the
 	 * mickey context without being the owner (read and write access to the context resource).
 	 * The duck context is readable by guests, while the mickey context is private.
 	 */
@@ -201,7 +201,7 @@ public class TestSuite {
 
 			//A plain Link to Daisy at wikipedia.
 			Entry linkToDonaldEntry = mouse.createLink(null, URI.create("http://en.wikipedia.org/wiki/Donald_Duck"), null);
-			HashSet<URI> mdRead = new HashSet<URI>();
+			HashSet<URI> mdRead = new HashSet<>();
 			mdRead.add(pm.getPrincipalEntry("Daisy").getResourceURI());
 			linkToDonaldEntry.setAllowedPrincipalsFor(AccessProperty.ReadMetadata, mdRead);
 			setMetadata(linkToDonaldEntry, "Donald the man", "Daisy, Donald is a really nice chap, maybe you two should get married soon?", "duck", null, null);

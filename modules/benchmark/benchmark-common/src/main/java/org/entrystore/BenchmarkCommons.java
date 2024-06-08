@@ -19,6 +19,8 @@ public class BenchmarkCommons {
     public static final String INDEXES = "cspo,spoc";
     public static final String BASE_URL = "http://localhost:8181/";
     public static final String CONTEXT_ALIAS = "benchmark";
+    public static final String BENCHMARK_USER = "Benchmark User";
+    public static final String BENCHMARK_USER_SECRET = "thisissecret";
 
     public static <T> Consumer<T> withCounter(BiConsumer<Integer, T> consumer) {
         AtomicInteger counter = new AtomicInteger(0);
@@ -72,6 +74,11 @@ public class BenchmarkCommons {
             arguments.setWithInterContexts("true".equals(args[5]));
         }
         System.setProperty("log.modulo", arguments.getInterRequestsModulo() + "");
+
+        // acl activated
+        // on | off
+        arguments.setWithAcl("on".equals(args[6]));
+        System.setProperty("log.acl", arguments.isWithAcl() ? "on" : "off");
 
         // welcome message
         LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());
