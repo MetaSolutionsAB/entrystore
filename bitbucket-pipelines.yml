@@ -6,6 +6,7 @@ options:
 stepdefinitions:
   - build: &build
       name: Build
+      size: 2x
       caches:
         - maven
       script:
