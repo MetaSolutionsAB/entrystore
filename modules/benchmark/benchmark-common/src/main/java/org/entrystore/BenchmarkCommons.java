@@ -13,6 +13,7 @@ public class BenchmarkCommons {
     public static final File ENTRY_STORE_NATIVE_PATH = new File("testdata/native_store");
     public static final File LMDB_PATH = new File("./testdata/lmdb_store");
     public static final File ENTRY_STORE_LMDB_PATH = new File("testdata/lmdb_store");
+    public static final String SOLR_PATH = "testdata/solr_benchmark";
     public static final String NATIVE = "native";
     public static final String MEMORY = "memory";
     public static final String LMDB = "lmdb";
