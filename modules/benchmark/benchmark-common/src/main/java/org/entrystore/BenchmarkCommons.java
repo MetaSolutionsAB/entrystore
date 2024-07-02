@@ -2,18 +2,13 @@ package org.entrystore;
 
 import org.entrystore.model.Arguments;
 
-import java.io.File;
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public class BenchmarkCommons {
 
-    public static final File NATIVE_PATH = new File("./testdata/native_store");
-    public static final File ENTRY_STORE_NATIVE_PATH = new File("testdata/native_store");
-    public static final File LMDB_PATH = new File("./testdata/lmdb_store");
-    public static final File ENTRY_STORE_LMDB_PATH = new File("testdata/lmdb_store");
-    public static final String SOLR_PATH = "testdata/solr_benchmark";
     public static final String NATIVE = "native";
     public static final String MEMORY = "memory";
     public static final String LMDB = "lmdb";
@@ -28,7 +23,7 @@ public class BenchmarkCommons {
         return item -> consumer.accept(counter.getAndIncrement(), item);
     }
 
-    public static Arguments processArguments(String[] args) {
+    public static Arguments processArguments(String[] args) throws IOException {
 
         Arguments arguments = new Arguments();
 
@@ -39,6 +34,7 @@ public class BenchmarkCommons {
         // NATIVE | MEMORY | LMDB
         if (NATIVE.equals(storeType) || MEMORY.equals(storeType) || LMDB.equals(storeType)) {
             arguments.setStoreType(storeType);
+            arguments.setStorePath();
             System.setProperty("log.storeType", storeType);
         } else {
             throw new IllegalArgumentException("Benchmark store type not supported.");
@@ -80,6 +76,9 @@ public class BenchmarkCommons {
         // on | off
         arguments.setWithAcl("on".equals(args[6]));
         System.setProperty("log.acl", arguments.isWithAcl() ? "on" : "off");
+
+        // set Solr directory path
+        arguments.setSolrPath();
 
         // welcome message
         LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());

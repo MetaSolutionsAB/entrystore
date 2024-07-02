@@ -7,23 +7,22 @@ import org.entrystore.model.Arguments;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 
+import java.io.IOException;
 import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.List;
 
 public class Benchmark {
 
-    private static Config createConfiguration(String storeType) {
+    private static Config createConfiguration(Arguments arguments) {
         Config config = new PropertiesConfiguration("EntryStore Configuration");
-        config.setProperty(Settings.STORE_TYPE, storeType);
-        if (storeType.equalsIgnoreCase("native")) {
-            String storePath = "file:///" + BenchmarkCommons.ENTRY_STORE_NATIVE_PATH.getAbsolutePath().replace('\\', '/');
-            config.addProperty(Settings.STORE_PATH, storePath);
+        config.setProperty(Settings.STORE_TYPE, arguments.getStoreType());
+        config.addProperty(Settings.STORE_PATH, "file:///" + arguments.getStorePath().getAbsolutePath().replace('\\', '/'));
+
+        if (arguments.getStoreType().equalsIgnoreCase("native")) {
             config.addProperty(Settings.STORE_INDEXES, BenchmarkCommons.INDEXES);
-        } else if (storeType.equalsIgnoreCase("lmdb")) {
-            String storePath = "file:///" + BenchmarkCommons.ENTRY_STORE_LMDB_PATH.getAbsolutePath().replace('\\', '/');
-            config.addProperty(Settings.STORE_PATH, storePath);
         }
+
         config.setProperty(Settings.BASE_URL, BenchmarkCommons.BASE_URL);
         config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
         config.setProperty(Settings.SOLR, "off");
@@ -77,7 +76,7 @@ public class Benchmark {
 
             Arguments arguments = BenchmarkCommons.processArguments(args);
 
-            Config configuration = createConfiguration(arguments.getStoreType());
+            Config configuration = createConfiguration(arguments);
             RepositoryManagerImpl repositoryManager = new RepositoryManagerImpl(BenchmarkCommons.BASE_URL, configuration);
 
             // turn acl off or use admin
@@ -106,7 +105,7 @@ public class Benchmark {
             // benchmark finished, goodbye message
             LogUtils.logGoodbye();
 
-        } catch (IllegalArgumentException | ArrayIndexOutOfBoundsException ex) {
+        } catch (IllegalArgumentException | ArrayIndexOutOfBoundsException | IOException ex) {
             LogUtils.log.error("No or bad arguments provided.");
             LogUtils.log.error(ex.getMessage());
         }

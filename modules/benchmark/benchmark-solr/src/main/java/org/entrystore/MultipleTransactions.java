@@ -4,6 +4,7 @@ import org.entrystore.generator.ObjectGenerator;
 import org.entrystore.mapper.ObjectMapper;
 import org.entrystore.model.FakePerson;
 import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.util.SolrSearchIndex;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -15,21 +16,18 @@ public class MultipleTransactions {
             List<Object> persons,
             int modulo,
             boolean withMultiContext,
-            boolean isWithAcl) {
+            boolean isWithAcl) throws InterruptedException {
 
         LogUtils.logType("   ADD  ");
 
         LocalDateTime start = LocalDateTime.now();
-        LogUtils.logDate("Starting adding to context at", start);
+        LogUtils.logDate("Starting adding to context and sending data to Solr at", start);
 
         ContextManager contextManager = repositoryManager.getContextManager();
         PrincipalManager principalManager = repositoryManager.getPrincipalManager();
 
         Entry newContext = contextManager.createResource(null, GraphType.Context, null, null);
         contextManager.setName(newContext.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS + "_0");
-
-        //SolrSearchIndex slr = (SolrSearchIndex) repositoryManager.getIndex();
-        //slr.getPostQueueSize();
 
         User benchmarkUser;
 
@@ -86,9 +84,23 @@ public class MultipleTransactions {
             }
         }));
 
-        LocalDateTime end = LocalDateTime.now();
-        LogUtils.logDate("Ending adding to context at", end);
-        LogUtils.logTimeDifference("Adding to context took", start, end);
+        LocalDateTime endContext = LocalDateTime.now();
+        LogUtils.logDate("Ending adding to context at", endContext);
+        LogUtils.logTimeDifference("Adding to context took", start, endContext);
+
+        SolrSearchIndex solrSearchIndex = (SolrSearchIndex) repositoryManager.getIndex();
+
+        while (solrSearchIndex.getPostQueueSize() > 0) {
+            Thread.sleep(500);
+        }
+
+        // To solve the race condition when queue is empty for low amount of instances.
+        Thread.sleep(500);
+
+        LocalDateTime endSolr = LocalDateTime.now();
+        LogUtils.logDate("Ending sending data to Solr at", endSolr);
+        LogUtils.logTimeDifference("Adding to context and sending data to Solr took", start, endSolr);
+
     }
 
     private static User createBenchmarkUser(PrincipalManager principalManager) {

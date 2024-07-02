@@ -12,19 +12,20 @@ import org.entrystore.generator.ObjectGenerator;
 import org.entrystore.model.Arguments;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 
 public class Benchmark {
 
     @NotNull
-    private static Repository getDatabase(String benchmarkType) {
+    private static Repository getDatabase(Arguments arguments) {
 
         // choose a storage type NATIVE | MEMORY
-        return switch (benchmarkType) {
+        return switch (arguments.getStoreType()) {
             case BenchmarkCommons.MEMORY -> new SailRepository(new MemoryStore());
-            case BenchmarkCommons.NATIVE -> new SailRepository(new NativeStore(BenchmarkCommons.NATIVE_PATH, BenchmarkCommons.INDEXES));
-            case BenchmarkCommons.LMDB -> new SailRepository(new LmdbStore(BenchmarkCommons.LMDB_PATH));
+            case BenchmarkCommons.NATIVE -> new SailRepository(new NativeStore(arguments.getStorePath(), BenchmarkCommons.INDEXES));
+            case BenchmarkCommons.LMDB -> new SailRepository(new LmdbStore(arguments.getStorePath()));
             case null, default -> throw new IllegalArgumentException("Not a valid storage type provided.");
         };
     }
@@ -76,7 +77,7 @@ public class Benchmark {
             Arguments arguments = BenchmarkCommons.processArguments(args);
 
             // get the Repository instance based on store type
-            Repository database = getDatabase(arguments.getStoreType());
+            Repository database = getDatabase(arguments);
 
             // generate list of objects
             List<Object> objects = generateData(arguments.getSizeToGenerate(), arguments.isComplex());
@@ -100,7 +101,7 @@ public class Benchmark {
             // benchmark finished, goodbye message
             LogUtils.logGoodbye();
 
-        } catch (IllegalArgumentException | ArrayIndexOutOfBoundsException ex) {
+        } catch (IllegalArgumentException | ArrayIndexOutOfBoundsException | IOException ex) {
             LogUtils.log.error("No or bad arguments provided.");
             LogUtils.log.error(ex.getMessage());
         }

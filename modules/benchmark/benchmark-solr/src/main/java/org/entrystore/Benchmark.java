@@ -7,35 +7,27 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.model.Arguments;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.util.SolrSearchIndex;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 public class Benchmark {
 
-    private static Config createConfiguration(String storeType, String tempPath) throws IOException {
+    private static Config createConfiguration(Arguments arguments) throws IOException {
         Config config = new PropertiesConfiguration("EntryStore Configuration");
-        config.setProperty(Settings.STORE_TYPE, storeType);
-        if (storeType.equalsIgnoreCase("native")) {
-            String storePath = "file:///" + BenchmarkCommons.ENTRY_STORE_NATIVE_PATH.getAbsolutePath().replace('\\', '/');
-            config.addProperty(Settings.STORE_PATH, storePath);
+        config.setProperty(Settings.STORE_TYPE, arguments.getStoreType());
+        config.addProperty(Settings.STORE_PATH, "file:///" + arguments.getStorePath().getAbsolutePath().replace('\\', '/'));
+
+        if (arguments.getStoreType().equalsIgnoreCase("native")) {
             config.addProperty(Settings.STORE_INDEXES, BenchmarkCommons.INDEXES);
-        } else if (storeType.equalsIgnoreCase("lmdb")) {
-            String storePath = "file:///" + BenchmarkCommons.ENTRY_STORE_LMDB_PATH.getAbsolutePath().replace('\\', '/');
-            config.addProperty(Settings.STORE_PATH, storePath);
         }
+
         config.setProperty(Settings.BASE_URL, BenchmarkCommons.BASE_URL);
         config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
         config.setProperty(Settings.SOLR, "on");
-        config.setProperty(Settings.SOLR_URL, tempPath);
+        config.setProperty(Settings.SOLR_URL, arguments.getSolrPath());
 
         return config;
     }
@@ -85,10 +77,7 @@ public class Benchmark {
 
             Arguments arguments = BenchmarkCommons.processArguments(args);
 
-            Path path = Paths.get(FileUtils.getTempDirectory().getAbsolutePath(), "benchmark-" + UUID.randomUUID());
-            String tempPath = Files.createDirectories(path).toFile().getAbsolutePath();
-
-            Config configuration = createConfiguration(arguments.getStoreType(), tempPath);
+            Config configuration = createConfiguration(arguments);
             RepositoryManagerImpl repositoryManager = new RepositoryManagerImpl(BenchmarkCommons.BASE_URL, configuration);
 
             // turn acl off or use admin
@@ -110,17 +99,11 @@ public class Benchmark {
                     readAllFromDatabase(context, arguments.getSizeToGenerate());
                 }
 
-                while (((SolrSearchIndex) repositoryManager.getIndex()).getPostQueueSize() > 0) {
-
-                }
-
-                // To solve the race condition when queue is empty for low amount of instances.
-                Thread.sleep(500);
-
             } finally {
                 // close the connection and shutDown the database and solr
                 repositoryManager.shutdown();
-                FileUtils.deleteDirectory(new File(tempPath));
+                FileUtils.deleteDirectory(arguments.getStorePath());
+                FileUtils.deleteDirectory(arguments.getSolrPath());
             }
 
             // benchmark finished, goodbye message
