@@ -28,9 +28,6 @@ public class MultipleTransactions {
         Entry newContext = contextManager.createResource(null, GraphType.Context, null, null);
         contextManager.setName(newContext.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS + "_0");
 
-        //SolrSearchIndex slr = (SolrSearchIndex) repositoryManager.getIndex();
-        //slr.getPostQueueSize();
-
         User benchmarkUser;
 
         if (isWithAcl) {
