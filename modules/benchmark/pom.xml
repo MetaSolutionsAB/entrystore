@@ -9,14 +9,15 @@
 		<artifactId>entrystore-modules</artifactId>
 		<version>5.4-SNAPSHOT</version>
 	</parent>
-	<artifactId>entrystore-harvesting</artifactId>
+	<artifactId>entrystore-benchmark</artifactId>
 	<packaging>pom</packaging>
-	<name>EntryStore Harvesting</name>
+	<name>EntryStore Benchmark</name>
 
 	<modules>
-		<module>factory</module>
-		<!--<module>oaipmh-target</module>-->
-		<module>oaipmh-harvester</module>
+		<module>benchmark-common</module>
+		<module>benchmark-rdf4j</module>
+		<module>benchmark-entrystore</module>
+		<module>benchmark-solr</module>
 	</modules>
 
 </project>
