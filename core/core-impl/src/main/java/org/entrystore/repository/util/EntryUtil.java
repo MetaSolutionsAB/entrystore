@@ -40,7 +40,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -75,18 +74,16 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterModificationDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
-
-		Collections.sort(entries, (e1, e2) -> {
-            int result = 0;
-            if (e1 != null && e2 != null) {
-                result = e1.getModifiedDate().compareTo(e2.getModifiedDate());
-                if (!ascending) {
-                    result *= -1;
-                }
-            }
-            return result;
-        });
-
+		entries.sort((e1, e2) -> {
+			int result = 0;
+			if (e1 != null && e2 != null) {
+				result = e1.getModifiedDate().compareTo(e2.getModifiedDate());
+				if (!ascending) {
+					result *= -1;
+				}
+			}
+			return result;
+		});
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
@@ -102,18 +99,16 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterCreationDate(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
-
-		Collections.sort(entries, (e1, e2) -> {
-            int result = 0;
-            if (e1 != null && e2 != null) {
-                result = e1.getCreationDate().compareTo(e2.getCreationDate());
-                if (!ascending) {
-                    result *= -1;
-                }
-            }
-            return result;
-        });
-
+		entries.sort((e1, e2) -> {
+			int result = 0;
+			if (e1 != null && e2 != null) {
+				result = e1.getCreationDate().compareTo(e2.getCreationDate());
+				if (!ascending) {
+					result *= -1;
+				}
+			}
+			return result;
+		});
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
@@ -131,48 +126,46 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterFileSize(List<Entry> entries, final boolean ascending, final GraphType prioritizedResourceType) {
-
-		Collections.sort(entries, (e1, e2) -> {
-            int result = 0;
-            if (e1 != null && e2 != null) {
-                GraphType e1BT = e1.getGraphType();
-                GraphType e2BT = e2.getGraphType();
-                if (GraphType.None.equals(e1BT) && GraphType.None.equals(e2BT)) {
-                    long size1 = e1.getFileSize();
-                    long size2 = e2.getFileSize();
-                    if (size1 < size2) {
-                        result = -1;
-                    } else if (size1 > size2) {
-                        result = 1;
-                    }
-                } else if (GraphType.List.equals(e1BT) && GraphType.List.equals(e2BT)) {
-                    Resource e1Res = e1.getResource();
-                    Resource e2Res = e2.getResource();
-                    if (e1Res == null) {
-                        log.warn("No resource found for List: " + e1.getEntryURI());
-                        return 0;
-                    }
-                    if (e2Res == null) {
-                        log.warn("No resource found for List: " + e2.getEntryURI());
-                        return 0;
-                    }
-                    org.entrystore.List e1List = (org.entrystore.List) e1Res;
-                    org.entrystore.List e2List = (org.entrystore.List) e2Res;
-                    int size1 = e1List.getChildren().size();
-                    int size2 = e2List.getChildren().size();
-                    if (size1 < size2) {
-                        result = -1;
-                    } else if (size1 > size2) {
-                        result = 1;
-                    }
-                }
-                if (!ascending) {
-                    result *= -1;
-                }
-            }
-            return result;
-        });
-
+		entries.sort((e1, e2) -> {
+			int result = 0;
+			if (e1 != null && e2 != null) {
+				GraphType e1BT = e1.getGraphType();
+				GraphType e2BT = e2.getGraphType();
+				if (GraphType.None.equals(e1BT) && GraphType.None.equals(e2BT)) {
+					long size1 = e1.getFileSize();
+					long size2 = e2.getFileSize();
+					if (size1 < size2) {
+						result = -1;
+					} else if (size1 > size2) {
+						result = 1;
+					}
+				} else if (GraphType.List.equals(e1BT) && GraphType.List.equals(e2BT)) {
+					Resource e1Res = e1.getResource();
+					Resource e2Res = e2.getResource();
+					if (e1Res == null) {
+						log.warn("No resource found for list: {}", e1.getEntryURI());
+						return 0;
+					}
+					if (e2Res == null) {
+						log.warn("No resource found for list: {}", e2.getEntryURI());
+						return 0;
+					}
+					org.entrystore.List e1List = (org.entrystore.List) e1Res;
+					org.entrystore.List e2List = (org.entrystore.List) e2Res;
+					int size1 = e1List.getChildren().size();
+					int size2 = e2List.getChildren().size();
+					if (size1 < size2) {
+						result = -1;
+					} else if (size1 > size2) {
+						result = 1;
+					}
+				}
+				if (!ascending) {
+					result *= -1;
+				}
+			}
+			return result;
+		});
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
@@ -193,26 +186,24 @@ public class EntryUtil {
 	 *            than entries with a different one.
 	 */
 	public static void sortAfterTitle(List<Entry> entries, final String language, final boolean ascending, final GraphType prioritizedResourceType) {
-
-		Collections.sort(entries, (e1, e2) -> {
-            int result = 0;
-            if (e1 != null && e2 != null) {
-                String title1 = getTitle(e1, language);
-                String title2 = getTitle(e2, language);
-                if (title1 != null && title2 != null) {
-                    result = title1.compareToIgnoreCase(title2);
-                } else if (title1 == null && title2 != null) {
-                    result = 1;
-                } else if (title1 != null) {
-                    result = -1;
-                }
-                if (!ascending) {
-                    result *= -1;
-                }
-            }
-            return result;
-        });
-
+		entries.sort((e1, e2) -> {
+			int result = 0;
+			if (e1 != null && e2 != null) {
+				String title1 = getTitle(e1, language);
+				String title2 = getTitle(e2, language);
+				if (title1 != null && title2 != null) {
+					result = title1.compareToIgnoreCase(title2);
+				} else if (title1 == null && title2 != null) {
+					result = 1;
+				} else if (title1 != null) {
+					result = -1;
+				}
+				if (!ascending) {
+					result *= -1;
+				}
+			}
+			return result;
+		});
 		prioritizeBuiltinType(entries, prioritizedResourceType, true);
 	}
 
@@ -233,22 +224,22 @@ public class EntryUtil {
 			return;
 		}
 
-		Collections.sort(entries, (e1, e2) -> {
-            int result = 0;
-            if (e1 != null && e2 != null) {
-                GraphType e1BT = e1.getGraphType();
-                GraphType e2BT = e2.getGraphType();
-                if (resourceType.equals(e1BT) && !resourceType.equals(e2BT)) {
-                    result = -1;
-                } else if (!resourceType.equals(e1BT) && resourceType.equals(e2BT)) {
-                    result = 1;
-                }
-                if (!top) {
-                    result *= -1;
-                }
-            }
-            return result;
-        });
+		entries.sort((e1, e2) -> {
+			int result = 0;
+			if (e1 != null && e2 != null) {
+				GraphType e1BT = e1.getGraphType();
+				GraphType e2BT = e2.getGraphType();
+				if (resourceType.equals(e1BT) && !resourceType.equals(e2BT)) {
+					result = -1;
+				} else if (!resourceType.equals(e1BT) && resourceType.equals(e2BT)) {
+					result = 1;
+				}
+				if (!top) {
+					result *= -1;
+				}
+			}
+			return result;
+		});
 	}
 
 	/**
@@ -638,8 +629,7 @@ public class EntryUtil {
 		for (IRI pred : predicates) {
 			for (Statement statement : graph.filter(valueFactory.createIRI(resourceURI.toString()), pred, null)) {
 				Value value = statement.getObject();
-				if (value instanceof IRI) {
-					org.eclipse.rdf4j.model.Resource res = (org.eclipse.rdf4j.model.Resource) value;
+				if (value instanceof IRI res) {
 					result.add(res.stringValue());
 				}
 			}
@@ -799,9 +789,6 @@ public class EntryUtil {
 	 * Checks whether a graph contains a predicate/object tuple. A simple String
 	 * comparison is performed, therefore it does not matter of which type
 	 * (Literal, Resource) the object is.
-	 * @param graph
-	 * @param tuples
-	 * @return
 	 */
 	private static boolean graphContainsPredicateObjectTuple(Model graph, Map<String, String> tuples) {
 		if (tuples != null && !tuples.isEmpty()) {

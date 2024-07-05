@@ -18,6 +18,7 @@ package org.entrystore.rest.util;
 
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
+import org.apache.commons.io.FilenameUtils;
 import org.entrystore.Entry;
 import org.entrystore.rest.EntryStoreApplication;
 import org.json.JSONException;
@@ -32,6 +33,8 @@ import org.slf4j.LoggerFactory;
 import javax.servlet.ServletContext;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 
 
 /**
@@ -42,6 +45,67 @@ import java.util.HashMap;
 public class Util {
 
 	static Logger log = LoggerFactory.getLogger(Util.class);
+
+	public static Set<String> dangerousFileExtensions = new HashSet<>();
+
+	static {
+		dangerousFileExtensions.add("apk");
+		dangerousFileExtensions.add("app");
+		dangerousFileExtensions.add("asp");
+		dangerousFileExtensions.add("aspx");
+		dangerousFileExtensions.add("bat");
+		dangerousFileExtensions.add("bin");
+		dangerousFileExtensions.add("cab");
+		dangerousFileExtensions.add("cmd");
+		dangerousFileExtensions.add("com");
+		dangerousFileExtensions.add("command");
+		dangerousFileExtensions.add("cpl");
+		dangerousFileExtensions.add("csh");
+		dangerousFileExtensions.add("ex");
+		dangerousFileExtensions.add("exe");
+		dangerousFileExtensions.add("gadget");
+		dangerousFileExtensions.add("inf");
+		dangerousFileExtensions.add("ins");
+		dangerousFileExtensions.add("inx");
+		dangerousFileExtensions.add("ipa");
+		dangerousFileExtensions.add("isu");
+		dangerousFileExtensions.add("js");
+		dangerousFileExtensions.add("jse");
+		dangerousFileExtensions.add("jsp");
+		dangerousFileExtensions.add("jsx");
+		dangerousFileExtensions.add("ksh");
+		dangerousFileExtensions.add("lnk");
+		dangerousFileExtensions.add("msc");
+		dangerousFileExtensions.add("msi");
+		dangerousFileExtensions.add("msp");
+		dangerousFileExtensions.add("mst");
+		dangerousFileExtensions.add("osx");
+		dangerousFileExtensions.add("out");
+		dangerousFileExtensions.add("paf");
+		dangerousFileExtensions.add("pif");
+		dangerousFileExtensions.add("php");
+		dangerousFileExtensions.add("pl");
+		dangerousFileExtensions.add("plx");
+		dangerousFileExtensions.add("prg");
+		dangerousFileExtensions.add("ps1");
+		dangerousFileExtensions.add("rb");
+		dangerousFileExtensions.add("reg");
+		dangerousFileExtensions.add("rgs");
+		dangerousFileExtensions.add("run");
+		dangerousFileExtensions.add("scr");
+		dangerousFileExtensions.add("sct");
+		dangerousFileExtensions.add("shb");
+		dangerousFileExtensions.add("shs");
+		dangerousFileExtensions.add("u3p");
+		dangerousFileExtensions.add("vb");
+		dangerousFileExtensions.add("vbe");
+		dangerousFileExtensions.add("vbs");
+		dangerousFileExtensions.add("vbscript");
+		dangerousFileExtensions.add("workflow");
+		dangerousFileExtensions.add("ws");
+		dangerousFileExtensions.add("wsf");
+		dangerousFileExtensions.add("wsh");
+	}
 
 	/**
 	 * Takes the parameters from the URL and puts them into a map instead.
@@ -135,6 +199,14 @@ public class Util {
 
 	public static Tag createTag(Date date) {
 		return new Tag(Long.toString(date.getTime()), false);
+	}
+
+	public static String sanitizeFilename(String filename) {
+		String fileExt = FilenameUtils.getExtension(filename);
+		if (fileExt != null && dangerousFileExtensions.contains(fileExt.toLowerCase())) {
+			return filename + "_dangerous";
+		}
+		return filename;
 	}
 
 }

@@ -38,7 +38,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.StringWriter;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
@@ -323,18 +322,18 @@ public class RDFJSON {
 		Objects.requireNonNull(iri);
 
 		try {
-			URI uri = new URI(iri).toURL().toURI();
+			URI uri = new URI(iri);
 
 			if (uri.toString().endsWith(".")) {
-				String messageTemplate = "Provided string \"%s\" is not a valid URL. Error: %s";
+				String messageTemplate = "Provided string \"%s\" is not a valid URI. Error: %s";
 				throw new RDFParseException(String.format(messageTemplate, iri, "String ends in a period '.'"));
 			}
-		} catch (IllegalArgumentException | MalformedURLException | URISyntaxException ex) {
-			String messageTemplate = "Provided string \"%s\" is not a valid URL. Error: %s";
+
+			return vf.createIRI(iri);
+		} catch (IllegalArgumentException | URISyntaxException ex) {
+			String messageTemplate = "Provided string \"%s\" is not a valid URI. Error: %s";
 			throw new RDFParseException(String.format(messageTemplate, iri, ex.getMessage()));
 		}
-
-		return vf.createIRI(iri);
 	}
 
 }

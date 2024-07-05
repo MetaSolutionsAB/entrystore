@@ -133,9 +133,9 @@ public class SignupResource extends BaseResource {
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
-			Entry userEntry = pm.getPrincipalEntry(ci.email);
+			Entry userEntry = pm.getPrincipalEntry(ci.getEmail());
 			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
-					pm.getUserByExternalID(ci.email) != null) {
+					pm.getUserByExternalID(ci.getEmail()) != null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 				return html.representation("User with submitted email address exists already.");
 			}
@@ -143,8 +143,8 @@ public class SignupResource extends BaseResource {
 			// Create user
 			Entry entry = pm.createResource(null, GraphType.User, null, null);
 			if (entry == null) {
-				if (ci.urlFailure != null) {
-					getResponse().redirectTemporary(URLDecoder.decode(ci.urlFailure, StandardCharsets.UTF_8));
+				if (ci.getUrlFailure() != null) {
+					getResponse().redirectTemporary(URLDecoder.decode(ci.getUrlFailure(), StandardCharsets.UTF_8));
 					return new EmptyRepresentation();
 				} else {
 					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
@@ -153,12 +153,12 @@ public class SignupResource extends BaseResource {
 			}
 
 			// Set alias, metadata and password
-			pm.setPrincipalName(entry.getResourceURI(), ci.email);
-			Signup.setFoafMetadata(entry, new org.restlet.security.User("", "", ci.firstName, ci.lastName, ci.email));
+			pm.setPrincipalName(entry.getResourceURI(), ci.getEmail());
+			Signup.setFoafMetadata(entry, new org.restlet.security.User("", "", ci.getFirstName(), ci.getLastName(), ci.getEmail()));
 			User u = (User) entry.getResource();
-			u.setSaltedHashedSecret(ci.saltedHashedPassword);
-			if (ci.customProperties != null) {
-				u.setCustomProperties(ci.customProperties);
+			u.setSaltedHashedSecret(ci.getSaltedHashedPassword());
+			if (ci.getCustomProperties() != null) {
+				u.setCustomProperties(ci.getCustomProperties());
 			}
 			log.info("Created user " + u.getURI());
 
@@ -166,7 +166,7 @@ public class SignupResource extends BaseResource {
 				// Create context and set ACL and alias
 				Entry homeContext = getCM().createResource(null, GraphType.Context, null, null);
 				homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
-				getCM().setName(homeContext.getEntryURI(), ci.email);
+				getCM().setName(homeContext.getEntryURI(), ci.getEmail());
 				log.info("Created context " + homeContext.getResourceURI());
 
 				// Set home context of user
@@ -177,8 +177,8 @@ public class SignupResource extends BaseResource {
 			pm.setAuthenticatedUserURI(authUser);
 		}
 
-		if (ci.urlSuccess != null) {
-			getResponse().redirectTemporary(URLDecoder.decode(ci.urlSuccess, StandardCharsets.UTF_8));
+		if (ci.getUrlSuccess() != null) {
+			getResponse().redirectTemporary(URLDecoder.decode(ci.getUrlSuccess(), StandardCharsets.UTF_8));
 			return new EmptyRepresentation();
 		}
 		getResponse().setStatus(Status.SUCCESS_CREATED);
@@ -194,9 +194,9 @@ public class SignupResource extends BaseResource {
 			return;
 		}
 
-		SignupInfo ci = new SignupInfo();
-		ci.expirationDate = new Date(new Date().getTime() + (24 * 3600 * 1000)); // 24 hours later
-		ci.customProperties = new HashMap<>();
+		SignupInfo ci = new SignupInfo(getRM());
+		ci.setExpirationDate(new Date(new Date().getTime() + (24 * 3600 * 1000))); // 24 hours later
+		ci.setCustomProperties(new HashMap<>());
 		String rcChallenge = null;
 		String rcResponse = null;
 		String rcResponseV2 = null;
@@ -207,13 +207,13 @@ public class SignupResource extends BaseResource {
 			try {
 				JSONObject siJson = new JSONObject(r.getText());
 				if (siJson.has("firstname")) {
-					ci.firstName = siJson.getString("firstname");
+					ci.setFirstName(siJson.getString("firstname"));
 				}
 				if (siJson.has("lastname")) {
-					ci.lastName = siJson.getString("lastname");
+					ci.setLastName(siJson.getString("lastname"));
 				}
 				if (siJson.has("email")) {
-					ci.email = siJson.getString("email");
+					ci.setEmail(siJson.getString("email"));
 				}
 				if (siJson.has("password")) {
 					password = siJson.getString("password");
@@ -228,10 +228,10 @@ public class SignupResource extends BaseResource {
 					rcResponseV2 = siJson.getString("grecaptcharesponse");
 				}
 				if (siJson.has("urlfailure")) {
-					ci.urlFailure = siJson.getString("urlfailure");
+					ci.setUrlFailure(siJson.getString("urlfailure"));
 				}
 				if (siJson.has("urlsuccess")) {
-					ci.urlSuccess = siJson.getString("urlsuccess");
+					ci.setUrlSuccess(siJson.getString("urlsuccess"));
 				}
 
 				// Extract custom properties
@@ -239,7 +239,7 @@ public class SignupResource extends BaseResource {
 				while (siJsonKeyIt.hasNext()) {
 					String key = (String) siJsonKeyIt.next();
 					if (key.startsWith(customPropPrefix) && (key.length() > customPropPrefix.length())) {
-						ci.customProperties.put(key.substring(customPropPrefix.length()), siJson.getString(key));
+						ci.getCustomProperties().put(key.substring(customPropPrefix.length()), siJson.getString(key));
 					}
 				}
 			} catch (Exception e) {
@@ -248,50 +248,52 @@ public class SignupResource extends BaseResource {
 			}
 		} else {
 			Form form = new Form(getRequest().getEntity());
-			ci.firstName = form.getFirstValue("firstname", true);
-			ci.lastName = form.getFirstValue("lastname", true);
-			ci.email = form.getFirstValue("email", true);
+			ci.setFirstName(form.getFirstValue("firstname", true));
+			ci.setLastName(form.getFirstValue("lastname", true));
+			ci.setEmail(form.getFirstValue("email", true));
 			password = form.getFirstValue("password", true);
 			rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
 			rcResponse = form.getFirstValue("recaptcha_response_field", true);
 			rcResponseV2 = form.getFirstValue("g-recaptcha-response", true);
-			ci.urlFailure = form.getFirstValue("urlfailure", true);
-			ci.urlSuccess = form.getFirstValue("urlsuccess", true);
+			ci.setUrlFailure(form.getFirstValue("urlfailure", true));
+			ci.setUrlSuccess(form.getFirstValue("urlsuccess", true));
 
 			// Extract custom properties
 			for (String key : form.getNames()) {
 				if (key.startsWith(customPropPrefix) && (key.length() > customPropPrefix.length())) {
-					ci.customProperties.put(key.substring(customPropPrefix.length()), form.getFirstValue(key));
+					ci.getCustomProperties().put(key.substring(customPropPrefix.length()), form.getFirstValue(key));
 				}
 			}
 		}
 
-		if (ci.firstName == null || ci.lastName == null || ci.email == null || password == null) {
+		if (ci.getFirstName() == null || ci.getLastName() == null || ci.getEmail() == null || password == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("One or more parameters are missing."));
 			return;
 		}
 
-		if (isInvalidName(ci.firstName) || isInvalidName(ci.lastName)) {
+		password = password.trim();
+
+		if (isInvalidName(ci.getFirstName()) || isInvalidName(ci.getLastName())) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("Invalid name."));
 			return;
 		}
 
-		if (password.trim().length() < 8) {
+		if (!Password.conformsToRules(password)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(html.representation("The password has to consist of at least 8 characters."));
+			getResponse().setEntity(html.representation("The password must conform to the configured rules."));
 			return;
 		}
 
-		if (!EmailValidator.getInstance().isValid(ci.email)) {
+		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(html.representation("Invalid email address: " + ci.email));
+			getResponse().setEntity(html.representation("Invalid email address: " + ci.getEmail()));
 			return;
 		}
 
-		if (domainWhitelist.size() > 0) {
-			String emailDomain = ci.email.substring(ci.email.indexOf("@") + 1).toLowerCase();
+		if (!domainWhitelist.isEmpty()) {
+			String emailDomain = ci.getEmail().substring(ci.getEmail().indexOf("@") + 1).toLowerCase();
 			if (!domainWhitelist.contains(emailDomain)) {
 				getResponse().setStatus(Status.CLIENT_ERROR_EXPECTATION_FAILED);
 				getResponse().setEntity(html.representation("The email domain is not allowed for sign-up: " + emailDomain));
@@ -301,7 +303,7 @@ public class SignupResource extends BaseResource {
 
 		Config config = getRM().getConfiguration();
 
-		log.info("Received sign-up request for " + ci.email);
+		log.info("Received sign-up request for " + ci.getEmail());
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
@@ -310,7 +312,7 @@ public class SignupResource extends BaseResource {
 				getResponse().setEntity(html.representation("reCaptcha information missing"));
 				return;
 			}
-			log.info("Checking reCaptcha for " + ci.email);
+			log.info("Checking reCaptcha for " + ci.getEmail());
 
 			String remoteAddr = getRequest().getClientInfo().getUpstreamAddress();
 			boolean reCaptchaIsValid = false;
@@ -326,9 +328,9 @@ public class SignupResource extends BaseResource {
 			}
 
 			if (reCaptchaIsValid) {
-				log.info("Valid reCaptcha for " + ci.email);
+				log.info("Valid reCaptcha for " + ci.getEmail());
 			} else {
-				log.info("Invalid reCaptcha for " + ci.email);
+				log.info("Invalid reCaptcha for " + ci.getEmail());
 				getResponse().setStatus(Status.CLIENT_ERROR_EXPECTATION_FAILED);
 				getResponse().setEntity(html.representation("Invalid reCaptcha received."));
 				return;
@@ -337,21 +339,21 @@ public class SignupResource extends BaseResource {
 
 		String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
-		log.info("Generated sign-up token for " + ci.email);
+		log.info("Generated sign-up token for " + ci.getEmail());
 
-		boolean sendSuccessful = Email.sendSignupConfirmation(getRM().getConfiguration(), ci.firstName + " " + ci.lastName, ci.email, confirmationLink);
+		boolean sendSuccessful = Email.sendSignupConfirmation(getRM().getConfiguration(), ci.getFirstName() + " " + ci.getLastName(), ci.getEmail(), confirmationLink);
 		if (sendSuccessful) {
-			ci.saltedHashedPassword = Password.getSaltedHash(password);
+			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
 			SignupTokenCache.getInstance().putToken(token, ci);
-			log.info("Sent confirmation request to " + ci.email);
+			log.info("Sent confirmation request to " + ci.getEmail());
 		} else {
-			log.info("Failed to send confirmation request to " + ci.email);
+			log.info("Failed to send confirmation request to " + ci.getEmail());
 			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 			return;
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);
-		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.email));
+		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.getEmail()));
 	}
 
 	private String constructHtmlForm(boolean reCaptcha) {

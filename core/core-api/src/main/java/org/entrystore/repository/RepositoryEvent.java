@@ -28,6 +28,7 @@ public enum RepositoryEvent {
 	EntryAclGuestUpdated, // implemented for EntryImpl.setGraph() and changes concerning _guest,
 						  // NOT for EntryImpl.updateAllowedPrincipalsFor() which only seems to be
 						  // used during entry creation
+	EntryProjectTypeUpdated,
 	MetadataUpdated,
 	ExternalMetadataUpdated,
 	ExtractedMetadataUpdated, // TODO event firing not implemented yet

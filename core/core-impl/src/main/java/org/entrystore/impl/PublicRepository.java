@@ -83,9 +83,9 @@ public class PublicRepository {
 				postQueue.cleanUp();
 				int batchCount = 0;
 
-				if (postQueue.estimatedSize() > 0 || deleteQueue.size() > 0) {
-					if (deleteQueue.size() > 0) {
-						Set<Entry> entriesToRemove = new HashSet();
+				if (postQueue.estimatedSize() > 0 || !deleteQueue.isEmpty()) {
+					if (!deleteQueue.isEmpty()) {
+						Set<Entry> entriesToRemove = new HashSet<>();
 						synchronized (deleteQueue) {
 							while (batchCount < BATCH_SIZE) {
 								Entry e = deleteQueue.poll();
@@ -285,7 +285,9 @@ public class PublicRepository {
 					rc.commit();
 				} catch (RepositoryException re) {
 					try {
-						rc.rollback();
+						if (rc != null) {
+							rc.rollback();
+						}
 					} catch (RepositoryException re1) {
 						log.error(re1.getMessage());
 					}

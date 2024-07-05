@@ -1,7 +1,11 @@
 package org.entrystore.rest.auth;
 
-import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_DURATION;
-import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
+import org.entrystore.config.Config;
+import org.entrystore.repository.RepositoryManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.time.Duration;
@@ -11,12 +15,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
-import org.entrystore.PrincipalManager;
-import org.entrystore.User;
-import org.entrystore.config.Config;
-import org.entrystore.repository.RepositoryManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_ADMIN;
+import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_DURATION;
+import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS;
 
 public class UserTempLockoutCache {
 
@@ -24,14 +26,16 @@ public class UserTempLockoutCache {
 
 	private final int configAllowedFailedLoginAttempts;
 	private final Duration configUserLockoutDuration;
+	private final boolean configIncludeAdmin;
 	private final PrincipalManager pm;
 	private final ConcurrentMap<String, UserTemporaryLockout> userTempLockoutMap = new ConcurrentHashMap<>();
 
 	public UserTempLockoutCache(RepositoryManager rm, PrincipalManager pm) {
 		Config config = rm.getConfiguration();
 		this.pm = pm;
-		this.configAllowedFailedLoginAttempts = config.getInt(AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS, -1);
-		this.configUserLockoutDuration = config.getDuration(AUTH_TEMP_LOCKOUT_DURATION, Duration.ZERO);
+		this.configAllowedFailedLoginAttempts = config.getInt(AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS, 5);
+		this.configUserLockoutDuration = config.getDuration(AUTH_TEMP_LOCKOUT_DURATION, Duration.ofMinutes(5));
+		this.configIncludeAdmin = config.getBoolean(AUTH_TEMP_LOCKOUT_ADMIN, true);
 	}
 
 	public void succeedLogin(String userName) {
@@ -46,13 +50,14 @@ public class UserTempLockoutCache {
 		URI userUri = pm.getPrincipalEntry(userName).getResourceURI();
 		User user = pm.getUser(userUri);
 
-		if (pm.isUserAdminOrAdminGroup(userUri)) {
-			log.warn("Admin-user [{}] failed to login due to entering wrong password/secret", userName);
+		log.info("User [{}] failed login attempt due to providing wrong password", userName);
+
+		if (pm.isUserAdminOrAdminGroup(userUri) && !configIncludeAdmin) {
+			log.warn("Login attempt of user [{}] is not counted towards temporary lockout because of configuration for admin users", userName);
 			return;
 		}
 
-		UserTemporaryLockout lockoutEntry =
-				userTempLockoutMap.getOrDefault(userName, new UserTemporaryLockout(user, 1, null));
+		UserTemporaryLockout lockoutEntry = userTempLockoutMap.getOrDefault(userName, new UserTemporaryLockout(user, 1, null));
 
 		if (lockoutEntry.disableUntil() != null && LocalDateTime.now().isAfter(lockoutEntry.disableUntil())) {
 			new UserTemporaryLockout(user, 1, null);
@@ -63,6 +68,7 @@ public class UserTempLockoutCache {
 		} else {
 			LocalDateTime lockedOutUntil = LocalDateTime.now().plus(configUserLockoutDuration);
 			lockoutEntry = new UserTemporaryLockout(user, lockoutEntry.failedLogins() + 1, lockedOutUntil);
+			log.warn("User [{}] failed too many login attempts and will be locked out until {}", userName, lockedOutUntil);
 		}
 		userTempLockoutMap.put(userName, lockoutEntry);
 		pm.setAuthenticatedUserURI(null);

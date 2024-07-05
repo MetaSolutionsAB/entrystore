@@ -821,6 +821,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			};
 			registerListener(contextIndexer, RepositoryEvent.EntryAclGuestUpdated);
+			registerListener(contextIndexer, RepositoryEvent.EntryProjectTypeUpdated);
 		}
 	}
 
