@@ -65,7 +65,7 @@ public class MultipleTransactions {
                         }
 
                         Entry newModuloContext = contextManager.createResource(null, GraphType.Context, null, null);
-                        contextManager.setName(newModuloContext.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS + "_" + (i + 1) / modulo);
+                        contextManager.setName(newModuloContext.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS + "_" + (i + 1) / modulo); // FIXME may add unnecessary overhead
 
                         if (isWithAcl) {
                             newModuloContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, benchmarkUser.getURI());
