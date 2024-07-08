@@ -2,6 +2,7 @@ package org.entrystore.mapper;
 
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.util.ModelBuilder;
 import org.eclipse.rdf4j.model.vocabulary.FOAF;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
@@ -46,7 +47,7 @@ public class ObjectMapper {
 
         Entry entry = context.createResource(null, GraphType.None, ResourceType.NamedResource, null);
 
-        Model model = entry.getLocalMetadata().getGraph();
+        Model model = new LinkedHashModel();
         IRI rootIRI = iri(entry.getResourceURI().toString());
 
         try {
