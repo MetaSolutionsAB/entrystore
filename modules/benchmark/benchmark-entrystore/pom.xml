@@ -17,17 +17,18 @@
     <dependencies>
         <dependency>
             <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-core-impl</artifactId>
+            <artifactId>benchmark-common</artifactId>
             <version>${project.version}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>org.entrystore</groupId>
-            <artifactId>benchmark-common</artifactId>
+            <artifactId>entrystore-core-impl</artifactId>
             <version>${project.version}</version>
             <scope>compile</scope>
         </dependency>
     </dependencies>
+
     <build>
         <plugins>
             <plugin>
