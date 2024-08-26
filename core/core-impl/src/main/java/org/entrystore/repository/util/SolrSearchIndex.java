@@ -1094,13 +1094,16 @@ public class SolrSearchIndex implements SearchIndex {
 							throw new IllegalStateException("Cannot return deleted entry in search result: " + uri);
 						}
 						PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
-						// If linkReference or reference to a entry in the same
-						// repository
+						// If linkReference or reference to an entry in the same repository
 						// check that the referenced metadata is accessible.
 						if ((entry.getEntryType() == EntryType.Reference || entry.getEntryType() == EntryType.LinkReference)
 								&& entry.getCachedExternalMetadata() instanceof LocalMetadataWrapper) {
 							Entry refEntry = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());
-							pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);
+							if (refEntry != null) {
+								pm.checkAuthenticatedUserAuthorized(refEntry, AccessProperty.ReadMetadata);
+							} else {
+								log.error("Entry {} contains reference to non-existing resource.", entry.getEntryURI());
+							}
 						} else {
 							// Check that the local metadata is accessible.
 							pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
