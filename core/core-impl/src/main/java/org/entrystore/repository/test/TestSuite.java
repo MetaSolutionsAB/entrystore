@@ -268,7 +268,7 @@ public class TestSuite {
 			if (format != null) {
 				graph.add(root, dc_format, literal(format));
 			}
-			if(type != null) {
+			if (type != null) {
 				graph.add(root, scam_type, literal(type));
 			}
 			entry.getLocalMetadata().setGraph(graph);
