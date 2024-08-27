@@ -108,7 +108,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private static final Logger log = LoggerFactory.getLogger(RepositoryManagerImpl.class);
 
 	@Getter
-    private Repository repository;
+	private Repository repository;
 
 	private ContextManagerImpl contextManager;
 
@@ -117,8 +117,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private URL baseURL;
 
 	@Setter
-    @Getter
-    private boolean checkForAuthorization = true;
+	@Getter
+	private boolean checkForAuthorization = true;
 
 	private final ArrayList<String> systemContextAliasList = new ArrayList<>();
 
@@ -133,21 +133,21 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private final Object mutex = new Object();
 
 	@Getter
-    private final SoftCache softCache;
+	private final SoftCache softCache;
 
 	@Getter
-    private final Config configuration;
+	private final Config configuration;
 
 	@Getter
-    private CacheManager cacheManager;
+	private CacheManager cacheManager;
 
 	private final boolean quotaEnabled;
 
 	@Getter
-    private long defaultQuota = Quota.VALUE_UNLIMITED;
+	private long defaultQuota = Quota.VALUE_UNLIMITED;
 
 	@Getter
-    private long maximumFileSize = Quota.VALUE_UNLIMITED;
+	private long maximumFileSize = Quota.VALUE_UNLIMITED;
 
 	//ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
 
@@ -158,10 +158,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	private SolrSearchIndex solrIndex;
 
 	@Getter
-    private PublicRepository publicRepository;
+	private PublicRepository publicRepository;
 
 	@Getter
-    private Repository provenanceRepository;
+	private Repository provenanceRepository;
 
 	static boolean trackDeletedEntries;
 
@@ -172,7 +172,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		this.configuration = configuration;
 		String storeType = configuration.getString(Settings.STORE_TYPE, "memory").trim();
 
-        log.info("Store type: {}", storeType);
+		log.info("Store type: {}", storeType);
 
 		if (storeType.equalsIgnoreCase("memory")) {
 			log.info("Using Memory Store");
@@ -209,7 +209,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				String url = configuration.getString(Settings.STORE_URL);
 				String user = configuration.getString(Settings.STORE_USER);
 				String password = configuration.getString(Settings.STORE_PWD);
-                log.info("Using HTTP repository at {}", url);
+				log.info("Using HTTP repository at {}", url);
 				this.repository = new HTTPRepository(url);
 				if (user != null && password != null) {
 					((HTTPRepository) this.repository).setUsernameAndPassword(user, password);
@@ -225,7 +225,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				String endpointUpdate = configuration.getString(Settings.STORE_ENDPOINT_UPDATE);
 				String user = configuration.getString(Settings.STORE_USER);
 				String password = configuration.getString(Settings.STORE_PWD);
-                log.info("Using SPARQL repository at {}, {}", endpointQuery, endpointUpdate);
+				log.info("Using SPARQL repository at {}, {}", endpointQuery, endpointUpdate);
 				this.repository = new SPARQLRepository(endpointQuery, endpointUpdate);
 				if (user != null && password != null) {
 					((SPARQLRepository) this.repository).setUsernameAndPassword(user, password);
@@ -272,7 +272,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			}
 			cacheManager = new CacheManager();
-            log.info("Disk cache activated, using {}", cacheManager.getDiskStorePath());
+			log.info("Disk cache activated, using {}", cacheManager.getDiskStorePath());
 		} else {
 			log.info("Disk cache not activated");
 		}
@@ -285,7 +285,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				log.info("Quota default set to UNLIMITED");
 			} else {
 				defaultQuota = StringUtils.convertUnitStringToByteSize(quotaValue);
-                log.info("Quota default set to {} bytes", defaultQuota);
+				log.info("Quota default set to {} bytes", defaultQuota);
 			}
 		} else {
 			log.info("Context quotas disabled");
@@ -296,7 +296,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			log.info("Maximum file size set to UNLIMITED");
 		} else {
 			maximumFileSize = StringUtils.convertUnitStringToByteSize(maxFileSizeValue);
-            log.info("Maximum file size set to {} bytes", maxFileSizeValue);
+			log.info("Maximum file size set to {} bytes", maxFileSizeValue);
 		}
 
 		setCheckForAuthorization(false);
@@ -305,10 +305,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				this.baseURL = new URI(baseURL).toURL();
 				NS.getMap().put("store", baseURL);
 			} catch (MalformedURLException | URISyntaxException e1) {
-                log.error(e1.getMessage());
+				log.error(e1.getMessage());
 			}
 
-            systemContextAliasList.add("_contexts");
+			systemContextAliasList.add("_contexts");
 			systemContextAliasList.add("_principals");
 
 			alias2Class.put("_contexts", ContextManagerImpl.class);
@@ -330,7 +330,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			if (instances.containsKey(baseURI) || instances.containsValue(this)) {
 				log.warn("This RepositoryManager instance has already been created, something is wrong");
 			} else {
-                log.info("Adding RepositoryManager instance to map: {},{}", baseURI, this);
+				log.info("Adding RepositoryManager instance to map: {},{}", baseURI, this);
 				instances.put(baseURI, this);
 			}
 		} finally {
@@ -338,7 +338,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 
 		trackDeletedEntries = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED, false);
-        log.info("Tracking of deleted entries is {}", trackDeletedEntries ? "activated" : "deactivated");
+		log.info("Tracking of deleted entries is {}", trackDeletedEntries ? "activated" : "deactivated");
 		boolean cleanupDeleted = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED_CLEANUP, false);
 		if (cleanupDeleted) {
 			DataCorrection.cleanupTrackedDeletedEntries(repository);
@@ -401,8 +401,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	/**
 	 * @return Returns a named instance of RepositoryManagerImpl. The method may
-	 *         return null if the RepositoryManager for the given base URI has
-	 *         not been created yet.
+	 * return null if the RepositoryManager for the given base URI has
+	 * not been created yet.
 	 */
 	public static RepositoryManagerImpl getInstance(String baseURI) {
 		// in a more complex setup (like applications running in several
@@ -411,15 +411,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		RepositoryManagerImpl rm = instances.get(baseURI);
 		if (rm != null) {
-            log.info("Instance found for {}", baseURI);
+			log.info("Instance found for {}", baseURI);
 		} else {
-            log.info("No instance found for {}", baseURI);
+			log.info("No instance found for {}", baseURI);
 		}
 
 		return rm;
 	}
 
-    /**
+	/**
 	 * Export the whole repository.
 	 *
 	 * @param file File to export repository to.
@@ -439,11 +439,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		} else if (RDFFormat.BINARY.equals(format)) {
 			rdfWriterFactory = new BinaryRDFWriterFactory();
 		} else {
-            log.error("RDF format is not supported for backups: {}", format);
+			log.error("RDF format is not supported for backups: {}", format);
 			return;
 		}
 
-        log.info("Exporting repository to {}", file);
+		log.info("Exporting repository to {}", file);
 		try {
 			con = repo.getConnection();
 			out = Files.newOutputStream(new File(file).toPath());
@@ -472,7 +472,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		}
 		long timeDiff = new Date().getTime() - before.getTime();
-        log.info("Export finished after {} ms", timeDiff);
+		log.info("Export finished after {} ms", timeDiff);
 	}
 
 	@Override
@@ -483,7 +483,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					log.info("Shutting down Quartz scheduler");
 					StdSchedulerFactory.getDefaultScheduler().shutdown();
 				} catch (SchedulerException se) {
-                    log.error("Cannot shutdown Quartz scheduler: {}", se.getMessage());
+					log.error("Cannot shutdown Quartz scheduler: {}", se.getMessage());
 				}
 				log.info("Shutting down repository listeners and executor");
 				//listenerExecutor.shutdown();
@@ -504,7 +504,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					try {
 						repository.shutDown();
 					} catch (RepositoryException re) {
-                        log.error("Error when shutting down Sesame repository: {}", re.getMessage());
+						log.error("Error when shutting down Sesame repository: {}", re.getMessage());
 						re.printStackTrace();
 					}
 				}
@@ -517,7 +517,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					try {
 						provenanceRepository.shutDown();
 					} catch (RepositoryException re) {
-                        log.error("Error when shutting down Sesame provenance repository: {}", re.getMessage());
+						log.error("Error when shutting down Sesame provenance repository: {}", re.getMessage());
 					}
 				}
 				if (solrServer != null) {
@@ -549,7 +549,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		return this.baseURL;
 	}
 
-    public List<String> getSystemContextAliases() {
+	public List<String> getSystemContextAliases() {
 		return systemContextAliasList;
 	}
 
@@ -566,15 +566,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	public void setModificationLockOut(boolean lockout) {
-        log.info("Lock out set to {}", lockout);
+		log.info("Lock out set to {}", lockout);
 		this.modificationLockout = lockout;
 	}
 
-    public boolean hasQuotas() {
+	public boolean hasQuotas() {
 		return quotaEnabled;
 	}
 
-    public void fireRepositoryEvent(RepositoryEventObject eventObject) {
+	public void fireRepositoryEvent(RepositoryEventObject eventObject) {
 		// because of concurrency problems the events are fired synchronously,
 		// not sure whether this event has a negative impact on performance.
 		// async-code is commented out.
@@ -604,7 +604,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 			listeners.add(listener);
 			repositoryListeners.put(event, listeners);
-            log.info("Registered new RepositoryListener: {}", listener);
+			log.info("Registered new RepositoryListener: {}", listener);
 		}
 	}
 
@@ -614,7 +614,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			if (listeners != null) {
 				listeners.remove(listener);
 				repositoryListeners.put(event, listeners);
-                log.info("Unregistered RepositoryListener: {}", listener);
+				log.info("Unregistered RepositoryListener: {}", listener);
 			}
 		}
 	}
@@ -628,13 +628,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		// Check whether memory store is configured without persistence and enforce
 		// reindexing to avoid inconsistencies between memory store and Solr index
-		if (!reindex && "memory".equalsIgnoreCase(configuration.getString(Settings.STORE_TYPE)) &&	!configuration.containsKey(Settings.STORE_PATH)) {
+		if (!reindex && "memory".equalsIgnoreCase(configuration.getString(Settings.STORE_TYPE)) && !configuration.containsKey(Settings.STORE_PATH)) {
 			reindex = true;
 		}
 
 		String solrURL = configuration.getString(Settings.SOLR_URL);
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
-            log.info("Using HTTP Solr server at {}", solrURL);
+			log.info("Using HTTP Solr server at {}", solrURL);
 
 			HttpSolrClient.Builder solrClientBuilder = new HttpSolrClient.Builder(solrURL).
 					withConnectionTimeout(5000).
@@ -765,7 +765,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					reindexWait = true;
 				}
 			} catch (Exception e) {
-                log.error("Failed to initialize Solr: {}", e.getMessage());
+				log.error("Failed to initialize Solr: {}", e.getMessage());
 			}
 		}
 		if (solrServer != null) {
@@ -891,7 +891,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			try (DirectoryStream<Path> stream = Files.newDirectoryStream(path.toPath())) {
 				for (Path p : stream) {
 					if (!"backup".equals(p.getFileName().toString())) {
-                        log.debug("Moving {} to {}", p, new File(backupPath, p.getFileName().toString()).toPath());
+						log.debug("Moving {} to {}", p, new File(backupPath, p.getFileName().toString()).toPath());
 						Files.move(p, new File(backupPath, p.getFileName().toString()).toPath());
 					}
 				}
@@ -956,7 +956,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			URI versionFile = ConfigurationManager.getConfigurationURI("VERSION.txt");
 			if (versionFile != null) {
 				try {
-                    log.debug("Reading version number from {}", versionFile);
+					log.debug("Reading version number from {}", versionFile);
 					VERSION = IOUtils.toString(versionFile, StandardCharsets.UTF_8);
 					VERSION = VERSION.replace("\n", "");
 					VERSION = VERSION.replace("\r", "");
