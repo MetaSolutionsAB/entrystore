@@ -58,7 +58,7 @@ public class LogUtils {
 
 		logStars(false);
 		logStars(true);
-		log.info("*****               !!! WELCOME TO ENTRYSCAPE BENCHMARK !!!               *****");
+		log.info("*****               !!! WELCOME TO ENTRYSTORE BENCHMARK !!!               *****");
 		logStars(true);
 		logStars(false);
 		log.info("*****       Running Benchmark for {} storage with {} persons {} ", benchmarkType, size, endStars);
