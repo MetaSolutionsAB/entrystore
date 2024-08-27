@@ -6,9 +6,9 @@ import lombok.Getter;
 @Builder
 @Getter
 public class FakeAddress {
-    int identifier;
-    int iterator;
-    String street;
-    String city;
-    String zipCode;
+	int identifier;
+	int iterator;
+	String street;
+	String city;
+	String zipCode;
 }

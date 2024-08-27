@@ -8,8 +8,8 @@ import lombok.experimental.SuperBuilder;
 @Getter
 @Setter
 public class FakeComplexPerson extends FakePerson {
-    int age;
-    String phoneNumber;
-    FakeComplexPerson spouse;
-    FakeCompany company;
+	int age;
+	String phoneNumber;
+	FakeComplexPerson spouse;
+	FakeCompany company;
 }

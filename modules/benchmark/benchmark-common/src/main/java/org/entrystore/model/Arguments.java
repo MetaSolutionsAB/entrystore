@@ -14,24 +14,24 @@ import java.util.UUID;
 @Getter
 @Setter
 public class Arguments {
-    String storeType;
-    int sizeToGenerate = 0;
-    boolean isComplex = false;
-    boolean withTransactions = false;
-    boolean withInterRequests = false;
-    int interRequestsModulo = -1;
-    boolean withInterContexts = false;
-    boolean withAcl = false;
-    File storePath;
-    File solrPath;
+	String storeType;
+	int sizeToGenerate = 0;
+	boolean isComplex = false;
+	boolean withTransactions = false;
+	boolean withInterRequests = false;
+	int interRequestsModulo = -1;
+	boolean withInterContexts = false;
+	boolean withAcl = false;
+	File storePath;
+	File solrPath;
 
-    public void setStorePath() throws IOException {
-        Path path = Paths.get(FileUtils.getTempDirectory().getAbsolutePath(), "benchmark-store-" + UUID.randomUUID());
-        this.storePath = Files.createDirectories(path).toFile();
-    }
+	public void setStorePath() throws IOException {
+		Path path = Paths.get(FileUtils.getTempDirectory().getAbsolutePath(), "benchmark-store-" + UUID.randomUUID());
+		this.storePath = Files.createDirectories(path).toFile();
+	}
 
-    public void setSolrPath() throws IOException {
-        Path path = Paths.get(FileUtils.getTempDirectory().getAbsolutePath(), "benchmark-solr-" + UUID.randomUUID());
-        this.solrPath = Files.createDirectories(path).toFile();
-    }
+	public void setSolrPath() throws IOException {
+		Path path = Paths.get(FileUtils.getTempDirectory().getAbsolutePath(), "benchmark-solr-" + UUID.randomUUID());
+		this.solrPath = Files.createDirectories(path).toFile();
+	}
 }

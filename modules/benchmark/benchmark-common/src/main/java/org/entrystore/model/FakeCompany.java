@@ -6,8 +6,8 @@ import lombok.Getter;
 @Builder
 @Getter
 public class FakeCompany {
-    int identifier;
-    int iterator;
-    String legalName;
-    FakeAddress address;
+	int identifier;
+	int iterator;
+	String legalName;
+	FakeAddress address;
 }

@@ -8,9 +8,9 @@ import lombok.experimental.SuperBuilder;
 @Getter
 @Setter
 public class FakePerson {
-    int identifier;
-    int iterator;
-    String firstName;
-    String lastName;
-    FakeAddress address;
+	int identifier;
+	int iterator;
+	String firstName;
+	String lastName;
+	FakeAddress address;
 }

@@ -18,92 +18,93 @@ import java.util.List;
 
 public class Benchmark {
 
-    @NotNull
-    private static Repository getDatabase(Arguments arguments) {
+	@NotNull
+	private static Repository getDatabase(Arguments arguments) {
 
-        // choose a storage type NATIVE | MEMORY
-        return switch (arguments.getStoreType()) {
-            case BenchmarkCommons.MEMORY -> new SailRepository(new MemoryStore());
-            case BenchmarkCommons.NATIVE -> new SailRepository(new NativeStore(arguments.getStorePath(), BenchmarkCommons.INDEXES));
-            case BenchmarkCommons.LMDB -> new SailRepository(new LmdbStore(arguments.getStorePath()));
-            case null, default -> throw new IllegalArgumentException("Not a valid storage type provided.");
-        };
-    }
+		// choose a storage type NATIVE | MEMORY
+		return switch (arguments.getStoreType()) {
+			case BenchmarkCommons.MEMORY -> new SailRepository(new MemoryStore());
+			case BenchmarkCommons.NATIVE ->
+					new SailRepository(new NativeStore(arguments.getStorePath(), BenchmarkCommons.INDEXES));
+			case BenchmarkCommons.LMDB -> new SailRepository(new LmdbStore(arguments.getStorePath()));
+			case null, default -> throw new IllegalArgumentException("Not a valid storage type provided.");
+		};
+	}
 
-    private static List<Object> generateData(int sizeToGenerate, boolean isComplex) {
+	private static List<Object> generateData(int sizeToGenerate, boolean isComplex) {
 
-        LogUtils.logType("GENERATE");
+		LogUtils.logType("GENERATE");
 
-        LocalDateTime start = LocalDateTime.now();
-        LogUtils.logDate("Starting generating data at", start);
+		LocalDateTime start = LocalDateTime.now();
+		LogUtils.logDate("Starting generating data at", start);
 
-        List<Object> objects = ObjectGenerator.createPersonList(sizeToGenerate, isComplex);
+		List<Object> objects = ObjectGenerator.createPersonList(sizeToGenerate, isComplex);
 
-        LocalDateTime end = LocalDateTime.now();
-        LogUtils.logDate("Ended generating data at", end);
-        LogUtils.logTimeDifference("Generating data took", start, end);
+		LocalDateTime end = LocalDateTime.now();
+		LogUtils.logDate("Ended generating data at", end);
+		LogUtils.logTimeDifference("Generating data took", start, end);
 
-        return objects;
-    }
+		return objects;
+	}
 
-    private static void readAllFromDatabase(RepositoryConnection connection, int sizeToGenerate) {
+	private static void readAllFromDatabase(RepositoryConnection connection, int sizeToGenerate) {
 
-        LogUtils.logType(" READING");
+		LogUtils.logType(" READING");
 
-        LocalDateTime start = LocalDateTime.now();
-        LogUtils.logDate("Starting reading from database at", start);
+		LocalDateTime start = LocalDateTime.now();
+		LogUtils.logDate("Starting reading from database at", start);
 
-        try (RepositoryResult<Statement> result = connection.getStatements(null, null, null)) {
-            String foo;
+		try (RepositoryResult<Statement> result = connection.getStatements(null, null, null)) {
+			String foo;
 
-            for (Statement statement : result) {
-                foo = statement.getObject().stringValue();
+			for (Statement statement : result) {
+				foo = statement.getObject().stringValue();
 
-                if (sizeToGenerate < 11) {
-                    System.out.printf("Database contains: %s\n", statement);
-                }
-            }
-        }
+				if (sizeToGenerate < 11) {
+					System.out.printf("Database contains: %s\n", statement);
+				}
+			}
+		}
 
-        LocalDateTime end = LocalDateTime.now();
-        LogUtils.logDate("Ended reading from database at", end);
-        LogUtils.logTimeDifference("Reading from database took", start, end);
-    }
+		LocalDateTime end = LocalDateTime.now();
+		LogUtils.logDate("Ended reading from database at", end);
+		LogUtils.logTimeDifference("Reading from database took", start, end);
+	}
 
-    public static void main(String[] args) {
+	public static void main(String[] args) {
 
-        try {
+		try {
 
-            Arguments arguments = BenchmarkCommons.processArguments(args);
+			Arguments arguments = BenchmarkCommons.processArguments(args);
 
-            // get the Repository instance based on store type
-            Repository database = getDatabase(arguments);
+			// get the Repository instance based on store type
+			Repository database = getDatabase(arguments);
 
-            // generate list of objects
-            List<Object> objects = generateData(arguments.getSizeToGenerate(), arguments.isComplex());
+			// generate list of objects
+			List<Object> objects = generateData(arguments.getSizeToGenerate(), arguments.isComplex());
 
-            // run either a multi-transaction or single-transaction benchmark
-            try (RepositoryConnection connection = database.getConnection()) {
+			// run either a multi-transaction or single-transaction benchmark
+			try (RepositoryConnection connection = database.getConnection()) {
 
-                if (arguments.isWithTransactions()) {
-                    MultipleTransactions.runBenchmark(connection, objects, arguments.getInterRequestsModulo());
-                } else {
-                    SingleTransaction.runBenchmark(connection, objects);
-                }
+				if (arguments.isWithTransactions()) {
+					MultipleTransactions.runBenchmark(connection, objects, arguments.getInterRequestsModulo());
+				} else {
+					SingleTransaction.runBenchmark(connection, objects);
+				}
 
-                // read statements from database
-                readAllFromDatabase(connection, arguments.getSizeToGenerate());
-            } finally {
-                // close the connection and shutDown the database
-                database.shutDown();
-            }
+				// read statements from database
+				readAllFromDatabase(connection, arguments.getSizeToGenerate());
+			} finally {
+				// close the connection and shutDown the database
+				database.shutDown();
+			}
 
-            // benchmark finished, goodbye message
-            LogUtils.logGoodbye();
+			// benchmark finished, goodbye message
+			LogUtils.logGoodbye();
 
-        } catch (IllegalArgumentException | ArrayIndexOutOfBoundsException | IOException ex) {
-            LogUtils.log.error("No or bad arguments provided.");
-            LogUtils.log.error(ex.getMessage());
-        }
-    }
+		} catch (IllegalArgumentException | ArrayIndexOutOfBoundsException | IOException ex) {
+			LogUtils.log.error("No or bad arguments provided.");
+			LogUtils.log.error(ex.getMessage());
+		}
+	}
 }
