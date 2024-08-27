@@ -9,7 +9,6 @@
 		<artifactId>entrystore-modules</artifactId>
 		<version>5.5-SNAPSHOT</version>
 	</parent>
-	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-harvesting</artifactId>
 	<packaging>pom</packaging>
 	<name>EntryStore Harvesting</name>

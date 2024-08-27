@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-
 package org.entrystore.impl;
 
+import lombok.Getter;
+import lombok.Setter;
 import net.sf.ehcache.CacheManager;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -48,6 +49,8 @@ import org.eclipse.rdf4j.rio.binary.BinaryRDFWriterFactory;
 import org.eclipse.rdf4j.rio.nquads.NQuadsWriterFactory;
 import org.eclipse.rdf4j.rio.trig.TriGWriterFactory;
 import org.eclipse.rdf4j.rio.trix.TriXWriterFactory;
+import org.eclipse.rdf4j.sail.lmdb.LmdbStore;
+import org.eclipse.rdf4j.sail.lmdb.config.LmdbStoreConfig;
 import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
 import org.entrystore.ContextManager;
@@ -80,6 +83,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
@@ -95,6 +99,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.zip.GZIPOutputStream;
 
@@ -102,6 +107,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private static final Logger log = LoggerFactory.getLogger(RepositoryManagerImpl.class);
 
+	@Getter
 	private Repository repository;
 
 	private ContextManagerImpl contextManager;
@@ -110,6 +116,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private URL baseURL;
 
+	@Setter
+	@Getter
 	private boolean checkForAuthorization = true;
 
 	private final ArrayList<String> systemContextAliasList = new ArrayList<>();
@@ -124,16 +132,21 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private final Object mutex = new Object();
 
+	@Getter
 	private final SoftCache softCache;
 
-	private final Config config;
+	@Getter
+	private final Config configuration;
 
+	@Getter
 	private CacheManager cacheManager;
 
-	private boolean quotaEnabled = false;
+	private final boolean quotaEnabled;
 
+	@Getter
 	private long defaultQuota = Quota.VALUE_UNLIMITED;
 
+	@Getter
 	private long maximumFileSize = Quota.VALUE_UNLIMITED;
 
 	//ThreadPoolExecutor listenerExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(15);
@@ -144,25 +157,27 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private SolrSearchIndex solrIndex;
 
+	@Getter
 	private PublicRepository publicRepository;
 
+	@Getter
 	private Repository provenanceRepository;
 
 	static boolean trackDeletedEntries;
 
 	private static String VERSION = null;
 
-	public RepositoryManagerImpl(String baseURL, Config config) {
+	public RepositoryManagerImpl(String baseURL, Config configuration) {
 		System.setProperty("org.openrdf.repository.debug", "true");
-		this.config = config;
-		String storeType = config.getString(Settings.STORE_TYPE, "memory").trim();
+		this.configuration = configuration;
+		String storeType = configuration.getString(Settings.STORE_TYPE, "memory").trim();
 
-		log.info("Store type: " + storeType);
+		log.info("Store type: {}", storeType);
 
 		if (storeType.equalsIgnoreCase("memory")) {
 			log.info("Using Memory Store");
-			if (config.containsKey(Settings.STORE_PATH)) {
-				MemoryStore ms = new MemoryStore(new File(config.getURI(Settings.STORE_PATH)));
+			if (configuration.containsKey(Settings.STORE_PATH)) {
+				MemoryStore ms = new MemoryStore(new File(configuration.getURI(Settings.STORE_PATH)));
 				ms.setPersist(true);
 				ms.setSyncDelay(5000);
 				this.repository = new SailRepository(ms);
@@ -170,15 +185,15 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				this.repository = new SailRepository(new MemoryStore());
 			}
 		} else if (storeType.equalsIgnoreCase("native")) {
-			if (!config.containsKey(Settings.STORE_PATH)) {
-				log.error("Incomplete configuration");
+			if (!configuration.containsKey(Settings.STORE_PATH)) {
+				log.error("Incomplete configuration for Native store");
 				throw new IllegalStateException("Incomplete configuration");
 			} else {
-				File path = new File(config.getURI(Settings.STORE_PATH));
-				String indexes = config.getString(Settings.STORE_INDEXES);
+				File path = new File(configuration.getURI(Settings.STORE_PATH));
+				String indexes = configuration.getString(Settings.STORE_INDEXES);
 				checkAndUpgradeNativeStore(path, indexes);
 				log.info("Main repository: using Native Store at {} with indexes {}", path, indexes);
-				NativeStore store = null;
+				NativeStore store;
 				if (indexes != null) {
 					store = new NativeStore(path, indexes);
 				} else {
@@ -187,34 +202,50 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				this.repository = new SailRepository(store);
 			}
 		} else if (storeType.equalsIgnoreCase("http")) {
-			if (!config.containsKey(Settings.STORE_URL)) {
-				log.error("Incomplete configuration");
+			if (!configuration.containsKey(Settings.STORE_URL)) {
+				log.error("Incomplete configuration for HTTP store");
 				throw new IllegalStateException("Incomplete configuration");
 			} else {
-				String url = config.getString(Settings.STORE_URL);
-				String user = config.getString(Settings.STORE_USER);
-				String password = config.getString(Settings.STORE_PWD);
-				log.info("Using HTTP repository at " + url);
+				String url = configuration.getString(Settings.STORE_URL);
+				String user = configuration.getString(Settings.STORE_USER);
+				String password = configuration.getString(Settings.STORE_PWD);
+				log.info("Using HTTP repository at {}", url);
 				this.repository = new HTTPRepository(url);
 				if (user != null && password != null) {
 					((HTTPRepository) this.repository).setUsernameAndPassword(user, password);
 				}
 			}
 		} else if (storeType.equalsIgnoreCase("sparql")) {
-			if (!config.containsKey(Settings.STORE_ENDPOINT_QUERY) ||
-					!config.containsKey(Settings.STORE_ENDPOINT_UPDATE)) {
-				log.error("Incomplete configuration");
+			if (!configuration.containsKey(Settings.STORE_ENDPOINT_QUERY) ||
+					!configuration.containsKey(Settings.STORE_ENDPOINT_UPDATE)) {
+				log.error("Incomplete configuration for sparql store");
 				throw new IllegalStateException("Incomplete configuration");
 			} else {
-				String endpointQuery = config.getString(Settings.STORE_ENDPOINT_QUERY);
-				String endpointUpdate = config.getString(Settings.STORE_ENDPOINT_UPDATE);
-				String user = config.getString(Settings.STORE_USER);
-				String password = config.getString(Settings.STORE_PWD);
-				log.info("Using SPARQL repository at " + endpointQuery + ", " + endpointUpdate);
+				String endpointQuery = configuration.getString(Settings.STORE_ENDPOINT_QUERY);
+				String endpointUpdate = configuration.getString(Settings.STORE_ENDPOINT_UPDATE);
+				String user = configuration.getString(Settings.STORE_USER);
+				String password = configuration.getString(Settings.STORE_PWD);
+				log.info("Using SPARQL repository at {}, {}", endpointQuery, endpointUpdate);
 				this.repository = new SPARQLRepository(endpointQuery, endpointUpdate);
 				if (user != null && password != null) {
 					((SPARQLRepository) this.repository).setUsernameAndPassword(user, password);
 				}
+			}
+		} else if (storeType.equalsIgnoreCase("lmdb")) {
+			if (!configuration.containsKey(Settings.STORE_PATH)) {
+				log.error("Incomplete configuration for LMDB store");
+				throw new IllegalStateException("Incomplete configuration");
+			} else {
+				File path = new File(configuration.getURI(Settings.STORE_PATH));
+				String indexes = configuration.getString(Settings.STORE_INDEXES);
+				log.info("Main repository: using LMDB Store at {} with indexes {}", path, indexes);
+				LmdbStore store;
+				if (indexes != null) {
+					store = new LmdbStore(path, new LmdbStoreConfig().setTripleIndexes(indexes));
+				} else {
+					store = new LmdbStore(path);
+				}
+				this.repository = new SailRepository(store);
 			}
 		}
 
@@ -226,8 +257,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		// create soft cache
 		softCache = new SoftCache();
 
-		if (config.getString(Settings.REPOSITORY_CACHE, "off").equalsIgnoreCase("on")) {
-			String cachePath = config.getString(Settings.REPOSITORY_CACHE_PATH);
+		if (configuration.getString(Settings.REPOSITORY_CACHE, "off").equalsIgnoreCase("on")) {
+			String cachePath = configuration.getString(Settings.REPOSITORY_CACHE_PATH);
 			if (cachePath != null) {
 				System.setProperty("ehcache.disk.store.dir", cachePath);
 			} else {
@@ -241,40 +272,40 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			}
 			cacheManager = new CacheManager();
-			log.info("Disk cache activated, using " + cacheManager.getDiskStorePath());
+			log.info("Disk cache activated, using {}", cacheManager.getDiskStorePath());
 		} else {
 			log.info("Disk cache not activated");
 		}
 
-		quotaEnabled = config.getString(Settings.DATA_QUOTA, "off").equalsIgnoreCase("on");
+		quotaEnabled = configuration.getString(Settings.DATA_QUOTA, "off").equalsIgnoreCase("on");
 		if (quotaEnabled) {
 			log.info("Context quotas enabled");
-			String quotaValue = config.getString(Settings.DATA_QUOTA_DEFAULT);
+			String quotaValue = configuration.getString(Settings.DATA_QUOTA_DEFAULT);
 			if (quotaValue == null) {
 				log.info("Quota default set to UNLIMITED");
 			} else {
 				defaultQuota = StringUtils.convertUnitStringToByteSize(quotaValue);
-				log.info("Quota default set to " + defaultQuota + " bytes");
+				log.info("Quota default set to {} bytes", defaultQuota);
 			}
 		} else {
 			log.info("Context quotas disabled");
 		}
 
-		String maxFileSizeValue = config.getString(Settings.DATA_MAX_FILE_SIZE);
+		String maxFileSizeValue = configuration.getString(Settings.DATA_MAX_FILE_SIZE);
 		if (maxFileSizeValue == null) {
 			log.info("Maximum file size set to UNLIMITED");
 		} else {
 			maximumFileSize = StringUtils.convertUnitStringToByteSize(maxFileSizeValue);
-			log.info("Maximum file size set to " + maxFileSizeValue + " bytes");
+			log.info("Maximum file size set to {} bytes", maxFileSizeValue);
 		}
 
 		setCheckForAuthorization(false);
 		try {
 			try {
-				this.baseURL = new URL(baseURL);
+				this.baseURL = new URI(baseURL).toURL();
 				NS.getMap().put("store", baseURL);
-			} catch (MalformedURLException e1) {
-                log.error(e1.getMessage());
+			} catch (MalformedURLException | URISyntaxException e1) {
+				log.error(e1.getMessage());
 			}
 
 			systemContextAliasList.add("_contexts");
@@ -289,66 +320,62 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				log.error(e.getMessage());
 			}
 
-			if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PROVENANCE, "off"))) {
+			if ("on".equalsIgnoreCase(configuration.getString(Settings.REPOSITORY_PROVENANCE, "off"))) {
 				initializeProvenanceRepository();
 			}
 
 			this.initialize();
 
-			String baseURI = config.getString(Settings.BASE_URL);
+			String baseURI = configuration.getString(Settings.BASE_URL);
 			if (instances.containsKey(baseURI) || instances.containsValue(this)) {
 				log.warn("This RepositoryManager instance has already been created, something is wrong");
 			} else {
-				log.info("Adding RepositoryManager instance to map: " + baseURI + "," + this);
+				log.info("Adding RepositoryManager instance to map: {},{}", baseURI, this);
 				instances.put(baseURI, this);
 			}
 		} finally {
 			setCheckForAuthorization(true);
 		}
 
-		trackDeletedEntries = config.getBoolean(Settings.REPOSITORY_TRACK_DELETED, false);
-		log.info("Tracking of deleted entries is " + (trackDeletedEntries ? "activated" : "deactivated"));
-		boolean cleanupDeleted = config.getBoolean(Settings.REPOSITORY_TRACK_DELETED_CLEANUP, false);
+		trackDeletedEntries = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED, false);
+		log.info("Tracking of deleted entries is {}", trackDeletedEntries ? "activated" : "deactivated");
+		boolean cleanupDeleted = configuration.getBoolean(Settings.REPOSITORY_TRACK_DELETED_CLEANUP, false);
 		if (cleanupDeleted) {
 			DataCorrection.cleanupTrackedDeletedEntries(repository);
 		}
 
-		if ("on".equalsIgnoreCase(config.getString(Settings.SOLR, "off")) && config.containsKey(Settings.SOLR_URL)) {
+		if ("on".equalsIgnoreCase(configuration.getString(Settings.SOLR, "off")) && configuration.containsKey(Settings.SOLR_URL)) {
 			log.info("Initializing Solr");
 			initSolr();
 			registerSolrListeners();
 		}
 
-		if ("on".equalsIgnoreCase(config.getString(Settings.REPOSITORY_PUBLIC, "off"))) {
+		if ("on".equalsIgnoreCase(configuration.getString(Settings.REPOSITORY_PUBLIC, "off"))) {
 			log.info("Initializing public repository");
 			publicRepository = new PublicRepository(this);
 			registerPublicRepositoryListeners();
 		}
 
 		log.info("Adding shutdown hook");
-		Runtime.getRuntime().addShutdownHook(new Thread() {
-			public void run() {
-				shutdown();
-			}
-		});
+		Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
 	}
 
 	private void initializeProvenanceRepository() {
-		String storeType = config.getString(Settings.REPOSITORY_PROVENANCE_TYPE, "memory").trim();
+		String storeType = configuration.getString(Settings.REPOSITORY_PROVENANCE_TYPE, "memory").trim();
 		log.info("Provenance repository type: " + storeType);
 
 		if (storeType.equalsIgnoreCase("memory")) {
 			this.provenanceRepository = new SailRepository(new MemoryStore());
 		} else if (storeType.equalsIgnoreCase("native")) {
-			if (!config.containsKey(Settings.REPOSITORY_PROVENANCE_PATH)) {
+			if (!configuration.containsKey(Settings.REPOSITORY_PROVENANCE_PATH)) {
 				log.error("Incomplete configuration of provenance repository");
 			} else {
-				File path = new File(config.getURI(Settings.REPOSITORY_PROVENANCE_PATH));
-				String indexes = config.getString(Settings.REPOSITORY_PROVENANCE_INDEXES);
+				File path = new File(configuration.getURI(Settings.REPOSITORY_PROVENANCE_PATH));
+				String indexes = configuration.getString(Settings.REPOSITORY_PROVENANCE_INDEXES);
 				checkAndUpgradeNativeStore(path, indexes);
 				log.info("Provenance repository: using Native Store at {} with indexes {}", path, indexes);
 
-				NativeStore store = null;
+				NativeStore store;
 				if (indexes != null) {
 					store = new NativeStore(path, indexes);
 				} else {
@@ -374,8 +401,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	/**
 	 * @return Returns a named instance of RepositoryManagerImpl. The method may
-	 *         return null if the RepositoryManager for the given base URI has
-	 *         not been created yet.
+	 * return null if the RepositoryManager for the given base URI has
+	 * not been created yet.
 	 */
 	public static RepositoryManagerImpl getInstance(String baseURI) {
 		// in a more complex setup (like applications running in several
@@ -384,24 +411,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		RepositoryManagerImpl rm = instances.get(baseURI);
 		if (rm != null) {
-			log.info("Instance found for " + baseURI);
+			log.info("Instance found for {}", baseURI);
 		} else {
-			log.info("No instance found for " + baseURI);
+			log.info("No instance found for {}", baseURI);
 		}
 
 		return rm;
-	}
-
-	public Repository getRepository() {
-		return this.repository;
-	}
-
-	public PublicRepository getPublicRepository() {
-		return this.publicRepository;
-	}
-
-	public Repository getProvenanceRepository() {
-		return this.provenanceRepository;
 	}
 
 	/**
@@ -413,7 +428,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		RepositoryConnection con = null;
 		OutputStream out = null;
 		Date before = new Date();
-		RDFWriterFactory rdfWriterFactory = null;
+		RDFWriterFactory rdfWriterFactory;
 
 		if (RDFFormat.TRIG.equals(format)) {
 			rdfWriterFactory = new TriGWriterFactory();
@@ -424,11 +439,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		} else if (RDFFormat.BINARY.equals(format)) {
 			rdfWriterFactory = new BinaryRDFWriterFactory();
 		} else {
-			log.error("RDF format is not supported for backups: " + format);
+			log.error("RDF format is not supported for backups: {}", format);
 			return;
 		}
 
-		log.info("Exporting repository to " + file);
+		log.info("Exporting repository to {}", file);
 		try {
 			con = repo.getConnection();
 			out = Files.newOutputStream(new File(file).toPath());
@@ -457,7 +472,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		}
 		long timeDiff = new Date().getTime() - before.getTime();
-		log.info("Export finished after " + timeDiff + " ms");
+		log.info("Export finished after {} ms", timeDiff);
 	}
 
 	@Override
@@ -468,7 +483,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					log.info("Shutting down Quartz scheduler");
 					StdSchedulerFactory.getDefaultScheduler().shutdown();
 				} catch (SchedulerException se) {
-					log.error("Cannot shutdown Quartz scheduler: " + se.getMessage());
+					log.error("Cannot shutdown Quartz scheduler: {}", se.getMessage());
 				}
 				log.info("Shutting down repository listeners and executor");
 				//listenerExecutor.shutdown();
@@ -489,7 +504,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					try {
 						repository.shutDown();
 					} catch (RepositoryException re) {
-						log.error("Error when shutting down Sesame repository: " + re.getMessage());
+						log.error("Error when shutting down Sesame repository: {}", re.getMessage());
 						re.printStackTrace();
 					}
 				}
@@ -502,7 +517,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					try {
 						provenanceRepository.shutDown();
 					} catch (RepositoryException re) {
-						log.error("Error when shutting down Sesame provenance repository: " + re.getMessage());
+						log.error("Error when shutting down Sesame provenance repository: {}", re.getMessage());
 					}
 				}
 				if (solrServer != null) {
@@ -534,14 +549,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		return this.baseURL;
 	}
 
-	public boolean isCheckForAuthorization() {
-		return checkForAuthorization;
-	}
-
-	public void setCheckForAuthorization(boolean checkForAuthorization) {
-		this.checkForAuthorization = checkForAuthorization;
-	}
-
 	public List<String> getSystemContextAliases() {
 		return systemContextAliasList;
 	}
@@ -559,32 +566,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	public void setModificationLockOut(boolean lockout) {
-		log.info("Lock out set to " + lockout);
+		log.info("Lock out set to {}", lockout);
 		this.modificationLockout = lockout;
-	}
-
-	public Config getConfiguration() {
-		return config;
-	}
-
-	public SoftCache getSoftCache() {
-		return softCache;
-	}
-
-	public CacheManager getCacheManager() {
-		return cacheManager;
-	}
-
-	public long getDefaultQuota() {
-		return defaultQuota;
 	}
 
 	public boolean hasQuotas() {
 		return quotaEnabled;
-	}
-
-	public long getMaximumFileSize() {
-		return maximumFileSize;
 	}
 
 	public void fireRepositoryEvent(RepositoryEventObject eventObject) {
@@ -613,11 +600,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		synchronized (repositoryListeners) {
 			Set<RepositoryListener> listeners = repositoryListeners.get(event);
 			if (listeners == null) {
-				listeners = new HashSet<RepositoryListener>();
+				listeners = new HashSet<>();
 			}
 			listeners.add(listener);
 			repositoryListeners.put(event, listeners);
-			log.info("Registered new RepositoryListener: " + listener);
+			log.info("Registered new RepositoryListener: {}", listener);
 		}
 	}
 
@@ -627,7 +614,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			if (listeners != null) {
 				listeners.remove(listener);
 				repositoryListeners.put(event, listeners);
-				log.info("Unregistered RepositoryListener: " + listener);
+				log.info("Unregistered RepositoryListener: {}", listener);
 			}
 		}
 	}
@@ -636,26 +623,26 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		log.info("Manually setting property \"javax.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");
 		System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
 
-		boolean reindex = config.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false);
-		boolean reindexWait = config.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, false);
+		boolean reindex = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false);
+		boolean reindexWait = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, false);
 
 		// Check whether memory store is configured without persistence and enforce
 		// reindexing to avoid inconsistencies between memory store and Solr index
-		if (!reindex && "memory".equalsIgnoreCase(config.getString(Settings.STORE_TYPE)) &&	!config.containsKey(Settings.STORE_PATH)) {
+		if (!reindex && "memory".equalsIgnoreCase(configuration.getString(Settings.STORE_TYPE)) && !configuration.containsKey(Settings.STORE_PATH)) {
 			reindex = true;
 		}
 
-		String solrURL = config.getString(Settings.SOLR_URL);
+		String solrURL = configuration.getString(Settings.SOLR_URL);
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
-			log.info("Using HTTP Solr server at " + solrURL);
+			log.info("Using HTTP Solr server at {}", solrURL);
 
 			HttpSolrClient.Builder solrClientBuilder = new HttpSolrClient.Builder(solrURL).
 					withConnectionTimeout(5000).
 					withSocketTimeout(5000).
 					allowCompression(true);
 
-			String solrUsername = config.getString(Settings.SOLR_AUTH_USERNAME);
-			String solrPassword = config.getString(Settings.SOLR_AUTH_PASSWORD);
+			String solrUsername = configuration.getString(Settings.SOLR_AUTH_USERNAME);
+			String solrPassword = configuration.getString(Settings.SOLR_AUTH_PASSWORD);
 
 			if (solrUsername != null && solrPassword != null) {
 				CredentialsProvider provider = new BasicCredentialsProvider();
@@ -721,7 +708,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			}
 
-			if (solrDir.list() != null && solrDir.list().length == 0) {
+			if (solrDir.list() != null && Objects.requireNonNull(solrDir.list()).length == 0) {
 				log.info("Solr directory is empty, scheduling conditional reindexing of repository");
 				reindex = true;
 				reindexWait = true;
@@ -738,7 +725,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			}
 
-			URL solrConfigXmlSource = config.getURL(Settings.SOLR_CONFIG_URL, ConverterUtil.findResource("solrconfig.xml_default"));
+			URL solrConfigXmlSource = configuration.getURL(Settings.SOLR_CONFIG_URL, ConverterUtil.findResource("solrconfig.xml_default"));
 			File solrConfigXmlDest = new File(solrCoreConfDir, "solrconfig.xml");
 			try {
 				log.info("Copying Solr solrconfig.xml from {} to {}", solrConfigXmlSource, solrConfigXmlDest);
@@ -747,7 +734,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				log.error(e.getMessage());
 			}
 
-			URL solrSchemaXmlSource = config.getURL(Settings.SOLR_SCHEMA_URL, ConverterUtil.findResource("schema.xml_default"));
+			URL solrSchemaXmlSource = configuration.getURL(Settings.SOLR_SCHEMA_URL, ConverterUtil.findResource("schema.xml_default"));
 			File solrSchemaXmlDest = new File(solrCoreConfDir, "schema.xml");
 			try {
 				log.info("Copying Solr schema.xml from {} to {}", solrSchemaXmlSource, solrSchemaXmlDest);
@@ -778,7 +765,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					reindexWait = true;
 				}
 			} catch (Exception e) {
-				log.error("Failed to initialize Solr: " + e.getMessage());
+				log.error("Failed to initialize Solr: {}", e.getMessage());
 			}
 		}
 		if (solrServer != null) {
@@ -879,7 +866,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	protected void checkAndUpgradeNativeStore(File path, String indexes) {
-		if (path.exists() && path.isDirectory() && (path.list().length == 0 || new File(path, "nativerdf.ver").exists())) {
+		if (path.exists() && path.isDirectory() && (Objects.requireNonNull(path.list()).length == 0 || new File(path, "nativerdf.ver").exists())) {
 			// no upgrade needed
 			return;
 		}
@@ -892,7 +879,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 
 		File backupPath = new File(path, "backup");
-		if (backupPath.exists() && backupPath.isDirectory() && backupPath.list().length > 0) {
+		if (backupPath.exists() && backupPath.isDirectory() && Objects.requireNonNull(backupPath.list()).length > 0) {
 			throw new RuntimeException(("Backup path at " + backupPath + " exists and is not empty"));
 		}
 
@@ -904,7 +891,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			try (DirectoryStream<Path> stream = Files.newDirectoryStream(path.toPath())) {
 				for (Path p : stream) {
 					if (!"backup".equals(p.getFileName().toString())) {
-						log.debug("Moving " + p + " to " + new File(backupPath, p.getFileName().toString()).toPath());
+						log.debug("Moving {} to {}", p, new File(backupPath, p.getFileName().toString()).toPath());
 						Files.move(p, new File(backupPath, p.getFileName().toString()).toPath());
 					}
 				}
@@ -969,7 +956,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			URI versionFile = ConfigurationManager.getConfigurationURI("VERSION.txt");
 			if (versionFile != null) {
 				try {
-					log.debug("Reading version number from " + versionFile);
+					log.debug("Reading version number from {}", versionFile);
 					VERSION = IOUtils.toString(versionFile, StandardCharsets.UTF_8);
 					VERSION = VERSION.replace("\n", "");
 					VERSION = VERSION.replace("\r", "");

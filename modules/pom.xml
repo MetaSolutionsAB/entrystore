@@ -19,6 +19,7 @@
 		<module>rest</module>
 		<module>rest-standalone</module>
 		<module>transforms</module>
+		<module>benchmark</module>
 		<!-- SQI not functional at the moment, needs refactoring -->
 		<!-- <module>sqi</module>-->
 	</modules>
