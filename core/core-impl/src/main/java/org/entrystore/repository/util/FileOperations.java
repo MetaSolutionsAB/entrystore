@@ -159,17 +159,16 @@ public class FileOperations {
 		long bytesCopied = 0;
 		byte[] b = new byte[BUFFER_SIZE];
 		int s;
-		while ((s = bis.read(b)) != -1) {
-			bos.write(b, 0, s);
-			bytesCopied += s;
+		try {
+			while ((s = bis.read(b)) != -1) {
+				bos.write(b, 0, s);
+				bytesCopied += s;
+			}
+		} catch (NullPointerException npe) {
+			throw new IOException(npe);
 		}
-		if (bis != null) {
-			bis.close();
-		}
-		if (bos != null) {
-			bos.flush();
-			bos.close();
-		}
+		bis.close();
+		bos.close();
 		return bytesCopied;
 	}
 
