@@ -17,13 +17,14 @@
 
 package org.entrystore.repository.util;
 
-import org.eclipse.rdf4j.model.IRI;
+import lombok.Getter;
 import org.entrystore.impl.RepositoryProperties;
 
 import java.net.URI;
 import java.net.URL;
 import java.util.StringTokenizer;
 
+@Getter
 public class URISplit {
 
 	public enum URIType {
@@ -33,7 +34,7 @@ public class URISplit {
 		Unknown
 	}
 
-	URIType ut;
+	URIType uriType;
 	String contextId;
 	String id;
 	String path;
@@ -60,23 +61,19 @@ public class URISplit {
 				isContext = true;
 			}
 			if (path.equals(RepositoryProperties.ENTRY_PATH)) {
-				ut = URIType.MetaMetadata;
+				uriType = URIType.MetaMetadata;
 			} else if (path.equals(RepositoryProperties.MD_PATH)) {
-				ut = URIType.Metadata;
+				uriType = URIType.Metadata;
 			} else {
-				ut = URIType.Resource;
+				uriType = URIType.Resource;
 			}
 		} else {
-			ut = URIType.Unknown;
+			uriType = URIType.Unknown;
 		}
 	}
 
 	public URI getMetaMetadataURI() {
 		return fabricateURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
-	}
-
-	public URI getMetadataURI() {
-		return fabricateURI(base, contextId, RepositoryProperties.MD_PATH, id);
 	}
 
 	public URI getResourceURI() {
@@ -87,28 +84,12 @@ public class URISplit {
 		}
 	}
 
-	public String getContextID() {
-		return contextId;
-	}
-
 	public URI getContextMetaMetadataURI() {
 		return fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);
 	}
 
-	public URI getContextMetadataURI() {
-		return fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId);
-	}
-
 	public URI getContextURI() {
 		return URI.create(base + contextId);
-	}
-
-	public URIType getURIType() {
-		return ut;
-	}
-
-	public String getID() {
-		return id;
 	}
 
 	public static URI fabricateURI(String base, String contextId, String path, String entryId) {
