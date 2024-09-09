@@ -48,7 +48,7 @@ public class URISplit {
 	public URISplit(String anyURIStr, URL baseURL) {
 		base = baseURL.toString();
 		if (anyURIStr.startsWith(base)) {
-			String withoutBase = anyURIStr.substring(base.toString().length());
+			String withoutBase = anyURIStr.substring(base.length());
 			StringTokenizer st = new StringTokenizer(withoutBase, "/");
 			contextId = st.nextToken();
 			if (st.hasMoreTokens()) {
@@ -78,7 +78,7 @@ public class URISplit {
 
 	public URI getResourceURI() {
 		if (isContext) {
-			return fabricateContextURI(base, id);
+			return fabricateURI(base, id, null, null);
 		} else {
 			return fabricateURI(base, contextId, RepositoryProperties.DATA_PATH, id);
 		}
@@ -89,14 +89,24 @@ public class URISplit {
 	}
 
 	public URI getContextURI() {
-		return URI.create(base + contextId);
+		return URI.create(getBaseContextURI(base, contextId));
 	}
 
 	public static URI fabricateURI(String base, String contextId, String path, String entryId) {
-		return URI.create(base + contextId + "/" + path + "/" + entryId);
+		String uri = getBaseContextURI(base, contextId);
+
+		if (path != null) {
+			uri = uri.concat("/").concat(path);
+		}
+
+		if (entryId != null) {
+			uri = uri.concat("/").concat(entryId);
+		}
+
+		return URI.create(uri);
 	}
 
-	public static URI fabricateContextURI(String base, String contextId) {
-		return URI.create(base + contextId);
+	private static String getBaseContextURI(String base, String contextId) {
+		return base.concat(contextId);
 	}
 }
