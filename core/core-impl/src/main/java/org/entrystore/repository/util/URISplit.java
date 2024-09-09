@@ -40,10 +40,6 @@ public class URISplit {
 	String base;
 	boolean isContext = false;
 
-	public URISplit(IRI anyURI, URL baseURL) {
-		this(anyURI.toString(), baseURL);
-	}
-
 	public URISplit(URI anyURI, URL baseURL) {
 		this(anyURI.toString(), baseURL);
 	}
