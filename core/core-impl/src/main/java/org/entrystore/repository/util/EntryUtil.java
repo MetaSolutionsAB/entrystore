@@ -644,7 +644,7 @@ public class EntryUtil {
 	public static boolean isDeleted(Entry entry) {
 		String repoURL = entry.getRepositoryManager().getRepositoryURL().toString();
 		String contextID = entry.getContext().getEntry().getId();
-		URI trashURI = URISplit.fabricateURI(repoURL, contextID, RepositoryProperties.LIST_PATH, "_trash");
+		URI trashURI = URISplit.createURI(repoURL, contextID, RepositoryProperties.LIST_PATH, "_trash");
 		Set<URI> referredBy = entry.getReferringListsInSameContext();
         return (referredBy.size() == 1) && (referredBy.contains(trashURI));
     }

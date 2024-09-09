@@ -27,12 +27,7 @@ import java.util.StringTokenizer;
 @Getter
 public class URISplit {
 
-	public enum URIType {
-		Resource,
-		Metadata,
-		MetaMetadata,
-		Unknown
-	}
+	private static final String SLASH_DELIMITER = "/";
 
 	URIType uriType;
 	String contextId;
@@ -49,7 +44,7 @@ public class URISplit {
 		base = baseURL.toString();
 		if (anyURIStr.startsWith(base)) {
 			String withoutBase = anyURIStr.substring(base.length());
-			StringTokenizer st = new StringTokenizer(withoutBase, "/");
+			StringTokenizer st = new StringTokenizer(withoutBase, SLASH_DELIMITER);
 			contextId = st.nextToken();
 			if (st.hasMoreTokens()) {
 				path = st.nextToken();
@@ -72,41 +67,39 @@ public class URISplit {
 		}
 	}
 
-	public URI getMetaMetadataURI() {
-		return fabricateURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
-	}
-
-	public URI getResourceURI() {
-		if (isContext) {
-			return fabricateURI(base, id, null, null);
-		} else {
-			return fabricateURI(base, contextId, RepositoryProperties.DATA_PATH, id);
-		}
-	}
-
-	public URI getContextMetaMetadataURI() {
-		return fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);
+	private static String getBaseContextURI(String base, String contextId) {
+		return base.concat(contextId);
 	}
 
 	public URI getContextURI() {
 		return URI.create(getBaseContextURI(base, contextId));
 	}
 
-	public static URI fabricateURI(String base, String contextId, String path, String entryId) {
+	public static URI createURI(String base, String contextId, String path, String entryId) {
 		String uri = getBaseContextURI(base, contextId);
 
 		if (path != null) {
-			uri = uri.concat("/").concat(path);
+			uri = uri.concat(SLASH_DELIMITER).concat(path);
 		}
 
 		if (entryId != null) {
-			uri = uri.concat("/").concat(entryId);
+			uri = uri.concat(SLASH_DELIMITER).concat(entryId);
 		}
 
 		return URI.create(uri);
 	}
 
-	private static String getBaseContextURI(String base, String contextId) {
-		return base.concat(contextId);
+	public URI getContextMetaMetadataURI() {
+		return createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);
+	}
+
+	public URI getMetaMetadataURI() {
+		return createURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
+	}
+
+	public URI getResourceURI() {
+		return isContext
+				? createURI(base, id, null, null)
+				: createURI(base, contextId, RepositoryProperties.DATA_PATH, id);
 	}
 }
