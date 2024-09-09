@@ -58,7 +58,7 @@ import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.URISplit;
-import org.entrystore.repository.util.URISplit.URIType;
+import org.entrystore.repository.util.URIType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,15 +104,15 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	private EntryImpl allContexts;
 
 	public ContextManagerImpl(RepositoryManagerImpl rman, Repository repo) {
-		super(new EntryImpl(rman,repo), URISplit.fabricateURI(rman.getRepositoryURL().toString(), 
-				RepositoryProperties.SYSTEM_CONTEXTS_ID, 
-				RepositoryProperties.DATA_PATH, 
-				RepositoryProperties.SYSTEM_CONTEXTS_ID).toString(), 
+		super(new EntryImpl(rman,repo), URISplit.createURI(rman.getRepositoryURL().toString(),
+				RepositoryProperties.SYSTEM_CONTEXTS_ID,
+				RepositoryProperties.DATA_PATH,
+				RepositoryProperties.SYSTEM_CONTEXTS_ID).toString(),
 				rman.getSoftCache());
 		//First try to load the ContextManager.
-		EntryImpl e = (EntryImpl) getByEntryURI(URISplit.fabricateURI(rman.getRepositoryURL().toString(), 
-				RepositoryProperties.SYSTEM_CONTEXTS_ID, 
-				RepositoryProperties.ENTRY_PATH, 
+		EntryImpl e = (EntryImpl) getByEntryURI(URISplit.createURI(rman.getRepositoryURL().toString(),
+				RepositoryProperties.SYSTEM_CONTEXTS_ID,
+				RepositoryProperties.ENTRY_PATH,
 				RepositoryProperties.SYSTEM_CONTEXTS_ID));
 		//If it does not exist, create it.
 		if (e == null) {
@@ -184,16 +184,16 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				rc.remove(rc.getStatements(null, null, null, false, filteredNGsArray));
 				rc.remove(rc.getStatements(null, null, contextURISesame, false));
 				rc.remove(rc.getStatements(contextURISesame, null, null, false));
-				
+
 				// remove all triples in named graphs which look like: http://base/_contexts/{kind}/{context-id}
 				log.info("Removing references to context " + contextURI);
-				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString())));
-				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId).toString())));
-				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.DATA_PATH, contextId).toString())));
-				rc.remove(rc.getStatements(vf.createIRI(URISplit.fabricateURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString()), null, null, false));
-				
+				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.createURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.createURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(null, null, null, false, vf.createIRI(URISplit.createURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.DATA_PATH, contextId).toString())));
+				rc.remove(rc.getStatements(vf.createIRI(URISplit.createURI(baseURIStr, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId).toString()), null, null, false));
+
 				rc.commit();
-				
+
 				// recursively remove the file directory on the hard disk
 				String contextPath = this.entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER);
 	            if (contextPath != null) {
@@ -243,7 +243,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 
 				rc = entry.getRepository().getConnection();
-				
+
 				RepositoryResult<org.eclipse.rdf4j.model.Resource> availableNGs = rc.getContextIDs();
 				List<org.eclipse.rdf4j.model.Resource> filteredNGs = new ArrayList<org.eclipse.rdf4j.model.Resource>();
 				while (availableNGs.hasNext()) {
@@ -271,7 +271,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				} catch (Exception e) {
 					log.error(e.getMessage());
 				}
-				
+
 				if (rdfWriter == null) {
 					log.error("Unable to create an RDF writer, format not supported");
 					return;
@@ -474,7 +474,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						URI newUserURI = null;
 						Entry pE = null;
 						if (oldUserName == null) {
-							pE = pm.get(oldUserID);						
+							pE = pm.get(oldUserID);
 						} else {
 							pE = pm.getPrincipalEntry(oldUserName);
 						}
@@ -541,7 +541,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						}
 					}
 
-					// we check first whether such a stmnt already exists 
+					// we check first whether such a stmnt already exists
 					Statement newStmnt = vf.createStatement(subject, predicate, object, context);
 					if (!rc.hasStatement(newStmnt, false, context)) {
 						importedTriples++;
@@ -587,12 +587,12 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	/** FIXME: rewrite
 	 */
 	public boolean deleteBackup(URI contexturi, String fromTime) {
-		String folder = getContextBackupFolder(contexturi, fromTime); 
+		String folder = getContextBackupFolder(contexturi, fromTime);
 		File backupFolder = new File(folder);
 		if(backupFolder.exists()) {
 			return FileOperations.deleteDirectory(backupFolder);
 		} else {
-			log.error("The folder does not exist"); 
+			log.error("The folder does not exist");
 		}
 		return false;
 	}
@@ -600,7 +600,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	/** FIXME: rewrite
 	 */
 	public String getBackup(URI contexturi, String fromTime) {
-		String folder = getContextBackupFolder(contexturi, fromTime); 
+		String folder = getContextBackupFolder(contexturi, fromTime);
 		try {
 			File file = new File(folder, "portfolio-index.rdf");
 			File file2 = new File(folder,  "portfolio-entries.rdf");
@@ -608,18 +608,18 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			String content1 = FileUtils.readFileToString(file);
 			String content2 = FileUtils.readFileToString(file2);
 
-			return new String(content1 + content2); 			            
+			return new String(content1 + content2);
 
 		}catch (IOException e) {
-			log.error(e.getMessage()); 
-		} 
+			log.error(e.getMessage());
+		}
 		return null;
 	}
 
 	/** FIXME: rewrite
 	 */
 	public String createBackup(URI contexturi) throws RepositoryException {
-		HashMap<String, String> map = getContextBackupFolder(contexturi, new Date()); 
+		HashMap<String, String> map = getContextBackupFolder(contexturi, new Date());
 		File backupFolder = new File(map.get("dateFolder"));
 
 		backupFolder.mkdirs();
@@ -1378,7 +1378,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		RepositoryManager repMan = entry.repositoryManager;
 		String base = repMan.getRepositoryURL().toString();
 		for (String id: repMan.getSystemContextAliases()) {
-			Entry scon = this.getByEntryURI(URISplit.fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID,
+			Entry scon = this.getByEntryURI(URISplit.createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID,
 					RepositoryProperties.ENTRY_PATH, id));
 			if (scon == null) {
 				scon = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.SystemContext, null, id);
@@ -1397,7 +1397,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		}
 
 		for (String id: repMan.getSystemContextAliases()) {
-			Entry scon = this.getByEntryURI(URISplit.fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID,
+			Entry scon = this.getByEntryURI(URISplit.createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID,
 					RepositoryProperties.ENTRY_PATH, id));
 			if (scon.getAllowedPrincipalsFor(AccessProperty.ReadMetadata).isEmpty()) {
 				scon.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, repMan.getPrincipalManager().getGuestUser().getURI());

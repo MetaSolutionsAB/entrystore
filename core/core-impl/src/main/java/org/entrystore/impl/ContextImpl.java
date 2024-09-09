@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-
 package org.entrystore.impl;
 
+import lombok.Getter;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -471,9 +471,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} else {
 					if (bType == GraphType.Context ||
 							bType == GraphType.SystemContext) {
-						resURI = vf.createIRI(URISplit.fabricateURI(base, identity, null, null).toString());
+						resURI = vf.createIRI(URISplit.createURI(base, identity, null, null).toString());
 					} else {
-						resURI = vf.createIRI(URISplit.fabricateURI(base, this.id, RepositoryProperties.getResourcePath(bType), identity).toString());
+						resURI = vf.createIRI(URISplit.createURI(base, this.id, RepositoryProperties.getResourcePath(bType), identity).toString());
 					}
 				}
 
@@ -698,7 +698,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public Entry get(String entryId) {
-		return getByEntryURI(URISplit.fabricateURI(
+		return getByEntryURI(URISplit.createURI(
 				entry.getRepositoryManager().getRepositoryURL().toString(),
 				id, RepositoryProperties.ENTRY_PATH, entryId));
 	}
@@ -742,10 +742,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 		EntryImpl newEntry = null;
 		try {
 			URISplit split = new URISplit(entryURI, this.entry.getRepositoryManager().getRepositoryURL());
-			if (split == null || !this.id.equals(split.getContextID())) {
+			if (split == null || !this.id.equals(split.getContextId())) {
 				return null;
 			}
-			newEntry = new EntryImpl(split.getID(), this, this.entry.repositoryManager, this.entry.getRepository());
+			newEntry = new EntryImpl(split.getId(), this, this.entry.repositoryManager, this.entry.getRepository());
 			if (newEntry.load(rc)) {
 				if(newEntry.getEntryType() == EntryType.Local) {
 					initResource(newEntry);
