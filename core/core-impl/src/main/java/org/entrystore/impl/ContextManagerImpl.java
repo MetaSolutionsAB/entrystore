@@ -811,7 +811,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 	public String getName(URI contextURI) {
 		URISplit us = new URISplit(contextURI, this.entry.getRepositoryManager().getRepositoryURL());
-		if (us.getURIType() == URIType.Resource) {
+		if (us.getUriType() == URIType.Resource) {
 			return super.getName(us.getMetaMetadataURI());
 		}
 		throw new org.entrystore.repository.RepositoryException("Given URI is not an existing contextURI.");
@@ -897,7 +897,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 	private Entry getEntry(URI uri, boolean withACL) {
 		URISplit usplit = new URISplit(uri, entry.getRepositoryManager().getRepositoryURL());
-		if (usplit.getURIType() != URIType.Unknown) {
+		if (usplit.getUriType() != URIType.Unknown) {
 			Entry item = cache.getByEntryURI(usplit.getMetaMetadataURI());
 			if (item != null) {
 				if (withACL) {

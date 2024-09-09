@@ -471,7 +471,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} else {
 					if (bType == GraphType.Context ||
 							bType == GraphType.SystemContext) {
-						resURI = vf.createIRI(URISplit.fabricateContextURI(base, identity).toString());
+						resURI = vf.createIRI(URISplit.fabricateURI(base, identity, null, null).toString());
 					} else {
 						resURI = vf.createIRI(URISplit.fabricateURI(base, this.id, RepositoryProperties.getResourcePath(bType), identity).toString());
 					}
