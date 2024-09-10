@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class StringUtilsTest {
 
 	@Test
-	public void convertUnitStringToByteSizeWithException() {
+	public void convertUnitStringToByteSize_WithException() {
 		try {
 			StringUtils.convertUnitStringToByteSize(null);
 		} catch (Exception e) {
@@ -32,35 +32,35 @@ public class StringUtilsTest {
 	}
 
 	@Test
-	public void convertUnitStringToByteSizeKilo() {
+	public void convertUnitStringToByteSize_Kilo() {
 		String input = "1k";
 		long result = StringUtils.convertUnitStringToByteSize(input);
 		assertEquals(1024L, result);
 	}
 
 	@Test
-	public void convertUnitStringToByteSizeMega() {
+	public void convertUnitStringToByteSize_Mega() {
 		String input = "1m";
 		long result = StringUtils.convertUnitStringToByteSize(input);
 		assertEquals(1048576L, result);
 	}
 
 	@Test
-	public void convertUnitStringToByteSizeGiga() {
+	public void convertUnitStringToByteSize_Giga() {
 		String input = "1g";
 		long result = StringUtils.convertUnitStringToByteSize(input);
 		assertEquals(1073741824L, result);
 	}
 
 	@Test
-	public void convertUnitStringToByteSizeTera() {
+	public void convertUnitStringToByteSize_Tera() {
 		String input = "1t";
 		long result = StringUtils.convertUnitStringToByteSize(input);
 		assertEquals(1099511627776L, result);
 	}
 
 	@Test
-	public void convertUnitStringToByteSizeNoUnit() {
+	public void convertUnitStringToByteSize_NoUnit() {
 		String input = "1000";
 		long result = StringUtils.convertUnitStringToByteSize(input);
 		assertEquals(1000L, result);
