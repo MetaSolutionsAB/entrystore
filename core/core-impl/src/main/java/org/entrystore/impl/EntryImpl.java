@@ -1319,7 +1319,7 @@ public class EntryImpl implements Entry {
 								EntryType lt = getEntryType(statement.getObject());
 								if (lt != null && locType == EntryType.Reference && lt == EntryType.LinkReference) { //Only allowed to change from Reference to LinkReference
 									locType = lt;
-									localMdURI = vf.createIRI(URISplit.fabricateURI(repositoryManager.getRepositoryURL().toString(), context.id, RepositoryProperties.MD_PATH, this.id).toString());
+									localMdURI = vf.createIRI(URISplit.createURI(repositoryManager.getRepositoryURL().toString(), context.id, RepositoryProperties.MD_PATH, this.id).toString());
 								}
 							} else {
 								GraphType gt = getGraphType(statement.getObject());
