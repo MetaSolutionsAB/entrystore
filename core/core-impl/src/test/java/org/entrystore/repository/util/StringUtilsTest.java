@@ -23,7 +23,7 @@ public class StringUtilsTest {
 
 	@Disabled("To be implemented")
 	@Test
-	public void testReplace() throws Exception {
+	public void convertUnitStringToByteSize() {
 		// TODO
 	}
 }
