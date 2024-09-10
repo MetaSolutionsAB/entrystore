@@ -18,18 +18,6 @@ package org.entrystore.repository.util;
 
 public class StringUtils {
 
-	public static String replace(String data, String from, String to) {
-		StringBuilder builder = new StringBuilder(data.length());
-		int pos;
-		int i = 0;
-		while ((pos = data.indexOf(from, i)) != -1) {
-			builder.append(data, i, pos).append(to);
-			i = pos + from.length();
-		}
-		builder.append(data.substring(i));
-		return builder.toString();
-	}
-
 	/**
 	 * Converts a string with or without units (kilo, mega, etc) to bytes.
 	 * Supported unit abbreviations: k, m, g, t. Lower- and uppercase are supported.
