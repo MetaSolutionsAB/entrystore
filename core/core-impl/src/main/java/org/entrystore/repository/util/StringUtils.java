@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package org.entrystore.repository.util;
 public class StringUtils {
 
 	/**
-	 * Converts a string with or without units (kilo, mega, etc) to bytes.
+	 * Converts a string with or without units (kilo, mega, etc.) to bytes.
 	 * Supported unit abbreviations: k, m, g, t. Lower- and uppercase are supported.
 	 *
 	 * @param input A String with or without abbreviated unit. E.g., an input value of
@@ -30,8 +30,10 @@ public class StringUtils {
 		if (input == null || input.isEmpty()) {
 			throw new IllegalArgumentException("Parameter must not be null or empty");
 		}
+
 		char unit = input.charAt(input.length() - 1);
 		long factor = 1L;
+
 		if (unit == 'k' || unit == 'K') { // Kilo
 			factor = 1024L;
 		} else if (unit == 'm' || unit == 'M') { // Mega

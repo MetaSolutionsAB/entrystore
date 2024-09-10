@@ -16,14 +16,53 @@
 
 package org.entrystore.repository.util;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class StringUtilsTest {
 
-	@Disabled("To be implemented")
 	@Test
-	public void convertUnitStringToByteSize() {
-		// TODO
+	public void convertUnitStringToByteSizeWithException() {
+		try {
+			StringUtils.convertUnitStringToByteSize(null);
+		} catch (Exception e) {
+			assertEquals(e.getMessage(), "Parameter must not be null or empty");
+		}
+	}
+
+	@Test
+	public void convertUnitStringToByteSizeKilo() {
+		String input = "1k";
+		long result = StringUtils.convertUnitStringToByteSize(input);
+		assertEquals(1024L, result);
+	}
+
+	@Test
+	public void convertUnitStringToByteSizeMega() {
+		String input = "1m";
+		long result = StringUtils.convertUnitStringToByteSize(input);
+		assertEquals(1048576L, result);
+	}
+
+	@Test
+	public void convertUnitStringToByteSizeGiga() {
+		String input = "1g";
+		long result = StringUtils.convertUnitStringToByteSize(input);
+		assertEquals(1073741824L, result);
+	}
+
+	@Test
+	public void convertUnitStringToByteSizeTera() {
+		String input = "1t";
+		long result = StringUtils.convertUnitStringToByteSize(input);
+		assertEquals(1099511627776L, result);
+	}
+
+	@Test
+	public void convertUnitStringToByteSizeNoUnit() {
+		String input = "1000";
+		long result = StringUtils.convertUnitStringToByteSize(input);
+		assertEquals(1000L, result);
 	}
 }
