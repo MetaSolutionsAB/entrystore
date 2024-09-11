@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 
 package org.entrystore.repository.util;
 
@@ -40,10 +39,10 @@ public class URISplit {
 		this(anyURI.toString(), baseURL);
 	}
 
-	public URISplit(String anyURIStr, URL baseURL) {
+	public URISplit(String anyURIString, URL baseURL) {
 		base = baseURL.toString();
-		if (anyURIStr.startsWith(base)) {
-			String withoutBase = anyURIStr.substring(base.length());
+		if (anyURIString.startsWith(base)) {
+			String withoutBase = anyURIString.substring(base.length());
 			StringTokenizer st = new StringTokenizer(withoutBase, SLASH_DELIMITER);
 			contextId = st.nextToken();
 			if (st.hasMoreTokens()) {
@@ -95,6 +94,10 @@ public class URISplit {
 
 	public URI getMetaMetadataURI() {
 		return createURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
+	}
+
+	public URI getMetadataURI() {
+		return createURI(base, contextId, RepositoryProperties.MD_PATH, id);
 	}
 
 	public URI getResourceURI() {
