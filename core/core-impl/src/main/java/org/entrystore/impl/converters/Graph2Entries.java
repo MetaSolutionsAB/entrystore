@@ -96,8 +96,8 @@ public class Graph2Entries {
 			String entryId = statement.getObject().stringValue();
 			Resource re = newResources.get(entryId);
 			if (re == null) {
-				URI uri = URISplit.fabricateURI(
-						context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
+				URI uri = URISplit.createURI(
+						context.getEntry().getRepositoryManager().getRepositoryURL().toString(),
 						context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
 				re = vf.createIRI(uri.toString());
 			}
@@ -106,8 +106,8 @@ public class Graph2Entries {
 
 		
 		if (destinationEntryId != null) {
-			URI uri = URISplit.fabricateURI(
-					context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
+			URI uri = URISplit.createURI(
+					context.getEntry().getRepositoryManager().getRepositoryURL().toString(),
 					context.getEntry().getId(), RepositoryProperties.DATA_PATH, destinationEntryId);
 			Resource newRe = vf.createIRI(uri.toString());
 
@@ -148,8 +148,8 @@ public class Graph2Entries {
 		while (stmts.hasNext()) {
 			Statement statement = (Statement) stmts.next();
 			String entryId = statement.getObject().stringValue();
-			URI uri = URISplit.fabricateURI(
-					context.getEntry().getRepositoryManager().getRepositoryURL().toString(), 
+			URI uri = URISplit.createURI(
+					context.getEntry().getRepositoryManager().getRepositoryURL().toString(),
 					context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
 			Resource newRe = vf.createIRI(uri.toString());
 			newResources.put(entryId, newRe);

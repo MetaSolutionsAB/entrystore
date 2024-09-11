@@ -121,9 +121,9 @@ public class EntryImpl implements Entry {
 		this.id = id;
 		String base = repositoryManager.getRepositoryURL().toString();
 		ValueFactory vf = repository.getValueFactory();
-		this.entryURI = vf.createIRI(URISplit.fabricateURI(base, context.id, RepositoryProperties.ENTRY_PATH, id).toString());
-		this.relationURI = vf.createIRI(URISplit.fabricateURI(base, context.id, RepositoryProperties.RELATION, id).toString());
-		this.localMdURI = vf.createIRI(URISplit.fabricateURI(base, context.id, RepositoryProperties.MD_PATH, this.id).toString());
+		this.entryURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.ENTRY_PATH, id).toString());
+		this.relationURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.RELATION, id).toString());
+		this.localMdURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.MD_PATH, this.id).toString());
 		this.context = context;
 		this.repositoryManager = repositoryManager;
 		this.repository = repository;
@@ -206,12 +206,12 @@ public class EntryImpl implements Entry {
 		this.resURI = resURI;
 
 		if (lType == EntryType.LinkReference) {
-			this.cachedExternalMdURI = vf.createIRI(URISplit.fabricateURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
+			this.cachedExternalMdURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
 			this.externalMdURI = externalMetadataURI;
 		}
 
 		if (lType == EntryType.Reference) {
-			this.cachedExternalMdURI = vf.createIRI(URISplit.fabricateURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
+			this.cachedExternalMdURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
 			this.externalMdURI = externalMetadataURI;
 		}
 
@@ -1319,7 +1319,7 @@ public class EntryImpl implements Entry {
 								EntryType lt = getEntryType(statement.getObject());
 								if (lt != null && locType == EntryType.Reference && lt == EntryType.LinkReference) { //Only allowed to change from Reference to LinkReference
 									locType = lt;
-									localMdURI = vf.createIRI(URISplit.fabricateURI(repositoryManager.getRepositoryURL().toString(), context.id, RepositoryProperties.MD_PATH, this.id).toString());
+									localMdURI = vf.createIRI(URISplit.createURI(repositoryManager.getRepositoryURL().toString(), context.id, RepositoryProperties.MD_PATH, this.id).toString());
 								}
 							} else {
 								GraphType gt = getGraphType(statement.getObject());

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,21 +18,8 @@ package org.entrystore.repository.util;
 
 public class StringUtils {
 
-	public static String replace(String data, String from, String to) {
-		StringBuffer buf = new StringBuffer(data.length());
-		int pos = -1;
-		int i = 0;
-		while ((pos = data.indexOf(from, i)) != -1) {
-			buf.append(data.substring(i, pos)).append(to);
-			i = pos + from.length();
-		}
-		buf.append(data.substring(i));
-		return buf.toString();
-	}
-
 	/**
-	 * Converts a string with or without units (kilo, mega, etc) to bytes.
-	 *
+	 * Converts a string with or without units (kilo, mega, etc.) to bytes.
 	 * Supported unit abbreviations: k, m, g, t. Lower- and uppercase are supported.
 	 *
 	 * @param input A String with or without abbreviated unit. E.g., an input value of
@@ -40,25 +27,27 @@ public class StringUtils {
 	 * @return The converted value in bytes as long variable.
 	 */
 	public static long convertUnitStringToByteSize(String input) {
-		if (input == null || input.length() < 1) {
+		if (input == null || input.isEmpty()) {
 			throw new IllegalArgumentException("Parameter must not be null or empty");
 		}
+
 		char unit = input.charAt(input.length() - 1);
-		long factor = 1;
+		long factor = 1L;
+
 		if (unit == 'k' || unit == 'K') { // Kilo
-			factor = 1024;
+			factor = 1024L;
 		} else if (unit == 'm' || unit == 'M') { // Mega
-			factor = 1024*1024;
+			factor = 1024L *1024;
 		} else if (unit == 'g' || unit == 'G') { // Giga
-			factor = 1024*1024*1024;
+			factor = 1024L *1024*1024;
 		} else if (unit == 't' || unit == 'T') { // Tera
-			factor = 1024*1024*1024*1024;
+			factor = 1024L *1024*1024*1024;
 		}
 
 		if (factor > 1) {
-			return Long.valueOf(input.substring(0, input.length() - 1)) * factor;
+			return Long.parseLong(input.substring(0, input.length() - 1)) * factor;
 		} else {
-			return Long.valueOf(input);
+			return Long.parseLong(input);
 		}
 	}
 

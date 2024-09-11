@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,45 +14,36 @@
  * limitations under the License.
  */
 
-
 package org.entrystore.repository.util;
 
-import org.eclipse.rdf4j.model.IRI;
+import lombok.Getter;
 import org.entrystore.impl.RepositoryProperties;
 
 import java.net.URI;
 import java.net.URL;
 import java.util.StringTokenizer;
 
+@Getter
 public class URISplit {
 
-	public enum URIType {
-		Resource,
-		Metadata,
-		MetaMetadata,
-		Unknown
-	}
+	private static final String SLASH_DELIMITER = "/";
 
-	URIType ut;
+	URIType uriType;
 	String contextId;
 	String id;
 	String path;
 	String base;
 	boolean isContext = false;
 
-	public URISplit(IRI anyURI, URL baseURL) {
-		this(anyURI.toString(), baseURL);
-	}
-
 	public URISplit(URI anyURI, URL baseURL) {
 		this(anyURI.toString(), baseURL);
 	}
 
-	public URISplit(String anyURIStr, URL baseURL) {
+	public URISplit(String anyURIString, URL baseURL) {
 		base = baseURL.toString();
-		if (anyURIStr.startsWith(base)) {
-			String withoutBase = anyURIStr.substring(base.toString().length());
-			StringTokenizer st = new StringTokenizer(withoutBase, "/");
+		if (anyURIString.startsWith(base)) {
+			String withoutBase = anyURIString.substring(base.length());
+			StringTokenizer st = new StringTokenizer(withoutBase, SLASH_DELIMITER);
 			contextId = st.nextToken();
 			if (st.hasMoreTokens()) {
 				path = st.nextToken();
@@ -64,62 +55,54 @@ public class URISplit {
 				isContext = true;
 			}
 			if (path.equals(RepositoryProperties.ENTRY_PATH)) {
-				ut = URIType.MetaMetadata;
+				uriType = URIType.MetaMetadata;
 			} else if (path.equals(RepositoryProperties.MD_PATH)) {
-				ut = URIType.Metadata;
+				uriType = URIType.Metadata;
 			} else {
-				ut = URIType.Resource;
+				uriType = URIType.Resource;
 			}
 		} else {
-			ut = URIType.Unknown;
+			uriType = URIType.Unknown;
 		}
 	}
 
-	public URI getMetaMetadataURI() {
-		return fabricateURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
-	}
-
-	public URI getMetadataURI() {
-		return fabricateURI(base, contextId, RepositoryProperties.MD_PATH, id);
-	}
-
-	public URI getResourceURI() {
-		if (isContext) {
-			return fabricateContextURI(base, id);
-		} else {
-			return fabricateURI(base, contextId, RepositoryProperties.DATA_PATH, id);
-		}
-	}
-
-	public String getContextID() {
-		return contextId;
-	}
-
-	public URI getContextMetaMetadataURI() {
-		return fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);
-	}
-
-	public URI getContextMetadataURI() {
-		return fabricateURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, contextId);
+	private static String getBaseContextURI(String base, String contextId) {
+		return base.concat(contextId);
 	}
 
 	public URI getContextURI() {
-		return URI.create(base + contextId);
+		return URI.create(getBaseContextURI(base, contextId));
 	}
 
-	public URIType getURIType() {
-		return ut;
+	public static URI createURI(String base, String contextId, String path, String entryId) {
+		String uri = getBaseContextURI(base, contextId);
+
+		if (path != null) {
+			uri = uri.concat(SLASH_DELIMITER).concat(path);
+		}
+
+		if (entryId != null) {
+			uri = uri.concat(SLASH_DELIMITER).concat(entryId);
+		}
+
+		return URI.create(uri);
 	}
 
-	public String getID() {
-		return id;
+	public URI getContextMetaMetadataURI() {
+		return createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);
 	}
 
-	public static URI fabricateURI(String base, String contextId, String path, String entryId) {
-		return URI.create(base + contextId + "/" + path + "/" + entryId);
+	public URI getMetaMetadataURI() {
+		return createURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
 	}
 
-	public static URI fabricateContextURI(String base, String contextId) {
-		return URI.create(base + contextId);
+	public URI getMetadataURI() {
+		return createURI(base, contextId, RepositoryProperties.MD_PATH, id);
+	}
+
+	public URI getResourceURI() {
+		return isContext
+				? createURI(base, id, null, null)
+				: createURI(base, contextId, RepositoryProperties.DATA_PATH, id);
 	}
 }
