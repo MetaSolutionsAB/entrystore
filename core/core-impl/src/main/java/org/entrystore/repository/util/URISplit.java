@@ -40,52 +40,45 @@ public class URISplit {
 	}
 
 	public URISplit(String anyURIString, URL baseURL) {
-		base = baseURL.toString();
-		if (anyURIString.startsWith(base)) {
-			String withoutBase = anyURIString.substring(base.length());
-			StringTokenizer st = new StringTokenizer(withoutBase, SLASH_DELIMITER);
-			contextId = st.nextToken();
-			if (st.hasMoreTokens()) {
-				path = st.nextToken();
-				id = st.nextToken();
+		if (baseURL != null) {
+			base = baseURL.toString();
+			if (anyURIString.startsWith(base)) {
+				String withoutBase = anyURIString.substring(base.length());
+				StringTokenizer st = new StringTokenizer(withoutBase, SLASH_DELIMITER);
+				contextId = st.nextToken();
+				if (st.hasMoreTokens()) {
+					path = st.nextToken();
+					id = st.nextToken();
+				} else {
+					id = contextId;
+					path = RepositoryProperties.DATA_PATH;
+					contextId = RepositoryProperties.SYSTEM_CONTEXTS_ID;
+					isContext = true;
+				}
+				if (path.equals(RepositoryProperties.ENTRY_PATH)) {
+					uriType = URIType.MetaMetadata;
+				} else if (path.equals(RepositoryProperties.MD_PATH)) {
+					uriType = URIType.Metadata;
+				} else {
+					uriType = URIType.Resource;
+				}
 			} else {
-				id = contextId;
-				path = RepositoryProperties.DATA_PATH;
-				contextId = RepositoryProperties.SYSTEM_CONTEXTS_ID;
-				isContext = true;
+				uriType = URIType.Unknown;
 			}
-			if (path.equals(RepositoryProperties.ENTRY_PATH)) {
-				uriType = URIType.MetaMetadata;
-			} else if (path.equals(RepositoryProperties.MD_PATH)) {
-				uriType = URIType.Metadata;
-			} else {
-				uriType = URIType.Resource;
-			}
-		} else {
-			uriType = URIType.Unknown;
 		}
 	}
 
 	private static String getBaseContextURI(String base, String contextId) {
-		return base.concat(contextId);
+		if (base != null && contextId != null) {
+			return base.concat(contextId);
+		}
+
+		return null;
 	}
 
 	public URI getContextURI() {
-		return URI.create(getBaseContextURI(base, contextId));
-	}
-
-	public static URI createURI(String base, String contextId, String path, String entryId) {
-		String uri = getBaseContextURI(base, contextId);
-
-		if (path != null) {
-			uri = uri.concat(SLASH_DELIMITER).concat(path);
-		}
-
-		if (entryId != null) {
-			uri = uri.concat(SLASH_DELIMITER).concat(entryId);
-		}
-
-		return URI.create(uri);
+		String context = getBaseContextURI(base, contextId);
+		return context != null ? URI.create(context) : null;
 	}
 
 	public URI getContextMetaMetadataURI() {
@@ -102,7 +95,25 @@ public class URISplit {
 
 	public URI getResourceURI() {
 		return isContext
-				? createURI(base, id, null, null)
-				: createURI(base, contextId, RepositoryProperties.DATA_PATH, id);
+			? createURI(base, id, null, null)
+			: createURI(base, contextId, RepositoryProperties.DATA_PATH, id);
+	}
+
+	public static URI createURI(String base, String contextId, String path, String entryId) {
+		String uri = getBaseContextURI(base, contextId);
+
+		if (uri != null) {
+			if (path != null) {
+				uri = uri.concat(SLASH_DELIMITER).concat(path);
+			}
+
+			if (entryId != null) {
+				uri = uri.concat(SLASH_DELIMITER).concat(entryId);
+			}
+
+			return URI.create(uri);
+		}
+
+		return null;
 	}
 }
