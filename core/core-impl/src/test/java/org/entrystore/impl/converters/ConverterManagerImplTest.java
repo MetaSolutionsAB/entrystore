@@ -16,21 +16,30 @@
 
 package org.entrystore.impl.converters;
 
-import org.entrystore.Converter;
 import org.junit.jupiter.api.Test;
 
-import java.net.URI;
+import java.net.URL;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-public class OAIDC2RDFGraphConverterTest {
-
-	private static final String entryURIString = "https://slashdot.org/12/entry/13";
+public class ConverterManagerImplTest {
 
 	@Test
-	public void convert_string() {
-		Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
-		Object graph = oaiDcRdfConverter.convert(null, URI.create(entryURIString));
-		assertNull(graph);
+	public void register() {
+		URL resourceURL = ConverterUtil.findResource("solrconfig.xml_default");
+		assertNotNull(resourceURL);
+	}
+
+	@Test
+	public void findResource_schema() {
+		URL resourceURL = ConverterUtil.findResource("schema.xml_default");
+		assertNotNull(resourceURL);
+	}
+
+	@Test
+	public void findResource_null() {
+		URL resourceURL = ConverterUtil.findResource("anything");
+		assertNull(resourceURL);
 	}
 }

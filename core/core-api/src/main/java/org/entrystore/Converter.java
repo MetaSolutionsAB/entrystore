@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,17 @@
 
 package org.entrystore;
 
+import org.w3c.dom.Node;
+
 import java.net.URI;
 
 public interface Converter {
-	
+
 	/**
-	 * @param from
-	 * @param resourceURI
-	 * @param metadataURI Optional, may be null.
-	 * @return
+	 * @param from Node to convert.
+	 * @param resourceURI Root URI of the resource's metadata.
+	 * @return Object the source should be converted to.
 	 */
-	Object convert(Object from, URI resourceURI, URI metadataURI);
-	 
+	Object convert(Node from, URI resourceURI);
+
 }

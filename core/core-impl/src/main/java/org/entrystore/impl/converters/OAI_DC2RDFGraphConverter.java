@@ -54,17 +54,15 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 	/**
 	 * Converts an oai_dc xml document tag metadata to a graph.
 	 *
-	 * @param from An XML NodeList.
+	 * @param from        An XML NodeList.
 	 * @param resourceURI Root URI of the resource's metadata.
 	 * @return the new metadata graph.
 	 */
-	public Object convert(Object from, URI resourceURI, URI metadataURI) {
+	public Object convert(Node from, URI resourceURI) {
 		NodeList metadataList;
 
-		if (from instanceof NodeList) {
-			metadataList = (NodeList) from;
-		} else if (from instanceof Node) {
-			metadataList = ((Node) from).getChildNodes();
+		if (from != null) {
+			metadataList = from.getChildNodes();
 		} else {
 			log.warn("Unable to convert object, class type not supported");
 			return null;
