@@ -16,30 +16,30 @@
 
 package org.entrystore.impl.converters;
 
-import org.entrystore.Converter;
-import org.w3c.dom.Node;
+import org.junit.jupiter.api.Test;
 
-import java.net.URI;
-import java.util.HashMap;
+import java.net.URL;
 
-/**
- * @author Eric Johansson (eric.johansson@educ.umu.se)
- */
-public class ConverterManagerImpl {
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
-	public static HashMap<String, Converter> converters = new HashMap<>();
+public class ConverterUtilTest {
 
-	public static void register(String type, Converter converter) {
-		converters.put(type, converter);
+	@Test
+	public void findResource_solrconfig() {
+		URL resourceURL = ConverterUtil.findResource("solrconfig.xml_default");
+		assertNotNull(resourceURL);
 	}
 
-	public static Object convert(String type, Node from, URI resourceURI) {
-
-		if (!converters.containsKey(type)) {
-			return null;
-		}
-
-		return converters.get(type).convert(from, resourceURI);
+	@Test
+	public void findResource_schema() {
+		URL resourceURL = ConverterUtil.findResource("schema.xml_default");
+		assertNotNull(resourceURL);
 	}
 
+	@Test
+	public void findResource_null() {
+		URL resourceURL = ConverterUtil.findResource("anything");
+		assertNull(resourceURL);
+	}
 }

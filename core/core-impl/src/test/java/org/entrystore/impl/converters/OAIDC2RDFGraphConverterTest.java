@@ -14,19 +14,23 @@
  * limitations under the License.
  */
 
-package org.entrystore;
+package org.entrystore.impl.converters;
 
-import org.w3c.dom.Node;
+import org.entrystore.Converter;
+import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 
-public interface Converter {
+import static org.junit.jupiter.api.Assertions.assertNull;
 
-	/**
-	 * @param from Node to convert.
-	 * @param resourceURI Root URI of the resource's metadata.
-	 * @return Object the source should be converted to.
-	 */
-	Object convert(Node from, URI resourceURI);
+public class OAIDC2RDFGraphConverterTest {
 
+	private static final String entryURIString = "https://slashdot.org/12/entry/13";
+
+	@Test
+	public void convert_string() {
+		Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
+		Object graph = oaiDcRdfConverter.convert(null, URI.create(entryURIString));
+		assertNull(graph);
+	}
 }

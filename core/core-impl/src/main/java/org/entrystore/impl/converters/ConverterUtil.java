@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,28 +27,28 @@ import java.net.URL;
  * @author Hannes Ebner
  */
 public class ConverterUtil {
-	
-	private static Logger log = LoggerFactory.getLogger(ConverterUtil.class);
 
-	public static URL findResource(String res) {
-		URL resURL = Thread.currentThread().getContextClassLoader().getResource(res);
-				
-		if (resURL == null) {
+	private static final Logger log = LoggerFactory.getLogger(ConverterUtil.class);
+
+	public static URL findResource(String resource) {
+		URL resourceURL = Thread.currentThread().getContextClassLoader().getResource(resource);
+
+		if (resourceURL == null) {
 			String classPath = System.getProperty("java.class.path");
-			String[] pathElements = classPath.split(System.getProperty("path.separator"));
+			String[] pathElements = classPath.split(File.pathSeparator);
 			for (String element : pathElements)	{
-				File newFile = new File(element, res);
+				File newFile = new File(element, resource);
 				if (newFile.exists()) {
 					try {
-						resURL = newFile.toURL();
+						resourceURL = newFile.toURI().toURL();
 					} catch (MalformedURLException e) {
 						log.error(e.getMessage());
 					}
 				}
 			}
 		}
-		
-		return resURL;
+
+		return resourceURL;
 	}
 
 }
