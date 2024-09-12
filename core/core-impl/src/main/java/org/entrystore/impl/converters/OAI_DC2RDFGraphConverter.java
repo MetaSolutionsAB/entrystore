@@ -54,21 +54,21 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 	/**
 	 * Converts an oai_dc xml document tag metadata to a graph.
 	 *
-	 * @param from        An XML NodeList.
+	 * @param from An XML Node.
 	 * @param resourceURI Root URI of the resource's metadata.
-	 * @return the new metadata graph.
+	 * @return the new metadata graph Model.
 	 */
-	public Object convert(Node from, URI resourceURI) {
+	public Model convertToModel(Node from, URI resourceURI) {
 		NodeList metadataList;
 
-		if (from != null) {
+		if (from != null && from.getChildNodes().getLength() > 0) {
 			metadataList = from.getChildNodes();
 		} else {
-			log.warn("Unable to convert object, class type not supported");
+			log.warn("Unable to convert Node to Model graph, as the Node is null or has empty childNodes");
 			return null;
 		}
 
-		Model graph = new LinkedHashModel();
+		Model model = new LinkedHashModel();
 		IRI root = iri(resourceURI.toString());
 
 		for (int i = 0; i < metadataList.getLength(); i++) {
@@ -131,10 +131,10 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 				lit = literal(nodeContent);
 			}
 
-			graph.add(root, iri(predicate), lit);
+			model.add(root, iri(predicate), lit);
 		}
 
-		return graph;
+		return model;
 	}
 
 	private String getISO2Language(String iso3Language) {
@@ -146,6 +146,7 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 				localeMap.put(locale.getISO3Language(), locale);
 			}
 		}
+
 		Locale locale = localeMap.get(iso3Language);
 		if (locale != null) {
 			return locale.getLanguage();

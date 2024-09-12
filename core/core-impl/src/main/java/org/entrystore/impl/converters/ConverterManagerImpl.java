@@ -16,6 +16,7 @@
 
 package org.entrystore.impl.converters;
 
+import org.eclipse.rdf4j.model.Model;
 import org.entrystore.Converter;
 import org.w3c.dom.Node;
 
@@ -33,13 +34,13 @@ public class ConverterManagerImpl {
 		converters.put(type, converter);
 	}
 
-	public static Object convert(String type, Node from, URI resourceURI) {
+	public static Model convert(String type, Node from, URI resourceURI) {
 
-		if (!converters.containsKey(type)) {
-			return null;
+		if (converters.containsKey(type) && converters.get(type) instanceof OAI_DC2RDFGraphConverter) {
+			return converters.get(type).convertToModel(from, resourceURI);
 		}
 
-		return converters.get(type).convert(from, resourceURI);
+		return null;
 	}
 
 }

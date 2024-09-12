@@ -16,21 +16,46 @@
 
 package org.entrystore.impl.converters;
 
+import org.eclipse.rdf4j.model.Model;
 import org.entrystore.Converter;
 import org.junit.jupiter.api.Test;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 import java.net.URI;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class OAIDC2RDFGraphConverterTest {
 
 	private static final String entryURIString = "https://slashdot.org/12/entry/13";
+	private static final String parentEntryURIString = "https://slashdot.org/12/entry/12";
 
 	@Test
-	public void convert_string() {
+	public void convertToModel_null() {
 		Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
-		Object graph = oaiDcRdfConverter.convert(null, URI.create(entryURIString));
+		Object graph = oaiDcRdfConverter.convertToModel(null, URI.create(entryURIString));
 		assertNull(graph);
+	}
+
+	@Test
+	public void convertToModel_ok() {
+		Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
+
+		try {
+			Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().newDocument();
+			Element element = document.createElement("root");
+			Node child1 = document.createElement("ex:isChildOf");
+			child1.setTextContent(parentEntryURIString);
+			element.appendChild(child1);
+			Model graph = oaiDcRdfConverter.convertToModel(element, URI.create(entryURIString));
+			assertEquals(graph.toString(), "[(https://slashdot.org/12/entry/13, ex:isChildOf, \"https://slashdot.org/12/entry/12\") [null]]");
+		} catch (ParserConfigurationException e) {
+			throw new RuntimeException(e);
+		}
 	}
 }
