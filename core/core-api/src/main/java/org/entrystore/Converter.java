@@ -16,6 +16,7 @@
 
 package org.entrystore;
 
+import org.eclipse.rdf4j.model.Model;
 import org.w3c.dom.Node;
 
 import java.net.URI;
@@ -25,8 +26,8 @@ public interface Converter {
 	/**
 	 * @param from Node to convert.
 	 * @param resourceURI Root URI of the resource's metadata.
-	 * @return Object the source should be converted to.
+	 * @return Model of graph the source should be converted to.
 	 */
-	Object convert(Node from, URI resourceURI);
+	Model convertToModel(Node from, URI resourceURI);
 
 }

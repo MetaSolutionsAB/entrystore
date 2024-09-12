@@ -65,8 +65,6 @@ public class ListRecordsJob implements Job, InterruptableJob {
 	// Parse XML Utils
 	private static XPathExpression expr;
 
-	private static XPathFactory factory;
-
 	private static XPath xpath;
 
 	private static boolean interrupted = false;
@@ -263,7 +261,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 	}
 
 	private static void initXpath() {
-		factory = XPathFactory.newInstance();
+		XPathFactory factory = XPathFactory.newInstance();
 		xpath = factory.newXPath();
 		xpath.setNamespaceContext(createNamespace());
 	}
@@ -390,11 +388,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 	}
 
 	private Model getExternalMetadataGraphFromXML(Element el, String metadataType, URI resourceURI) throws XPathExpressionException {
-		Node metadata = getMetadataNode(el, metadataType);
-		if (metadata == null || metadata.getChildNodes().getLength() == 0) {
-			return null;
-		}
-		return (Model) ConverterManagerImpl.convert(metadataType, metadata, resourceURI);
+		return ConverterManagerImpl.convert(metadataType, getMetadataNode(el, metadataType), resourceURI);
 	}
 
 	private void setCachedMetadataGraph(Entry entry, Model graph) {
@@ -465,26 +459,20 @@ public class ListRecordsJob implements Job, InterruptableJob {
 
 	private static NamespaceContext createNamespace() {
 		// We map the prefixes to URIs
-		NamespaceContext ctx = new NamespaceContext() {
+		return new NamespaceContext() {
 			public String getNamespaceURI(String prefix) {
-				String uri;
-				if (prefix.equals("oai"))
-					uri = "http://www.openarchives.org/OAI/2.0/";
-				else if (prefix.equals("dc"))
-					uri = "http://purl.org/dc/elements/1.1/";
-				else if (prefix.equals("dcterms"))
-					uri = "http://purl.org/dc/terms/";
-				else if (prefix.equals("oai_dc"))
-					uri = "http://www.openarchives.org/OAI/2.0/oai_dc/";
-				else if (prefix.equals("rdn_dc"))
-					uri = "http://www.rdn.ac.uk/oai/rdn_dc/";
-				else
-					uri = null;
-				return uri;
+				return switch (prefix) {
+					case "oai" -> "http://www.openarchives.org/OAI/2.0/";
+					case "dc" -> "http://purl.org/dc/elements/1.1/";
+					case "dcterms" -> "http://purl.org/dc/terms/";
+					case "oai_dc" -> "http://www.openarchives.org/OAI/2.0/oai_dc/";
+					case "rdn_dc" -> "http://www.rdn.ac.uk/oai/rdn_dc/";
+					default -> null;
+				};
 			}
 
 			// Dummy implementation - not used!
-			public Iterator getPrefixes(String val) {
+			public Iterator<String> getPrefixes(String val) {
 				return null;
 			}
 
@@ -493,7 +481,6 @@ public class ListRecordsJob implements Job, InterruptableJob {
 				return null;
 			}
 		};
-		return ctx;
 	}
 
 	public void interrupt() throws UnableToInterruptJobException {
