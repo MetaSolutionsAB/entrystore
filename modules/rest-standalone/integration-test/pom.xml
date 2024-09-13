@@ -58,6 +58,7 @@
             <groupId>org.entrystore</groupId>
             <artifactId>entrystore-rest-standalone-jetty</artifactId>
             <version>5.5-SNAPSHOT</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.spockframework</groupId>
@@ -65,6 +66,11 @@
             <version>2.4-M4-groovy-4.0</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy-json</artifactId>
+            <version>4.0.20</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
-
 </project>
