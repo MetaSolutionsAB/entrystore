@@ -1,0 +1,24 @@
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+    <responseDate>2024-09-12T17:48:18Z</responseDate>
+    <request verb="GetRecord" metadataPrefix="oai_dc" identifier="oai:DiVA.org:kth-144310">
+        http://libris.kb.se/swepub/oaipmh
+    </request>
+    <GetRecord>
+        <record
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xmlns:dc="http://purl.org/dc/elements/1.1/"
+        >
+            <dc:title>An information model</dc:title>
+            <dc:creator>Ebner, Hannes</dc:creator>
+            <dc:type>text</dc:type>
+            <dc:date>2014</dc:date>
+            <dc:language>eng</dc:language>
+            <dc:subject>information model</dc:subject>
+            <dc:subject>Media Technology</dc:subject>
+            <dc:subject>Computer Science</dc:subject>
+            <dc:subject>Information and Communication Technology</dc:subject>
+            <dc:relation>Semantic Web</dc:relation>
+        </record>
+    </GetRecord>
+</OAI-PMH>

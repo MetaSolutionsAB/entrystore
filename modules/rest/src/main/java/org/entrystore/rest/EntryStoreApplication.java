@@ -124,6 +124,8 @@ public class EntryStoreApplication extends Application {
 
 	public static final String KEY = EntryStoreApplication.class.getCanonicalName();
 	public static final String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
+	public static final String OAI_DC = "oai_dc";
+	public static final String RDN_DC = "rdn_dc";
 	private static Date startupDate;
 
 
@@ -222,8 +224,8 @@ public class EntryStoreApplication extends Application {
 			}
 
 			Converter oaiDcRdfConverter = new OAI_DC2RDFGraphConverter();
-			ConverterManagerImpl.register("oai_dc", oaiDcRdfConverter);
-			ConverterManagerImpl.register("rdn_dc", oaiDcRdfConverter);
+			ConverterManagerImpl.register(OAI_DC, oaiDcRdfConverter);
+			ConverterManagerImpl.register(RDN_DC, oaiDcRdfConverter);
 
 			this.rm = new RepositoryManagerImpl(baseURI, confManager.getConfiguration());
 			this.cm = rm.getContextManager();
