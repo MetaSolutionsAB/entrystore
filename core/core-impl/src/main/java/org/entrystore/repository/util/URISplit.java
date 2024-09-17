@@ -68,7 +68,7 @@ public class URISplit {
 		}
 	}
 
-	private static String getBaseContextURI(String base, String contextId) {
+	private static String getBaseContextURIString(String base, String contextId) {
 		if (base != null && contextId != null) {
 			return base.concat(contextId);
 		}
@@ -77,7 +77,7 @@ public class URISplit {
 	}
 
 	public URI getContextURI() {
-		String context = getBaseContextURI(base, contextId);
+		String context = getBaseContextURIString(base, contextId);
 		return context != null ? URI.create(context) : null;
 	}
 
@@ -95,25 +95,19 @@ public class URISplit {
 
 	public URI getResourceURI() {
 		return isContext
-			? createURI(base, id, null, null)
+			? createURI(base, id)
 			: createURI(base, contextId, RepositoryProperties.DATA_PATH, id);
 	}
 
 	public static URI createURI(String base, String contextId, String path, String entryId) {
-		String uri = getBaseContextURI(base, contextId);
+		String uri = getBaseContextURIString(base, contextId);
 
-		if (uri != null) {
-			if (path != null) {
-				uri = uri.concat(SLASH_DELIMITER).concat(path);
-			}
+		// TODO: why do we allow uri with entryId /null ?
+		// http://localhost/store/_contexts/entry/null
+		return URI.create(uri + SLASH_DELIMITER + path + SLASH_DELIMITER + entryId);
+	}
 
-			if (entryId != null) {
-				uri = uri.concat(SLASH_DELIMITER).concat(entryId);
-			}
-
-			return URI.create(uri);
-		}
-
-		return null;
+	public static URI createURI(String base, String contextId) {
+		return URI.create(getBaseContextURIString(base, contextId));
 	}
 }

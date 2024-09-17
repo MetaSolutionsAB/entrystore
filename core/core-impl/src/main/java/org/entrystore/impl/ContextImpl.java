@@ -72,6 +72,7 @@ import static org.eclipse.rdf4j.model.util.Values.literal;
 public class ContextImpl extends ResourceImpl implements Context {
 
 	private long counter = -1;
+	@Getter
 	protected SoftCache cache;
 	protected String id;
 	protected HashMap<URI, Object> extMdUri2entry;
@@ -87,6 +88,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	protected long quotaFillLevel = Quota.VALUE_UNCACHED;
 	protected long quota = Quota.VALUE_UNCACHED;
 
+	@Getter
 	private volatile boolean deleted = false;
 
 	static {
@@ -104,10 +106,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 		super(entry, contextUri);
 		this.cache = cache;
 		this.id = resourceURI.toString().substring(resourceURI.toString().lastIndexOf('/') + 1);
-	}
-
-	public SoftCache getCache() {
-		return this.cache;
 	}
 
 	/**
@@ -464,14 +462,14 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 
 				//resURI - resourceURI
-				IRI resURI = null;
+				IRI resURI;
 				if (resourceURI != null) {
 					String resourceURIStr = resourceURI.toString().replace("_newId", identity);
 					resURI = vf.createIRI(resourceURIStr);
 				} else {
 					if (bType == GraphType.Context ||
 							bType == GraphType.SystemContext) {
-						resURI = vf.createIRI(URISplit.createURI(base, identity, null, null).toString());
+						resURI = vf.createIRI(URISplit.createURI(base, identity).toString());
 					} else {
 						resURI = vf.createIRI(URISplit.createURI(base, this.id, RepositoryProperties.getResourcePath(bType), identity).toString());
 					}
@@ -1192,10 +1190,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 		} catch (Exception e) {
 			log.error(e.getMessage());
 		}
-	}
-
-	public boolean isDeleted() {
-		return deleted;
 	}
 
 }
