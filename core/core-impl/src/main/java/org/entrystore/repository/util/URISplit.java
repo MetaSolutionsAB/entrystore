@@ -68,7 +68,7 @@ public class URISplit {
 		}
 	}
 
-	private static String getBaseContextString(String base, String contextId) {
+	private static String getBaseContextURIString(String base, String contextId) {
 		if (base != null && contextId != null) {
 			return base.concat(contextId);
 		}
@@ -77,7 +77,7 @@ public class URISplit {
 	}
 
 	public URI getContextURI() {
-		String context = getBaseContextString(base, contextId);
+		String context = getBaseContextURIString(base, contextId);
 		return context != null ? URI.create(context) : null;
 	}
 
@@ -100,7 +100,7 @@ public class URISplit {
 	}
 
 	public static URI createURI(String base, String contextId, String path, String entryId) {
-		String uri = getBaseContextString(base, contextId);
+		String uri = getBaseContextURIString(base, contextId);
 
 		// TODO: why do we allow uri with entryId /null ?
 		// http://localhost/store/_contexts/entry/null
@@ -108,6 +108,6 @@ public class URISplit {
 	}
 
 	public static URI createURI(String base, String contextId) {
-		return URI.create(getBaseContextString(base, contextId));
+		return URI.create(getBaseContextURIString(base, contextId));
 	}
 }
