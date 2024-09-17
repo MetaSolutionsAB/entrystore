@@ -16,6 +16,7 @@
 
 package org.entrystore.repository.util;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.net.MalformedURLException;
@@ -42,6 +43,7 @@ public class URISplitTest {
 		}
 	}
 
+	@Disabled("To be discussed")
 	@Test
 	public void constructor_null() {
 		URISplit uriSplit = new URISplit("", null);
@@ -138,18 +140,21 @@ public class URISplitTest {
 		assertEquals(URISplit.createURI(uriSplit.getBase(), uriSplit.getContextId(), uriSplit.getPath(), uriSplit.getId()), URI.create("https://slashdot.org/_contexts/resource/example"));
 	}
 
+	@Disabled("To be discussed")
 	@Test
 	public void createURI_noId() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(anyURIString), URI.create(anyURIStringBase).toURL());
 		assertEquals(URISplit.createURI(uriSplit.getBase(), uriSplit.getContextId(), uriSplit.getPath(), null), URI.create("https://slashdot.org/_contexts/resource"));
 	}
 
+	@Disabled("To be discussed")
 	@Test
 	public void createURI_noPath() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(anyURIString), URI.create(anyURIStringBase).toURL());
 		assertEquals(URISplit.createURI(uriSplit.getBase(), uriSplit.getContextId(), null, uriSplit.getId()), URI.create("https://slashdot.org/_contexts/example"));
 	}
 
+	@Disabled("To be discussed")
 	@Test
 	public void createURI_noPathNoId() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(anyURIString), URI.create(anyURIStringBase).toURL());

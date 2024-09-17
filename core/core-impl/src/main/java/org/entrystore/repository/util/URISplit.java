@@ -89,6 +89,10 @@ public class URISplit {
 		return createURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
 	}
 
+	public URI getMetadataURI() {
+		return createURI(base, contextId, RepositoryProperties.MD_PATH, id);
+	}
+
 	public URI getResourceURI() {
 		return isContext
 			? createURI(base, id)
