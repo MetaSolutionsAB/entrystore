@@ -56,12 +56,13 @@ stepdefinitions:
   - trivy: &trivy
       name: Trivy
       script:
+        - export VERSION=`cat VERSION.txt` && echo $VERSION
         - pipe: aquasecurity/trivy-pipe:latest
           variables:
-            imageRef: 'docker.io/metasolutions/entrystore:develop'
+            imageRef: 'docker.io/metasolutions/entrystore:$VERSION'
             format: 'table'
             exitCode: '1'
-            ignoreUnfixed: true
+            ignoreUnfixed: 'true'
             vulnType: 'os,library'
             severity: 'CRITICAL,HIGH'
       services:
