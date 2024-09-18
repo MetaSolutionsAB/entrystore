@@ -1,26 +1,15 @@
 package org.entrystore.rest.it
 
 import groovy.json.JsonSlurper
-import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.standalone.EntryStoreApplicationStandaloneJetty
-import spock.lang.Specification
 
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
-class ManagementStatusIT extends Specification {
+class ManagementStatusIT extends BaseSpec {
 
-	static client
-
-	def setupSpec() {
-		def args = ['-c', 'file:src/test/resources/entrystore-it.properties', '-p', EntryStoreClient.port.toString()] as String[]
-		EntryStoreApplicationStandaloneJetty.main(args)
-		client = new EntryStoreClient()
-	}
-
-	def "/management/status should reply with status"() {
+	def "GET /management/status should reply with status UP, when no Accept header defined"() {
 		when:
-		def connection = client.getRequest('/management/status')
+		def connection = client.getRequest('/management/status', null, null)
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -28,7 +17,20 @@ class ManagementStatusIT extends Specification {
 		connection.getInputStream().text == 'UP'
 	}
 
-	def "/management/status?extended should reply with Unauthorized error for non-admin user"() {
+	def "GET /management/status should reply with json status UP, when json Accept header is defined"() {
+		when:
+		def connection = client.getRequest('/management/status')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('application/json')
+		def responseJson = (new JsonSlurper()).parseText(connection.getInputStream().text)
+		responseJson['repositoryStatus'] == 'online'
+		responseJson['version'] != null
+		(responseJson['version'] as String).size() > 2
+	}
+
+	def "GET /management/status?extended should reply with Unauthorized error for non-admin user"() {
 		when:
 		def connection = client.getRequest('/management/status?extended=true')
 
@@ -38,7 +40,7 @@ class ManagementStatusIT extends Specification {
 		connection.getErrorStream().text.contains('"error":"Not authorized"')
 	}
 
-	def "/management/status?extended should reply with detailed status for admin user"() {
+	def "GET /management/status?extended should reply with detailed status for admin user"() {
 		when:
 		def connection = client.getRequest('/management/status?extended=true', 'admin')
 

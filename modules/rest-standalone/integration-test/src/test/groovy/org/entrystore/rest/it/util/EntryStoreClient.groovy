@@ -15,8 +15,11 @@ class EntryStoreClient {
 		}
 	}
 
-	def getRequest(String path, String asUser = null) {
+	def getRequest(String path, String asUser = null, String requestAcceptType = 'application/json') {
 		def connection = (HttpURLConnection) new URI(origin + path).toURL().openConnection()
+		if (requestAcceptType?.trim()) {
+			connection.setRequestProperty('Accept', requestAcceptType)
+		}
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
@@ -24,14 +27,23 @@ class EntryStoreClient {
 		return connection
 	}
 
+	def postRequest(String path, String body, String asUser = null, String contentType = 'application/json') {
+		def connection = (HttpURLConnection) new URI(origin + path).toURL().openConnection()
+		if (asUser?.trim()) {
+			connection.setRequestProperty('Cookie', cookies[asUser].toString())
+		}
+		connection.setRequestMethod('POST')
+		connection.setRequestProperty('Content-Type', contentType)
+		connection.setDoOutput(true)
+		connection.getOutputStream().write(body.getBytes())
+		connection.connect()
+		return connection
+	}
+
 	def authorize(String asUser) {
-		def urlParams = 'auth_username=' + asUser + '&auth_password=' + creds[asUser]
-		def conn = (HttpURLConnection) new URI(origin + '/auth/cookie').toURL().openConnection()
-		conn.setRequestMethod('POST')
-		conn.setRequestProperty('Content-Type', 'application/x-www-form-urlencoded')
-		conn.setDoOutput(true)
-		conn.getOutputStream().write(urlParams.getBytes())
-		conn.connect()
+		def bodyParams = 'auth_username=' + asUser + '&auth_password=' + creds[asUser]
+		def conn = postRequest('/auth/cookie', bodyParams, null,
+			'application/x-www-form-urlencoded')
 
 		assert conn.getResponseCode() == HTTP_OK
 		def cookies = conn.getHeaderField('Set-Cookie')
