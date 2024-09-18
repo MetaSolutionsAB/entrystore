@@ -41,7 +41,7 @@ stepdefinitions:
         - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
         - cd docker/entrystore
         - docker build --build-arg ENTRYSTORE_VERSION=$VERSION --pull --no-cache --tag metasolutions/entrystore:$VERSION .
-        - docker run anchore/grype --only-fixed --fail-on medium docker:metasolutions/entrystore:$VERSION
+        - docker run --rm --volume /var/run/docker.sock:/var/run/docker.sock anchore/grype --only-fixed --fail-on medium docker:metasolutions/entrystore:$VERSION
         - docker push metasolutions/entrystore:$VERSION
         - if [ $BITBUCKET_BRANCH == "develop" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:develop ; docker push metasolutions/entrystore:develop ; fi
         - if [ $BITBUCKET_BRANCH == "master" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:$VERSION_MAJOR_MINOR ; docker push metasolutions/entrystore:$VERSION_MAJOR_MINOR ; fi
@@ -54,25 +54,26 @@ stepdefinitions:
         - docker
       caches:
         - docker
-  - grype: &grype
-      name: Grype
+  - trivy: &trivy
+      name: Trivy
       script:
         - export VERSION=`cat VERSION.txt` && echo $VERSION
-        - docker run anchore/grype --only-fixed --fail-on high registry:metasolutions/entrystore:$VERSION
+        - docker run --rm aquasec/trivy repo --exit-code 1 --format table --no-progress --severity MEDIUM,HIGH,CRITICAL --branch $BITBUCKET_BRANCH $BITBUCKET_CLONE_DIR
       services:
         - docker
 
 pipelines:
   default:
+    - step: *trivy
     - step: *build
   branches:
     master:
+      - step: *trivy
       - step: *build
       - step: *deploy
       - step: *dockerhub
-      - step: *grype
     develop:
+      - step: *trivy
       - step: *build
       - step: *deploy
       - step: *dockerhub
-      - step: *grype
