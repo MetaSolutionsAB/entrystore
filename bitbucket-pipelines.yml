@@ -53,6 +53,20 @@ stepdefinitions:
         - docker
       caches:
         - docker
+  - trivy: &trivy
+      name: Trivy
+      script:
+        - export VERSION=`cat VERSION.txt` && echo $VERSION
+        - pipe: aquasecurity/trivy-pipe:latest
+          variables:
+            imageRef: 'docker.io/metasolutions/entrystore:$VERSION'
+            format: 'table'
+            exitCode: '1'
+            ignoreUnfixed: true
+            vulnType: 'os,library'
+            severity: 'CRITICAL,HIGH'
+      services:
+        - docker
 
 pipelines:
   default:
@@ -62,7 +76,9 @@ pipelines:
       - step: *build
       - step: *deploy
       - step: *dockerhub
+      - step: *trivy
     develop:
       - step: *build
       - step: *deploy
       - step: *dockerhub
+      - step: *trivy
