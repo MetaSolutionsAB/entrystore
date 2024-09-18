@@ -58,7 +58,7 @@ stepdefinitions:
       name: Trivy
       script:
         - export VERSION=`cat VERSION.txt` && echo $VERSION
-        - docker run --rm aquasec/trivy repo --exit-code 1 --format table --no-progress --severity MEDIUM,HIGH,CRITICAL --branch $BITBUCKET_BRANCH $BITBUCKET_CLONE_DIR
+        - docker run --rm -v "$BITBUCKET_CLONE_DIR":/repo:ro aquasec/trivy repo --exit-code 1 --format table --no-progress --severity MEDIUM,HIGH,CRITICAL /repo
       services:
         - docker
 
