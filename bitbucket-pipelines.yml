@@ -57,7 +57,7 @@ stepdefinitions:
       name: Trivy
       script:
         - export VERSION=`cat VERSION.txt` && echo $VERSION
-        - pipe: aquasecurity/trivy-pipe:latest
+        - pipe: aquasecurity/trivy-pipe:1.0.0
           variables:
             imageRef: 'docker.io/metasolutions/entrystore:$VERSION'
             format: 'table'
