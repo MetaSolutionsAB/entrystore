@@ -56,10 +56,9 @@ stepdefinitions:
   - trivy: &trivy
       name: Trivy
       script:
-        - export VERSION=`cat VERSION.txt` && echo $VERSION
         - pipe: aquasecurity/trivy-pipe:latest
           variables:
-            imageRef: 'docker.io/metasolutions/entrystore:$VERSION'
+            imageRef: 'docker.io/metasolutions/entrystore:develop'
             format: 'table'
             exitCode: '1'
             ignoreUnfixed: true
@@ -76,7 +75,6 @@ pipelines:
       - step: *build
       - step: *deploy
       - step: *dockerhub
-      - step: *trivy
     develop:
       - step: *build
       - step: *deploy
