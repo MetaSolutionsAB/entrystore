@@ -18,15 +18,17 @@ package org.entrystore.repository.util;
 
 import lombok.Getter;
 import org.entrystore.impl.RepositoryProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URL;
 import java.util.StringTokenizer;
 
-import static org.entrystore.repository.util.EntryUtil.log;
-
 @Getter
 public class URISplit {
+
+	static Logger log = LoggerFactory.getLogger(URISplit.class);
 
 	private static final String SLASH_DELIMITER = "/";
 
