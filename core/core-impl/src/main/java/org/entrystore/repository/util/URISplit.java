@@ -23,6 +23,8 @@ import java.net.URI;
 import java.net.URL;
 import java.util.StringTokenizer;
 
+import static org.entrystore.repository.util.EntryUtil.log;
+
 @Getter
 public class URISplit {
 
@@ -102,8 +104,11 @@ public class URISplit {
 	public static URI createURI(String base, String contextId, String path, String entryId) {
 		String uri = getBaseContextURIString(base, contextId);
 
-		// TODO: why do we allow uri with entryId /null ?
-		// http://localhost/store/_contexts/entry/null
+		if (uri == null || path == null || entryId == null) {
+			log.warn("Parameters must not be null or empty in uri={} path={} entryId={}.", uri, path, entryId);
+			//throw new IllegalArgumentException("Parameters must not be null or empty.");
+		}
+
 		return URI.create(uri + SLASH_DELIMITER + path + SLASH_DELIMITER + entryId);
 	}
 
