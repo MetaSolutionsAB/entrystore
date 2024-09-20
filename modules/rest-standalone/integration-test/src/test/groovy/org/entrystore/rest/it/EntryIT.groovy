@@ -11,8 +11,9 @@ class EntryIT extends BaseSpec {
 
 	def "POST /{context-id} should create new entry in the context"() {
 		given:
-		def contextId = createContext([name: 'someName'])
-		def body = JsonOutput.toJson([entrytype: 'local'])
+		def contextId = '10'
+		def groupId = createContext([name: 'someName10', contextId: contextId])
+		def body = JsonOutput.toJson([entrytype: 'link'])
 
 		when:
 		def connection = client.postRequest('/' + contextId, body, 'admin')
@@ -37,7 +38,8 @@ class EntryIT extends BaseSpec {
 
 	def "POST /{context-id} should throw unauthorized for non-admin user"() {
 		given:
-		def contextId = createContext([name: 'someName'])
+		def contextId = '11'
+		def groupId = createContext([name: 'someName11', contextId: contextId])
 		def body = JsonOutput.toJson([entrytype: 'local'])
 
 		when:

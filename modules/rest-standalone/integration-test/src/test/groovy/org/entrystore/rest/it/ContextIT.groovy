@@ -1,18 +1,19 @@
 package org.entrystore.rest.it
 
-import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import org.entrystore.rest.it.util.EntryStoreClient
+import org.entrystore.rest.it.util.NameSpaceConst
 
-import static java.net.HttpURLConnection.HTTP_CREATED
-import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.*
 
 class ContextIT extends BaseSpec {
 
 	def "POST /_principals/groups should create new group and context"() {
 		given:
-		def body = JsonOutput.toJson([name: 'someName'])
+		def contextName = 'someName'
 
 		when:
-		def connection = client.postRequest('/_principals/groups', body, 'admin')
+		def connection = client.postRequest('/_principals/groups?name=' + contextName, '', 'admin')
 
 		then:
 		connection.getResponseCode() == HTTP_CREATED
@@ -23,43 +24,54 @@ class ContextIT extends BaseSpec {
 		connection.getInputStream().text == ''
 		def contextId = connection.getHeaderField('Location').find(/\/_principals\/entry\/(\d+)$/) { match, id -> id } as Integer
 		contextId > 0
-		def contextConn = client.getRequest('/' + contextId, 'admin')
+
+		def contextConn = client.getRequest('/_contexts/entry/' + contextId, 'admin')
+//		def contextConn = client.getRequest('/' + contextId, 'admin')
 		contextConn.getResponseCode() == HTTP_OK
-		contextConn.getInputStream().text == '[]'
+		def responseJson = new JsonSlurper().parseText(contextConn.getInputStream().text)
+		responseJson['entryId'] == contextId.toString()
+		responseJson['name'] == contextName
+		responseJson['info'] != null
+		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId] != null
+		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType] != null
+		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['type'] != null
+		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['type'].collect().size() == 1
+		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['type'].collect()[0] == 'uri'
+		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['value'] != null
+		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['value'].collect().size() == 1
+		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['value'].collect()[0] == NameSpaceConst.EsContext
 	}
 
-	// Able to create multiple contexts with the same name, is this expected behaviour?
-	def "POST /_principals/groups should (or not?) create new group and context with duplicated name"() {
+	def "POST /_principals/groups should not create group and context with a duplicated name"() {
 		given:
-		def body = JsonOutput.toJson([name: 'someName'])
+		def contextName = 'someName'
 
 		when:
-		def connection = client.postRequest('/_principals/groups', body, 'admin')
+		def connection = client.postRequest('/_principals/groups?name=' + contextName, '', 'admin')
 
 		then:
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getHeaderField('Location') != null
-		connection.getHeaderField('Location').contains('/_principals/entry/')
-		connection.getInputStream().text == ''
-		def contextId = connection.getHeaderField('Location').find(/\/_principals\/entry\/(\d+)$/) { match, id -> id } as Integer
-		contextId > 0
-		def contextConn = client.getRequest('/' + contextId, 'admin')
-		contextConn.getResponseCode() == HTTP_OK
-		contextConn.getInputStream().text == '[]'
+		connection.getResponseCode() == HTTP_CONFLICT
+		def responseBody = connection.getErrorStream().text
+		responseBody != null
+		responseBody.length() > 10
 	}
 
-	/*
-	// Below test does not pass, created entry has ID 1, but should be 12345?
 	def "POST /_principals/groups should create new group and context with specified ID"() {
+		given:
+		def contextId = '12345'
+		def params = [contextId: contextId, name: 'someName2']
+
 		when:
-		def contextId = createContext([name: 'someName2', contextId: '12345'])
+		def groupId = createContext(params)
 
 		then:
-		contextId == 12345
-		def conn = client.getRequest('/12345', 'admin')
+		groupId > 0
+		def conn = client.getRequest('/_contexts/entry/' + contextId, 'admin')
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		conn.getInputStream().text == ''
+		def responseJson = new JsonSlurper().parseText(conn.getInputStream().text)
+		responseJson['entryId'] == contextId
+		responseJson['name'] == 'someName2'
+		responseJson['info'] != null
 	}
-	 */
 }

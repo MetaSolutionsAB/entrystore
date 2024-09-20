@@ -7,6 +7,7 @@ class EntryStoreClient {
 	static String host = 'localhost'
 	static int port = 8181 // Math.abs(new Random().nextInt() % 50000) + 10000
 	static String origin = 'http://' + host + ':' + port
+	static String baseUrl = origin + '/store'
 
 	def creds = ['admin': 'adminpass']
 	def cookies = [:].withDefault { userName ->
@@ -27,7 +28,7 @@ class EntryStoreClient {
 		return connection
 	}
 
-	def postRequest(String path, String body, String asUser = null, String contentType = 'application/json') {
+	def postRequest(String path, String body = '', String asUser = null, String contentType = 'application/json') {
 		def connection = (HttpURLConnection) new URI(origin + path).toURL().openConnection()
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
