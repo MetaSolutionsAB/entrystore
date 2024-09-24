@@ -33,9 +33,17 @@ abstract class BaseSpec extends Specification {
 	 * @return ID of the created group
 	 */
 	def createContext(Map data) {
-		def reqParams = (data.size() == 0) ? '' : '?' + data.collect { k, v -> "$k=$v" }.join('&')
-		def connection = client.postRequest('/_principals/groups' + reqParams, '', 'admin')
+		def connection = client.postRequest('/_principals/groups' + convertMapToQueryParams(data), '', 'admin')
 		assert connection.getResponseCode() == HTTP_CREATED
-		return connection.getHeaderField('Location').find(/\/_principals\/entry\/(\d+)$/) { match, id -> id } as Integer
+		return connection.getHeaderField('Location').find(/\/_principals\/entry\/([0-9A-Za-z]+)$/) { match, id -> id }
+	}
+
+	/**
+	 *
+	 * @param data a key-val map to be converted
+	 * @return a string in form of "?key1=value1&key2=value2&..."; or empty string for empty map
+	 */
+	def convertMapToQueryParams(Map data) {
+		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> "$k=$v" }.join('&')
 	}
 }

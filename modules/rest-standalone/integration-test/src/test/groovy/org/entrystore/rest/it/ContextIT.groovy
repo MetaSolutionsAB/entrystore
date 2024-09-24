@@ -22,8 +22,23 @@ class ContextIT extends BaseSpec {
 		// shouldn't it return the created instance data?
 		//connection.getContentType().contains('application/json')
 		connection.getInputStream().text == ''
-		def contextId = connection.getHeaderField('Location').find(/\/_principals\/entry\/(\d+)$/) { match, id -> id } as Integer
-		contextId > 0
+		def groupId = connection.getHeaderField('Location').find(/\/_principals\/entry\/([0-9A-Za-z]+)$/) { match, id -> id }
+		groupId.length() > 0
+
+		def principalConn = client.getRequest('/_principals/entry/' + groupId, 'admin')
+		principalConn.getResponseCode() == HTTP_OK
+		principalConn.getContentType().contains('application/json')
+		def principalJson = new JsonSlurper().parseText(principalConn.getInputStream().text)
+		principalJson['info'] != null
+		principalJson['info'][EntryStoreClient.baseUrl + '/_principals/resource/' + groupId] != null
+		principalJson['info'][EntryStoreClient.baseUrl + '/_principals/resource/' + groupId][NameSpaceConst.TERM_HOME_CONTEXT] != null
+		def homeContexts = principalJson['info'][EntryStoreClient.baseUrl + '/_principals/resource/' + groupId][NameSpaceConst.TERM_HOME_CONTEXT].collect()
+		homeContexts.size() == 1
+		homeContexts[0]['type'] == 'uri'
+		homeContexts[0]['value'] != null
+		homeContexts[0]['value'].toString().startsWith(EntryStoreClient.baseUrl + '/_contexts/entry/')
+		def contextId = homeContexts[0]['value'].toString().find(/\/_contexts\/entry\/([0-9A-Za-z]+)$/) { match, id -> id }
+		contextId.length() > 0
 
 		def contextConn = client.getRequest('/_contexts/entry/' + contextId, 'admin')
 //		def contextConn = client.getRequest('/' + contextId, 'admin')
@@ -33,13 +48,11 @@ class ContextIT extends BaseSpec {
 		responseJson['name'] == contextName
 		responseJson['info'] != null
 		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId] != null
-		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType] != null
-		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['type'] != null
-		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['type'].collect().size() == 1
-		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['type'].collect()[0] == 'uri'
-		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['value'] != null
-		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['value'].collect().size() == 1
-		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RdfType]['value'].collect()[0] == NameSpaceConst.EsContext
+		responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RDF_TYPE] != null
+		def contextTypes = responseJson['info'][EntryStoreClient.baseUrl + '/' + contextId][NameSpaceConst.RDF_TYPE].collect()
+		contextTypes.size() == 1
+		contextTypes[0]['type'] == 'uri'
+		contextTypes[0]['value'] == NameSpaceConst.TERM_CONTEXT
 	}
 
 	def "POST /_principals/groups should not create group and context with a duplicated name"() {

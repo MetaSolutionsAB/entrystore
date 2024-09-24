@@ -27,7 +27,7 @@ class ManagementStatusIT extends BaseSpec {
 		def responseJson = (new JsonSlurper()).parseText(connection.getInputStream().text)
 		responseJson['repositoryStatus'] == 'online'
 		responseJson['version'] != null
-		(responseJson['version'] as String).size() > 2
+		(responseJson['version'] as String).length() > 2
 	}
 
 	def "GET /management/status?extended should reply with Unauthorized error for non-admin user"() {
