@@ -68,6 +68,7 @@ import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
 import org.entrystore.rest.resources.MergedMetadataResource;
 import org.entrystore.rest.resources.MessageResource;
+import org.entrystore.rest.resources.MultiSamlLoginResource;
 import org.entrystore.rest.resources.NameResource;
 import org.entrystore.rest.resources.PasswordResetResource;
 import org.entrystore.rest.resources.PerformanceMetricsResource;
@@ -328,9 +329,12 @@ public class EntryStoreApplication extends Application {
 		}
 
 		// SAML
-		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_SAML, "off"))) {
+		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_SAML))) {
 			router.attach("/auth/saml", SamlLoginResource.class);
-			log.info("SAML authentication enabled");
+			log.info("Legacy SAML authentication enabled");
+		} else if ("multi".equalsIgnoreCase(config.getString(Settings.AUTH_SAML))) {
+			router.attach("/auth/saml", MultiSamlLoginResource.class);
+			log.info("Multi SAML authentication enabled");
 		}
 
 		// signup
