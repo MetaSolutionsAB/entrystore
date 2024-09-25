@@ -182,8 +182,15 @@ public class MultiSamlLoginResource extends BaseResource {
 
 	private void loadMetadataAndInitSamlClient(SamlIdpInfo samlIdpInfo) {
 		try {
-			Reader idpMetadataReader = new BufferedReader(new InputStreamReader(new URL(samlIdpInfo.getMetadataUrl()).openStream(), StandardCharsets.UTF_8));
-			samlIdpInfo.setSamlClient(SamlClient.fromMetadata(samlIdpInfo.getRelyingPartyId(), assertionConsumerService, idpMetadataReader));
+			String acsWithIdp = assertionConsumerService;
+			if (acsWithIdp.contains("?")) {
+				acsWithIdp += "&";
+			} else {
+				acsWithIdp += "?";
+			}
+			acsWithIdp += "idp=" + samlIdpInfo.getId();
+			Reader idpMetadataReader = new BufferedReader(new InputStreamReader(URI.create(samlIdpInfo.getMetadataUrl()).toURL().openStream(), StandardCharsets.UTF_8));
+			samlIdpInfo.setSamlClient(SamlClient.fromMetadata(samlIdpInfo.getRelyingPartyId(), acsWithIdp, idpMetadataReader));
 			samlIdpInfo.setMetadataLoaded(new Date());
 			log.info("Loaded SAML metadata for \"{}\" from {}", samlIdpInfo.getId(), samlIdpInfo.getMetadataUrl());
 		} catch (IOException | SamlException e) {
