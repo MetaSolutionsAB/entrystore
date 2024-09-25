@@ -133,7 +133,7 @@ public class MultiSamlLoginResource extends BaseResource {
 					log.error("No SAML Assertion Consumer Service URL configured");
 					return;
 				} else {
-					log.info("SAML Assertion Consumer Service URL: " + assertionConsumerService);
+					log.info("Generic SAML Assertion Consumer Service URL: {}", assertionConsumerService);
 				}
 
 				List<String> idps = config.getStringList(Settings.AUTH_SAML_IDPS);
@@ -157,7 +157,7 @@ public class MultiSamlLoginResource extends BaseResource {
 						samlIDPs.put(idp, idpInfo);
 						loadMetadataAndInitSamlClient(idpInfo);
 					} else {
-						log.error("Configuration of SAML IDP \"{}\" is incomplete", idp);
+						log.error("Configuration of SAML IdP \"{}\" is incomplete", idp);
 					}
 
 					logIdpInfo(idpInfo);
@@ -170,7 +170,7 @@ public class MultiSamlLoginResource extends BaseResource {
 	}
 
 	private void logIdpInfo(SamlIdpInfo info) {
-		String prefix = "SAML IDP \"" + info.getId() + "\" ";
+		String prefix = "SAML IdP \"" + info.getId() + "\" ";
 		log.info(prefix + "Domains: {}", info.getDomains());
 		log.info(prefix + "Relying Party ID: {}", info.getRelyingPartyId());
 		log.info(prefix + "Metadata URL: {}", info.getMetadataUrl());
@@ -192,7 +192,7 @@ public class MultiSamlLoginResource extends BaseResource {
 			Reader idpMetadataReader = new BufferedReader(new InputStreamReader(URI.create(samlIdpInfo.getMetadataUrl()).toURL().openStream(), StandardCharsets.UTF_8));
 			samlIdpInfo.setSamlClient(SamlClient.fromMetadata(samlIdpInfo.getRelyingPartyId(), acsWithIdp, idpMetadataReader));
 			samlIdpInfo.setMetadataLoaded(new Date());
-			log.info("Loaded SAML metadata for \"{}\" from {}", samlIdpInfo.getId(), samlIdpInfo.getMetadataUrl());
+			log.info("Loaded SAML metadata for IdP \"{}\" from {}", samlIdpInfo.getId(), samlIdpInfo.getMetadataUrl());
 		} catch (IOException | SamlException e) {
 			log.error(e.getMessage());
 		}
@@ -212,7 +212,7 @@ public class MultiSamlLoginResource extends BaseResource {
 		SamlIdpInfo idpInfo = findIdpForRequest(getRequest());
 		if (idpInfo == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			return new StringRepresentation("No matching IDP configuration found for request");
+			return new StringRepresentation("No matching IdP configuration found for request");
 		}
 		checkAndInitSamlClient(idpInfo);
 		try {
@@ -234,7 +234,7 @@ public class MultiSamlLoginResource extends BaseResource {
 		SamlIdpInfo idpInfo = findIdpForRequest(getRequest());
 		if (idpInfo == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(new StringRepresentation("No matching IDP configuration found for request"));
+			getResponse().setEntity(new StringRepresentation("No matching IdP configuration found for request"));
 			return;
 		}
 		checkAndInitSamlClient(idpInfo);
@@ -248,7 +248,7 @@ public class MultiSamlLoginResource extends BaseResource {
 			try {
 				SamlResponse samlResponse = idpInfo.getSamlClient().decodeAndValidateSamlResponse(encodedResponse, "POST");
 				userName = samlResponse.getNameID();
-				log.info("Successfully authenticated via SAML: " + userName);
+				log.info("Successfully authenticated via SAML IdP \"{}\": {}", idpInfo.getId(), userName);
 			} catch (SamlException e) {
 				log.error(e.getMessage());
 			}
@@ -259,7 +259,7 @@ public class MultiSamlLoginResource extends BaseResource {
 
 			if (userName != null && !BasicVerifier.userExists(getPM(), userName)) {
 				if (!idpInfo.isAutoProvisioning()) {
-					log.warn("User auto-provisioning is deactivated");
+					log.warn("User auto-provisioning is deactivated for IdP \"{}\"", idpInfo.getId());
 				} else {
 					PrincipalManager pm = getPM();
 					URI authUser = pm.getAuthenticatedUserURI();
@@ -270,7 +270,7 @@ public class MultiSamlLoginResource extends BaseResource {
 						Entry entry = pm.createResource(null, GraphType.User, null, null);
 						if (entry != null) {
 							User u = (User) entry.getResource();
-							log.info("Created user " + u.getURI());
+							log.info("Created user {}", u.getURI());
 							pm.setPrincipalName(entry.getResourceURI(), userName);
 							// TODO set some basic metadata, if we can get it from the SAML server
 							// Signup.setFoafMetadata(entry, new org.restlet.security.User(...));
@@ -302,7 +302,7 @@ public class MultiSamlLoginResource extends BaseResource {
 			}
 
 			if (!authSuccess) {
-				log.info("Login failed with username {}", userName);
+				log.info("Login failed with username {} via IdP \"{}\"", userName, idpInfo.getId());
 				if (redirFailure != null) {
 					getResponse().redirectTemporary(URLDecoder.decode(redirFailure, StandardCharsets.UTF_8));
 				} else {
@@ -392,7 +392,7 @@ public class MultiSamlLoginResource extends BaseResource {
 		} else {
 			String defaultIdp = config.getString(Settings.AUTH_SAML_DEFAULT_IDP);
 			if (defaultIdp == null || defaultIdp.isEmpty()) {
-				log.warn("IDP parameter missing and no default IDP configured, unable to properly initialize SAML request");
+				log.warn("IdP parameter missing and no default IdP configured, unable to properly initialize SAML request");
 			}
 			return samlIDPs.get(defaultIdp);
 		}
