@@ -38,11 +38,10 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * A resource that allows normal users to create a group with a linked context.
- *
  * This resource is an exception as it does not require admin-rights. This feature
  * needs to be explicitly activated in the configuration (the approach may change
  * in the future).
- * 
+ *
  * @author Hannes Ebner
  */
 public class GroupResource extends BaseResource {
@@ -106,7 +105,7 @@ public class GroupResource extends BaseResource {
 				return;
 			}
 
-			if (getCM().getContext(contextId) != null) {
+			if (contextId != null && getCM().getContext(contextId) != null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
 				return;
 			}
