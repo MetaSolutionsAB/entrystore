@@ -1,5 +1,6 @@
 package org.entrystore.rest.auth;
 
+import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
@@ -25,9 +26,13 @@ public class UserTempLockoutCache {
 	private static final Logger log = LoggerFactory.getLogger(UserTempLockoutCache.class);
 
 	private final int configAllowedFailedLoginAttempts;
+
 	private final Duration configUserLockoutDuration;
+
 	private final boolean configIncludeAdmin;
+
 	private final PrincipalManager pm;
+
 	private final ConcurrentMap<String, UserTemporaryLockout> userTempLockoutMap = new ConcurrentHashMap<>();
 
 	public UserTempLockoutCache(RepositoryManager rm, PrincipalManager pm) {
@@ -47,7 +52,12 @@ public class UserTempLockoutCache {
 			return;
 		}
 
-		URI userUri = pm.getPrincipalEntry(userName).getResourceURI();
+		Entry userEntry = pm.getPrincipalEntry(userName);
+		if (userEntry == null) {
+			log.warn("Login attempt failed, user does not exist: {}", userName);
+			return;
+		}
+		URI userUri = userEntry.getResourceURI();
 		User user = pm.getUser(userUri);
 
 		log.info("User [{}] failed login attempt due to providing wrong password", userName);
