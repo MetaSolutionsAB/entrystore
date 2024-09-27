@@ -57,6 +57,7 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 	private Context context;
 	private static RDFXMLParser rdfXmlParser;
 
+
 	@BeforeEach
 	public void setUp() {
 		super.setUp();
@@ -91,11 +92,14 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 
 			if (entry.getEntryURI().toString().contains("person")) {
 				String age = entry.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+				String ageStored = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
 				assertEquals(24, Integer.parseInt(age));
-			}
-			else if (entry.getEntryURI().toString().contains("ssn")) {
+				assertEquals(age, ageStored);
+			} else if (entry.getEntryURI().toString().contains("ssn")) {
 				String ssn = entry.getMetadataGraph().getStatements(null, hasIdentifierValue, null).iterator().next().getObject().stringValue();
+				String ssnStored = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, hasIdentifierValue, null).iterator().next().getObject().stringValue();
 				assertEquals("8805139032", ssn);
+				assertEquals(ssn, ssnStored);
 			}
 		});
 
@@ -108,21 +112,24 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 
 		deserializedGraph = new LinkedHashModel(collector.getStatements());
 		entries = g2e.merge(deserializedGraph, null, null);
-		Set<URI> resourcesUpdate = context.getResources();
+		Set<URI> resourcesUpdated = context.getResources();
 
 		assertEquals(2, entries.size());
-		assertEquals(2, resourcesUpdate.size());
+		assertEquals(2, resourcesUpdated.size());
 
 		entries.forEach(entry -> {
-			assertTrue(resourcesUpdate.contains(entry.getResourceURI()));
+			assertTrue(resourcesUpdated.contains(entry.getResourceURI()));
 
 			if (entry.getEntryURI().toString().contains("person")) {
 				String age = entry.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+				String ageStored = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
 				assertEquals(48, Integer.parseInt(age));
-			}
-			else if (entry.getEntryURI().toString().contains("ssn")) {
+				assertEquals(age, ageStored);
+			} else if (entry.getEntryURI().toString().contains("ssn")) {
 				String ssn = entry.getMetadataGraph().getStatements(null, hasIdentifierValue, null).iterator().next().getObject().stringValue();
+				String ssnStored = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, hasIdentifierValue, null).iterator().next().getObject().stringValue();
 				assertEquals("9905139032", ssn);
+				assertEquals(ssn, ssnStored);
 			}
 		});
 	}
