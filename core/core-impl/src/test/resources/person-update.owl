@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://www.example.org/person#"
+     xml:base="http://www.example.org/person"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:per="http://www.example.org/person/"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:xml="http://www.w3.org/XML/1998/namespace"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:eterms="http://entrystore.org/terms/"
+     xmlns:per-ind="http://www.example.org/person#">
+    <owl:Ontology rdf:about="http://www.example.org/person">
+        <rdfs:label>Game of Thrones test update</rdfs:label>
+    </owl:Ontology>
+
+
+
+    <!--
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Individuals
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+
+
+    <!-- http://www.example.org/person#JohnSnow -->
+
+    <owl:NamedIndividual rdf:about="http://www.example.org/person#JohnSnow">
+        <per:hasAge rdf:datatype="http://www.w3.org/2001/XMLSchema#int">48</per:hasAge>
+        <eterms:mergeResourceId>person</eterms:mergeResourceId>
+    </owl:NamedIndividual>
+
+
+
+    <!-- http://www.example.org/person#JohnSnowSSN -->
+
+    <owl:NamedIndividual rdf:about="http://www.example.org/person#JohnSnowSSN">
+        <per:hasIdentifierValue>9905139032</per:hasIdentifierValue>
+        <eterms:mergeResourceId>ssn</eterms:mergeResourceId>
+    </owl:NamedIndividual>
+</rdf:RDF>

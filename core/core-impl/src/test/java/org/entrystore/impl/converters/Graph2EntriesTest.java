@@ -55,23 +55,23 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 	private static final IRI hasIdentifierValue = valueFactory.createIRI(personOntology, "hasIdentifierValue");
 
 	private Context context;
+	private static RDFXMLParser rdfXmlParser;
 
 	@BeforeEach
 	public void setUp() {
 		super.setUp();
 		rm.setCheckForAuthorization(false);
 
-		// A new Context
+		rdfXmlParser = new RDFXMLParser();
+		rdfXmlParser.setParserConfig(constructSafeXmlParserConfig());
+
 		Entry entry = cm.createResource(null, GraphType.Context, null, null);
 		context = (Context) entry.getResource();
 	}
 
 	@Test
-	public void merge_rdf_create() throws IOException {
-		File file = new File("src/test/resources/person.owl");
-		String graphString = FileUtils.readFileToString(file, "UTF-8");
-		RDFXMLParser rdfXmlParser = new RDFXMLParser();
-		rdfXmlParser.setParserConfig(constructSafeXmlParserConfig());
+	public void merge_create_and_update() throws IOException {
+		String graphString = FileUtils.readFileToString(new File("src/test/resources/person.owl"), "UTF-8");
 
 		StringReader reader = new StringReader(graphString);
 		StatementCollector collector = new StatementCollector();
@@ -81,13 +81,13 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 		Model deserializedGraph = new LinkedHashModel(collector.getStatements());
 		Graph2Entries g2e = new Graph2Entries(context);
 		Set<Entry> entries = g2e.merge(deserializedGraph, null, null);
-		Set<URI> resources = context.getResources();
+		Set<URI> resourcesCreated = context.getResources();
 
 		assertEquals(2, entries.size());
-		assertEquals(2, resources.size());
+		assertEquals(2, resourcesCreated.size());
 
 		entries.forEach(entry -> {
-			assertTrue(resources.contains(entry.getResourceURI()));
+			assertTrue(resourcesCreated.contains(entry.getResourceURI()));
 
 			if (entry.getEntryURI().toString().contains("person")) {
 				String age = entry.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
@@ -96,6 +96,33 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 			else if (entry.getEntryURI().toString().contains("ssn")) {
 				String ssn = entry.getMetadataGraph().getStatements(null, hasIdentifierValue, null).iterator().next().getObject().stringValue();
 				assertEquals("8805139032", ssn);
+			}
+		});
+
+		graphString = FileUtils.readFileToString(new File("src/test/resources/person-update.owl"), "UTF-8");
+
+		reader = new StringReader(graphString);
+		collector = new StatementCollector();
+		rdfXmlParser.setRDFHandler(collector);
+		rdfXmlParser.parse(reader, "");
+
+		deserializedGraph = new LinkedHashModel(collector.getStatements());
+		entries = g2e.merge(deserializedGraph, null, null);
+		Set<URI> resourcesUpdate = context.getResources();
+
+		assertEquals(2, entries.size());
+		assertEquals(2, resourcesUpdate.size());
+
+		entries.forEach(entry -> {
+			assertTrue(resourcesUpdate.contains(entry.getResourceURI()));
+
+			if (entry.getEntryURI().toString().contains("person")) {
+				String age = entry.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+				assertEquals(48, Integer.parseInt(age));
+			}
+			else if (entry.getEntryURI().toString().contains("ssn")) {
+				String ssn = entry.getMetadataGraph().getStatements(null, hasIdentifierValue, null).iterator().next().getObject().stringValue();
+				assertEquals("9905139032", ssn);
 			}
 		});
 	}
