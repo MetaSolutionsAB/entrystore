@@ -67,7 +67,7 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 	}
 
 	@Test
-	public void merge_create() throws IOException {
+	public void merge_rdf_create() throws IOException {
 		File file = new File("src/test/resources/person.owl");
 		String graphString = FileUtils.readFileToString(file, "UTF-8");
 		RDFXMLParser rdfXmlParser = new RDFXMLParser();
