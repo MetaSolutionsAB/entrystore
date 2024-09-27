@@ -71,7 +71,7 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 	}
 
 	@Test
-	public void merge_create_and_update() throws IOException {
+	public void merge_create_and_update_null() throws IOException {
 		String graphString = FileUtils.readFileToString(new File("src/test/resources/person.owl"), "UTF-8");
 
 		StringReader reader = new StringReader(graphString);
@@ -132,6 +132,33 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 				assertEquals(ssn, ssnStored);
 			}
 		});
+	}
+
+	@Test
+	public void merge_create_and_update_empty() throws IOException {
+		String graphString = FileUtils.readFileToString(new File("src/test/resources/person-destination-id-empty.owl"), "UTF-8");
+
+		StringReader reader = new StringReader(graphString);
+		StatementCollector collector = new StatementCollector();
+		rdfXmlParser.setRDFHandler(collector);
+		rdfXmlParser.parse(reader, "");
+
+		Model deserializedGraph = new LinkedHashModel(collector.getStatements());
+		Graph2Entries g2e = new Graph2Entries(context);
+		Set<Entry> entries = g2e.merge(deserializedGraph, "", null);
+		Set<URI> resourcesCreated = context.getResources();
+
+		assertEquals(1, entries.size());
+		assertEquals(1, resourcesCreated.size());
+
+		Entry entry = entries.iterator().next();
+		assertTrue(resourcesCreated.contains(entry.getResourceURI()));
+
+		String age = entry.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+		String ageStored = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+		assertEquals(24, Integer.parseInt(age));
+		assertEquals(age, ageStored);
+
 	}
 
 	/**
