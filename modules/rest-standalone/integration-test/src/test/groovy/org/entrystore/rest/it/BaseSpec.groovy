@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 import static java.net.HttpURLConnection.HTTP_CREATED
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 
 abstract class BaseSpec extends Specification {
 
@@ -24,6 +25,13 @@ abstract class BaseSpec extends Specification {
 			EntryStoreApplicationStandaloneJetty.main(args)
 		} else {
 			log.info('EntryStoreApp already started')
+		}
+	}
+
+	def getOrCreateContext(Map data) {
+		def connection = client.getRequest('/_contexts/entry/' + data['contextId'], 'admin')
+		if (connection.getResponseCode() == HTTP_NOT_FOUND) {
+			createContext(data)
 		}
 	}
 

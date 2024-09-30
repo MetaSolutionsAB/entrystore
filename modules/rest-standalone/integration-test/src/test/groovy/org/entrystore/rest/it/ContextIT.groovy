@@ -78,7 +78,8 @@ class ContextIT extends BaseSpec {
 		def groupId = createContext(params)
 
 		then:
-		groupId > 0
+		groupId != null
+		groupId.length() > 0
 		def conn = client.getRequest('/_contexts/entry/' + contextId, 'admin')
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
