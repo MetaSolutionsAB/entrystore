@@ -28,7 +28,7 @@ import java.util.StringTokenizer;
 @Getter
 public class URISplit {
 
-	static Logger log = LoggerFactory.getLogger(URISplit.class);
+	private static final Logger log = LoggerFactory.getLogger(URISplit.class);
 
 	private static final String SLASH_DELIMITER = "/";
 

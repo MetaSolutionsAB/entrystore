@@ -32,9 +32,9 @@ import org.junit.jupiter.api.BeforeEach;
  */
 public abstract class AbstractCoreTest {
 
-	RepositoryManagerImpl rm;
-	ContextManager cm;
-	PrincipalManager pm;
+	public RepositoryManagerImpl rm;
+	public ContextManager cm;
+	public PrincipalManager pm;
 
 	@BeforeEach
 	public void setUp() {

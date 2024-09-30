@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,22 +49,22 @@ import java.util.Set;
 
 /**
  * Converts an RDF graph to a set of Entries
- * 
+ *
  * @author Matthias Palmér
  */
 public class Graph2Entries {
-	
-	private static ValueFactory vf = SimpleValueFactory.getInstance();
-	private static IRI mergeResourceId = vf.createIRI(NS.entrystore, "mergeResourceId");
-	private static IRI referenceResourceId = vf.createIRI(NS.entrystore, "referenceResourceId");
 
-	private static Logger log = LoggerFactory.getLogger(Graph2Entries.class);
-	private Context context;
-	
+	private static final ValueFactory valueFactory = SimpleValueFactory.getInstance();
+	private static final IRI mergeResourceId = valueFactory.createIRI(NS.entrystore, "mergeResourceId");
+	private static final IRI referenceResourceId = valueFactory.createIRI(NS.entrystore, "referenceResourceId");
+
+	private static final Logger log = LoggerFactory.getLogger(Graph2Entries.class);
+	private final Context context;
+
 	public Graph2Entries(Context context) {
 		this.context = context;
 	}
-	
+
 	/**
 	 * Detects and adds a set of entries from the graph via the anonymous closure algorithm starting from resources
 	 * indicated with either of the two following properties that both indicate which entryId to use:<ul>
@@ -73,174 +73,174 @@ public class Graph2Entries {
 	 * </ul>
 	 * The mergeResourceId indicates that the corresponding entry should be merged or created if it does not exist.
 	 * The referenceResourceId only indicates that the relevant resource should be referenced.
-	 * 
-	 * @param graph the RDF to merge
-	 * @param destinationEntryId an entryId who's resource (resourcetype Graph) the graph should be stored in, 
-	 * if the id does not yet correspond to an existing entry it will be created. An empty string indicates that 
-	 * a new entry should be created, null indicates that the graph should end up in multiple entries as 
-	 * indicated in the graph via the mergeResourceId properties on blank nodes.
+	 *
+	 * @param graph              the RDF to merge
+	 * @param destinationEntryId an entryId whose resource (resourcetype Graph) the graph should be stored in.
+	 *                           If the id does not yet correspond to an existing entry it will be created.
+	 *                           An empty string indicates that a new entry should be created,
+	 *                           null indicates that the graph should end up in multiple entries as
+	 *                           indicated in the graph via the mergeResourceId properties on blank nodes.
 	 * @param destinationListURI a list where the destinationEntryId will be created if a new entry is to be created.
 	 * @return a collection of the merged entries (updated or created), the referenced entries are not included in the collection.
 	 */
 	public Set<Entry> merge(Model graph, String destinationEntryId, URI destinationListURI) {
-		log.info("About to update/create entries in context "+this.context.getEntry().getId()+".");
-		Set<Entry> entries = new HashSet<Entry>();
-		
-		HashMap<String, Resource> newResources = new HashMap<String, Resource>();
-		HashMap<String, Resource> oldResources = new HashMap<String, Resource>();
-		HashMap<Resource, Resource> translate = new HashMap<Resource, Resource>();
+		log.info("About to update/create entries in context {}.", this.context.getEntry().getId());
+		Set<Entry> entries = new HashSet<>();
 
-		Iterator<Statement> stmts = graph.filter(null, referenceResourceId, null).iterator();
-		while (stmts.hasNext()) {
-			Statement statement = (Statement) stmts.next();
+		HashMap<String, Resource> newResources = new HashMap<>();
+		HashMap<String, Resource> oldResources = new HashMap<>();
+		HashMap<Resource, Resource> translate = new HashMap<>();
+
+		Iterator<Statement> statements = graph.filter(null, referenceResourceId, null).iterator();
+
+		// populate the translate Map with entries from statements
+		while (statements.hasNext()) {
+			Statement statement = statements.next();
 			String entryId = statement.getObject().stringValue();
-			Resource re = newResources.get(entryId);
-			if (re == null) {
+			Resource newResource = newResources.get(entryId);
+			if (newResource == null) {
 				URI uri = URISplit.createURI(
-						context.getEntry().getRepositoryManager().getRepositoryURL().toString(),
-						context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
-				re = vf.createIRI(uri.toString());
+					context.getEntry().getRepositoryManager().getRepositoryURL().toString(),
+					context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
+				newResource = valueFactory.createIRI(uri.toString());
 			}
-			translate.put(statement.getSubject(), re);
+			translate.put(statement.getSubject(), newResource);
 		}
 
-		
 		if (destinationEntryId != null) {
 			URI uri = URISplit.createURI(
-					context.getEntry().getRepositoryManager().getRepositoryURL().toString(),
-					context.getEntry().getId(), RepositoryProperties.DATA_PATH, destinationEntryId);
-			Resource newRe = vf.createIRI(uri.toString());
+				context.getEntry().getRepositoryManager().getRepositoryURL().toString(),
+				context.getEntry().getId(), RepositoryProperties.DATA_PATH, destinationEntryId);
+			Resource newResource = valueFactory.createIRI(uri.toString());
 
-			stmts = graph.filter(null, mergeResourceId, null).iterator();
-			while (stmts.hasNext()) {
-				Statement statement = (Statement) stmts.next();
-				translate.put(statement.getSubject(), newRe);
+			statements = graph.filter(null, mergeResourceId, null).iterator();
+			while (statements.hasNext()) {
+				Statement statement = statements.next();
+				translate.put(statement.getSubject(), newResource);
 			}
-			
+
 			Entry entry;
 			boolean entryCreated = false;
-			if ("".equals(destinationEntryId)) {
+			if (destinationEntryId.isEmpty()) {
 				entry = this.context.createResource(null, GraphType.Graph, ResourceType.InformationResource, destinationListURI);
 				entryCreated = true;
-				((ContextImpl) this.context).setMetadata(entry, "RDF Graph created at "+new Date().toString(), null);
+				((ContextImpl) this.context).setMetadata(entry, "RDF Graph created at " + new Date(), null);
 			} else {
 				entry = this.context.get(destinationEntryId); //Try to fetch existing entry.
 				if (entry == null) {
 					entry = this.context.createResource(destinationEntryId, GraphType.Graph, ResourceType.InformationResource, destinationListURI);
 					entryCreated = true;
-				}				
+				}
 			}
-			Model resg = this.translate(graph, translate);
-			((RDFResource) entry.getResource()).setGraph(resg);
+			Model resourceGraph = this.translate(graph, translate);
+			((RDFResource) entry.getResource()).setGraph(resourceGraph);
 
-			Model subg = this.extract(resg, newRe, new HashSet<Resource>(), new HashMap<Resource, Resource>());
-			if (!subg.isEmpty()) {
-				entry.getLocalMetadata().setGraph(subg);
+			Model subGraph = this.extract(resourceGraph, newResource, new HashSet<>(), new HashMap<>());
+			if (!subGraph.isEmpty()) {
+				entry.getLocalMetadata().setGraph(subGraph);
 			} else if (entryCreated) {
-				((ContextImpl) this.context).setMetadata(entry, "RDF Graph created at "+new Date().toString(), null);				
+				((ContextImpl) this.context).setMetadata(entry, "RDF Graph created at " + new Date(), null);
 			}
-			
+
 			entries.add(entry);
 			return entries;
 		}
-		
-		stmts = graph.filter(null, mergeResourceId, null).iterator();
-		while (stmts.hasNext()) {
-			Statement statement = (Statement) stmts.next();
+
+		statements = graph.filter(null, mergeResourceId, null).iterator();
+		while (statements.hasNext()) {
+			Statement statement = statements.next();
 			String entryId = statement.getObject().stringValue();
 			URI uri = URISplit.createURI(
-					context.getEntry().getRepositoryManager().getRepositoryURL().toString(),
-					context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
-			Resource newRe = vf.createIRI(uri.toString());
+				context.getEntry().getRepositoryManager().getRepositoryURL().toString(),
+				context.getEntry().getId(), RepositoryProperties.DATA_PATH, entryId);
+			Resource newRe = valueFactory.createIRI(uri.toString());
 			newResources.put(entryId, newRe);
 			oldResources.put(entryId, statement.getSubject());
 			translate.put(statement.getSubject(), newRe);
 		}
 
-		log.info("Found "+oldResources.size()+" resources that will be updated/created.");
+		log.info("Found {} resources that will be updated/created.", oldResources.size());
 
 		int newResCounter = 0;
 		int updResCounter = 0;
 		Collection<Resource> ignore = newResources.values();
 		for (String entryId : newResources.keySet()) {
-			Model subg = this.extract(graph, oldResources.get(entryId), ignore, translate);
-			Entry entry = this.context.get(entryId); //Try to fetch existing entry.
-			if (entry == null) {  //If none exist, create it.
+			Model subjectGraph = this.extract(graph, oldResources.get(entryId), ignore, translate);
+			Entry entry = this.context.get(entryId); // Try to fetch existing entry.
+			if (entry == null) {  // If none exists, create it.
 				entry = this.context.createResource(entryId, GraphType.None, ResourceType.NamedResource, null);
 				newResCounter++;
 			} else {
 				updResCounter++;
 			}
-			entry.getLocalMetadata().setGraph(subg);
+			entry.getLocalMetadata().setGraph(subjectGraph);
 			entries.add(entry);
 		}
-		log.info("Updated "+updResCounter+" existing entries and created "+ newResCounter+" new entries.");
-		log.info("Finished updating/creating entries in context "+this.context.getEntry().getId()+".");		
+		log.info("Updated {} existing entries and created {} new entries.", updResCounter, newResCounter);
+		log.info("Finished updating/creating entries in context {}.", this.context.getEntry().getId());
 		return entries;
 	}
-	
+
+	private boolean checkPredicate(IRI predicate) {
+		return !mergeResourceId.equals(predicate) && !referenceResourceId.equals(predicate);
+	}
+
+	private void populateModel(Model model, Statement statement, Map<Resource, Resource> translate) {
+		Resource subject = statement.getSubject();
+		IRI predicate = statement.getPredicate();
+		Value object = statement.getObject();
+
+		if (translate.get(subject) != null) {
+			subject = translate.get(subject);
+		}
+		if (translate.get(object) != null) {
+			object = translate.get(object);
+		}
+		model.add(subject, predicate, object);
+	}
+
+	private Model translate(Model from, Map<Resource, Resource> translate) {
+		Model to = new LinkedHashModel();
+		for (Statement statement : from) {
+			if (checkPredicate(statement.getPredicate())) {
+				populateModel(to, statement, translate);
+			}
+		}
+
+		return to;
+	}
+
 	/**
-	 * Extracts a smaller graph by starting from a given resource and collects all direct and indirect outgoing triples, 
+	 * Extracts a smaller graph by starting from a given resource and collects all direct and indirect outgoing triples,
 	 * only stopping when non-blank nodes or resources in the ignore set are encountered. It also replaces resources
 	 * found in the translate map.
-	 * 
-	 * @param from the graph to extract triples from
-	 * @param subject the resource to start detecting triples from
-	 * @param ignore a set of resources that when encountered no further triples (outgoing) from that resource should be included
-	 * @param translate a map of resources, the keys should be replaces with the values when encountered.
+	 *
+	 * @param from      the graph to extract triples from
+	 * @param subject   the resource to start detecting triples from
+	 * @param ignore    a set of resources that when encountered no further triples (outgoing) from that resource should be included
+	 * @param translate a map of resources, the keys should be replaced with the values when encountered.
 	 * @return the extracted subgraph, may be empty, not null.
 	 */
 	private Model extract(Model from, Resource subject, Collection<Resource> ignore, Map<Resource, Resource> translate) {
 		Model to = new LinkedHashModel();
-		HashSet<Resource> collected = new HashSet<Resource>(ignore);
+		HashSet<Resource> collected = new HashSet<>(ignore);
 		this._extract(from, to, subject, collected, translate);
 		return to;
 	}
-	private void _extract(Model from, Model to, Resource subject, Set<Resource> collected, Map<Resource, Resource> translate) {
-		Iterator<Statement> stmts = from.filter(subject, null, null).iterator();
-		while (stmts.hasNext()) {
-			Statement statement = (Statement) stmts.next();
-			Resource subj = statement.getSubject();
-			IRI pred = statement.getPredicate();
-			Value obj = statement.getObject();
-			//Recursive step.
-			if (obj instanceof BNode && !collected.contains(obj)) {
-				collected.add((BNode) obj);
-				this._extract(from, to, (BNode) obj, collected, translate);
+
+	private void _extract(Model from, Model to, Resource resource, Set<Resource> collected, Map<Resource, Resource> translate) {
+		for (Statement statement : from.filter(resource, null, null)) {
+			Value object = statement.getObject();
+			// Recursive step.
+			if (object instanceof BNode && !collected.contains((Resource) object)) {
+				collected.add((BNode) object);
+				this._extract(from, to, (BNode) object, collected, translate);
 			}
 
-			if (pred.equals(mergeResourceId) || pred.equals(referenceResourceId)) {
-				continue;
+			if (checkPredicate(statement.getPredicate())) {
+				populateModel(to, statement, translate);
 			}
-
-			if (translate.get(subj) != null) {
-				subj = translate.get(subj);
-			}
-			if (translate.get(obj) != null) {
-				obj = translate.get(obj);
-			}
-			to.add(subj, pred, obj);
 		}
 	}
-	private Model translate(Model from, Map<Resource, Resource> translate) {
-		Model to = new LinkedHashModel();
-		for (Statement statement : from) {
-			Resource subj = statement.getSubject();
-			IRI pred = statement.getPredicate();
-			Value obj = statement.getObject();
-			if (pred.equals(mergeResourceId) || pred.equals(referenceResourceId)) {
-				continue;
-			}
 
-			if (translate.get(subj) != null) {
-				subj = translate.get(subj);
-			}
-			if (translate.get(obj) != null) {
-				obj = translate.get(obj);
-			}
-			to.add(subj, pred, obj);
-		}
-		
-		return to;		
-	}
 }
