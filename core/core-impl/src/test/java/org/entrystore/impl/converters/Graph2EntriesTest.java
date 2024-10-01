@@ -233,6 +233,14 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 		assertEquals(age, ageStored);
 	}
 
+	@Test
+	public void merge_invalid_graph() {
+		Graph2Entries g2e = new Graph2Entries(context);
+		Set<Entry> entries = g2e.merge(null, "", null);
+
+		assertNull(entries);
+	}
+
 	/**
 	 * Builds a custom and safe XML parser configuration to prevent XXE attacks. Creates a custom
 	 * XML reader to be able to set features that are not supported by the reader which is initialized by Sesame.
