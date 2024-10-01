@@ -56,7 +56,6 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 	private Context context;
 	private static RDFXMLParser rdfXmlParser;
 
-
 	@BeforeEach
 	public void setUp() {
 		super.setUp();
@@ -133,7 +132,8 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 		});
 	}
 
-	/** Sending the same entity, even with different data, simply creates a new entity.
+	/**
+	 * Sending the same entity, even with different data, simply creates a new entity.
 	 */
 	@Test
 	public void merge_empty_create_and_create() throws IOException {
