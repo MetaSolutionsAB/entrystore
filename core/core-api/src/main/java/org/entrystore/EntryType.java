@@ -26,7 +26,7 @@ package org.entrystore;
 public enum EntryType {
 	
 	/**
-	 * Reference means means that both the Resource and the Metadata for 
+	 * Reference means that both the Resource and the Metadata for
 	 * the resource is maintained outside of the entry's context.
 	 * 
 	 * Note that the repository may have cached the remote metadata
