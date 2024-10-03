@@ -52,6 +52,7 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 	private static final ValueFactory valueFactory = SimpleValueFactory.getInstance();
 	private static final IRI hasAge = valueFactory.createIRI(personOntology, "hasAge");
 	private static final IRI hasIdentifierValue = valueFactory.createIRI(personOntology, "hasIdentifierValue");
+	private static final IRI isOwnedBy = valueFactory.createIRI(personOntology, "isOwnedBy");
 
 	private Context context;
 	private static RDFXMLParser rdfXmlParser;
@@ -101,7 +102,7 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 			}
 		});
 
-		graphString = FileUtils.readFileToString(new File("src/test/resources/person-2mris-update.owl"), "UTF-8");
+		graphString = FileUtils.readFileToString(new File("src/test/resources/person-2mrids-update.owl"), "UTF-8");
 
 		reader = new StringReader(graphString);
 		collector = new StatementCollector();
@@ -231,6 +232,44 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 		ageStored = context.getByEntryURI(entryNew.getEntryURI()).getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
 		assertEquals(48, Integer.parseInt(age));
 		assertEquals(age, ageStored);
+	}
+
+	@Test
+	public void merge_null_create_and_update_referenceId() throws IOException {
+		String graphString = FileUtils.readFileToString(new File("src/test/resources/person-1mrid.owl"), "UTF-8");
+
+		StringReader reader = new StringReader(graphString);
+		StatementCollector collector = new StatementCollector();
+		rdfXmlParser.setRDFHandler(collector);
+		rdfXmlParser.parse(reader, "");
+
+		Model deserializedGraph = new LinkedHashModel(collector.getStatements());
+		Graph2Entries g2e = new Graph2Entries(context);
+		Set<Entry> entries = g2e.merge(deserializedGraph, null, null);
+
+		Entry entry = entries.iterator().next();
+
+		graphString = FileUtils.readFileToString(new File("src/test/resources/person-1mrid-1rrid-update.owl"), "UTF-8");
+
+		reader = new StringReader(graphString);
+		collector = new StatementCollector();
+		rdfXmlParser.setRDFHandler(collector);
+		rdfXmlParser.parse(reader, "");
+
+		deserializedGraph = new LinkedHashModel(collector.getStatements());
+		entries = g2e.merge(deserializedGraph, null, null);
+		Set<URI> resourcesUpdated = context.getResources();
+
+		assertEquals(1, entries.size());
+		assertEquals(2, resourcesUpdated.size());
+
+		Entry entryNew = entries.iterator().next();
+		assertTrue(resourcesUpdated.contains(entry.getResourceURI()));
+		assertTrue(resourcesUpdated.contains(entryNew.getResourceURI()));
+
+		String owner = entryNew.getMetadataGraph().getStatements(null, isOwnedBy, null).iterator().next().getObject().stringValue();
+		String ownerStored = context.getByEntryURI(entryNew.getEntryURI()).getMetadataGraph().getStatements(null, isOwnedBy, null).iterator().next().getObject().stringValue();
+		assertEquals(owner, ownerStored);
 	}
 
 	@Test
