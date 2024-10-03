@@ -20,6 +20,7 @@ import org.apache.commons.io.FileUtils;
 import org.eclipse.rdf4j.common.xml.XMLReaderFactory;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
@@ -31,6 +32,7 @@ import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.impl.AbstractCoreTest;
+import org.entrystore.repository.util.NS;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -42,6 +44,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
 import java.net.URI;
+import java.util.Iterator;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -53,6 +56,7 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 	private static final IRI hasAge = valueFactory.createIRI(personOntology, "hasAge");
 	private static final IRI hasIdentifierValue = valueFactory.createIRI(personOntology, "hasIdentifierValue");
 	private static final IRI isOwnedBy = valueFactory.createIRI(personOntology, "isOwnedBy");
+	private static final IRI createdBy = valueFactory.createIRI(NS.dc, "creator");
 
 	private Context context;
 	private static RDFXMLParser rdfXmlParser;
@@ -92,8 +96,10 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 			if (entry.getEntryURI().toString().contains("person")) {
 				String age = entry.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
 				String ageStored = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+				Iterator<Statement> creator = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, createdBy, null).iterator();
 				assertEquals(24, Integer.parseInt(age));
 				assertEquals(age, ageStored);
+				assertTrue(creator.hasNext());
 			} else if (entry.getEntryURI().toString().contains("ssn")) {
 				String ssn = entry.getMetadataGraph().getStatements(null, hasIdentifierValue, null).iterator().next().getObject().stringValue();
 				String ssnStored = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, hasIdentifierValue, null).iterator().next().getObject().stringValue();
@@ -122,8 +128,10 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 			if (entry.getEntryURI().toString().contains("person")) {
 				String age = entry.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
 				String ageStored = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+				Iterator<Statement> creator = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, createdBy, null).iterator();
 				assertEquals(48, Integer.parseInt(age));
 				assertEquals(age, ageStored);
+				assertFalse(creator.hasNext());
 			} else if (entry.getEntryURI().toString().contains("ssn")) {
 				String ssn = entry.getMetadataGraph().getStatements(null, hasIdentifierValue, null).iterator().next().getObject().stringValue();
 				String ssnStored = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, hasIdentifierValue, null).iterator().next().getObject().stringValue();
