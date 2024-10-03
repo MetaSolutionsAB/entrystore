@@ -1,0 +1,88 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://www.example.org/person#"
+     xml:base="http://www.example.org/person"
+     xmlns:dc="http://purl.org/dc/elements/1.1/"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:per="http://www.example.org/person/"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:xml="http://www.w3.org/XML/1998/namespace"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:eterms="http://entrystore.org/terms/"
+     xmlns:per-ind="http://www.example.org/person#">
+    <owl:Ontology rdf:about="http://www.example.org/person">
+        <rdfs:label>Game of Thrones test update</rdfs:label>
+    </owl:Ontology>
+
+
+
+    <!--
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Object Properties
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+
+
+
+    <!-- http://www.example.org/person/isOwnedBy -->
+
+    <owl:ObjectProperty rdf:about="http://www.example.org/person/isOwnedBy">
+        <rdfs:domain rdf:resource="http://www.example.org/person/House"/>
+        <rdfs:range rdf:resource="http://www.example.org/person/Person"/>
+        <dc:creator>patrik</dc:creator>
+        <dc:dateTime rdf:datatype="http://www.w3.org/2001/XMLSchema#dateTime">2024-07-19T10:05:50Z</dc:dateTime>
+        <rdfs:isDefinedBy rdf:resource="http://www.example.org/person"/>
+        <rdfs:label>is owned by</rdfs:label>
+    </owl:ObjectProperty>
+
+
+
+    <!--
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Classes
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+
+
+    <!-- http://www.example.org/person/House -->
+
+    <owl:Class rdf:about="http://www.example.org/person/House">
+        <dc:creator>patrik</dc:creator>
+        <dc:dateTime rdf:datatype="http://www.w3.org/2001/XMLSchema#dateTime">2024-07-19T10:06:14Z</dc:dateTime>
+        <rdfs:isDefinedBy rdf:resource="http://www.example.org/person"/>
+        <rdfs:label>House</rdfs:label>
+    </owl:Class>
+
+
+
+    <!--
+    ///////////////////////////////////////////////////////////////////////////////////////
+    //
+    // Individuals
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////
+     -->
+
+
+
+    <!-- http://www.example.org/person#JohnSnow -->
+
+    <owl:NamedIndividual rdf:about="http://www.example.org/person#JohnSnow">
+        <eterms:referenceResourceId>person</eterms:referenceResourceId>
+    </owl:NamedIndividual>
+
+
+
+    <!-- http://www.example.org/person#JohnSnowHouse -->
+
+    <owl:NamedIndividual rdf:about="http://www.example.org/person#JohnSnowHouse">
+        <per:isOwnedBy rdf:resource="http://www.example.org/person#JohnSnow"/>
+        <eterms:mergeResourceId>house</eterms:mergeResourceId>
+    </owl:NamedIndividual>
+</rdf:RDF>

@@ -94,7 +94,7 @@ public class Graph2Entries {
 
 		HashMap<String, Resource> newResources = new HashMap<>();
 		HashMap<String, Resource> oldResources = new HashMap<>();
-		HashMap<Resource, Resource> translate = new HashMap<>();
+		HashMap<Value, Resource> translate = new HashMap<>();
 
 		Iterator<Statement> statements = graph.filter(null, referenceResourceId, null).iterator();
 
@@ -172,7 +172,7 @@ public class Graph2Entries {
 		int updResCounter = 0;
 		Collection<Resource> ignore = newResources.values();
 		for (String entryId : newResources.keySet()) {
-			Model subjectGraph = this.extract(graph, oldResources.get(entryId), ignore, translate);
+			Model subGraph = this.extract(graph, oldResources.get(entryId), ignore, translate);
 			Entry entry = this.context.get(entryId); // Try to fetch existing entry.
 			if (entry == null) {  // If none exists, create it.
 				entry = this.context.createResource(entryId, GraphType.None, ResourceType.NamedResource, null);
@@ -180,7 +180,7 @@ public class Graph2Entries {
 			} else {
 				updResCounter++;
 			}
-			entry.getLocalMetadata().setGraph(subjectGraph);
+			entry.getLocalMetadata().setGraph(subGraph);
 			entries.add(entry);
 		}
 		log.info("Updated {} existing entries and created {} new entries.", updResCounter, newResCounter);
@@ -192,7 +192,7 @@ public class Graph2Entries {
 		return !mergeResourceId.equals(predicate) && !referenceResourceId.equals(predicate);
 	}
 
-	private void populateModel(Model model, Statement statement, Map<Resource, Resource> translate) {
+	private void populateModel(Model model, Statement statement, Map<Value, Resource> translate) {
 		Resource subject = statement.getSubject();
 		IRI predicate = statement.getPredicate();
 		Value object = statement.getObject();
@@ -206,7 +206,7 @@ public class Graph2Entries {
 		model.add(subject, predicate, object);
 	}
 
-	private Model translate(Model from, Map<Resource, Resource> translate) {
+	private Model translate(Model from, Map<Value, Resource> translate) {
 		Model to = new LinkedHashModel();
 		for (Statement statement : from) {
 			if (checkPredicate(statement.getPredicate())) {
@@ -219,23 +219,23 @@ public class Graph2Entries {
 
 	/**
 	 * Extracts a smaller graph by starting from a given resource and collects all direct and indirect outgoing triples,
-	 * only stopping when non-blank nodes or resources in the ignore set are encountered. It also replaces resources
-	 * found in the translate map.
+	 * only stopping when non-blank nodes or resources in the "ignore" set are encountered. It also replaces resources
+	 * found in the "translate" map.
 	 *
 	 * @param from      the graph to extract triples from
 	 * @param subject   the resource to start detecting triples from
 	 * @param ignore    a set of resources that when encountered no further triples (outgoing) from that resource should be included
 	 * @param translate a map of resources, the keys should be replaced with the values when encountered.
-	 * @return the extracted subgraph, may be empty, not null.
+	 * @return the extracted subgraph may be empty, not null.
 	 */
-	private Model extract(Model from, Resource subject, Collection<Resource> ignore, Map<Resource, Resource> translate) {
+	private Model extract(Model from, Resource subject, Collection<Resource> ignore, Map<Value, Resource> translate) {
 		Model to = new LinkedHashModel();
 		HashSet<Resource> collected = new HashSet<>(ignore);
 		this._extract(from, to, subject, collected, translate);
 		return to;
 	}
 
-	private void _extract(Model from, Model to, Resource resource, Set<Resource> collected, Map<Resource, Resource> translate) {
+	private void _extract(Model from, Model to, Resource resource, Set<Resource> collected, Map<Value, Resource> translate) {
 		for (Statement statement : from.filter(resource, null, null)) {
 			Value object = statement.getObject();
 			// Recursive step.
