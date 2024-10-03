@@ -76,14 +76,19 @@ public class Graph2Entries {
 	 *
 	 * @param graph              the RDF to merge
 	 * @param destinationEntryId an entryId whose resource (resourcetype Graph) the graph should be stored in.
-	 *                           If the id does not yet correspond to an existing entry it will be created.
-	 *                           An empty string indicates that a new entry should be created,
-	 *                           null indicates that the graph should end up in multiple entries as
-	 *                           indicated in the graph via the mergeResourceId properties on blank nodes.
+	 *                           A: If the id does not yet correspond to an existing entry, it will be created.
+	 *                           B: An empty string indicates that a new entry should be created,
+	 *                           C: null indicates that the graph should end up in multiple entries as indicated
+	 *                           in the graph via the mergeResourceId properties on blank nodes.
 	 * @param destinationListURI a list where the destinationEntryId will be created if a new entry is to be created.
 	 * @return a collection of the merged entries (updated or created), the referenced entries are not included in the collection.
 	 */
 	public Set<Entry> merge(Model graph, String destinationEntryId, URI destinationListURI) {
+		if (graph == null) {
+			log.info("Supplied null instead of a graph.");
+			return null;
+		}
+
 		log.info("About to update/create entries in context {}.", this.context.getEntry().getId());
 		Set<Entry> entries = new HashSet<>();
 
@@ -121,6 +126,7 @@ public class Graph2Entries {
 
 			Entry entry;
 			boolean entryCreated = false;
+
 			if (destinationEntryId.isEmpty()) {
 				entry = this.context.createResource(null, GraphType.Graph, ResourceType.InformationResource, destinationListURI);
 				entryCreated = true;
@@ -132,6 +138,7 @@ public class Graph2Entries {
 					entryCreated = true;
 				}
 			}
+
 			Model resourceGraph = this.translate(graph, translate);
 			((RDFResource) entry.getResource()).setGraph(resourceGraph);
 

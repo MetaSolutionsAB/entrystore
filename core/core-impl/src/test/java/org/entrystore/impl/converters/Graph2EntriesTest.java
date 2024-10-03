@@ -44,8 +44,7 @@ import java.io.StringReader;
 import java.net.URI;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class Graph2EntriesTest extends AbstractCoreTest {
 	private final static Logger log = LoggerFactory.getLogger(Graph2EntriesTest.class);
@@ -56,7 +55,6 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 
 	private Context context;
 	private static RDFXMLParser rdfXmlParser;
-
 
 	@BeforeEach
 	public void setUp() {
@@ -71,8 +69,8 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 	}
 
 	@Test
-	public void merge_create_and_update_null() throws IOException {
-		String graphString = FileUtils.readFileToString(new File("src/test/resources/person.owl"), "UTF-8");
+	public void merge_null_create_and_update() throws IOException {
+		String graphString = FileUtils.readFileToString(new File("src/test/resources/person-2mrids.owl"), "UTF-8");
 
 		StringReader reader = new StringReader(graphString);
 		StatementCollector collector = new StatementCollector();
@@ -103,7 +101,7 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 			}
 		});
 
-		graphString = FileUtils.readFileToString(new File("src/test/resources/person-update.owl"), "UTF-8");
+		graphString = FileUtils.readFileToString(new File("src/test/resources/person-2mris-update.owl"), "UTF-8");
 
 		reader = new StringReader(graphString);
 		collector = new StatementCollector();
@@ -134,9 +132,12 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 		});
 	}
 
+	/**
+	 * Sending the same entity, even with different data, simply creates a new entity.
+	 */
 	@Test
-	public void merge_create_and_update_empty() throws IOException {
-		String graphString = FileUtils.readFileToString(new File("src/test/resources/person-destination-id-empty.owl"), "UTF-8");
+	public void merge_empty_create_and_create() throws IOException {
+		String graphString = FileUtils.readFileToString(new File("src/test/resources/person-1mrid.owl"), "UTF-8");
 
 		StringReader reader = new StringReader(graphString);
 		StatementCollector collector = new StatementCollector();
@@ -159,6 +160,85 @@ public class Graph2EntriesTest extends AbstractCoreTest {
 		assertEquals(24, Integer.parseInt(age));
 		assertEquals(age, ageStored);
 
+		graphString = FileUtils.readFileToString(new File("src/test/resources/person-1mrid-update.owl"), "UTF-8");
+
+		reader = new StringReader(graphString);
+		collector = new StatementCollector();
+		rdfXmlParser.setRDFHandler(collector);
+		rdfXmlParser.parse(reader, "");
+
+		deserializedGraph = new LinkedHashModel(collector.getStatements());
+		entries = g2e.merge(deserializedGraph, "", null);
+		Set<URI> resourcesUpdated = context.getResources();
+
+		assertEquals(1, entries.size());
+		assertEquals(2, resourcesUpdated.size());
+
+		Entry entryNew = entries.iterator().next();
+		assertTrue(resourcesCreated.contains(entryNew.getResourceURI()));
+		assertNotEquals(entry.getResourceURI(), entryNew.getResourceURI());
+
+		age = entryNew.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+		ageStored = context.getByEntryURI(entryNew.getEntryURI()).getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+		assertEquals(48, Integer.parseInt(age));
+		assertEquals(age, ageStored);
+	}
+
+	@Test
+	public void merge_non_existing_create_and_update() throws IOException {
+		String graphString = FileUtils.readFileToString(new File("src/test/resources/person-1mrid.owl"), "UTF-8");
+
+		StringReader reader = new StringReader(graphString);
+		StatementCollector collector = new StatementCollector();
+		rdfXmlParser.setRDFHandler(collector);
+		rdfXmlParser.parse(reader, "");
+
+		Model deserializedGraph = new LinkedHashModel(collector.getStatements());
+		Graph2Entries g2e = new Graph2Entries(context);
+		Set<Entry> entries = g2e.merge(deserializedGraph, "", null);
+		Set<URI> resourcesCreated = context.getResources();
+
+		assertEquals(1, entries.size());
+		assertEquals(1, resourcesCreated.size());
+
+		Entry entry = entries.iterator().next();
+		assertTrue(resourcesCreated.contains(entry.getResourceURI()));
+
+		String age = entry.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+		String ageStored = context.getByEntryURI(entry.getEntryURI()).getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+		assertEquals(24, Integer.parseInt(age));
+		assertEquals(age, ageStored);
+
+		graphString = FileUtils.readFileToString(new File("src/test/resources/person-1mrid-update.owl"), "UTF-8");
+
+		reader = new StringReader(graphString);
+		collector = new StatementCollector();
+		rdfXmlParser.setRDFHandler(collector);
+		rdfXmlParser.parse(reader, "");
+
+		deserializedGraph = new LinkedHashModel(collector.getStatements());
+		entries = g2e.merge(deserializedGraph, entry.getId(), null);
+		Set<URI> resourcesUpdated = context.getResources();
+
+		assertEquals(1, entries.size());
+		assertEquals(1, resourcesUpdated.size());
+
+		Entry entryNew = entries.iterator().next();
+		assertTrue(resourcesCreated.contains(entryNew.getResourceURI()));
+		assertEquals(entry.getResourceURI(), entryNew.getResourceURI());
+
+		age = entryNew.getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+		ageStored = context.getByEntryURI(entryNew.getEntryURI()).getMetadataGraph().getStatements(null, hasAge, null).iterator().next().getObject().stringValue();
+		assertEquals(48, Integer.parseInt(age));
+		assertEquals(age, ageStored);
+	}
+
+	@Test
+	public void merge_invalid_graph() {
+		Graph2Entries g2e = new Graph2Entries(context);
+		Set<Entry> entries = g2e.merge(null, "", null);
+
+		assertNull(entries);
 	}
 
 	/**
