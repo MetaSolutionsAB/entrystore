@@ -9,7 +9,7 @@ import static java.net.HttpURLConnection.*
 
 class EntryIT extends BaseSpec {
 
-	def "POST /{context-id} should create a new link entry"() {
+	def "POST /{context-id}?entrytype=link should create a new link entry"() {
 		given:
 		def contextId = '10'
 		getOrCreateContext([contextId: contextId])
@@ -63,7 +63,7 @@ class EntryIT extends BaseSpec {
 		entryResources[0]['value'] == resourceUrl
 	}
 
-	def "POST /{context-id} should create a new link-reference entry"() {
+	def "POST /{context-id}?entrytype=linkreference should create a new link-reference entry"() {
 		given:
 		def contextId = '10'
 		getOrCreateContext([contextId: contextId])
@@ -119,7 +119,7 @@ class EntryIT extends BaseSpec {
 		entryCachedExtMetadata[0]['value'].toString().contains('/store/' + contextId + '/cached-external-metadata/')
 	}
 
-	def "POST /{context-id} should create a new reference entry"() {
+	def "POST /{context-id}?entrytype=reference should create a new reference entry"() {
 		given:
 		def contextId = '10'
 		getOrCreateContext([contextId: contextId])
@@ -175,7 +175,7 @@ class EntryIT extends BaseSpec {
 		entryCachedExtMetadata[0]['value'].toString().contains('/store/' + contextId + '/cached-external-metadata/')
 	}
 
-	def "POST /{context-id} should create a new entry with specific id"() {
+	def "POST /{context-id}?entrytype=link&id=x should create a new link entry with specific id"() {
 		given:
 		def contextId = '10'
 		getOrCreateContext([contextId: contextId])
@@ -218,7 +218,27 @@ class EntryIT extends BaseSpec {
 		entryResources[0]['value'] == resourceUrl
 	}
 
-	def "POST /{context-id} should create a new entry with metadata"() {
+	def "POST /{context-id}?entrytype=link&id=x should not create a new entry if id already exists"() {
+		given:
+		def contextId = '10'
+		getOrCreateContext([contextId: contextId])
+		def resourceUrl = 'https://bbc.co.uk'
+		def entryId = 'myEntryId'
+		def params = [entrytype: 'link', resource: resourceUrl, id: entryId]
+		def body = JsonOutput.toJson([:])
+
+		when:
+		def connection = client.postRequest('/' + contextId + convertMapToQueryParams(params), body, 'admin')
+
+		then:
+		connection.getResponseCode() == HTTP_CONFLICT
+		connection.getContentType().contains('application/json')
+		def responseJson = (new JsonSlurper()).parseText(connection.getErrorStream().text)
+		responseJson['error'] != null
+		responseJson['error'].toString().contains('Entry with provided ID already exists')
+	}
+
+	def "POST /{context-id}?entrytype=link with metadata in the request body, should create a new link entry with metadata"() {
 		given:
 		def contextId = '10'
 		getOrCreateContext([contextId: contextId])
@@ -287,7 +307,7 @@ class EntryIT extends BaseSpec {
 		dcTitles[0]['value'] == 'Cool entry'
 	}
 
-	def "POST /{context-id} should throw unauthorized for non-admin user"() {
+	def "POST /{context-id}?entrytype=link should throw unauthorized for non-admin user"() {
 		given:
 		def resourceUrl = 'https://bbc.co.uk'
 		def contextId = '11'

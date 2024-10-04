@@ -25,12 +25,12 @@ import org.slf4j.LoggerFactory;
  * This class containing JSON error messages for the resources.
  */
 public class JSONErrorMessages {
-	
+
 	private static Logger log = LoggerFactory.getLogger(JSONErrorMessages.class);
-	
+
 	public static String errorWrongContextIDmsg = new String("{\"error\":\"The requested context ID does not exist\"}");
 	public static String errorCantCreateEntry = new String("{\"error\":\"Cannot create entry\"}");
-	public static String errorEntryWithGivenIDExists = new String("{\"error\":\"Entry already exists with provided ID\"}");
+	public static String errorEntryWithGivenIDExists = new String("{\"error\":\"Entry with provided ID already exists\"}");
 	public static String errorEntryNotFound = new String("{\"error\":\"Entry not found\"}");
 	public static String errorResourceNotFound = new String("{\"error\":\"Resource not found\"}");
 	public static String errorMetadataNotFound = new String("{\"error\":\"Metadata not found\"}");
@@ -48,9 +48,9 @@ public class JSONErrorMessages {
 	public static String unauthorizedDELETE = new String("{\"error\":\"Not authorized\"}");
 	public static String unauthorizedPOST = new String("{\"error\":\"Not authorized\"}");
 	public static String unauthorizedPUT = new String("{\"error\":\"Not authorized\"}");
-	
+
 	public static String syndicationFormat = new String("{\"error\":\"Syndication format is not supported\"}");
-	
+
 	static JSONObject constructMessage(String error, String code) {
 		JSONObject result = new JSONObject();
 		try {
@@ -61,5 +61,5 @@ public class JSONErrorMessages {
 		}
 		return result;
 	}
-	
+
 }

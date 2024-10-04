@@ -3,6 +3,8 @@ package org.entrystore.rest.it.util
 class NameSpaceConst {
 	static RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type'
 	static TERM_CONTEXT = 'http://entrystore.org/terms/Context'
+	static TERM_STRING = 'http://entrystore.org/terms/String'
+	static TERM_USER = 'http://entrystore.org/terms/User'
 	static TERM_LINK = 'http://entrystore.org/terms/Link'
 	static TERM_REFERENCE = 'http://entrystore.org/terms/Reference'
 	static TERM_LINK_REFERENCE = 'http://entrystore.org/terms/LinkReference'
