@@ -150,4 +150,63 @@ class LocalEntryIT extends BaseSpec {
 		resourceRespJson['customProperties'] == [:]
 		resourceRespJson['name'] == requestResourceName['name'].toLowerCase() // Why the returned username is in lower case, different than in request?
 	}
+
+	def "POST /{context-id}?graphtype=group should create by default a local entry of type Group"() {
+		given:
+		def requestResourceName = [name: 'Test Group']
+		def params = [graphtype: 'group']
+		def body = JsonOutput.toJson([resource: requestResourceName])
+
+		when:
+		def connection = client.postRequest('/_principals' + convertMapToQueryParams(params), body, 'admin')
+
+		then:
+		connection.getResponseCode() == HTTP_CREATED
+		connection.getContentType().contains('application/json')
+		def responseJson = (new JsonSlurper()).parseText(connection.getInputStream().text)
+		responseJson['entryId'] != null
+		responseJson['entryId'].toString().length() > 0
+		def entryId = responseJson['entryId'].toString()
+
+		// fetch created entry
+		def entryConn = client.getRequest('/_principals/entry/' + entryId, 'admin')
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/json')
+		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/_principals/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+
+		// Entry type not being under /entry/{entry-id}, but under /resource/{resource-id}
+//		entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE] != null
+//		def entryTypes = entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE].collect()
+//		entryTypes.size() == 1
+//		entryTypes[0]['type'] == 'uri'
+//		entryTypes[0]['value'] == NameSpaceConst.TERM_STRING
+
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		entryResources.size() == 1
+		entryResources[0]['type'] == 'uri'
+		entryResources[0]['value'] != null
+		def createdResourceUri = entryResources[0]['value'].toString()
+		createdResourceUri.startsWith(EntryStoreClient.baseUrl + '/_principals/resource/')
+
+		entryRespJson['info'][createdResourceUri] != null
+		entryRespJson['info'][createdResourceUri][NameSpaceConst.RDF_TYPE] != null
+		def resourceTypes = entryRespJson['info'][createdResourceUri][NameSpaceConst.RDF_TYPE].collect()
+		resourceTypes.size() == 1
+		resourceTypes[0]['type'] == 'uri'
+		resourceTypes[0]['value'] == NameSpaceConst.TERM_GROUP
+
+		// fetch created resource
+		def resourceConn = client.getRequest(createdResourceUri.substring(EntryStoreClient.baseUrl.length()), 'admin')
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceRespJson = (new JsonSlurper()).parseText(resourceConn.getInputStream().text)
+		resourceRespJson != null
+		resourceRespJson['children'] == []
+		resourceRespJson['name'] == requestResourceName['name'].toLowerCase() // Why the returned group name is in lower case, different than in the request?
+	}
 }

@@ -683,8 +683,8 @@ public class ContextResource extends BaseResource {
 			JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 			if (mdObj.has("info")) {
 				JSONObject obj = (JSONObject) mdObj.get("info");
-				Model graph = null;
-				if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
+				Model graph = RDFJSON.rdfJsonToGraph(obj);
+				if (graph != null) {
 					entry.setGraph(graph);
 				}
 			}
