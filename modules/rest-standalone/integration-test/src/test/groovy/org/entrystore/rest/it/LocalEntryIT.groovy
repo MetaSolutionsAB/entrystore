@@ -19,7 +19,7 @@ class LocalEntryIT extends BaseSpec {
 		def body = JsonOutput.toJson([resource: someText])
 
 		when:
-		def connection = client.postRequest('/' + contextId + convertMapToQueryParams(params), body, 'admin')
+		def connection = client.postRequest('/' + contextId + convertMapToQueryParams(params), body)
 
 		then:
 		connection.getResponseCode() == HTTP_CREATED
@@ -30,7 +30,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryId = responseJson['entryId'].toString()
 
 		// fetch created entry
-		def entryConn = client.getRequest('/' + contextId + '/entry/' + entryId, 'admin')
+		def entryConn = client.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
 		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
@@ -61,8 +61,8 @@ class LocalEntryIT extends BaseSpec {
 		resourceTypes[0]['type'] == 'uri'
 		resourceTypes[0]['value'] == NameSpaceConst.TERM_STRING
 
-		// fetch created reqource
-		def resourceConn = client.getRequest(createdResourceUri.substring(EntryStoreClient.baseUrl.length()), 'admin')
+		// fetch created resource
+		def resourceConn = client.getRequest(createdResourceUri.substring(EntryStoreClient.baseUrl.length()))
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
 		// Response says content-type is JSON, but it returns a non-json String value, same as in the request to create the entry
@@ -78,18 +78,15 @@ class LocalEntryIT extends BaseSpec {
 		def body = JsonOutput.toJson([resource: resourceName])
 
 		when:
-		def connection = client.postRequest('/' + contextId + convertMapToQueryParams(params), body, 'admin')
+		def connection = client.postRequest('/' + contextId + convertMapToQueryParams(params), body)
 
 		then:
-		// TODO: Should return BadRequest (400) and json with error information, but returns ServerError (500) and default html error page
-		//connection.getResponseCode() == HTTP_BAD_REQUEST
-		//connection.getContentType().contains('application/json')
-
-		connection.getResponseCode() == HTTP_INTERNAL_ERROR
-		connection.getContentType().contains('text/html')
-		def responseBody = connection.getErrorStream().text
-		responseBody.contains('<title>Status page</title>')
-		responseBody.contains('Internal Server Error')
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		connection.getContentType().contains('application/json')
+		def responseJson = (new JsonSlurper()).parseText(connection.getErrorStream().text)
+		responseJson['entryId'] == null
+		responseJson['error'] != null
+		responseJson['error'].toString().contains('Regular context only support Lists, ResultLists and None as BuiltinTypes')
 	}
 
 	def "POST /{context-id}?graphtype=user should create by default a local entry of type User"() {
@@ -99,7 +96,7 @@ class LocalEntryIT extends BaseSpec {
 		def body = JsonOutput.toJson([resource: requestResourceName])
 
 		when:
-		def connection = client.postRequest('/_principals' + convertMapToQueryParams(params), body, 'admin')
+		def connection = client.postRequest('/_principals' + convertMapToQueryParams(params), body)
 
 		then:
 		connection.getResponseCode() == HTTP_CREATED
@@ -110,7 +107,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryId = responseJson['entryId'].toString()
 
 		// fetch created entry
-		def entryConn = client.getRequest('/_principals/entry/' + entryId, 'admin')
+		def entryConn = client.getRequest('/_principals/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
 		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
@@ -142,7 +139,7 @@ class LocalEntryIT extends BaseSpec {
 		resourceTypes[0]['value'] == NameSpaceConst.TERM_USER
 
 		// fetch created resource
-		def resourceConn = client.getRequest(createdResourceUri.substring(EntryStoreClient.baseUrl.length()), 'admin')
+		def resourceConn = client.getRequest(createdResourceUri.substring(EntryStoreClient.baseUrl.length()))
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
 		def resourceRespJson = (new JsonSlurper()).parseText(resourceConn.getInputStream().text)
@@ -158,7 +155,7 @@ class LocalEntryIT extends BaseSpec {
 		def body = JsonOutput.toJson([resource: requestResourceName])
 
 		when:
-		def connection = client.postRequest('/_principals' + convertMapToQueryParams(params), body, 'admin')
+		def connection = client.postRequest('/_principals' + convertMapToQueryParams(params), body)
 
 		then:
 		connection.getResponseCode() == HTTP_CREATED
@@ -169,7 +166,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryId = responseJson['entryId'].toString()
 
 		// fetch created entry
-		def entryConn = client.getRequest('/_principals/entry/' + entryId, 'admin')
+		def entryConn = client.getRequest('/_principals/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
 		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
@@ -201,7 +198,7 @@ class LocalEntryIT extends BaseSpec {
 		resourceTypes[0]['value'] == NameSpaceConst.TERM_GROUP
 
 		// fetch created resource
-		def resourceConn = client.getRequest(createdResourceUri.substring(EntryStoreClient.baseUrl.length()), 'admin')
+		def resourceConn = client.getRequest(createdResourceUri.substring(EntryStoreClient.baseUrl.length()))
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
 		def resourceRespJson = (new JsonSlurper()).parseText(resourceConn.getInputStream().text)

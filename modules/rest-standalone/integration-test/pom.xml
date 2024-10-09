@@ -70,13 +70,13 @@
         <dependency>
             <groupId>org.entrystore</groupId>
             <artifactId>entrystore-rest-standalone-jetty</artifactId>
-            <version>5.5-SNAPSHOT</version>
+            <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.entrystore</groupId>
             <artifactId>entrystore-rest</artifactId>
-            <version>5.5-SNAPSHOT</version>
+            <version>${project.version}</version>
             <scope>compile</scope>
         </dependency>
         <dependency>

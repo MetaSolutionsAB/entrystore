@@ -2,7 +2,6 @@ package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.standalone.EntryStoreApplicationStandaloneJetty
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -11,11 +10,11 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 
 abstract class BaseSpec extends Specification {
 
-	static Logger log = LoggerFactory.getLogger(this.class);
+	def static log = LoggerFactory.getLogger(this.class)
 
-	static client = new EntryStoreClient()
+	def static client = new EntryStoreClient()
 
-	static appStarted = false
+	def static appStarted = false
 
 	def setupSpec() {
 		if (!appStarted) {
@@ -29,7 +28,7 @@ abstract class BaseSpec extends Specification {
 	}
 
 	def getOrCreateContext(Map data) {
-		def connection = client.getRequest('/_contexts/entry/' + data['contextId'], 'admin')
+		def connection = client.getRequest('/_contexts/entry/' + data['contextId'])
 		if (connection.getResponseCode() == HTTP_NOT_FOUND) {
 			createContext(data)
 		}
@@ -41,7 +40,7 @@ abstract class BaseSpec extends Specification {
 	 * @return ID of the created group
 	 */
 	def createContext(Map data) {
-		def connection = client.postRequest('/_principals/groups' + convertMapToQueryParams(data), '', 'admin')
+		def connection = client.postRequest('/_principals/groups' + convertMapToQueryParams(data))
 		assert connection.getResponseCode() == HTTP_CREATED
 		return connection.getHeaderField('Location').find(/\/_principals\/entry\/([0-9A-Za-z]+)$/) { match, id -> id }
 	}

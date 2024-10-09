@@ -1,5 +1,7 @@
 package org.entrystore.rest.it.util
 
+import groovy.json.JsonOutput
+
 import static java.net.HttpURLConnection.HTTP_OK
 
 class EntryStoreClient {
@@ -9,14 +11,16 @@ class EntryStoreClient {
 	static String origin = 'http://' + host + ':' + port
 	static String baseUrl = origin + '/store'
 
-	def creds = ['admin': 'adminpass']
-	def cookies = [:].withDefault { userName ->
+	def static emptyJsonBody = JsonOutput.toJson([:])
+
+	def static creds = ['admin': 'adminpass']
+	def static cookies = [:].withDefault { userName ->
 		{
 			authorize(userName.toString())
 		}
 	}
 
-	def getRequest(String path, String asUser = null, String requestAcceptType = 'application/json') {
+	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json') {
 		def connection = (HttpURLConnection) new URI(origin + path).toURL().openConnection()
 		if (requestAcceptType?.trim()) {
 			connection.setRequestProperty('Accept', requestAcceptType)
@@ -28,7 +32,7 @@ class EntryStoreClient {
 		return connection
 	}
 
-	def postRequest(String path, String body = '', String asUser = null, String contentType = 'application/json') {
+	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
 		def connection = (HttpURLConnection) new URI(origin + path).toURL().openConnection()
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
@@ -41,7 +45,7 @@ class EntryStoreClient {
 		return connection
 	}
 
-	def authorize(String asUser) {
+	def static authorize(String asUser) {
 		def bodyParams = 'auth_username=' + asUser + '&auth_password=' + creds[asUser]
 		def conn = postRequest('/auth/cookie', bodyParams, null,
 			'application/x-www-form-urlencoded')
