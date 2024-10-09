@@ -21,7 +21,6 @@ import org.apache.commons.logging.LogFactory;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
-import org.entrystore.repository.RepositoryException;
 
 import java.net.URI;
 
@@ -42,8 +41,7 @@ public class RegularContext extends ContextImpl {
 	}
 
 	@Override
-	public Entry createResource(String entryId, GraphType buiType,
-			ResourceType repType, URI listURI) {
+	public Entry createResource(String entryId, GraphType buiType, ResourceType repType, URI listURI) {
 		switch (buiType) {
 		case List:
 		case ResultList:
@@ -54,7 +52,7 @@ public class RegularContext extends ContextImpl {
 		case PipelineResult:
 			return super.createResource(entryId, buiType, repType, listURI);			
 		default:
-			throw new RepositoryException("Regular context only support Lists, ResultLists and None as BuiltinTypes");
+			throw new IllegalArgumentException("Regular context only support Lists, ResultLists and None as BuiltinTypes");
 		}
 	}
 
