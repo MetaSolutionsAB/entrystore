@@ -21,7 +21,7 @@ class EntryStoreClient {
 	}
 
 	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json') {
-		def connection = (HttpURLConnection) new URI(origin + path).toURL().openConnection()
+		def connection = createConnection(path)
 		if (requestAcceptType?.trim()) {
 			connection.setRequestProperty('Accept', requestAcceptType)
 		}
@@ -33,7 +33,7 @@ class EntryStoreClient {
 	}
 
 	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
-		def connection = (HttpURLConnection) new URI(origin + path).toURL().openConnection()
+		def connection = createConnection(path)
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
@@ -43,6 +43,16 @@ class EntryStoreClient {
 		connection.getOutputStream().write(body.getBytes())
 		connection.connect()
 		return connection
+	}
+
+	/**
+	 *
+	 * @param path can be a local path. e.g. /_contexts/entry/_principals or a full URL
+	 * @return
+	 */
+	def static createConnection(String path) {
+		def hostInfo = (path.startsWith('/')) ? origin : ''
+		return (HttpURLConnection) new URI(hostInfo + path.replace('/store', '')).toURL().openConnection()
 	}
 
 	def static authorize(String asUser) {
