@@ -229,7 +229,7 @@ public class BackupJob implements Job, InterruptableJob {
 					log.warn("Unable to delete {}: {}", getErrorStatusFile(newBackupDirectory), e.getMessage());
 				}
 			} catch (Exception e) {
-				log.error("Backup failed: {}", e.getMessage());
+				log.error("Backup failed: {}", e.getMessage(), e);
 				errors.add(e.getMessage());
 			}
 
