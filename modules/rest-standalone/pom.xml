@@ -18,6 +18,7 @@
         <module>common</module>
         <module>jetty</module>
         <module>simple</module>
+        <module>integration-test</module>
     </modules>
 
 </project>
