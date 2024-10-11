@@ -18,6 +18,7 @@ package org.entrystore.repository.backup;
 
 import org.apache.commons.io.FileUtils;
 import org.eclipse.rdf4j.rio.RDFFormat;
+import org.eclipse.rdf4j.sail.SailException;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
@@ -115,6 +116,7 @@ public class BackupJob implements Job, InterruptableJob {
 			boolean deleteAfter = dataMap.getBoolean("deleteAfter");
 			File oldBackupDirectory = new File(exportPath, "all-old");
 			File newBackupDirectory = new File(exportPath, currentDateTime);
+			List<String> errors = new LinkedList<>();
 
 			try {
 				if (simple) {
@@ -150,28 +152,38 @@ public class BackupJob implements Job, InterruptableJob {
 					if (newBackupDirectory.mkdirs()) {
 						log.info("Created directory {}", newBackupDirectory);
 					} else {
+						// sadly, since we don't have a directory to write to,
+						// we cannot create an error status file either
 						log.error("Unable to create directory {}", newBackupDirectory);
-						log.info("Aborting backup due to error");
+						log.info("Aborting backup due to unrecoverable error");
 						return;
 					}
 				}
 
-				long before = System.currentTimeMillis();
-
 				// Main repo
+				long beforeMainExport = System.currentTimeMillis();
 				log.info("Exporting main repository");
-
-				String fileName = "repository." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
-				rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, fileName).toURI(), gzip, format);
-				log.info("Exporting main repository took " + (System.currentTimeMillis() - before) + " ms");
+				String mainRepoFile = "repository." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+				try {
+					rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, mainRepoFile).toURI(), gzip, format);
+					log.info("Exporting main repository took " + (System.currentTimeMillis() - beforeMainExport) + " ms");
+				} catch (SailException se) {
+					log.error("Unable to export main repository {}", se.getMessage());
+					errors.add(se.getMessage());
+				}
 
 				// Provenance repo
 				if (rm.getProvenanceRepository() != null) {
-					before = System.currentTimeMillis();
+					long beforeProvExport = System.currentTimeMillis();
 					log.info("Exporting provenance repository");
-					fileName = "repository_prov." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
-					rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, fileName).toURI(), gzip, format);
-					log.info("Exporting provenance repository took " + (System.currentTimeMillis() - before) + " ms");
+					String provRepoFile = "repository_prov." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+					try {
+						rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, provRepoFile).toURI(), gzip, format);
+						log.info("Exporting provenance repository took " + (System.currentTimeMillis() - beforeProvExport) + " ms");
+					} catch (SailException se) {
+						log.error("Unable to export provenance repository {}", se.getMessage());
+						errors.add(se.getMessage());
+					}
 				} else {
 					log.info("Provenance repository is unconfigured and is therefore not be included in the backup");
 				}
@@ -182,11 +194,16 @@ public class BackupJob implements Job, InterruptableJob {
 					if (dataPath == null) {
 						log.error("Unknown data path, please check the following setting: " + Settings.DATA_FOLDER);
 					} else {
-						before = System.currentTimeMillis();
+						long beforeFileExport = System.currentTimeMillis();
 						File dataPathFile = new File(dataPath);
 						log.info("Copying data folder from " + dataPathFile + " to " + newBackupDirectory);
-						FileOperations.copyPath(dataPathFile.toPath(), newBackupDirectory.toPath());
-						log.info("Copying data folder took " + (System.currentTimeMillis() - before) + " ms");
+						try {
+							FileOperations.copyPath(dataPathFile.toPath(), newBackupDirectory.toPath());
+							log.info("Copying data folder took " + (System.currentTimeMillis() - beforeFileExport) + " ms");
+						} catch (IOException ioe) {
+							log.error("Unable to copy data folder from {} to {}", dataPathFile, newBackupDirectory);
+							errors.add(ioe.getMessage());
+						}
 					}
 				} else {
 					log.warn("Files not included in backup due to configuration");
@@ -198,7 +215,7 @@ public class BackupJob implements Job, InterruptableJob {
 						FileUtils.deleteDirectory(oldBackupDirectory);
 						log.info("Deleted {}", oldBackupDirectory);
 					} catch (IOException e) {
-						log.warn("Unable to delete {}: {}", oldBackupDirectory, e);
+						log.warn("Unable to delete {}: {}", oldBackupDirectory, e.getMessage());
 					}
 				}
 
@@ -206,19 +223,32 @@ public class BackupJob implements Job, InterruptableJob {
 				FileOperations.writeStringToFile(new File(newBackupDirectory, "BACKUP_DATE"), currentDateTime);
 
 				// Removing eventually existing failed status file
-				File failedStatusFile = new File(newBackupDirectory, "BACKUP_FAILED");
 				try {
-					Files.deleteIfExists(failedStatusFile.toPath());
+					Files.deleteIfExists(getErrorStatusFile(newBackupDirectory).toPath());
 				} catch (IOException e) {
-					log.error("Unable to delete {}: {}", failedStatusFile, e.getMessage());
+					log.warn("Unable to delete {}: {}", getErrorStatusFile(newBackupDirectory), e.getMessage());
 				}
 			} catch (Exception e) {
-				FileOperations.writeStringToFile(new File(newBackupDirectory, "BACKUP_FAILED"), currentDateTime + "\n" + e.getMessage());
 				log.error("Backup failed: {}", e.getMessage());
+				errors.add(e.getMessage());
+			}
+
+			if (!errors.isEmpty()) {
+				File errorStatusFile = getErrorStatusFile(newBackupDirectory);
+				writeErrorStatus(errorStatusFile, errors, currentDateTime);
 			}
 		}
 
 		log.info("Backup job done with execution, took " + (System.currentTimeMillis() - beforeTotal) + " ms in total");
+	}
+
+	private static void writeErrorStatus(File errorFile, List<String> errors, String backupDateTime) {
+		String errorFileContent = backupDateTime + "\n" + String.join("\n", errors);
+		FileOperations.writeStringToFile(errorFile, errorFileContent);
+	}
+
+	private static File getErrorStatusFile(File backupDirectory) {
+		return new File(backupDirectory, "BACKUP_FAILED");
 	}
 	
 	synchronized public static void runBackupMaintenance(JobExecutionContext jobContext) throws Exception {
