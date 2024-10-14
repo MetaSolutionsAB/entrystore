@@ -7,12 +7,12 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-harvesting</artifactId>
-		<version>5.5-SNAPSHOT</version>
+		<version>5.5.0</version>
 	</parent>
 	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-harvesting-factory</artifactId>
 	<packaging>jar</packaging>
-	<version>5.5-SNAPSHOT</version>
+	<version>5.5.0</version>
 	<name>EntryStore Harvester Factory module</name>
 	
 	<build>
