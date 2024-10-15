@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package org.entrystore.repository.util;
 
 import org.eclipse.rdf4j.model.Literal;
+import org.eclipse.rdf4j.model.base.CoreDatatype;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -26,47 +27,51 @@ import java.util.Set;
  */
 public class MetadataUtil {
 
-	public static Set<String> integerDataTypes;
+	public static Set<CoreDatatype> integerDataTypes;
 
-	public static Set<String> dateDataTypes;
+	public static Set<CoreDatatype> dateDataTypes;
 
-	public static Set<String> stringDataTypes;
+	public static Set<CoreDatatype> stringDataTypes;
 
 	static {
 		integerDataTypes = new HashSet<>();
-		integerDataTypes.add(NS.expand("xsd:byte").toString());
-		integerDataTypes.add(NS.expand("xsd:int").toString());
-		integerDataTypes.add(NS.expand("xsd:integer").toString());
-		integerDataTypes.add(NS.expand("xsd:long").toString());
-		integerDataTypes.add(NS.expand("xsd:negativeInteger").toString());
-		integerDataTypes.add(NS.expand("xsd:nonNegativeInteger").toString());
-		integerDataTypes.add(NS.expand("xsd:nonPositiveInteger").toString());
-		integerDataTypes.add(NS.expand("xsd:positiveInteger").toString());
-		integerDataTypes.add(NS.expand("xsd:short").toString());
-		integerDataTypes.add(NS.expand("xsd:unsignedLong").toString());
-		integerDataTypes.add(NS.expand("xsd:unsignedInt").toString());
-		integerDataTypes.add(NS.expand("xsd:unsignedShort").toString());
-		integerDataTypes.add(NS.expand("xsd:unsignedByte").toString());
-		integerDataTypes.add(NS.expand("xsd:gYear").toString());
+		integerDataTypes.add(CoreDatatype.XSD.BYTE);
+		integerDataTypes.add(CoreDatatype.XSD.INT);
+		integerDataTypes.add(CoreDatatype.XSD.INTEGER);
+		integerDataTypes.add(CoreDatatype.XSD.LONG);
+		integerDataTypes.add(CoreDatatype.XSD.NEGATIVE_INTEGER);
+		integerDataTypes.add(CoreDatatype.XSD.NON_NEGATIVE_INTEGER);
+		integerDataTypes.add(CoreDatatype.XSD.NON_POSITIVE_INTEGER);
+		integerDataTypes.add(CoreDatatype.XSD.POSITIVE_INTEGER);
+		integerDataTypes.add(CoreDatatype.XSD.SHORT);
+		integerDataTypes.add(CoreDatatype.XSD.UNSIGNED_LONG);
+		integerDataTypes.add(CoreDatatype.XSD.UNSIGNED_INT);
+		integerDataTypes.add(CoreDatatype.XSD.UNSIGNED_SHORT);
+		integerDataTypes.add(CoreDatatype.XSD.UNSIGNED_BYTE);
+		integerDataTypes.add(CoreDatatype.XSD.GYEAR);
 
 		dateDataTypes = new HashSet<>();
-		dateDataTypes.add(NS.expand("xsd:date").toString());
-		dateDataTypes.add(NS.expand("xsd:dateTime").toString());
-		dateDataTypes.add(NS.expand("xsd:gYear").toString());
-		dateDataTypes.add(NS.expand("xsd:gYearMonth").toString());
+		dateDataTypes.add(CoreDatatype.XSD.DATE);
+		dateDataTypes.add(CoreDatatype.XSD.DATETIME);
+		dateDataTypes.add(CoreDatatype.XSD.GYEAR);
+		dateDataTypes.add(CoreDatatype.XSD.GYEARMONTH);
+		dateDataTypes.add(CoreDatatype.XSD.GDAY);
+		dateDataTypes.add(CoreDatatype.XSD.GMONTH);
+		dateDataTypes.add(CoreDatatype.XSD.DATETIMESTAMP);
 
 		stringDataTypes = new HashSet<>();
-		stringDataTypes.add(NS.expand("rdf:langString").toString());
-		stringDataTypes.add(NS.expand("xsd:string").toString());
+		stringDataTypes.add(CoreDatatype.RDF.LANGSTRING);
+		stringDataTypes.add(CoreDatatype.XSD.STRING);
 	}
 
 	/**
 	 * Filters all invalid XML characters out of the string.
-	 * 
+	 *
 	 * @param s
 	 *            string to be filtered.
 	 * @return A valid XML string.
 	 */
+	/* NEVER USED
 	public static String removeInvalidXMLCharacters(String s) {
 		StringBuilder out = new StringBuilder(); // Used to hold the output.
 		// used to reference the current char
@@ -93,37 +98,25 @@ public class MetadataUtil {
 
 		return out.toString();
 	}
+	*/
 
-	public static boolean isIntegerLiteral(Literal l) {
+	public static boolean isTypedLiteral(Literal l, String type) {
+
 		if (l == null) {
-			throw new IllegalArgumentException("Literal must not be null");
+			throw new IllegalArgumentException("Literal must not be null.");
 		}
 
-		if (l.getDatatype() == null) {
+		CoreDatatype datatype = CoreDatatype.from(l.getDatatype());
+
+		if (datatype == null) {
 			return false;
 		}
 
-		return integerDataTypes.contains(l.getDatatype().stringValue());
-	}
-
-	public static boolean isDateLiteral(Literal l) {
-		if (l == null) {
-			throw new IllegalArgumentException("Literal must not be null");
-		}
-
-		if (l.getDatatype() == null) {
-			return false;
-		}
-
-		return dateDataTypes.contains(l.getDatatype().stringValue());
-	}
-
-	public static boolean isStringLiteral(Literal l) {
-		if (l == null) {
-			throw new IllegalArgumentException("Literal must not be null");
-		}
-
-		return (l.getDatatype() == null) || stringDataTypes.contains(l.getDatatype().stringValue());
+		return switch (type) {
+			case "integer" -> integerDataTypes.contains(datatype);
+			case "date" -> dateDataTypes.contains(datatype);
+			default -> stringDataTypes.contains(datatype);
+		};
 	}
 
 }
