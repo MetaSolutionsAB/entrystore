@@ -31,7 +31,7 @@ public class MetadataUtil {
 
 	public static Set<CoreDatatype> dateDataTypes;
 
-	public static Set<CoreDatatype> stringDataTypes;
+	public static Set<CoreDatatype> literalDataTypes;
 
 	static {
 		integerDataTypes = new HashSet<>();
@@ -59,9 +59,9 @@ public class MetadataUtil {
 		dateDataTypes.add(CoreDatatype.XSD.GMONTH);
 		dateDataTypes.add(CoreDatatype.XSD.DATETIMESTAMP);
 
-		stringDataTypes = new HashSet<>();
-		stringDataTypes.add(CoreDatatype.RDF.LANGSTRING);
-		stringDataTypes.add(CoreDatatype.XSD.STRING);
+		literalDataTypes = new HashSet<>();
+		literalDataTypes.add(CoreDatatype.RDF.LANGSTRING);
+		literalDataTypes.add(CoreDatatype.XSD.STRING);
 	}
 
 	/**
@@ -115,7 +115,7 @@ public class MetadataUtil {
 		return switch (type) {
 			case "integer" -> integerDataTypes.contains(datatype);
 			case "date" -> dateDataTypes.contains(datatype);
-			default -> stringDataTypes.contains(datatype);
+			default -> literalDataTypes.contains(datatype);
 		};
 	}
 

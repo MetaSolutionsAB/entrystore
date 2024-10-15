@@ -128,9 +128,9 @@ public class MetadataUtilTest {
 	}
 
 	@Test
-	public void isTypedLiteral_string() {
+	public void isTypedLiteral_literal() {
 
-		String type = "string";
+		String type = "literal";
 
 		assertFalse(MetadataUtil.isTypedLiteral(byteLiteral, type));
 		assertFalse(MetadataUtil.isTypedLiteral(intLiteral, type));
