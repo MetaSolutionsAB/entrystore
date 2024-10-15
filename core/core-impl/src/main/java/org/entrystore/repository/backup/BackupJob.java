@@ -18,6 +18,7 @@ package org.entrystore.repository.backup;
 
 import org.apache.commons.io.FileUtils;
 import org.eclipse.rdf4j.rio.RDFFormat;
+import org.eclipse.rdf4j.sail.SailException;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
@@ -33,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -112,99 +114,141 @@ public class BackupJob implements Job, InterruptableJob {
 		} else {
 			boolean simple = dataMap.getBoolean("simple");
 			boolean deleteAfter = dataMap.getBoolean("deleteAfter");
-			File newBackupDirectory;
 			File oldBackupDirectory = new File(exportPath, "all-old");
-			if (simple) {
-				newBackupDirectory = new File(exportPath, "all");
-				if (newBackupDirectory.isDirectory()) {
-					if (oldBackupDirectory.exists()) {
-						try {
-							FileUtils.deleteDirectory(oldBackupDirectory);
-							log.info("Deleted {}", oldBackupDirectory);
-						} catch (IOException e) {
-							log.warn("Unable to delete {}: {}", oldBackupDirectory, e);
-						}
-					}
+			File newBackupDirectory = new File(exportPath, currentDateTime);
+			List<String> errors = new LinkedList<>();
 
-					if (deleteAfter) {
-						if (newBackupDirectory.renameTo(oldBackupDirectory)) {
-							log.info("Renamed {} to {}", newBackupDirectory, oldBackupDirectory);
+			try {
+				if (simple) {
+					newBackupDirectory = new File(exportPath, "all");
+					if (newBackupDirectory.isDirectory()) {
+						if (oldBackupDirectory.exists()) {
+							try {
+								FileUtils.deleteDirectory(oldBackupDirectory);
+								log.info("Deleted {}", oldBackupDirectory);
+							} catch (IOException e) {
+								log.warn("Unable to delete {}: {}", oldBackupDirectory, e);
+							}
+						}
+
+						if (deleteAfter) {
+							if (newBackupDirectory.renameTo(oldBackupDirectory)) {
+								log.info("Renamed {} to {}", newBackupDirectory, oldBackupDirectory);
+							} else {
+								log.warn("Unable to rename {} to {}", newBackupDirectory, oldBackupDirectory);
+							}
 						} else {
-							log.warn("Unable to rename {} to {}", newBackupDirectory, oldBackupDirectory);
-						}
-					} else {
-						try {
-							FileUtils.deleteDirectory(newBackupDirectory);
-							log.info("Deleted {}", newBackupDirectory);
-						} catch (IOException e) {
-							log.warn("Unable to delete {}: {}", newBackupDirectory, e);
+							try {
+								FileUtils.deleteDirectory(newBackupDirectory);
+								log.info("Deleted {}", newBackupDirectory);
+							} catch (IOException e) {
+								log.warn("Unable to delete {}: {}", newBackupDirectory, e);
+							}
 						}
 					}
 				}
-			} else {
-				newBackupDirectory = new File(exportPath, currentDateTime);
-			}
 
-			if (!newBackupDirectory.exists()) {
-				if (newBackupDirectory.mkdirs()) {
-					log.info("Created directory {}", newBackupDirectory);
-				} else {
-					log.error("Unable to create directory {}", newBackupDirectory);
-					log.info("Aborting backup due to error");
-					return;
+				if (!newBackupDirectory.exists()) {
+					if (newBackupDirectory.mkdirs()) {
+						log.info("Created directory {}", newBackupDirectory);
+					} else {
+						// sadly, since we don't have a directory to write to,
+						// we cannot create an error status file either
+						log.error("Unable to create directory {}", newBackupDirectory);
+						log.info("Aborting backup due to unrecoverable error");
+						return;
+					}
 				}
-			}
 
-			long before = System.currentTimeMillis();
-
-			// Writing time stamp
-			FileOperations.writeStringToFile(new File(newBackupDirectory, "BACKUP_DATE"), currentDateTime);
-
-			// Main repo
-			log.info("Exporting main repository");
-
-			String fileName = "repository." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
-			rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, fileName).toURI(), gzip, format);
-			log.info("Exporting main repository took " + (System.currentTimeMillis() - before) + " ms");
-
-			// Provenance repo
-			if (rm.getProvenanceRepository() != null) {
-				before = System.currentTimeMillis();
-				log.info("Exporting provenance repository");
-				fileName = "repository_prov." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
-				rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, fileName).toURI(), gzip, format);
-				log.info("Exporting provenance repository took " + (System.currentTimeMillis() - before) + " ms");
-			} else {
-				log.info("Provenance repository is unconfigured and is therefore not be included in the backup");
-			}
-
-			// Files/binary data
-			if (includeFiles) {
-				String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
-				if (dataPath == null) {
-					log.error("Unknown data path, please check the following setting: " + Settings.DATA_FOLDER);
-				} else {
-					before = System.currentTimeMillis();
-					File dataPathFile = new File(dataPath);
-					log.info("Copying data folder from " + dataPathFile + " to " + newBackupDirectory);
-					FileOperations.copyPath(dataPathFile.toPath(), newBackupDirectory.toPath());
-					log.info("Copying data folder took " + (System.currentTimeMillis() - before) + " ms");
-				}
-			} else {
-				log.warn("Files not included in backup due to configuration");
-			}
-
-			// Clean-up with "delete-after"
-			if (simple && deleteAfter && oldBackupDirectory.exists()) {
+				// Main repo
+				long beforeMainExport = System.currentTimeMillis();
+				log.info("Exporting main repository");
+				String mainRepoFile = "repository." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
 				try {
-					FileUtils.deleteDirectory(oldBackupDirectory);
-					log.info("Deleted {}", oldBackupDirectory);
-				} catch (IOException e) {
-					log.warn("Unable to delete {}: {}", oldBackupDirectory, e);
+					rm.exportToFile(rm.getRepository(), new File(newBackupDirectory, mainRepoFile).toURI(), gzip, format);
+					log.info("Exporting main repository took " + (System.currentTimeMillis() - beforeMainExport) + " ms");
+				} catch (SailException se) {
+					log.error("Unable to export main repository {}", se.getMessage());
+					errors.add(se.getMessage());
 				}
+
+				// Provenance repo
+				if (rm.getProvenanceRepository() != null) {
+					long beforeProvExport = System.currentTimeMillis();
+					log.info("Exporting provenance repository");
+					String provRepoFile = "repository_prov." + format.getDefaultFileExtension() + (gzip ? ".gz" : "");
+					try {
+						rm.exportToFile(rm.getProvenanceRepository(), new File(newBackupDirectory, provRepoFile).toURI(), gzip, format);
+						log.info("Exporting provenance repository took " + (System.currentTimeMillis() - beforeProvExport) + " ms");
+					} catch (SailException se) {
+						log.error("Unable to export provenance repository {}", se.getMessage());
+						errors.add(se.getMessage());
+					}
+				} else {
+					log.info("Provenance repository is unconfigured and is therefore not be included in the backup");
+				}
+
+				// Files/binary data
+				if (includeFiles) {
+					String dataPath = rm.getConfiguration().getString(Settings.DATA_FOLDER);
+					if (dataPath == null) {
+						log.error("Unknown data path, please check the following setting: " + Settings.DATA_FOLDER);
+					} else {
+						long beforeFileExport = System.currentTimeMillis();
+						File dataPathFile = new File(dataPath);
+						log.info("Copying data folder from " + dataPathFile + " to " + newBackupDirectory);
+						try {
+							FileOperations.copyPath(dataPathFile.toPath(), newBackupDirectory.toPath());
+							log.info("Copying data folder took " + (System.currentTimeMillis() - beforeFileExport) + " ms");
+						} catch (IOException ioe) {
+							log.error("Unable to copy data folder from {} to {}", dataPathFile, newBackupDirectory);
+							errors.add(ioe.getMessage());
+						}
+					}
+				} else {
+					log.warn("Files not included in backup due to configuration");
+				}
+
+				// Clean-up with "delete-after"
+				if (simple && deleteAfter && oldBackupDirectory.exists()) {
+					try {
+						FileUtils.deleteDirectory(oldBackupDirectory);
+						log.info("Deleted {}", oldBackupDirectory);
+					} catch (IOException e) {
+						log.warn("Unable to delete {}: {}", oldBackupDirectory, e.getMessage());
+					}
+				}
+
+				// Writing time stamp
+				FileOperations.writeStringToFile(new File(newBackupDirectory, "BACKUP_DATE"), currentDateTime);
+
+				// Removing eventually existing failed status file
+				try {
+					Files.deleteIfExists(getErrorStatusFile(newBackupDirectory).toPath());
+				} catch (IOException e) {
+					log.warn("Unable to delete {}: {}", getErrorStatusFile(newBackupDirectory), e.getMessage());
+				}
+			} catch (Exception e) {
+				log.error("Backup failed: {}", e.getMessage(), e);
+				errors.add(e.getMessage());
+			}
+
+			if (!errors.isEmpty()) {
+				File errorStatusFile = getErrorStatusFile(newBackupDirectory);
+				writeErrorStatus(errorStatusFile, errors, currentDateTime);
 			}
 		}
+
 		log.info("Backup job done with execution, took " + (System.currentTimeMillis() - beforeTotal) + " ms in total");
+	}
+
+	private static void writeErrorStatus(File errorFile, List<String> errors, String backupDateTime) {
+		String errorFileContent = backupDateTime + "\n" + String.join("\n", errors);
+		FileOperations.writeStringToFile(errorFile, errorFileContent);
+	}
+
+	private static File getErrorStatusFile(File backupDirectory) {
+		return new File(backupDirectory, "BACKUP_FAILED");
 	}
 	
 	synchronized public static void runBackupMaintenance(JobExecutionContext jobContext) throws Exception {

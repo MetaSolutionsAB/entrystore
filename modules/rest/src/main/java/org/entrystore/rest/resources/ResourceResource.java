@@ -977,8 +977,13 @@ public class ResourceResource extends BaseResource {
 					error = qe.getMessage();
 					getResponse().setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 				} catch (IOException ioe) {
-					error = ioe.getMessage();
-					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+					if (ioe.getCause() instanceof NullPointerException) {
+						error = ioe.getCause().getMessage();
+						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					} else {
+						error = ioe.getMessage();
+						getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+					}
 				}
 			}
 

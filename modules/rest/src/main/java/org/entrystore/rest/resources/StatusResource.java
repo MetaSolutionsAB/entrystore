@@ -124,7 +124,7 @@ public class StatusResource extends BaseResource  {
 					cors.put("headers", config.getString(Settings.CORS_HEADERS, "unconfigured"));
 					cors.put("maxAge", config.getString(Settings.CORS_MAX_AGE, "unconfigured"));
 					cors.put("origins", config.getString(Settings.CORS_ORIGINS, "unconfigured"));
-					cors.put("originsAllowCredentials", config.getString(Settings.CORS_ORIGINS, "unconfigured"));
+					cors.put("originsAllowCredentials", config.getString(Settings.CORS_ORIGINS_ALLOW_CREDENTIALS, "unconfigured"));
 					result.put("cors", cors);
 
 					// Solr

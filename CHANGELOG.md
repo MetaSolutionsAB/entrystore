@@ -1,5 +1,25 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 5.5.0 (2024-10-15)
+
+### Improvement
+
+[ENTRYSTORE-822](https://metasolutions.atlassian.net/browse/ENTRYSTORE-822) Avoid NPE and HTTP 500 when client sends empty request body for resource updates
+
+[ENTRYSTORE-829](https://metasolutions.atlassian.net/browse/ENTRYSTORE-829) Improve creation of backup status file\(s\)
+
+### Task
+
+[ENTRYSTORE-824](https://metasolutions.atlassian.net/browse/ENTRYSTORE-824) Bump versions of core dependencies
+
+### New Feature
+
+[ENTRYSTORE-153](https://metasolutions.atlassian.net/browse/ENTRYSTORE-153) Decide on and implement benchmarking strategy
+
+### Bug
+
+[ENTRYSTORE-828](https://metasolutions.atlassian.net/browse/ENTRYSTORE-828) Login attempt with non-existing username results in NPE and HTTP 500
+
 ## Version 5.4.0 (2024-05-20)
 
 ### Improvement

@@ -6,6 +6,7 @@ options:
 stepdefinitions:
   - build: &build
       name: Build
+      size: 4x
       caches:
         - maven
       script:
@@ -40,6 +41,10 @@ stepdefinitions:
         - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
         - cd docker/entrystore
         - docker build --build-arg ENTRYSTORE_VERSION=$VERSION --pull --no-cache --tag metasolutions/entrystore:$VERSION .
+        # We export to TAR because on Bitbucket Grype cannot access the image directly through the Docker daemon's /var/run/docker.sock
+        - docker save metasolutions/entrystore:$VERSION > "$BITBUCKET_CLONE_DIR/image.tar"
+        # We scan for OS vulnerabilities with Grype before we push to the registry, code scanning is covered by Snyk
+        - docker run --rm -v $BITBUCKET_CLONE_DIR/image.tar:/image.tar:ro anchore/grype --only-fixed --fail-on high --exclude "/srv/entrystore/**" docker-archive:/image.tar
         - docker push metasolutions/entrystore:$VERSION
         - if [ $BITBUCKET_BRANCH == "develop" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:develop ; docker push metasolutions/entrystore:develop ; fi
         - if [ $BITBUCKET_BRANCH == "master" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:$VERSION_MAJOR_MINOR ; docker push metasolutions/entrystore:$VERSION_MAJOR_MINOR ; fi
@@ -52,6 +57,15 @@ stepdefinitions:
         - docker
       caches:
         - docker
+  # trivy was activated as a step before build, but it took a long time to run (~7 mins) and we also have Snyk
+  # which is not as intrusive as a mandatory scanning step in the repo; deactivating it for now
+  #- trivy: &trivy
+  #    name: Trivy
+  #    script:
+  #      - export VERSION=`cat VERSION.txt` && echo $VERSION
+  #      - docker run --rm -v "$BITBUCKET_CLONE_DIR":/repo:ro aquasec/trivy repo --exit-code 1 --format table --no-progress --severity HIGH,CRITICAL /repo
+  #    services:
+  #      - docker
 
 pipelines:
   default:

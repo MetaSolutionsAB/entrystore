@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,24 +60,22 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 public class ListRecordsJob implements Job, InterruptableJob {
 
-	private final Log log = LogFactory.getLog(ListRecordsJob.class); 
+	private final Log log = LogFactory.getLog(ListRecordsJob.class);
 
 	// Parse XML Utils
 	private static XPathExpression expr;
 
-	private static XPathFactory factory;
-
 	private static XPath xpath;
 
 	private static boolean interrupted = false;
-	
+
 	private boolean replaceMetadata = false;
-	
+
 	private ValueFactory vf;
 
 	public void execute(JobExecutionContext context) throws JobExecutionException {
 		if (!interrupted) {
-			log.info("ListRecordsJob starts: " + ((URI)context.getJobDetail().getJobDataMap().get("contextURI")).toString() + " metadataType: " + context.getJobDetail().getJobDataMap().getString("metadataType") ); 
+			log.info("ListRecordsJob starts: " + ((URI)context.getJobDetail().getJobDataMap().get("contextURI")).toString() + " metadataType: " + context.getJobDetail().getJobDataMap().getString("metadataType") );
 			OutputStream out;
 			try {
 				out = System.out;
@@ -91,42 +89,42 @@ public class ListRecordsJob implements Job, InterruptableJob {
 				URI realURI = pm.getAuthenticatedUserURI();
 				try {
 					pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-					run(out, context); 
+					run(out, context);
 					// this clause sets the current user back to the actually logged in user
 				} finally {
 					pm.setAuthenticatedUserURI(realURI);
-				}		
+				}
 			} catch (Exception e) {
 				log.error(e.getMessage());
-				e.printStackTrace(); 
+				e.printStackTrace();
 			}
 		}
 	}
 
 	/**
-	 * 
+	 *
 	 * @param out
 	 * @throws Exception
 	 */
-	synchronized public void run(OutputStream out, JobExecutionContext jobContext) throws Exception { 
+	synchronized public void run(OutputStream out, JobExecutionContext jobContext) throws Exception {
 		JobDataMap dataMap = jobContext.getJobDetail().getJobDataMap();
 		RepositoryManagerImpl rm = (RepositoryManagerImpl) dataMap.get("rm");
 		ContextManager cm = rm.getContextManager();
 		final PrincipalManager pm = rm.getPrincipalManager();
 
-		initXpath(); 
+		initXpath();
 
-		URI contextURI = (URI)dataMap.get("contextURI"); 
-		String contextId = contextURI.toString().substring(contextURI.toString().lastIndexOf("/")+1); 
+		URI contextURI = (URI)dataMap.get("contextURI");
+		String contextId = contextURI.toString().substring(contextURI.toString().lastIndexOf("/")+1);
 		final Context context = cm.getContext(contextId);
 		final String metadataType = dataMap.getString("metadataType");
 		final String target = dataMap.getString("target");
 		String from = dataMap.getString("from");
-		String until = dataMap.getString("until");  
+		String until = dataMap.getString("until");
 		String set = dataMap.getString("set");
 		replaceMetadata = "replace".equalsIgnoreCase(rm.getConfiguration().getString(Settings.HARVESTER_OAI_METADATA_POLICY, "skip"));
 		boolean fromAutoDetect = "on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.HARVESTER_OAI_FROM_AUTO_DETECT, "on"));
-		
+
 		if (from == null && fromAutoDetect) {
 			Date latestEntry = null;
 			Set<URI> allEntries = context.getEntries();
@@ -145,7 +143,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 				from = new SimpleDateFormat("yyyy-MM-dd").format(latestEntry);
 			}
 		}
-		
+
 		log.info("OAI-PMH metadataType: " + metadataType);
 		log.info("OAI-PMH target: " + target);
 		log.info("OAI-PMH from: " + from);
@@ -158,11 +156,11 @@ public class ListRecordsJob implements Job, InterruptableJob {
 			listRecords = new ListRecords(target, from, until, set, metadataType);
 		} catch (UnknownHostException e) {
 			// TODO: handle exception write in the RDF tree
-			log.info("UnknownHostException since the target is unknown, the havester will be deleted"); 
-			jobContext.getScheduler().interrupt(jobContext.getJobDetail().getName(), jobContext.getJobDetail().getGroup()); 
-			return ; 
+			log.info("UnknownHostException since the target is unknown, the havester will be deleted");
+			jobContext.getScheduler().interrupt(jobContext.getJobDetail().getName(), jobContext.getJobDetail().getGroup());
+			return ;
 		}
-		
+
 		ThreadPoolExecutor exService = null;
 		if ("on".equalsIgnoreCase(rm.getConfiguration().getString(Settings.HARVESTER_OAI_MULTITHREADED, "off"))) {
 			int cpuCount = Runtime.getRuntime().availableProcessors();
@@ -176,7 +174,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		} else {
 			log.info("Performing single-threaded harvesting");
 		}
-		
+
 		Date before = new Date();
 		int j = 0;
 		while (listRecords != null) {
@@ -190,26 +188,26 @@ public class ListRecordsJob implements Job, InterruptableJob {
 				}
 				log.error("Error record: " + listRecords.toString());
 				break;
-			} 
+			}
 
-			//out.write(listRecords.toString().getBytes()); 
+			//out.write(listRecords.toString().getBytes());
 
 			// Get the <Root>-element
-			final Element el = listRecords.getDocument().getDocumentElement(); 
+			final Element el = listRecords.getDocument().getDocumentElement();
 			if (el.getElementsByTagName("ListRecords").getLength() == 0) {
-				log.error("No ListRecords"); 
-				throw new Exception("No ListRecords"); 
+				log.error("No ListRecords");
+				throw new Exception("No ListRecords");
 			}
 
 			// Get the <ListRecords> element
-			Element listRecordsElement = (Element) el.getElementsByTagName("ListRecords").item(0); 
+			Element listRecordsElement = (Element) el.getElementsByTagName("ListRecords").item(0);
 			NodeList recordList = listRecordsElement.getElementsByTagName("record");
 			// old NodeList recordList = getRecords(listRecordsElement);
-			
+
 			// Create entries from the XML
 			for (int i = 0; i < recordList.getLength(); i++) {
 				final Element recordElement = (Element) recordList.item(i).cloneNode(true);
-				
+
 				if (exService == null) {
 					try {
 						createEntry(context, recordElement, target, metadataType);
@@ -220,7 +218,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 					exService.execute(new Runnable() {
 						public void run() {
 							try {
-								pm.setAuthenticatedUserURI(pm.getAdminUser().getURI()); 
+								pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 								createEntry(context, recordElement, target, metadataType);
 							} catch (XPathExpressionException e) {
 								log.error(e.getMessage());
@@ -246,7 +244,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 				listRecords = new ListRecords(target, resumptionToken);
 			}
 		}
-		
+
 		if (exService != null) {
 			while (exService.getQueue().size() > 0) {
 				log.info("Runnables left in queue: " + exService.getQueue().size() + ", waiting");
@@ -254,7 +252,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 			}
 			exService.shutdown();
 		}
-		
+
 		log.info("OAI-PMH harvester done with execution");
 		long diff = new Date().getTime() - before.getTime();
 		if (j > 0) {
@@ -263,19 +261,19 @@ public class ListRecordsJob implements Job, InterruptableJob {
 	}
 
 	private static void initXpath() {
-		factory = XPathFactory.newInstance();
+		XPathFactory factory = XPathFactory.newInstance();
 		xpath = factory.newXPath();
 		xpath.setNamespaceContext(createNamespace());
 	}
 
 	public void createEntry(Context context, Element recordElement, String target, String metadataType) throws XPathExpressionException {
-		String identifier = getIdentifier(recordElement); 
+		String identifier = getIdentifier(recordElement);
 		String datestamp = getDatestamp(recordElement);
 
 		if (identifier == null) {
 			return;
 		}
-		
+
 		// We use OpenRDF URI and Java URI, they do different validity checks,
 		// and we need it to work in both.
 		// We can create a Reference without a resource URI, but not without a
@@ -283,7 +281,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		// metadata URI.
 		//
 		// Before you touch any of the code down there, think twice!
-		
+
 		IRI openrdfEntryResourceURI = null;
 		try {
 			String resourceIdentifier = getResourceIdentifier(recordElement, metadataType);
@@ -303,7 +301,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 			log.error("Illegal external metadata URI, not creating entry: " + e.getMessage());
 			return;
 		}
-		
+
 		URI entryResourceURI = null;
 		if (openrdfEntryResourceURI != null) {
 			try {
@@ -324,9 +322,9 @@ public class ListRecordsJob implements Job, InterruptableJob {
 			log.error("Illegal external metadata URI, not creating entry");
 			return;
 		}
-		
+
 		Set<Entry> entries = context.getByExternalMdURI(entryMetadataURI);
-		
+
 		// if there are no old entries
 		if (entries.isEmpty()) {
 			Model g = getExternalMetadataGraphFromXML(recordElement, metadataType, entryResourceURI);
@@ -365,13 +363,13 @@ public class ListRecordsJob implements Job, InterruptableJob {
 					setCachedMetadataGraph(entry, getExternalMetadataGraphFromXML(recordElement, metadataType, entry.getResourceURI()));
 				}
 			}
-			
+
 //			Iterator<Entry> iter = entries.iterator();
 //			while(iter.hasNext()) {
-//				entry = iter.next(); 
+//				entry = iter.next();
 //				String entryURIString = entry.getEntryURI().toString();
 //				int indexDateStamp = entryURIString.lastIndexOf("=");
-//				String datestampOld = entryURIString.substring(indexDateStamp+1); 
+//				String datestampOld = entryURIString.substring(indexDateStamp+1);
 //				if (datestamp.equals(datestampOld)) {
 //					// just update modified in the entry since the metadata is the same.
 //					entry.getCachedExternalMetadata().setGraph(entry.getCachedExternalMetadata().getGraph());
@@ -384,17 +382,13 @@ public class ListRecordsJob implements Job, InterruptableJob {
 	}
 
 	private static String getDatestamp(Element el) throws XPathExpressionException {
-		initXpath(); 
-		expr = xpath.compile("oai:header/oai:datestamp"); 
+		initXpath();
+		expr = xpath.compile("oai:header/oai:datestamp");
 		return (String) expr.evaluate(el, XPathConstants.STRING);
 	}
-	
+
 	private Model getExternalMetadataGraphFromXML(Element el, String metadataType, URI resourceURI) throws XPathExpressionException {
-		Node metadata = getMetadataNode(el, metadataType);
-		if (metadata == null || metadata.getChildNodes() == null) {
-			return null;
-		}
-		return (Model) ConverterManagerImpl.convert(metadataType, metadata, resourceURI, null);
+		return ConverterManagerImpl.convert(metadataType, getMetadataNode(el, metadataType), resourceURI);
 	}
 
 	private void setCachedMetadataGraph(Entry entry, Model graph) {
@@ -407,7 +401,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 	}
 
 	private static Node getMetadataNode(Element el, String metadataType) throws XPathExpressionException {
-		initXpath(); 
+		initXpath();
 		if (metadataType.equals("oai_dc")) {
 			expr = xpath.compile("oai:metadata/oai_dc:dc");
 		} else if (metadataType.equals("rdn_dc")) {
@@ -415,36 +409,36 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		}
 		return (Node) expr.evaluate(el, XPathConstants.NODE);
 	}
-	
+
 	private static NodeList getAboutNodes(Element el, String metadataType) throws XPathExpressionException {
-		initXpath(); 
+		initXpath();
 		if (metadataType.equals("oai_dc") || metadataType.equals("rdn_dc")) {
 			expr = xpath.compile("oai:about/oai_dc:dc");
 			return (NodeList) expr.evaluate(el, XPathConstants.NODESET);
 		}
-		
+
 		return null;
 	}
 
 	private static String getIdentifier(Element el) throws XPathExpressionException {
-		initXpath(); 
-		expr = xpath.compile("oai:header/oai:identifier"); 
+		initXpath();
+		expr = xpath.compile("oai:header/oai:identifier");
 		return (String) expr.evaluate(el, XPathConstants.STRING);
 	}
 
 	public static NodeList getRecords(Element el) throws XPathExpressionException {
-		expr = xpath.compile("oai:record");  
+		expr = xpath.compile("oai:record");
 		return (NodeList) expr.evaluate(el, XPathConstants.NODESET);
 	}
-	
+
 	private static String getResourceIdentifier(Element el, String metadataType) throws XPathExpressionException {
 		initXpath();
 		if (metadataType.equals("oai_dc")) {
-			expr = xpath.compile("oai:metadata/oai_dc:dc/dc:identifier"); 
+			expr = xpath.compile("oai:metadata/oai_dc:dc/dc:identifier");
 		} else if (metadataType.equals("rdn_dc")) {
-			expr = xpath.compile("oai:metadata/rdn_dc:rdndc/dc:identifier"); 
+			expr = xpath.compile("oai:metadata/rdn_dc:rdndc/dc:identifier");
 		}
-		
+
 		// we only want URIs as identifiers and discard other strings
 		NodeList ids = (NodeList) expr.evaluate(el, XPathConstants.NODESET);
 		for (int i = 0; i < ids.getLength(); i++) {
@@ -458,33 +452,27 @@ public class ListRecordsJob implements Job, InterruptableJob {
 				}
 			}
 		}
-		
+
 		return null;
 		// return (String) expr.evaluate(el, XPathConstants.STRING);
 	}
 
 	private static NamespaceContext createNamespace() {
 		// We map the prefixes to URIs
-		NamespaceContext ctx = new NamespaceContext() {
+		return new NamespaceContext() {
 			public String getNamespaceURI(String prefix) {
-				String uri;
-				if (prefix.equals("oai"))
-					uri = "http://www.openarchives.org/OAI/2.0/";
-				else if (prefix.equals("dc"))
-					uri = "http://purl.org/dc/elements/1.1/";
-				else if (prefix.equals("dcterms"))
-					uri = "http://purl.org/dc/terms/";
-				else if (prefix.equals("oai_dc"))
-					uri = "http://www.openarchives.org/OAI/2.0/oai_dc/";
-				else if (prefix.equals("rdn_dc"))
-					uri = "http://www.rdn.ac.uk/oai/rdn_dc/";
-				else
-					uri = null;
-				return uri;
+				return switch (prefix) {
+					case "oai" -> "http://www.openarchives.org/OAI/2.0/";
+					case "dc" -> "http://purl.org/dc/elements/1.1/";
+					case "dcterms" -> "http://purl.org/dc/terms/";
+					case "oai_dc" -> "http://www.openarchives.org/OAI/2.0/oai_dc/";
+					case "rdn_dc" -> "http://www.rdn.ac.uk/oai/rdn_dc/";
+					default -> null;
+				};
 			}
 
 			// Dummy implementation - not used!
-			public Iterator getPrefixes(String val) {
+			public Iterator<String> getPrefixes(String val) {
 				return null;
 			}
 
@@ -493,11 +481,10 @@ public class ListRecordsJob implements Job, InterruptableJob {
 				return null;
 			}
 		};
-		return ctx;
 	}
 
 	public void interrupt() throws UnableToInterruptJobException {
-		interrupted = true; 
+		interrupted = true;
 	}
 
 }

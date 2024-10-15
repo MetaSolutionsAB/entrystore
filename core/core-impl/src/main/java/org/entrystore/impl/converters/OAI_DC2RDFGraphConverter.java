@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,43 +38,37 @@ import static org.eclipse.rdf4j.model.util.Values.literal;
 
 public class OAI_DC2RDFGraphConverter implements Converter {
 
-	private static Log log = LogFactory.getLog(OAI_DC2RDFGraphConverter.class);
-	
-	Map<String, Locale> localeMap;
-	
+	private static final Log log = LogFactory.getLog(OAI_DC2RDFGraphConverter.class);
+
+	static Map<String, Locale> localeMap;
+
 	static {
 		String[] languages = Locale.getISOLanguages();
-		Map<String, Locale> localeMap = new HashMap<String, Locale>(languages.length);
+		localeMap = new HashMap<>(languages.length);
 		for (String language : languages) {
-			Locale locale = new Locale(language);
+			Locale locale = new Locale.Builder().setLanguage(language).build();
 			localeMap.put(locale.getISO3Language(), locale);
 		}
 	}
 
 	/**
 	 * Converts an oai_dc xml document tag metadata to a graph.
-	 * 
-	 * @param from
-	 *            An XML NodeList.
-	 * 
-	 * @param resourceURI
-	 *            Root URI of the resource's metadata.
-	 * 
-	 * @return the new metadata graph.
+	 *
+	 * @param from An XML Node.
+	 * @param resourceURI Root URI of the resource's metadata.
+	 * @return the new metadata graph Model.
 	 */
-	public Object convert(Object from, URI resourceURI, URI metadataURI) {
-		NodeList metadataList = null;
+	public Model convertToModel(Node from, URI resourceURI) {
+		NodeList metadataList;
 
-		if (from instanceof NodeList) {
-			metadataList = (NodeList) from;
-		} else if (from instanceof Node) {
-			metadataList = ((Node) from).getChildNodes();
+		if (from != null && from.getChildNodes().getLength() > 0) {
+			metadataList = from.getChildNodes();
 		} else {
-			log.warn("Unable to convert object, class type not supported");
+			log.warn("Unable to convert Node to Model graph, as the Node is null or has empty childNodes");
 			return null;
 		}
 
-		Model graph = new LinkedHashModel();
+		Model model = new LinkedHashModel();
 		IRI root = iri(resourceURI.toString());
 
 		for (int i = 0; i < metadataList.getLength(); i++) {
@@ -85,7 +79,7 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 
 			String nodeNS = n.getNamespaceURI();
 			String nodeName = n.getNodeName();
-			String predicate = null;
+			String predicate;
 			if (nodeName.contains(":") && (nodeNS != null)) {
 				nodeName = nodeName.substring(nodeName.indexOf(":") + 1);
 				predicate = nodeNS + nodeName;
@@ -97,17 +91,21 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 				continue;
 			}
 			nodeContent = nodeContent.trim();
-			
+
 			// fix to create a valid language literal with a 2-letter ISO code
 			// this is about the language value as a literal, attributes are treated further down
 			if ("language".equalsIgnoreCase(nodeName)) {
 				// convert 3-letter to 2-letter ISO code
 				if (nodeContent.length() == 3) {
 					nodeContent = getISO2Language(nodeContent);
+
+					if (nodeContent == null) {
+						continue;
+					}
 				}
 			}
 			// <- fix
-			
+
 			// fix to convert ISO 3-letter lang codes to 2-letter codes
 			// this is about LangStrings in general
 			NamedNodeMap nodeAttributes = n.getAttributes();
@@ -125,33 +123,35 @@ public class OAI_DC2RDFGraphConverter implements Converter {
 				}
 			}
 			// <- fix
-			
+
 			Literal lit;
 			if (lang != null) {
 				lit = literal(nodeContent, lang);
 			} else {
 				lit = literal(nodeContent);
 			}
-			
-			graph.add(root, iri(predicate), lit);
+
+			model.add(root, iri(predicate), lit);
 		}
 
-		return graph;
+		return model;
 	}
-	
+
 	private String getISO2Language(String iso3Language) {
 		if (localeMap == null) {
 			String[] languages = Locale.getISOLanguages();
-			localeMap = new HashMap<String, Locale>(languages.length);
+			localeMap = new HashMap<>(languages.length);
 			for (String language : languages) {
-				Locale locale = new Locale(language);
+				Locale locale = new Locale.Builder().setLanguage(language).build();
 				localeMap.put(locale.getISO3Language(), locale);
 			}
 		}
+
 		Locale locale = localeMap.get(iso3Language);
 		if (locale != null) {
 			return locale.getLanguage();
 		}
+
 		return null;
 	}
 
