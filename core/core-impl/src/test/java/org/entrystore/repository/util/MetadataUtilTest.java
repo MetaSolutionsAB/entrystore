@@ -50,111 +50,125 @@ public class MetadataUtilTest {
 	private final Literal dateTimeStampLiteral = valueFactory.createLiteral("2012-03-07T08:00:01Z", CoreDatatype.XSD.DATETIMESTAMP);
 	private final Literal stringLiteral = valueFactory.createLiteral("test", CoreDatatype.XSD.STRING);
 	private final Literal langStringLiteral = valueFactory.createLiteral("test@en", CoreDatatype.RDF.LANGSTRING.toString());
-	private final Literal nullLiteral = valueFactory.createLiteral("test null", CoreDatatype.XSD.NONE.toString());
+	private final Literal nullLiteral = valueFactory.createLiteral("this is rdf:langString type by default", CoreDatatype.XSD.NONE.toString());
 
 	@Test
-	public void isTypedLiteral_null() {
+	public void isIntegerLiteral_null() {
 		try {
-			MetadataUtil.isTypedLiteral(null, "integer");
+			MetadataUtil.isIntegerLiteral(null);
 		} catch (Exception e) {
 			assertEquals(e.getMessage(), "Literal must not be null.");
 		}
 	}
 
 	@Test
-	public void isTypedLiteral_nullDatatype() {
-		assertFalse(MetadataUtil.isTypedLiteral(nullLiteral, "integer"));
+	public void isDateLiteral_null() {
+		try {
+			MetadataUtil.isDateLiteral(null);
+		} catch (Exception e) {
+			assertEquals(e.getMessage(), "Literal must not be null.");
+		}
 	}
 
 	@Test
-	public void isTypedLiteral_integer() {
-
-		String type = "integer";
-
-		assertTrue(MetadataUtil.isTypedLiteral(byteLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(intLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(integerLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(longLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(negativeIntegerLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(nonNegativeIntegerLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(nonPositiveIntegerLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(positiveIntegerLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(shortIntegerLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(unsignedByteLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(unsignedIntLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(unsignedLongLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(unsignedShortLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(gYearLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(gDayLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(gYearMonthLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(gMonthLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(dateLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(dateTimeLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(dateTimeStampLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(booleanLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(stringLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(langStringLiteral, type));
+	public void isStringLiteral_null() {
+		try {
+			MetadataUtil.isStringLiteral(null);
+		} catch (Exception e) {
+			assertEquals(e.getMessage(), "Literal must not be null.");
+		}
 	}
 
 	@Test
-	public void isTypedLiteral_date() {
-
-		String type = "date";
-
-		assertFalse(MetadataUtil.isTypedLiteral(byteLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(intLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(integerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(longLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(negativeIntegerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(nonNegativeIntegerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(nonPositiveIntegerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(positiveIntegerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(shortIntegerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(unsignedByteLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(unsignedIntLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(unsignedLongLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(unsignedShortLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(gYearLiteral, type));
-
-		assertTrue(MetadataUtil.isTypedLiteral(gDayLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(gYearMonthLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(gMonthLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(dateLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(dateTimeLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(dateTimeStampLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(booleanLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(stringLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(langStringLiteral, type));
+	public void isAnyLiteral_nullDatatype() {
+		assertFalse(MetadataUtil.isIntegerLiteral(nullLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(nullLiteral));
+		assertTrue(MetadataUtil.isStringLiteral(nullLiteral));
 	}
 
 	@Test
-	public void isTypedLiteral_literal() {
+	public void isIntegerLiteral() {
 
-		String type = "literal";
+		assertTrue(MetadataUtil.isIntegerLiteral(byteLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(intLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(integerLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(longLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(negativeIntegerLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(nonNegativeIntegerLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(nonPositiveIntegerLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(positiveIntegerLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(shortIntegerLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(unsignedByteLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(unsignedIntLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(unsignedLongLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(unsignedShortLiteral));
+		assertTrue(MetadataUtil.isIntegerLiteral(gYearLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(gDayLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(gYearMonthLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(gMonthLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(dateLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(dateTimeLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(dateTimeStampLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(booleanLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(stringLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(langStringLiteral));
+	}
 
-		assertFalse(MetadataUtil.isTypedLiteral(byteLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(intLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(integerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(longLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(negativeIntegerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(nonNegativeIntegerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(nonPositiveIntegerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(positiveIntegerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(shortIntegerLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(unsignedByteLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(unsignedIntLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(unsignedLongLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(unsignedShortLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(gYearLiteral, type));
+	@Test
+	public void isDateLiteral() {
 
-		assertFalse(MetadataUtil.isTypedLiteral(gDayLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(gYearMonthLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(gMonthLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(dateLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(dateTimeLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(dateTimeStampLiteral, type));
-		assertFalse(MetadataUtil.isTypedLiteral(booleanLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(stringLiteral, type));
-		assertTrue(MetadataUtil.isTypedLiteral(langStringLiteral, type));
+		assertFalse(MetadataUtil.isDateLiteral(byteLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(intLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(integerLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(longLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(negativeIntegerLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(nonNegativeIntegerLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(nonPositiveIntegerLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(positiveIntegerLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(shortIntegerLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(unsignedByteLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(unsignedIntLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(unsignedLongLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(unsignedShortLiteral));
+		assertTrue(MetadataUtil.isDateLiteral(gYearLiteral));
+
+		assertTrue(MetadataUtil.isDateLiteral(gDayLiteral));
+		assertTrue(MetadataUtil.isDateLiteral(gYearMonthLiteral));
+		assertTrue(MetadataUtil.isDateLiteral(gMonthLiteral));
+		assertTrue(MetadataUtil.isDateLiteral(dateLiteral));
+		assertTrue(MetadataUtil.isDateLiteral(dateTimeLiteral));
+		assertTrue(MetadataUtil.isDateLiteral(dateTimeStampLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(booleanLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(stringLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(langStringLiteral));
+	}
+
+	@Test
+	public void isStringLiteral() {
+
+		assertFalse(MetadataUtil.isStringLiteral(byteLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(intLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(integerLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(longLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(negativeIntegerLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(nonNegativeIntegerLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(nonPositiveIntegerLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(positiveIntegerLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(shortIntegerLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(unsignedByteLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(unsignedIntLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(unsignedLongLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(unsignedShortLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(gYearLiteral));
+
+		assertFalse(MetadataUtil.isStringLiteral(gDayLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(gYearMonthLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(gMonthLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(dateLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(dateTimeLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(dateTimeStampLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(booleanLiteral));
+		assertTrue(MetadataUtil.isStringLiteral(stringLiteral));
+		assertTrue(MetadataUtil.isStringLiteral(langStringLiteral));
 	}
 }

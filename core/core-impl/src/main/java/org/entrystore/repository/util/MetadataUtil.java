@@ -27,11 +27,15 @@ import java.util.Set;
  */
 public class MetadataUtil {
 
+	public static final String INTEGER_TYPE = "integer";
+	public static final String DATE_TYPE = "date";
+	public static final String STRING_TYPE = "string";
+
 	public static Set<CoreDatatype> integerDataTypes;
 
 	public static Set<CoreDatatype> dateDataTypes;
 
-	public static Set<CoreDatatype> literalDataTypes;
+	public static Set<CoreDatatype> stringDataTypes;
 
 	static {
 		integerDataTypes = new HashSet<>();
@@ -59,9 +63,9 @@ public class MetadataUtil {
 		dateDataTypes.add(CoreDatatype.XSD.GMONTH);
 		dateDataTypes.add(CoreDatatype.XSD.DATETIMESTAMP);
 
-		literalDataTypes = new HashSet<>();
-		literalDataTypes.add(CoreDatatype.RDF.LANGSTRING);
-		literalDataTypes.add(CoreDatatype.XSD.STRING);
+		stringDataTypes = new HashSet<>();
+		stringDataTypes.add(CoreDatatype.RDF.LANGSTRING);
+		stringDataTypes.add(CoreDatatype.XSD.STRING);
 	}
 
 	/**
@@ -100,7 +104,19 @@ public class MetadataUtil {
 	}
 	*/
 
-	public static boolean isTypedLiteral(Literal l, String type) {
+	public static boolean isIntegerLiteral(Literal l) {
+		return isTypedLiteral(l, INTEGER_TYPE);
+	}
+
+	public static boolean isDateLiteral(Literal l) {
+		return isTypedLiteral(l, DATE_TYPE);
+	}
+
+	public static boolean isStringLiteral(Literal l) {
+		return isTypedLiteral(l, STRING_TYPE);
+	}
+
+	private static boolean isTypedLiteral(Literal l, String type) {
 
 		if (l == null) {
 			throw new IllegalArgumentException("Literal must not be null.");
@@ -108,14 +124,14 @@ public class MetadataUtil {
 
 		CoreDatatype datatype = CoreDatatype.from(l.getDatatype());
 
-		if (datatype == null) {
+		if (datatype == CoreDatatype.XSD.NONE) {
 			return false;
 		}
 
 		return switch (type) {
-			case "integer" -> integerDataTypes.contains(datatype);
-			case "date" -> dateDataTypes.contains(datatype);
-			default -> literalDataTypes.contains(datatype);
+			case INTEGER_TYPE -> integerDataTypes.contains(datatype);
+			case DATE_TYPE -> dateDataTypes.contains(datatype);
+			default -> stringDataTypes.contains(datatype);
 		};
 	}
 
