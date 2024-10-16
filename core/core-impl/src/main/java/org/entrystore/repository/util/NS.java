@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,16 @@
 
 package org.entrystore.repository.util;
 
+import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URI;
 import java.util.HashMap;
-import java.util.Map;
 
 public class NS {
+
+	private static final Logger log = LoggerFactory.getLogger(NS.class);
 
 	public static String dc = "http://purl.org/dc/elements/1.1/";
 
@@ -56,10 +61,11 @@ public class NS {
 
 	public static String geosparql = "http://www.opengis.net/ont/geosparql#";
 
+	@Getter
 	private static final HashMap<String, String> map;
 
 	static {
-		map = new HashMap<String, String>();
+		map = new HashMap<>();
 		map.put("dc", NS.dc);
 		map.put("dcterms", NS.dcterms);
 		map.put("foaf", NS.foaf);
@@ -79,26 +85,27 @@ public class NS {
 		map.put("skos", NS.skos);
 	}
 
-	/**
-	 * @return A map with all relevant namespaces. Key is name and Value is namespace.
-	 */
-	public static Map<String, String> getMap() {
-		return map;
-	}
+	public static URI expand(String abbreviatedURI) {
+		if (!abbreviatedURI.contains(":")) {
+			return URI.create(abbreviatedURI);
+		}
 
-	public static URI expand(String abbrvURI) {
-		if (!abbrvURI.contains(":")) {
-			return URI.create(abbrvURI);
+		String[] uriSplits = abbreviatedURI.split(":");
+		if (uriSplits.length != 2) {
+			return URI.create(abbreviatedURI);
 		}
-		String[] uriS = abbrvURI.split(":");
-		if (uriS.length != 2) {
-			return URI.create(abbrvURI);
+
+		String namespace = uriSplits[0];
+		if (NS.getMap().containsKey(namespace)) {
+			return URI.create(NS.getMap().get(namespace) + uriSplits[1]);
 		}
-		String ns = uriS[0];
-		if (NS.getMap().containsKey(ns)) {
-			return URI.create(NS.getMap().get(ns) + uriS[1]);
+
+		try {
+			return URI.create(abbreviatedURI);
+		} catch (IllegalArgumentException e) {
+			log.error("Could not create URI from: \"{}\"", abbreviatedURI);
+			return null;
 		}
-		return URI.create(abbrvURI);
 	}
 
 }

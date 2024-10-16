@@ -877,10 +877,10 @@ public class SolrSearchIndex implements SearchIndex {
 				// predicate value is included in the parameter name, the object value is the field value
 				addFieldValueOnce(doc,prefix + "metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
 
-				// special handling of integer values, to be used for e.g. sorting
+				// special handling of integer values, to be used for e.g., sorting
 				if (MetadataUtil.isIntegerLiteral(l)) {
 					try {
-						// it's a single-value field so we call setField instead of addField just in case there should be
+						// it's a single-value field, so we call setField instead of addField just in case there should be
 						doc.setField(prefix + "metadata.predicate.integer." + predMD5Trunc8, l.longValue());
 					} catch (NumberFormatException nfe) {
 						log.debug("Unable to index integer literal: {}. (Subject: {}, Predicate: {}, Object: {})", nfe.getMessage(), s.getSubject(), predString, l.getLabel());
