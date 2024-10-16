@@ -51,8 +51,13 @@ class EntryStoreClient {
 	 * @return
 	 */
 	def static createConnection(String path) {
-		def hostInfo = (path.startsWith('/')) ? origin : ''
-		return (HttpURLConnection) new URI(hostInfo + path.replace('/store', '')).toURL().openConnection()
+		def hostInfo = ''
+		if (path.startsWith('/')) {
+			hostInfo = origin
+		} else {
+			path = path.replace('/store', '')
+		}
+		return (HttpURLConnection) new URI(hostInfo + path).toURL().openConnection()
 	}
 
 	def static authorize(String asUser) {
