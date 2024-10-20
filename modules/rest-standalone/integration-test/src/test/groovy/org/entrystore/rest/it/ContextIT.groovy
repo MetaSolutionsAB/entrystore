@@ -8,8 +8,6 @@ import static java.net.HttpURLConnection.*
 
 class ContextIT extends BaseSpec {
 
-	// TODO: Add tests to create only a group (without context) and only a context (without group)
-
 	def "POST /_principals/groups should create new group and context"() {
 		given:
 		def contextName = 'someName'
