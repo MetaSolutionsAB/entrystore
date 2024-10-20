@@ -20,6 +20,7 @@ class NameSpaceConst {
 	static DC_TERM_TITLE = 'http://purl.org/dc/terms/title'
 	static DC_TERM_CREATOR = 'http://purl.org/dc/terms/creator'
 	static DC_TERM_PUBLISHER = 'http://purl.org/dc/terms/publisher'
+	static DC_TERM_SUBJECT = 'http://purl.org/dc/terms/subject'
 
 	static NS_DCAT_DATASET = 'http://www.w3.org/ns/dcat#Dataset'
 }
