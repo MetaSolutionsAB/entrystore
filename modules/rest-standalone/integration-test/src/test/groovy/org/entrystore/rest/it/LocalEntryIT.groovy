@@ -9,11 +9,14 @@ import static java.net.HttpURLConnection.*
 
 class LocalEntryIT extends BaseSpec {
 
-	def contextId = '20'
+	def static contextId = '20'
+
+	def setupSpec() {
+		getOrCreateContext([contextId: contextId])
+	}
 
 	def "POST /{context-id}?graphtype=string should create by default a local entry of type String"() {
 		given:
-		getOrCreateContext([contextId: contextId])
 		def someText = 'Some text'
 		def params = [graphtype: 'string']
 		def body = [resource: someText]
@@ -65,9 +68,56 @@ class LocalEntryIT extends BaseSpec {
 		resourceRespText == someText
 	}
 
+	def "POST /{context-id}?graphtype=list should create by default a local entry of type List"() {
+		given:
+		// create minimal entry to be used in the list
+		def givenEntryId = createEntry(contextId, [:])
+		def someText = [givenEntryId, 'non-existing-id']
+		def params = [graphtype: 'list']
+		def body = [resource: someText]
+
+		when:
+		def entryId = createEntry(contextId, params, body)
+
+		then:
+		entryId.length() > 0
+
+		// fetch created entry
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/json')
+		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+
+		// Entry type for some reason set under /{context-id}/resource/{entry-id}, and not under /{context-id}/entry/{entry-id}
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		entryResources.size() == 1
+		entryResources[0]['type'] == 'uri'
+		entryResources[0]['value'] != null
+		def createdResourceUri = entryResources[0]['value'].toString()
+		createdResourceUri.startsWith(EntryStoreClient.baseUrl + '/' + contextId + '/resource/')
+
+		entryRespJson['info'][createdResourceUri] != null
+		entryRespJson['info'][createdResourceUri][NameSpaceConst.RDF_TYPE] != null
+		def resourceTypes = entryRespJson['info'][createdResourceUri][NameSpaceConst.RDF_TYPE].collect()
+		resourceTypes.size() == 1
+		resourceTypes[0]['type'] == 'uri'
+		resourceTypes[0]['value'] == NameSpaceConst.TERM_LIST
+
+		// fetch created resource
+		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceRespJson = (new JsonSlurper()).parseText(resourceConn.getInputStream().text)
+		resourceRespJson == [givenEntryId]
+	}
+
 	def "POST /{context-id}?graphtype=user should not create a user entry inside regular context"() {
 		given:
-		getOrCreateContext([contextId: contextId])
 		def resourceName = [name: 'Test User name']
 		def params = [graphtype: 'user']
 		def body = JsonOutput.toJson([resource: resourceName])

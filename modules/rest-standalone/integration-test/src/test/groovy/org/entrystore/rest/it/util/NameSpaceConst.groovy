@@ -10,6 +10,7 @@ class NameSpaceConst {
 	static TERM_LINK = 'http://entrystore.org/terms/Link'
 	static TERM_REFERENCE = 'http://entrystore.org/terms/Reference'
 	static TERM_LINK_REFERENCE = 'http://entrystore.org/terms/LinkReference'
+	static TERM_LIST = 'http://entrystore.org/terms/List'
 	static TERM_RESOURCE = 'http://entrystore.org/terms/resource'
 	static TERM_METADATA = 'http://entrystore.org/terms/metadata'
 	static TERM_EXTERNAL_METADATA = 'http://entrystore.org/terms/externalMetadata'
