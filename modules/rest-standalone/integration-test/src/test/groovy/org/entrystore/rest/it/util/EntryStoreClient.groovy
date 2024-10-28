@@ -45,6 +45,29 @@ class EntryStoreClient {
 		return connection
 	}
 
+	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
+		def connection = createConnection(path)
+		if (asUser?.trim()) {
+			connection.setRequestProperty('Cookie', cookies[asUser].toString())
+		}
+		connection.setRequestMethod('PUT')
+		connection.setRequestProperty('Content-Type', contentType)
+		connection.setDoOutput(true)
+		connection.getOutputStream().write(body.getBytes())
+		connection.connect()
+		return connection
+	}
+
+	def static deleteRequest(String path, String asUser = 'admin') {
+		def connection = createConnection(path)
+		if (asUser?.trim()) {
+			connection.setRequestProperty('Cookie', cookies[asUser].toString())
+		}
+		connection.setRequestMethod('DELETE')
+		connection.connect()
+		return connection
+	}
+
 	/**
 	 *
 	 * @param path can be a local path. e.g. /_contexts/entry/_principals or a full URL
