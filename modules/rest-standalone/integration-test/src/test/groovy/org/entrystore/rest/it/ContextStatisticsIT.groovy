@@ -1,6 +1,5 @@
 package org.entrystore.rest.it
 
-import groovy.json.JsonSlurper
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
@@ -21,7 +20,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_BAD_REQUEST
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
 		responseJson['error'] != null
 		responseJson['error'] == 'The requested context ID does not exist'
 	}
@@ -33,7 +32,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] == null
 		responseJson['entryCount'] == 0
 		responseJson['propertyUsage'] == []
@@ -47,7 +46,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] == null
 		responseJson['entryCount'] == 0
 		responseJson['propertyUsage'] == []
@@ -61,7 +60,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] == null
 		responseJson['entryCount'] == 0
 		responseJson['ontologyTermUsage'] == []
@@ -75,7 +74,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] == null
 		responseJson['entryCount'] == 0
 		responseJson['entryCountWithKeyword'] == 0
@@ -89,7 +88,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] != null
 		responseJson['error'] == 'This statistics type is not supported yet'
 		responseJson['entryCount'] == null
@@ -102,7 +101,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] != null
 		responseJson['error'] == 'This statistics type is not supported yet'
 		responseJson['entryCount'] == null
@@ -115,7 +114,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] != null
 		responseJson['error'] == 'This statistics type is not supported yet'
 		responseJson['entryCount'] == null
@@ -128,7 +127,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] != null
 		responseJson['error'] == 'Unknown statistics type'
 		responseJson['entryCount'] == null
@@ -141,7 +140,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] == null
 		responseJson['entryCount'] == null
 		responseJson['nrOfPersons'] > 1
@@ -165,7 +164,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] == null
 		responseJson['entryCount'] == 1
 		responseJson['propertyUsage'] != null
@@ -195,7 +194,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] == null
 		responseJson['entryCount'] > 0
 		responseJson['propertyUsage'] != null
@@ -225,7 +224,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] == null
 		responseJson['entryCount'] > 0
 
@@ -258,7 +257,7 @@ class ContextStatisticsIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['error'] == null
 		responseJson['entryCount'] > 0
 		responseJson['entryCountWithKeyword'] > 0

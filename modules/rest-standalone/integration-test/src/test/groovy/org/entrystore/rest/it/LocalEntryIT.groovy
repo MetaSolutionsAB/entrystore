@@ -1,7 +1,6 @@
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
-import groovy.json.JsonSlurper
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
@@ -31,7 +30,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -86,7 +85,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -112,7 +111,7 @@ class LocalEntryIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = (new JsonSlurper()).parseText(resourceConn.getInputStream().text)
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
 		resourceRespJson == [givenEntryId]
 	}
 
@@ -128,7 +127,7 @@ class LocalEntryIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_BAD_REQUEST
 		connection.getContentType().contains('application/json')
-		def responseJson = (new JsonSlurper()).parseText(connection.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
 		responseJson['entryId'] == null
 		responseJson['error'] != null
 		responseJson['error'].toString().contains('Regular context only support Lists, ResultLists and None as BuiltinTypes')
@@ -146,7 +145,7 @@ class LocalEntryIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_CREATED
 		connection.getContentType().contains('application/json')
-		def responseJson = (new JsonSlurper()).parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['entryId'] != null
 		responseJson['entryId'].toString().length() > 0
 		def entryId = responseJson['entryId'].toString()
@@ -155,7 +154,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/_principals/entry/' + entryId
@@ -182,7 +181,7 @@ class LocalEntryIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = (new JsonSlurper()).parseText(resourceConn.getInputStream().text)
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
 		resourceRespJson != null
 		resourceRespJson['customProperties'] == [:]
 		resourceRespJson['name'] == requestResourceName['name'].toLowerCase() // Why the returned username is in lower case, different than in request?
@@ -200,7 +199,7 @@ class LocalEntryIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_CREATED
 		connection.getContentType().contains('application/json')
-		def responseJson = (new JsonSlurper()).parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['entryId'] != null
 		responseJson['entryId'].toString().length() > 0
 		def entryId = responseJson['entryId'].toString()
@@ -209,7 +208,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/_principals/entry/' + entryId
@@ -236,7 +235,7 @@ class LocalEntryIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = (new JsonSlurper()).parseText(resourceConn.getInputStream().text)
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
 		resourceRespJson != null
 		resourceRespJson['children'] == []
 		resourceRespJson['name'] == requestResourceName['name'].toLowerCase() // Why the returned group name is in lower case, different than in the request?
@@ -254,7 +253,7 @@ class LocalEntryIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_CREATED
 		connection.getContentType().contains('application/json')
-		def responseJson = (new JsonSlurper()).parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['entryId'] != null
 		responseJson['entryId'].toString().length() > 0
 		def entryId = responseJson['entryId'].toString()
@@ -263,7 +262,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/_contexts/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['name'] == requestResourceName['name']
 		entryRespJson['info'] != null
@@ -299,7 +298,7 @@ class LocalEntryIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = (new JsonSlurper()).parseText(resourceConn.getInputStream().text)
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
 		resourceRespJson != null
 		// resourceRespJson is empty - GET (createdResourceUri) returns empty list
 
@@ -307,7 +306,7 @@ class LocalEntryIT extends BaseSpec {
 		def metadataConn = EntryStoreClient.getRequest(entryMetadataUrl)
 		metadataConn.getResponseCode() == HTTP_OK
 		metadataConn.getContentType().contains('application/json')
-		def metadataRespJson = (new JsonSlurper()).parseText(metadataConn.getInputStream().text)
+		def metadataRespJson = JSON_PARSER.parseText(metadataConn.getInputStream().text)
 		metadataRespJson != null
 		(metadataRespJson as Map).keySet().size() == 0
 		// metadataRespJson is empty - GET (entryMetadataUrl) returns empty map

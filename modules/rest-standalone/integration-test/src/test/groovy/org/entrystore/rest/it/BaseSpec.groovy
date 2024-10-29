@@ -14,6 +14,7 @@ import static java.net.HttpURLConnection.HTTP_OK
 abstract class BaseSpec extends Specification {
 
 	def static log = LoggerFactory.getLogger(this.class)
+	def static JSON_PARSER = new JsonSlurper()
 
 	def static appStarted = false
 
@@ -79,7 +80,7 @@ abstract class BaseSpec extends Specification {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		if (entryConn.getResponseCode() == HTTP_OK) {
 			entryConn.getContentType().contains('application/json')
-			def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+			def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 			entryRespJson['entryId'] != null
 			return entryRespJson['entryId'].toString()
 		} else if (entryConn.getResponseCode() == HTTP_NOT_FOUND) {
@@ -101,7 +102,7 @@ abstract class BaseSpec extends Specification {
 		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), bodyJson)
 		assert connection.getResponseCode() == HTTP_CREATED
 		assert connection.getContentType().contains('application/json')
-		def responseJson = (new JsonSlurper()).parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		assert responseJson['entryId'] != null
 		return responseJson['entryId'].toString()
 	}

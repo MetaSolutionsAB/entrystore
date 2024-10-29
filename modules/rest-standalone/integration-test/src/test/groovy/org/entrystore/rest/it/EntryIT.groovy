@@ -1,6 +1,5 @@
 package org.entrystore.rest.it
 
-import groovy.json.JsonSlurper
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
@@ -31,7 +30,7 @@ class EntryIT extends BaseSpec {
 		def contextConn = EntryStoreClient.getRequest('/' + contextId)
 		contextConn.getResponseCode() == HTTP_OK
 		contextConn.getContentType().contains('application/json')
-		def contextRespJson = (new JsonSlurper()).parseText(contextConn.getInputStream().text).collect()
+		def contextRespJson = JSON_PARSER.parseText(contextConn.getInputStream().text).collect()
 		contextRespJson.size() == 1
 		contextRespJson[0] != null
 		!contextRespJson[0].toString().isEmpty()
@@ -42,7 +41,7 @@ class EntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -72,7 +71,7 @@ class EntryIT extends BaseSpec {
 		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = (new JsonSlurper()).parseText(entryMetaConn.getInputStream().text)
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		// metadata should be empty
 		(entryMetaRespJson as Map).keySet().size() == 0
 	}
@@ -98,7 +97,7 @@ class EntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -128,7 +127,7 @@ class EntryIT extends BaseSpec {
 		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = (new JsonSlurper()).parseText(entryMetaConn.getInputStream().text)
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 1
 		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
 		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
@@ -153,7 +152,7 @@ class EntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -183,7 +182,7 @@ class EntryIT extends BaseSpec {
 		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = (new JsonSlurper()).parseText(entryMetaConn.getInputStream().text)
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 0
 
 		entryRespJson['info'][entryUri][NameSpaceConst.TERM_EXTERNAL_METADATA] != null
@@ -204,7 +203,7 @@ class EntryIT extends BaseSpec {
 		def entryExternalMetaConn = EntryStoreClient.getRequest(storedExternalMetadataUrl)
 		entryExternalMetaConn.getResponseCode() == HTTP_OK
 		entryExternalMetaConn.getContentType().contains('application/json')
-		def entryExternalMetaRespJson = (new JsonSlurper()).parseText(entryExternalMetaConn.getInputStream().text)
+		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
 	}
 
@@ -230,7 +229,7 @@ class EntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -260,7 +259,7 @@ class EntryIT extends BaseSpec {
 		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = (new JsonSlurper()).parseText(entryMetaConn.getInputStream().text)
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 1
 		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
 		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
@@ -287,7 +286,7 @@ class EntryIT extends BaseSpec {
 		def entryExternalMetaConn = EntryStoreClient.getRequest(storedExternalMetadataUrl)
 		entryExternalMetaConn.getResponseCode() == HTTP_OK
 		entryExternalMetaConn.getContentType().contains('application/json')
-		def entryExternalMetaRespJson = (new JsonSlurper()).parseText(entryExternalMetaConn.getInputStream().text)
+		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
 	}
 
@@ -306,7 +305,7 @@ class EntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -344,7 +343,7 @@ class EntryIT extends BaseSpec {
 		def entryExternalMetaConn = EntryStoreClient.getRequest(storedExternalMetadataUrl)
 		entryExternalMetaConn.getResponseCode() == HTTP_OK
 		entryExternalMetaConn.getContentType().contains('application/json')
-		def entryExternalMetaRespJson = (new JsonSlurper()).parseText(entryExternalMetaConn.getInputStream().text)
+		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
 	}
 
@@ -370,7 +369,7 @@ class EntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -408,7 +407,7 @@ class EntryIT extends BaseSpec {
 		def entryExternalMetaConn = EntryStoreClient.getRequest(storedExternalMetadataUrl)
 		entryExternalMetaConn.getResponseCode() == HTTP_OK
 		entryExternalMetaConn.getContentType().contains('application/json')
-		def entryExternalMetaRespJson = (new JsonSlurper()).parseText(entryExternalMetaConn.getInputStream().text)
+		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
 	}
 
@@ -428,7 +427,7 @@ class EntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -459,7 +458,7 @@ class EntryIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_CONFLICT
 		connection.getContentType().contains('application/json')
-		def responseJson = (new JsonSlurper()).parseText(connection.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
 		responseJson['error'] != null
 		responseJson['error'].toString().contains('Entry with provided ID already exists')
 	}
@@ -523,7 +522,7 @@ class EntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -553,7 +552,7 @@ class EntryIT extends BaseSpec {
 		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = (new JsonSlurper()).parseText(entryMetaConn.getInputStream().text)
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		def metadataKeys = (entryMetaRespJson as Map).keySet()
 		metadataKeys.size() == 2
 
@@ -610,7 +609,7 @@ class EntryIT extends BaseSpec {
 		then:
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -652,7 +651,7 @@ class EntryIT extends BaseSpec {
 		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = (new JsonSlurper()).parseText(entryMetaConn.getInputStream().text)
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 1
 		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
 		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
@@ -682,7 +681,7 @@ class EntryIT extends BaseSpec {
 		then:
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = (new JsonSlurper()).parseText(entryConn.getInputStream().text)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -729,7 +728,7 @@ class EntryIT extends BaseSpec {
 		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = (new JsonSlurper()).parseText(entryMetaConn.getInputStream().text)
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 1
 		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
 		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
@@ -756,7 +755,7 @@ class EntryIT extends BaseSpec {
 		def entryExternalMetaConn = EntryStoreClient.getRequest(storedExternalMetadataUrl)
 		entryExternalMetaConn.getResponseCode() == HTTP_OK
 		entryExternalMetaConn.getContentType().contains('application/json')
-		def entryExternalMetaRespJson = (new JsonSlurper()).parseText(entryExternalMetaConn.getInputStream().text)
+		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
 	}
 

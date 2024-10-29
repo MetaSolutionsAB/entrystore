@@ -1,6 +1,5 @@
 package org.entrystore.rest.it
 
-import groovy.json.JsonSlurper
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
@@ -28,7 +27,7 @@ class ContextIT extends BaseSpec {
 		def principalConn = EntryStoreClient.getRequest('/_principals/entry/' + groupId)
 		principalConn.getResponseCode() == HTTP_OK
 		principalConn.getContentType().contains('application/json')
-		def principalJson = new JsonSlurper().parseText(principalConn.getInputStream().text)
+		def principalJson = JSON_PARSER.parseText(principalConn.getInputStream().text)
 		principalJson['info'] != null
 		principalJson['info'][EntryStoreClient.baseUrl + '/_principals/resource/' + groupId] != null
 		principalJson['info'][EntryStoreClient.baseUrl + '/_principals/resource/' + groupId][NameSpaceConst.TERM_HOME_CONTEXT] != null
@@ -42,7 +41,7 @@ class ContextIT extends BaseSpec {
 
 		def contextConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId)
 		contextConn.getResponseCode() == HTTP_OK
-		def responseJson = new JsonSlurper().parseText(contextConn.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(contextConn.getInputStream().text)
 		responseJson['entryId'] == contextId.toString()
 		responseJson['name'] == contextName
 		responseJson['info'] != null
@@ -82,7 +81,7 @@ class ContextIT extends BaseSpec {
 		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId)
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def responseJson = new JsonSlurper().parseText(conn.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(conn.getInputStream().text)
 		responseJson['entryId'] == contextId
 		responseJson['name'] == 'someName2'
 		responseJson['info'] != null

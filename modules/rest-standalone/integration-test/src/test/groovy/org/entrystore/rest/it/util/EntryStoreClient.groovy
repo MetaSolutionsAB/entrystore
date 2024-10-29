@@ -1,6 +1,7 @@
 package org.entrystore.rest.it.util
 
 import groovy.json.JsonOutput
+import org.apache.commons.lang3.StringUtils
 
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -78,7 +79,7 @@ class EntryStoreClient {
 		if (path.startsWith('/')) {
 			hostInfo = origin
 		} else {
-			path = path.replace('/store', '')
+			path = StringUtils.replaceOnce(path, '/store', '')
 		}
 		return (HttpURLConnection) new URI(hostInfo + path).toURL().openConnection()
 	}

@@ -1,6 +1,5 @@
 package org.entrystore.rest.it
 
-import groovy.json.JsonSlurper
 import org.entrystore.rest.it.util.EntryStoreClient
 
 import static java.net.HttpURLConnection.HTTP_OK
@@ -25,7 +24,7 @@ class ManagementStatusIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = (new JsonSlurper()).parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['repositoryStatus'] == 'online'
 		responseJson['version'] != null
 		(responseJson['version'] as String).length() > 2
@@ -48,7 +47,7 @@ class ManagementStatusIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = (new JsonSlurper()).parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['version'] != null
 		responseJson['jvm'] != null
 		responseJson['baseURI'] != null
@@ -67,7 +66,7 @@ class ManagementStatusIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = (new JsonSlurper()).parseText(connection.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['version'] != null
 		responseJson['jvm'] != null
 		responseJson['baseURI'] != null
