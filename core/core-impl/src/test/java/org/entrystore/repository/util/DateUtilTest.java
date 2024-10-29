@@ -18,6 +18,8 @@ package org.entrystore.repository.util;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,18 +37,20 @@ public class DateUtilTest {
 
 	@Test
 	public void daysBetween_10days() {
-		Date d1 = new Date();
-		Date d2 = new Date();
-		d2.setDate(d2.getDate() + 10);
+		LocalDateTime ld1 = LocalDateTime.now();
+		LocalDateTime ld2 = ld1.plusDays(10);
+		Date d1 = java.util.Date.from(ld1.atZone(ZoneId.systemDefault()).toInstant());
+		Date d2 = java.util.Date.from(ld2.atZone(ZoneId.systemDefault()).toInstant());
 		long result = DateUtils.daysBetween(d1, d2);
 		assertEquals(10, result);
 	}
 
 	@Test
 	public void daysBetween_50days() {
-		Date d1 = new Date();
-		Date d2 = new Date();
-		d2.setDate(d2.getDate() + 50);
+		LocalDateTime ld1 = LocalDateTime.now();
+		LocalDateTime ld2 = ld1.plusDays(50);
+		Date d1 = java.util.Date.from(ld1.atZone(ZoneId.systemDefault()).toInstant());
+		Date d2 = java.util.Date.from(ld2.atZone(ZoneId.systemDefault()).toInstant());
 		long result = DateUtils.daysBetween(d1, d2);
 		assertEquals(50, result);
 	}

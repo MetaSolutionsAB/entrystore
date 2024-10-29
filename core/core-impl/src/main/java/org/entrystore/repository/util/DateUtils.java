@@ -16,6 +16,9 @@
 
 package org.entrystore.repository.util;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 
 public class DateUtils {
@@ -25,7 +28,9 @@ public class DateUtils {
 			throw new IllegalArgumentException("Date must not be null");
 		}
 
-		long oneHour = 60 * 60 * 1000L;
-		return ((d2.getTime() - d1.getTime() + oneHour) / (oneHour * 24));
+		LocalDateTime ld1 = LocalDateTime.ofInstant(d1.toInstant(), ZoneId.systemDefault());
+		LocalDateTime ld2 = LocalDateTime.ofInstant(d2.toInstant(), ZoneId.systemDefault());
+
+		return ChronoUnit.DAYS.between(ld1, ld2);
 	}
 }
