@@ -64,44 +64,46 @@ public class BackupJob implements Job, InterruptableJob {
 	}
 
 	public void execute(JobExecutionContext context) {
-		if (!interrupted) {
-			try {
-				JobDataMap dataMap = context.getJobDetail().getJobDataMap();
-				RepositoryManagerImpl rm = (RepositoryManagerImpl) dataMap.get("rm");
+		if (interrupted) {
+			throw new RuntimeException("Backup job \"execute()\" was interrupted");
+		}
 
-				URI realURI = rm.getPrincipalManager().getAuthenticatedUserURI();
+		try {
+			JobDataMap dataMap = context.getJobDetail().getJobDataMap();
+			RepositoryManagerImpl rm = (RepositoryManagerImpl) dataMap.get("rm");
+
+			URI realURI = rm.getPrincipalManager().getAuthenticatedUserURI();
+			try {
+				// temporarily make the current user to admin
+				rm.getPrincipalManager().setAuthenticatedUserURI(rm.getPrincipalManager().getAdminUser().getURI());
+				// we just allow the GET requests during the backup
+				rm.setModificationLockOut(true);
+				runBackup(context);
+			} finally {
+				rm.setModificationLockOut(false);
+				// sets the current user back to the actually logged-in user
+				rm.getPrincipalManager().setAuthenticatedUserURI(realURI);
+			}
+
+			boolean maintenance = (Boolean) dataMap.get("maintenance");
+			if (maintenance) {
 				try {
-					// temporarily make the current user to admin
 					rm.getPrincipalManager().setAuthenticatedUserURI(rm.getPrincipalManager().getAdminUser().getURI());
-					// we just allow the GET requests during the backup
-					rm.setModificationLockOut(true);
-					runBackup(context);
+					runBackupMaintenance(context);
 				} finally {
-					rm.setModificationLockOut(false);
-					// sets the current user back to the actually logged-in user
 					rm.getPrincipalManager().setAuthenticatedUserURI(realURI);
 				}
-
-				boolean maintenance = (Boolean) dataMap.get("maintenance");
-				if (maintenance) {
-					try {
-						rm.getPrincipalManager().setAuthenticatedUserURI(rm.getPrincipalManager().getAdminUser().getURI());
-						runBackupMaintenance(context);
-					} finally {
-						rm.getPrincipalManager().setAuthenticatedUserURI(realURI);
-					}
-				} else {
-					log.info("Backup maintenance not active");
-				}
-			} catch (Exception e) {
-				log.error(e.getMessage());
+			} else {
+				log.info("Backup maintenance not active");
 			}
+		} catch (Exception e) {
+			log.error(e.getMessage());
 		}
 	}
 
 	synchronized public static void runBackup(JobExecutionContext jobContext) {
 		if (interrupted) {
-			return;
+			throw new RuntimeException("Backup job \"runBackup()\" was interrupted");
 		}
 
 		long beforeTotal = System.currentTimeMillis();
@@ -246,12 +248,12 @@ public class BackupJob implements Job, InterruptableJob {
 			}
 		}
 
-		log.info("Backup job done with execution, took " + (System.currentTimeMillis() - beforeTotal) + " ms in total");
+		log.info("Backup job done with execution, took {} ms in total", System.currentTimeMillis() - beforeTotal);
 	}
 
 	synchronized public static void runBackupMaintenance(JobExecutionContext jobContext) {
 		if (interrupted) {
-			return;
+			throw new RuntimeException("Backup job \"runBackupMaintenance()\" was interrupted");
 		}
 
 		log.info("Starting backup maintenance job");
