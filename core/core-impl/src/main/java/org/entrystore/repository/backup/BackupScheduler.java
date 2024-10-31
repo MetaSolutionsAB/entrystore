@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,12 @@
 
 package org.entrystore.repository.backup;
 
+import lombok.Getter;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.util.MetadataUtil;
 import org.quartz.CronTrigger;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
@@ -29,18 +31,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.text.ParseException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-
 /**
  * Supports continuously backing up the repository.
- * 
+ *
  * @author Hannes Ebner
  */
 public class BackupScheduler {
@@ -55,6 +53,7 @@ public class BackupScheduler {
 
 	boolean gzip;
 
+	@Getter
 	String cronExpression;
 
 	boolean maintenance;
@@ -81,6 +80,7 @@ public class BackupScheduler {
 		} catch (SchedulerException e) {
 			log.error(e.getMessage());
 		}
+
 		this.rm = rm;
 		this.gzip = gzip;
 		this.deleteAfter = deleteAfter;
@@ -91,7 +91,7 @@ public class BackupScheduler {
 		this.lowerLimit = lowerLimit;
 		this.expiresAfterDays = expiresAfterDays;
 		this.format = format;
-		
+
 		if (upperLimit < 2 && lowerLimit < 2 && expiresAfterDays < 2) {
 			log.info("Switching to simple backup strategy with one folder without date and time in name");
 			this.simple = true;
@@ -99,30 +99,6 @@ public class BackupScheduler {
 		}
 
 		log.info("Created backup scheduler");
-	}
-
-	private static RDFFormat getFormat(String formatName) {
-		List<RDFFormat> allFormats = new ArrayList<>();
-		Arrays.asList(
-				RDFFormat.RDFXML,
-				RDFFormat.NTRIPLES,
-				RDFFormat.TURTLE,
-				RDFFormat.N3,
-				RDFFormat.TRIX,
-				RDFFormat.TRIG,
-				RDFFormat.BINARY,
-				RDFFormat.NQUADS,
-				RDFFormat.JSONLD,
-				RDFFormat.RDFJSON,
-				RDFFormat.RDFA);
-
-		for (RDFFormat format : allFormats) {
-			if (format.getName().equalsIgnoreCase(formatName)) {
-				return format;
-			}
-		}
-
-		return null;
 	}
 
 	public static synchronized BackupScheduler getInstance(RepositoryManager rm) {
@@ -140,7 +116,8 @@ public class BackupScheduler {
 			int upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
 			int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
 			int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
-			RDFFormat format = getFormat(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
+
+			RDFFormat format = MetadataUtil.getRDFFormat(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
 			if (format == null) {
 				log.warn("Invalid backup format {}, falling back to TriX", config.getString(Settings.BACKUP_FORMAT));
 				format = RDFFormat.TRIX;
@@ -150,14 +127,14 @@ public class BackupScheduler {
 				cronExp = randomizeCronString(cronExp);
 			}
 
-			log.info("Cron expression: " + cronExp);
-			log.info("GZIP: " + gzip);
-			log.info("Include files: " + includeFiles);
-			log.info("Delete previous backup after new backup: " + deleteAfter);
-			log.info("Maintenance: " + maintenance);
-			log.info("Maintenance upper limit: " + upperLimit);
-			log.info("Maintenance lower limit: " + lowerLimit);
-			log.info("Maintenance expires after days: " + expiresAfterDays);
+			log.info("Cron expression: {}", cronExp);
+			log.info("GZIP: {}", gzip);
+			log.info("Include files: {}", includeFiles);
+			log.info("Delete previous backup after new backup: {}", deleteAfter);
+			log.info("Maintenance: {}", maintenance);
+			log.info("Maintenance upper limit: {}", upperLimit);
+			log.info("Maintenance lower limit: {}", lowerLimit);
+			log.info("Maintenance expires after days: {}", expiresAfterDays);
 
 			instance = new BackupScheduler(rm, cronExp, gzip, deleteAfter, includeFiles, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
 		}
@@ -169,7 +146,7 @@ public class BackupScheduler {
 		String[] parts = cronExp.split("\\s+");
 
 		if (parts.length < 6) {
-			log.warn("Cron expression seems to be incorrect and cannot be parsed correctly: " + cronExp);
+			log.warn("Cron expression seems to be incorrect and cannot be parsed correctly: {}", cronExp);
 			return cronExp;
 		}
 
@@ -181,7 +158,6 @@ public class BackupScheduler {
 			Matcher matcher = pattern.matcher(p);
 			if (!matcher.matches()) {
 				result.add(p);
-				continue;
 			} else {
 				String first = matcher.group(1);
 				String second = matcher.group(2);
@@ -196,17 +172,17 @@ public class BackupScheduler {
 						result.add(first);
 					}
 				} else if (isInt(first) && isInt(second)) {
-						int i1 = Integer.parseInt(first);
-						int i2 = Integer.parseInt(second);
-						if (i == 0 || i == 1) {
-							// second or minute
-							result.add(Integer.toString(ThreadLocalRandom.current().ints(i1, i2 + 1).limit(1).findFirst().getAsInt()));
-						} else if (i == 2) {
-							// hour
-							result.add(Integer.toString(ThreadLocalRandom.current().ints(i1, i2 + 1).limit(1).findFirst().getAsInt()));
-						} else {
-							result.add(first);
-						}
+					int i1 = Integer.parseInt(first);
+					int i2 = Integer.parseInt(second);
+					if (i == 0 || i == 1) {
+						// second or minute
+						result.add(Integer.toString(ThreadLocalRandom.current().ints(i1, i2 + 1).limit(1).findFirst().getAsInt()));
+					} else if (i == 2) {
+						// hour
+						result.add(Integer.toString(ThreadLocalRandom.current().ints(i1, i2 + 1).limit(1).findFirst().getAsInt()));
+					} else {
+						result.add(first);
+					}
 				} else {
 					result.add(p);
 				}
@@ -230,17 +206,17 @@ public class BackupScheduler {
 			log.warn("Backup is disabled in configuration");
 			return;
 		}
-		
+
 		try {
-			String[] names = scheduler.getJobNames("backupGroup"); 
+			String[] names = scheduler.getJobNames("backupGroup");
 
 			int index = 1;
 			if (names.length > 0) {
 				// this only works for up to 10 jobs in this group
-				index = Integer.parseInt(names[names.length-1]);
+				index = Integer.parseInt(names[names.length - 1]);
 				index++;
 			}
-			String jobIndex = String.valueOf(index); 
+			String jobIndex = String.valueOf(index);
 
 			job = new JobDetail(jobIndex, "backupGroup", BackupJob.class);
 			job.getJobDataMap().put("rm", this.rm);
@@ -253,7 +229,7 @@ public class BackupScheduler {
 			job.getJobDataMap().put("expiresAfterDays", this.expiresAfterDays);
 			job.getJobDataMap().put("format", this.format);
 			job.getJobDataMap().put("simple", this.simple);
-			
+
 			CronTrigger trigger = new CronTrigger("trigger" + jobIndex, "backupGroup", jobIndex, "backupGroup", this.cronExpression);
 			scheduler.addJob(job, true);
 			scheduler.scheduleJob(trigger);
@@ -267,19 +243,19 @@ public class BackupScheduler {
 //		try {
 //			scheduler.standby();
 //		} catch (SchedulerException e) {
-//			log.error(e.getMessage()); 
+//			log.error(e.getMessage());
 //			e.printStackTrace();
-//		} 
+//		}
 //	}
 //
 //	public void start() {
 //		try {
 //			scheduler.start();
 //		} catch (SchedulerException e) {
-//			log.error(e.getMessage()); 
+//			log.error(e.getMessage());
 //		}
 //	}
-	
+
 	public boolean delete() {
 		try {
 			if (job != null) {
@@ -292,10 +268,6 @@ public class BackupScheduler {
 			return false;
 		}
 		return true;
-	}
-
-	public String getCronExpression() {
-		return this.cronExpression;
 	}
 
 }

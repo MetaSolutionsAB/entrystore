@@ -20,6 +20,7 @@ import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.base.CoreDatatype;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.rio.RDFFormat;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -170,5 +171,84 @@ public class MetadataUtilTest {
 		assertFalse(MetadataUtil.isStringLiteral(booleanLiteral));
 		assertTrue(MetadataUtil.isStringLiteral(stringLiteral));
 		assertTrue(MetadataUtil.isStringLiteral(langStringLiteral));
+	}
+
+	@Test
+	public void getRDFFormat_all() {
+		String formatString = "RDF/XML";
+		RDFFormat format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "N-Triples";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "Turtle";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "N3";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "TriX";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "TriG";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "BinaryRDF";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "N-Quads";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "JSON-LD";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "RDF/JSON";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "RDFa";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNotNull(format);
+		assertEquals(formatString, format.getName());
+
+		formatString = "Turtle-star";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNull(format);
+
+		formatString = "TriG-star";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNull(format);
+
+		formatString = "NDJSON-LD";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNull(format);
+
+		formatString = "HDT";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNull(format);
+
+		formatString = "anything";
+		format = MetadataUtil.getRDFFormat(formatString);
+		assertNull(format);
+
 	}
 }

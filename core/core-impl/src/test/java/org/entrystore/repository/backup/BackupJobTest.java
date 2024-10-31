@@ -26,6 +26,7 @@ public class BackupJobTest {
 	public void interrupt() {
 		BackupJob job = new BackupJob();
 		job.interrupt();
+
 		try {
 			job.execute(null);
 		} catch(RuntimeException e) {
