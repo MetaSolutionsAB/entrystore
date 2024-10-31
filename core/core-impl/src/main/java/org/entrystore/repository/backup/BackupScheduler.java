@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 
 import java.text.ParseException;
 import java.util.LinkedList;
+import java.util.OptionalInt;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -164,10 +165,16 @@ public class BackupScheduler {
 				if ("*".equals(first)) {
 					if (i == 0 || i == 1) {
 						// second or minute
-						result.add(Integer.toString(ThreadLocalRandom.current().ints(0, 60).limit(1).findFirst().getAsInt()));
+						OptionalInt findFirst = ThreadLocalRandom.current().ints(0, 60).limit(1).findFirst();
+						if (findFirst.isPresent()) {
+							result.add(Integer.toString(findFirst.getAsInt()));
+						}
 					} else if (i == 2) {
 						// hour
-						result.add(Integer.toString(ThreadLocalRandom.current().ints(0, 24).limit(1).findFirst().getAsInt()));
+						OptionalInt findFirst = ThreadLocalRandom.current().ints(0, 24).limit(1).findFirst();
+						if (findFirst.isPresent()) {
+							result.add(Integer.toString(findFirst.getAsInt()));
+						}
 					} else {
 						result.add(first);
 					}
@@ -176,10 +183,16 @@ public class BackupScheduler {
 					int i2 = Integer.parseInt(second);
 					if (i == 0 || i == 1) {
 						// second or minute
-						result.add(Integer.toString(ThreadLocalRandom.current().ints(i1, i2 + 1).limit(1).findFirst().getAsInt()));
+						OptionalInt findFirst = ThreadLocalRandom.current().ints(i1, i2 + 1).limit(1).findFirst();
+						if (findFirst.isPresent()) {
+							result.add(Integer.toString(findFirst.getAsInt()));
+						}
 					} else if (i == 2) {
 						// hour
-						result.add(Integer.toString(ThreadLocalRandom.current().ints(i1, i2 + 1).limit(1).findFirst().getAsInt()));
+						OptionalInt findFirst = ThreadLocalRandom.current().ints(i1, i2 + 1).limit(1).findFirst();
+						if (findFirst.isPresent()) {
+							result.add(Integer.toString(findFirst.getAsInt()));
+						}
 					} else {
 						result.add(first);
 					}
