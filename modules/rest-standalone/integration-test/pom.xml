@@ -91,5 +91,11 @@
             <version>4.0.20</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy-xml</artifactId>
+            <version>4.0.20</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

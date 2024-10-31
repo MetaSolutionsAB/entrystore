@@ -1,7 +1,10 @@
 package org.entrystore.rest.it
 
+import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
+
+import java.time.Year
 
 import static java.net.HttpURLConnection.*
 import static java.nio.charset.StandardCharsets.UTF_8
@@ -759,4 +762,96 @@ class EntryIT extends BaseSpec {
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
 	}
 
+	def "GET /{context-id}/entry/{entry-id} in rdf+xml format for a linkreference entry, should return information about the entry in RDF+XML format"() {
+		given:
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		def entryId = createEntry(contextId, params, body)
+		assert entryId.length() > 0
+
+		when:
+		// TODO: bug? below GET (a request for an entry with "application/ld+json" format in Accept header) throws 500
+//		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll', 'admin', 'application/ld+json')
+
+		// TODO: bug? below GET (a request for an entry with param "rdfFormat=application/ld+json" and empty Accept header) returns RDF+XML (the default type)
+//		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + convertMapToQueryParams([rdfFormat: 'application/ld+json']), 'admin', null)
+
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/rdf+xml')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/rdf+xml')
+		def entryRespXml = new XmlParser(false, false).parseText(entryConn.getInputStream().text)
+		entryRespXml['es:LinkReference'].size() == 1
+		def entryLinkRefXml = entryRespXml['es:LinkReference'][0] as Node
+		// es:LinkReference has one attribute and 9 children
+		entryLinkRefXml.attributes().size() == 1
+		entryLinkRefXml['@rdf:about'] == 'http://localhost:8181/store/10/entry/' + entryId
+		entryLinkRefXml.value().size() == 9
+
+		//   es:resource child should have: 1 attr, 0 children
+		entryLinkRefXml['es:resource'].size() == 1
+		def entryResourceXml = entryLinkRefXml['es:resource'][0] as Node
+		entryResourceXml.attributes().size() == 1
+		entryResourceXml['@rdf:resource'] == resourceUrl
+		entryResourceXml.value().size() == 0
+
+		//   dcterms:created child should have: 1 attr, 1 val
+		entryLinkRefXml['dcterms:created'].size() == 1
+		def entryCreatedXml = entryLinkRefXml['dcterms:created'][0] as Node
+		entryCreatedXml.attributes().size() == 1
+		entryCreatedXml['@rdf:datatype'] == 'http://www.w3.org/2001/XMLSchema#dateTime'
+		entryCreatedXml.text().length() > 10
+		entryCreatedXml.text().contains(Year.now().getValue().toString())
+
+		//   es:metadata child should have: 1 attr, no val
+		entryLinkRefXml['es:metadata'].size() == 1
+		def entryMetadataXml = entryLinkRefXml['es:metadata'][0] as Node
+		entryMetadataXml.attributes().size() == 1
+		def storedMetadataUrl = entryMetadataXml['@rdf:resource'].toString()
+		storedMetadataUrl.contains('/store/' + contextId + '/metadata/')
+		entryMetadataXml.text() == ''
+
+		//   es:externalMetadata child should have: 1 attr, no val
+		entryLinkRefXml['es:externalMetadata'].size() == 1
+		def entryExternalMetadataXml = entryLinkRefXml['es:externalMetadata'][0] as Node
+		entryExternalMetadataXml.attributes().size() == 1
+		entryExternalMetadataXml['@rdf:resource'] == metadataUrl
+		entryExternalMetadataXml.text() == ''
+
+		//   es:cachedExternalMetadata child should have: 1 attr, no val
+		entryLinkRefXml['es:cachedExternalMetadata'].size() == 1
+		def entryCachedExternalMetadataXml = entryLinkRefXml['es:cachedExternalMetadata'][0] as Node
+		entryCachedExternalMetadataXml.attributes().size() == 1
+		def storedExternalMetadataUrl = entryCachedExternalMetadataXml['@rdf:resource'].toString()
+		storedExternalMetadataUrl.contains('/store/' + contextId + '/cached-external-metadata/')
+		entryCachedExternalMetadataXml.text() == ''
+
+		// fetch entry metadata
+		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/json')
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
+		(entryMetaRespJson as Map).keySet().size() == 1
+		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
+		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcTitles = entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcTitles.size() == 1
+		dcTitles[0]['type'] == 'literal'
+		dcTitles[0]['value'] == 'local metadata title'
+
+		// fetch external metadata
+		def entryExternalMetaConn = EntryStoreClient.getRequest(storedExternalMetadataUrl)
+		entryExternalMetaConn.getResponseCode() == HTTP_OK
+		entryExternalMetaConn.getContentType().contains('application/json')
+		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
+		(entryExternalMetaRespJson as Map).keySet().size() == 0
+	}
 }
