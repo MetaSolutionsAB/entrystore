@@ -40,7 +40,6 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Runs a backup of the repository.
@@ -274,60 +273,46 @@ public class BackupJob implements Job, InterruptableJob {
 			log.error("Unknown backup path, please check the following setting: {}", Settings.BACKUP_FOLDER);
 		} else {
 			File backupFolder = new File(exportPath);
-			DateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
+			if (!backupFolder.exists() || !backupFolder.isDirectory() || backupFolder.listFiles() == null) {
+				log.error("Backup folder {} does not exist or is not a directory", exportPath);
+			} else {
+				DateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmss");
 
-			List<Date> backupFolders = new LinkedList<>();
-			for (File file : Objects.requireNonNull(backupFolder.listFiles())) {
-				if (!file.isDirectory() || file.isHidden()) {
-					log.info("Ignoring: {}", file);
-					continue;
-				}
+				List<Date> backupFolders = new LinkedList<>();
+				for (File file : backupFolder.listFiles()) {
+					if (!file.isDirectory() || file.isHidden()) {
+						log.info("Ignoring: {}", file);
+						continue;
+					}
 
-				try {
-					Date date = formatter.parse(file.getName());
-					backupFolders.add(date);
-					log.info("Found backup folder: {}", file);
-				} catch (ParseException pe) {
-					log.warn("Skipping path: {}. Reason: {}", file, pe.getMessage());
-				}
-			}
-
-			if (backupFolders.size() <= lowerLimit) {
-				log.info("Lower limit not reached - backup maintenance job done with execution");
-				return;
-			}
-
-			backupFolders.sort((a, b) -> {
-				if (a.after(b)) {
-					return 1;
-				} else if (a.before(b)) {
-					return -1;
-				} else {
-					return 0;
-				}
-			});
-
-			if (backupFolders.size() > upperLimit) {
-				int nrRemoveItems = backupFolders.size() - upperLimit;
-				log.info("Upper limit is {}, will delete {} backup folder(s)", upperLimit, nrRemoveItems);
-				for (int i = 0; i < nrRemoveItems; i++) {
-					String folder = formatter.format(backupFolders.get(i));
-					File f = new File(exportPath, folder);
-					if (FileOperations.deleteDirectory(f)) {
-						backupFolders.remove(i);
-						log.info("Deleted {}", f);
-					} else {
-						log.info("Unable to delete {}", f);
+					try {
+						Date date = formatter.parse(file.getName());
+						backupFolders.add(date);
+						log.info("Found backup folder: {}", file);
+					} catch (ParseException pe) {
+						log.warn("Skipping path: {}. Reason: {}", file, pe.getMessage());
 					}
 				}
-			}
 
-			Date oldestDate = backupFolders.get(0);
+				if (backupFolders.size() <= lowerLimit) {
+					log.info("Lower limit not reached - backup maintenance job done with execution");
+					return;
+				}
 
-			if (DateUtils.daysBetween(oldestDate, today) > expiresAfterDays) {
-				for (int size = backupFolders.size(), i = 0; lowerLimit < size; size--) {
-					Date d = backupFolders.get(i);
-					if (DateUtils.daysBetween(d, today) > expiresAfterDays) {
+				backupFolders.sort((a, b) -> {
+					if (a.after(b)) {
+						return 1;
+					} else if (a.before(b)) {
+						return -1;
+					} else {
+						return 0;
+					}
+				});
+
+				if (backupFolders.size() > upperLimit) {
+					int nrRemoveItems = backupFolders.size() - upperLimit;
+					log.info("Upper limit is {}, will delete {} backup folder(s)", upperLimit, nrRemoveItems);
+					for (int i = 0; i < nrRemoveItems; i++) {
 						String folder = formatter.format(backupFolders.get(i));
 						File f = new File(exportPath, folder);
 						if (FileOperations.deleteDirectory(f)) {
@@ -336,10 +321,29 @@ public class BackupJob implements Job, InterruptableJob {
 						} else {
 							log.info("Unable to delete {}", f);
 						}
-					} else {
-						break;
 					}
 				}
+
+				Date oldestDate = backupFolders.getFirst();
+
+				if (DateUtils.daysBetween(oldestDate, today) > expiresAfterDays) {
+					for (int size = backupFolders.size(), i = 0; lowerLimit < size; size--) {
+						Date d = backupFolders.get(i);
+						if (DateUtils.daysBetween(d, today) > expiresAfterDays) {
+							String folder = formatter.format(backupFolders.get(i));
+							File f = new File(exportPath, folder);
+							if (FileOperations.deleteDirectory(f)) {
+								backupFolders.remove(i);
+								log.info("Deleted {}", f);
+							} else {
+								log.info("Unable to delete {}", f);
+							}
+						} else {
+							break;
+						}
+					}
+				}
+
 			}
 		}
 

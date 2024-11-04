@@ -230,6 +230,7 @@ public class MetadataUtilTest {
 		assertNotNull(format);
 		assertEquals(formatString, format.getName());
 
+		// the decision was made to not currently support the following formats by this method
 		formatString = "Turtle-star";
 		format = MetadataUtil.getRDFFormat(formatString);
 		assertNull(format);
