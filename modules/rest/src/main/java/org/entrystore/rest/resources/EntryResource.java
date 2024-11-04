@@ -133,7 +133,7 @@ public class EntryResource extends BaseResource {
 			}
 
 			// the check for resource safety is necessary to avoid an implicit
-			// getMetadata() in the case of a PUT on (not yet) existant metadata
+			// getMetadata() in the case of a PUT on (not yet) existent metadata
 			// - this is e.g. the case if conditional requests are issued
 			Optional<MediaType> preferredMediaType = Optional.of(getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes));
 

@@ -666,8 +666,12 @@ class EntryIT extends BaseSpec {
 
 	def "GET /{context-id}/entry/{entry-id}?includeAll for a linkreference entry, should return extra information about the entry"() {
 		given:
+		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'
-		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
@@ -675,8 +679,7 @@ class EntryIT extends BaseSpec {
 												 value: 'local metadata title'
 											 ]]
 		]]]
-		def entryId = createEntry(contextId, params, body)
-		assert entryId.length() > 0
+		getOrCreateEntry(contextId, params, body)
 
 		when:
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
@@ -764,8 +767,12 @@ class EntryIT extends BaseSpec {
 
 	def "GET /{context-id}/entry/{entry-id} in rdf+xml format for a linkreference entry, should return information about the entry in RDF+XML format"() {
 		given:
+		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'
-		def params = [entrytype: 'linkreference', resource: resourceUrl, 'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
@@ -773,14 +780,14 @@ class EntryIT extends BaseSpec {
 												 value: 'local metadata title'
 											 ]]
 		]]]
-		def entryId = createEntry(contextId, params, body)
-		assert entryId.length() > 0
+		getOrCreateEntry(contextId, params, body)
 
 		when:
-		// TODO: bug? below GET (a request for an entry with "application/ld+json" format in Accept header) throws 500
-//		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll', 'admin', 'application/ld+json')
+		// TODO: bug? below GET (a request for an entry with "application/ld+json" or "rdf+json" format in Accept header) throws 500
+//		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll', 'admin', 'application/ld+json') // Exception: Hierarchical view is not supported by this JSON-LD processor
+//		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll', 'admin', 'application/rdf+json') // Exception: NullPointer
 
-		// TODO: bug? below GET (a request for an entry with param "rdfFormat=application/ld+json" and empty Accept header) returns RDF+XML (the default type)
+		// TODO: bug? below GET (a request for an entry with param "rdfFormat=application/ld+json" and empty Accept header) returns RDF+XML (the default type, and rdfFormat param value is ignored)
 //		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + convertMapToQueryParams([rdfFormat: 'application/ld+json']), 'admin', null)
 
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/rdf+xml')
@@ -853,5 +860,126 @@ class EntryIT extends BaseSpec {
 		entryExternalMetaConn.getContentType().contains('application/json')
 		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
+	}
+
+	def "GET /{context-id}/entry/{entry-id} in text/n3 format for a linkreference entry, should return information about the entry in text/n3 format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin','text/n3')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('text/n3')
+		def response = entryConn.getInputStream().text
+		response.contains('/' + contextId + '/entry/' + entryId + '> a es:LinkReference;')
+		response.contains('es:resource <' + resourceUrl + '>;')
+		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId + '>;')
+		response.contains('es:externalMetadata <' + metadataUrl + '>;')
+		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
+	}
+
+	def "GET /{context-id}/entry/{entry-id} in text/turtle format for a linkreference entry, should return information about the entry in text/turtle format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin','text/turtle')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('text/turtle')
+		def response = entryConn.getInputStream().text
+		response.contains('/' + contextId + '/entry/' + entryId + '> a es:LinkReference;')
+		response.contains('es:resource <' + resourceUrl + '>;')
+		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId + '>;')
+		response.contains('es:externalMetadata <' + metadataUrl + '>;')
+		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
+	}
+
+	def "GET /{context-id}/entry/{entry-id} in application/trix format for a linkreference entry, should return information about the entry in application/trix format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin','application/trix')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/trix')
+		def responseXml = new XmlParser(false, false).parseText(entryConn.getInputStream().text)
+		responseXml['@xmlns'] == 'http://www.w3.org/2004/03/trix/trix-1/'
+		responseXml['graph'].size() == 1
+		def respGraphXml = responseXml['graph'][0] as Node
+		// top level graph has no attributes and 11 children (1 uri + 10 triples)
+		respGraphXml.attributes().size() == 0
+		respGraphXml.value().size() == 11
+
+		//   1 uri child should have: 0 attr, 1 children
+		respGraphXml['uri'].size() == 1
+		def graphUriXml = respGraphXml['uri'][0] as Node
+		graphUriXml.attributes().size() == 0
+		graphUriXml.value().size() == 1
+		def expectedEntryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		graphUriXml.value()[0] == expectedEntryUri
+
+		//   10 triple children
+		def entryTriples = respGraphXml['triple'] as NodeList
+		entryTriples.size() == 10
+		entryTriples.every { tr -> tr.name() == 'triple' && tr.attributes().size() == 0 }
+		entryTriples.any { tr -> tripleHasUrisEqualTo(tr, [expectedEntryUri, NameSpaceConst.RDF_TYPE, NameSpaceConst.TERM_LINK_REFERENCE]) }
+		entryTriples.any { tr -> tripleHasUrisEqualTo(tr, [expectedEntryUri, NameSpaceConst.TERM_RESOURCE, resourceUrl]) }
+		entryTriples.any { tr -> tripleHasUrisEqualTo(tr, [expectedEntryUri, NameSpaceConst.TERM_METADATA, EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId]) }
+		entryTriples.any { tr -> tripleHasUrisEqualTo(tr, [expectedEntryUri, NameSpaceConst.TERM_EXTERNAL_METADATA, metadataUrl]) }
+		entryTriples.any { tr -> tripleHasUrisEqualTo(tr, [expectedEntryUri, NameSpaceConst.TERM_CACHED_EXTERNAL_METADATA, EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId]) }
+	}
+
+	def tripleHasUrisEqualTo(Node triple, List expectedValues) {
+		def uris = triple['uri'] as NodeList
+		if (uris.size() != 3)
+			return false
+		return uris[0].value() == [expectedValues[0]] &&
+			uris[1].value() == [expectedValues[1]] &&
+			uris[2].value() == [expectedValues[2]]
 	}
 }

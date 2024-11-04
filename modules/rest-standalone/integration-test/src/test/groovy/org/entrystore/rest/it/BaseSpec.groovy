@@ -66,7 +66,7 @@ abstract class BaseSpec extends Specification {
 
 	/**
 	 * Fetches requested entry by given ID, if it does not exist then creates a new entry with that ID.
-	 * Expects id key to be present in the `params` argument.
+	 * Expects "id" key to be present in the `params` argument.
 	 *
 	 * @param contextId under which to create the entry
 	 * @param params key-value map which will be send in the request URL, e.g. [entrytype: 'link', resource: '...Url...', id: 'entryId']
