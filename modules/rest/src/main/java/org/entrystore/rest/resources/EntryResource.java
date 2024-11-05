@@ -75,6 +75,8 @@ import static org.restlet.data.MediaType.TEXT_RDF_N3;
 public class EntryResource extends BaseResource {
 
 	private final Logger log = LoggerFactory.getLogger(EntryResource.class);
+
+	// TODO: Use GraphUtil.supportedMediaTypes instead of this list? GraphUtil contains 1 extra MediaType: rdf+json
 	private final List<MediaType> supportedMediaTypes = List.of(
 			APPLICATION_RDF_XML,
 			APPLICATION_JSON,

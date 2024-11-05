@@ -880,7 +880,7 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin','text/n3')
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'text/n3')
 
 		then:
 		entryConn.getResponseCode() == HTTP_OK
@@ -911,7 +911,7 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin','text/turtle')
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'text/turtle')
 
 		then:
 		entryConn.getResponseCode() == HTTP_OK
@@ -940,9 +940,10 @@ class EntryIT extends BaseSpec {
 											 ]]
 		]]]
 		getOrCreateEntry(contextId, params, body)
+		def expectedEntryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 
 		when:
-		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin','application/trix')
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/trix')
 
 		then:
 		entryConn.getResponseCode() == HTTP_OK
@@ -960,26 +961,161 @@ class EntryIT extends BaseSpec {
 		def graphUriXml = respGraphXml['uri'][0] as Node
 		graphUriXml.attributes().size() == 0
 		graphUriXml.value().size() == 1
-		def expectedEntryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
-		graphUriXml.value()[0] == expectedEntryUri
+		graphUriXml.value() == [expectedEntryUri]
 
-		//   10 triple children
+		//   10 triple children, all with 0 attributes and 3 values
 		def entryTriples = respGraphXml['triple'] as NodeList
 		entryTriples.size() == 10
-		entryTriples.every { tr -> tr.name() == 'triple' && tr.attributes().size() == 0 }
-		entryTriples.any { tr -> tripleHasUrisEqualTo(tr, [expectedEntryUri, NameSpaceConst.RDF_TYPE, NameSpaceConst.TERM_LINK_REFERENCE]) }
-		entryTriples.any { tr -> tripleHasUrisEqualTo(tr, [expectedEntryUri, NameSpaceConst.TERM_RESOURCE, resourceUrl]) }
-		entryTriples.any { tr -> tripleHasUrisEqualTo(tr, [expectedEntryUri, NameSpaceConst.TERM_METADATA, EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId]) }
-		entryTriples.any { tr -> tripleHasUrisEqualTo(tr, [expectedEntryUri, NameSpaceConst.TERM_EXTERNAL_METADATA, metadataUrl]) }
-		entryTriples.any { tr -> tripleHasUrisEqualTo(tr, [expectedEntryUri, NameSpaceConst.TERM_CACHED_EXTERNAL_METADATA, EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId]) }
+		entryTriples.every { it.name() == 'triple' && it.attributes().size() == 0 }
+		entryTriples.any { tripleHasUrisEqualTo(it, [expectedEntryUri, NameSpaceConst.RDF_TYPE, NameSpaceConst.TERM_LINK_REFERENCE]) }
+		entryTriples.any { tripleHasUrisEqualTo(it, [expectedEntryUri, NameSpaceConst.TERM_RESOURCE, resourceUrl]) }
+		entryTriples.any { tripleHasUrisEqualTo(it, [expectedEntryUri, NameSpaceConst.TERM_METADATA, EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId]) }
+		entryTriples.any { tripleHasUrisEqualTo(it, [expectedEntryUri, NameSpaceConst.TERM_EXTERNAL_METADATA, metadataUrl]) }
+		entryTriples.any { tripleHasUrisEqualTo(it, [expectedEntryUri, NameSpaceConst.TERM_CACHED_EXTERNAL_METADATA, EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId]) }
 	}
 
-	def tripleHasUrisEqualTo(Node triple, List expectedValues) {
+	def tripleHasUrisEqualTo(Node triple, List<String> expectedValues) {
 		def uris = triple['uri'] as NodeList
 		if (uris.size() != 3)
 			return false
 		return uris[0].value() == [expectedValues[0]] &&
 			uris[1].value() == [expectedValues[1]] &&
 			uris[2].value() == [expectedValues[2]]
+	}
+
+	def "GET /{context-id}/entry/{entry-id} in application/n-triples format for a linkreference entry, should return information about the entry in application/n-triples format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+		def expectedEntryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/n-triples')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/n-triples')
+		def responseArray = entryConn.getInputStream().text.split('\n').collect { it.split(' ') }
+		// expect 10 triples
+		responseArray.size() == 10
+		// expect a triple with rdf-type of LinkReference
+		responseArray.any { tripleArrayEqualTo(it, [expectedEntryUri, NameSpaceConst.RDF_TYPE, NameSpaceConst.TERM_LINK_REFERENCE]) }
+		responseArray.any { tripleArrayEqualTo(it, [expectedEntryUri, NameSpaceConst.TERM_RESOURCE, resourceUrl]) }
+		responseArray.any { tripleArrayEqualTo(it, [expectedEntryUri, NameSpaceConst.TERM_METADATA, EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId]) }
+		responseArray.any { tripleArrayEqualTo(it, [expectedEntryUri, NameSpaceConst.TERM_EXTERNAL_METADATA, metadataUrl]) }
+		responseArray.any { tripleArrayEqualTo(it, [expectedEntryUri, NameSpaceConst.TERM_CACHED_EXTERNAL_METADATA, EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId]) }
+	}
+
+	def wrapInAngleBrackets(String input) {
+		return '<' + input + '>'
+	}
+
+	def tripleArrayEqualTo(String[] triple, List<String> expectedValues) {
+		if (triple.size() < 3)
+			return false
+		return triple[0] == wrapInAngleBrackets(expectedValues[0]) &&
+			triple[1] == wrapInAngleBrackets(expectedValues[1]) &&
+			triple[2] == wrapInAngleBrackets(expectedValues[2])
+	}
+
+	def "GET /{context-id}/entry/{entry-id} in application/trig format for a linkreference entry, should return information about the entry in application/trig format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/trig')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/trig')
+		def response = entryConn.getInputStream().text
+		response.contains('/' + contextId + '/entry/' + entryId + '> a es:LinkReference;')
+		response.contains('es:resource <' + resourceUrl + '>;')
+		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId + '>;')
+		response.contains('es:externalMetadata <' + metadataUrl + '>;')
+		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
+	}
+
+	def "DELETE /{context-id}/entry/{entry-id} as not-authorized user should not delete the entry"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId, null)
+
+		then:
+		entryConn.getResponseCode() == HTTP_UNAUTHORIZED
+		entryConn.getContentType().contains('text/html')
+		def response = entryConn.getErrorStream().text
+		response.contains('<title>Status page</title>')
+		response.contains('Unauthorized')
+		response.contains('The request requires user authentication')
+	}
+
+	def "DELETE /{context-id}/entry/{entry-id} should delete the entry"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def deleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId)
+
+		then:
+		// DELETE request should respond with 20x
+		deleteConn.getResponseCode() == HTTP_NO_CONTENT
+
+		// GET entry by ID should respond with 404
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		entryConn.getResponseCode() == HTTP_NOT_FOUND
 	}
 }
