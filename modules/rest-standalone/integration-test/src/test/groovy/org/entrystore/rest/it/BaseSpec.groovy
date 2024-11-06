@@ -60,8 +60,9 @@ abstract class BaseSpec extends Specification {
 	 * @param data a key-val map to be converted
 	 * @return a string in form of "?key1=value1&key2=value2&..."; or empty string for empty map
 	 */
-	def convertMapToQueryParams(Map data) {
-		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> "$k=$v" }.join('&')
+	def convertMapToQueryParams(Map<String, String> data) {
+		// should encode all URL params, but that breaks some tests - backend bug?
+		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> k + '=' + v /*URLEncoder.encode(v, UTF_8)*/ }.join('&')
 	}
 
 	/**

@@ -337,8 +337,8 @@ class ResourceIT extends BaseSpec {
 		assert entryConn.getResponseCode() == HTTP_OK
 		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		assert entryRespJson['info'] != null
-		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
-		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
+		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect { it.toString() }
+		def resourceUri = entryRespJsonKeys.find { it.contains('resource') }
 		// fetch resource details
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK

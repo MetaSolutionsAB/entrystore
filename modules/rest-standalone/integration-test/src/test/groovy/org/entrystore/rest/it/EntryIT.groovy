@@ -7,7 +7,6 @@ import org.entrystore.rest.it.util.NameSpaceConst
 import java.time.Year
 
 import static java.net.HttpURLConnection.*
-import static java.nio.charset.StandardCharsets.UTF_8
 
 class EntryIT extends BaseSpec {
 
@@ -478,7 +477,7 @@ class EntryIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "POST /{context-id}?entrytype=link&template=otherEntry with metadata in the body, should create a new link entry with local metadata combined with MD from otherEntry"() {
+	def "POST /{context-id}?entrytype=link&template=otherEntry with metadata in the body, should create a new link entry with local metadata combined with MD from template entry"() {
 		given:
 		def otherEntryParams = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -499,7 +498,9 @@ class EntryIT extends BaseSpec {
 		def otherEntryId = createEntry(contextId, otherEntryParams, otherEntryBody)
 		assert otherEntryId.length() > 0
 
-		def params = [entrytype: 'link', resource: resourceUrl, template: EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + otherEntryId]
+		def params = [entrytype: 'link',
+					  resource: resourceUrl,
+					  template: EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + otherEntryId]
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE)    : [[
 													 type : 'literal',
@@ -671,7 +672,7 @@ class EntryIT extends BaseSpec {
 		def params = [id                        : entryId,
 					  entrytype                 : 'linkreference',
 					  resource                  : resourceUrl,
-					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
@@ -772,7 +773,7 @@ class EntryIT extends BaseSpec {
 		def params = [id                        : entryId,
 					  entrytype                 : 'linkreference',
 					  resource                  : resourceUrl,
-					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
@@ -869,7 +870,7 @@ class EntryIT extends BaseSpec {
 		def params = [id                        : entryId,
 					  entrytype                 : 'linkreference',
 					  resource                  : resourceUrl,
-					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
@@ -900,7 +901,7 @@ class EntryIT extends BaseSpec {
 		def params = [id                        : entryId,
 					  entrytype                 : 'linkreference',
 					  resource                  : resourceUrl,
-					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
@@ -931,7 +932,7 @@ class EntryIT extends BaseSpec {
 		def params = [id                        : entryId,
 					  entrytype                 : 'linkreference',
 					  resource                  : resourceUrl,
-					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
@@ -990,7 +991,7 @@ class EntryIT extends BaseSpec {
 		def params = [id                        : entryId,
 					  entrytype                 : 'linkreference',
 					  resource                  : resourceUrl,
-					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
@@ -1037,7 +1038,7 @@ class EntryIT extends BaseSpec {
 		def params = [id                        : entryId,
 					  entrytype                 : 'linkreference',
 					  resource                  : resourceUrl,
-					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
@@ -1068,7 +1069,7 @@ class EntryIT extends BaseSpec {
 		def params = [id                        : entryId,
 					  entrytype                 : 'linkreference',
 					  resource                  : resourceUrl,
-					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
@@ -1097,7 +1098,7 @@ class EntryIT extends BaseSpec {
 		def params = [id                        : entryId,
 					  entrytype                 : 'linkreference',
 					  resource                  : resourceUrl,
-					  'cached-external-metadata': URLEncoder.encode(metadataUrl, UTF_8)]
+					  'cached-external-metadata': metadataUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [[
