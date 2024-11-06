@@ -112,10 +112,10 @@ class NameResourceIT extends BaseSpec {
 		json['name'] == newName
 	}
 
-	def "PUT /{context-id}/entry/{entry-id}/name on a User should edit the user name"() {
+	def "PUT /{context-id}/entry/{entry-id}/name on a User should edit the username"() {
 		given:
 		// create user
-		def requestResourceName = [name: 'Test User name']
+		def requestResourceName = [name: 'Username 1']
 		def params = [graphtype: 'user']
 		def createUserBody = JsonOutput.toJson([resource: requestResourceName])
 		def createUserConn = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), createUserBody)
@@ -141,10 +141,10 @@ class NameResourceIT extends BaseSpec {
 		json['name'] == newUserName.toLowerCase()
 	}
 
-	def "PUT /{context-id}/entry/{entry-id}/name with name=null on a User should not remove user name, as username is required for a User"() {
+	def "PUT /{context-id}/entry/{entry-id}/name with name=null on a User should not remove user name, as a username is required for a User"() {
 		given:
 		// create user
-		def requestResourceName = [name: 'Test User name']
+		def requestResourceName = [name: 'Username 2']
 		def params = [graphtype: 'user']
 		def createUserBody = JsonOutput.toJson([resource: requestResourceName])
 		def createUserConn = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), createUserBody)
