@@ -18,8 +18,11 @@ package org.entrystore.repository.util;
 
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.base.CoreDatatype;
+import org.eclipse.rdf4j.rio.RDFFormat;
 
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -133,6 +136,29 @@ public class MetadataUtil {
 			case DATE_TYPE -> dateDataTypes.contains(datatype);
 			default -> stringDataTypes.contains(datatype);
 		};
+	}
+
+	public static RDFFormat getRDFFormat(String formatString) {
+		List<RDFFormat> allFormats = Arrays.asList(
+			RDFFormat.RDFXML,
+			RDFFormat.NTRIPLES,
+			RDFFormat.TURTLE,
+			RDFFormat.N3,
+			RDFFormat.TRIX,
+			RDFFormat.TRIG,
+			RDFFormat.BINARY,
+			RDFFormat.NQUADS,
+			RDFFormat.JSONLD,
+			RDFFormat.RDFJSON,
+			RDFFormat.RDFA);
+
+		for (RDFFormat format : allFormats) {
+			if (format.getName().equalsIgnoreCase(formatString)) {
+				return format;
+			}
+		}
+
+		return null;
 	}
 
 }
