@@ -25,7 +25,7 @@ class NameResourceIT extends BaseSpec {
 		connection.getContentType().contains('application/octet-stream') // content-type is octet-stream for some reason, no body
 	}
 
-	def "GET /{context-id}/entry/{entry-id}/name on a String entry should return 404"() {
+	def "GET /{context-id}/entry/{entry-id}/name on a String entry without name should return 404"() {
 		given:
 		// create local String entry
 		def someText = 'Some text'

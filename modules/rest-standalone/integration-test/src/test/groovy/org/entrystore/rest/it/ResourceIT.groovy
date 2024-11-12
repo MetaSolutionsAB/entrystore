@@ -436,7 +436,7 @@ class ResourceIT extends BaseSpec {
 		assert targetResourceRespJson == []
 
 		def postParams = [moveEntry: contextId + '/entry/' + givenEntryId,
-					  fromList: sourceResourceUri]
+						  fromList : sourceResourceUri]
 
 		when:
 		// move entry from source to target list
