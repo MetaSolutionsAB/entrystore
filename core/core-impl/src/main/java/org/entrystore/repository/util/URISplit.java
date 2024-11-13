@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URL;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.StringTokenizer;
 
 @Getter
@@ -39,24 +41,15 @@ public class URISplit {
 	String base;
 	boolean isContext = false;
 
-	/**
-	 * TODO: fix html chars decoding - URI.toString() does not decode the html characters (e.g. '%2F' to '/')
-	 * We can either use (anyURI.getScheme() + ":" + anyURI.getSchemeSpecificPart()) instead of .toString()
-	 * or ideally refactor the URISplit constructor to not accept String of a URI, but instead work on URI objects - e.g. method URI.getPath()
-	 *
-	 * @param anyURI any URI
-	 * @param baseURL ES instance base URL
-	 */
 	public URISplit(URI anyURI, URL baseURL) {
-		this(anyURI.toString(), baseURL);
-	}
 
-	public URISplit(String anyURIString, URL baseURL) {
+		URI decodedAnyURI = URI.create(URLDecoder.decode(anyURI.toString(), StandardCharsets.UTF_8));
+
 		if (baseURL != null) {
-			base = baseURL.toString();
-			if (anyURIString.startsWith(base)) {
-				String withoutBase = anyURIString.substring(base.length());
-				StringTokenizer st = new StringTokenizer(withoutBase, SLASH_DELIMITER);
+			//base = baseURL.toString();
+			if (baseURL.getHost().equals(decodedAnyURI.getHost()) && decodedAnyURI.getPath().startsWith(baseURL.getPath())) {
+				String anyURIWithoutBase = decodedAnyURI.getPath().substring(baseURL.getPath().length());
+				StringTokenizer st = new StringTokenizer(anyURIWithoutBase, SLASH_DELIMITER);
 				contextId = st.nextToken();
 				if (st.hasMoreTokens()) {
 					path = st.nextToken();
@@ -77,6 +70,12 @@ public class URISplit {
 			} else {
 				uriType = URIType.Unknown;
 			}
+
+			base = baseURL.getProtocol().concat("://").concat(baseURL.getHost());
+			if (baseURL.getPort() > 0) {
+				base = base.concat(":" + baseURL.getPort());
+			}
+			base = base.concat(baseURL.getPath());
 		}
 	}
 
