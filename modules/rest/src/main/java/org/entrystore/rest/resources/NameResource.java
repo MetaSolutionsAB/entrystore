@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.resources;
 
+import org.apache.commons.lang3.StringUtils;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.GraphType;
@@ -86,17 +87,15 @@ public class NameResource extends BaseResource {
 			if (nameObj.has("name")) {
 				name = nameObj.getString("name").trim();
 			}
-		} catch (JSONException jsone) {
+		} catch (JSONException | IOException jsone) {
 			log.error(jsone.getMessage());
-		} catch (IOException ioe) {
-			log.error(ioe.getMessage());
 		}
 
 		if (this.context == null || this.entry == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
-		if (name == null || name.length() == 0) {
+		if (name == null || name.isEmpty()) {
 			name = null;
 		}
 		GraphType bt = entry.getGraphType();
@@ -111,7 +110,7 @@ public class NameResource extends BaseResource {
 			}
 			success = ((User) entry.getResource()).setName(name);
 		} else if (GraphType.Context.equals(bt)) {
-			if (!getReservedNames().contains(name.toLowerCase())) {
+			if (!getReservedNames().contains(StringUtils.trimToEmpty(name).toLowerCase())) {
 				Context c = getCM().getContext(entryId);
 				success = getCM().setName(c.getURI(), name);
 			}

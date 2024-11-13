@@ -75,6 +75,8 @@ import static org.restlet.data.MediaType.TEXT_RDF_N3;
 public class EntryResource extends BaseResource {
 
 	private final Logger log = LoggerFactory.getLogger(EntryResource.class);
+
+	// TODO: Use GraphUtil.supportedMediaTypes instead of this list? GraphUtil contains 1 extra MediaType: rdf+json
 	private final List<MediaType> supportedMediaTypes = List.of(
 			APPLICATION_RDF_XML,
 			APPLICATION_JSON,
@@ -133,7 +135,7 @@ public class EntryResource extends BaseResource {
 			}
 
 			// the check for resource safety is necessary to avoid an implicit
-			// getMetadata() in the case of a PUT on (not yet) existant metadata
+			// getMetadata() in the case of a PUT on (not yet) existent metadata
 			// - this is e.g. the case if conditional requests are issued
 			Optional<MediaType> preferredMediaType = Optional.of(getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes));
 

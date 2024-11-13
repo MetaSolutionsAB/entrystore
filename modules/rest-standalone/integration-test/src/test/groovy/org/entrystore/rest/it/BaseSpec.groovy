@@ -1,5 +1,7 @@
 package org.entrystore.rest.it
 
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.standalone.EntryStoreApplicationStandaloneJetty
 import org.slf4j.LoggerFactory
@@ -7,12 +9,12 @@ import spock.lang.Specification
 
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_OK
 
 abstract class BaseSpec extends Specification {
 
 	def static log = LoggerFactory.getLogger(this.class)
-
-	def static client = new EntryStoreClient()
+	def static JSON_PARSER = new JsonSlurper()
 
 	def static appStarted = false
 
@@ -27,8 +29,16 @@ abstract class BaseSpec extends Specification {
 		}
 	}
 
+	/**
+	 * Fetches requested context by given ID, if it does not exist then creates a new context with that ID.
+	 * Expects contextId to be present in the `data` argument.
+	 * @param data
+	 * @return
+	 */
 	def getOrCreateContext(Map data) {
-		def connection = client.getRequest('/_contexts/entry/' + data['contextId'])
+		assert data['contextId'] != null
+		assert data['contextId'].toString().length() > 0
+		def connection = EntryStoreClient.getRequest('/_contexts/entry/' + data['contextId'])
 		if (connection.getResponseCode() == HTTP_NOT_FOUND) {
 			createContext(data)
 		}
@@ -40,7 +50,7 @@ abstract class BaseSpec extends Specification {
 	 * @return ID of the created group
 	 */
 	def createContext(Map data) {
-		def connection = client.postRequest('/_principals/groups' + convertMapToQueryParams(data))
+		def connection = EntryStoreClient.postRequest('/_principals/groups' + convertMapToQueryParams(data))
 		assert connection.getResponseCode() == HTTP_CREATED
 		return connection.getHeaderField('Location').find(/\/_principals\/entry\/([0-9A-Za-z]+)$/) { match, id -> id }
 	}
@@ -50,7 +60,51 @@ abstract class BaseSpec extends Specification {
 	 * @param data a key-val map to be converted
 	 * @return a string in form of "?key1=value1&key2=value2&..."; or empty string for empty map
 	 */
-	def convertMapToQueryParams(Map data) {
-		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> "$k=$v" }.join('&')
+	def convertMapToQueryParams(Map<String, String> data) {
+		// should encode all URL params, but that breaks some tests - backend bug?
+		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> k + '=' + v /*URLEncoder.encode(v, UTF_8)*/ }.join('&')
+	}
+
+	/**
+	 * Fetches requested entry by given ID, if it does not exist then creates a new entry with that ID.
+	 * Expects "id" key to be present in the `params` argument.
+	 *
+	 * @param contextId under which to create the entry
+	 * @param params key-value map which will be send in the request URL, e.g. [entrytype: 'link', resource: '...Url...', id: 'entryId']
+	 * @param body key-value map which will be send in the request body, e.g. [resource: 'someText']
+	 * @return entry ID from the response
+	 */
+	def getOrCreateEntry(String contextId, Map params, Map body = [:]) {
+		def entryId = params['id']
+		assert entryId != null
+		assert entryId.toString().length() > 0
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		if (entryConn.getResponseCode() == HTTP_OK) {
+			entryConn.getContentType().contains('application/json')
+			def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+			entryRespJson['entryId'] != null
+			return entryRespJson['entryId'].toString()
+		} else if (entryConn.getResponseCode() == HTTP_NOT_FOUND) {
+			return createEntry(contextId, params, body)
+		} else {
+			assert false // unexpected response
+		}
+	}
+
+	/**
+	 *
+	 * @param contextId under which to create the entry
+	 * @param params key-value map which will be send in the request URL, e.g. [entrytype: 'link', resource: '...Url...', id: 'entryId']
+	 * @param body key-value map which will be send in the request body, e.g. [resource: 'someText']
+	 * @return created entry ID
+	 */
+	def createEntry(String contextId, Map params, Map body = [:]) {
+		def bodyJson = JsonOutput.toJson(body)
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), bodyJson)
+		assert connection.getResponseCode() == HTTP_CREATED
+		assert connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		assert responseJson['entryId'] != null
+		return responseJson['entryId'].toString()
 	}
 }
