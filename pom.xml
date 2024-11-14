@@ -36,7 +36,6 @@
         <junit.version>5.10.1</junit.version>
         <assertj.version>3.25.3</assertj.version>
         <bytebuddy.version>1.14.13</bytebuddy.version>
-        <rest-assured.version>5.3.2</rest-assured.version>
         <zookeeper.version>3.9.2</zookeeper.version>
         <xmlsec.version>3.0.4</xmlsec.version>
         <httpmime.version>4.5.14</httpmime.version>
@@ -564,11 +563,6 @@
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-layout-template-json</artifactId>
                 <version>${log4j.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.rest-assured</groupId>
-                <artifactId>rest-assured</artifactId>
-                <version>${rest-assured.version}</version>
             </dependency>
             <!-- TODO: The mockito dependencies below shouldn't be needed, as we import the Mockito BOM. Investigate why the BOM does not work!-->
             <dependency>
