@@ -23,8 +23,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URL;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.StringTokenizer;
 
 @Getter
@@ -43,17 +41,16 @@ public class URISplit {
 
 	public URISplit(URI anyURI, URL baseURL) {
 
-		URI decodedAnyURI = URI.create(URLDecoder.decode(anyURI.toString(), StandardCharsets.UTF_8));
-
-		if (baseURL != null) {
-			//base = baseURL.toString();
-			if (baseURL.getHost().equals(decodedAnyURI.getHost()) && decodedAnyURI.getPath().startsWith(baseURL.getPath())) {
-				String anyURIWithoutBase = decodedAnyURI.getPath().substring(baseURL.getPath().length());
+		if (isValidURI(anyURI) && isValidURI(URI.create(baseURL.toString()))) {
+			if (baseURL.getAuthority().equals(anyURI.getAuthority()) && anyURI.getPath().startsWith(baseURL.getPath())) {
+				String anyURIWithoutBase = anyURI.getPath().substring(baseURL.getPath().length());
 				StringTokenizer st = new StringTokenizer(anyURIWithoutBase, SLASH_DELIMITER);
 				contextId = st.nextToken();
 				if (st.hasMoreTokens()) {
 					path = st.nextToken();
-					id = st.nextToken();
+					if (st.hasMoreTokens()) {
+						id = st.nextToken();
+					} else throw new IllegalArgumentException("URI is incompatible with EntryStore");
 				} else {
 					id = contextId;
 					path = RepositoryProperties.DATA_PATH;
@@ -71,12 +68,18 @@ public class URISplit {
 				uriType = URIType.Unknown;
 			}
 
-			base = baseURL.getProtocol().concat("://").concat(baseURL.getHost());
-			if (baseURL.getPort() > 0) {
-				base = base.concat(":" + baseURL.getPort());
-			}
-			base = base.concat(baseURL.getPath());
+			base = baseURL.getProtocol().concat("://").concat(baseURL.getAuthority()).concat(baseURL.getPath());
 		}
+	}
+
+	private static boolean isValidURI(URI uri) {
+		if (uri == null) {
+			throw new IllegalArgumentException("URI cannot be null");
+		} else if (uri.getScheme() == null) {
+			throw new IllegalArgumentException("URI is malformed or encoded");
+		}
+
+		return true;
 	}
 
 	private static String getBaseContextURIString(String base, String contextId) {
@@ -89,39 +92,86 @@ public class URISplit {
 
 	public URI getContextURI() {
 		String context = getBaseContextURIString(base, contextId);
-		return context != null ? URI.create(context) : null;
+		if (context != null) {
+			URI uri = URI.create(context);
+
+			if (isValidURI(uri)) {
+				return uri;
+			}
+
+		}
+
+		return null;
 	}
 
 	public URI getContextMetaMetadataURI() {
-		return createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);
+		URI uri = createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);
+
+		if (isValidURI(uri)) {
+			return uri;
+		}
+
+		return null;
 	}
 
 	public URI getMetaMetadataURI() {
-		return createURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
+		URI uri = createURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
+
+		if (isValidURI(uri)) {
+			return uri;
+		}
+
+		return null;
 	}
 
 	public URI getMetadataURI() {
-		return createURI(base, contextId, RepositoryProperties.MD_PATH, id);
+		URI uri = createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, id);
+
+		if (isValidURI(uri)) {
+			return uri;
+		}
+
+		return null;
 	}
 
 	public URI getResourceURI() {
-		return isContext
+
+		URI uri = isContext
 			? createURI(base, id)
 			: createURI(base, contextId, RepositoryProperties.DATA_PATH, id);
+
+		if (isValidURI(uri)) {
+			return uri;
+		}
+
+		return null;
 	}
 
 	public static URI createURI(String base, String contextId, String path, String entryId) {
-		String uri = getBaseContextURIString(base, contextId);
+		String uriString = getBaseContextURIString(base, contextId);
 
-		if (uri == null || path == null || entryId == null) {
-			log.warn("Parameters must not be null or empty in uri={} path={} entryId={}.", uri, path, entryId);
-			//throw new IllegalArgumentException("Parameters must not be null or empty.");
+		if (uriString == null || path == null || entryId == null) {
+			log.warn("Parameters must not be null or empty in uri={} path={} entryId={}.", uriString, path, entryId);
+			// throw new IllegalArgumentException("Parameters must not be null or empty.");
 		}
 
-		return URI.create(uri + SLASH_DELIMITER + path + SLASH_DELIMITER + entryId);
+		URI uri = URI.create(uriString + SLASH_DELIMITER + path + SLASH_DELIMITER + entryId);
+
+		if (isValidURI(uri)) {
+			return uri;
+		}
+
+		return null;
 	}
 
 	public static URI createURI(String base, String contextId) {
-		return URI.create(getBaseContextURIString(base, contextId));
+
+		URI uri = URI.create(base.concat(contextId));
+
+		if (isValidURI(uri)) {
+			return uri;
+		}
+
+		return null;
 	}
 }

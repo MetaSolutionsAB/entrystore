@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
 import static java.net.HttpURLConnection.*
-import static java.nio.charset.StandardCharsets.UTF_8
 
 abstract class BaseSpec extends Specification {
 
@@ -61,7 +60,7 @@ abstract class BaseSpec extends Specification {
 	 */
 	def convertMapToQueryParams(Map<String, String> data) {
 		// should encode all URL params, but that breaks some tests - backend bug?
-		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> k + '=' + URLEncoder.encode(v, UTF_8) }.join('&')
+		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> k + '=' + v /* URLEncoder.encode(v, UTF_8) */ }.join('&')
 	}
 
 	/**
