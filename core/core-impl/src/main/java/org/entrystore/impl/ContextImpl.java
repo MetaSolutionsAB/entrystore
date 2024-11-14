@@ -642,9 +642,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 		synchronized (this.entry.repository) {
 			EntryImpl entry = createNewMinimalItem(null, null, EntryType.Local, buiType, repType, entryId);
 			if (list != null) {
-				log.info("Adding entry " + entry.getEntryURI() + " to list " + list.getURI());
+				log.info("Adding entry {} to list {}", entry.getEntryURI(), list.getURI());
 				list.addChild(entry.getEntryURI());
-				log.info("Copying ACL from list " + list.getURI() + " to entry " + entry.getEntryURI());
+				log.info("Copying ACL from list {} to entry {}", list.getURI(), entry.getEntryURI());
 				copyACL(list, entry);
 				if (!isOwner) {
 					entry.setOriginalListSynchronized(listURI.toString());
