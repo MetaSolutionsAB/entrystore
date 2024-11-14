@@ -29,6 +29,7 @@ public class URISplitTest {
 
 	private static final URI anyURI = URI.create("https://slashdot.org/example");
 	private static final String anyURIStringBase = "https://slashdot.org/";
+	private static final String anyURIStringBaseWithPort = "https://slashdot.org:8081/";
 	private static final String contextURIString = "https://slashdot.org/12/";
 	private static final String entryURIString = "https://slashdot.org/12/entry/13";
 	private static final String resourceURIString = "https://slashdot.org/12/resource/13";
@@ -80,6 +81,12 @@ public class URISplitTest {
 	@Test
 	public void constructor_resource() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(resourceURIString), URI.create(anyURIStringBase).toURL());
+		assertEquals(uriSplit.getUriType(), URIType.Resource);
+	}
+
+	@Test
+	public void constructor_baseWithPort() throws MalformedURLException {
+		URISplit uriSplit = new URISplit(URI.create(resourceURIString), URI.create(anyURIStringBaseWithPort).toURL());
 		assertEquals(uriSplit.getUriType(), URIType.Resource);
 	}
 
