@@ -16,6 +16,7 @@ stepdefinitions:
         - rm -rf ~/.m2/repository/org/entrystore/
       artifacts:
         - modules/rest-standalone/*/target/**
+        - modules/rest-standalone/integration-test/target/site/jacoco-aggregate/**
   - deploy: &deploy
       name: Deploy
       script:
@@ -29,6 +30,7 @@ stepdefinitions:
         - export FILE_BASE_JETTY="entrystore-jetty-$VERSION" && echo $FILE_BASE_JETTY
         - ( cd modules/rest-standalone/jetty/target/dist/ && tar czf ${FILE_BASE_JETTY}.tar.gz * && sha256sum ${FILE_BASE_JETTY}.tar.gz > ${FILE_BASE_JETTY}.tar.gz.sha256 && gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${FILE_BASE_JETTY}.tar.gz.sha256 )
         - scp -v modules/rest-standalone/jetty/target/dist/{*.tar.gz,*.sha256.asc} deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
+        - scp -rv modules/rest-standalone/integration-test/target/site/jacoco-aggregate/* deploy@meta1.metasolutions.se:/var/www/entrystore.org/test-coverage/
         - if [ $BITBUCKET_BRANCH == "develop" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/develop.version" ; elif [ $BITBUCKET_BRANCH == "master" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/latest.version" ; fi
   - dockerhub: &dockerhub
       name: Docker Hub
