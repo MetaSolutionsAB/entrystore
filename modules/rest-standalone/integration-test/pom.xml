@@ -60,6 +60,9 @@
                         <goals>
                             <goal>report-aggregate</goal>
                         </goals>
+                        <configuration>
+                            <title>EntryStore Test Coverage</title>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
