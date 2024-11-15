@@ -41,7 +41,9 @@ public class URISplit {
 
 	public URISplit(URI anyURI, URL baseURL) {
 
-		if (isValidURI(anyURI) && isValidURI(URI.create(baseURL.toString()))) {
+		if (isValidURI(anyURI)) {
+			// base = baseURL.getProtocol().concat("://").concat(baseURL.getAuthority()).concat(baseURL.getPath());
+			base = baseURL.toString();
 			if (baseURL.getAuthority().equals(anyURI.getAuthority()) && anyURI.getPath().startsWith(baseURL.getPath())) {
 				String anyURIWithoutBase = anyURI.getPath().substring(baseURL.getPath().length());
 				StringTokenizer st = new StringTokenizer(anyURIWithoutBase, SLASH_DELIMITER);
@@ -67,8 +69,6 @@ public class URISplit {
 			} else {
 				uriType = URIType.Unknown;
 			}
-
-			base = baseURL.getProtocol().concat("://").concat(baseURL.getAuthority()).concat(baseURL.getPath());
 		}
 	}
 
@@ -93,11 +93,7 @@ public class URISplit {
 	public URI getContextURI() {
 		String context = getBaseContextURIString(base, contextId);
 		if (context != null) {
-			URI uri = URI.create(context);
-
-			if (isValidURI(uri)) {
-				return uri;
-			}
+			return URI.create(context);
 
 		}
 
@@ -105,46 +101,22 @@ public class URISplit {
 	}
 
 	public URI getContextMetaMetadataURI() {
-		URI uri = createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);
-
-		if (isValidURI(uri)) {
-			return uri;
-		}
-
-		return null;
+		return createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.ENTRY_PATH, contextId);
 	}
 
 	public URI getMetaMetadataURI() {
-		URI uri = createURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
-
-		if (isValidURI(uri)) {
-			return uri;
-		}
-
-		return null;
+		return createURI(base, contextId, RepositoryProperties.ENTRY_PATH, id);
 	}
 
 	public URI getMetadataURI() {
-		URI uri = createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, id);
-
-		if (isValidURI(uri)) {
-			return uri;
-		}
-
-		return null;
+		return createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, id);
 	}
 
 	public URI getResourceURI() {
 
-		URI uri = isContext
+		return isContext
 			? createURI(base, id)
 			: createURI(base, contextId, RepositoryProperties.DATA_PATH, id);
-
-		if (isValidURI(uri)) {
-			return uri;
-		}
-
-		return null;
 	}
 
 	public static URI createURI(String base, String contextId, String path, String entryId) {
