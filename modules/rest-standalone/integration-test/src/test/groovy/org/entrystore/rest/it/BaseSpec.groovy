@@ -7,7 +7,9 @@ import org.entrystore.rest.standalone.EntryStoreApplicationStandaloneJetty
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
-import static java.net.HttpURLConnection.*
+import static java.net.HttpURLConnection.HTTP_CREATED
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_OK
 
 abstract class BaseSpec extends Specification {
 
