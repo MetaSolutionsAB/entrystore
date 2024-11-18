@@ -42,9 +42,8 @@ public class URISplit {
 	public URISplit(URI anyURI, URL baseURL) {
 
 		if (isValidURI(anyURI)) {
-			// base = baseURL.getProtocol().concat("://").concat(baseURL.getAuthority()).concat(baseURL.getPath());
 			base = baseURL.toString();
-			if (baseURL.getAuthority().equals(anyURI.getAuthority()) && anyURI.getPath().startsWith(baseURL.getPath())) {
+			if (anyURI.toString().startsWith(base)) {
 				String anyURIWithoutBase = anyURI.getPath().substring(baseURL.getPath().length());
 				StringTokenizer st = new StringTokenizer(anyURIWithoutBase, SLASH_DELIMITER);
 				contextId = st.nextToken();
@@ -109,7 +108,7 @@ public class URISplit {
 	}
 
 	public URI getMetadataURI() {
-		return createURI(base, RepositoryProperties.SYSTEM_CONTEXTS_ID, RepositoryProperties.MD_PATH, id);
+		return createURI(base, contextId, RepositoryProperties.MD_PATH, id);
 	}
 
 	public URI getResourceURI() {
@@ -131,9 +130,7 @@ public class URISplit {
 
 		if (isValidURI(uri)) {
 			return uri;
-		}
-
-		return null;
+		} else throw new IllegalArgumentException("URI is malformed or encoded");
 	}
 
 	public static URI createURI(String base, String contextId) {
@@ -142,8 +139,6 @@ public class URISplit {
 
 		if (isValidURI(uri)) {
 			return uri;
-		}
-
-		return null;
+		} else throw new IllegalArgumentException("URI is malformed or encoded");
 	}
 }
