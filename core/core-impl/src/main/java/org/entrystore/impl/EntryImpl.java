@@ -1723,7 +1723,10 @@ public class EntryImpl implements Entry {
 	private String getMimetypeFromMetadata() {
 		Statement st = getStatementFromLocalMetadata(resURI, RepositoryProperties.format, null);
 		if (st != null) {
-			return st.getObject().stringValue();
+			Value obj = st.getObject();
+			if (obj.isLiteral()) {
+				return obj.stringValue();
+			}
 		}
 		return null;
 	}
