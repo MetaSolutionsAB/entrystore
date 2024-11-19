@@ -17,6 +17,7 @@
 package org.entrystore.rest.util;
 
 import org.eclipse.rdf4j.common.xml.XMLReaderFactory;
+import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
@@ -118,9 +119,6 @@ public class GraphUtil {
 			}
 			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.jsonld.use_native_types")) {
 				rdfWriter.getWriterConfig().set(JSONLDSettings.USE_NATIVE_TYPES, true);
-			}
-			if (!System.getProperties().containsKey("org.eclipse.rdf4j.rio.jsonld.hierarchical_view")) {
-				rdfWriter.getWriterConfig().set(JSONLDSettings.HIERARCHICAL_VIEW, true);
 			}
 			rdfWriter.getWriterConfig().set(JSONLDSettings.JSONLD_MODE, JSONLDMode.COMPACT);
 
@@ -239,7 +237,7 @@ public class GraphUtil {
 	}
 
 	public static String serializeGraph(Model graph, MediaType mediaType) {
-		String serializedGraph = null;
+		String serializedGraph;
 		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
 			serializedGraph = RDFJSON.graphToRdfJson(graph);
 		} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
@@ -287,7 +285,7 @@ public class GraphUtil {
 	/**
 	 * Detects whether an RDF payload can be parsed by RDF4J.
 	 *
-	 * @param rdf The RDF to validate.
+	 * @param rdf       The RDF to validate.
 	 * @param mediaType The media type of the RDF.
 	 * @return Returns null if successful or an error message if there was an error when parsing the payload.
 	 */
@@ -331,11 +329,7 @@ public class GraphUtil {
 			error = rdfe.getMessage();
 		}
 
-		if (error != null) {
-			return error;
-		}
-
-		return null;
+		return error;
 	}
 
 	/**
@@ -389,14 +383,20 @@ public class GraphUtil {
 
 	private static Map<String, String> findNS(Value value) {
 		Map<String, String> result = new HashMap<>();
-		if (value.isIRI()) {
-			for (String ns : NS.getMap().keySet()) {
-				if (value.stringValue().startsWith(NS.getMap().get(ns))) {
-					result.put(ns, NS.getMap().get(ns));
-				}
-			}
+		String dataTypeIri;
+		if (value.isLiteral()) {
+			// when Value is instance of Literal then .stringValue() returns e.g. "2024-11-18T17:11:59.147+01:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>, so need add .getDataType()
+			dataTypeIri = ((Literal) value).getDatatype().stringValue();
+		} else if (value.isIRI()) {
+			dataTypeIri = value.stringValue();
+		} else {
+			return result;
 		}
+		NS.getMap().forEach((prefix, ns) -> {
+			if (dataTypeIri.startsWith(ns)) {
+				result.put(prefix, ns);
+			}
+		});
 		return result;
 	}
-
 }

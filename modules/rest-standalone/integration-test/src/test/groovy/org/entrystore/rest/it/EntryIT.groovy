@@ -1,6 +1,7 @@
 package org.entrystore.rest.it
 
 import groovy.xml.XmlParser
+import org.entrystore.repository.util.NS
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
@@ -848,6 +849,85 @@ class EntryIT extends BaseSpec {
 		dcTitles[0]['value'] == 'local metadata title'
 	}
 
+	def "GET /{context-id}/entry/{entry-id} in ld+json format for a linkreference entry, should return information about the entry in ld+json format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll', 'admin', 'application/ld+json')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/ld+json')
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		(entryRespJson as Map).keySet().size() == 3
+		entryRespJson['@id'] == 'store:' + contextId + '/entry/' + entryId
+
+		entryRespJson['@context'] != null
+		def context = entryRespJson['@context'] as Map<String, String>
+		context.size() == 5
+		context['es'] == NameSpaceConst.ES_TERMS
+		context['rdf'] == NameSpaceConst.RDF
+		context['xsd'] == NameSpaceConst.XSD
+		context['dcterms'] == NameSpaceConst.DC_TERMS
+		context['store'] == EntryStoreClient.baseUrl + '/'
+
+		entryRespJson['@graph'] != null
+		entryRespJson['@graph'].collect().size() == 1
+		def graph = entryRespJson['@graph'].collect()[0]
+		graph['@id'] == 'store:10/entry/entryForGetTests'
+
+		graph['@type'] == 'es:LinkReference'
+		NS.expand(graph['@type'] as String).toString() == NameSpaceConst.TERM_LINK_REFERENCE
+
+		graph['es:resource'] != null
+		graph['es:resource']['@id'] == resourceUrl
+
+		graph['es:metadata'] != null
+		graph['es:metadata']['@id'] == 'store:' + contextId + '/metadata/' + entryId
+		def storedMetadataUrl = NS.expand(graph['es:metadata']['@id'] as String).toString()
+
+		graph['es:externalMetadata'] != null
+		graph['es:externalMetadata']['@id'] == metadataUrl
+
+		graph['es:cachedExternalMetadata'] != null
+		graph['es:cachedExternalMetadata']['@id'] == 'store:' + contextId + '/cached-external-metadata/' + entryId
+		def cachedExternalMetadataUrl = NS.expand(graph['es:cachedExternalMetadata']['@id'] as String).toString()
+
+		// fetch external metadata
+		def entryExternalMetaConn = EntryStoreClient.getRequest(cachedExternalMetadataUrl)
+		entryExternalMetaConn.getResponseCode() == HTTP_OK
+		entryExternalMetaConn.getContentType().contains('application/json')
+		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
+		(entryExternalMetaRespJson as Map).keySet().size() == 0
+
+		// fetch entry metadata
+		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/json')
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
+		(entryMetaRespJson as Map).keySet().size() == 1
+		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
+		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcTitles = entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcTitles.size() == 1
+		dcTitles[0]['type'] == 'literal'
+		dcTitles[0]['value'] == 'local metadata title'
+	}
+
 	def "GET /{context-id}/entry/{entry-id} in rdf+xml format for a linkreference entry, should return information about the entry in RDF+XML format"() {
 		given:
 		def entryId = 'entryForGetTests'
@@ -866,9 +946,6 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		// TODO: bug? below GET (a request for an entry with "application/ld+json" format in Accept header) throws 500
-//		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll', 'admin', 'application/ld+json') // Exception: Hierarchical view is not supported by this JSON-LD processor
-
 		// TODO: just weird behaviour - below GET (a request for an entry with param "rdfFormat=application/ld+json" and empty Accept header) returns RDF+XML (the default type, and rdfFormat param value is ignored)
 //		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + convertMapToQueryParams([rdfFormat: 'application/ld+json']), 'admin', null)
 
