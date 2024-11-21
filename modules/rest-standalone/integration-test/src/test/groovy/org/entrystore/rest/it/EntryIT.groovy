@@ -867,7 +867,7 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll', 'admin', 'application/ld+json')
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/ld+json')
 
 		then:
 		entryConn.getResponseCode() == HTTP_OK
@@ -888,7 +888,7 @@ class EntryIT extends BaseSpec {
 		entryRespJson['@graph'] != null
 		entryRespJson['@graph'].collect().size() == 1
 		def graph = entryRespJson['@graph'].collect()[0]
-		graph['@id'] == 'store:10/entry/entryForGetTests'
+		graph['@id'] == 'store:' + contextId + '/entry/' + entryId
 
 		graph['@type'] == 'es:LinkReference'
 		NS.expand(graph['@type'] as String).toString() == NameSpaceConst.TERM_LINK_REFERENCE
@@ -906,6 +906,98 @@ class EntryIT extends BaseSpec {
 		graph['es:cachedExternalMetadata'] != null
 		graph['es:cachedExternalMetadata']['@id'] == 'store:' + contextId + '/cached-external-metadata/' + entryId
 		def cachedExternalMetadataUrl = NS.expand(graph['es:cachedExternalMetadata']['@id'] as String).toString()
+
+		// fetch external metadata
+		def entryExternalMetaConn = EntryStoreClient.getRequest(cachedExternalMetadataUrl)
+		entryExternalMetaConn.getResponseCode() == HTTP_OK
+		entryExternalMetaConn.getContentType().contains('application/json')
+		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
+		(entryExternalMetaRespJson as Map).keySet().size() == 0
+
+		// fetch entry metadata
+		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/json')
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
+		(entryMetaRespJson as Map).keySet().size() == 1
+		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
+		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcTitles = entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcTitles.size() == 1
+		dcTitles[0]['type'] == 'literal'
+		dcTitles[0]['value'] == 'local metadata title'
+	}
+
+	def "GET /{context-id}/entry/{entry-id}?rdfFormat=application/ld+json&includeAll for a linkreference entry, should return information about the entry in json format, with graphs in ld+json format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?rdfFormat=application/ld+json&includeAll')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/json')
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		(entryRespJson as Map).size() == 6
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		entryRespJson['cached-external-metadata'] != null
+		entryRespJson['cached-external-metadata'] as Map == [:]
+		entryRespJson['rights'] != null
+		entryRespJson['rights'].collect() == ['administer']
+		entryRespJson['relations'] != null
+		entryRespJson['relations'] as Map == [:]
+		entryRespJson['metadata'] != null
+
+		(entryRespJson['metadata'] as Map).keySet().size() == 3
+		entryRespJson['metadata']['@id'] == 'store:' + contextId + '/metadata/' + entryId
+		entryRespJson['metadata']['@graph'] != null
+		entryRespJson['metadata']['@graph'].collect().size() == 1
+		def metadataGraph = entryRespJson['metadata']['@graph'].collect()[0]
+		metadataGraph['@id'] == 'store:' + contextId + '/resource/' + entryId
+		metadataGraph['dcterms:title'] == 'local metadata title'
+		entryRespJson['metadata']['@context'] != null
+		(entryRespJson['metadata']['@context'] as Map).size() == 3
+		entryRespJson['metadata']['@context']['xsd'] == NameSpaceConst.XSD
+		entryRespJson['metadata']['@context']['dcterms'] == NameSpaceConst.DC_TERMS
+		entryRespJson['metadata']['@context']['store'] == EntryStoreClient.baseUrl + '/'
+
+		(entryRespJson['info'] as Map).keySet().size() == 3
+		entryRespJson['info']['@id'] == 'store:' + contextId + '/entry/' + entryId
+		entryRespJson['info']['@graph'] != null
+		entryRespJson['info']['@graph'].collect().size() == 1
+		def infoGraph = entryRespJson['info']['@graph'].collect()[0]
+		infoGraph['@id'] == 'store:' + contextId + '/entry/' + entryId
+		infoGraph['@type'] == 'es:LinkReference'
+		NS.expand(infoGraph['@type'] as String).toString() == NameSpaceConst.TERM_LINK_REFERENCE
+
+		infoGraph['es:resource'] != null
+		infoGraph['es:resource']['@id'] == resourceUrl
+
+		infoGraph['es:metadata'] != null
+		infoGraph['es:metadata']['@id'] == 'store:' + contextId + '/metadata/' + entryId
+		def storedMetadataUrl = NS.expand(infoGraph['es:metadata']['@id'] as String).toString()
+
+		infoGraph['es:externalMetadata'] != null
+		infoGraph['es:externalMetadata']['@id'] == metadataUrl
+
+		infoGraph['es:cachedExternalMetadata'] != null
+		infoGraph['es:cachedExternalMetadata']['@id'] == 'store:' + contextId + '/cached-external-metadata/' + entryId
+		def cachedExternalMetadataUrl = NS.expand(infoGraph['es:cachedExternalMetadata']['@id'] as String).toString()
 
 		// fetch external metadata
 		def entryExternalMetaConn = EntryStoreClient.getRequest(cachedExternalMetadataUrl)
