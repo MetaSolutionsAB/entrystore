@@ -39,28 +39,19 @@ public class URISplit {
 	String base;
 	boolean isContext = false;
 
-	/**
-	 * TODO: fix html chars decoding - URI.toString() does not decode the html characters (e.g. '%2F' to '/')
-	 * We can either use (anyURI.getScheme() + ":" + anyURI.getSchemeSpecificPart()) instead of .toString()
-	 * or ideally refactor the URISplit constructor to not accept String of a URI, but instead work on URI objects - e.g. method URI.getPath()
-	 *
-	 * @param anyURI any URI
-	 * @param baseURL ES instance base URL
-	 */
 	public URISplit(URI anyURI, URL baseURL) {
-		this(anyURI.toString(), baseURL);
-	}
 
-	public URISplit(String anyURIString, URL baseURL) {
-		if (baseURL != null) {
+		if (isValidURI(anyURI)) {
 			base = baseURL.toString();
-			if (anyURIString.startsWith(base)) {
-				String withoutBase = anyURIString.substring(base.length());
-				StringTokenizer st = new StringTokenizer(withoutBase, SLASH_DELIMITER);
+			if (anyURI.toString().startsWith(base)) {
+				String anyURIWithoutBase = anyURI.getPath().substring(baseURL.getPath().length());
+				StringTokenizer st = new StringTokenizer(anyURIWithoutBase, SLASH_DELIMITER);
 				contextId = st.nextToken();
 				if (st.hasMoreTokens()) {
 					path = st.nextToken();
-					id = st.nextToken();
+					if (st.hasMoreTokens()) {
+						id = st.nextToken();
+					} else throw new IllegalArgumentException("URI is incompatible with EntryStore");
 				} else {
 					id = contextId;
 					path = RepositoryProperties.DATA_PATH;
@@ -80,6 +71,16 @@ public class URISplit {
 		}
 	}
 
+	private static boolean isValidURI(URI uri) {
+		if (uri == null) {
+			throw new IllegalArgumentException("URI cannot be null");
+		} else if (uri.getScheme() == null) {
+			throw new IllegalArgumentException("URI is malformed or encoded");
+		}
+
+		return true;
+	}
+
 	private static String getBaseContextURIString(String base, String contextId) {
 		if (base != null && contextId != null) {
 			return base.concat(contextId);
@@ -90,7 +91,12 @@ public class URISplit {
 
 	public URI getContextURI() {
 		String context = getBaseContextURIString(base, contextId);
-		return context != null ? URI.create(context) : null;
+		if (context != null) {
+			return URI.create(context);
+
+		}
+
+		return null;
 	}
 
 	public URI getContextMetaMetadataURI() {
@@ -106,23 +112,33 @@ public class URISplit {
 	}
 
 	public URI getResourceURI() {
+
 		return isContext
 			? createURI(base, id)
 			: createURI(base, contextId, RepositoryProperties.DATA_PATH, id);
 	}
 
 	public static URI createURI(String base, String contextId, String path, String entryId) {
-		String uri = getBaseContextURIString(base, contextId);
+		String uriString = getBaseContextURIString(base, contextId);
 
-		if (uri == null || path == null || entryId == null) {
-			log.warn("Parameters must not be null or empty in uri={} path={} entryId={}.", uri, path, entryId);
-			//throw new IllegalArgumentException("Parameters must not be null or empty.");
+		if (uriString == null || path == null || entryId == null) {
+			log.warn("Parameters must not be null or empty in uri={} path={} entryId={}.", uriString, path, entryId);
+			// throw new IllegalArgumentException("Parameters must not be null or empty.");
 		}
 
-		return URI.create(uri + SLASH_DELIMITER + path + SLASH_DELIMITER + entryId);
+		URI uri = URI.create(uriString + SLASH_DELIMITER + path + SLASH_DELIMITER + entryId);
+
+		if (isValidURI(uri)) {
+			return uri;
+		} else throw new IllegalArgumentException("URI is malformed or encoded");
 	}
 
 	public static URI createURI(String base, String contextId) {
-		return URI.create(getBaseContextURIString(base, contextId));
+
+		URI uri = URI.create(base.concat(contextId));
+
+		if (isValidURI(uri)) {
+			return uri;
+		} else throw new IllegalArgumentException("URI is malformed or encoded");
 	}
 }
