@@ -62,7 +62,7 @@ abstract class BaseSpec extends Specification {
 	 */
 	def convertMapToQueryParams(Map<String, String> data) {
 		// should encode all URL params, but that breaks some tests - backend bug?
-		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> k + '=' + v /*URLEncoder.encode(v, UTF_8)*/ }.join('&')
+		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> k + '=' + v /* URLEncoder.encode(v, UTF_8) */ }.join('&')
 	}
 
 	/**
