@@ -83,6 +83,12 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 			argName("LEVEL").
 			build());
 		options.addOption(Option.builder().
+			longOpt("config-property").
+			desc("provide property in addition to the regular configuration file, overrides existing properties in configuration, option can be used multiple times, one per property").
+			hasArgs().
+			valueSeparator('=').
+			build());
+		options.addOption(Option.builder().
 			longOpt("connector-params").
 			desc("comma separated list of parameters to be used for the server connector, " +
 				"the environment variable ENTRYSTORE_CONNECTOR_PARAMS may be used instead. " +
@@ -162,7 +168,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 		component.getClients().add(Protocol.HTTPS);
 		server.getContext().getParameters().add("useForwardedForHeader", "true");
 		Context childContext = component.getContext().createChildContext();
-		EntryStoreApplication esApp = new EntryStoreApplication(config, childContext, component);
+		EntryStoreApplication esApp = new EntryStoreApplication(config, cl.getOptionProperties("config-property"), childContext, component);
 		childContext.getAttributes().put(EntryStoreApplication.KEY, esApp);
 		component.getDefaultHost().attach(esApp);
 

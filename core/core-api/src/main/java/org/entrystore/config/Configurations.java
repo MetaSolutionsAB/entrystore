@@ -24,6 +24,7 @@ import java.net.URL;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Properties;
 
 /**
  * This class consists exclusively of static methods that operate on or return
@@ -543,5 +544,14 @@ public class Configurations {
 				config.setProperty(key, value);
 			}
 		}
+
+		@Override
+		public Properties getProperties() {
+			synchronized (mutex) {
+				return config.getProperties();
+			}
+		}
+
 	}
+
 }

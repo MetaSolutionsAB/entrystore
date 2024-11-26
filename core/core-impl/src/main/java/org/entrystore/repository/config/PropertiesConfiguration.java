@@ -16,10 +16,10 @@
 
 package org.entrystore.repository.config;
 
-import java.time.Duration;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.config.Config;
+import org.entrystore.config.DurationStyle;
 
 import java.awt.*;
 import java.beans.PropertyChangeListener;
@@ -34,11 +34,12 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
-import org.entrystore.config.DurationStyle;
+import java.util.Properties;
 
 /**
  * Wrapper around Java's Properties.
@@ -69,11 +70,11 @@ public class PropertiesConfiguration implements Config {
 	/**
 	 * The main resource in this object. Contains the configuration.
 	 */
-	private SortedProperties config;
+	private final SortedProperties config;
 
-	private PropertyChangeSupport pcs;
+	private final PropertyChangeSupport pcs;
 
-	private String configName;
+	private final String configName;
 
 	private boolean modified = false;
 
@@ -668,4 +669,10 @@ public class PropertiesConfiguration implements Config {
 		Duration duration = DurationStyle.detectAndParse(durationString);
 		return duration;
 	}
+
+	@Override
+	public Properties getProperties() {
+		return this.config;
+	}
+
 }

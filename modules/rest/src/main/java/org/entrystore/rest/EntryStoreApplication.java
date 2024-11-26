@@ -110,6 +110,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Properties;
 import java.util.Set;
 
 /**
@@ -148,6 +149,10 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public EntryStoreApplication(URI configPath, Context parentContext, Component component) {
+		this(configPath, null, parentContext, component);
+	}
+
+	public EntryStoreApplication(URI configPath, Properties configOverride, Context parentContext, Component component) {
 		super(parentContext);
 		Date startupBegin = new Date();
 		this.component = component;
@@ -217,6 +222,10 @@ public class EntryStoreApplication extends Application {
 			}
 
 			Config config = confManager.getConfiguration();
+			if (configOverride != null) {
+				config.getProperties().putAll(configOverride);
+			}
+
 			String baseURI = config.getString(Settings.BASE_URL);
 			if (baseURI == null) {
 				log.error("No Base URI specified, exiting");

@@ -24,6 +24,7 @@ import java.net.URL;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Properties;
 
 /**
  * Methods to handle a configuration. Basically a wrapping interface around
@@ -455,4 +456,7 @@ public interface Config {
 	 *         for instance 10s, 7d. Default is ms.
 	 */
 	Duration getDuration(String key, long defaultValue);
+
+	Properties getProperties();
+
 }
