@@ -110,7 +110,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.Properties;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -152,7 +152,7 @@ public class EntryStoreApplication extends Application {
 		this(configPath, null, parentContext, component);
 	}
 
-	public EntryStoreApplication(URI configPath, Properties configOverride, Context parentContext, Component component) {
+	public EntryStoreApplication(URI configPath, Map<String, String> configOverride, Context parentContext, Component component) {
 		super(parentContext);
 		Date startupBegin = new Date();
 		this.component = component;
