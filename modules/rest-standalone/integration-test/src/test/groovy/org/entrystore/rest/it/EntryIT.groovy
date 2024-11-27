@@ -1403,7 +1403,7 @@ class EntryIT extends BaseSpec {
 		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
 	}
 
-	def "PUT /{context-id}/entry/{entry-id} in ld+json format, should edit the information about the entry"() {
+	def "PUT /{context-id}/entry/{entry-id} with body in json format, should edit the information about the entry"() {
 		given:
 		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'
@@ -1428,12 +1428,14 @@ class EntryIT extends BaseSpec {
 		]]
 
 		when:
-		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId, JsonOutput.toJson(putBody))
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId,
+			JsonOutput.toJson(putBody), 'admin', 'application/json')
 
 		then:
 		editEntryConn.getResponseCode() == HTTP_NO_CONTENT
 
 		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		getEntryConn.getResponseCode() == HTTP_OK
 		getEntryConn.getContentType().contains('application/json')
 		def entryRespJson = JSON_PARSER.parseText(getEntryConn.getInputStream().text)
 		entryRespJson['entryId'] == entryId
@@ -1452,6 +1454,158 @@ class EntryIT extends BaseSpec {
 		entryResources.size() == 1
 		entryResources[0]['type'] == 'uri'
 		entryResources[0]['value'] == resourceUrl + 'v2'
+
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA] != null
+		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
+		entryMetadata.size() == 1
+		entryMetadata[0]['type'] == 'uri'
+		entryMetadata[0]['value'] != null
+		entryMetadata[0]['value'].toString().contains('/store/' + contextId + '/metadata/')
+
+		entryRespJson['metadata'] != null
+		(entryRespJson['metadata'] as Map).keySet().size() == 1
+		def entryMDResourceUrl = (entryRespJson['metadata'] as Map).keySet()[0].toString()
+		entryRespJson['metadata'][entryMDResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
+		def entryMDdcTitles = entryRespJson['metadata'][entryMDResourceUrl][NameSpaceConst.DC_TERM_TITLE].collect()
+		entryMDdcTitles.size() == 1
+		entryMDdcTitles[0]['type'] == 'literal'
+		entryMDdcTitles[0]['value'] == 'local metadata title'
+
+		entryRespJson['cached-external-metadata'] != null
+		entryRespJson['cached-external-metadata'] as Map == [:]
+
+		entryRespJson['rights'] != null
+		entryRespJson['rights'].collect() == ['administer']
+		entryRespJson['relations'] != null
+		entryRespJson['relations'] as Map == [:]
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} in text/turtle format, should edit the information about the entry"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		def putBody = """
+@prefix es: <http://entrystore.org/terms/> .
+
+<http://localhost:8181/store/10/entry/entryForGetTests> a es:LinkReference;
+  es:resource <https://bbc.co.uk/v2> .
+"""
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId, putBody, 'admin', 'text/turtle')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_NO_CONTENT
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		getEntryConn.getResponseCode() == HTTP_OK
+		getEntryConn.getContentType().contains('application/json')
+		def entryRespJson = JSON_PARSER.parseText(getEntryConn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+
+		entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE] != null
+		def entryTypes = entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE].collect()
+		entryTypes.size() == 1
+		entryTypes[0]['type'] == 'uri'
+		entryTypes[0]['value'] == NameSpaceConst.TERM_LINK_REFERENCE
+
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		entryResources.size() == 1
+		entryResources[0]['type'] == 'uri'
+		entryResources[0]['value'] == resourceUrl + '/v2'
+
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA] != null
+		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
+		entryMetadata.size() == 1
+		entryMetadata[0]['type'] == 'uri'
+		entryMetadata[0]['value'] != null
+		entryMetadata[0]['value'].toString().contains('/store/' + contextId + '/metadata/')
+
+		entryRespJson['metadata'] != null
+		(entryRespJson['metadata'] as Map).keySet().size() == 1
+		def entryMDResourceUrl = (entryRespJson['metadata'] as Map).keySet()[0].toString()
+		entryRespJson['metadata'][entryMDResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
+		def entryMDdcTitles = entryRespJson['metadata'][entryMDResourceUrl][NameSpaceConst.DC_TERM_TITLE].collect()
+		entryMDdcTitles.size() == 1
+		entryMDdcTitles[0]['type'] == 'literal'
+		entryMDdcTitles[0]['value'] == 'local metadata title'
+
+		entryRespJson['cached-external-metadata'] != null
+		entryRespJson['cached-external-metadata'] as Map == [:]
+
+		entryRespJson['rights'] != null
+		entryRespJson['rights'].collect() == ['administer']
+		entryRespJson['relations'] != null
+		entryRespJson['relations'] as Map == [:]
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} as non-admin, should not edit the entry"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl + '/v2',
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		def putBody = """
+@prefix es: <http://entrystore.org/terms/> .
+
+<http://localhost:8181/store/10/entry/entryForGetTests> a es:LinkReference;
+  es:resource <https://bbc.co.uk/v3> .
+"""
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId, putBody, '', 'text/turtle')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_UNAUTHORIZED
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		getEntryConn.getResponseCode() == HTTP_OK
+		getEntryConn.getContentType().contains('application/json')
+		def entryRespJson = JSON_PARSER.parseText(getEntryConn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+
+		entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE] != null
+		def entryTypes = entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE].collect()
+		entryTypes.size() == 1
+		entryTypes[0]['type'] == 'uri'
+		entryTypes[0]['value'] == NameSpaceConst.TERM_LINK_REFERENCE
+
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		entryResources.size() == 1
+		entryResources[0]['type'] == 'uri'
+		entryResources[0]['value'] == resourceUrl + '/v2'
 
 		entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA] != null
 		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
