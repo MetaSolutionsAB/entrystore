@@ -86,4 +86,26 @@ class ContextIT extends BaseSpec {
 		responseJson['name'] == 'someName2'
 		responseJson['info'] != null
 	}
+
+	def "POST /_contexts?id={id} should create a new context with specified ID"() {
+		given:
+		def contextId = 'new-context'
+		def params = [id: contextId, graphtype: 'context', name: 'someName3']
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_contexts' + convertMapToQueryParams(params))
+
+		then:
+		connection.getResponseCode() == HTTP_CREATED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson['entryId'] == contextId
+
+		def getConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId + '?includeAll')
+		getConn.getResponseCode() == HTTP_OK
+		getConn.getContentType().contains('application/json')
+		def getResponseJson = JSON_PARSER.parseText(getConn.getInputStream().text)
+		getResponseJson['entryId'] == contextId
+		getResponseJson['info'] != null
+	}
 }
