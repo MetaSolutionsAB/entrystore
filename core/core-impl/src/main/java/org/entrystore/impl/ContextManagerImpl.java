@@ -893,8 +893,15 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 	private Entry getEntry(URI uri, boolean withACL) {
 		URISplit usplit = new URISplit(uri, entry.getRepositoryManager().getRepositoryURL());
+		URI entryURI;
+		try {
+			entryURI = usplit.getMetaMetadataURI();
+		} catch (IllegalArgumentException e) {
+			log.error("Unable to construct entry URI based on likely incorrect URI [{}], error was: {}", uri, e);
+			return null;
+		}
 		if (usplit.getUriType() != URIType.Unknown) {
-			Entry item = cache.getByEntryURI(usplit.getMetaMetadataURI());
+			Entry item = cache.getByEntryURI(entryURI);
 			if (item != null) {
 				if (withACL) {
 					((ContextImpl) item.getContext()).checkAccess(item, AccessProperty.ReadMetadata);
