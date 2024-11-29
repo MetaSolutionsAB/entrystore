@@ -30,6 +30,7 @@ import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.User;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.util.JSONErrorMessages;
+import org.jetbrains.annotations.NotNull;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
@@ -79,45 +80,46 @@ public class ExportResource extends BaseResource {
 				throw new AuthorizationException(getPM().getUser(getPM().getAuthenticatedUserURI()), context.getEntry(), AccessProperty.Administer);
 			}
 
-			boolean metadataOnly = false;
-			if (parameters.containsKey("metadataOnly")) {
-				metadataOnly = true;
-			}
-			
+			boolean metadataOnly = parameters.containsKey("metadataOnly");
+
 			String format = null;
 			if (parameters.containsKey("rdfFormat")) {
 				format = parameters.get("rdfFormat");
 			}
-			
-			Class<? extends RDFWriter> writer = null;
-			if (format == null || RDFFormat.TRIG.getDefaultMIMEType().equals(format)) {
-				writer = TriGWriter.class;
-			} else if (RDFFormat.RDFXML.getDefaultMIMEType().equals(format)) {
-				writer = RDFXMLPrettyWriter.class;
-			} else if (RDFFormat.N3.getDefaultMIMEType().equals(format)) {
-				writer = N3Writer.class;
-			} else if (RDFFormat.TURTLE.getDefaultMIMEType().equals(format)) {
-				writer = TurtleWriter.class;
-			} else if (RDFFormat.TRIX.getDefaultMIMEType().equals(format)) {
-				writer = TriXWriter.class;
-			} else if (RDFFormat.NTRIPLES.getDefaultMIMEType().equals(format)) {
-				writer = NTriplesWriter.class;
-			} else {
-				writer = TriGWriter.class;
-			}
-			
+
+			Class<? extends RDFWriter> writer = determineWriter(format);
 			return getExport(metadataOnly, writer);
 		} catch(AuthorizationException e) {
 			log.error("unauthorizedGET");
 			return unauthorizedGET();
 		}
 	}
-		
+
+	private static @NotNull Class<? extends RDFWriter> determineWriter(String format) {
+		Class<? extends RDFWriter> writer;
+		if (format == null || RDFFormat.TRIG.getDefaultMIMEType().equals(format)) {
+			writer = TriGWriter.class;
+		} else if (RDFFormat.RDFXML.getDefaultMIMEType().equals(format)) {
+			writer = RDFXMLPrettyWriter.class;
+		} else if (RDFFormat.N3.getDefaultMIMEType().equals(format)) {
+			writer = N3Writer.class;
+		} else if (RDFFormat.TURTLE.getDefaultMIMEType().equals(format)) {
+			writer = TurtleWriter.class;
+		} else if (RDFFormat.TRIX.getDefaultMIMEType().equals(format)) {
+			writer = TriXWriter.class;
+		} else if (RDFFormat.NTRIPLES.getDefaultMIMEType().equals(format)) {
+			writer = NTriplesWriter.class;
+		} else {
+			writer = TriGWriter.class;
+		}
+		return writer;
+	}
+
 	private Representation getExport(boolean metadataOnly,  Class<? extends RDFWriter> writer) throws AuthorizationException {
 		Representation result = null;
 		String tmpPrefix = "scam_context_" + contextId + "_export_";
 		try {
-			Set<URI> users = new HashSet<URI>();
+			Set<URI> users = new HashSet<>();
 			
 			// create temp files
 			File tmpExport = File.createTempFile(tmpPrefix, ".zip");
@@ -127,8 +129,8 @@ public class ExportResource extends BaseResource {
 			File tmpProperties = File.createTempFile(tmpPrefix + "info_", ".properties");
 			tmpProperties.deleteOnExit();
 			
-			// write context's triples to an rdf file
-			log.info("Exporting triples of context " + context.getURI());
+			// write context's triples to a rdf file
+			log.info("Exporting triples of context {}", context.getURI());
 			getCM().exportContext(context.getEntry(), tmpTriples, users, metadataOnly, writer);
 			
 			// write export properties to a property file
@@ -188,7 +190,6 @@ public class ExportResource extends BaseResource {
             zeProperties.setMethod(ZipEntry.DEFLATED);
             zipOS.putNextEntry(zeProperties);
             
-            bytesRead = 0;
             is = Files.newInputStream(tmpProperties.toPath());
             while ((bytesRead = is.read(buffer)) != -1) {
             	zipOS.write(buffer, 0, bytesRead);
@@ -214,7 +215,7 @@ public class ExportResource extends BaseResource {
             			}
             		}
             	} else {
-            		log.warn("The data path of context " + contextId + " is not a folder: " + contextFolder);
+					log.warn("The data path of context {} is not a folder: {}", contextId, contextFolder);
             	}
             } else {
             	log.error("No SCAM data folder configured");
@@ -231,14 +232,11 @@ public class ExportResource extends BaseResource {
 			result.getDisposition().setType(Disposition.TYPE_ATTACHMENT);
 			result.getDisposition().setFilename("context_" + contextId + "_export.zip");
 			result.setSize(tmpExport.length());
-		} catch (IOException ioe) {
-			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL, ioe.getMessage());
-			log.error(ioe.getMessage(), ioe);
-		} catch (RepositoryException re) {
-			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL, re.getMessage());
-			log.error(re.getMessage(), re);
+		} catch (IOException | RepositoryException ex) {
+			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL, ex.getMessage());
+			log.error("Exception in getExport(): {}", ex.getMessage(), ex);
 		}
-		
+
 		return result;
 	}
 	
@@ -252,7 +250,7 @@ public class ExportResource extends BaseResource {
 		public void release() {
 			File file = getFile();
 			if (file.exists() && file.isFile() && file.canWrite()) {
-				log.info("Removing temporary export file: " + file);
+				log.info("Removing temporary export file: {}", file);
 				file.delete();
 			}
 			super.release();
