@@ -897,7 +897,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		try {
 			entryURI = usplit.getMetaMetadataURI();
 		} catch (IllegalArgumentException e) {
-			log.error("Unable to construct entry URI based on likely incorrect URI [{}], error was: {}", uri, e);
+			log.error("Unable to construct entry URI based on likely incorrect URI [{}], error was: {}", uri, e.getMessage());
 			return null;
 		}
 		if (usplit.getUriType() != URIType.Unknown) {

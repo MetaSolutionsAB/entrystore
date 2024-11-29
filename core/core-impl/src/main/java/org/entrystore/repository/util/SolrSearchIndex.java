@@ -554,7 +554,7 @@ public class SolrSearchIndex implements SearchIndex {
 					try {
 						entry = cm.getEntry(entryURI);
 					} catch (Exception e) {
-						log.error("Unable to load entry with URI {} due to error: {}", entryURI, e);
+						log.error("Unable to load entry with URI {} due to error: {}", entryURI, e.getMessage());
 						continue;
 					}
 					if (entry == null) {
