@@ -44,7 +44,7 @@ public class URISplit {
 		if (isValidURI(anyURI)) {
 			base = baseURL.toString();
 			if (anyURI.toString().startsWith(base)) {
-				String anyURIWithoutBase = anyURI.getPath().substring(baseURL.getPath().length());
+				String anyURIWithoutBase = anyURI.toString().substring(base.length());
 				StringTokenizer st = new StringTokenizer(anyURIWithoutBase, SLASH_DELIMITER);
 				contextId = st.nextToken();
 				if (st.hasMoreTokens()) {
