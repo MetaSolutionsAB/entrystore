@@ -22,7 +22,9 @@ import org.junit.jupiter.api.Test;
 import java.net.MalformedURLException;
 import java.net.URI;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class URISplitTest {
 
@@ -35,7 +37,8 @@ public class URISplitTest {
 	private static final String resourceURIString = "https://slashdot.org/12/resource/13";
 	private static final String metadataURIString = "https://slashdot.org/12/metadata/13";
 	private static final String unknownURIString = "https://example.org/12/metadata/13";
-	private static final String encodedURIStringPart = "https://slashdot.org/12%2Fentry%2F13";
+	private static final String encodedURIStringPartFail = "https://slashdot.org/12%2Fentry%2F13";
+	private static final String encodedURIStringPart = "https://slashdot.org/12/entry/peter%3Cpan";
 	private static final String encodedURIStringFull = "https%3A%2F%2Fslashdot.org%2F12%2Fentry%2F13";
 	private static final String badURIString1 = ":https://slashdot.org/12/entry/13";
 	private static final String badURIString2 = "https//slashdot.org/12/entry/13:";
@@ -43,11 +46,7 @@ public class URISplitTest {
 
 	@Test
 	public void constructor_badURL() {
-		try {
-			new URISplit(anyURI, URI.create("s://slashdot/").toURL());
-		} catch (MalformedURLException e) {
-			assertEquals(e.getMessage(), "unknown protocol: s");
-		}
+		assertThrows(MalformedURLException.class, () -> new URISplit(anyURI, URI.create("s://slashdot/").toURL()));
 	}
 
 	@Disabled("To be discussed")
@@ -69,52 +68,57 @@ public class URISplitTest {
 	@Test
 	public void constructor_ok() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(anyURI, URI.create(anyURIStringBase).toURL());
-		assertEquals(uriSplit.getBase(), anyURIStringBase);
-		assertEquals(uriSplit.getContextId(), "_contexts");
+		assertEquals(anyURIStringBase, uriSplit.getBase());
+		assertEquals("_contexts", uriSplit.getContextId());
 		assertEquals(uriSplit.getMetadataURI(), URI.create("https://slashdot.org/_contexts/metadata/example"));
 		assertEquals(uriSplit.getMetaMetadataURI(), URI.create("https://slashdot.org/_contexts/entry/example"));
-		assertEquals(uriSplit.getUriType(), URIType.Resource);
-		assertEquals(uriSplit.getPath(), "resource");
+		assertEquals(URIType.Resource, uriSplit.getUriType());
+		assertEquals("resource", uriSplit.getPath());
 		assertEquals(uriSplit.getContextURI(), URI.create("https://slashdot.org/_contexts"));
 		assertEquals(uriSplit.getContextMetaMetadataURI(), URI.create("https://slashdot.org/_contexts/entry/_contexts"));
-		assertEquals(uriSplit.getResourceURI(), anyURI);
+		assertEquals(anyURI, uriSplit.getResourceURI());
 		assertEquals(URISplit.createURI(uriSplit.getBase(), uriSplit.getContextId(), uriSplit.getPath(), uriSplit.getId()), URI.create("https://slashdot.org/_contexts/resource/example"));
 	}
 
 	@Test
 	public void constructor_resource() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(resourceURIString), URI.create(anyURIStringBase).toURL());
-		assertEquals(uriSplit.getUriType(), URIType.Resource);
+		assertEquals(URIType.Resource, uriSplit.getUriType());
 	}
 
 	@Test
 	public void constructor_baseWithPort() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(entryURIStringWithPort), URI.create(anyURIStringBaseWithPort).toURL());
-		assertEquals(uriSplit.getUriType(), URIType.MetaMetadata);
+		assertEquals(URIType.MetaMetadata, uriSplit.getUriType());
 	}
 
 	@Test
 	public void constructor_metaMetadata() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(entryURIString), URI.create(anyURIStringBase).toURL());
-		assertEquals(uriSplit.getUriType(), URIType.MetaMetadata);
+		assertEquals(URIType.MetaMetadata, uriSplit.getUriType());
 	}
 
 	@Test
 	public void constructor_metadata() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(metadataURIString), URI.create(anyURIStringBase).toURL());
-		assertEquals(uriSplit.getUriType(), URIType.Metadata);
+		assertEquals(URIType.Metadata, uriSplit.getUriType());
 	}
 
 	@Test
 	public void constructor_unknown() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(unknownURIString), URI.create(anyURIStringBase).toURL());
-		assertEquals(uriSplit.getUriType(), URIType.Unknown);
+		assertEquals(URIType.Unknown, uriSplit.getUriType());
+	}
+
+	@Test
+	public void constructor_encodedPartFail() {
+		assertThrows(IllegalArgumentException.class, () -> new URISplit(URI.create(encodedURIStringPartFail), URI.create(anyURIStringBase).toURL()));
 	}
 
 	@Test
 	public void constructor_encodedPart() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(encodedURIStringPart), URI.create(anyURIStringBase).toURL());
-		assertEquals(uriSplit.getUriType(), URIType.MetaMetadata);
+		assertEquals(URIType.MetaMetadata, uriSplit.getUriType());
 	}
 
 	@Test
@@ -135,7 +139,7 @@ public class URISplitTest {
 	@Test
 	public void constructor_goodURI1() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(goodURIString1), URI.create(anyURIStringBase).toURL());
-		assertEquals(uriSplit.getUriType(), URIType.Unknown);
+		assertEquals(URIType.Unknown, uriSplit.getUriType());
 	}
 
 	@Test

@@ -31,6 +31,7 @@ public class URISplit {
 	private static final Logger log = LoggerFactory.getLogger(URISplit.class);
 
 	private static final String SLASH_DELIMITER = "/";
+	private static final String URI_REGEX = "^_?[a-zA-Z0-9]+/?";
 
 	URIType uriType;
 	String contextId;
@@ -52,12 +53,15 @@ public class URISplit {
 					if (st.hasMoreTokens()) {
 						id = st.nextToken();
 					} else throw new IllegalArgumentException("URI is incompatible with EntryStore");
+				} else if (!anyURIWithoutBase.matches(URI_REGEX)) {
+					throw new IllegalArgumentException("URI is malformed or encoded");
 				} else {
 					id = contextId;
 					path = RepositoryProperties.DATA_PATH;
 					contextId = RepositoryProperties.SYSTEM_CONTEXTS_ID;
 					isContext = true;
 				}
+
 				if (path.equals(RepositoryProperties.ENTRY_PATH)) {
 					uriType = URIType.MetaMetadata;
 				} else if (path.equals(RepositoryProperties.MD_PATH)) {
