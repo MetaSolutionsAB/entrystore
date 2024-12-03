@@ -9,6 +9,7 @@ import java.util.zip.ZipInputStream
 
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ContextExportIT extends BaseSpec {
 
@@ -32,6 +33,14 @@ class ContextExportIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "GET /{context-id}/export as non-admin on existing context should return Unauthorized 401 response"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/' + contextId + '/export', '')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "GET /{context-id}/export should return context data in Trig format inside a zip-file"() {
