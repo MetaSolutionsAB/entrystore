@@ -64,7 +64,6 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -314,27 +313,27 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	public void importContext(Entry contextEntry, File srcFile) throws RepositoryException, IOException {
 		Date before = new Date();
 
-		File unzippedDir = FileOperations.createTempDirectory("scam_import", null);
+		File unzippedDir = FileOperations.createTempDirectory("entrystore_import", null);
 		FileOperations.unzipFile(srcFile, unzippedDir);
 
 		File propFile = new File(unzippedDir, "export.properties");
 		log.info("Loading property file from {}", propFile);
 		Properties props = new Properties();
 		props.load(Files.newInputStream(propFile.toPath()));
-		String srcScamBaseURI = props.getProperty("scamBaseURI");
+		String srcBaseURI = props.getProperty("baseURI");
 		String srcContextEntryURI = props.getProperty("contextEntryURI");
 		String srcContextResourceURI = props.getProperty("contextResourceURI");
 		String srcContextMetadataURI = props.getProperty("contextMetadataURI");
 		String srcContextRelationURI = props.getProperty("contextRelationURI");
 		String srcContainedUsers = props.getProperty("containedUsers");
 
-		if (srcScamBaseURI == null || srcContextEntryURI == null || srcContextResourceURI == null || srcContainedUsers == null) {
+		if (srcBaseURI == null || srcContextEntryURI == null || srcContextResourceURI == null || srcContainedUsers == null) {
 			String msg = "Property file of import ZIP did not contain all necessary properties, aborting import";
 			log.error(msg);
 			throw new org.entrystore.repository.RepositoryException(msg);
 		}
 
-		log.info("scamBaseURI: {}", srcScamBaseURI);
+		log.info("baseURI: {}", srcBaseURI);
 		log.info("contextEntryURI: {}", srcContextEntryURI);
 		log.info("contextResourceURI: {}", srcContextResourceURI);
 		log.info("contextMetadataURI: {}", srcContextMetadataURI);
@@ -405,9 +404,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				parser.getParserConfig().set(BasicParserSettings.VERIFY_DATATYPE_VALUES, false);
 				StatementCollector collector = new StatementCollector();
 				parser.setRDFHandler(collector);
-				parser.parse(rdfInput, srcScamBaseURI);
+				parser.parse(rdfInput, srcBaseURI);
 
-				String oldBaseURI = srcScamBaseURI;
+				String oldBaseURI = srcBaseURI;
 				if (!oldBaseURI.endsWith("/")) {
 					oldBaseURI += "/";
 				}
@@ -666,7 +665,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					} else if (e.getEntryType() == EntryType.Local && e.getGraphType() == GraphType.None
 							&& e.getResourceType() == ResourceType.InformationResource) {
 						// File dataFolder = new
-						// File(entry.getRepositoryManager().getConfiguration().getString(Settings.SCAM_DATA_FOLDER));
+						// File(entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER));
 						// TODO Spara undan filen som ligger i entryt.
 						// Det som står här under stämmer inte.
 						// String id = new URISplit(uri,
@@ -724,12 +723,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			InputStream fileOut = Files.newInputStream(new File(folder, "portfolio-index.rdf").toPath());
 			InputStream fileOut2 = Files.newInputStream(new File(folder,  "portfolio-entries.rdf").toPath());
 
-			String base = entry.getRepositoryManager().getConfiguration().getString(Settings.BASE_URL, "http://scam4.org");
+			String base = entry.getRepositoryManager().getConfiguration().getString(Settings.BASE_URL, "https://entrystore.org");
 
 			trigParser.parse(fileOut, base);
 			fileOut.close();
-			RepositoryConnection conn = entry.getRepository().getConnection();
-			try {
+			try (RepositoryConnection conn = entry.getRepository().getConnection()) {
 				for (Statement s : collector.getStatements()) {
 					conn.add(s);
 				}
@@ -739,17 +737,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				for (Statement s : collector.getStatements()) {
 					conn.add(s);
 				}
-			} finally {
-				conn.close();
 			}
-
-		} catch (FileNotFoundException e) {
-			log.error(e.getMessage());
-		} catch (RDFHandlerException e) {
-			log.error(e.getMessage());
-		} catch (RDFParseException e) {
-			log.error(e.getMessage());
-		} catch (IOException e) {
+		} catch (RDFHandlerException | RDFParseException | IOException e) {
 			log.error(e.getMessage());
 		} catch (RepositoryException e) {
 			log.error(e.getMessage(), e);
