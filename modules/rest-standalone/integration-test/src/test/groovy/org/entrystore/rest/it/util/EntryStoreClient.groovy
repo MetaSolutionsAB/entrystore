@@ -40,9 +40,11 @@ class EntryStoreClient {
 		}
 		connection.setRequestMethod('POST')
 		connection.setRequestProperty('Content-Type', contentType)
-		connection.setDoOutput(true)
-		connection.getOutputStream().write(body.getBytes())
-		connection.connect()
+		if (body != null) {
+			connection.setDoOutput(true)
+			connection.getOutputStream().write(body.getBytes())
+			connection.connect()
+		}
 		return connection
 	}
 

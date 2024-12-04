@@ -32,7 +32,7 @@ abstract class BaseSpec extends Specification {
 	/**
 	 * Fetches requested context by given ID, if it does not exist then creates a new context with that ID.
 	 * Expects contextId to be present in the `data` argument.
-	 * @param data
+	 * @param data Map with required param `contextId`, optional param `name`
 	 * @return
 	 */
 	def getOrCreateContext(Map data) {

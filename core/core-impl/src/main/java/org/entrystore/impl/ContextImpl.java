@@ -743,8 +743,12 @@ public class ContextImpl extends ResourceImpl implements Context {
 			if (split == null || !this.id.equals(split.getContextId())) {
 				return null;
 			}
-			newEntry = new EntryImpl(split.getId(), this, this.entry.repositoryManager, this.entry.getRepository());
-			if (newEntry.load(rc)) {
+			try {
+				newEntry = new EntryImpl(split.getId(), this, this.entry.repositoryManager, this.entry.getRepository());
+			} catch (IllegalArgumentException iae) {
+				log.error("Error when creating entry object: {}", iae.getMessage());
+			}
+			if (newEntry != null && newEntry.load(rc)) {
 				if(newEntry.getEntryType() == EntryType.Local) {
 					initResource(newEntry);
 				}
