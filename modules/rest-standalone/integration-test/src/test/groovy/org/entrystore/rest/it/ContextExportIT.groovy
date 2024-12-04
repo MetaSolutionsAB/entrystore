@@ -70,7 +70,7 @@ class ContextExportIT extends BaseSpec {
 
 		exportedZip['export.properties'].contains('containedUsers=_admin\\:admin,')
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
-		exportedZip['export.properties'].contains('scamBaseURI=http\\://localhost\\:8181/store/')
+		exportedZip['export.properties'].contains('baseURI=http\\://localhost\\:8181/store/')
 		exportedZip['export.properties'].contains('exportDate=')
 	}
 
@@ -99,7 +99,7 @@ class ContextExportIT extends BaseSpec {
 
 		exportedZip['export.properties'].contains('containedUsers=_admin\\:admin,')
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
-		exportedZip['export.properties'].contains('scamBaseURI=http\\://localhost\\:8181/store/')
+		exportedZip['export.properties'].contains('baseURI=http\\://localhost\\:8181/store/')
 		exportedZip['export.properties'].contains('exportDate=')
 	}
 
@@ -150,7 +150,7 @@ class ContextExportIT extends BaseSpec {
 
 		exportedZip['export.properties'].contains('containedUsers=_admin\\:admin,')
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
-		exportedZip['export.properties'].contains('scamBaseURI=http\\://localhost\\:8181/store/')
+		exportedZip['export.properties'].contains('baseURI=http\\://localhost\\:8181/store/')
 		exportedZip['export.properties'].contains('exportDate=')
 	}
 }
