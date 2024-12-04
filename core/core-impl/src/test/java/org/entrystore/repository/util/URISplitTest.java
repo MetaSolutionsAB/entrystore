@@ -43,6 +43,8 @@ public class URISplitTest {
 	private static final String badURIString1 = ":https://slashdot.org/12/entry/13";
 	private static final String badURIString2 = "https//slashdot.org/12/entry/13:";
 	private static final String goodURIString1 = "urn:oasis:names:specification:docbook:dtd:xml:4.1.2";
+	private static final String goodURIString2 = "https://slashdot.org:8081/store/context-export";
+	private static final String goodURIString3 = "https://slashdot.org:8081/store/new-context";
 
 	@Test
 	public void constructor_badURL() {
@@ -139,6 +141,18 @@ public class URISplitTest {
 	@Test
 	public void constructor_goodURI1() throws MalformedURLException {
 		URISplit uriSplit = new URISplit(URI.create(goodURIString1), URI.create(anyURIStringBase).toURL());
+		assertEquals(URIType.Unknown, uriSplit.getUriType());
+	}
+
+	@Test
+	public void constructor_goodURI2() throws MalformedURLException {
+		URISplit uriSplit = new URISplit(URI.create(goodURIString2), URI.create(anyURIStringBase).toURL());
+		assertEquals(URIType.Unknown, uriSplit.getUriType());
+	}
+
+	@Test
+	public void constructor_goodURI3() throws MalformedURLException {
+		URISplit uriSplit = new URISplit(URI.create(goodURIString3), URI.create(anyURIStringBase).toURL());
 		assertEquals(URIType.Unknown, uriSplit.getUriType());
 	}
 
