@@ -64,7 +64,6 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -76,7 +75,6 @@ import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -147,7 +145,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			RepositoryConnection rc = null;
 
 			try {
-				log.info("Removing context " + contextURI + " from index");
+				log.info("Removing context {} from index", contextURI);
 				remove(contextURI);
 
 				rc = entry.getRepository().getConnection();
@@ -176,7 +174,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				String baseURIStr = baseURI.toString();
 
 				// remove all triples belonging to the context
-				log.info("Removing triples contained in context " + contextURI);
+				log.info("Removing triples contained in context {}", contextURI);
 				rc.remove(rc.getStatements(null, null, null, false, filteredNGsArray));
 				rc.remove(rc.getStatements(null, null, contextURISesame, false));
 				rc.remove(rc.getStatements(contextURISesame, null, null, false));
@@ -196,11 +194,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	            	File contextPathFile = new File(contextPath);
 	            	File contextFolder = new File(contextPathFile, contextId);
 	            	if (contextFolder.exists() && contextFolder.isDirectory() && contextFolder.canWrite()) {
-	            		log.info("Removing all local files referenced by context " + contextURI);
+						log.info("Removing all local files referenced by context {}", contextURI);
 	            		FileOperations.deleteAllFilesInDir(contextFolder);
 	            		contextFolder.delete();
 	            	} else {
-	            		log.error("The data path of context " + contextId + " is not a folder or not writable: " + contextFolder);
+						log.error("The data path of context {} is not a folder or not writable: {}", contextId, contextFolder);
 	            	}
 	            } else {
 	            	log.error("No data folder configured");
@@ -263,7 +261,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				RDFHandler rdfWriter = null;
 				try {
 					Constructor<? extends RDFWriter> constructor = writer.getConstructor(OutputStream.class);
-					rdfWriter = (RDFWriter) constructor.newInstance(out);
+					rdfWriter = constructor.newInstance(out);
 				} catch (Exception e) {
 					log.error(e.getMessage());
 				}
@@ -315,35 +313,35 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	public void importContext(Entry contextEntry, File srcFile) throws RepositoryException, IOException {
 		Date before = new Date();
 
-		File unzippedDir = FileOperations.createTempDirectory("scam_import", null);
+		File unzippedDir = FileOperations.createTempDirectory("entrystore_import", null);
 		FileOperations.unzipFile(srcFile, unzippedDir);
 
 		File propFile = new File(unzippedDir, "export.properties");
-		log.info("Loading property file from " + propFile.toString());
+		log.info("Loading property file from {}", propFile);
 		Properties props = new Properties();
 		props.load(Files.newInputStream(propFile.toPath()));
-		String srcScamBaseURI = props.getProperty("scamBaseURI");
+		String srcBaseURI = props.getProperty("baseURI");
 		String srcContextEntryURI = props.getProperty("contextEntryURI");
 		String srcContextResourceURI = props.getProperty("contextResourceURI");
 		String srcContextMetadataURI = props.getProperty("contextMetadataURI");
 		String srcContextRelationURI = props.getProperty("contextRelationURI");
 		String srcContainedUsers = props.getProperty("containedUsers");
 
-		if (srcScamBaseURI == null || srcContextEntryURI == null || srcContextResourceURI == null || srcContainedUsers == null) {
+		if (srcBaseURI == null || srcContextEntryURI == null || srcContextResourceURI == null || srcContainedUsers == null) {
 			String msg = "Property file of import ZIP did not contain all necessary properties, aborting import";
 			log.error(msg);
 			throw new org.entrystore.repository.RepositoryException(msg);
 		}
 
-		log.info("scamBaseURI: " + srcScamBaseURI);
-		log.info("contextEntryURI: " + srcContextEntryURI);
-		log.info("contextResourceURI: " + srcContextResourceURI);
-		log.info("contextMetadataURI: " + srcContextMetadataURI);
-		log.info("contextRelationURI: " + srcContextRelationURI);
-		log.info("containedUsers: " + srcContainedUsers);
+		log.info("baseURI: {}", srcBaseURI);
+		log.info("contextEntryURI: {}", srcContextEntryURI);
+		log.info("contextResourceURI: {}", srcContextResourceURI);
+		log.info("contextMetadataURI: {}", srcContextMetadataURI);
+		log.info("contextRelationURI: {}", srcContextRelationURI);
+		log.info("containedUsers: {}", srcContainedUsers);
 
-		List<String> containedUsers = Arrays.asList(srcContainedUsers.split(","));
-		Map<String, String> id2name = new HashMap<String, String>();
+		String[] containedUsers = srcContainedUsers.split(",");
+		Map<String, String> id2name = new HashMap<>();
 		for (String u : containedUsers) {
 			String[] uS = u.split(":");
 			if (uS.length == 1) {
@@ -361,7 +359,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		for (URI entryURI : entries) {
 			String eId = cont.getByEntryURI(entryURI).getId();
 			if (!eId.startsWith("_")) {
-				log.info("Removing " + entryURI);
+				log.info("Removing {}", entryURI);
 				try {
 					cont.remove(entryURI);
 				} catch (DisallowedException de) {
@@ -380,7 +378,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		if (resourceDir != null && resourceDir.exists() && resourceDir.isDirectory()) {
 			for (File src : resourceDir.listFiles()) {
 				File dst = new File(dstDir, src.getName());
-				log.info("Copying " + src + " to " + dst);
+				log.info("Copying {} to {}", src, dst);
 				FileOperations.copyFile(src, dst);
 			}
 		}
@@ -390,7 +388,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		long amountTriples = 0;
 		long importedTriples = 0;
 		File tripleFile = new File(unzippedDir, "triples.rdf");
-		log.info("Loading quadruples from " + tripleFile.toString());
+		log.info("Loading quadruples from {}", tripleFile);
 		InputStream rdfInput = new BufferedInputStream(Files.newInputStream(tripleFile.toPath()));
 
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
@@ -406,9 +404,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				parser.getParserConfig().set(BasicParserSettings.VERIFY_DATATYPE_VALUES, false);
 				StatementCollector collector = new StatementCollector();
 				parser.setRDFHandler(collector);
-				parser.parse(rdfInput, srcScamBaseURI);
+				parser.parse(rdfInput, srcBaseURI);
 
-				String oldBaseURI = srcScamBaseURI;
+				String oldBaseURI = srcBaseURI;
 				if (!oldBaseURI.endsWith("/")) {
 					oldBaseURI += "/";
 				}
@@ -432,18 +430,18 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					newContextNS += "/";
 				}
 
-				log.info("Old context ID: " + oldContextID);
-				log.info("New context ID: " + newContextID);
-				log.info("Old context resource URI: " + oldContextResourceURI);
-				log.info("New context resource URI: " + contextEntry.getResourceURI().toString());
-				log.info("Old context entry URI: " + oldContextEntryURI);
-				log.info("New context entry URI: " + contextEntry.getEntryURI().toString());
-				log.info("Old context metadata URI: " + oldContextMetadataURI);
-				log.info("New context metadata URI: " + contextEntry.getLocalMetadataURI().toString());
-				log.info("Old context relation URI: " + oldContextRelationURI);
-				log.info("New context relation URI: " + contextEntry.getRelationURI().toString());
+				log.info("Old context ID: {}", oldContextID);
+				log.info("New context ID: {}", newContextID);
+				log.info("Old context resource URI: {}", oldContextResourceURI);
+				log.info("New context resource URI: {}", contextEntry.getResourceURI().toString());
+				log.info("Old context entry URI: {}", oldContextEntryURI);
+				log.info("New context entry URI: {}", contextEntry.getEntryURI().toString());
+				log.info("Old context metadata URI: {}", oldContextMetadataURI);
+				log.info("New context metadata URI: {}", contextEntry.getLocalMetadataURI().toString());
+				log.info("Old context relation URI: {}", oldContextRelationURI);
+				log.info("New context relation URI: {}", contextEntry.getRelationURI().toString());
 
-				// iterate over all statements and add them to the reposivory
+				// iterate over all statements and add them to the repository
 
 				ValueFactory vf = rc.getValueFactory();
 				for (Statement s : collector.getStatements()) {
@@ -464,8 +462,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 							predicate.equals(RepositoryProperties.Write) ||
 							predicate.equals(RepositoryProperties.DeletedBy)) {
 						String oldUserID = object.stringValue().substring(object.stringValue().lastIndexOf("/") + 1);
-						log.info("Old user URI: " + object);
-						log.info("Old user ID: " + oldUserID);
+						log.info("Old user URI: {}", object);
+						log.info("Old user ID: {}", oldUserID);
 						String oldUserName = id2name.get(oldUserID);
 						URI newUserURI = null;
 						Entry pE = null;
@@ -478,11 +476,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 							newUserURI = pE.getResourceURI();
 						}
 						if (newUserURI == null) {
-							log.info("Unable to detect principal for ID " + oldUserID + ", skipping");
+							log.info("Unable to detect principal for ID {}, skipping", oldUserID);
 							continue;
 						}
 						object = vf.createIRI(newUserURI.toString());
-						log.info("Created principal URI for user " + oldUserID + ":" + oldUserName + ": " + object.stringValue());
+						log.info("Created principal URI for user {}:{}: {}", oldUserID, oldUserName, object.stringValue());
 					}
 
 					if (subject instanceof IRI) {
@@ -541,10 +539,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					Statement newStmnt = vf.createStatement(subject, predicate, object, context);
 					if (!rc.hasStatement(newStmnt, false, context)) {
 						importedTriples++;
-						log.info("Adding statement to repository: " + newStmnt.toString());
+						log.info("Adding statement to repository: {}", newStmnt.toString());
 						rc.add(newStmnt, context);
 					} else {
-						log.warn("Statement already exists, skipping: " + newStmnt.toString());
+						log.warn("Statement already exists, skipping: {}", newStmnt.toString());
 					}
 				}
 
@@ -572,12 +570,12 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		// reindex the context to get everything reloaded
 
-		log.info("Reindexing " + cont.getEntry().getEntryURI());
+		log.info("Reindexing {}", cont.getEntry().getEntryURI());
 		cont.reIndex();
 
-		log.info("Import finished in " + (new Date().getTime() - before.getTime()) + " ms");
-		log.info("Imported " + importedTriples + " triples");
-		log.info("Skipped " + (amountTriples - importedTriples) + " triples");
+		log.info("Import finished in {} ms", new Date().getTime() - before.getTime());
+		log.info("Imported {} triples", importedTriples);
+		log.info("Skipped {} triples", amountTriples - importedTriples);
 	}
 
 	/** FIXME: rewrite
@@ -604,7 +602,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			String content1 = FileUtils.readFileToString(file);
 			String content2 = FileUtils.readFileToString(file2);
 
-			return new String(content1 + content2);
+			return content1 + content2;
 
 		}catch (IOException e) {
 			log.error(e.getMessage());
@@ -667,7 +665,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					} else if (e.getEntryType() == EntryType.Local && e.getGraphType() == GraphType.None
 							&& e.getResourceType() == ResourceType.InformationResource) {
 						// File dataFolder = new
-						// File(entry.getRepositoryManager().getConfiguration().getString(Settings.SCAM_DATA_FOLDER));
+						// File(entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER));
 						// TODO Spara undan filen som ligger i entryt.
 						// Det som står här under stämmer inte.
 						// String id = new URISplit(uri,
@@ -725,12 +723,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			InputStream fileOut = Files.newInputStream(new File(folder, "portfolio-index.rdf").toPath());
 			InputStream fileOut2 = Files.newInputStream(new File(folder,  "portfolio-entries.rdf").toPath());
 
-			String base = entry.getRepositoryManager().getConfiguration().getString(Settings.BASE_URL, "http://scam4.org");
+			String base = entry.getRepositoryManager().getConfiguration().getString(Settings.BASE_URL, "https://entrystore.org");
 
 			trigParser.parse(fileOut, base);
 			fileOut.close();
-			RepositoryConnection conn = entry.getRepository().getConnection();
-			try {
+			try (RepositoryConnection conn = entry.getRepository().getConnection()) {
 				for (Statement s : collector.getStatements()) {
 					conn.add(s);
 				}
@@ -740,21 +737,11 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				for (Statement s : collector.getStatements()) {
 					conn.add(s);
 				}
-			} finally {
-				conn.close();
 			}
-
-		} catch (FileNotFoundException e) {
-			log.error(e.getMessage());
-		} catch (RDFHandlerException e) {
-			log.error(e.getMessage());
-		} catch (RDFParseException e) {
-			log.error(e.getMessage());
-		} catch (IOException e) {
+		} catch (RDFHandlerException | RDFParseException | IOException e) {
 			log.error(e.getMessage());
 		} catch (RepositoryException e) {
-			e.printStackTrace();
-			log.error(e.getMessage());
+			log.error(e.getMessage(), e);
 		}
 
 	}
@@ -786,9 +773,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 
 	public String getContextBackupFolder(URI contexturi, String date) {
-		String timestampStr = date;
 		File backupFolder = new File(getContextBackupFolder(contexturi));
-		File datedFolder = new File(backupFolder, timestampStr);
+		File datedFolder = new File(backupFolder, date);
 
 		return datedFolder.toString();
 	}
@@ -866,7 +852,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			if (entry.getGraphType() == GraphType.Context ||
 					entry.getGraphType() == GraphType.SystemContext) {
 				Resource context = entry.getResource();
-				if (context != null && context instanceof Context) {
+				if (context instanceof Context) {
 					return (Context) context;
 				}
 			}
@@ -912,7 +898,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			if (contextEntry != null) {
 				return ((Context) contextEntry.getResource()).getByEntryURI(usplit.getMetaMetadataURI());
 			} else {
-				log.warn("No context found for Entry with URI " + uri);
+				log.warn("No context found for Entry with URI {}", uri);
 			}
 		}
 		return null;

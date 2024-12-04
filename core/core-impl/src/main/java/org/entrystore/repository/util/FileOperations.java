@@ -351,13 +351,13 @@ public class FileOperations {
 		ZipInputStream zis = new ZipInputStream(bis);
 		ZipEntry entry;
 		while ((entry = zis.getNextEntry()) != null) {
-			log.debug("Extracting file: " + entry.getName());
+			log.debug("Extracting file: {}", entry.getName());
 			int count;
 			byte data[] = new byte[BUFFER_SIZE];
 			File unzippedFile = new File(destination, entry.getName());
 			File parentDir = unzippedFile.getParentFile();
 			if (!parentDir.exists()) {
-				log.debug("Creating directory: " + parentDir);
+				log.debug("Creating directory: {}", parentDir);
 				parentDir.mkdirs();
 			}
 			OutputStream fos = Files.newOutputStream(unzippedFile.toPath());

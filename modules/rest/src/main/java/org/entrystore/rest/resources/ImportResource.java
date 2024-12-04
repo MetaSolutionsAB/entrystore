@@ -59,15 +59,15 @@ public class ImportResource extends BaseResource {
 	@Post
 	public void acceptRepresentation(Representation r) {
 		try {
-			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
-				throw new AuthorizationException(getPM().getUser(getPM().getAuthenticatedUserURI()), context.getEntry(), AccessProperty.Administer);
-			}
-			
 			if (context == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
-			
+
+			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
+				throw new AuthorizationException(getPM().getUser(getPM().getAuthenticatedUserURI()), context.getEntry(), AccessProperty.Administer);
+			}
+
 			File tmpFile = null;
 			try {
 				String version = this.parameters.get("version");
