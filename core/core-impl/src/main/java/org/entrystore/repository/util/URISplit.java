@@ -31,7 +31,7 @@ public class URISplit {
 	private static final Logger log = LoggerFactory.getLogger(URISplit.class);
 
 	private static final String SLASH_DELIMITER = "/";
-	private static final String URI_REGEX = "^_?[a-zA-Z0-9]+/?";
+	private static final String URI_REGEX = "^_?[a-zA-Z0-9-_]+/?";
 
 	URIType uriType;
 	String contextId;
