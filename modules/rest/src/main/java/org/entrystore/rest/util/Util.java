@@ -19,6 +19,7 @@ package org.entrystore.rest.util;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Entry;
 import org.entrystore.rest.EntryStoreApplication;
 import org.json.JSONException;
@@ -31,10 +32,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.servlet.ServletContext;
+import java.net.URLDecoder;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 
 /**
@@ -119,16 +123,14 @@ public class Util {
 
 		int r = request.lastIndexOf("?");
 		String req = request.substring(r + 1);
-		String[] arguments = req.split("&");
+		String[] arguments = StringUtils.split(req, '&');
 
 		try {
-			for (int i = 0; i < arguments.length; i++) {
-				if (arguments[i].contains("=")) {
-					String[] elements = arguments[i].split("=");
-					argsAndVal.put(elements[0], elements.length == 1 ? "" : elements[1]);
-				} else {
-					argsAndVal.put(arguments[i], "");
-				}
+			for (String argument : arguments) {
+				String[] elements = StringUtils.split(argument, '=');
+				// URLDecoder is for application/x-www-form-urlencoded decoding, which is not exact with URL params decoding
+				// (includes '+' to 'space' replacement), hence need to replace '+' with '%2B'
+				argsAndVal.put(elements[0], elements.length == 1 ? "" : URLDecoder.decode(elements[1].replace("+", "%2B"), UTF_8));
 			}
 		} catch (IndexOutOfBoundsException e) {
 			// special case!

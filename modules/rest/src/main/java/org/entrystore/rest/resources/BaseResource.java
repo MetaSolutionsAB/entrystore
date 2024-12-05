@@ -88,11 +88,11 @@ public abstract class BaseResource extends ServerResource {
 		contextId = (String) request.getAttributes().get("context-id");
 		if (getCM() != null && contextId != null) {
 			if (getReservedNames().contains(contextId.toLowerCase())) {
-				log.error("Context ID is a reserved term and must not be used: \"" + contextId + "\". This error is likely to be caused by an error in the REST routing.");
+				log.error("Context ID is a reserved term and must not be used: \"{}\". This error is likely to be caused by an error in the REST routing.", contextId);
 			} else {
 				context = getCM().getContext(contextId);
 				if (context == null) {
-					log.info("There is no context " + contextId);
+					log.info("There is no context {}", contextId);
 				}
 			}
 		}
@@ -101,17 +101,15 @@ public abstract class BaseResource extends ServerResource {
 		if (context != null && entryId != null) {
 			entry = context.get(entryId);
 			if (entry == null) {
-				log.info("There is no entry " + entryId + " in context " + contextId);
+				log.info("There is no entry {} in context {}", entryId, contextId);
 			}
 		}
 
-		if (parameters.containsKey("format")) {
-			String format = parameters.get("format");
-			if (format != null) {
-				// workaround for URL-decoded pluses (space) in MIME-type names, e.g. ld+json
-				format = format.replaceAll(" ", "+");
-				this.format = new MediaType(format);
-			}
+		String format = parameters.get("format");
+		if (format != null) {
+			// workaround for URL-decoded pluses (space) in MIME-type names, e.g. ld+json
+			format = format.replace(' ', '+');
+			this.format = new MediaType(format);
 		}
 
 		Util.handleIfUnmodifiedSince(entry, getRequest());
@@ -213,7 +211,7 @@ public abstract class BaseResource extends ServerResource {
 		log.info("Unauthorized GET");
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 
-		List<MediaType> supportedMediaTypes = new ArrayList<MediaType>();
+		List<MediaType> supportedMediaTypes = new ArrayList<>();
 		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
 		MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
 		if (MediaType.APPLICATION_JSON.equals(preferredMediaType)) {
@@ -247,16 +245,14 @@ public abstract class BaseResource extends ServerResource {
 		}
 	}
 
-
 	protected Representation createEmptyRepresentationWithLastModified(Date modificationDate) {
 		Representation result = new EmptyRepresentation();
 		if (modificationDate != null) {
 			result.setModificationDate(modificationDate);
 			result.setTag(Util.createTag(modificationDate));
 		} else {
-			log.warn("Last-Modified header could not be set because the entry does not have a modification date: " + entry.getEntryURI());
+			log.warn("Last-Modified header could not be set because the entry does not have a modification date: {}", entry.getEntryURI());
 		}
 		return result;
 	}
-
 }

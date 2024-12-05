@@ -25,4 +25,18 @@ class UtilTest {
 				.hasSize(5)
 				.isEqualTo(expected);
 	}
+
+	@Test
+	void parseRequest2() {
+
+		Map<String, String> expected = Map.of(
+				"rdfFormat", "application/ld+json",
+				"includeAll", "");
+
+		HashMap<String, String> params = Util.parseRequest("rdfFormat=application/ld+json&includeAll");
+
+		assertThat(params)
+				.hasSize(2)
+				.isEqualTo(expected);
+	}
 }
