@@ -23,7 +23,7 @@ public class Benchmark {
 			config.addProperty(Settings.STORE_INDEXES, BenchmarkCommons.INDEXES);
 		}
 
-		config.setProperty(Settings.BASE_URL, BenchmarkCommons.BASE_URL);
+		config.setProperty(Settings.BASE_URL, arguments.getBaseUrl());
 		config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
 		config.setProperty(Settings.SOLR, "off");
 
@@ -77,7 +77,7 @@ public class Benchmark {
 			Arguments arguments = BenchmarkCommons.processArguments(args);
 
 			Config configuration = createConfiguration(arguments);
-			RepositoryManagerImpl repositoryManager = new RepositoryManagerImpl(BenchmarkCommons.BASE_URL, configuration);
+			RepositoryManagerImpl repositoryManager = new RepositoryManagerImpl(arguments.getBaseUrl(), configuration);
 
 			// turn acl off or use admin
 			if (!arguments.isWithAcl()) {
