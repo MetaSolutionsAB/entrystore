@@ -3,8 +3,11 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 
-import static java.net.HttpURLConnection.*
-import static java.nio.charset.StandardCharsets.UTF_8
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_CREATED
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
+import static java.net.HttpURLConnection.HTTP_OK
 
 class NameResourceIT extends BaseSpec {
 
@@ -12,7 +15,7 @@ class NameResourceIT extends BaseSpec {
 	def static contextIdWithoutName = '71'
 
 	def setupSpec() {
-		getOrCreateContext([contextId: contextIdWithName, name: URLEncoder.encode('The Context Name', UTF_8)])
+		getOrCreateContext([contextId: contextIdWithName, name: 'The Context Name'])
 		getOrCreateContext([contextId: contextIdWithoutName])
 	}
 

@@ -47,7 +47,7 @@ class ContextImportIT extends BaseSpec {
 		given:
 		// check existing list of entries for context that will be overridden
 		def contextConn = EntryStoreClient.getRequest('/' + contextImportId)
-		contextConn.getResponseCode() == HTTP_OK
+		assert contextConn.getResponseCode() == HTTP_OK
 		assert contextConn.getContentType().contains('application/json')
 		assert JSON_PARSER.parseText(contextConn.getInputStream().text) == [entryId2]
 
