@@ -13,8 +13,8 @@ public class StatusController {
 
 	private final StatusService statusService;
 
-	@GetMapping(path = "/management/status", produces = MediaType.APPLICATION_JSON_VALUE)
-	public StatusResponse getStatusAsJson() {
+	@GetMapping(path = "/management/status", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
+	public StatusResponse getStatus() {
 		return statusService.getStatus();
 	}
 }
