@@ -51,8 +51,8 @@ public class Hashing {
 		return new String(out);
 	}
 
-	public static String hash(String source, String algorithm) {
-		if (algorithm == null || algorithm.isEmpty()) {
+	public static String hash(String source, HashType algorithm) {
+		if (algorithm == null) {
 			throw new IllegalArgumentException("Algorithm cannot be null or empty.");
 		}
 
@@ -61,7 +61,7 @@ public class Hashing {
 		}
 
 		try {
-			MessageDigest md = MessageDigest.getInstance(algorithm);
+			MessageDigest md = MessageDigest.getInstance(algorithm.toString());
 			byte[] bytes = md.digest(source.getBytes());
 
 			if (bytes == null || bytes.length < 1) {

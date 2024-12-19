@@ -26,22 +26,19 @@ public class HashingTest {
 	// from https://www.md5hashgenerator.com/
 	private final String md5hash = "1a79a4d60de6718e8e5b326e338ae533";
 	private final String sha1hash = "c3499c2729730a7f807efb8676a92dcb6f8a3f8f";
-
-	private final String md5 = "MD5";
-	private final String sha = "SHA1";
-	private final String foo = "FOO";
+	private final String sha256hash = "3bb12eda3c298db5de25597f54d924f2e17e78a26ad8953ed8218ee682f0bbbe9021e2f3009d152c911bf1f25ec683a902714166767afbd8e5bd0fb0124ecb8a";
 
 	@Test
 	public void hash_WithException() {
 		assertThrows(IllegalArgumentException.class, () -> Hashing.hash(null, null));
 		assertThrows(IllegalArgumentException.class, () -> Hashing.hash("example", null));
-		assertThrows(IllegalArgumentException.class, () -> Hashing.hash(null, md5));
+		assertThrows(IllegalArgumentException.class, () -> Hashing.hash(null, HashType.MD5));
 	}
 
 	@Test
 	public void hash() {
-		assertEquals(md5hash, Hashing.hash("example", md5));
-		assertEquals(sha1hash, Hashing.hash("example", sha));
-		assertEquals("example", Hashing.hash("example", foo));
+		assertEquals(md5hash, Hashing.hash("example", HashType.MD5));
+		assertEquals(sha1hash, Hashing.hash("example", HashType.SHA1));
+		assertEquals(sha256hash, Hashing.hash("example", HashType.SHA512));
 	}
 }
