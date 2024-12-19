@@ -23,16 +23,17 @@ import java.time.ZoneId;
 import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class DateUtilTest {
 
 	@Test
 	public void daysBetween_WithException() {
-		try {
-			DateUtils.daysBetween(null, null);
-		} catch (Exception e) {
-			assertEquals(e.getMessage(), "Date must not be null");
-		}
+		LocalDateTime ld1 = LocalDateTime.now();
+		Date d1 = java.util.Date.from(ld1.atZone(ZoneId.systemDefault()).toInstant());
+		assertThrows(IllegalArgumentException.class, () -> DateUtils.daysBetween(null, null));
+		assertThrows(IllegalArgumentException.class, () -> DateUtils.daysBetween(d1, null));
+		assertThrows(IllegalArgumentException.class, () -> DateUtils.daysBetween(null, d1));
 	}
 
 	@Test

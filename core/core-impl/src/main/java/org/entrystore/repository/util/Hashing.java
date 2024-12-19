@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,66 +16,62 @@
 
 package org.entrystore.repository.util;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+
 /**
  * Hashing utilities.
- * 
+ *
  * @author Hannes Ebner
  */
 public class Hashing {
-	
+
 	private static final Logger log = LoggerFactory.getLogger(Hashing.class);
 
-	private static String byteArrayToHexString(byte in[]) {
-		byte ch = 0x00;
+	private static String byteArrayToHexString(byte[] in) {
+		byte ch;
 		int i = 0;
 
-		if ((in == null) || (in.length < 1)) {
-			return null;
-		}
-
-		String pseudo[] = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f" };
-		StringBuffer out = new StringBuffer(in.length * 2);
+		String[] pseudo = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"};
+		StringBuilder out = new StringBuilder(in.length * 2);
 
 		while (i < in.length) {
 			ch = (byte) (in[i] & 0xF0);
 			ch = (byte) (ch >>> 4);
 			ch = (byte) (ch & 0x0F);
-			out.append(pseudo[(int) ch]);
+			out.append(pseudo[ch]);
 			ch = (byte) (in[i] & 0x0F);
-			out.append(pseudo[(int) ch]);
+			out.append(pseudo[ch]);
 			i++;
 		}
 
-		String rslt = new String(out);
-
-		return rslt;
+		return new String(out);
 	}
 
-	public static String md5(String source) {
-		try {
-			MessageDigest md = MessageDigest.getInstance("MD5");
-			byte[] bytes = md.digest(source.getBytes());
-			return byteArrayToHexString(bytes);
-		} catch (NoSuchAlgorithmException nsae) {
-			log.warn("MD5 not supported: " + nsae.getMessage());
-			return null;
+	public static String hash(String source, HashType algorithm) {
+		if (algorithm == null) {
+			throw new IllegalArgumentException("Algorithm cannot be null or empty.");
 		}
-	}
 
-	public static String sha(String source) {
+		if (source == null || source.isEmpty()) {
+			throw new IllegalArgumentException("Source cannot be null or empty.");
+		}
+
 		try {
-			MessageDigest md = MessageDigest.getInstance("SHA");
+			MessageDigest md = MessageDigest.getInstance(algorithm.toString());
 			byte[] bytes = md.digest(source.getBytes());
+
+			if (bytes == null || bytes.length < 1) {
+				throw new IllegalArgumentException("Digest created empty bytes array.");
+			}
+
 			return byteArrayToHexString(bytes);
-		} catch (NoSuchAlgorithmException nsae) {
-			log.warn("SHA not supported: " + nsae.getMessage());
-			return null;
+		} catch (NoSuchAlgorithmException ex) {
+			log.warn("{} not supported: {}. Returning non-hashed value.", algorithm, ex.getMessage());
+			return source;
 		}
 	}
 

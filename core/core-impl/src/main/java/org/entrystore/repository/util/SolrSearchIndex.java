@@ -863,7 +863,7 @@ public class SolrSearchIndex implements SearchIndex {
 		for (Statement s : metadata) {
 			// predicate
 			String predString = s.getPredicate().stringValue();
-			String predMD5Trunc8 = Hashing.md5(predString).substring(0, 8);
+			String predMD5Trunc8 = Hashing.hash(predString, HashType.MD5).substring(0, 8);
 
 			// object
 			if (s.getObject() instanceof IRI) {
