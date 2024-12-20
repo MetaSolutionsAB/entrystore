@@ -94,7 +94,7 @@ public class Benchmark {
 
 				// reading
 				if (!arguments.isWithInterContexts()) {
-					Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS + "_0");
+					Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS + "_1");
 					readAllFromDatabase(context, arguments.getSizeToGenerate());
 				}
 			} finally {
