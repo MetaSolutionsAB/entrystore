@@ -9,7 +9,6 @@
 		<artifactId>entrystore-parent</artifactId>
 		<version>5.6-SNAPSHOT</version>
 	</parent>
-	<groupId>org.entrystore</groupId>
 	<artifactId>entrystore-modules</artifactId>
 	<packaging>pom</packaging>
 	<name>EntryStore Modules</name>

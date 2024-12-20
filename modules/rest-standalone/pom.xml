@@ -19,6 +19,7 @@
         <module>jetty</module>
         <module>simple</module>
         <module>spring-boot</module>
+        <module>javalin</module>
         <module>integration-test</module>
     </modules>
 
