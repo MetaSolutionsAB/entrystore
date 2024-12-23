@@ -12,6 +12,8 @@ public class StatusService {
 	private final EntryStoreConfiguration configuration;
 
 	public StatusResponse getStatus() {
-		return new StatusResponse(configuration.app().version(), "offline");
+		return new StatusResponse(
+			configuration.app().version(),
+			"online");
 	}
 }
