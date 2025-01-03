@@ -1,1 +1,3 @@
 info.app.version: @project.version@
+
+spring.mvc.problemdetails.enabled: false
