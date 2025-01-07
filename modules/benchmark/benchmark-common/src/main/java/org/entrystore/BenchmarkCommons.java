@@ -111,7 +111,7 @@ public class BenchmarkCommons {
 				arguments.setComplex(false);
 				System.setProperty("log.complexity", SIMPLE);
 			} else if (SIMPLE.equals(complexityType) || COMPLEX.equals(complexityType)) {
-				arguments.setComplex(SIMPLE.equals(complexityType));
+				arguments.setComplex(COMPLEX.equals(complexityType));
 				System.setProperty("log.complexity", complexityType);
 			} else {
 				System.err.println("Complexity type not supported.");
