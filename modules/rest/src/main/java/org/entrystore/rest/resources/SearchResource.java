@@ -47,7 +47,6 @@ import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.GraphUtil;
-import org.entrystore.rest.util.RDFJSON;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -73,7 +72,9 @@ import java.util.Set;
 
 import static java.lang.String.format;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.restlet.data.Status.*;
+import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
+import static org.restlet.data.Status.SERVER_ERROR_INTERNAL;
+import static org.restlet.data.Status.SERVER_ERROR_SERVICE_UNAVAILABLE;
 
 
 /**
@@ -223,37 +224,42 @@ public class SearchResource extends BaseResource {
 
 			List<SyndEntry> syndEntries = new ArrayList<>();
 			int limitedCount = 0;
+
 			for (Entry entry : entries) {
+				try {
+					String title = EntryUtil.getTitle(entry, language);
+					String description = EntryUtil.getDescription(entry, language);
 
-				String title = EntryUtil.getTitle(entry, language);
-				String description = EntryUtil.getDescription(entry, language);
-
-				if (title == null && description == null) {
-					break;
-				}
-
-				SyndContent syndConcentDescription = new SyndContentImpl();
-				syndConcentDescription.setType("text/plain");
-				syndConcentDescription.setValue(description);
-
-				SyndEntry syndEntry = new SyndEntryImpl();
-				syndEntry.setTitle(title);
-				syndEntry.setDescription(syndConcentDescription);
-
-				syndEntry.setPublishedDate(entry.getCreationDate());
-				syndEntry.setUpdatedDate(entry.getModifiedDate());
-				syndEntry.setLink(entry.getResourceURI().toString());
-
-				URI creator = entry.getCreator();
-				if (creator != null) {
-					Entry creatorEntry = getRM().getPrincipalManager().getByEntryURI(creator);
-					String creatorName = EntryUtil.getName(creatorEntry);
-					if (creatorName != null) {
-						syndEntry.setAuthor(creatorName);
+					if (title == null && description == null) {
+						break;
 					}
-				}
 
-				syndEntries.add(syndEntry);
+					SyndContent syndContentDescription = new SyndContentImpl();
+					syndContentDescription.setType("text/plain");
+					syndContentDescription.setValue(description);
+
+					SyndEntry syndEntry = new SyndEntryImpl();
+					syndEntry.setTitle(title);
+					syndEntry.setDescription(syndContentDescription);
+
+					syndEntry.setPublishedDate(entry.getCreationDate());
+					syndEntry.setUpdatedDate(entry.getModifiedDate());
+					syndEntry.setLink(entry.getResourceURI().toString());
+
+					URI creator = entry.getCreator();
+					if (creator != null) {
+						Entry creatorEntry = getRM().getPrincipalManager().getByEntryURI(creator);
+						String creatorName = EntryUtil.getName(creatorEntry);
+						if (creatorName != null) {
+							syndEntry.setAuthor(creatorName);
+						}
+					}
+
+					syndEntries.add(syndEntry);
+				} catch (AuthorizationException e) {
+					log.debug("Cannot access {}: {}", entry.getEntryURI(), e.getMessage());
+					continue;
+				}
 
 				if (limitedCount++ >= limit) {
 					break;
