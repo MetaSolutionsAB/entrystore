@@ -16,11 +16,10 @@
 
 package org.entrystore.rest.resources;
 
-import java.io.IOException;
-import java.net.URI;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
@@ -30,6 +29,8 @@ import org.restlet.resource.Post;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
 
 
 /**
@@ -56,7 +57,7 @@ public class SolrResource extends BaseResource {
 		JSONObject request = null;
 		try {
 			request = new JsonRepresentation(r).getJsonObject();
-		} catch (IOException ioe) {
+		} catch (JSONException e) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return;
 		}
