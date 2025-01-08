@@ -6,6 +6,7 @@ import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.util.ModelBuilder;
 import org.eclipse.rdf4j.model.vocabulary.FOAF;
 import org.eclipse.rdf4j.model.vocabulary.RDF;
+import org.entrystore.BenchmarkCommons;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -95,6 +96,10 @@ public class ObjectMapper {
 			e.printStackTrace();
 		} finally {
 			entry.getLocalMetadata().setGraph(model);
+		}
+
+		if (BenchmarkCommons.VERBOSE) {
+			LogUtils.log("Created entry: " + entry.getEntryURI());
 		}
 
 		return entry;

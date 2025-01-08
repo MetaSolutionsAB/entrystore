@@ -27,6 +27,8 @@ public class BenchmarkCommons {
 	public static final String BENCHMARK_USER = "Benchmark User";
 	public static final String BENCHMARK_USER_SECRET = "thisissecret";
 
+	public static boolean VERBOSE = false;
+
 	public static <T> Consumer<T> withCounter(BiConsumer<Integer, T> consumer) {
 		AtomicInteger counter = new AtomicInteger(0);
 		return item -> consumer.accept(counter.getAndIncrement(), item);
@@ -61,6 +63,7 @@ public class BenchmarkCommons {
 		Option isWithAclOption = createOption("a", "acl", "ACL", "Run with ACL: @boolean.", false);
 		Option storePathOption = createOption("p", "path", "PATH", "Store path: @string.", false);
 		Option baseUrlOption = createOption("b", "base", "BASE", "Base URL: @string.", false);
+		Option verboseLogging = Option.builder("v").longOpt("verbose").desc("Verbose logging").hasArg(false).required(false).build();
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -72,10 +75,13 @@ public class BenchmarkCommons {
 		options.addOption(isWithAclOption);
 		options.addOption(storePathOption);
 		options.addOption(baseUrlOption);
+		options.addOption(verboseLogging);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
 			CommandLine commandLine = commandLineParser.parse(options, args);
+
+			VERBOSE = commandLine.hasOption("v");
 
 			String storeType = commandLine.hasOption("s") ? commandLine.getOptionValue(storTypeOption) : null;
 			if (NATIVE.equals(storeType) || MEMORY.equals(storeType) || LMDB.equals(storeType)) {

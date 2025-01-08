@@ -89,4 +89,9 @@ public class LogUtils {
 	public static void logTimeDifference(String message, LocalDateTime start, LocalDateTime end) {
 		log.info("{} {} milliseconds.", message, Duration.between(start, end).toMillis());
 	}
+
+	public static void log(String message) {
+		log.info(message);
+	}
+
 }
