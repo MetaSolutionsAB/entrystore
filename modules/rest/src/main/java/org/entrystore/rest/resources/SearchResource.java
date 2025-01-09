@@ -231,16 +231,23 @@ public class SearchResource extends BaseResource {
 					String description = EntryUtil.getDescription(entry, language);
 
 					if (title == null && description == null) {
-						break;
+						log.debug("Entry has neither title, nor description: {}", entry.getEntryURI());
 					}
 
-					SyndContent syndContentDescription = new SyndContentImpl();
-					syndContentDescription.setType("text/plain");
-					syndContentDescription.setValue(description);
-
 					SyndEntry syndEntry = new SyndEntryImpl();
-					syndEntry.setTitle(title);
-					syndEntry.setDescription(syndContentDescription);
+
+					if (title != null) {
+						syndEntry.setTitle(title);
+					} else {
+						syndEntry.setTitle("Missing title");
+					}
+
+					if (description != null) {
+						SyndContent syndContentDescription = new SyndContentImpl();
+						syndContentDescription.setType("text/plain");
+						syndContentDescription.setValue(description);
+						syndEntry.setDescription(syndContentDescription);
+					}
 
 					syndEntry.setPublishedDate(entry.getCreationDate());
 					syndEntry.setUpdatedDate(entry.getModifiedDate());
@@ -248,16 +255,20 @@ public class SearchResource extends BaseResource {
 
 					URI creator = entry.getCreator();
 					if (creator != null) {
-						Entry creatorEntry = getRM().getPrincipalManager().getByEntryURI(creator);
-						String creatorName = EntryUtil.getName(creatorEntry);
-						if (creatorName != null) {
-							syndEntry.setAuthor(creatorName);
+						try {
+							Entry creatorEntry = getRM().getPrincipalManager().getByEntryURI(creator);
+							String creatorName = EntryUtil.getName(creatorEntry);
+							if (creatorName != null) {
+								syndEntry.setAuthor(creatorName);
+							}
+						} catch (AuthorizationException ae) {
+							log.debug(ae.getMessage());
 						}
 					}
 
 					syndEntries.add(syndEntry);
 				} catch (AuthorizationException e) {
-					log.debug("Cannot access {}: {}", entry.getEntryURI(), e.getMessage());
+					log.debug(e.getMessage());
 					continue;
 				}
 
