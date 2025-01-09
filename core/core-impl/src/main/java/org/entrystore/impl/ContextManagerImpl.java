@@ -111,7 +111,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		//If it does not exist, create it.
 		if (e == null) {
 			e = this.createNewMinimalItem(null, null, EntryType.Local, GraphType.SystemContext,
-					null, rman.getSystemContextAliases().get(0));
+					null, rman.getSystemContextAliases().getFirst());
 		}
 		this.entry = e;
 		loadIndex();
@@ -887,7 +887,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			return null;
 		}
 		if (usplit.getUriType() != URIType.Unknown) {
-			Entry item = cache.getByEntryURI(entryURI);
+			Entry item = softCache.getByEntryURI(entryURI);
 			if (item != null) {
 				if (withACL) {
 					((ContextImpl) item.getContext()).checkAccess(item, AccessProperty.ReadMetadata);
@@ -957,7 +957,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 
 	protected Entry getItemInRepositoryByMMdURI(URI mmdURI) {
-		Entry entry = cache.getByEntryURI(mmdURI);
+		Entry entry = softCache.getByEntryURI(mmdURI);
 		if (entry != null) {
 			((ContextImpl) entry.getContext()).checkAccess(entry, AccessProperty.ReadMetadata);
 			return entry;
@@ -976,7 +976,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		case Context:
 			Class clsReg = this.entry.repositoryManager.getRegularContextClass();
 			try {
-				Object[] constrParamReg = {newEntry, newEntry.getResourceURI().toString(), this.cache};
+				Object[] constrParamReg = {newEntry, newEntry.getResourceURI().toString(), this.softCache};
 				Class[] constrClsParamReg = {EntryImpl.class, String.class, SoftCache.class};
 				Constructor constrReg = clsReg.getConstructor(constrClsParamReg);
 				Context context = (Context) constrReg.newInstance(constrParamReg);
@@ -993,7 +993,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				newEntry.setResource(this);
 			} else {
 				try {
-					Object[] constrParam = {newEntry, newEntry.getResourceURI().toString(), this.cache};
+					Object[] constrParam = {newEntry, newEntry.getResourceURI().toString(), this.softCache};
 					Class[] constrClsParam = {EntryImpl.class, String.class, SoftCache.class};
 					Constructor constr = cls.getConstructor(constrClsParam);
 					newEntry.setResource((Context) constr.newInstance(constrParam));
