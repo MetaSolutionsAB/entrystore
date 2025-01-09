@@ -23,7 +23,11 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MetadataUtilTest {
 
@@ -58,7 +62,7 @@ public class MetadataUtilTest {
 		try {
 			MetadataUtil.isIntegerLiteral(null);
 		} catch (Exception e) {
-			assertEquals(e.getMessage(), "Literal must not be null.");
+			assertEquals("Literal must not be null.", e.getMessage());
 		}
 	}
 
@@ -67,7 +71,7 @@ public class MetadataUtilTest {
 		try {
 			MetadataUtil.isDateLiteral(null);
 		} catch (Exception e) {
-			assertEquals(e.getMessage(), "Literal must not be null.");
+			assertEquals("Literal must not be null.", e.getMessage());
 		}
 	}
 
@@ -76,7 +80,7 @@ public class MetadataUtilTest {
 		try {
 			MetadataUtil.isStringLiteral(null);
 		} catch (Exception e) {
-			assertEquals(e.getMessage(), "Literal must not be null.");
+			assertEquals("Literal must not be null.", e.getMessage());
 		}
 	}
 
@@ -89,7 +93,6 @@ public class MetadataUtilTest {
 
 	@Test
 	public void isIntegerLiteral() {
-
 		assertTrue(MetadataUtil.isIntegerLiteral(byteLiteral));
 		assertTrue(MetadataUtil.isIntegerLiteral(intLiteral));
 		assertTrue(MetadataUtil.isIntegerLiteral(integerLiteral));
@@ -117,7 +120,6 @@ public class MetadataUtilTest {
 
 	@Test
 	public void isDateLiteral() {
-
 		assertFalse(MetadataUtil.isDateLiteral(byteLiteral));
 		assertFalse(MetadataUtil.isDateLiteral(intLiteral));
 		assertFalse(MetadataUtil.isDateLiteral(integerLiteral));
@@ -146,7 +148,6 @@ public class MetadataUtilTest {
 
 	@Test
 	public void isStringLiteral() {
-
 		assertFalse(MetadataUtil.isStringLiteral(byteLiteral));
 		assertFalse(MetadataUtil.isStringLiteral(intLiteral));
 		assertFalse(MetadataUtil.isStringLiteral(integerLiteral));
@@ -250,6 +251,5 @@ public class MetadataUtilTest {
 		formatString = "anything";
 		format = MetadataUtil.getRDFFormat(formatString);
 		assertNull(format);
-
 	}
 }
