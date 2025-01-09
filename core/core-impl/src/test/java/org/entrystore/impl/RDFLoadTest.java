@@ -16,8 +16,6 @@
 
 package org.entrystore.impl;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -27,6 +25,9 @@ import org.entrystore.repository.test.TestSuite;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+
 /**
  */
 public class RDFLoadTest extends AbstractCoreTest {
@@ -35,49 +36,48 @@ public class RDFLoadTest extends AbstractCoreTest {
 	public void setUp() {
 		super.setUp();
 		TestSuite.addEntriesInDisneySuite(rm);
-		((ContextImpl) cm).getCache().clear();
+		((ContextImpl) cm).getSoftCache().clear();
 	}
 
 	@Test
 	public void typeCheck() {
-		//Donald, check owner of duck and editing rights in mouse.
+		//Donald, check the owner of duck and editing rights in mouse.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
 		Context duck = cm.getContext("duck");
 
 		//ContextManager correct types.
-		assertTrue(cm.getEntry().getEntryType() == EntryType.Local);
-		assertTrue(cm.getEntry().getGraphType() == GraphType.SystemContext);
-		assertTrue(cm.getEntry().getResourceType() == ResourceType.InformationResource);
+		assertSame(EntryType.Local, cm.getEntry().getEntryType());
+		assertSame(GraphType.SystemContext, cm.getEntry().getGraphType());
+		assertSame(ResourceType.InformationResource, cm.getEntry().getResourceType());
 
 		//Duck context
-		assertTrue(duck.getEntry().getEntryType() == EntryType.Local);
-		assertTrue(duck.getEntry().getGraphType() == GraphType.Context);
-		assertTrue(duck.getEntry().getResourceType() == ResourceType.InformationResource);
+		assertSame(EntryType.Local, duck.getEntry().getEntryType());
+		assertSame(GraphType.Context, duck.getEntry().getGraphType());
+		assertSame(ResourceType.InformationResource, duck.getEntry().getResourceType());
 
 		Entry entry = duck.get("3");
-		assertTrue(entry.getEntryType() ==
-							 EntryType.Link, "Locationtype should be LinkReference, it is now: " + entry.getEntryType());
-		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
+		assertSame(EntryType.Link, entry.getEntryType(), "Locationtype should be LinkReference, it is now: " + entry.getEntryType());
+		assertSame(ResourceType.InformationResource, entry.getResourceType());
 
 		entry = duck.get("4");
-		assertTrue(entry.getEntryType() == EntryType.Link);
-		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
+		assertSame(EntryType.Link, entry.getEntryType());
+		assertSame(ResourceType.InformationResource, entry.getResourceType());
 
 		entry = duck.get("6");
-		assertTrue(entry.getEntryType() == EntryType.Local);
-		assertTrue(entry.getGraphType() == GraphType.None);
-		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
+		assertSame(EntryType.Local, entry.getEntryType());
+		assertSame(GraphType.None, entry.getGraphType());
+		assertSame(ResourceType.InformationResource, entry.getResourceType());
 
 		entry = duck.get("6");
-		assertTrue(entry.getEntryType() == EntryType.Local);
-		assertTrue(entry.getGraphType() == GraphType.None);
-		assertTrue(entry.getResourceType() == ResourceType.InformationResource);
+		assertSame(EntryType.Local, entry.getEntryType());
+		assertSame(GraphType.None, entry.getGraphType());
+		assertSame(ResourceType.InformationResource, entry.getResourceType());
 	}
 
 	@Test
 	public void userChecks() {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-		assertTrue(pm.getGroupUris().size() == 3);
+		assertEquals(3, pm.getGroupUris().size());
 	}
 
 }

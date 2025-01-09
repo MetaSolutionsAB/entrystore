@@ -27,7 +27,7 @@ public class StringUtilsTest {
 		try {
 			StringUtils.convertUnitStringToByteSize(null);
 		} catch (Exception e) {
-			assertEquals(e.getMessage(), "Parameter must not be null or empty");
+			assertEquals("Parameter must not be null or empty", e.getMessage());
 		}
 	}
 

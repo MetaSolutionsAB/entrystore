@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,50 +16,91 @@
 
 package org.entrystore.impl;
 
-import org.junit.jupiter.api.Disabled;
+import org.entrystore.Context;
+import org.entrystore.Entry;
+import org.entrystore.repository.test.TestSuite;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class SoftCacheTest {
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-	@Disabled("To be implemented")
-	@Test
-	public void testClear() throws Exception {
-		// TODO
+public class SoftCacheTest extends AbstractCoreTest{
+
+	private Entry duck1;
+	private Entry duck2;
+	private Entry duck3;
+
+	@BeforeEach
+	public void setUp() {
+		super.setUp();
+		TestSuite.addEntriesInDisneySuite(rm);
+		rm.setCheckForAuthorization(false);
+		Context duck = cm.getContext("duck");
+		duck1 = duck.get("1");
+		duck2 = duck.get("2");
+		duck3 = duck.get("3");
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testPut() throws Exception {
-		// TODO
+	public void shutdown_ok() {
+		SoftCache softCache = new SoftCache();
+		softCache.shutdown();
+		assert softCache.isShutdown();
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testRemove() throws Exception {
-		// TODO
+	public void put_ok() {
+		SoftCache softCache = new SoftCache();
+		assertTrue(softCache.getCache().isEmpty());
+		softCache.put(duck1);
+		assertEquals(1, softCache.getCache().size());
+		softCache.put(duck2);
+		assertEquals(2, softCache.getCache().size());
+		softCache.put(duck2);
+		assertEquals(2, softCache.getCache().size());
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testGetByEntryURI() throws Exception {
-		// TODO
+	public void clear_ok() {
+		SoftCache softCache = new SoftCache();
+		assertTrue(softCache.getCache().isEmpty());
+		softCache.put(duck1);
+		softCache.put(duck2);
+		assertFalse(softCache.getCache().isEmpty());
+		softCache.clear();
+		assertTrue(softCache.getCache().isEmpty());
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testGetByURI() throws Exception {
-		// TODO
+	public void remove_ok() {
+		SoftCache softCache = new SoftCache();
+		assertTrue(softCache.getCache().isEmpty());
+		softCache.put(duck1);
+		softCache.put(duck2);
+		assertFalse(softCache.getCache().isEmpty());
+		softCache.remove(duck1);
+		assertFalse(softCache.getCache().isEmpty());
+		assertEquals(1, softCache.getCache().size());
+		assertNull(softCache.getCache().get(duck1.getEntryURI()));
+		assertNotNull(softCache.getCache().get(duck2.getEntryURI()));
+		softCache.remove(duck3);
+		assertEquals(1, softCache.getCache().size());
+		assertNull(softCache.getCache().get(duck3.getEntryURI()));
+		softCache.remove(duck2);
+		assertTrue(softCache.getCache().isEmpty());
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testShutdown() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
-	public void testIsShutdown() throws Exception {
-		// TODO
+	public void getByEntryURI_ok() {
+		SoftCache softCache = new SoftCache();
+		softCache.put(duck1);
+		Entry tempDuck1 = softCache.getByEntryURI(duck1.getEntryURI());
+		assertNotNull(tempDuck1);
+		Entry tempDuck2 = softCache.getByEntryURI(duck2.getEntryURI());
+		assertNull(tempDuck2);
 	}
 }

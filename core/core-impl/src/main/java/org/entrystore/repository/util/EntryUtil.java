@@ -488,8 +488,6 @@ public class EntryUtil {
 	}
 
 	public static String getDescription(Entry entry, String language) {
-		checkArgument(language != null, "language parameter must not be null");
-
 		Map<String, Set<String>> descriptions = getDescriptions(entry);
 
 		if (descriptions.isEmpty()) {
@@ -498,12 +496,15 @@ public class EntryUtil {
 
 		String description = null;
 		for (String key : descriptions.keySet()) {
-
-			for (String lang : descriptions.get(key)) {
-				if (language.equals(lang)) {
-					description = key;
-					break;
+			if (language != null) {
+				for (String lang : descriptions.get(key)) {
+					if (language.equals(lang)) {
+						description = key;
+						break;
+					}
 				}
+			} else {
+				description = key;
 			}
 
 			if (description != null) {

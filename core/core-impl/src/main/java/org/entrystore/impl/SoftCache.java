@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,54 +17,54 @@
 
 package org.entrystore.impl;
 
-import java.lang.ref.Reference;
-import java.lang.ref.ReferenceQueue;
-import java.lang.ref.SoftReference;
-import java.net.URI;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
-
+import lombok.Getter;
+import lombok.Setter;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.Entry;
 
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.SoftReference;
+import java.net.URI;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+
 
 //TODO prioritize recently used objects so they are not
 // garbage collected first. Simple use is to have hard references
-// to everything used within the last 30 minutes, but that does 
+// to everything used within the last 30 minutes, but that does
 // take into account amount of available memory.
 public class SoftCache {
-	
-	HashMap<URI, SoftReference<Entry>> cache = new HashMap<URI, SoftReference<Entry>>();
-	
-	HashMap<URI, Object> uri2entryURIs = new HashMap<URI, Object>();
-	
+
+	@Getter
+	private final HashMap<URI, SoftReference<Entry>> cache = new HashMap<>();
+
+	HashMap<URI, Object> uri2entryURIs = new HashMap<>();
+
 	Thread remover;
-	
+
 	ReferenceQueue<Entry> clearedRefs;
-	
+
 	Log log = LogFactory.getLog(SoftCache.class);
-	
-	boolean shutdown = false;
-	
+
+	@Getter
+	@Setter
+	private boolean shutdown = false;
+
 	public SoftCache() {
-		clearedRefs = new ReferenceQueue<Entry>();
-		
+		clearedRefs = new ReferenceQueue<>();
+
 		// start thread to delete cleared references from the cache
 		remover = new Remover(clearedRefs, this);
 		remover.start();
-		
+
 		// add a shutdown hook to interrupt the endless loop
 		// the hook is only called when the whole VM is shutdown
-		Runtime.getRuntime().addShutdownHook(new Thread() {
-			public void run() {
-				shutdown();
-			}
-		});
+		Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
 	}
-	
+
 	public void clear() {
 		synchronized (cache) {
 			cache.clear();
@@ -75,37 +75,38 @@ public class SoftCache {
 	public void put(Entry entry) {
 		synchronized (cache) {
 			URI entryURI = entry.getEntryURI();
-			cache.put(entryURI, new SoftReference(entry, clearedRefs));
+			cache.put(entryURI, new SoftReference<>(entry, clearedRefs));
 			push(entry.getLocalMetadataURI(), entryURI);
 			push(entry.getExternalMetadataURI(), entryURI);
 			push(entry.getResourceURI(), entryURI);
-			push(entry.getRelationURI(), entryURI); 
-		} 
+			push(entry.getRelationURI(), entryURI);
+		}
 	}
 
 	private void push(URI from, URI to) {
 		if (from == null || to == null) {
 			return;
 		}
-		Object existingTo = uri2entryURIs.get(from); 
+		Object existingTo = uri2entryURIs.get(from);
 		if (existingTo == null) {
 			uri2entryURIs.put(from, to);
 		} else {
 			if (existingTo instanceof Set) {
 				((Set<URI>) existingTo).add(to);
 			} else {
-				HashSet<URI> set = new HashSet<URI>();
+				HashSet<URI> set = new HashSet<>();
 				set.add((URI) existingTo);
 				set.add(to);
 				uri2entryURIs.put(from, set);
 			}
 		}
 	}
+
 	private void pop(URI from, URI to) {
 		if (from == null || to == null) {
 			return;
 		}
-		Object existingTo = uri2entryURIs.get(from); 
+		Object existingTo = uri2entryURIs.get(from);
 		if (existingTo != null) {
 			if (existingTo instanceof Set) {
 				((Set) existingTo).remove(to);
@@ -119,14 +120,14 @@ public class SoftCache {
 	}
 
 	public void remove(Entry entry) {
-		if(entry == null) return; 
+		if(entry == null) return;
 		synchronized (cache) {
 			URI entryURI = entry.getEntryURI();
 			cache.remove(entryURI);
 			pop(entry.getLocalMetadataURI(), entryURI);
 			pop(entry.getExternalMetadataURI(), entryURI);
 			pop(entry.getResourceURI(), entryURI);
-			pop(entry.getRelationURI(), entryURI); 
+			pop(entry.getRelationURI(), entryURI);
 		}
 	}
 
@@ -141,7 +142,7 @@ public class SoftCache {
 
 	public Set<Entry> getByURI(URI uri) {
 		if (uri2entryURIs.containsKey(uri)) {
-			HashSet<Entry> entries = new HashSet<Entry>();
+			HashSet<Entry> entries = new HashSet<>();
 			Object entryUris = uri2entryURIs.get(uri);
 			if (entryUris instanceof Set) {
 				for (URI entryURI : ((Set<URI>) entryUris)) {
@@ -154,24 +155,20 @@ public class SoftCache {
 		}
 		return null;
 	}
-	
+
 	public void shutdown() {
 		if (remover == null || (shutdown && remover.isInterrupted())) {
 			return;
 		}
 		log.info("Shutting down SoftCache");
-		shutdown = true;
+		setShutdown(true);
 		remover.interrupt();
-	}
-	
-	public boolean isShutdown() {
-		return shutdown;
 	}
 
 	private class Remover extends Thread {
-		
+
 		ReferenceQueue<Entry> refQ;
-		
+
 		SoftCache cache;
 
 		public Remover(ReferenceQueue<Entry> rq, SoftCache cache) {

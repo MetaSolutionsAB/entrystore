@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,7 +47,7 @@ public class LocalMetadataWrapper implements Metadata {
 	public Model getGraph() {
 		Entry e = null;
 		if (refEntryURI != null) {
-			e = ((ContextImpl) entry.getContext()).getCache().getByEntryURI(refEntryURI);
+			e = ((ContextImpl) entry.getContext()).getSoftCache().getByEntryURI(refEntryURI);
 		}
 		if (e == null) {
 			e = entry.getRepositoryManager().getContextManager().getEntry(entry.getExternalMetadataURI());

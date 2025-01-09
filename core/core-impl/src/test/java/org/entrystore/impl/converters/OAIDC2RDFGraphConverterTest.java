@@ -63,7 +63,7 @@ public class OAIDC2RDFGraphConverterTest {
 			child1.setTextContent(parentEntryURIString);
 			element.appendChild(child1);
 			Model graph = oaiDcRdfConverter.convertToModel(element, URI.create(entryURIString));
-			assertEquals(graph.toString(), "[(https://slashdot.org/12/entry/13, ex:isChildOf, \"https://slashdot.org/12/entry/12\") [null]]");
+			assertEquals("[(https://slashdot.org/12/entry/13, ex:isChildOf, \"https://slashdot.org/12/entry/12\") [null]]", graph.toString());
 		} catch (ParserConfigurationException e) {
 			throw new RuntimeException(e);
 		}
