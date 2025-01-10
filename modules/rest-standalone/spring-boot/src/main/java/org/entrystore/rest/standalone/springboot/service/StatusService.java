@@ -1,7 +1,7 @@
 package org.entrystore.rest.standalone.springboot.service;
 
 import lombok.RequiredArgsConstructor;
-import org.entrystore.rest.standalone.springboot.EntryStoreConfiguration;
+import org.entrystore.rest.standalone.springboot.configuration.EntryStoreConfiguration;
 import org.entrystore.rest.standalone.springboot.model.api.StatusResponse;
 import org.springframework.stereotype.Service;
 

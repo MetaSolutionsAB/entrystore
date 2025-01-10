@@ -20,6 +20,7 @@
         <module>simple</module>
         <module>spring-boot</module>
         <module>javalin</module>
+        <module>quarkus</module>
         <module>integration-test</module>
     </modules>
 

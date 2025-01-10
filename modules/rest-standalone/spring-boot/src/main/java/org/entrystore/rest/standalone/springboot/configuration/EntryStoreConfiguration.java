@@ -1,4 +1,4 @@
-package org.entrystore.rest.standalone.springboot;
+package org.entrystore.rest.standalone.springboot.configuration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
