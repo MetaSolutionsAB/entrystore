@@ -1,4 +1,4 @@
-package org.entrystore.rest.standalone.quarkus;
+package org.entrystore.rest.standalone.quarkus.service;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;

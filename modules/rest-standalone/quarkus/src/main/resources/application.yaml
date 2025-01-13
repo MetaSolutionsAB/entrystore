@@ -1,1 +1,3 @@
-info.app.version: @project.version@
+info:
+    app:
+        version: @project.version@
