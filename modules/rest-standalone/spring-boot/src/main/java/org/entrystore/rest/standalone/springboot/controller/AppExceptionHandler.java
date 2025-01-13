@@ -1,6 +1,7 @@
 package org.entrystore.rest.standalone.springboot.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.entrystore.rest.standalone.springboot.model.api.ErrorResponse;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,17 +11,13 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @ControllerAdvice
 public class AppExceptionHandler {
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
-	public ResponseEntity<Map<String, Object>> handleValidationExceptions(
+	public ResponseEntity<ErrorResponse> handleValidationExceptions(
 		MethodArgumentNotValidException ex,
 		HttpServletRequest request) {
 
@@ -29,33 +26,29 @@ public class AppExceptionHandler {
 			.getAllErrors()
 			.stream()
 			.map(DefaultMessageSourceResolvable::getDefaultMessage)
-			.collect(Collectors.toList());
+			.toList();
 
 		// Build the response body
-		Map<String, Object> responseBody = new HashMap<>();
-		responseBody.put("timestamp", LocalDateTime.now());
-		responseBody.put("status", HttpStatus.BAD_REQUEST.value());
-		responseBody.put("path", request.getRequestURI());
-		responseBody.put("errors", errorMessages);
+		ErrorResponse responseBody = new ErrorResponse(
+			LocalDateTime.now(),
+			HttpStatus.BAD_REQUEST.value(),
+			request.getRequestURI(),
+			errorMessages.toString());
 
 		return new ResponseEntity<>(responseBody, HttpStatus.BAD_REQUEST);
 	}
 
-	@ExceptionHandler(HttpMessageNotReadableException.class)
-	public ResponseEntity<Map<String, Object>> handleValidationExceptions(
-		HttpMessageNotReadableException ex,
+	@ExceptionHandler({HttpMessageNotReadableException.class, IllegalArgumentException.class})
+	public ResponseEntity<ErrorResponse> handleHttpMessageNotReadableAndIllegalArgumentException(
+		Exception ex,
 		HttpServletRequest request) {
 
-		// Aggregate default messages from validation errors
-		List<String> errorMessages = new ArrayList<>();
-		errorMessages.add(ex.getMessage());
-
 		// Build the response body
-		Map<String, Object> responseBody = new HashMap<>();
-		responseBody.put("timestamp", LocalDateTime.now());
-		responseBody.put("status", HttpStatus.BAD_REQUEST.value());
-		responseBody.put("path", request.getRequestURI());
-		responseBody.put("errors", errorMessages);
+		ErrorResponse responseBody = new ErrorResponse(
+			LocalDateTime.now(),
+			HttpStatus.BAD_REQUEST.value(),
+			request.getRequestURI(),
+			ex.getMessage());
 
 		return new ResponseEntity<>(responseBody, HttpStatus.BAD_REQUEST);
 	}

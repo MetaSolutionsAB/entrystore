@@ -9,13 +9,16 @@ import org.springframework.stereotype.Service;
 public class EntryService {
 
 	public EntryResponse getEntry(int entryId) {
+		if (entryId < 1) {
+			throw new IllegalArgumentException("What is this entry ID: '" + entryId + "'?");
+		}
 		return new EntryResponse(String.valueOf(entryId), EntryType.LOCAL);
 	}
 
-	public EntryResponse createEntry(EntryCreateRequest newEntry) {
+	public EntryResponse createEntry(EntryCreateRequest entryRequest) {
 		// store the entry
 
 		// return stored entry data
-		return new EntryResponse(newEntry.getEntryId(), newEntry.getType());
+		return new EntryResponse(entryRequest.getEntryId(), entryRequest.getType());
 	}
 }
