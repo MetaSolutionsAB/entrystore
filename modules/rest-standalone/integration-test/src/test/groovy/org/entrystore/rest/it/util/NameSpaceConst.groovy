@@ -3,6 +3,7 @@ package org.entrystore.rest.it.util
 class NameSpaceConst {
 	static ES_TERMS = 'http://entrystore.org/terms/'
 	static DC_TERMS = 'http://purl.org/dc/terms/'
+	static DC_ELEMENTS = 'http://purl.org/dc/elements/1.1/'
 	static RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'
 	static XSD = 'http://www.w3.org/2001/XMLSchema#'
 
