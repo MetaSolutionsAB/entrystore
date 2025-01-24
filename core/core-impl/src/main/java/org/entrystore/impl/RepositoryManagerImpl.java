@@ -712,10 +712,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				log.info("Solr directory is empty, scheduling conditional reindexing of repository");
 				reindex = true;
 				reindexWait = true;
-				log.info("Writing EntryStore version to schema version file at {}", solrSchemaVersionFile);
-				FileOperations.writeStringToFile(solrSchemaVersionFile, getVersion());
-				log.info("Writing Solr version to version file at {}", solrVersionFile);
-				FileOperations.writeStringToFile(solrVersionFile, SolrVersion.LATEST.toString());
+				try {
+					log.info("Writing EntryStore version to schema version file at {}", solrSchemaVersionFile);
+					FileOperations.writeStringToFile(solrSchemaVersionFile, getVersion());
+					log.info("Writing Solr version to version file at {}", solrVersionFile);
+					FileOperations.writeStringToFile(solrVersionFile, SolrVersion.LATEST.toString());
+				} catch (IOException e) {
+					log.error(e.getMessage());
+				}
 			}
 
 			File solrCoreConfDir = new File(new File(solrDir, coreName), "conf");

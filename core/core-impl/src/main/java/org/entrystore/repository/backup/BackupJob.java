@@ -55,7 +55,11 @@ public class BackupJob implements Job, InterruptableJob {
 
 	private static void writeErrorStatus(File errorFile, List<String> errors, String backupDateTime) {
 		String errorFileContent = backupDateTime + "\n" + String.join("\n", errors);
-		FileOperations.writeStringToFile(errorFile, errorFileContent);
+		try {
+			FileOperations.writeStringToFile(errorFile, errorFileContent);
+		} catch (IOException e) {
+			log.error(e.getMessage());
+		}
 	}
 
 	private static File getErrorStatusFile(File backupDirectory) {
@@ -228,7 +232,11 @@ public class BackupJob implements Job, InterruptableJob {
 				}
 
 				// Writing time stamp
-				FileOperations.writeStringToFile(new File(newBackupDirectory, "BACKUP_DATE"), currentDateTime);
+				try {
+					FileOperations.writeStringToFile(new File(newBackupDirectory, "BACKUP_DATE"), currentDateTime);
+				} catch (IOException e) {
+					log.error(e.getMessage());
+				}
 
 				// Removing eventually an existing failed status file
 				try {

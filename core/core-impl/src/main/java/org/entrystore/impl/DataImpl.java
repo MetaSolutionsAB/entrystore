@@ -16,13 +16,7 @@
 
 package org.entrystore.impl;
 
-import java.nio.file.Path;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import org.apache.commons.codec.Charsets;
 import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.codec.digest.MessageDigestAlgorithms;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -41,6 +35,10 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 import static org.apache.commons.codec.Charsets.UTF_8;
 import static org.apache.commons.codec.digest.MessageDigestAlgorithms.SHA_256;
@@ -105,7 +103,7 @@ public class DataImpl extends ResourceImpl implements Data {
 	public void setData(InputStream is) throws QuotaException, IOException {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
 
-		MessageDigest sha = null;
+		MessageDigest sha;
 		try {
 			sha = MessageDigest.getInstance(SHA_256);
 		} catch (NoSuchAlgorithmException e) {
@@ -146,7 +144,7 @@ public class DataImpl extends ResourceImpl implements Data {
 			if (getFile() != null && getFile().exists()) {
 				sizeBefore = getFile().length();
 			}
-			if (file != null && file.exists()) {
+			if (file.exists()) {
 				sizeAfter = file.length();
 			}
 		}
@@ -211,15 +209,14 @@ public class DataImpl extends ResourceImpl implements Data {
 		if (dataFile == null) {
 			return null;
 		}
-		String digestFileName = null;
+		String digestFileName;
 		try {
 			digestFileName = dataFile.getCanonicalPath() + SHA_256_POSTFIX;
 		} catch (IOException e) {
-			log.error("Could not get canonical path of: " + dataFile.getAbsolutePath(), e);
+			log.error("Could not get canonical path of: {}", dataFile.getAbsolutePath(), e);
 			return null;
 		}
-		File digestFile = new File(digestFileName);
-		return digestFile;
+		return new File(digestFileName);
 	}
 
 	private void writeDigest(MessageDigest messageDigest) throws IOException {
