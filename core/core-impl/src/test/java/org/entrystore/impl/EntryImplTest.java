@@ -209,7 +209,7 @@ public class EntryImplTest extends AbstractCoreTest {
         //Testing to manually remove relation to target entry
         g.remove(stm);
         sourceEntry.setGraph(g);
-        assertTrue(targetEntry.getRelations().isEmpty());
+		assertTrue(targetEntry.getRelations().isEmpty());
 
         //Testing to change acl and making sure that principal inv-rel-cache (relations) is not affected.
         int rels = guestE.getRelations().size();
@@ -224,5 +224,4 @@ public class EntryImplTest extends AbstractCoreTest {
         context.remove(sourceEntry.getEntryURI());
         assertTrue(targetEntry.getRelations().isEmpty());
     }
-
 }
