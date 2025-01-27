@@ -715,6 +715,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				try {
 					log.info("Writing EntryStore version to schema version file at {}", solrSchemaVersionFile);
 					FileOperations.writeStringToFile(solrSchemaVersionFile, getVersion());
+				} catch (IOException e) {
+					log.error(e.getMessage());
+				}
+
+				try {
 					log.info("Writing Solr version to version file at {}", solrVersionFile);
 					FileOperations.writeStringToFile(solrVersionFile, SolrVersion.LATEST.toString());
 				} catch (IOException e) {

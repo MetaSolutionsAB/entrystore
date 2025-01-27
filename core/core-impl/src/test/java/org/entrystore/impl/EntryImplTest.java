@@ -224,4 +224,5 @@ public class EntryImplTest extends AbstractCoreTest {
         context.remove(sourceEntry.getEntryURI());
         assertTrue(targetEntry.getRelations().isEmpty());
     }
+
 }

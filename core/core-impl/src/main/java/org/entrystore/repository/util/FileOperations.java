@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -441,9 +441,9 @@ public class FileOperations {
 			throw new NullPointerException("file to write to is null");
 		}
 
-		BufferedWriter writer = new BufferedWriter(new FileWriter(file));
-		writer.write(content);
-		writer.close();
+		try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+			writer.write(content);
+		}
 	}
 
 }
