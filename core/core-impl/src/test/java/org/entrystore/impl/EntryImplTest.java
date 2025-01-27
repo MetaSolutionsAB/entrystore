@@ -187,41 +187,41 @@ public class EntryImplTest extends AbstractCoreTest {
 		assertEquals(ref.getCachedExternalMetadata().getGraph().size(), linkEntry.getLocalMetadata().getGraph().size());
 	}
 
-    @Test
-    public void invRelCache() {
-        EntryImpl sourceEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
-        EntryImpl targetEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
-        ValueFactory vf = sourceEntry.getRepository().getValueFactory();
-        IRI pred = vf.createIRI("http://example.com/related");
-        Statement stm = vf.createStatement(sourceEntry.getSesameResourceURI(), pred, targetEntry.getSesameResourceURI());
-        EntryImpl guestE = (EntryImpl) pm.getGuestUser().getEntry();
-        Statement readStm = vf.createStatement(sourceEntry.getSesameResourceURI(), RepositoryProperties.Read, guestE.getSesameResourceURI());
-        Model g = sourceEntry.getGraph();
+	@Test
+	public void invRelCache() {
+		EntryImpl sourceEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+		EntryImpl targetEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+		ValueFactory vf = sourceEntry.getRepository().getValueFactory();
+		IRI pred = vf.createIRI("http://example.com/related");
+		Statement stm = vf.createStatement(sourceEntry.getSesameResourceURI(), pred, targetEntry.getSesameResourceURI());
+		EntryImpl guestE = (EntryImpl) pm.getGuestUser().getEntry();
+		Statement readStm = vf.createStatement(sourceEntry.getSesameResourceURI(), RepositoryProperties.Read, guestE.getSesameResourceURI());
+		Model g = sourceEntry.getGraph();
 
-        //No relations in target entry
-        assertTrue(targetEntry.getRelations().isEmpty());
-
-        //Testing to create a relation to target entry
-        g.add(stm);
-        sourceEntry.setGraph(g);
-		assertFalse(targetEntry.getRelations().isEmpty());
-
-        //Testing to manually remove relation to target entry
-        g.remove(stm);
-        sourceEntry.setGraph(g);
+		//No relations in target entry
 		assertTrue(targetEntry.getRelations().isEmpty());
 
-        //Testing to change acl and making sure that principal inv-rel-cache (relations) is not affected.
-        int rels = guestE.getRelations().size();
-        g.add(readStm);
-        sourceEntry.setGraph(g);
+		//Testing to create a relation to target entry
+		g.add(stm);
+		sourceEntry.setGraph(g);
+		assertFalse(targetEntry.getRelations().isEmpty());
+
+		//Testing to manually remove relation to target entry
+		g.remove(stm);
+		sourceEntry.setGraph(g);
+		assertTrue(targetEntry.getRelations().isEmpty());
+
+		//Testing to change acl and making sure that principal inv-rel-cache (relations) is not affected.
+		int rels = guestE.getRelations().size();
+		g.add(readStm);
+		sourceEntry.setGraph(g);
 		assertEquals(guestE.getRelations().size(), rels);
 
-        //Testing that inv-rel-cache of target entry is updated upon remove of source entry.
-        g.add(stm);
-        sourceEntry.setGraph(g);
+		//Testing that inv-rel-cache of target entry is updated upon remove of source entry.
+		g.add(stm);
+		sourceEntry.setGraph(g);
 		assertFalse(targetEntry.getRelations().isEmpty());
-        context.remove(sourceEntry.getEntryURI());
-        assertTrue(targetEntry.getRelations().isEmpty());
-    }
+		context.remove(sourceEntry.getEntryURI());
+		assertTrue(targetEntry.getRelations().isEmpty());
+	}
 }
