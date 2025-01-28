@@ -16,10 +16,6 @@
 
 package org.entrystore.impl;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-import java.io.File;
-import java.net.URI;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
@@ -34,6 +30,17 @@ import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.io.File;
+import java.net.URI;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 public class EntryImplTest extends AbstractCoreTest {
 
@@ -69,62 +76,62 @@ public class EntryImplTest extends AbstractCoreTest {
 
 	@Test
 	public void builtinType() {
-		// Checking that builtintype cannot be changed for local resources
+		// Checking that built-in type cannot be changed for local resources
 		try {
 			listEntry.setGraphType(GraphType.None);
-			assertTrue(false, "Successfully (and erroneously) changed the builtin type" + " of a local resource!");
-		} catch (RepositoryException re) {
+			fail("Successfully (and erroneously) changed the builtin type" + " of a local resource!");
+		} catch (RepositoryException ignored) {
 		}
 
 		// Checking that builtintype CAN be changed for links.
-		assertTrue(linkEntry.getGraphType() == GraphType.None);
+		assertSame(GraphType.None, linkEntry.getGraphType());
 		linkEntry.setGraphType(GraphType.List);
-		assertTrue(linkEntry.getGraphType() == GraphType.List);
+		assertSame(GraphType.List, linkEntry.getGraphType());
 
 		// Checking that builtintype CAN be changed for references.
-		assertTrue(refEntry.getGraphType() == GraphType.None);
+		assertSame(GraphType.None, refEntry.getGraphType());
 		refEntry.setGraphType(GraphType.List);
-		assertTrue(refEntry.getGraphType() == GraphType.List);
+		assertSame(GraphType.List, refEntry.getGraphType());
 	}
 
 	@Test
 	public void referenceType() {
-		assertTrue(listEntry.getEntryType() == EntryType.Local);
-		assertTrue(linkEntry.getEntryType() == EntryType.Link);
-		assertTrue(refEntry.getEntryType() == EntryType.Reference);
+		assertSame(EntryType.Local, listEntry.getEntryType());
+		assertSame(EntryType.Link, linkEntry.getEntryType());
+		assertSame(EntryType.Reference, refEntry.getEntryType());
 	}
 
 	@Test
 	public void representationType() {
-		assertTrue(listEntry.getResourceType() == ResourceType.InformationResource);
+		assertSame(ResourceType.InformationResource, listEntry.getResourceType());
 		// Checking that representationtype cannot be changed for local
 		// resources
 		try {
 			listEntry.setResourceType(ResourceType.NamedResource);
-			assertTrue(false, "Succesfully (and erronously) changed the representationtype" + " of a local resource!");
-		} catch (RepositoryException re) {
+			fail("Succesfully (and erronously) changed the representationtype" + " of a local resource!");
+		} catch (RepositoryException ignored) {
 		}
 
-		assertTrue(linkEntry.getResourceType() == ResourceType.InformationResource);
+		assertSame(ResourceType.InformationResource, linkEntry.getResourceType());
 		linkEntry.setResourceType(ResourceType.NamedResource);
-		assertTrue(linkEntry.getResourceType() == ResourceType.NamedResource);
+		assertSame(ResourceType.NamedResource, linkEntry.getResourceType());
 
-		assertTrue(refEntry.getResourceType() == ResourceType.InformationResource);
+		assertSame(ResourceType.InformationResource, refEntry.getResourceType());
 		refEntry.setResourceType(ResourceType.Unknown);
-		assertTrue(refEntry.getResourceType() == ResourceType.Unknown);
+		assertSame(ResourceType.Unknown, refEntry.getResourceType());
 	}
 
 	@Test
 	public void dates() {
-		assertTrue(listEntry.getCreationDate() != null);
-		assertTrue(listEntry.getModifiedDate() != null);
+		assertNotNull(listEntry.getCreationDate());
+		assertNotNull(listEntry.getModifiedDate());
 		listEntry.getLocalMetadata().setGraph(listEntry.getLocalMetadata().getGraph()); // pretend
 		// to
 		// change
 		// the
 		// metadata
 		// graph.
-		assertTrue(listEntry.getModifiedDate() != null);
+		assertNotNull(listEntry.getModifiedDate());
 	}
 
 
@@ -151,18 +158,18 @@ public class EntryImplTest extends AbstractCoreTest {
 	public void rdf() {
 		Model mmdGraph = listEntry.getGraph();
 //		assertTrue(mmdGraph.size() == 6);
-		assertTrue(!mmdGraph.filter(null, RepositoryProperties.resource, null).isEmpty());
-		assertTrue(!mmdGraph.filter(null, RepositoryProperties.metadata, null).isEmpty());
-		assertTrue(!mmdGraph.filter(null, RepositoryProperties.Created, null).isEmpty());
-		assertTrue(!mmdGraph.filter(null, RDF.TYPE, null).isEmpty());
+		assertFalse(mmdGraph.filter(null, RepositoryProperties.resource, null).isEmpty());
+		assertFalse(mmdGraph.filter(null, RepositoryProperties.metadata, null).isEmpty());
+		assertFalse(mmdGraph.filter(null, RepositoryProperties.Created, null).isEmpty());
+		assertFalse(mmdGraph.filter(null, RDF.TYPE, null).isEmpty());
 
-		assertTrue(refEntry.getExternalMetadataCacheDate() == null);
+		assertNull(refEntry.getExternalMetadataCacheDate());
 		refEntry.getCachedExternalMetadata().setGraph(new LinkedHashModel());
-		assertTrue(refEntry.getExternalMetadataCacheDate() != null);
+		assertNotNull(refEntry.getExternalMetadataCacheDate());
 
-		assertTrue(refLinkEntry.getExternalMetadataCacheDate() == null);
+		assertNull(refLinkEntry.getExternalMetadataCacheDate());
 		refLinkEntry.getCachedExternalMetadata().setGraph(new LinkedHashModel());
-		assertTrue(refLinkEntry.getExternalMetadataCacheDate() != null);
+		assertNotNull(refLinkEntry.getExternalMetadataCacheDate());
 
 	}
 
@@ -171,50 +178,50 @@ public class EntryImplTest extends AbstractCoreTest {
 		Model mmdGraph = listEntry.getGraph();
 		listEntry.setGraph(mmdGraph);
 		Model mmdGraph2 = listEntry.getGraph();
-		assertTrue(mmdGraph.size() == mmdGraph2.size());
+		assertEquals(mmdGraph.size(), mmdGraph2.size());
 	}
 
 	@Test
 	public void refLocalEntry() {
 		Entry ref = context.createReference(null, linkEntry.getResourceURI(), linkEntry.getLocalMetadataURI(), null);
-		assertTrue(ref.getCachedExternalMetadata().getGraph().size() == linkEntry.getLocalMetadata().getGraph().size());
+		assertEquals(ref.getCachedExternalMetadata().getGraph().size(), linkEntry.getLocalMetadata().getGraph().size());
 	}
 
-    @Test
-    public void invRelCache() {
-        EntryImpl sourceEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
-        EntryImpl targetEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
-        ValueFactory vf = sourceEntry.getRepository().getValueFactory();
-        IRI pred = vf.createIRI("http://example.com/related");
-        Statement stm = vf.createStatement(sourceEntry.getSesameResourceURI(), pred, targetEntry.getSesameResourceURI());
-        EntryImpl guestE = (EntryImpl) pm.getGuestUser().getEntry();
-        Statement readStm = vf.createStatement(sourceEntry.getSesameResourceURI(), RepositoryProperties.Read, guestE.getSesameResourceURI());
-        Model g = sourceEntry.getGraph();
+	@Test
+	public void invRelCache() {
+		EntryImpl sourceEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+		EntryImpl targetEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
+		ValueFactory vf = sourceEntry.getRepository().getValueFactory();
+		IRI pred = vf.createIRI("http://example.com/related");
+		Statement stm = vf.createStatement(sourceEntry.getSesameResourceURI(), pred, targetEntry.getSesameResourceURI());
+		EntryImpl guestE = (EntryImpl) pm.getGuestUser().getEntry();
+		Statement readStm = vf.createStatement(sourceEntry.getSesameResourceURI(), RepositoryProperties.Read, guestE.getSesameResourceURI());
+		Model g = sourceEntry.getGraph();
 
-        //No relations in target entry
-        assertTrue(targetEntry.getRelations().isEmpty());
+		//No relations in target entry
+		assertTrue(targetEntry.getRelations().isEmpty());
 
-        //Testing to create a relation to target entry
-        g.add(stm);
-        sourceEntry.setGraph(g);
-        assertTrue(!targetEntry.getRelations().isEmpty());
+		//Testing to create a relation to target entry
+		g.add(stm);
+		sourceEntry.setGraph(g);
+		assertFalse(targetEntry.getRelations().isEmpty());
 
-        //Testing to manually remove relation to target entry
-        g.remove(stm);
-        sourceEntry.setGraph(g);
-        assertTrue(targetEntry.getRelations().isEmpty());
+		//Testing to manually remove relation to target entry
+		g.remove(stm);
+		sourceEntry.setGraph(g);
+		assertTrue(targetEntry.getRelations().isEmpty());
 
-        //Testing to change acl and making sure that principal inv-rel-cache (relations) is not affected.
-        int rels = guestE.getRelations().size();
-        g.add(readStm);
-        sourceEntry.setGraph(g);
-        assertTrue(guestE.getRelations().size() == rels);
+		//Testing to change acl and making sure that principal inv-rel-cache (relations) is not affected.
+		int rels = guestE.getRelations().size();
+		g.add(readStm);
+		sourceEntry.setGraph(g);
+		assertEquals(guestE.getRelations().size(), rels);
 
-        //Testing that inv-rel-cache of target entry is updated upon remove of source entry.
-        g.add(stm);
-        sourceEntry.setGraph(g);
-        assertTrue(!targetEntry.getRelations().isEmpty());
-        context.remove(sourceEntry.getEntryURI());
-        assertTrue(targetEntry.getRelations().isEmpty());
-    }
+		//Testing that inv-rel-cache of target entry is updated upon remove of source entry.
+		g.add(stm);
+		sourceEntry.setGraph(g);
+		assertFalse(targetEntry.getRelations().isEmpty());
+		context.remove(sourceEntry.getEntryURI());
+		assertTrue(targetEntry.getRelations().isEmpty());
+	}
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,7 +40,6 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedInputStream;
@@ -51,30 +50,28 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * Commonly used file operations.
- * 
+ *
  * @author Hannes Ebner
  * @version $Id$
  */
 public class FileOperations {
 
 	private final static Logger log = LoggerFactory.getLogger(FileOperations.class);
-	
+
 	private final static int BUFFER_SIZE = 8192;
-	
-	// Noninstantiable utility class
+
+	// Non instantiable utility class
 	private FileOperations() {
 		throw new AssertionError();
 	}
 
 	/**
 	 * Moves a file from one location to another. If the file cannot be moved
-	 * (e.g. because source and destination are in a different file system), it
+	 * (e.g., because source and destination are in a different file system), it
 	 * is copied instead. The source file is removed then.
-	 * 
-	 * @param source
-	 *            File to move
-	 * @param destination
-	 *            Destination file
+	 *
+	 * @param source      File to move
+	 * @param destination Destination file
 	 * @throws IOException
 	 */
 	public static void moveFile(File source, File destination) throws IOException {
@@ -86,7 +83,7 @@ public class FileOperations {
 			throw new IllegalArgumentException("Cannot move file to itself");
 		}
 
-		log.debug("Moving file " + source + " to " + destination);
+		log.debug("Moving file {} to {}", source, destination);
 		if (!source.renameTo(destination)) {
 			copyFile(source, destination);
 			if (!source.delete()) {
@@ -97,11 +94,9 @@ public class FileOperations {
 
 	/**
 	 * Copies a File using Java NIO Channels.
-	 * 
-	 * @param src
-	 *            Source file
-	 * @param dst
-	 *            Destination file
+	 *
+	 * @param src Source file
+	 * @param dst Destination file
 	 * @throws IOException
 	 */
 	public static void copyFile(File src, File dst) throws IOException {
@@ -123,15 +118,15 @@ public class FileOperations {
 				destinationChannel.close();
 			}
 		}
-		
+
 		if (!copied) {
 			log.warn("File copying failed using NIO, performing traditional copy using streams instead");
 			copyFile(Files.newInputStream(src.toPath()), Files.newOutputStream(dst.toPath()));
 		}
 	}
-	
-	public static void fastChannelCopy(final ReadableByteChannel src, final WritableByteChannel dest) throws IOException {  
-		final ByteBuffer buffer = ByteBuffer.allocateDirect(16 * 1024);  
+
+	public static void fastChannelCopy(final ReadableByteChannel src, final WritableByteChannel dest) throws IOException {
+		final ByteBuffer buffer = ByteBuffer.allocateDirect(16 * 1024);
 		while (src.read(buffer) != -1) {
 			buffer.flip();
 			dest.write(buffer);
@@ -145,13 +140,11 @@ public class FileOperations {
 
 	/**
 	 * Copies the contents of an InputStream to an OutputStream. Closes both
-	 * streams after everything has gone well. Uses buffered streams internally.
-	 * 
-	 * @param is
-	 *            Source InputStream
-	 * @param os
-	 *            Destination OutputStream
-	 * @throws IOException 
+	 * streams after everything has gone well. Using buffered streams internally.
+	 *
+	 * @param is Source InputStream
+	 * @param os Destination OutputStream
+	 * @throws IOException
 	 */
 	public static long copyFile(InputStream is, OutputStream os) throws IOException {
 		BufferedInputStream bis = new BufferedInputStream(is, BUFFER_SIZE);
@@ -175,23 +168,24 @@ public class FileOperations {
 	/**
 	 * Deletes all files in a given directory, but does not remove the directory
 	 * itself. Does not delete files in subdirectories.
-	 * 
-	 * @param dir
-	 *            Directory to be cleaned.
+	 *
+	 * @param dir Directory to be cleaned.
 	 * @return True if successful for all files.
 	 */
 	public static boolean deleteAllFilesInDir(File dir) {
 		File file;
 		if (dir.isDirectory()) {
 			String[] children = dir.list();
-			for (int i = 0; i < children.length; i++) {
-				file = new File(dir, children[i]);
-				if (file.isFile()) {
-					if (!file.delete()) {
-						log.warn("Could not delete file " + file);
-						return false;
+			if (children != null) {
+				for (String child : children) {
+					file = new File(dir, child);
+					if (file.isFile()) {
+						if (!file.delete()) {
+							log.warn("Could not delete file {}", file);
+							return false;
+						}
+						log.debug("Deleted file {}", file);
 					}
-					log.debug("Deleted file " + file);
 				}
 			}
 		}
@@ -207,11 +201,13 @@ public class FileOperations {
 	public static boolean deleteDirectory(File path) {
 		if (path.exists()) {
 			File[] files = path.listFiles();
-			for (int i=0; i<files.length; i++) {
-				if (files[i].isDirectory()) {
-					deleteDirectory(files[i]);
-				} else {
-					files[i].delete();
+			if (files != null) {
+				for (File file : files) {
+					if (file.isDirectory()) {
+						deleteDirectory(file);
+					} else {
+						file.delete();
+					}
 				}
 			}
 		}
@@ -220,20 +216,18 @@ public class FileOperations {
 
 	/**
 	 * Lists all files from a directory and its subdirectories.
-	 * 
-	 * @param folder
-	 *            Folder
+	 *
+	 * @param folder Folder
 	 * @return Returns a list of files. Does not contain folders.
 	 */
 	public static List<File> listFiles(File folder) {
-		List<File> result = new ArrayList<File>();
+		List<File> result = new ArrayList<>();
 		if (!folder.isDirectory()) {
 			result.add(folder);
 		} else {
 			File[] fileArray = folder.listFiles();
 			if (fileArray != null) {
-				List<File> fileList = Arrays.asList(fileArray);
-				for (File file : fileList) {
+				for (File file : fileArray) {
 					if (file.isFile()) {
 						result.add(file);
 					} else if (file.isDirectory()) {
@@ -244,25 +238,23 @@ public class FileOperations {
 		}
 		return result;
 	}
-	
+
 	/**
 	 * Lists all subdirectories (and their subdirectories; recursively) of a
 	 * directory.
-	 * 
-	 * @param folder
-	 *            Folder
+	 *
+	 * @param folder Folder
 	 * @return Returns a list of folders. Does not contain files.
 	 */
 	public static List<File> listDirectories(File folder) {
 		if (!folder.isDirectory()) {
 			throw new IllegalArgumentException("Parameter is not a folder");
 		}
-		
-		List<File> result = new ArrayList<File>();
+
+		List<File> result = new ArrayList<>();
 		File[] fileArray = folder.listFiles();
-		if ((fileArray != null) && (fileArray.length > 0)) {
-			List<File> fileList = Arrays.asList(fileArray);
-			for (File file : fileList) {
+		if (fileArray != null) {
+			for (File file : fileArray) {
 				if (file.isDirectory()) {
 					result.add(file);
 					result.addAll(listFiles(file));
@@ -272,16 +264,13 @@ public class FileOperations {
 
 		return result;
 	}
-	
+
 	/**
 	 * Zips a folder and its subfolders.
-	 * 
-	 * @param zipFile
-	 *            Destination ZIP file. Is created if it does not exist.
-	 * @param directory
-	 *            The directory to be zipped.
-	 * @param base
-	 *            Base File path to strip off the zipped files. May be null.
+	 *
+	 * @param zipFile   Destination ZIP file. Is created if it does not exist.
+	 * @param directory The directory to be zipped.
+	 * @param base      Base File path to strip off the zipped files. May be null.
 	 * @return Returns a CRC32 checksum of the zipped file.
 	 * @throws IOException
 	 */
@@ -291,13 +280,10 @@ public class FileOperations {
 
 	/**
 	 * Zips a set of files.
-	 * 
-	 * @param zipFile
-	 *            Destination ZIP file. Is created if it does not exist.
-	 * @param files
-	 *            List of files to add to the ZIP file.
-	 * @param base
-	 *            Base File path to strip off the zipped files. May be null.
+	 *
+	 * @param zipFile Destination ZIP file. Is created if it does not exist.
+	 * @param files   List of files to add to the ZIP file.
+	 * @param base    Base File path to strip off the zipped files. May be null.
 	 * @return Returns a CRC32 checksum of the zipped file.
 	 * @throws IOException
 	 */
@@ -306,7 +292,7 @@ public class FileOperations {
 		CheckedOutputStream cos = new CheckedOutputStream(fos, new CRC32());
 		BufferedOutputStream bos = new BufferedOutputStream(cos, BUFFER_SIZE);
 		ZipOutputStream zos = new ZipOutputStream(bos);
-		byte data[] = new byte[BUFFER_SIZE];
+		byte[] data = new byte[BUFFER_SIZE];
 		for (File file : files) {
 			InputStream fis = Files.newInputStream(file.toPath());
 			BufferedInputStream source = new BufferedInputStream(fis);
@@ -315,7 +301,7 @@ public class FileOperations {
 				entryPath = entryPath.replace(base.getPath(), "");
 			}
 			ZipEntry entry = new ZipEntry(entryPath);
-			log.debug("Adding file: " + file.getPath());
+			log.debug("Adding file: {}", file.getPath());
 			zos.putNextEntry(entry);
 			int count;
 			while ((count = source.read(data, 0, BUFFER_SIZE)) != -1) {
@@ -330,15 +316,12 @@ public class FileOperations {
 
 	/**
 	 * Unzips a file into a directory. Subfolders are created if necessary.
-	 * 
-	 * @param zipFile
-	 *            ZIP file to be used as source.
-	 * @param destination
-	 *            Destination folder
+	 *
+	 * @param zipFile     ZIP file to be used as a source.
+	 * @param destination Destination folder
 	 * @return Returns a CRC32 checksum of the ZIP file.
 	 * @throws IOException
-	 * @throws IllegalArgumentException
-	 *             If destination is not a folder.
+	 * @throws IllegalArgumentException If destination is not a folder.
 	 */
 	public static long unzipFile(File zipFile, File destination) throws IOException {
 		if (!destination.isDirectory()) {
@@ -353,7 +336,7 @@ public class FileOperations {
 		while ((entry = zis.getNextEntry()) != null) {
 			log.debug("Extracting file: {}", entry.getName());
 			int count;
-			byte data[] = new byte[BUFFER_SIZE];
+			byte[] data = new byte[BUFFER_SIZE];
 			File unzippedFile = new File(destination, entry.getName());
 			File parentDir = unzippedFile.getParentFile();
 			if (!parentDir.exists()) {
@@ -376,20 +359,16 @@ public class FileOperations {
 	/**
 	 * Creates an empty file in the default temporary-file directory, using the
 	 * given prefix and suffix to generate its name.
-	 * 
-	 * @param prefix
-	 *            The prefix string to be used in generating the folder's name;
-	 *            must be at least three characters long
-	 * @param suffix
-	 *            The suffix string to be used in generating the folder's name;
-	 *            may be <code>null</code>, in which case the suffix
-	 *            <code>".tmp"</code> will be used
-	 * @return An abstract pathname denoting a newly-created empty folder
-	 * @throws IllegalArgumentException
-	 *             If the <code>prefix</code> argument contains fewer than
-	 *             three characters
-	 * @throws IOException
-	 *             If a folder could not be created
+	 *
+	 * @param prefix The prefix string to be used in generating the folder's name;
+	 *               must be at least three characters long
+	 * @param suffix The suffix string to be used in generating the folder's name;
+	 *               may be <code>null</code>, in which case the suffix
+	 *               <code>".tmp"</code> will be used
+	 * @return An abstract pathname denoting a newly created empty folder
+	 * @throws IllegalArgumentException If the <code>prefix</code> argument contains fewer than
+	 *                                  three characters
+	 * @throws IOException              If a folder could not be created
 	 */
 	public static File createTempDirectory(String prefix, String suffix) throws IOException {
 		File tempFile = File.createTempFile(prefix, suffix);
@@ -399,17 +378,17 @@ public class FileOperations {
 	}
 
 	public static void copyPath(Path src, Path dst) throws IOException {
-		Files.walkFileTree(src, new SimpleFileVisitor<Path>() {
+		Files.walkFileTree(src, new SimpleFileVisitor<>() {
 			@Override
 			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
-					throws IOException {
+				throws IOException {
 				Files.createDirectories(dst.resolve(src.relativize(dir)));
 				return FileVisitResult.CONTINUE;
 			}
 
 			@Override
 			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
-					throws IOException {
+				throws IOException {
 				Files.copy(file, dst.resolve(src.relativize(file)), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
 				return FileVisitResult.CONTINUE;
 			}
@@ -423,13 +402,15 @@ public class FileOperations {
 				dstPath.mkdir();
 			}
 
-			String files[] = srcPath.list();
-			for (int i = 0; i < files.length; i++) {
-				copyDirectory(new File(srcPath, files[i]), new File(dstPath, files[i]));
+			String[] files = srcPath.list();
+			if (files != null) {
+				for (String file : files) {
+					copyDirectory(new File(srcPath, file), new File(dstPath, file));
+				}
 			}
 		} else {
 			if (!srcPath.exists()) {
-				log.error(srcPath + ": file or directory does not exist.");
+				log.error("{}: file or directory does not exist.", srcPath);
 			} else {
 				InputStream in = null;
 				OutputStream out = null;
@@ -437,11 +418,11 @@ public class FileOperations {
 					in = Files.newInputStream(srcPath.toPath());
 					out = Files.newOutputStream(dstPath.toPath());
 					// Transfer bytes from in to out
-					byte[] buf = new byte[1024];
+					byte[] buffer = new byte[1024];
 					int len;
 
-					while ((len = in.read(buf)) > 0) {
-						out.write(buf, 0, len);
+					while ((len = in.read(buffer)) > 0) {
+						out.write(buffer, 0, len);
 					}
 				} finally {
 					if (in != null) {
@@ -455,11 +436,13 @@ public class FileOperations {
 		}
 	}
 
-	public static void writeStringToFile(File file, String content) {
+	public static void writeStringToFile(File file, String content) throws IOException {
+		if (file == null) {
+			throw new NullPointerException("file to write to is null");
+		}
+
 		try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
 			writer.write(content);
-		} catch (IOException e) {
-			log.error(e.getMessage());
 		}
 	}
 

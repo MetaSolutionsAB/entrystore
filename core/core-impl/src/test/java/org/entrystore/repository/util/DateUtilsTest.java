@@ -25,7 +25,7 @@ import java.util.Date;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class DateUtilTest {
+public class DateUtilsTest {
 
 	@Test
 	public void daysBetween_WithException() {

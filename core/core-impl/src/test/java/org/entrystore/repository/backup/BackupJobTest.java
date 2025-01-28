@@ -30,19 +30,19 @@ public class BackupJobTest {
 		try {
 			job.execute(null);
 		} catch(RuntimeException e) {
-			assertEquals(e.getMessage(), "Backup job \"execute()\" was interrupted");
+			assertEquals("Backup job \"execute()\" was interrupted", e.getMessage());
 		}
 
 		try {
 			BackupJob.runBackup(null);
 		} catch(RuntimeException e) {
-			assertEquals(e.getMessage(), "Backup job \"runBackup()\" was interrupted");
+			assertEquals("Backup job \"runBackup()\" was interrupted", e.getMessage());
 		}
 
 		try {
 			BackupJob.runBackupMaintenance(null);
 		} catch(RuntimeException e) {
-			assertEquals(e.getMessage(), "Backup job \"runBackupMaintenance()\" was interrupted");
+			assertEquals("Backup job \"runBackupMaintenance()\" was interrupted", e.getMessage());
 		}
 
 	}
