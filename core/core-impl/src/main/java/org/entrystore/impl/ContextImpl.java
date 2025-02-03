@@ -496,7 +496,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 					// Update the index counter.
 					List<Statement> counters = rc.getStatements(this.resourceURI, RepositoryProperties.counter, null, false, this.resourceURI).stream().toList();
 					rc.remove(counters, this.resourceURI);
-					//rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(counter), this.resourceURI);
+					rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(counter), this.resourceURI);
 
 					rc.commit();
 					softCache.put(newEntry);
