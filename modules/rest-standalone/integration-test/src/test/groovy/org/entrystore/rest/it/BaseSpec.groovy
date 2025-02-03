@@ -2,15 +2,19 @@ package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
+import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.standalone.EntryStoreApplicationStandaloneJetty
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
+import java.util.concurrent.TimeUnit
+
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.nio.charset.StandardCharsets.UTF_8
+import static org.awaitility.Awaitility.await
 
 abstract class BaseSpec extends Specification {
 
@@ -61,7 +65,7 @@ abstract class BaseSpec extends Specification {
 	 * @param data a key-val map to be converted
 	 * @return a string in form of "?key1=value1&key2=value2&..."; or empty string for empty map
 	 */
-	def convertMapToQueryParams(Map<String, String> data) {
+	def static convertMapToQueryParams(Map<String, String> data) {
 		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> k + '=' + URLEncoder.encode(v, UTF_8) }.join('&')
 	}
 
@@ -107,4 +111,21 @@ abstract class BaseSpec extends Specification {
 		assert responseJson['entryId'] != null
 		return responseJson['entryId'].toString()
 	}
+
+	Integer getSolrQueueSize() {
+		def connection = EntryStoreClient.getRequest('/management/status?extended=true')
+		assert connection.getResponseCode() == HTTP_OK
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		return (Integer) responseJson['solr']['postQueueSize']
+	}
+
+	def waitForSolrProcessing() {
+		await()
+			.conditionEvaluationListener(new ConditionEvaluationLogger(log::info))
+			.pollInterval(10, TimeUnit.MILLISECONDS)
+			.atMost(30, TimeUnit.SECONDS)
+			// separate supplier and predicate for better await logging
+			.until({ getSolrQueueSize() }, { it == 0 })
+	}
+
 }

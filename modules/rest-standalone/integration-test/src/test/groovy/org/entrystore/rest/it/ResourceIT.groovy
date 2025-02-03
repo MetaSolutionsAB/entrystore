@@ -1,10 +1,16 @@
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
+import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
-import static java.net.HttpURLConnection.*
+import java.time.Year
+
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_CREATED
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
+import static java.net.HttpURLConnection.HTTP_OK
 
 class ResourceIT extends BaseSpec {
 
@@ -190,7 +196,7 @@ class ResourceIT extends BaseSpec {
 
 		// TODO: Verify this behaviour: if 'password' is set then no other properties (than 'password and 'name') are processed, due to logic for processing 'password' has a 'return' statement
 		def requestBody = JsonOutput.toJson([
-			name: 'New name',
+			name    : 'New name',
 			language: 'PL',
 			password: 'newPass123'
 		])
@@ -210,7 +216,7 @@ class ResourceIT extends BaseSpec {
 		def resourceJson2 = JSON_PARSER.parseText(resourceConn2.getInputStream().text)
 		// Why the name is in the lower case, other than the data in the request
 		resourceJson2['name'] == 'new name'
-		resourceJson2['language'] == null 	// Should be 'PL'
+		resourceJson2['language'] == null    // Should be 'PL'
 		resourceJson2['customProperties'] == [:]
 	}
 
@@ -297,9 +303,9 @@ class ResourceIT extends BaseSpec {
 		assert resourceJson['customProperties'] == [:]
 
 		def requestBody = JsonOutput.toJson([
-			name: 'Newer name',
-			language: 'PL',
-			disabled: 'true',
+			name            : 'Newer name',
+			language        : 'PL',
+			disabled        : 'true',
 			customProperties: [disablingReason: 'Untruthful']
 		])
 
@@ -413,7 +419,7 @@ class ResourceIT extends BaseSpec {
 		assert entryConn.getResponseCode() == HTTP_OK
 		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
 		assert entryRespJson['info'] != null
-		def sourceEntryKeys = (entryRespJson['info'] as Map).keySet().collect( it -> it.toString())
+		def sourceEntryKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def sourceResourceUri = sourceEntryKeys.find { it -> it.contains('resource') }
 		// fetch source resource, should contain above created entry
 		def sourceResourceConn = EntryStoreClient.getRequest(sourceResourceUri)
@@ -427,7 +433,7 @@ class ResourceIT extends BaseSpec {
 		assert targetEntryConn.getResponseCode() == HTTP_OK
 		def targetEntryRespJson = JSON_PARSER.parseText(targetEntryConn.getInputStream().text)
 		assert targetEntryRespJson['info'] != null
-		def targetEntryKeys = (targetEntryRespJson['info'] as Map).keySet().collect( it -> it.toString())
+		def targetEntryKeys = (targetEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def targetResourceUri = targetEntryKeys.find { it -> it.contains('resource') }
 		// fetch target resource, should be empty
 		def targetResourceConn = EntryStoreClient.getRequest(targetResourceUri)
@@ -447,7 +453,7 @@ class ResourceIT extends BaseSpec {
 		editResourceConn.getContentType().contains('application/json')
 		def editResourceJson = JSON_PARSER.parseText(editResourceConn.getInputStream().text)
 		// POST on target list to move an entry from source list, returns moved entryUri for some reason, instead of the new state of POST item (target list)
-		editResourceJson['entryURI'] == 'http://localhost:8181/store/' + contextId + '/entry/' + givenEntryId
+		editResourceJson['entryURI'] == EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + givenEntryId
 
 		// fetch target resource again, should contain moved entry
 		def targetResourceConn2 = EntryStoreClient.getRequest(targetResourceUri)
