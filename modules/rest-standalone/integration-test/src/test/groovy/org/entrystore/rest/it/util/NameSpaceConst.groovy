@@ -28,6 +28,7 @@ class NameSpaceConst {
 	static DC_TERM_CREATOR = DC_TERMS + 'creator'
 	static DC_TERM_PUBLISHER = DC_TERMS + 'publisher'
 	static DC_TERM_SUBJECT = DC_TERMS + 'subject'
+	static DC_TERM_DESCRIPTION = DC_TERMS + 'description'
 
 	static NS_DCAT_DATASET = 'http://www.w3.org/ns/dcat#Dataset'
 }

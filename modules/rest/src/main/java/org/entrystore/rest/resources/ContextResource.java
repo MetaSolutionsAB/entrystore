@@ -245,7 +245,7 @@ public class ContextResource extends BaseResource {
 							predicateBlackList.add(vf.createIRI(NS.dcterms, "title"));
 							predicateBlackList.add(vf.createIRI(NS.dc, "description"));
 							predicateBlackList.add(vf.createIRI(NS.dcterms, "description"));
-							java.util.List<Value> subjectBlackList = new ArrayList<Value>();
+							java.util.List<Value> subjectBlackList = new ArrayList<>();
 
 							for (Statement statement : templateMD) {
 								if (predicateBlackList.contains(statement.getPredicate())) {
@@ -262,7 +262,7 @@ public class ContextResource extends BaseResource {
 								}
 							}
 						}
-						if (inheritedMD != null && !inheritedMD.isEmpty() && entry.getLocalMetadata() != null) {
+						if (!inheritedMD.isEmpty() && entry.getLocalMetadata() != null) {
 							Model mergedGraph = new LinkedHashModel();
 							mergedGraph.addAll(entry.getLocalMetadata().getGraph());
 							mergedGraph.addAll(inheritedMD);
@@ -302,10 +302,9 @@ public class ContextResource extends BaseResource {
 		try {
 			if (parameters.get("resource") != null
 					&& "linkreference".equalsIgnoreCase(parameters.get("entrytype"))) {
-				URI resourceURI = null;
-				URI metadataURI = null;
-				resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
-				metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), UTF_8));
+
+				URI resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
+				URI metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), UTF_8));
 
 				if (parameters.containsKey("list")) {
 					entry = context.createLinkReference(parameters.get("id"), resourceURI, metadataURI, new URI(parameters.get("list")));
@@ -354,10 +353,8 @@ public class ContextResource extends BaseResource {
 			if ((parameters.get("resource") != null) &&
 					(parameters.get("cached-external-metadata") != null) &&
 					("reference".equalsIgnoreCase(parameters.get("entrytype")))) {
-				URI resourceURI = null;
-				URI metadataURI = null;
-				resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
-				metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), UTF_8));
+				URI resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
+				URI metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), UTF_8));
 
 				if (parameters.containsKey("list")) {
 					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, new URI(parameters.get("list")));
@@ -403,7 +400,7 @@ public class ContextResource extends BaseResource {
 
 
 	private GraphType getGraphType(String gt) {
-		if (gt == null || "".equals(gt)) {
+		if (gt == null || gt.isEmpty()) {
 			return GraphType.None;
 		}
 		if (gt.equalsIgnoreCase("list")) {
@@ -485,7 +482,7 @@ public class ContextResource extends BaseResource {
 	 */
 	private boolean setResource(Entry entry) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
-		if (requestText != null && !"".equals(requestText)) {
+		if (requestText != null && !requestText.isEmpty()) {
 			jsonObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 		}
 
@@ -586,8 +583,7 @@ public class ContextResource extends BaseResource {
 		}
 
 		//check the request
-		URI resourceURI = null;
-		resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
+		URI resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
 
 		if (parameters.containsKey("list")) {
 			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("list")));
@@ -630,8 +626,8 @@ public class ContextResource extends BaseResource {
 			JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 			if (mdObj.has("metadata")) {
 				JSONObject obj =(JSONObject) mdObj.get("metadata");
-				Model graph = null;
-				if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
+				Model graph = RDFJSON.rdfJsonToGraph(obj);
+				if (graph != null) {
 					entry.getLocalMetadata().setGraph(graph);
 				}
 			}
@@ -655,8 +651,8 @@ public class ContextResource extends BaseResource {
 				JSONObject mdObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 				if (mdObj.has("cached-external-metadata")) {
 					JSONObject obj = (JSONObject) mdObj.get("cached-external-metadata");
-					Model graph = null;
-					if ((graph = RDFJSON.rdfJsonToGraph(obj)) != null) {
+					Model graph = RDFJSON.rdfJsonToGraph(obj);
+					if (graph != null) {
 						entry.getCachedExternalMetadata().setGraph(graph);
 					}
 				}
