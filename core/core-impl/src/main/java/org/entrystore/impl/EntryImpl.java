@@ -1864,9 +1864,9 @@ public class EntryImpl implements Entry {
 	private void addRelation(Statement statement, RepositoryConnection rc) {
 		try {
 			rc.add(statement, relationURI);
-			if (this.relations != null) {
-				this.relations.add(statement);
-			}
+			// we force a reload upon next call of getRelations(), this is less error
+			// prone than trying to keep this.relations up-to-date manually
+			this.relations = null;
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);
@@ -1882,9 +1882,9 @@ public class EntryImpl implements Entry {
 	private void removeRelation(Statement statement, RepositoryConnection rc) {
 		try {
 			rc.remove(statement, relationURI);
-			if (this.relations != null) {
-				this.relations.remove(statement);
-			}
+			// we force a reload upon next call of getRelations(), this is less error
+			// prone than trying to keep this.relations up-to-date manually
+			this.relations = null;
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);
