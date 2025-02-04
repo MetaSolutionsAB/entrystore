@@ -309,7 +309,7 @@ public class UserImpl extends RDFResource implements User {
 						URI sourceEntryURI = URI.create(statement.getObject().stringValue());
 						EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
 						if (sourceEntry != null) {
-							sourceEntry.removeRelationSynchronized(statement, rc, vf);
+							sourceEntry.removeRelationSynchronized(statement, rc);
 						}
 						rc.remove(statement, entry.getSesameEntryURI());
 					}
@@ -322,7 +322,7 @@ public class UserImpl extends RDFResource implements User {
 					if (context != null) {
 						Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
 						rc.add(newStatement);
-						((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
+						((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc);
 					}
 					this.entry.updateModifiedDateSynchronized(rc, vf);
 					rc.commit();

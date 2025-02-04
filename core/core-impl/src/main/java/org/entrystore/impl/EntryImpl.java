@@ -65,8 +65,6 @@ import java.util.Set;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
 
-
-//TODO change expression to match paper.
 public class EntryImpl implements Entry {
 	@Getter
 	protected volatile String id;
@@ -129,8 +127,8 @@ public class EntryImpl implements Entry {
 		this.id = id;
 		String base = repositoryManager.getRepositoryURL().toString();
 		ValueFactory vf = repository.getValueFactory();
-		this.entryURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.ENTRY_PATH, id).toString());
-		this.relationURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.RELATION, id).toString());
+		this.entryURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.ENTRY_PATH, this.id).toString());
+		this.relationURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.RELATION, this.id).toString());
 		this.localMdURI = vf.createIRI(URISplit.createURI(base, context.id, RepositoryProperties.MD_PATH, this.id).toString());
 		this.context = context;
 		this.repositoryManager = repositoryManager;
@@ -145,9 +143,8 @@ public class EntryImpl implements Entry {
 	 */
 	protected boolean load() {
 		try {
-			RepositoryConnection rc = repository.getConnection();
-			try {
-				if (loadFromStatements(rc.getStatements(null, null, null, false, this.entryURI).asList())) {
+			try (RepositoryConnection rc = repository.getConnection()) {
+				if (loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, this.entryURI)))) {
 					initMetadataObjects();
 					return true;
 				}
@@ -155,8 +152,6 @@ public class EntryImpl implements Entry {
 			} catch (Exception e) {
 				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
-			} finally {
-				rc.close();
 			}
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
@@ -169,7 +164,7 @@ public class EntryImpl implements Entry {
 	 * @throws RepositoryException
 	 */
 	protected boolean load(RepositoryConnection rc) throws RepositoryException {
-		if (loadFromStatements(rc.getStatements(null, null, null, false, this.entryURI).asList())) {
+		if (loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, this.entryURI)))) {
 			initMetadataObjects();
 			return true;
 		}
@@ -268,7 +263,7 @@ public class EntryImpl implements Entry {
 	}
 
 	protected void refreshFromRepository(RepositoryConnection rc) throws RepositoryException {
-		loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
+		loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
 	}
 
 	private boolean loadFromStatements(List<Statement> existingStatements) throws RepositoryException {
@@ -590,9 +585,7 @@ public class EntryImpl implements Entry {
 		//ACL check not necessary as the prerequisite for accessing the MetaMetadata object at all is
 		//AccessProperty.readMetadata rights. It is supposed that the object is not delegated
 		//to principals with less rights.
-		RepositoryConnection rc = null;
-		try {
-			rc = this.repository.getConnection();
+		try (RepositoryConnection rc = this.repository.getConnection()) {
 			Model graph = Iterations.addAll(rc.getStatements(null, null, null, false, entryURI), new LinkedHashModel());
 			//TODO following is a fix for backwards compatability where homeContext is set on user object rather than in the entryinfo.
 			if (this.resource instanceof User && ((User) this.resource).getHomeContext() != null) {
@@ -604,12 +597,6 @@ public class EntryImpl implements Entry {
 		} catch (RepositoryException e) {
 			log.error(e.getMessage(), e);
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
-		} finally {
-			try {
-				rc.close();
-			} catch (RepositoryException e) {
-				log.error(e.getMessage());
-			}
 		}
 	}
 
@@ -631,7 +618,7 @@ public class EntryImpl implements Entry {
 			// referredIn.add(URI.create(listResource.stringValue()));
 			ValueFactory vf = this.repository.getValueFactory();
 			this.addRelationSynchronized(vf.createStatement(resource.resourceURI,
-					resource instanceof Group ? RepositoryProperties.hasGroupMember : RepositoryProperties.hasListMember, this.getSesameEntryURI()), rc, vf);
+					resource instanceof Group ? RepositoryProperties.hasGroupMember : RepositoryProperties.hasListMember, this.getSesameEntryURI()), rc);
 		}
 	}
 
@@ -641,7 +628,7 @@ public class EntryImpl implements Entry {
 			// referredIn.remove(URI.create(listResource.stringValue()));
 			ValueFactory vf = this.repository.getValueFactory();
 			this.removeRelationSynchronized(vf.createStatement(resource.resourceURI,
-					resource instanceof Group ? RepositoryProperties.hasGroupMember : RepositoryProperties.hasListMember, this.getSesameEntryURI()), rc, vf);
+					resource instanceof Group ? RepositoryProperties.hasGroupMember : RepositoryProperties.hasListMember, this.getSesameEntryURI()), rc);
 		}
 	}
 
@@ -651,7 +638,7 @@ public class EntryImpl implements Entry {
 		try {
 			synchronized (this.repository) {
 				RepositoryConnection rc = this.repository.getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
 					// we add an MD triple of we convert from Reference to LinkReference
 					if (EntryType.Reference.equals(locType) && EntryType.LinkReference.equals(entryType)) {
@@ -715,7 +702,7 @@ public class EntryImpl implements Entry {
 		Model newMetadataGraph = null;
 		if (getLocalMetadata() != null) {
 			Model metadataGraph = getLocalMetadata().getGraph();
-			if (metadataGraph != null && metadataGraph.size() != 0) {
+			if (metadataGraph != null && !metadataGraph.isEmpty()) {
 				newMetadataGraph = new LinkedHashModel();
 				for (Statement statement : metadataGraph) {
 					if (statement.getSubject().equals(oldResourceURI)) {
@@ -733,7 +720,7 @@ public class EntryImpl implements Entry {
 		Model newCachedExternalMetadataGraph = null;
 		if (getCachedExternalMetadata() != null) {
 			Model metadataGraph = getCachedExternalMetadata().getGraph();
-			if (metadataGraph != null && metadataGraph.size() != 0) {
+			if (metadataGraph != null && !metadataGraph.isEmpty()) {
 				newCachedExternalMetadataGraph = new LinkedHashModel();
 				for (Statement statement : metadataGraph) {
 					if (statement.getSubject().equals(oldResourceURI)) {
@@ -751,7 +738,7 @@ public class EntryImpl implements Entry {
 		Model newResourceGraph = null;
 		if (!getGraphType().equals(GraphType.None)) {
 			Model resourceGraph = getResource().getEntry().getGraph();
-			if (resourceGraph != null && resourceGraph.size() != 0) {
+			if (resourceGraph != null && !resourceGraph.isEmpty()) {
 				newResourceGraph = new LinkedHashModel();
 				for (Statement statement : resourceGraph) {
 					if (statement.getSubject().equals(oldResourceURI)) {
@@ -782,7 +769,7 @@ public class EntryImpl implements Entry {
 			synchronized (this.repository) {
 				RepositoryConnection rc = this.repository.getConnection();
 				try {
-					rc.setAutoCommit(false);
+					rc.begin();
 					IRI contextURI = vf.createIRI(this.getContext().getEntry().getResourceURI().toString());
 					IRI entryURI = vf.createIRI(this.getEntryURI().toString());
 					rc.remove(vf.createStatement(oldResourceURI, RepositoryProperties.resHasEntry, entryURI, contextURI));
@@ -847,7 +834,7 @@ public class EntryImpl implements Entry {
 			synchronized (this.repository) {
 				RepositoryConnection rc = this.repository.getConnection();
 				try {
-					rc.setAutoCommit(false);
+					rc.begin();
 					IRI contextURI = vf.createIRI(this.getContext().getEntry().getResourceURI().toString());
 					IRI entryURI = vf.createIRI(this.getEntryURI().toString());
 					rc.remove(vf.createStatement(oldExternalMetadataURI, RepositoryProperties.mdHasEntry, entryURI, contextURI));
@@ -901,19 +888,13 @@ public class EntryImpl implements Entry {
 	}
 
 	private Set<URI> getCachedAllowedPrincipalsFor(AccessProperty prop) {
-		switch (prop) {
-		case Administer:
-			return administerPrincipals;
-		case ReadMetadata:
-			return readMetadataPrincipals;
-		case WriteMetadata:
-			return writeMetadataPrincipals;
-		case ReadResource:
-			return readResourcePrincipals;
-		case WriteResource:
-			return writeResourcePrincipals;
-		}
-		return null;
+		return switch (prop) {
+			case Administer -> administerPrincipals;
+			case ReadMetadata -> readMetadataPrincipals;
+			case WriteMetadata -> writeMetadataPrincipals;
+			case ReadResource -> readResourcePrincipals;
+			case WriteResource -> writeResourcePrincipals;
+		};
 	}
 
 	private void setCachedAllowedPrincipalsFor(AccessProperty prop, Set<URI> set) {
@@ -943,12 +924,10 @@ public class EntryImpl implements Entry {
 			return set;
 		}
 
-		RepositoryConnection rc = null;
-		try {
-			rc = this.repository.getConnection();
+		try (RepositoryConnection rc = this.repository.getConnection()) {
 			IRI subject = getAccessSubject(prop);
 			IRI predicate = getAccessPredicate(prop);
-			List<Statement> statements = rc.getStatements(subject, predicate, null, false, entryURI).asList();
+			List<Statement> statements = Iterations.asList(rc.getStatements(subject, predicate, null, false, entryURI));
 			set = new HashSet<URI>();
 			for (Statement statement : statements) {
 				if (statement.getObject() instanceof IRI) {
@@ -958,14 +937,7 @@ public class EntryImpl implements Entry {
 			setCachedAllowedPrincipalsFor(prop, set);
 			return set;
 		} catch (RepositoryException e) {
-			e.printStackTrace();
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
-		} finally {
-			try {
-				rc.close();
-			} catch (RepositoryException e) {
-				e.printStackTrace();
-			}
 		}
 	}
 
@@ -993,7 +965,7 @@ public class EntryImpl implements Entry {
 		try {
 			synchronized (this.repository) {
 				RepositoryConnection rc = this.repository.getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
 					IRI subject = getAccessSubject(prop);
 					IRI predicate = getAccessPredicate(prop);
@@ -1018,7 +990,6 @@ public class EntryImpl implements Entry {
 					}
 				} catch (Exception e) {
 					rc.rollback();
-					e.printStackTrace();
 					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 				} finally {
 					rc.close();
@@ -1034,16 +1005,13 @@ public class EntryImpl implements Entry {
 	public boolean hasAllowedPrincipals() {
 		if (this.readOrWrite == null) {
 			try {
-				RepositoryConnection rc = this.repository.getConnection();
-				try {
+				try (RepositoryConnection rc = this.repository.getConnection()) {
 					if (rc.hasStatement(null, RepositoryProperties.Write, null, false, entryURI) ||
-							rc.hasStatement(null, RepositoryProperties.Read, null, false, entryURI)) {
+						rc.hasStatement(null, RepositoryProperties.Read, null, false, entryURI)) {
 						this.readOrWrite = Boolean.TRUE;
 					} else {
 						this.readOrWrite = Boolean.FALSE;
 					}
-				} finally {
-					rc.close();
 				}
 			} catch (RepositoryException e) {
 				log.error(e.getMessage());
@@ -1075,7 +1043,7 @@ public class EntryImpl implements Entry {
 		try {
 			synchronized (this.repository) {
 				RepositoryConnection rc = this.repository.getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
 					setGraphType(gt, rc);
 					registerEntryModified(rc, this.repository.getValueFactory());
@@ -1104,7 +1072,7 @@ public class EntryImpl implements Entry {
 	 * @throws DatatypeConfigurationException
 	 */
 	protected void setGraphType(GraphType gt, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
-		List<Statement> statements = rc.getStatements(resURI, RDF.TYPE, null, false, entryURI).asList();
+		List<Statement> statements = Iterations.asList(rc.getStatements(resURI, RDF.TYPE, null, false, entryURI));
 		for (Statement statement : statements) {
 			if (getGraphType(statement.getObject()) != null) {
 				rc.remove(statement, entryURI);
@@ -1134,7 +1102,7 @@ public class EntryImpl implements Entry {
 		try {
 			synchronized (this.repository) {
 				RepositoryConnection rc = this.repository.getConnection();
-				rc.setAutoCommit(false);
+				rc.begin();
 				try {
 					setResourceType(resType, rc);
 					registerEntryModified(rc, this.repository.getValueFactory());
@@ -1153,7 +1121,7 @@ public class EntryImpl implements Entry {
 	}
 
 	protected void setResourceType(ResourceType resType, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
-		List<Statement> statements = rc.getStatements(resURI, RDF.TYPE, null, false, entryURI).asList();
+		List<Statement> statements = Iterations.asList(rc.getStatements(resURI, RDF.TYPE, null, false, entryURI));
 		for (Statement statement : statements) {
 			if (getResourceType(statement.getObject()) != null) {
 				rc.remove(statement, entryURI);
@@ -1239,14 +1207,14 @@ public class EntryImpl implements Entry {
 					rc.commit();
 
 					// we reload the internal cache
-					loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
+					loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
 					initMetadataObjects();
 
 					getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
 				} catch (Exception e) {
 					rc.rollback();
 					// Reset to previous saved values, just in case we saved the types above halfway through.
-					loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
+					loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
 					rc.close();
 					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 				} finally {
@@ -1353,7 +1321,7 @@ public class EntryImpl implements Entry {
 					setResourceType(this.repType, rc);
 
 					rc.add(entryURI, RepositoryProperties.resource, getSesameResourceURI(), entryURI);
-					rc.add(entryURI, RepositoryProperties.relation, getSesameRelationURI(), entryURI);
+					rc.add(entryURI, RepositoryProperties.relation, this.relationURI, entryURI);
 					if (localMdURI != null) {
 						rc.add(entryURI, RepositoryProperties.metadata, localMdURI, entryURI);
 					}
@@ -1379,9 +1347,8 @@ public class EntryImpl implements Entry {
 						rc.add(entryURI, RepositoryProperties.Creator, creator, entryURI);
 					}
 
-					if (contributors != null && contributors.size()>0){
-						for (Iterator<IRI> iter = contributors.iterator(); iter.hasNext();) {
-							IRI contrib =  iter.next();
+					if (contributors != null && !contributors.isEmpty()) {
+						for (IRI contrib : contributors) {
 							rc.add(entryURI, RepositoryProperties.Contributor, contrib, entryURI);
 						}
 					}
@@ -1409,7 +1376,7 @@ public class EntryImpl implements Entry {
 					status = null;
 
 					// we reload the internal cache
-					loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
+					loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
 					initMetadataObjects();
 
 					getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
@@ -1424,7 +1391,7 @@ public class EntryImpl implements Entry {
 				} catch (Exception e) {
 					rc.rollback();
 					// Reset to previous saved values, just in case we saved the types above halfway through.
-					loadFromStatements(rc.getStatements(null, null, null, false, entryURI).asList());
+					loadFromStatements(Iterations.asList(rc.getStatements(null, null, null, false, entryURI)));
 					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
 				} finally {
 					rc.close();
@@ -1490,24 +1457,23 @@ public class EntryImpl implements Entry {
         return false;
     }
 
-    private void removeInverseRelations(RepositoryConnection rc) throws RepositoryException {
-        if (invRelations) {
-            RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, entryURI);
-            String base = repositoryManager.getRepositoryURL().toString();
-            while (rr.hasNext()) {
-                Statement statement = rr.next();
-                if (isStatementInvRelationCandidate(statement, base)) {
-                    URI entryURI = URI.create(statement.getObject().stringValue());
-                    EntryImpl sourceEntry =  (EntryImpl) repositoryManager.getContextManager().getEntry(entryURI);
-                    if (sourceEntry != null && sourceEntry != this) {
-                        sourceEntry.removeRelationSynchronized(statement, rc, repository.getValueFactory());
-                    }
-                }
-            }
-            rr.close();
-            invRelations = false;
-        }
-    }
+	private void removeInverseRelations(RepositoryConnection rc) throws RepositoryException {
+		if (invRelations) {
+			try (RepositoryResult<Statement> rr = rc.getStatements(null, null, null, false, entryURI)) {
+				String base = repositoryManager.getRepositoryURL().toString();
+				for (Statement statement : rr) {
+					if (isStatementInvRelationCandidate(statement, base)) {
+						URI entryURI = URI.create(statement.getObject().stringValue());
+						EntryImpl sourceEntry = (EntryImpl) repositoryManager.getContextManager().getEntry(entryURI);
+						if (sourceEntry != null && sourceEntry != this) {
+							sourceEntry.removeRelationSynchronized(statement, rc);
+						}
+					}
+				}
+			}
+			invRelations = false;
+		}
+	}
 
     private void addInverseRelations(RepositoryConnection rc, Model graph) {
         String base = repositoryManager.getRepositoryURL().toString();
@@ -1516,7 +1482,7 @@ public class EntryImpl implements Entry {
                 URI entryURI = URI.create(statement.getObject().stringValue());
                 EntryImpl sourceEntry =  (EntryImpl) repositoryManager.getContextManager().getEntry(entryURI);
                 if (sourceEntry != null && sourceEntry != this) {
-                    sourceEntry.addRelationSynchronized(statement, rc, repository.getValueFactory());
+                    sourceEntry.addRelationSynchronized(statement, rc);
                 }
             }
         }
@@ -1602,15 +1568,21 @@ public class EntryImpl implements Entry {
 		log.debug("Removing entry " + entryURI);
         removeInverseRelations(rc);
 		rc.clear(entryURI);
-		if (locType == EntryType.Local || locType == EntryType.Link || locType == EntryType.LinkReference) {
+		if ((locType == EntryType.Local) || (locType == EntryType.Link) || (locType == EntryType.LinkReference)) {
 			localMetadata.removeGraphSynchronized(rc);
 		}
-		if (locType == EntryType.LinkReference || locType == EntryType.Reference) {
+
+		if ((locType == EntryType.LinkReference) || (locType == EntryType.Reference)) {
             if (cachedExternalMetadata instanceof MetadataImpl) {
                 ((MetadataImpl) cachedExternalMetadata).removeGraphSynchronized(rc);
             } else {
                 rc.clear(cachedExternalMdURI);
             }
+		}
+
+		if (relationURI != null) {
+			rc.clear(relationURI);
+			relations = null;
 		}
 
 		localMetadata = null;
@@ -1630,10 +1602,6 @@ public class EntryImpl implements Entry {
 			}
 		}
 		return this.filename;
-	}
-
-	public IRI getSesameRelationURI() {
-		return this.relationURI;
 	}
 
 	public URI getRelationURI() {
@@ -1835,7 +1803,7 @@ public class EntryImpl implements Entry {
 				this.originalList = "";
 			}
 		}
-		if (this.originalList.equals("")) {
+		if (this.originalList.isEmpty()) {
 			return null;
 		}
 		return this.originalList;
@@ -1877,31 +1845,23 @@ public class EntryImpl implements Entry {
 
 	public List<Statement> getRelations() {
 		if (this.relations == null) {
-			RepositoryConnection rc = null;
-			try {
-				rc = this.repository.getConnection();
-				return Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
+			try (RepositoryConnection rc = this.repository.getConnection()) {
+				this.relations = Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
 			} catch (RepositoryException e) {
 				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
-			} finally {
-				try {
-					rc.close();
-				} catch (RepositoryException e) {
-					log.error(e.getMessage(), e);
-				}
 			}
 		}
 		return this.relations;
 	}
 
-	protected void addRelationSynchronized(Statement statement, RepositoryConnection rc, ValueFactory vf) {
+	protected void addRelationSynchronized(Statement statement, RepositoryConnection rc) {
 		synchronized (this) {
-			addRelation(statement, rc, vf);
+			addRelation(statement, rc);
 		}
 	}
 
-	private void addRelation(Statement statement, RepositoryConnection rc, ValueFactory vf) {
+	private void addRelation(Statement statement, RepositoryConnection rc) {
 		try {
 			rc.add(statement, relationURI);
 			if (this.relations != null) {
@@ -1913,13 +1873,13 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	protected void removeRelationSynchronized(Statement statement, RepositoryConnection rc, ValueFactory vf) {
+	protected void removeRelationSynchronized(Statement statement, RepositoryConnection rc) {
 		synchronized (this) {
-			removeRelation(statement, rc, vf);
+			removeRelation(statement, rc);
 		}
 	}
 
-	private void removeRelation(Statement statement, RepositoryConnection rc, ValueFactory vf) {
+	private void removeRelation(Statement statement, RepositoryConnection rc) {
 		try {
 			rc.remove(statement, relationURI);
 			if (this.relations != null) {
