@@ -16,14 +16,7 @@
 
 package org.entrystore.rest.resources;
 
-import com.rometools.rome.feed.synd.SyndContent;
-import com.rometools.rome.feed.synd.SyndContentImpl;
-import com.rometools.rome.feed.synd.SyndEntry;
-import com.rometools.rome.feed.synd.SyndEntryImpl;
 import com.rometools.rome.feed.synd.SyndFeed;
-import com.rometools.rome.feed.synd.SyndFeedImpl;
-import com.rometools.rome.io.FeedException;
-import com.rometools.rome.io.SyndFeedOutput;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.response.FacetField;
@@ -43,10 +36,10 @@ import org.entrystore.Resource;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.GraphUtil;
+import org.entrystore.rest.util.Syndication;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -59,7 +52,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -67,10 +59,8 @@ import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
-import static java.lang.String.format;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
 import static org.restlet.data.Status.SERVER_ERROR_INTERNAL;
@@ -135,7 +125,7 @@ public class SearchResource extends BaseResource {
 				log.info(msg);
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation(
-						"{\"error\":\"" + msg + "\"}");
+					"{\"error\":\"" + msg + "\"}");
 			}
 
 			// Query parameter: offset
@@ -145,7 +135,7 @@ public class SearchResource extends BaseResource {
 				log.info(msg);
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation(
-						"{\"error\":\"" + msg + "\"}");
+					"{\"error\":\"" + msg + "\"}");
 			}
 			if (offset < 0) {
 				offset = 0;
@@ -213,97 +203,22 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
-	public Representation generateSyndication(List<Entry> entries, String type, String language, int limit) {
+	public Representation generateSyndication(List<Entry> entries, String feedType, String language, int limit) {
 		try {
-			SyndFeed feed = new SyndFeedImpl();
-			feed.setFeedType(type);
-
+			SyndFeed feed = Syndication.createFeedFromEntries(getRM().getPrincipalManager(), entries, language, limit);
 			feed.setTitle("Syndication feed of search");
-			feed.setDescription(format("Syndication feed containing max %d items", limit));
 			feed.setLink(getRequest().getResourceRef().getIdentifier());
+			feed.setFeedType(feedType);
 
-			List<SyndEntry> syndEntries = new ArrayList<>();
-			int limitedCount = 0;
+			String feedXml = Syndication.convertSyndFeedToXml(feed);
 
-			for (Entry entry : entries) {
-				try {
-					String title = EntryUtil.getTitle(entry, language);
-					String description = EntryUtil.getDescription(entry, language);
-
-					if (title == null && description == null) {
-						log.debug("Entry has neither title, nor description: {}", entry.getEntryURI());
-					}
-
-					SyndEntry syndEntry = new SyndEntryImpl();
-
-					if (title != null) {
-						syndEntry.setTitle(title);
-					} else {
-						syndEntry.setTitle("Missing title");
-					}
-
-					if (description != null) {
-						SyndContent syndContentDescription = new SyndContentImpl();
-						syndContentDescription.setType("text/plain");
-						syndContentDescription.setValue(description);
-						syndEntry.setDescription(syndContentDescription);
-					}
-
-					syndEntry.setPublishedDate(entry.getCreationDate());
-					syndEntry.setUpdatedDate(entry.getModifiedDate());
-					syndEntry.setLink(entry.getResourceURI().toString());
-
-					URI creator = entry.getCreator();
-					if (creator != null) {
-						try {
-							Entry creatorEntry = getRM().getPrincipalManager().getByEntryURI(creator);
-							String creatorName = EntryUtil.getName(creatorEntry);
-							if (creatorName != null) {
-								syndEntry.setAuthor(creatorName);
-							}
-						} catch (AuthorizationException ae) {
-							log.debug(ae.getMessage());
-						}
-					}
-
-					syndEntries.add(syndEntry);
-				} catch (AuthorizationException e) {
-					log.debug(e.getMessage());
-					continue;
-				}
-
-				if (limitedCount++ >= limit) {
-					break;
-				}
-			}
-
-			feed.setEntries(syndEntries);
-			String s;
-			try {
-				s = new SyndFeedOutput().outputString(feed, true);
-			} catch (FeedException fe) {
-				log.error(fe.getMessage());
-				s = fe.getMessage();
-			}
-
-			String feedType = feed.getFeedType();
-			MediaType mediaType = null;
-			if (feedType != null) {
-				if (feedType.startsWith("rss_")) {
-					mediaType = MediaType.APPLICATION_RSS;
-				} else if (feedType.startsWith("atom_")) {
-					mediaType = MediaType.APPLICATION_ATOM;
-				}
-			}
-
-			StringRepresentation rep;
+			MediaType mediaType = Syndication.convertFeedTypeToMediaType(feedType);
 			if (mediaType != null) {
-				rep = new StringRepresentation(s, mediaType);
+				return new StringRepresentation(feedXml, mediaType);
 			} else {
-				rep = new StringRepresentation(s);
+				return new StringRepresentation(feedXml);
 			}
 
-			return rep;
 		} catch (IllegalArgumentException e) {
 			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 			return new JsonRepresentation(new JSONObject().put("error", e.getMessage()));
@@ -448,17 +363,17 @@ public class SearchResource extends BaseResource {
 	}
 
 	private QueryResults searchSolr(
-			String queryValue,
-			String sorting,
-			int offset,
-			int limit,
-			List<String> filterQueries,
-			SolrSearchIndex.FacetSettings facetSettings) throws JsonErrorException {
+		String queryValue,
+		String sorting,
+		int offset,
+		int limit,
+		List<String> filterQueries,
+		SolrSearchIndex.FacetSettings facetSettings) throws JsonErrorException {
 
 		try {
 
 			List<Entry> entries;
-			long results ;
+			long results;
 			List<FacetField> responseFacetFields;
 
 			if (getRM().getIndex() == null) {
@@ -531,68 +446,16 @@ public class SearchResource extends BaseResource {
 		List<Entry> entries;
 		try {
 			String query =
-					"PREFIX dc:<http://purl.org/dc/terms/> " +
-							"SELECT ?x " +
-							"WHERE { " +
-							"?x " + queryValue + " ?y }";
+				"PREFIX dc:<http://purl.org/dc/terms/> " +
+					"SELECT ?x " +
+					"WHERE { " +
+					"?x " + queryValue + " ?y }";
 			entries = getCM().search(query, null, null);
 		} catch (Exception e) {
 			log.error(e.getMessage());
 			throw new JsonErrorException(URLEncoder.encode(e.getMessage(), UTF_8));
 		}
 		return new QueryResults(entries, entries.size());
-	}
-
-	private String decodeMandatoryParameter(String parameter) throws JsonErrorException {
-		return Optional.ofNullable(parameters.get(parameter))
-				.map(param -> URLDecoder.decode(param, UTF_8))
-				.orElseThrow(() -> {
-					String msg = "Mandatory parameter '" + parameter + "' is missing";
-					log.info(msg);
-					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-					return new JsonErrorException(msg);
-				});
-	}
-
-	private String decodeOptionalParameter(String parameter, String defaultValue) {
-		return Optional.ofNullable(parameters.get(parameter))
-				.map(param -> URLDecoder.decode(param, UTF_8))
-				.orElse(defaultValue);
-	}
-
-	private Integer decodeOptionalParameterInteger(String parameter, int defaultValue) {
-		try {
-			return Integer.valueOf(decodeOptionalParameter(parameter, Integer.valueOf(defaultValue).toString()));
-		} catch (NumberFormatException e) {
-			log.info(e.getMessage());
-			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-			return defaultValue;
-		}
-	}
-
-	private Boolean decodeOptionalParameterBoolean(String parameter, boolean defaultValue) {
-		return Boolean.valueOf(decodeOptionalParameter(parameter, Boolean.valueOf(defaultValue).toString()));
-	}
-
-	static class JsonErrorException extends Throwable {
-
-		private final JsonRepresentation representation;
-
-		public JsonErrorException() {
-			representation = new JsonRepresentation("{\"error\":\"An error has occurred\"}");
-		}
-
-		public JsonErrorException(String error) {
-			this.representation = new JsonRepresentation("{\"error\":\"" + error + "\"}");
-		}
-
-		public JsonErrorException(JsonRepresentation jsonErrorRepresentation) {
-			this.representation = jsonErrorRepresentation;
-		}
-
-		public JsonRepresentation getRepresentation() {
-			return representation;
-		}
 	}
 
 	record QueryResults(List<Entry> entries, long results, List<FacetField> responseFacetFields) {

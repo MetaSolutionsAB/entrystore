@@ -18,6 +18,7 @@ package org.entrystore.rest.resources;
 
 
 import com.google.common.collect.Sets;
+import lombok.Getter;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
@@ -46,11 +47,16 @@ import org.restlet.util.Series;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
 
 /**
  *<p> Base resource class that supports common behaviours or attributes shared by
@@ -255,4 +261,54 @@ public abstract class BaseResource extends ServerResource {
 		}
 		return result;
 	}
+
+	protected String decodeMandatoryParameter(String parameter) throws JsonErrorException {
+		return Optional.ofNullable(parameters.get(parameter))
+			.map(param -> URLDecoder.decode(param, UTF_8))
+			.orElseThrow(() -> {
+				String msg = "Mandatory parameter '" + parameter + "' is missing";
+				log.info(msg);
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+				return new JsonErrorException(msg);
+			});
+	}
+
+	protected String decodeOptionalParameter(String parameter, String defaultValue) {
+		return Optional.ofNullable(parameters.get(parameter))
+			.map(param -> URLDecoder.decode(param, UTF_8))
+			.orElse(defaultValue);
+	}
+
+	protected Integer decodeOptionalParameterInteger(String parameter, int defaultValue) {
+		try {
+			return Integer.valueOf(decodeOptionalParameter(parameter, Integer.valueOf(defaultValue).toString()));
+		} catch (NumberFormatException e) {
+			log.info(e.getMessage());
+			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+			return defaultValue;
+		}
+	}
+
+	protected Boolean decodeOptionalParameterBoolean(String parameter, boolean defaultValue) {
+		return Boolean.valueOf(decodeOptionalParameter(parameter, Boolean.valueOf(defaultValue).toString()));
+	}
+
+	@Getter
+	static class JsonErrorException extends Throwable {
+
+		private final JsonRepresentation representation;
+
+		public JsonErrorException() {
+			representation = new JsonRepresentation("{\"error\":\"An error has occurred\"}");
+		}
+
+		public JsonErrorException(String error) {
+			this.representation = new JsonRepresentation("{\"error\":\"" + error + "\"}");
+		}
+
+		public JsonErrorException(JsonRepresentation jsonErrorRepresentation) {
+			this.representation = jsonErrorRepresentation;
+		}
+	}
+
 }

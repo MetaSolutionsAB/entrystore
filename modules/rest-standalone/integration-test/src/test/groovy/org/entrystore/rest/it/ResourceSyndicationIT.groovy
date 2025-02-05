@@ -24,12 +24,12 @@ class ResourceSyndicationIT extends BaseSpec {
 						(NameSpaceConst.DC_TERM_TITLE)      : [
 							[
 								type : 'literal',
-								value: 'local metadata title implicitly in EN',
+								value: 'local metadata title explicitly in EN',
+								lang : 'en'
 							],
 							[
 								type : 'literal',
-								value: 'local metadata title explicitly in EN',
-								lang : 'en'
+								value: 'local metadata title implicitly in EN',
 							],
 							[
 								type : 'literal',
@@ -49,7 +49,7 @@ class ResourceSyndicationIT extends BaseSpec {
 							],
 							[
 								type : 'literal',
-								value: 'lokalne metadane opis jawnie po polsku',
+								value: 'lokalne metadane opisresourcesyndication jawnie po polsku',
 								lang : 'pl'
 							]
 						]
@@ -98,7 +98,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def channelDescriptionNode = channelNode['description'][0] as Node
 		channelDescriptionNode.attributes().size() == 0
 		channelDescriptionNode.value().size() == 1
-		channelDescriptionNode.value()[0] == 'A syndication feed containing the 50 most recent items from "Syndication Test"'
+		channelDescriptionNode.value()[0] == 'Syndication feed containing max 50 items'
 
 		channelNode['item'].size() == 1
 		def channelItemNode = channelNode['item'][0] as Node
@@ -115,7 +115,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def itemDescriptionNode = channelItemNode['description'][0] as Node
 		itemDescriptionNode.attributes().size() == 0
 		itemDescriptionNode.value().size() == 1
-		itemDescriptionNode.value()[0] == 'lokalne metadane opis jawnie po polsku'
+		itemDescriptionNode.value()[0] == 'local metadata description implicitly in EN'
 
 		channelItemNode['dc:date'].size() == 1
 		def itemDateNode = channelItemNode['dc:date'][0] as Node
@@ -158,7 +158,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def channelDescriptionNode = channelNode['description'][0] as Node
 		channelDescriptionNode.attributes().size() == 0
 		channelDescriptionNode.value().size() == 1
-		channelDescriptionNode.value()[0] == 'A syndication feed containing the 50 most recent items from "Syndication Test"'
+		channelDescriptionNode.value()[0] == 'Syndication feed containing max 50 items'
 
 		channelNode['item'].size() == 1
 		def channelItemNode = channelNode['item'][0] as Node
@@ -175,7 +175,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def itemDescriptionNode = channelItemNode['description'][0] as Node
 		itemDescriptionNode.attributes().size() == 0
 		itemDescriptionNode.value().size() == 1
-		itemDescriptionNode.value()[0] == 'lokalne metadane opis jawnie po polsku'
+		itemDescriptionNode.value()[0] == 'local metadata description explicitly in EN'
 
 		channelItemNode['dc:date'].size() == 1
 		def itemDateNode = channelItemNode['dc:date'][0] as Node
@@ -218,7 +218,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def channelDescriptionNode = channelNode['description'][0] as Node
 		channelDescriptionNode.attributes().size() == 0
 		channelDescriptionNode.value().size() == 1
-		channelDescriptionNode.value()[0] == 'A syndication feed containing the 50 most recent items from "Syndication Test"'
+		channelDescriptionNode.value()[0] == 'Syndication feed containing max 50 items'
 
 		channelNode['item'].size() == 1
 		def channelItemNode = channelNode['item'][0] as Node
@@ -235,7 +235,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def itemDescriptionNode = channelItemNode['description'][0] as Node
 		itemDescriptionNode.attributes().size() == 0
 		itemDescriptionNode.value().size() == 1
-		itemDescriptionNode.value()[0] == 'lokalne metadane opis jawnie po polsku'
+		itemDescriptionNode.value()[0] == 'lokalne metadane opisresourcesyndication jawnie po polsku'
 
 		channelItemNode['dc:date'].size() == 1
 		def itemDateNode = channelItemNode['dc:date'][0] as Node
@@ -275,7 +275,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def subtitleNode = respXml['subtitle'][0] as Node
 		subtitleNode.attributes().size() == 0
 		subtitleNode.value().size() == 1
-		subtitleNode.value()[0] == 'A syndication feed containing the 50 most recent items from "Syndication Test"'
+		subtitleNode.value()[0] == 'Syndication feed containing max 50 items'
 
 		respXml['entry'].size() == 1
 		def entryNode = respXml['entry'][0] as Node
@@ -294,7 +294,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		summaryDescriptionNode.attributes().size() == 1
 		summaryDescriptionNode.attributes()['type'] == 'text'
 		summaryDescriptionNode.value().size() == 1
-		summaryDescriptionNode.value()[0] == 'lokalne metadane opis jawnie po polsku'
+		summaryDescriptionNode.value()[0] == 'local metadata description implicitly in EN'
 
 		entryNode['link'].size() == 1
 		def itemLinkNode = entryNode['link'][0] as Node
@@ -341,7 +341,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def subtitleNode = respXml['subtitle'][0] as Node
 		subtitleNode.attributes().size() == 0
 		subtitleNode.value().size() == 1
-		subtitleNode.value()[0] == 'A syndication feed containing the 50 most recent items from "Syndication Test"'
+		subtitleNode.value()[0] == 'Syndication feed containing max 50 items'
 
 		respXml['entry'].size() == 1
 		def entryNode = respXml['entry'][0] as Node
@@ -360,7 +360,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		summaryDescriptionNode.attributes().size() == 1
 		summaryDescriptionNode.attributes()['type'] == 'text'
 		summaryDescriptionNode.value().size() == 1
-		summaryDescriptionNode.value()[0] == 'lokalne metadane opis jawnie po polsku'
+		summaryDescriptionNode.value()[0] == 'local metadata description explicitly in EN'
 
 		entryNode['link'].size() == 1
 		def itemLinkNode = entryNode['link'][0] as Node
@@ -407,7 +407,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def subtitleNode = respXml['subtitle'][0] as Node
 		subtitleNode.attributes().size() == 0
 		subtitleNode.value().size() == 1
-		subtitleNode.value()[0] == 'A syndication feed containing the 50 most recent items from "Syndication Test"'
+		subtitleNode.value()[0] == 'Syndication feed containing max 50 items'
 
 		respXml['entry'].size() == 1
 		def entryNode = respXml['entry'][0] as Node
@@ -419,14 +419,14 @@ class ResourceSyndicationIT extends BaseSpec {
 		itemDescriptionNode.attributes().size() == 0
 		itemDescriptionNode.value().size() == 1
 		// title with explicit english lang is chosen
-		itemDescriptionNode.value()[0] == 'local metadata title explicitly in EN'
+		itemDescriptionNode.value()[0] == 'lokalne metadane tytuł jawnie po polsku'
 
 		entryNode['summary'].size() == 1
 		def summaryDescriptionNode = entryNode['summary'][0] as Node
 		summaryDescriptionNode.attributes().size() == 1
 		summaryDescriptionNode.attributes()['type'] == 'text'
 		summaryDescriptionNode.value().size() == 1
-		summaryDescriptionNode.value()[0] == 'lokalne metadane opis jawnie po polsku'
+		summaryDescriptionNode.value()[0] == 'lokalne metadane opisresourcesyndication jawnie po polsku'
 
 		entryNode['link'].size() == 1
 		def itemLinkNode = entryNode['link'][0] as Node
