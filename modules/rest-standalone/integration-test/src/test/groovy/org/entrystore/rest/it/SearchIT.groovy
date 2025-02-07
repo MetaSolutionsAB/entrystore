@@ -24,12 +24,12 @@ class SearchIT extends BaseSpec {
 						(NameSpaceConst.DC_TERM_TITLE)      : [
 							[
 								type : 'literal',
-								value: 'local metadata title implicitly in EN',
+								value: 'local metadata title explicitly in EN',
+								lang : 'en'
 							],
 							[
 								type : 'literal',
-								value: 'local metadata title explicitly in EN',
-								lang : 'en'
+								value: 'local metadata title implicitly in EN',
 							],
 							[
 								type : 'literal',
@@ -49,7 +49,7 @@ class SearchIT extends BaseSpec {
 							],
 							[
 								type : 'literal',
-								value: 'lokalne metadane opis jawnie po polsku',
+								value: 'lokalne metadane opissearch jawnie po polsku',
 								lang : 'pl'
 							]
 						]
@@ -63,10 +63,10 @@ class SearchIT extends BaseSpec {
 		Thread.sleep(1500)
 	}
 
-	def "GET /search?type=solr&query=title:metadata&syndication=rss_2.0 should return created resources syndication"() {
+	def "GET /search?type=solr&syndication=rss_2.0 should return syndication feed for the entry"() {
 		when:
 		// fetch syndication feed
-		def resourceConn = EntryStoreClient.getRequest('/search?type=solr&query=title.en:metadata&limit=1&syndication=rss_2.0')
+		def resourceConn = EntryStoreClient.getRequest('/search?type=solr&query=description.pl:opissearch&syndication=rss_2.0')
 
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
@@ -91,13 +91,13 @@ class SearchIT extends BaseSpec {
 		def channelLinkNode = channelNode['link'][0] as Node
 		channelLinkNode.attributes().size() == 0
 		channelLinkNode.value().size() == 1
-		channelLinkNode.value()[0] == EntryStoreClient.baseUrl + '/search?type=solr&query=title.en:metadata&limit=1&syndication=rss_2.0'
+		channelLinkNode.value()[0] == EntryStoreClient.baseUrl + '/search?type=solr&query=description.pl:opissearch&syndication=rss_2.0'
 
 		channelNode['description'].size() == 1
 		def channelDescriptionNode = channelNode['description'][0] as Node
 		channelDescriptionNode.attributes().size() == 0
 		channelDescriptionNode.value().size() == 1
-		channelDescriptionNode.value()[0] == 'Syndication feed containing max 1 items'
+		channelDescriptionNode.value()[0] == 'Syndication feed containing max 50 items'
 
 		channelNode['item'].size() == 1
 		def channelItemNode = channelNode['item'][0] as Node
@@ -108,13 +108,15 @@ class SearchIT extends BaseSpec {
 		def itemTitleNode = channelItemNode['title'][0] as Node
 		itemTitleNode.attributes().size() == 0
 		itemTitleNode.value().size() == 1
-		itemTitleNode.value()[0] == 'local metadata title implicitly in EN'
+		// when the lang param is not given in the request, then it defaults to "en"
+		itemTitleNode.value()[0] == 'local metadata title explicitly in EN'
 
 		channelItemNode['description'].size() == 1
 		def itemDescriptionNode = channelItemNode['description'][0] as Node
 		itemDescriptionNode.attributes().size() == 0
 		itemDescriptionNode.value().size() == 1
-		itemDescriptionNode.value()[0] == 'local metadata description implicitly in EN'
+		// when the lang param is not given in the request, then it defaults to "en"
+		itemDescriptionNode.value()[0] == 'local metadata description explicitly in EN'
 
 		channelItemNode['link'].size() == 1
 		def itemLinkNode = channelItemNode['link'][0] as Node
@@ -129,10 +131,10 @@ class SearchIT extends BaseSpec {
 		(itemDateNode.value()[0] as String).contains(Year.now().toString())
 	}
 
-	def "GET /search?type=solr&query=title:metadata&syndication=rss_2.0&lang=en should return created resources syndication values explicitly in English"() {
+	def "GET /search?type=solr&syndication=rss_2.0&lang=en should return syndication feed with values explicitly in English"() {
 		when:
 		// fetch syndication feed
-		def resourceConn = EntryStoreClient.getRequest('/search?type=solr&query=title.en:metadata&limit=1&syndication=rss_2.0&lang=en')
+		def resourceConn = EntryStoreClient.getRequest('/search?type=solr&query=description.pl:opissearch&syndication=rss_2.0&lang=en')
 
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
@@ -157,13 +159,13 @@ class SearchIT extends BaseSpec {
 		def channelLinkNode = channelNode['link'][0] as Node
 		channelLinkNode.attributes().size() == 0
 		channelLinkNode.value().size() == 1
-		channelLinkNode.value()[0] == EntryStoreClient.baseUrl + '/search?type=solr&query=title.en:metadata&limit=1&syndication=rss_2.0&lang=en'
+		channelLinkNode.value()[0] == EntryStoreClient.baseUrl + '/search?type=solr&query=description.pl:opissearch&syndication=rss_2.0&lang=en'
 
 		channelNode['description'].size() == 1
 		def channelDescriptionNode = channelNode['description'][0] as Node
 		channelDescriptionNode.attributes().size() == 0
 		channelDescriptionNode.value().size() == 1
-		channelDescriptionNode.value()[0] == 'Syndication feed containing max 1 items'
+		channelDescriptionNode.value()[0] == 'Syndication feed containing max 50 items'
 
 		channelNode['item'].size() == 1
 		def channelItemNode = channelNode['item'][0] as Node
@@ -195,10 +197,10 @@ class SearchIT extends BaseSpec {
 		(itemDateNode.value()[0] as String).contains(Year.now().toString())
 	}
 
-	def "GET /search?type=solr&query=title:metadata&syndication=rss_2.0&lang=pl should return created resources syndication values explicitly in Polish"() {
+	def "GET /search?type=solr&syndication=rss_2.0&lang=pl should return syndication feed with values explicitly in Polish"() {
 		when:
 		// fetch syndication feed
-		def resourceConn = EntryStoreClient.getRequest('/search?type=solr&query=title.en:metadata&limit=1&syndication=rss_2.0&lang=pl')
+		def resourceConn = EntryStoreClient.getRequest('/search?type=solr&query=description.pl:opissearch&syndication=rss_2.0&lang=pl')
 
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
@@ -223,13 +225,13 @@ class SearchIT extends BaseSpec {
 		def channelLinkNode = channelNode['link'][0] as Node
 		channelLinkNode.attributes().size() == 0
 		channelLinkNode.value().size() == 1
-		channelLinkNode.value()[0] == EntryStoreClient.baseUrl + '/search?type=solr&query=title.en:metadata&limit=1&syndication=rss_2.0&lang=pl'
+		channelLinkNode.value()[0] == EntryStoreClient.baseUrl + '/search?type=solr&query=description.pl:opissearch&syndication=rss_2.0&lang=pl'
 
 		channelNode['description'].size() == 1
 		def channelDescriptionNode = channelNode['description'][0] as Node
 		channelDescriptionNode.attributes().size() == 0
 		channelDescriptionNode.value().size() == 1
-		channelDescriptionNode.value()[0] == 'Syndication feed containing max 1 items'
+		channelDescriptionNode.value()[0] == 'Syndication feed containing max 50 items'
 
 		channelNode['item'].size() == 1
 		def channelItemNode = channelNode['item'][0] as Node
@@ -246,7 +248,7 @@ class SearchIT extends BaseSpec {
 		def itemDescriptionNode = channelItemNode['description'][0] as Node
 		itemDescriptionNode.attributes().size() == 0
 		itemDescriptionNode.value().size() == 1
-		itemDescriptionNode.value()[0] == 'lokalne metadane opis jawnie po polsku'
+		itemDescriptionNode.value()[0] == 'lokalne metadane opissearch jawnie po polsku'
 
 		channelItemNode['link'].size() == 1
 		def itemLinkNode = channelItemNode['link'][0] as Node

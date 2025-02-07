@@ -130,7 +130,7 @@ public class Util {
 				String[] elements = StringUtils.split(argument, '=');
 				// URLDecoder is for application/x-www-form-urlencoded decoding, which is not exact with URL params decoding
 				// (includes '+' to 'space' replacement), hence need to replace '+' with '%2B'
-				argsAndVal.put(elements[0], elements.length == 1 ? "" : URLDecoder.decode(elements[1].replace("+", "%2B"), UTF_8));
+				argsAndVal.put(elements[0], elements.length == 1 ? "" : URLDecoder.decode(elements[1].trim().replace("+", "%2B"), UTF_8));
 			}
 		} catch (IndexOutOfBoundsException e) {
 			// special case!
