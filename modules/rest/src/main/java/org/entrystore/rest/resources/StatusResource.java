@@ -279,11 +279,7 @@ public class StatusResource extends BaseResource  {
 														log.warn("Relation target does not exist: <{}>, statement: {}", relation.getObject(), relation);
 														statementsWithDanglingObject.add(relation.toString());
 														String predicate = relation.getPredicate().toString();
-														if (relationStats.containsKey(predicate)) {
-															relationStats.put(predicate, relationStats.get(predicate) + 1);
-														} else {
-															relationStats.put(predicate, 1L);
-														}
+														relationStats.put(predicate, relationStats.getOrDefault(predicate, 0L) + 1L);
 													}
 												}
 											}
