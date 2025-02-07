@@ -193,7 +193,7 @@ public class StatusResource extends BaseResource  {
 					}
 
 					if (parameters.containsKey("includeRelationStats")) {
-						result.put("relationStats", getDanglingRelationStats(parameters.get("includeRelationStats").equalsIgnoreCase("verbose")));
+						result.put("relationStats", getRelationStats(parameters.get("includeRelationStats").equalsIgnoreCase("verbose")));
 					}
 
 					return new JsonRepresentation(result);
@@ -245,57 +245,44 @@ public class StatusResource extends BaseResource  {
 		return result;
 	}
 
-	JSONObject getDanglingRelationStats(boolean includeURIs) {
+	JSONObject getRelationStats(boolean verbose) {
 		Repository repository = getRM().getRepository();
 		long checkedRelations = 0;
 		Map<String, Long> relationStats = new HashMap<>();
 		List<String> relationContextsWithoutEntryContext = new ArrayList<>();
 		List<String> statementsWithDanglingObject = new ArrayList<>();
-		String baseURI = getRM().getRepositoryURL().toString();
 
 		try (RepositoryConnection rc = repository.getConnection()) {
 			try (RepositoryResult<Resource> rr = rc.getContextIDs()) {
 				for (Resource context : rr) {
 					if (context != null && context.isIRI()) {
 						String contextIRIStr = context.toString();
-						if (contextIRIStr.startsWith(baseURI) && contextIRIStr.contains("/relations/")) {
+						if (isRelationIRI(contextIRIStr)) {
 							// check whether corresponding entry exists
-							IRI entryURI = iri(new URISplit(URI.create(contextIRIStr), getRM().getRepositoryURL()).getMetaMetadataURI().toString());
-							try (RepositoryConnection rc2 = repository.getConnection()) {
-								try (RepositoryResult<Statement> entryGraph = rc2.getStatements(null, null, null, false, entryURI)) {
-									if (!entryGraph.hasNext()) {
-										log.warn("Entry context does not exist: {}", entryURI);
-										relationContextsWithoutEntryContext.add(contextIRIStr);
-									} else {
-										log.debug("Found entry context: {}", entryURI);
-									}
-								}
+							if (!doesEntryExist(contextIRIStr)) {
+								log.warn("No corresponding entry found for relation graph <{}>", contextIRIStr);
+								relationContextsWithoutEntryContext.add(contextIRIStr);
+								continue;
 							}
 
-							if (relationContextsWithoutEntryContext.contains(contextIRIStr)) {
-								log.debug("Skipping analysis of relation context as it lacks corresponding entry: {}", contextIRIStr);
-							} else {
-								// check whether relation target exists
-								try (RepositoryConnection rc3 = repository.getConnection()) {
-									try (RepositoryResult<Statement> relations = rc3.getStatements(null, null, null, false, context)) {
-										for (Statement relation : relations) {
-											if (!relation.getObject().isIRI()) {
-												log.warn("Statement does not have a resource in object position: {}", relation);
-											} else {
-												try (RepositoryConnection rc4 = repository.getConnection()) {
-													try (RepositoryResult<Statement> targetEntry = rc4.getStatements((Resource) relation.getObject(), null, null, false)) {
-														checkedRelations++;
-														if (targetEntry.hasNext()) {
-															log.debug("Relation target exists: <{}>, statement: {}", relation.getObject(), relation);
+							// check whether relation target exists
+							try (RepositoryConnection rc2 = repository.getConnection()) {
+								try (RepositoryResult<Statement> relations = rc2.getStatements(null, null, null, false, context)) {
+									for (Statement relation : relations) {
+										if (!relation.getObject().isIRI()) {
+											log.warn("Statement does not have a resource in object position: {}", relation);
+										} else {
+											try (RepositoryConnection rc3 = repository.getConnection()) {
+												try (RepositoryResult<Statement> targetEntry = rc3.getStatements((Resource) relation.getObject(), null, null, false)) {
+													checkedRelations++;
+													if (!targetEntry.hasNext()) {
+														log.warn("Relation target does not exist: <{}>, statement: {}", relation.getObject(), relation);
+														statementsWithDanglingObject.add(relation.toString());
+														String predicate = relation.getPredicate().toString();
+														if (relationStats.containsKey(predicate)) {
+															relationStats.put(predicate, relationStats.get(predicate) + 1);
 														} else {
-															log.warn("Relation target does not exist: <{}>, statement: {}", relation.getObject(), relation);
-															statementsWithDanglingObject.add(relation.toString());
-															String predicate = relation.getPredicate().toString();
-															if (relationStats.containsKey(predicate)) {
-																relationStats.put(predicate, relationStats.get(predicate) + 1);
-															} else {
-																relationStats.put(predicate, 1L);
-															}
+															relationStats.put(predicate, 1L);
 														}
 													}
 												}
@@ -326,12 +313,28 @@ public class StatusResource extends BaseResource  {
 		result.put("activeRelationsWithNonExistingTargetCount", statementsWithDanglingObject.size());
 		result.put("relationContextsWithoutEntryContextCount", relationContextsWithoutEntryContext.size());
 
-		if (includeURIs) {
+		if (verbose) {
 			result.put("activeRelationsWithNonExistingTarget", new JSONArray(statementsWithDanglingObject));
 			result.put("relationContextsWithoutEntryContext", new JSONArray(relationContextsWithoutEntryContext));
 		}
 
 		return result;
+	}
+
+	private boolean doesEntryExist(String relationIRIStr) {
+		IRI entryURI = iri(new URISplit(URI.create(relationIRIStr), getRM().getRepositoryURL()).getMetaMetadataURI().toString());
+		try (RepositoryConnection rc = getRM().getRepository().getConnection()) {
+			try (RepositoryResult<Statement> entryGraph = rc.getStatements(null, null, null, false, entryURI)) {
+				if (entryGraph.hasNext()) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	private boolean isRelationIRI(String iriStr) {
+		return (iriStr.startsWith(getRM().getRepositoryURL().toString()) && iriStr.contains("/relations/"));
 	}
 
 }
