@@ -98,10 +98,10 @@ public class SearchResource extends BaseResource {
 	public Representation represent() throws ResourceException {
 		try {
 			// Query parameter: type
-			String type = decodeMandatoryParameter("type").toLowerCase();
+			String type = getMandatoryParameter("type").toLowerCase();
 
 			// Query parameter: query
-			String queryValue = decodeMandatoryParameter("query");
+			String queryValue = getMandatoryParameter("query");
 			if (queryValue.length() < 3) {
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation("{\"error\":\"Query too short\"}");
@@ -113,13 +113,13 @@ public class SearchResource extends BaseResource {
 			}
 
 			// Query parameter: syndication
-			var syndication = decodeOptionalParameter("syndication", null);
+			var syndication = getOptionalParameter("syndication", null);
 
 			// Query parameter: lang
-			var language = decodeOptionalParameter("lang", null);
+			var language = getOptionalParameter("lang", "en");
 
 			// Query parameter: sort
-			String sorting = decodeOptionalParameter("sort", null);
+			String sorting = getOptionalParameter("sort", null);
 			if (syndication != null && sorting != null) {
 				String msg = "Query parameter 'sort' not supported with syndication";
 				log.info(msg);
@@ -129,7 +129,7 @@ public class SearchResource extends BaseResource {
 			}
 
 			// Query parameter: offset
-			int offset = decodeOptionalParameterInteger("offset", 0);
+			int offset = getOptionalParameterAsInteger("offset", 0);
 			if (syndication != null && offset > 0) {
 				String msg = "Query parameter 'offset' not supported with syndication";
 				log.info(msg);
@@ -142,7 +142,7 @@ public class SearchResource extends BaseResource {
 			}
 
 			// Query parameter: limit
-			int limit = decodeOptionalParameterInteger("limit", DEFAULT_LIMIT);
+			int limit = getOptionalParameterAsInteger("limit", DEFAULT_LIMIT);
 			if (limit > MAX_LIMIT) {
 				limit = MAX_LIMIT;
 			} else if (limit < 0) {
@@ -153,7 +153,7 @@ public class SearchResource extends BaseResource {
 			// Query parameter: filterQuery
 			List<String> filterQueries = new ArrayList<>();
 			{
-				String filterQueriesStr = decodeOptionalParameter("filterQuery", null);
+				String filterQueriesStr = getOptionalParameter("filterQuery", null);
 				if (filterQueriesStr != null) {
 					// We URLDecode after the split because we want to be able to use comma
 					// as separator (unencoded) for FQs and as content inside FQs (encoded)
@@ -166,22 +166,22 @@ public class SearchResource extends BaseResource {
 			SolrSearchIndex.FacetSettings facetSettings = new SolrSearchIndex.FacetSettings();
 
 			// Query parameter: facetFields
-			facetSettings.fields = decodeOptionalParameter("facetFields", null);
+			facetSettings.fields = getOptionalParameter("facetFields", null);
 
 			// Query parameter: facetMinCount
-			facetSettings.minCount = decodeOptionalParameterInteger("facetMinCount", 1);
+			facetSettings.minCount = getOptionalParameterAsInteger("facetMinCount", 1);
 
 			// Query parameter: facetLimit
-			facetSettings.limit = Math.min(decodeOptionalParameterInteger("facetLimit", DEFAULT_FACET_LIMIT), MAX_FACET_LIMIT);
+			facetSettings.limit = Math.min(getOptionalParameterAsInteger("facetLimit", DEFAULT_FACET_LIMIT), MAX_FACET_LIMIT);
 			if (facetSettings.limit < 1) {
 				facetSettings.limit = DEFAULT_FACET_LIMIT;
 			}
 
 			// Query parameter: facetMatches
-			facetSettings.matches = decodeOptionalParameter("facetMatches", null);
+			facetSettings.matches = getOptionalParameter("facetMatches", null);
 
 			// Query parameter: missing
-			facetSettings.missing = decodeOptionalParameterBoolean("facetMissing", false);
+			facetSettings.missing = getOptionalParameterAsBoolean("facetMissing", false);
 
 			// Logic
 			QueryResults queryResults = new QueryResults(List.of(), -1, List.of());
@@ -347,14 +347,6 @@ public class SearchResource extends BaseResource {
 			facetFieldsArr.put(ffObj);
 		}
 		result.put("facetFields", facetFieldsArr);
-
-		// TODO remove the commented four lines below if there is no use found for it
-                /*
-				JSONArray jaRights = new JSONArray();
-				jaRights.put("readmetadata");
-				jaRights.put("readresource");
-				result.put("rights", jaRights);
-				*/
 
 		long timeDiff = new Date().getTime() - before.getTime();
 		log.debug("Graph fetching and serialization took " + timeDiff + " ms");

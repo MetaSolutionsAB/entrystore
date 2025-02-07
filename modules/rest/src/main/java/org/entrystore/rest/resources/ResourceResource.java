@@ -728,9 +728,9 @@ public class ResourceResource extends BaseResource {
 			return null;
 		}
 
-		String language = decodeOptionalParameter("lang", null);
+		String language = getOptionalParameter("lang", "en");
 
-		int feedSize = decodeOptionalParameterInteger("feedSize", DEFAULT_FEED_SIZE);
+		int feedSize = getOptionalParameterAsInteger("feedSize", DEFAULT_FEED_SIZE);
 		if (feedSize > maxFeedSize) {
 			feedSize = maxFeedSize;
 		} else if (feedSize < 0) {

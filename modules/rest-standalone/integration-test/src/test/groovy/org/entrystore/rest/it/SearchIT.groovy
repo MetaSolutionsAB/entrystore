@@ -108,15 +108,15 @@ class SearchIT extends BaseSpec {
 		def itemTitleNode = channelItemNode['title'][0] as Node
 		itemTitleNode.attributes().size() == 0
 		itemTitleNode.value().size() == 1
-		// when the lang param is not given in the request (lang=null), then the first title of an entry is returned
+		// when the lang param is not given in the request, then it defaults to "en"
 		itemTitleNode.value()[0] == 'local metadata title explicitly in EN'
 
 		channelItemNode['description'].size() == 1
 		def itemDescriptionNode = channelItemNode['description'][0] as Node
 		itemDescriptionNode.attributes().size() == 0
 		itemDescriptionNode.value().size() == 1
-		// when the lang param is not given in the request (lang=null), then the first description of an entry is returned
-		itemDescriptionNode.value()[0] == 'local metadata description implicitly in EN'
+		// when the lang param is not given in the request, then it defaults to "en"
+		itemDescriptionNode.value()[0] == 'local metadata description explicitly in EN'
 
 		channelItemNode['link'].size() == 1
 		def itemLinkNode = channelItemNode['link'][0] as Node

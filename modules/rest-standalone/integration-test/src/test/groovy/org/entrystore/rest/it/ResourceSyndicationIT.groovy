@@ -115,7 +115,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def itemDescriptionNode = channelItemNode['description'][0] as Node
 		itemDescriptionNode.attributes().size() == 0
 		itemDescriptionNode.value().size() == 1
-		itemDescriptionNode.value()[0] == 'local metadata description implicitly in EN'
+		itemDescriptionNode.value()[0] == 'local metadata description explicitly in EN'
 
 		channelItemNode['dc:date'].size() == 1
 		def itemDateNode = channelItemNode['dc:date'][0] as Node
@@ -294,7 +294,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		summaryDescriptionNode.attributes().size() == 1
 		summaryDescriptionNode.attributes()['type'] == 'text'
 		summaryDescriptionNode.value().size() == 1
-		summaryDescriptionNode.value()[0] == 'local metadata description implicitly in EN'
+		summaryDescriptionNode.value()[0] == 'local metadata description explicitly in EN'
 
 		entryNode['link'].size() == 1
 		def itemLinkNode = entryNode['link'][0] as Node
