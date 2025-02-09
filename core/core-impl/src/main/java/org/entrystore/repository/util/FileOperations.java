@@ -325,7 +325,7 @@ public class FileOperations {
 	 */
 	public static long unzipFile(File zipFile, File destination) throws IOException {
 		if (!destination.isDirectory()) {
-			throw new IllegalArgumentException("Destination is not a folder");
+			throw new IllegalArgumentException("Destination is not a folder.");
 		}
 
 		InputStream fis = Files.newInputStream(zipFile.toPath());
@@ -341,7 +341,11 @@ public class FileOperations {
 			File parentDir = unzippedFile.getParentFile();
 			if (!parentDir.exists()) {
 				log.debug("Creating directory: {}", parentDir);
-				parentDir.mkdirs();
+				if (parentDir.mkdirs()) {
+					log.debug("Created directory: {}", parentDir);
+				} else {
+					log.debug("Could not create  directory: {}", parentDir);
+				}
 			}
 			OutputStream fos = Files.newOutputStream(unzippedFile.toPath());
 			BufferedOutputStream bos = new BufferedOutputStream(fos, BUFFER_SIZE);
@@ -441,7 +445,9 @@ public class FileOperations {
 			throw new NullPointerException("file to write to is null");
 		}
 
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+		FileWriter fw = new FileWriter(file);
+
+		try (BufferedWriter writer = new BufferedWriter(fw)) {
 			writer.write(content);
 		}
 	}

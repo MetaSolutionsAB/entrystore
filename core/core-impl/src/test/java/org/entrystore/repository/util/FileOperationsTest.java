@@ -17,6 +17,7 @@
 package org.entrystore.repository.util;
 
 import org.apache.commons.io.FileUtils;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -33,13 +34,17 @@ import java.util.Scanner;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class FileOperationsTest {
 
 	private final String content = "foo\nbar";
-	private final File tempFile = Files.createTempFile("temp", ".txt").toFile();
+	private final File tempFileSource = Files.createTempFile("tempSource", ".txt").toFile();
+	private final File tempFileDestination = Files.createTempFile("tempDestination", ".txt").toFile();
+	private final Path path = Paths.get(FileUtils.getTempDirectory().getAbsolutePath(), "temp-" + UUID.randomUUID());
+	private final File tempBadFile = Files.createDirectories(path).toFile();
 
 	private FileOperationsTest() throws IOException {
 	}
@@ -66,10 +71,17 @@ public class FileOperationsTest {
 		return fileContents.toString();
 	}
 
+	@BeforeEach
+	public void setUp() {
+		tempFileSource.deleteOnExit();
+		tempFileDestination.deleteOnExit();
+		tempBadFile.deleteOnExit();
+	}
+
 	@Test
 	public void writeStringToFile_ok() throws IOException {
-		FileOperations.writeStringToFile(tempFile, content);
-		assertEquals(content, readFileToString(tempFile));
+		FileOperations.writeStringToFile(tempFileSource, content);
+		assertEquals(content, readFileToString(tempFileSource));
 	}
 
 	@Test
@@ -78,15 +90,25 @@ public class FileOperationsTest {
 	}
 
 	@Test
-	public void writeStringToFile_ioException() throws IOException {
-		Path path = Paths.get(FileUtils.getTempDirectory().getAbsolutePath(), "temp-" + UUID.randomUUID());
-		File file = Files.createDirectories(path).toFile();
-		assertThrows(IOException.class, () -> FileOperations.writeStringToFile(file, content));
+	public void writeStringToFile_ioException() {
+		assertThrows(IOException.class, () -> FileOperations.writeStringToFile(tempBadFile, content));
+	}
+
+	@Test
+	public void writeStringToFile_fileNotFoundException() throws IOException {
+		File directory = FileOperations.createTempDirectory("temp", "folder");
+		File subDirectory = new File(directory.getAbsolutePath() + "/subdirectory");
+		File file = new File(subDirectory.getAbsolutePath() + "/testFile.txt");
+		directory.deleteOnExit();
+		subDirectory.deleteOnExit();
+		file.deleteOnExit();
+		assertThrows(FileNotFoundException.class, () -> FileOperations.writeStringToFile(file, content));
 	}
 
 	@Test
 	public void createTempDirectory_ok() throws IOException {
 		File file = FileOperations.createTempDirectory("temp", "folder");
+		file.deleteOnExit();
 		assertThrows(IOException.class, () -> FileOperations.writeStringToFile(file, content));
 		assertTrue(file.isDirectory());
 	}
@@ -95,11 +117,111 @@ public class FileOperationsTest {
 	public void copyFile_streams_ok() throws IOException {
 		long bytesToCopy = content.getBytes().length;
 		InputStream inputStream = new ByteArrayInputStream(content.getBytes());
-		try (OutputStream outputStream = new FileOutputStream(tempFile)) {
+		try (OutputStream outputStream = new FileOutputStream(tempFileSource)) {
 			long copiedBytes = FileOperations.copyFile(inputStream, outputStream);
-
 			assertEquals(copiedBytes, bytesToCopy);
 		}
+	}
+
+	@Test
+	public void copyFile_streams_emptyOk() throws IOException {
+		long bytesToCopy = "".getBytes().length;
+		InputStream inputStream = new ByteArrayInputStream("".getBytes());
+		try (OutputStream outputStream = new FileOutputStream(tempFileSource)) {
+			long copiedBytes = FileOperations.copyFile(inputStream, outputStream);
+			assertEquals(copiedBytes, bytesToCopy);
+		}
+	}
+
+
+	@Test
+	public void copyFile_ok() throws IOException {
+		FileOperations.writeStringToFile(tempFileSource, content);
+		FileOperations.copyFile(tempFileSource, tempFileDestination);
+		assertEquals(content, readFileToString(tempFileDestination));
+	}
+
+
+	@Test
+	public void copyFile_exception() throws IOException {
+		FileOperations.writeStringToFile(tempFileSource, content);
+		assertThrows(IOException.class, () -> FileOperations.copyFile(tempFileSource, tempBadFile));
+	}
+
+	@Test
+	public void deleteDirectory_ok() throws IOException {
+		File directory = FileOperations.createTempDirectory("temp", "folder");
+		assertTrue(directory.exists());
+		FileOperations.deleteDirectory(directory);
+		assertFalse(directory.exists());
+	}
+
+	@Test
+	public void deleteDirectory_subfilesOk() throws IOException {
+		File directory = FileOperations.createTempDirectory("temp", "folder");
+		File file = new File(directory.getAbsolutePath() + "/testFile.txt");
+		FileOperations.writeStringToFile(file, content);
+		assertTrue(file.exists());
+		FileOperations.deleteDirectory(directory);
+		assertFalse(file.exists());
+		assertFalse(directory.exists());
+	}
+
+	@Test
+	public void deleteAllFilesInDir_ok() throws IOException {
+		File directory = FileOperations.createTempDirectory("temp", "folder");
+		directory.deleteOnExit();
+		assertTrue(directory.exists());
+		FileOperations.deleteAllFilesInDir(directory);
+		assertTrue(directory.exists());
+	}
+
+	@Test
+	public void deleteAllFilesInDir_subfilesOk() throws IOException {
+		File directory = FileOperations.createTempDirectory("temp", "folder");
+		File file = new File(directory.getAbsolutePath() + "/testFile.txt");
+		directory.deleteOnExit();
+		file.deleteOnExit();
+		FileOperations.writeStringToFile(file, content);
+		assertTrue(file.exists());
+		FileOperations.deleteAllFilesInDir(directory);
+		assertFalse(file.exists());
+		assertTrue(directory.exists());
+	}
+
+	@Test
+	public void listFiles_ok() throws IOException {
+		File directory = FileOperations.createTempDirectory("temp", "folder");
+		File subDirectory = new File(directory, "subDirectory");
+		directory.deleteOnExit();
+		subDirectory.deleteOnExit();
+		assertTrue(subDirectory.mkdirs());
+		File file1 = new File(directory.getAbsolutePath() + "/testFile1.txt");
+		File file2 = new File(directory.getAbsolutePath() + "/testFile2.txt");
+		File file3 = new File(subDirectory.getAbsolutePath() + "/testFile3.txt");
+		file1.deleteOnExit();
+		file2.deleteOnExit();
+		file3.deleteOnExit();
+		FileOperations.writeStringToFile(file1, content);
+		FileOperations.writeStringToFile(file2, content);
+		FileOperations.writeStringToFile(file3, content);
+		assertEquals(3, FileOperations.listFiles(directory).size());
+	}
+
+	@Test
+	public void listDirectories_ok() throws IOException {
+		File directory = FileOperations.createTempDirectory("temp", "folder");
+		File subDirectory1 = new File(directory, "subDirectory1");
+		File subDirectory2 = new File(directory, "subDirectory2");
+		directory.deleteOnExit();
+		subDirectory1.deleteOnExit();
+		subDirectory2.deleteOnExit();
+		assertTrue(subDirectory1.mkdirs());
+		assertTrue(subDirectory2.mkdirs());
+		File file1 = new File(directory.getAbsolutePath() + "/testFile1.txt");
+		file1.deleteOnExit();
+		FileOperations.writeStringToFile(file1, content);
+		assertEquals(2, FileOperations.listDirectories(directory).size());
 	}
 
 }
