@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -160,7 +160,7 @@ public class ListImpl extends RDFResource implements List {
 		if (!children.isEmpty()) {
 			rc.add(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
 			for (int i = 0; i < children.size(); i++) {
-				IRI li = vf.createIRI(RDF.NAMESPACE + "_" + Integer.toString(i + 1));
+				IRI li = vf.createIRI(RDF.NAMESPACE + "_" + (i + 1));
 				IRI child = vf.createIRI(children.get(i).toString());
 				rc.add(this.resourceURI, li, child, this.resourceURI);
 			}
@@ -213,7 +213,7 @@ public class ListImpl extends RDFResource implements List {
 						rc.add(this.resourceURI, RDF.TYPE, RDF.SEQ, this.resourceURI);
 					}
 
-					IRI li = vf.createIRI(RDF.NAMESPACE + "_" + Integer.toString(children.size() + 1));
+					IRI li = vf.createIRI(RDF.NAMESPACE + "_" + (children.size() + 1));
 					IRI childURI = vf.createIRI(nEntry.toString());
 					rc.add(this.resourceURI, li, childURI, this.resourceURI);
 					childEntry.addReferringList(this, rc); //TODO deprecate addReferringList.
@@ -235,7 +235,7 @@ public class ListImpl extends RDFResource implements List {
 		}
 	}
 
-	public Entry moveEntryHere(URI entry, URI fromList, boolean removeFromAllLists) throws QuotaException, IOException {
+	public Entry moveEntryHere(URI entry, URI fromList, boolean removeFromAllLists) throws QuotaException {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
 		pm.checkAuthenticatedUserAuthorized(this.entry, AccessProperty.WriteResource);
 		EntryImpl e = ((EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(entry));
@@ -305,7 +305,11 @@ public class ListImpl extends RDFResource implements List {
 					newEntry = (EntryImpl) c.createResource(null, e.getGraphType(), e.getResourceType(), getURI());
 					if (e.getGraphType() == GraphType.None && e.getResourceType() == ResourceType.InformationResource) {
 						// FIXME if a QuotaException is thrown here we have already lost the original entry, this should be fixed
-						((DataImpl) newEntry.getResource()).useData(((DataImpl) e.getResource()).getDataFile());
+						try {
+							((DataImpl) newEntry.getResource()).useData(((DataImpl) e.getResource()).getDataFile());
+						} catch (IOException ex) {
+							log.error(ex.getMessage(), ex);
+						}
 					}
 					break;
 				case Link:
@@ -329,11 +333,11 @@ public class ListImpl extends RDFResource implements List {
 		}
 	}
 
-	protected EntryImpl copyEntryHere(EntryImpl entryToCopy) throws QuotaException, IOException {
+	protected EntryImpl copyEntryHere(EntryImpl entryToCopy) throws QuotaException {
 		return this._copyEntryHere(entryToCopy, true);
 	}
 
-	private EntryImpl _copyEntryHere(EntryImpl entryToCopy, boolean first) throws QuotaException, IOException {
+	private EntryImpl _copyEntryHere(EntryImpl entryToCopy, boolean first) throws QuotaException {
 		EntryImpl newEntry = null;
 		try {
 			GraphType bt = entryToCopy.getGraphType();
@@ -347,7 +351,11 @@ public class ListImpl extends RDFResource implements List {
 					newEntry = (EntryImpl) c.createResource(null, entryToCopy.getGraphType(), entryToCopy.getResourceType(), getURI());
 					if (entryToCopy.getGraphType() == GraphType.None && entryToCopy.getResourceType() == ResourceType.InformationResource) {
 						// FIXME if a QuotaException is thrown here we have already lost the original entry, this should be fixed
-						((DataImpl) newEntry.getResource()).useData(((DataImpl) entryToCopy.getResource()).getDataFile());
+						try {
+							((DataImpl) newEntry.getResource()).useData(((DataImpl) entryToCopy.getResource()).getDataFile());
+						} catch (IOException ex) {
+							log.error(ex.getMessage(), ex);
+						}
 					}
 					break;
 				case Link:
@@ -461,9 +469,9 @@ public class ListImpl extends RDFResource implements List {
 		if (children == null) {
 			loadChildren();
 		}
-		java.util.List<URI> toRemove = new java.util.ArrayList<URI>(children);
+		java.util.List<URI> toRemove = new java.util.ArrayList<>(children);
 		toRemove.removeAll(newChildren);
-		java.util.List<URI> toAdd = new java.util.ArrayList<URI>(newChildren);
+		java.util.List<URI> toAdd = new java.util.ArrayList<>(newChildren);
 		toAdd.removeAll(children);
 
 		for (URI uri : toAdd) {
@@ -683,7 +691,7 @@ public class ListImpl extends RDFResource implements List {
 		}
 
 		java.util.List<URI> tchildren = new ArrayList<>(children);
-		setChildren(new ArrayList<URI>(), false, false);
+		setChildren(new ArrayList<>(), false, false);
 		for (URI uri : tchildren) {
 			EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
 			if (childEntry != null) {
