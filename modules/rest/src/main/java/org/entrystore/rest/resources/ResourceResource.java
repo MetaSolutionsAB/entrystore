@@ -67,7 +67,6 @@ import org.json.JSONObject;
 import org.restlet.Client;
 import org.restlet.Request;
 import org.restlet.Response;
-import org.restlet.Uniform;
 import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Method;
@@ -222,13 +221,11 @@ public class ResourceResource extends BaseResource {
 				if (delResponse != null) {
 					getResponse().setEntity(delResponse.getEntity());
 					getResponse().setStatus(delResponse.getStatus());
-					getResponse().setOnSent(new Uniform() {
-						public void handle(Request request, Response response) {
-							try {
-								delResponse.release();
-							} catch (Exception e) {
-								log.error(e.getMessage());
-							}
+					getResponse().setOnSent((request, response) -> {
+						try {
+							delResponse.release();
+						} catch (Exception e) {
+							log.error(e.getMessage());
 						}
 					});
 				} else {
@@ -289,10 +286,6 @@ public class ResourceResource extends BaseResource {
 					error = qe.getMessage();
 					log.warn(qe.getMessage());
 					getResponse().setStatus(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
-				} catch (IOException ioe) {
-					error = ioe.getMessage();
-					log.error(ioe.getMessage());
-					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				}
 				if (error != null) {
 					JSONObject jsonError = new JSONObject();
