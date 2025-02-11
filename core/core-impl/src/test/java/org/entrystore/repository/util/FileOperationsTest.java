@@ -18,6 +18,7 @@ package org.entrystore.repository.util;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -222,6 +223,28 @@ public class FileOperationsTest {
 		file1.deleteOnExit();
 		FileOperations.writeStringToFile(file1, content);
 		assertEquals(2, FileOperations.listDirectories(directory).size());
+	}
+
+	@Disabled
+	@Test
+	public void unzipFile_ok() throws IOException {
+		File directory = FileOperations.createTempDirectory("temp", "folder");
+		directory.deleteOnExit();
+		FileOperations.unzipFile(new File("src/test/resources/zipfile.zip"), directory);
+		assertEquals(6, FileOperations.listFiles(directory).size());
+	}
+
+	@Test
+	public void unzipFile_empty() throws IOException {
+		File directory = FileOperations.createTempDirectory("temp", "folder");
+		directory.deleteOnExit();
+		FileOperations.unzipFile(tempFileSource, directory);
+		assertEquals(0, FileOperations.listFiles(directory).size());
+	}
+
+	@Test
+	public void unzipFile_exception() {
+		assertThrows(IllegalArgumentException.class, () -> FileOperations.unzipFile(tempFileSource, tempFileSource));
 	}
 
 }
