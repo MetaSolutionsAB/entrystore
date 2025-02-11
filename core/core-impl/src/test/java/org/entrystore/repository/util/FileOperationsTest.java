@@ -225,9 +225,17 @@ public class FileOperationsTest {
 		assertEquals(2, FileOperations.listDirectories(directory).size());
 	}
 
-	@Disabled
 	@Test
 	public void unzipFile_ok() throws IOException {
+		File directory = FileOperations.createTempDirectory("temp", "folder");
+		directory.deleteOnExit();
+		FileOperations.unzipFile(new File("src/test/resources/zipfile2.zip"), directory);
+		assertEquals(6, FileOperations.listFiles(directory).size());
+	}
+
+	@Disabled
+	@Test
+	public void unzipFile_subfolderOk() throws IOException {
 		File directory = FileOperations.createTempDirectory("temp", "folder");
 		directory.deleteOnExit();
 		FileOperations.unzipFile(new File("src/test/resources/zipfile.zip"), directory);

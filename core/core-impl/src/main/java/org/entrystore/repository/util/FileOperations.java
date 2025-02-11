@@ -290,7 +290,6 @@ public class FileOperations {
 			File parentDir = unzippedFile.getParentFile();
 			if (!parentDir.exists()) {
 				log.debug("Creating directory: {}", parentDir);
-				System.out.println("Creating directory:" + parentDir);
 				if (parentDir.mkdirs()) {
 					log.debug("Created directory: {}", parentDir);
 				} else {
