@@ -9,16 +9,15 @@
         <artifactId>entrystore-modules</artifactId>
         <version>5.6-SNAPSHOT</version>
     </parent>
+
     <artifactId>entrystore-rest-standalone</artifactId>
     <packaging>pom</packaging>
     <version>5.6-SNAPSHOT</version>
     <name>EntryStore REST Standalone</name>
 
     <modules>
-        <module>common</module>
-        <module>jetty</module>
+<!--        <module>integration-test</module>-->
         <module>spring-boot</module>
-        <module>integration-test</module>
     </modules>
 
 </project>

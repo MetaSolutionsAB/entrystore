@@ -27,13 +27,13 @@ import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.solr.client.api.util.SolrVersion;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
 import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.apache.solr.client.solrj.request.CoreAdminRequest;
 import org.apache.solr.client.solrj.request.CoreStatus;
 import org.apache.solr.core.NodeConfig;
-import org.apache.solr.util.SolrVersion;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -504,8 +504,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					try {
 						repository.shutDown();
 					} catch (RepositoryException re) {
-						log.error("Error when shutting down Sesame repository: {}", re.getMessage());
-						re.printStackTrace();
+						log.error("Error when shutting down Sesame repository: {}", re.getMessage(), re);
 					}
 				}
 				if (publicRepository != null) {

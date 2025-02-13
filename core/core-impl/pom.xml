@@ -38,15 +38,6 @@
 			<version>${project.version}</version>
 		</dependency>
 		<dependency>
-			<!-- needed by SolrJ -->
-			<groupId>javax.servlet</groupId>
-			<artifactId>javax.servlet-api</artifactId>
-			<version>${servlet.version}</version>
-			<!-- should not be deployed to the web container (hence the scope is 'provided')   -->
-			<!-- needs to be included in standalone packages (i.e., non-Servlet use)           -->
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
 			<groupId>org.eclipse.rdf4j</groupId>
 			<artifactId>rdf4j-model</artifactId>
 			<version>${rdf4j.version}</version>
@@ -173,11 +164,6 @@
 			<version>2.2.0</version>
 		</dependency>
 		<dependency>
-			<artifactId>solr-solrj</artifactId>
-			<groupId>org.apache.solr</groupId>
-			<version>${solr.version}</version>
-		</dependency>
-		<dependency>
 			<artifactId>solr-analysis-extras</artifactId>
 			<groupId>org.apache.solr</groupId>
 			<version>${solr.version}</version>
@@ -194,12 +180,8 @@
 			<version>${solr.version}</version>
 			<exclusions>
 				<exclusion>
-					<groupId>org.eclipse.jetty.orbit</groupId>
-					<artifactId>javax.servlet</artifactId>
-				</exclusion>
-				<exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
 					<artifactId>zookeeper</artifactId>
-					<groupId>org.apache.zookeeper</groupId>
 				</exclusion>
 				<exclusion>
 					<groupId>org.apache.logging.log4j</groupId>

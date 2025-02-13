@@ -20,11 +20,6 @@
 			<artifactId>reflections</artifactId>
 			<version>0.10.2</version>
 		</dependency>
-		<dependency>
-			<groupId>org.restlet</groupId>
-			<artifactId>org.restlet</artifactId>
-			<version>${restlet.version}</version>
-		</dependency>
 	</dependencies>
 
 </project>
