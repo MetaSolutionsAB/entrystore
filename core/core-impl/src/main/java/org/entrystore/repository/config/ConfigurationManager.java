@@ -16,6 +16,7 @@
 
 package org.entrystore.repository.config;
 
+import lombok.Getter;
 import org.entrystore.config.Config;
 import org.entrystore.config.Configurations;
 import org.slf4j.Logger;
@@ -30,10 +31,11 @@ import java.net.URL;
 
 /**
  * ConfigurationManager is loading, saving, and returning a configuration.
- * 
+ *
  * @author Hannes Ebner
  * @version $Id$
  */
+@Getter
 public class ConfigurationManager {
 
 	static Logger log = LoggerFactory.getLogger(ConfigurationManager.class);
@@ -41,8 +43,7 @@ public class ConfigurationManager {
 	/**
 	 * Instance of the configuration object.
 	 */
-	private Config mainConfig;
-
+	private Config configuration;
 	public static String CONFIG_FILE = "entrystore.properties";
 
 	/* Private methods */
@@ -51,15 +52,16 @@ public class ConfigurationManager {
 	 * Constructor to be called indirectly by initialize(). Checks whether a
 	 * configuration file exists and loads it respectively creates a new
 	 * configuration.
-	 * 
+	 *
 	 * @throws IOException
 	 */
 	public ConfigurationManager(URI configURI) throws IOException {
 		if (configURI == null) {
 			throw new IllegalArgumentException("Configuration URI must not be null");
 		}
+
 		try {
-			log.info("Loading configuration from: " + configURI);
+			log.info("Loading configuration from: {}", configURI);
 			// We don't call configFile.toURL() because it doesn't escape spaces etc.
 			loadConfiguration(configURI.toURL());
 		} catch (MalformedURLException e) {
@@ -68,16 +70,17 @@ public class ConfigurationManager {
 	}
 
 	private void initMainConfig() {
-		mainConfig = Configurations.synchronizedConfig(new PropertiesConfiguration("EntryStore Configuration"));
+		configuration = Configurations.synchronizedConfig(new PropertiesConfiguration("EntryStore Configuration"));
 	}
 
 	/**
 	 * Loads an already existing configuration.
-	 * @throws IOException 
+	 *
+	 * @throws IOException
 	 */
 	private void loadConfiguration(URL configURL) throws IOException {
 		initMainConfig();
-		mainConfig.load(configURL);
+		configuration.load(configURL);
 	}
 
 	/* Public methods */
@@ -85,45 +88,37 @@ public class ConfigurationManager {
 	/**
 	 * This class is implemented as Singleton, so we want to avoid having
 	 * multiple instances of the same object by cloning.
-	 * 
+	 *
 	 * @see java.lang.Object#clone()
 	 */
 	public Object clone() throws CloneNotSupportedException {
 		throw new CloneNotSupportedException(this.getClass() + " is a Singleton.");
 	}
 
-	public ConfigurationType getType() {
-		return ConfigurationType.Properties;
-	}
-
 	public static URI getConfigurationURI(String fileName) {
-		URL resURL = Thread.currentThread().getContextClassLoader().getResource(fileName); 
+		URL resURL = Thread.currentThread().getContextClassLoader().getResource(fileName);
 		try {
 			if (resURL != null) {
 				return resURL.toURI();
 			}
-		} catch (URISyntaxException e) { 
-			log.error(e.getMessage()); 
+		} catch (URISyntaxException e) {
+			log.error(e.getMessage());
 		}
 
 		String classPath = System.getProperty("java.class.path");
-		String[] pathElements = classPath.split(System.getProperty("path.separator"));
-		for (String element : pathElements)	{
+		String[] pathElements = classPath.split(File.pathSeparator);
+		for (String element : pathElements) {
 			File newFile = new File(element, fileName);
 			if (newFile.exists()) {
 				return newFile.toURI();
 			}
 		}
-		log.error("Unable to find " + fileName + " in classpath");
+		log.error("Unable to find {} in classpath", fileName);
 		return null;
 	}
-	
+
 	public static URI getConfigurationURI() {
 		return getConfigurationURI(CONFIG_FILE);
-	}
-
-	public Config getConfiguration() {
-		return mainConfig;
 	}
 
 }
