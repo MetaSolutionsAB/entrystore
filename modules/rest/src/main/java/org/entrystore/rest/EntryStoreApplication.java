@@ -199,7 +199,7 @@ public class EntryStoreApplication extends Application {
 					configURI = URI.create(envConfigURI);
 				} else {
 					// We try the context
-					javax.naming.Context env = null;
+					javax.naming.Context env;
 					try {
 						env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
 						if (env != null && env.lookup("entrystore.config") != null) {
@@ -250,7 +250,7 @@ public class EntryStoreApplication extends Application {
 			Password.loadRules(config);
 
 			if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
-				// Check for existence of Donald
+				// Check for the existence of Donald
 				Entry donald = rm.getPrincipalManager().getPrincipalEntry("Donald");
 				// We only initialize of test suite has not been loaded before,
 				// otherwise we end up with duplicates (if store is persisted)

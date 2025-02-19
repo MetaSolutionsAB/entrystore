@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,29 +19,66 @@ package org.entrystore.repository.security;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 public class PasswordTest {
 
-	@Disabled("To be implemented")
 	@Test
-	public void testGetSaltedHash() throws Exception {
-		// TODO
+	public void check_exception() {
+		assertThrows(IllegalArgumentException.class, () -> Password.check(null, ""));
+		assertThrows(IllegalArgumentException.class, () -> Password.check("", ""));
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testCheck() throws Exception {
-		// TODO
+	public void check_ok() {
+		assertTrue(Password.check("somePassword", "some$UOe58Q8uFZPwqhsvuVYmqnelHhtzbvA/"));
+		assertFalse(Password.check("somePassword", "Password$UOe58Q8uFZPwqhsvuVYmqnelHhtzbvA/"));
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testGetRandomBase64() throws Exception {
-		// TODO
+	public void sha256_ok() {
+		assertEquals("uq6QvQZIZ6so8DTW7UDvFGhAEuTAVnGB6u40lKI1hpU=", Password.sha256("somePassword"));
+		assertEquals("47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=", Password.sha256(""));
 	}
 
-	@Disabled("To be implemented")
+	@Disabled
 	@Test
-	public void testSha256() throws Exception {
-		// TODO
+	public void getSaltedHash_ok() {
+		// not idempotent
+	}
+
+	@Test
+	public void conformsToRules_exception() {
+		Password.setRules(Password.getDefaultRules());
+		assertFalse(Password.conformsToRules(null));
+		assertFalse(Password.conformsToRules(""));
+	}
+
+	@Test
+	public void conformsToRules_default_ok() {
+		Password.setRules(Password.getDefaultRules());
+		assertTrue(Password.conformsToRules("!ABCdefgh123456*"));
+		assertFalse(Password.conformsToRules("!1234567890"));
+		assertFalse(Password.conformsToRules("!abcdefgh123456"));
+		assertFalse(Password.conformsToRules("!ABCDEFGH123456"));
+	}
+
+	@Test
+	public void conformsToRules_ok() {
+		Password.Rules rules = new Password.Rules();
+		rules.lowercase = false;
+		rules.uppercase = false;
+		rules.number = false;
+		rules.symbol =true;
+		rules.minLength = 13;
+		Password.setRules(rules);
+		assertTrue(Password.conformsToRules("!ABCdefgh123456*"));
+		assertFalse(Password.conformsToRules("!1234567890"));
+		assertTrue(Password.conformsToRules("!abcdefgh1234567890"));
+		assertTrue(Password.conformsToRules("!ABCDEFGH123456"));
+		assertFalse(Password.conformsToRules("ABCDEFGH123456"));
 	}
 }
