@@ -4,7 +4,6 @@ import org.entrystore.generator.ObjectGenerator;
 import org.entrystore.mapper.ObjectMapper;
 import org.entrystore.model.FakePerson;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.util.SolrSearchIndex;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -87,12 +86,6 @@ public class MultipleTransactions {
 		LocalDateTime endContext = LocalDateTime.now();
 		LogUtils.logDate("Ending adding to context at", endContext);
 		LogUtils.logTimeDifference("Adding to context took", start, endContext);
-
-		SolrSearchIndex solrSearchIndex = (SolrSearchIndex) repositoryManager.getIndex();
-
-		while (solrSearchIndex.getPostQueueSize() > 0) {
-			Thread.sleep(500);
-		}
 
 		// To solve the race condition when queue is empty for low amount of instances.
 		Thread.sleep(500);

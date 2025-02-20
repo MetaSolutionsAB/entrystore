@@ -164,32 +164,6 @@
 			<version>2.2.0</version>
 		</dependency>
 		<dependency>
-			<artifactId>solr-analysis-extras</artifactId>
-			<groupId>org.apache.solr</groupId>
-			<version>${solr.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>org.restlet.jee</groupId>
-					<artifactId>org.restlet.ext.servlet</artifactId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-		<dependency>
-			<artifactId>solr-core</artifactId>
-			<groupId>org.apache.solr</groupId>
-			<version>${solr.version}</version>
-			<exclusions>
-				<exclusion>
-                    <groupId>org.apache.zookeeper</groupId>
-					<artifactId>zookeeper</artifactId>
-				</exclusion>
-				<exclusion>
-					<groupId>org.apache.logging.log4j</groupId>
-					<artifactId>log4j-slf4j-impl</artifactId>
-				</exclusion>
-			</exclusions>
-		</dependency>
-		<dependency>
 			<groupId>com.ibm.icu</groupId>
 			<artifactId>icu4j</artifactId>
 			<version>74.2</version>
