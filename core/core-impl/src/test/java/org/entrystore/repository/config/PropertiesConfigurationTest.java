@@ -47,7 +47,7 @@ public class PropertiesConfigurationTest {
 	public void load_ok() {
 		PropertiesConfiguration configuration = new PropertiesConfiguration("test");
 		try {
-			File properties = new File("src/test/resources/entrystore.properties");
+			File properties = new File("src/test/resources/entrystore.properties-test");
 			configuration.load(URI.create("file:///" + properties.getAbsolutePath().replace('\\', '/')).toURL());
 		} catch (IOException e) {
 			e.printStackTrace();
