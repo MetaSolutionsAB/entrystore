@@ -28,12 +28,6 @@
             <scope>compile</scope>
         </dependency>
         <dependency>
-            <groupId>org.entrystore</groupId>
-            <artifactId>entrystore-core-api</artifactId>
-            <version>${project.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
         </dependency>
