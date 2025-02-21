@@ -43,10 +43,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedInputStream;
-import java.util.zip.CheckedOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
 
 /**
  * Commonly used file operations.
@@ -266,55 +264,6 @@ public class FileOperations {
 	}
 
 	/**
-	 * Zips a folder and its subfolders.
-	 *
-	 * @param zipFile   Destination ZIP file. Is created if it does not exist.
-	 * @param directory The directory to be zipped.
-	 * @param base      Base File path to strip off the zipped files. May be null.
-	 * @return Returns a CRC32 checksum of the zipped file.
-	 * @throws IOException
-	 */
-	public static long zipDirectory(File zipFile, File directory, File base) throws IOException {
-		return zipFiles(zipFile, listFiles(directory), base);
-	}
-
-	/**
-	 * Zips a set of files.
-	 *
-	 * @param zipFile Destination ZIP file. Is created if it does not exist.
-	 * @param files   List of files to add to the ZIP file.
-	 * @param base    Base File path to strip off the zipped files. May be null.
-	 * @return Returns a CRC32 checksum of the zipped file.
-	 * @throws IOException
-	 */
-	public static long zipFiles(File zipFile, List<File> files, File base) throws IOException {
-		OutputStream fos = Files.newOutputStream(zipFile.toPath());
-		CheckedOutputStream cos = new CheckedOutputStream(fos, new CRC32());
-		BufferedOutputStream bos = new BufferedOutputStream(cos, BUFFER_SIZE);
-		ZipOutputStream zos = new ZipOutputStream(bos);
-		byte[] data = new byte[BUFFER_SIZE];
-		for (File file : files) {
-			InputStream fis = Files.newInputStream(file.toPath());
-			BufferedInputStream source = new BufferedInputStream(fis);
-			String entryPath = file.getPath();
-			if (base != null) {
-				entryPath = entryPath.replace(base.getPath(), "");
-			}
-			ZipEntry entry = new ZipEntry(entryPath);
-			log.debug("Adding file: {}", file.getPath());
-			zos.putNextEntry(entry);
-			int count;
-			while ((count = source.read(data, 0, BUFFER_SIZE)) != -1) {
-				zos.write(data, 0, count);
-			}
-			source.close();
-		}
-		zos.close();
-
-		return cos.getChecksum().getValue();
-	}
-
-	/**
 	 * Unzips a file into a directory. Subfolders are created if necessary.
 	 *
 	 * @param zipFile     ZIP file to be used as a source.
@@ -325,7 +274,7 @@ public class FileOperations {
 	 */
 	public static long unzipFile(File zipFile, File destination) throws IOException {
 		if (!destination.isDirectory()) {
-			throw new IllegalArgumentException("Destination is not a folder");
+			throw new IllegalArgumentException("Destination is not a folder.");
 		}
 
 		InputStream fis = Files.newInputStream(zipFile.toPath());
@@ -341,7 +290,11 @@ public class FileOperations {
 			File parentDir = unzippedFile.getParentFile();
 			if (!parentDir.exists()) {
 				log.debug("Creating directory: {}", parentDir);
-				parentDir.mkdirs();
+				if (parentDir.mkdirs()) {
+					log.debug("Created directory: {}", parentDir);
+				} else {
+					log.debug("Could not create  directory: {}", parentDir);
+				}
 			}
 			OutputStream fos = Files.newOutputStream(unzippedFile.toPath());
 			BufferedOutputStream bos = new BufferedOutputStream(fos, BUFFER_SIZE);
@@ -441,7 +394,9 @@ public class FileOperations {
 			throw new NullPointerException("file to write to is null");
 		}
 
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter(file))) {
+		FileWriter fw = new FileWriter(file);
+
+		try (BufferedWriter writer = new BufferedWriter(fw)) {
 			writer.write(content);
 		}
 	}
