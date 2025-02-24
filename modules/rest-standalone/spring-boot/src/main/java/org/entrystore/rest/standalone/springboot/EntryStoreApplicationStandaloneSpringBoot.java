@@ -1,12 +1,11 @@
 package org.entrystore.rest.standalone.springboot;
 
-import org.entrystore.rest.standalone.springboot.configuration.EntryStoreConfiguration;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
-@EnableConfigurationProperties(EntryStoreConfiguration.class)
+@ConfigurationPropertiesScan("org.entrystore.rest.standalone.springboot.configuration")
 public class EntryStoreApplicationStandaloneSpringBoot {
 
 	public static void main(String[] args) {

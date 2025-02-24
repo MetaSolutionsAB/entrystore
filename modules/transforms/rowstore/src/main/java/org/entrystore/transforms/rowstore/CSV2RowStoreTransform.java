@@ -16,6 +16,10 @@
 
 package org.entrystore.transforms.rowstore;
 
+
+// TODO: rewrite to use generic Java http client, or delete
+
+/*
 import org.apache.commons.io.IOUtils;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -51,6 +55,7 @@ import java.util.Set;
  *
  * @author Hannes Ebner
  */
+/*
 @TransformParameters(type="rowstore", extensions={"csv"})
 public class CSV2RowStoreTransform extends Transform {
 
@@ -181,3 +186,4 @@ public class CSV2RowStoreTransform extends Transform {
 	}
 
 }
+*/

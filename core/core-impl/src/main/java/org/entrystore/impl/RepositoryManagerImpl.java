@@ -21,19 +21,8 @@ import lombok.Setter;
 import net.sf.ehcache.CacheManager;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.HttpClient;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.solr.client.solrj.SolrClient;
-import org.apache.solr.client.solrj.embedded.EmbeddedSolrServer;
-import org.apache.solr.client.solrj.impl.HttpSolrClient;
-import org.apache.solr.client.solrj.request.CoreAdminRequest;
-import org.apache.solr.client.solrj.request.CoreStatus;
-import org.apache.solr.core.NodeConfig;
-import org.apache.solr.util.SolrVersion;
+import org.apache.solr.client.solrj.impl.HttpJdkSolrClient;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -60,7 +49,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.Quota;
 import org.entrystore.SearchIndex;
 import org.entrystore.config.Config;
-import org.entrystore.impl.converters.ConverterUtil;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryListener;
@@ -89,7 +77,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -636,27 +623,21 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at {}", solrURL);
 
-			HttpSolrClient.Builder solrClientBuilder = new HttpSolrClient.Builder(solrURL).
-					withConnectionTimeout(5000).
-					withSocketTimeout(5000).
-					allowCompression(true);
+			HttpJdkSolrClient.Builder solrClientBuilder = new HttpJdkSolrClient.Builder(solrURL).
+				withDefaultCollection("entrystore-core");
 
 			String solrUsername = configuration.getString(Settings.SOLR_AUTH_USERNAME);
 			String solrPassword = configuration.getString(Settings.SOLR_AUTH_PASSWORD);
 
 			if (solrUsername != null && solrPassword != null) {
-				CredentialsProvider provider = new BasicCredentialsProvider();
-				UsernamePasswordCredentials credentials = new UsernamePasswordCredentials(solrUsername, solrPassword);
-				provider.setCredentials(AuthScope.ANY, credentials);
-				HttpClient solrHttpClient = HttpClientBuilder.create().setDefaultCredentialsProvider(provider).build();
-				solrClientBuilder.withHttpClient(solrHttpClient);
+				solrClientBuilder.withBasicAuthCredentials(solrUsername, solrPassword);
 			}
 
-			HttpSolrClient httpSolrClient = solrClientBuilder.build();
-			httpSolrClient.setFollowRedirects(true);
-			solrServer = httpSolrClient;
+			solrServer = solrClientBuilder.build();
 		} else {
-			log.info("Using embedded Solr server");
+			log.info("Error embedded Solr server unavailable");
+			System.exit(1);
+/*			log.info("Using embedded Solr server");
 			String coreName = "core1";
 			String schemaFileName = "SCHEMA_VERSION";
 			String solrFileName = "SOLR_VERSION";
@@ -775,7 +756,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			} catch (Exception e) {
 				log.error("Failed to initialize Solr: {}", e.getMessage());
-			}
+			}*/
 		}
 		if (solrServer != null) {
 			solrIndex = new SolrSearchIndex(this, solrServer);
