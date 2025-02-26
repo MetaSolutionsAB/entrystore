@@ -15,10 +15,6 @@
     <version>5.6-SNAPSHOT</version>
     <name>EntryStore REST Standalone Spring Boot App</name>
 
-    <properties>
-        <springframework.boot.version>3.4.2</springframework.boot.version>
-    </properties>
-
     <dependencies>
 
         <dependency>
@@ -81,13 +77,5 @@
                 <directory>src/test/resources</directory>
             </testResource>
         </testResources>
-
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <version>${springframework.boot.version}</version>
-            </plugin>
-        </plugins>
     </build>
 </project>

@@ -204,7 +204,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		} else if (storeType.equalsIgnoreCase("sparql")) {
 			if (!configuration.containsKey(Settings.STORE_ENDPOINT_QUERY) ||
-					!configuration.containsKey(Settings.STORE_ENDPOINT_UPDATE)) {
+				!configuration.containsKey(Settings.STORE_ENDPOINT_UPDATE)) {
 				log.error("Incomplete configuration for sparql store");
 				throw new IllegalStateException("Incomplete configuration");
 			} else {
@@ -491,8 +491,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					try {
 						repository.shutDown();
 					} catch (RepositoryException re) {
-						log.error("Error when shutting down Sesame repository: {}", re.getMessage());
-						re.printStackTrace();
+						log.error("Error when shutting down Sesame repository: {}", re.getMessage(), re);
 					}
 				}
 				if (publicRepository != null) {
@@ -623,8 +622,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at {}", solrURL);
 
-			HttpJdkSolrClient.Builder solrClientBuilder = new HttpJdkSolrClient.Builder(solrURL).
-				withDefaultCollection("entrystore-core");
+			HttpJdkSolrClient.Builder solrClientBuilder = new HttpJdkSolrClient.Builder(solrURL);
 
 			String solrUsername = configuration.getString(Settings.SOLR_AUTH_USERNAME);
 			String solrPassword = configuration.getString(Settings.SOLR_AUTH_PASSWORD);
