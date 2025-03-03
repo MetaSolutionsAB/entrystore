@@ -1,410 +1,410 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
-    <!-- ================= EntryStore  ================= -->
-    <modelVersion>4.0.0</modelVersion>
+	<!-- ================= EntryStore  ================= -->
+	<modelVersion>4.0.0</modelVersion>
 
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.2</version>
-        <relativePath/> <!-- lookup parent from repository -->
-    </parent>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.2</version>
+		<relativePath/> <!-- lookup parent from repository -->
+	</parent>
 
-    <groupId>org.entrystore</groupId>
-    <artifactId>entrystore-parent</artifactId>
-    <version>5.6-SNAPSHOT</version>
-    <packaging>pom</packaging>
-    <name>EntryStore</name>
-    <url>https://entrystore.org</url>
-    <description>
-        EntryStore is a Linked Data-based resource and metadata management framework. It provides a reference
-        implementation of the Resource and Metadata Management Model (ReM3).
-    </description>
-    <inceptionYear>2008</inceptionYear>
+	<groupId>org.entrystore</groupId>
+	<artifactId>entrystore-parent</artifactId>
+	<version>5.6-SNAPSHOT</version>
+	<packaging>pom</packaging>
+	<name>EntryStore</name>
+	<url>https://entrystore.org</url>
+	<description>
+		EntryStore is a Linked Data-based resource and metadata management framework. It provides a reference
+		implementation of the Resource and Metadata Management Model (ReM3).
+	</description>
+	<inceptionYear>2008</inceptionYear>
 
-    <!-- ================= Default Properties ================= -->
-    <properties>
-        <java.version>21</java.version>
-        <solr.version>9.8.0</solr.version>
-        <rdf4j.version>5.0.3</rdf4j.version>
-        <servlet.version>3.1.0</servlet.version>
-        <xerces.version>2.12.2</xerces.version>
-        <jaxb.version>2.3.1</jaxb.version>
-        <guava.version>33.4.0-jre</guava.version>
-        <jsonorg.version>20240303</jsonorg.version>
-        <zookeeper.version>3.9.2</zookeeper.version>
-        <xmlsec.version>3.0.4</xmlsec.version>
-        <httpmime.version>4.5.14</httpmime.version>
-        <commonscli.version>1.6.0</commonscli.version>
-        <snappy.version>1.1.10.5</snappy.version>
-        <jetbrains-annotations.version>24.1.0</jetbrains-annotations.version>
+	<!-- ================= Default Properties ================= -->
+	<properties>
+		<java.version>21</java.version>
+		<solr.version>9.8.0</solr.version>
+		<rdf4j.version>5.0.3</rdf4j.version>
+		<servlet.version>3.1.0</servlet.version>
+		<xerces.version>2.12.2</xerces.version>
+		<jaxb.version>2.3.1</jaxb.version>
+		<guava.version>33.4.0-jre</guava.version>
+		<jsonorg.version>20240303</jsonorg.version>
+		<zookeeper.version>3.9.2</zookeeper.version>
+		<xmlsec.version>3.0.4</xmlsec.version>
+		<httpmime.version>4.5.14</httpmime.version>
+		<commonscli.version>1.6.0</commonscli.version>
+		<snappy.version>1.1.10.5</snappy.version>
+		<jetbrains-annotations.version>24.1.0</jetbrains-annotations.version>
 
-        <!-- Override Spring-boot versions -->
-        <caffeine.version>3.2.0</caffeine.version>
+		<!-- Override Spring-boot versions -->
+		<caffeine.version>3.2.0</caffeine.version>
 
-        <site.url>https://entrystore.org</site.url>
-        <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
-        <distribution.url>https://entrystore.org</distribution.url>
-        <license.licenseName>apache_v2</license.licenseName>
-        <maven.compiler.release>${java.version}</maven.compiler.release>
-    </properties>
+		<site.url>https://entrystore.org</site.url>
+		<distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
+		<distribution.url>https://entrystore.org</distribution.url>
+		<license.licenseName>apache_v2</license.licenseName>
+		<maven.compiler.release>${java.version}</maven.compiler.release>
+	</properties>
 
-    <!-- ================= Developers ================= -->
-    <developers>
-        <developer>
-            <name>Matthias Palmér</name>
-            <id>matthias</id>
-            <email>matthias at metasolutions.se</email>
-            <organization>MetaSolutions AB</organization>
-        </developer>
-        <developer>
-            <name>Hannes Ebner</name>
-            <id>hannes</id>
-            <email>hannes at metasolutions.se</email>
-            <organization>MetaSolutions AB</organization>
-        </developer>
-    </developers>
+	<!-- ================= Developers ================= -->
+	<developers>
+		<developer>
+			<name>Matthias Palmér</name>
+			<id>matthias</id>
+			<email>matthias at metasolutions.se</email>
+			<organization>MetaSolutions AB</organization>
+		</developer>
+		<developer>
+			<name>Hannes Ebner</name>
+			<id>hannes</id>
+			<email>hannes at metasolutions.se</email>
+			<organization>MetaSolutions AB</organization>
+		</developer>
+	</developers>
 
-    <!-- ================= DistributionManagement ================= -->
-    <distributionManagement>
-        <repository>
-            <id>libs-releases-local</id>
-            <name>release repository</name>
-            <url>${distribution.url}</url>
-            <uniqueVersion>false</uniqueVersion>
-        </repository>
-        <snapshotRepository>
-            <id>libs-snapshots-local</id>
-            <name>snapshot repository</name>
-            <url>${distribution.snapshot.url}</url>
-            <uniqueVersion>false</uniqueVersion>
-        </snapshotRepository>
-        <site>
-            <id>entrystore-website</id>
-            <url>${site.url}</url>
-        </site>
-    </distributionManagement>
+	<!-- ================= DistributionManagement ================= -->
+	<distributionManagement>
+		<repository>
+			<id>libs-releases-local</id>
+			<name>release repository</name>
+			<url>${distribution.url}</url>
+			<uniqueVersion>false</uniqueVersion>
+		</repository>
+		<snapshotRepository>
+			<id>libs-snapshots-local</id>
+			<name>snapshot repository</name>
+			<url>${distribution.snapshot.url}</url>
+			<uniqueVersion>false</uniqueVersion>
+		</snapshotRepository>
+		<site>
+			<id>entrystore-website</id>
+			<url>${site.url}</url>
+		</site>
+	</distributionManagement>
 
-    <scm>
-        <connection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</connection>
-        <developerConnection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</developerConnection>
-        <url>https://bitbucket.org/metasolutions/entrystore.git</url>
-    </scm>
+	<scm>
+		<connection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</connection>
+		<developerConnection>scm:git:ssh://git@bitbucket.org/metasolutions/entrystore.git</developerConnection>
+		<url>https://bitbucket.org/metasolutions/entrystore.git</url>
+	</scm>
 
-    <!-- ================= Modules ================= -->
-    <modules>
-        <module>core</module>
-        <module>modules</module>
-        <!--<module>apps</module>-->
-    </modules>
+	<!-- ================= Modules ================= -->
+	<modules>
+		<module>core</module>
+		<module>modules</module>
+		<!--<module>apps</module>-->
+	</modules>
 
-    <!-- ================= Licenses ================= -->
-    <licenses>
-        <license>
-            <name>Apache License Version 2.0</name>
-            <url>http://www.apache.org/licenses/</url>
-            <distribution>repo</distribution>
-            <comments/>
-        </license>
-    </licenses>
+	<!-- ================= Licenses ================= -->
+	<licenses>
+		<license>
+			<name>Apache License Version 2.0</name>
+			<url>http://www.apache.org/licenses/</url>
+			<distribution>repo</distribution>
+			<comments/>
+		</license>
+	</licenses>
 
-    <!-- ================= Organization ================= -->
-    <organization>
-        <name>MetaSolutions AB</name>
-        <url>https://www.metasolutions.se</url>
-    </organization>
+	<!-- ================= Organization ================= -->
+	<organization>
+		<name>MetaSolutions AB</name>
+		<url>https://www.metasolutions.se</url>
+	</organization>
 
-    <!-- ================= Build ================= -->
-    <build>
-        <defaultGoal>install</defaultGoal>
+	<!-- ================= Build ================= -->
+	<build>
+		<defaultGoal>install</defaultGoal>
 
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-deploy-plugin</artifactId>
-                    <version>3.1.0</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-install-plugin</artifactId>
-                    <version>3.1.0</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.codehaus.mojo</groupId>
-                    <artifactId>appassembler-maven-plugin</artifactId>
-                    <version>2.1.0</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-source-plugin</artifactId>
-                    <version>3.2.1</version>
-                    <executions>
-                        <execution>
-                            <id>attach-source</id>
-                            <goals>
-                                <goal>jar</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-enforcer-plugin</artifactId>
-                    <version>3.2.1</version>
-                    <executions>
-                        <execution>
-                            <id>enforce-maven</id>
-                            <goals>
-                                <goal>enforce</goal>
-                            </goals>
-                            <configuration>
-                                <rules>
-                                    <requireMavenVersion>
-                                        <version>3.6</version>
-                                    </requireMavenVersion>
-                                </rules>
-                            </configuration>
-                        </execution>
-                    </executions>
-                </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.0.0-M9</version>
-                </plugin>
-                <plugin>
-                    <groupId>org.owasp</groupId>
-                    <artifactId>dependency-check-maven</artifactId>
-                    <version>8.1.2</version>
-                    <configuration>
-                        <skipProvidedScope>true</skipProvidedScope>
-                        <skipTestScope>true</skipTestScope>
-                        <assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
-                        <failBuildOnCVSS>7</failBuildOnCVSS>
-                        <excludes>
-                            <exclude>xalan:serializer</exclude>
-                            <exclude>xalan:xalan</exclude>
-                            <exclude>org.json:json</exclude>
-                        </excludes>
-                    </configuration>
-                </plugin>
-            </plugins>
-        </pluginManagement>
+		<pluginManagement>
+			<plugins>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-deploy-plugin</artifactId>
+					<version>3.1.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-install-plugin</artifactId>
+					<version>3.1.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.codehaus.mojo</groupId>
+					<artifactId>appassembler-maven-plugin</artifactId>
+					<version>2.1.0</version>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-source-plugin</artifactId>
+					<version>3.2.1</version>
+					<executions>
+						<execution>
+							<id>attach-source</id>
+							<goals>
+								<goal>jar</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-enforcer-plugin</artifactId>
+					<version>3.2.1</version>
+					<executions>
+						<execution>
+							<id>enforce-maven</id>
+							<goals>
+								<goal>enforce</goal>
+							</goals>
+							<configuration>
+								<rules>
+									<requireMavenVersion>
+										<version>3.6</version>
+									</requireMavenVersion>
+								</rules>
+							</configuration>
+						</execution>
+					</executions>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-surefire-plugin</artifactId>
+					<version>3.0.0-M9</version>
+				</plugin>
+				<plugin>
+					<groupId>org.owasp</groupId>
+					<artifactId>dependency-check-maven</artifactId>
+					<version>8.1.2</version>
+					<configuration>
+						<skipProvidedScope>true</skipProvidedScope>
+						<skipTestScope>true</skipTestScope>
+						<assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
+						<failBuildOnCVSS>7</failBuildOnCVSS>
+						<excludes>
+							<exclude>xalan:serializer</exclude>
+							<exclude>xalan:xalan</exclude>
+							<exclude>org.json:json</exclude>
+						</excludes>
+					</configuration>
+				</plugin>
+			</plugins>
+		</pluginManagement>
 
-        <plugins>
-            <plugin>
-                <groupId>org.owasp</groupId>
-                <artifactId>dependency-check-maven</artifactId>
-            </plugin>
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.12</version>
-                <executions>
-                    <execution>
-                        <id>default-prepare-agent</id>
-                        <goals>
-                            <goal>prepare-agent</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>default-report</id>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
+		<plugins>
+			<plugin>
+				<groupId>org.owasp</groupId>
+				<artifactId>dependency-check-maven</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.12</version>
+				<executions>
+					<execution>
+						<id>default-prepare-agent</id>
+						<goals>
+							<goal>prepare-agent</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>default-report</id>
+						<goals>
+							<goal>report</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
 
-    <!-- ================= Repositories ================= -->
-    <repositories>
-        <repository>
-            <id>EntryStore</id>
-            <url>https://maven.entrystore.org</url>
-        </repository>
-        <repository>
-            <id>Maven Central</id>
-            <url>https://repo.maven.apache.org/maven2/</url>
-        </repository>
-    </repositories>
-    <pluginRepositories>
-        <pluginRepository>
-            <id>EntryStore</id>
-            <url>https://maven.entrystore.org</url>
-        </pluginRepository>
-        <pluginRepository>
-            <id>Maven Central</id>
-            <url>https://repo.maven.apache.org/maven2/</url>
-        </pluginRepository>
-    </pluginRepositories>
+	<!-- ================= Repositories ================= -->
+	<repositories>
+		<repository>
+			<id>EntryStore</id>
+			<url>https://maven.entrystore.org</url>
+		</repository>
+		<repository>
+			<id>Maven Central</id>
+			<url>https://repo.maven.apache.org/maven2/</url>
+		</repository>
+	</repositories>
+	<pluginRepositories>
+		<pluginRepository>
+			<id>EntryStore</id>
+			<url>https://maven.entrystore.org</url>
+		</pluginRepository>
+		<pluginRepository>
+			<id>Maven Central</id>
+			<url>https://repo.maven.apache.org/maven2/</url>
+		</pluginRepository>
+	</pluginRepositories>
 
-    <!-- ================= Dependencies ================= -->
-    <dependencies>
-        <!-- use no-commons-logging -->
-        <dependency>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging</artifactId>
-            <version>99.0-does-not-exist</version>
-        </dependency>
-        <!-- no-commons-logging-api, if you need it -->
-        <dependency>
-            <groupId>commons-logging</groupId>
-            <artifactId>commons-logging-api</artifactId>
-            <version>99.0-does-not-exist</version>
-        </dependency>
-        <!-- the slf4j commons-logging replacement -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <!--<artifactId>jcl104-over-slf4j</artifactId>-->
-            <artifactId>jcl-over-slf4j</artifactId>
-        </dependency>
-        <!-- the other slf4j jars -->
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-        </dependency>
-        <!-- using log4j as backend -->
-        <dependency>
-            <groupId>org.apache.logging.log4j</groupId>
-            <artifactId>log4j-slf4j2-impl</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.codehaus.cargo</groupId>
-            <artifactId>cargo-core-uberjar</artifactId>
-            <version>0.9</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.codehaus.cargo</groupId>
-            <artifactId>cargo-ant</artifactId>
-            <version>0.9</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.jetbrains</groupId>
-            <artifactId>annotations</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-        </dependency>
-    </dependencies>
+	<!-- ================= Dependencies ================= -->
+	<dependencies>
+		<!-- use no-commons-logging -->
+		<dependency>
+			<groupId>commons-logging</groupId>
+			<artifactId>commons-logging</artifactId>
+			<version>99.0-does-not-exist</version>
+		</dependency>
+		<!-- no-commons-logging-api, if you need it -->
+		<dependency>
+			<groupId>commons-logging</groupId>
+			<artifactId>commons-logging-api</artifactId>
+			<version>99.0-does-not-exist</version>
+		</dependency>
+		<!-- the slf4j commons-logging replacement -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<!--<artifactId>jcl104-over-slf4j</artifactId>-->
+			<artifactId>jcl-over-slf4j</artifactId>
+		</dependency>
+		<!-- the other slf4j jars -->
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+		</dependency>
+		<!-- using log4j as backend -->
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-slf4j2-impl</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.codehaus.cargo</groupId>
+			<artifactId>cargo-core-uberjar</artifactId>
+			<version>0.9</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.codehaus.cargo</groupId>
+			<artifactId>cargo-ant</artifactId>
+			<version>0.9</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.jetbrains</groupId>
+			<artifactId>annotations</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+		</dependency>
+	</dependencies>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.json</groupId>
-                <artifactId>json</artifactId>
-                <version>${jsonorg.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>commons-collections</groupId>
-                <artifactId>commons-collections</artifactId>
-                <version>3.2.2</version>
-            </dependency>
-            <!-- TODO: upgrade commons to org.apache.commons group -->
-            <dependency>
-                <groupId>commons-dbcp</groupId>
-                <artifactId>commons-dbcp</artifactId>
-                <version>1.4</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>xml-apis</groupId>
-                        <artifactId>xml-apis</artifactId>
-                    </exclusion>
-                </exclusions>
-            </dependency>
-            <dependency>
-                <groupId>commons-pool</groupId>
-                <artifactId>commons-pool</artifactId>
-                <version>1.6</version>
-            </dependency>
-            <dependency>
-                <groupId>commons-io</groupId>
-                <artifactId>commons-io</artifactId>
-                <version>2.17.0</version>
-            </dependency>
-            <dependency>
-                <groupId>commons-cli</groupId>
-                <artifactId>commons-cli</artifactId>
-                <version>${commonscli.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>commons-fileupload</groupId>
-                <artifactId>commons-fileupload</artifactId>
-                <version>1.5</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.commons</groupId>
-                <artifactId>commons-text</artifactId>
-                <version>1.12.0</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.zookeeper</groupId>
-                <artifactId>zookeeper</artifactId>
-                <version>${zookeeper.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.santuario</groupId>
-                <artifactId>xmlsec</artifactId>
-                <version>${xmlsec.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.httpcomponents</groupId>
-                <artifactId>httpmime</artifactId>
-                <version>${httpmime.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.guava</groupId>
-                <artifactId>guava</artifactId>
-                <version>${guava.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.xerial.snappy</groupId>
-                <artifactId>snappy-java</artifactId>
-                <version>${snappy.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.errorprone</groupId>
-                <artifactId>error_prone_annotations</artifactId>
-                <version>2.28.0</version>
-            </dependency>
-            <dependency>
-                <groupId>org.jetbrains</groupId>
-                <artifactId>annotations</artifactId>
-                <version>${jetbrains-annotations.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.ow2.asm</groupId>
-                <artifactId>asm</artifactId>
-                <version>9.7.1</version>
-            </dependency>
-            <dependency>
-                <groupId>org.ow2.asm</groupId>
-                <artifactId>asm-commons</artifactId>
-                <version>9.7.1</version>
-            </dependency>
-            <dependency>
-                <groupId>org.glassfish.hk2</groupId>
-                <artifactId>hk2-api</artifactId>
-                <version>3.1.1</version>
-            </dependency>
-            <dependency>
-                <groupId>org.glassfish.hk2</groupId>
-                <artifactId>hk2-utils</artifactId>
-                <version>3.1.1</version>
-            </dependency>
-            <dependency>
-                <groupId>org.glassfish.hk2.external</groupId>
-                <artifactId>aopalliance-repackaged</artifactId>
-                <version>3.1.1</version>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.json</groupId>
+				<artifactId>json</artifactId>
+				<version>${jsonorg.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>commons-collections</groupId>
+				<artifactId>commons-collections</artifactId>
+				<version>3.2.2</version>
+			</dependency>
+			<!-- TODO: upgrade commons to org.apache.commons group -->
+			<dependency>
+				<groupId>commons-dbcp</groupId>
+				<artifactId>commons-dbcp</artifactId>
+				<version>1.4</version>
+				<exclusions>
+					<exclusion>
+						<groupId>xml-apis</groupId>
+						<artifactId>xml-apis</artifactId>
+					</exclusion>
+				</exclusions>
+			</dependency>
+			<dependency>
+				<groupId>commons-pool</groupId>
+				<artifactId>commons-pool</artifactId>
+				<version>1.6</version>
+			</dependency>
+			<dependency>
+				<groupId>commons-io</groupId>
+				<artifactId>commons-io</artifactId>
+				<version>2.17.0</version>
+			</dependency>
+			<dependency>
+				<groupId>commons-cli</groupId>
+				<artifactId>commons-cli</artifactId>
+				<version>${commonscli.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>commons-fileupload</groupId>
+				<artifactId>commons-fileupload</artifactId>
+				<version>1.5</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.commons</groupId>
+				<artifactId>commons-text</artifactId>
+				<version>1.12.0</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.zookeeper</groupId>
+				<artifactId>zookeeper</artifactId>
+				<version>${zookeeper.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.santuario</groupId>
+				<artifactId>xmlsec</artifactId>
+				<version>${xmlsec.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.apache.httpcomponents</groupId>
+				<artifactId>httpmime</artifactId>
+				<version>${httpmime.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.google.guava</groupId>
+				<artifactId>guava</artifactId>
+				<version>${guava.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.xerial.snappy</groupId>
+				<artifactId>snappy-java</artifactId>
+				<version>${snappy.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.google.errorprone</groupId>
+				<artifactId>error_prone_annotations</artifactId>
+				<version>2.28.0</version>
+			</dependency>
+			<dependency>
+				<groupId>org.jetbrains</groupId>
+				<artifactId>annotations</artifactId>
+				<version>${jetbrains-annotations.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.ow2.asm</groupId>
+				<artifactId>asm</artifactId>
+				<version>9.7.1</version>
+			</dependency>
+			<dependency>
+				<groupId>org.ow2.asm</groupId>
+				<artifactId>asm-commons</artifactId>
+				<version>9.7.1</version>
+			</dependency>
+			<dependency>
+				<groupId>org.glassfish.hk2</groupId>
+				<artifactId>hk2-api</artifactId>
+				<version>3.1.1</version>
+			</dependency>
+			<dependency>
+				<groupId>org.glassfish.hk2</groupId>
+				<artifactId>hk2-utils</artifactId>
+				<version>3.1.1</version>
+			</dependency>
+			<dependency>
+				<groupId>org.glassfish.hk2.external</groupId>
+				<artifactId>aopalliance-repackaged</artifactId>
+				<version>3.1.1</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 </project>

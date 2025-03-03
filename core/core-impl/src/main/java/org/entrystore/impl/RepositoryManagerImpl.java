@@ -88,6 +88,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPOutputStream;
 
 public class RepositoryManagerImpl implements RepositoryManager {
@@ -623,6 +624,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			log.info("Using HTTP Solr server at {}", solrURL);
 
 			HttpJdkSolrClient.Builder solrClientBuilder = new HttpJdkSolrClient.Builder(solrURL);
+			solrClientBuilder.withRequestTimeout(5, TimeUnit.SECONDS);
+			solrClientBuilder.withConnectionTimeout(5, TimeUnit.SECONDS);
+			solrClientBuilder.withIdleTimeout(3, TimeUnit.MINUTES);
 
 			String solrUsername = configuration.getString(Settings.SOLR_AUTH_USERNAME);
 			String solrPassword = configuration.getString(Settings.SOLR_AUTH_PASSWORD);
@@ -633,7 +637,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 			solrServer = solrClientBuilder.build();
 		} else {
-			log.info("Error embedded Solr server unavailable");
+			log.error("Error embedded Solr server unavailable");
 			System.exit(1);
 /*			log.info("Using embedded Solr server");
 			String coreName = "core1";
