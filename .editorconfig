@@ -21,3 +21,6 @@ ij_groovy_names_count_to_use_import_on_demand = 99
 
 [*.json]
 indent_size = 2
+
+[*.xml]
+indent_style = tab

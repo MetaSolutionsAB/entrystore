@@ -4,7 +4,7 @@ import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.standalone.EntryStoreApplicationStandaloneJetty
+import org.entrystore.rest.standalone.springboot.EntryStoreApplicationStandaloneSpringBoot
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
 
@@ -28,7 +28,7 @@ abstract class BaseSpec extends Specification {
 			def args = ['-c', 'file:src/test/resources/entrystore-it.properties', '-p', EntryStoreClient.port.toString()] as String[]
 			log.info('Starting EntryStoreApp')
 			appStarted = true
-			EntryStoreApplicationStandaloneJetty.main(args)
+			EntryStoreApplicationStandaloneSpringBoot.main(args)
 		} else {
 			log.info('EntryStoreApp already started')
 		}

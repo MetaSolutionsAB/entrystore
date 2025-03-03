@@ -5,3 +5,7 @@ info.app.version: @project.version@
 
 
 spring.mvc.problemdetails.enabled: false
+
+entrystore:
+    configuration.path: file:modules/rest-standalone/spring-boot/src/main/resources/entrystore.properties
+
