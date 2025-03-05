@@ -59,7 +59,6 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -68,12 +67,11 @@ import java.util.StringTokenizer;
 import static org.eclipse.rdf4j.model.util.Values.iri;
 import static org.eclipse.rdf4j.model.util.Values.literal;
 
-
 public class ContextImpl extends ResourceImpl implements Context {
 
 	private long counter = -1;
 	@Getter
-	protected SoftCache cache;
+	protected final SoftCache softCache;
 	protected String id;
 	protected HashMap<URI, Object> extMdUri2entry;
 	protected HashMap<URI, Object> res2entry;
@@ -96,15 +94,15 @@ public class ContextImpl extends ResourceImpl implements Context {
 		DCTermsModified = iri(NS.dcterms, "modified");
 	}
 
-	protected ContextImpl(EntryImpl entry, String uri, SoftCache cache) {
+	protected ContextImpl(EntryImpl entry, String uri, SoftCache softCache) {
 		super(entry, uri);
-		this.cache = cache;
-		this.id = uri.substring(uri.lastIndexOf('/')+1);
+		this.softCache = softCache;
+		this.id = uri.substring(uri.lastIndexOf('/') + 1);
 	}
 
-	public ContextImpl(EntryImpl entry, IRI contextUri, SoftCache cache)  {
+	public ContextImpl(EntryImpl entry, IRI contextUri, SoftCache softCache) {
 		super(entry, contextUri);
-		this.cache = cache;
+		this.softCache = softCache;
 		this.id = resourceURI.toString().substring(resourceURI.toString().lastIndexOf('/') + 1);
 	}
 
@@ -124,9 +122,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 					rc.remove((Resource) null, RepositoryProperties.resHasEntry, null, this.resourceURI);
 					rc.remove((Resource) null, RepositoryProperties.counter, null, this.resourceURI);
 
-					List<Statement> stmntsToAdd = new ArrayList<Statement>();
+					List<Statement> stmntsToAdd = new ArrayList<>();
 
-					// create new index by finding all sesame contexts which belong to this context
+					// create a new index by finding all sesame contexts that belong to this context
 					int maxIndex = 0;
 					RepositoryResult<Statement> resources = rc.getStatements(null, RepositoryProperties.resource, null, false);
 					while (resources.hasNext()) {
@@ -134,19 +132,20 @@ public class ContextImpl extends ResourceImpl implements Context {
 						Resource mmd = statement.getContext();
 						if (mmd instanceof IRI) {
 							if (!mmd.stringValue().startsWith(entry.getRepositoryManager().getRepositoryURL().toString())) {
-								log.warn("This Entry URI does not belong to this repository: " + mmd.stringValue());
+								log.warn("This Entry URI does not belong to this repository: {}", mmd.stringValue());
 								continue;
 							}
 
-							StringTokenizer stok = Util.extractParameters(entry.repositoryManager, (IRI) mmd);
-							if (stok.countTokens() == 3 && stok.nextToken().equals(this.id)) { //Belongs to this context.
+							StringTokenizer tokenizer = Util.extractParameters(entry.repositoryManager, (IRI) mmd);
+							if (tokenizer.countTokens() == 3 && tokenizer.nextToken().equals(this.id)) { // Belongs to this context.
 								try {
-									stok.nextToken(); //Ignoring the M
-									int index = Integer.parseInt(stok.nextToken());
+									tokenizer.nextToken(); //Ignoring the M
+									int index = Integer.parseInt(tokenizer.nextToken());
 									if (index > maxIndex) {
 										maxIndex = index;
 									}
-								} catch (NumberFormatException nfe) {}
+								} catch (NumberFormatException nfe) {
+								}
 								// this does not work: addToIndex((org.openrdf.model.URI) statement.getSubject(),(org.openrdf.model.URI) statement.getObject(),(org.openrdf.model.URI) statement.getContext(), rc);
 								stmntsToAdd.add(vf.createStatement((Resource) statement.getObject(), RepositoryProperties.resHasEntry, statement.getContext(), this.resourceURI));
 							}
@@ -204,13 +203,14 @@ public class ContextImpl extends ResourceImpl implements Context {
 			if (existingTo instanceof Set) {
 				((Set<URI>) existingTo).add(to);
 			} else {
-				HashSet<URI> set = new HashSet<URI>();
+				HashSet<URI> set = new HashSet<>();
 				set.add((URI) existingTo);
 				set.add(to);
 				map.put(from, set);
 			}
 		}
 	}
+
 	private void pop(URI from, URI to, HashMap<URI, Object> map) {
 		if (from == null || to == null) {
 			return;
@@ -226,7 +226,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				if (((Set) existingTo).isEmpty()) {
 					map.remove(from);
 				}
-			} else if (existingTo.equals(to)){
+			} else if (existingTo.equals(to)) {
 				map.remove(from);
 			}
 		}
@@ -236,9 +236,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (oldResourceURI == null || newResourceURI == null || entryURI == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
-		log.debug("Removing resource to entry mapping: " + oldResourceURI + " -> " + entryURI);
+		log.debug("Removing resource to entry mapping: {} -> {}", oldResourceURI, entryURI);
 		pop(oldResourceURI, entryURI, res2entry);
-		log.debug("Adding resource to entry mapping: " + newResourceURI + " -> " + entryURI);
+		log.debug("Adding resource to entry mapping: {} -> {}", newResourceURI, entryURI);
 		push(newResourceURI, entryURI, res2entry);
 	}
 
@@ -246,9 +246,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (oldExtMdURI == null || newExtMdURI == null || entryURI == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
-		log.debug("Removing external metadata to entry mapping: " + oldExtMdURI + " -> " + entryURI);
+		log.debug("Removing external metadata to entry mapping: {} -> {}", oldExtMdURI, entryURI);
 		pop(oldExtMdURI, entryURI, extMdUri2entry);
-		log.debug("Adding external metadata to entry mapping: " + newExtMdURI + " -> " + entryURI);
+		log.debug("Adding external metadata to entry mapping: {} -> {}", newExtMdURI, entryURI);
 		push(newExtMdURI, entryURI, extMdUri2entry);
 	}
 
@@ -260,8 +260,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 				RepositoryConnection rc = entry.repository.getConnection();
 				try {
-					res2entry = new HashMap<URI, Object>();
-					extMdUri2entry = new HashMap<URI, Object>();
+					res2entry = new HashMap<>();
+					extMdUri2entry = new HashMap<>();
 					RepositoryResult<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI);
 					while (statements.hasNext()) {
 						Statement statement = statements.next();
@@ -297,7 +297,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		rc.add(resURI, RepositoryProperties.resHasEntry, entryURI, this.resourceURI);
 		URI euri = URI.create(entryURI.toString());
 
-		if (extMdURI!= null) {
+		if (extMdURI != null) {
 			rc.add(extMdURI, RepositoryProperties.mdHasEntry, entryURI, this.resourceURI);
 			if (extMdUri2entry != null) {
 				URI mdURI = URI.create(extMdURI.toString());
@@ -337,13 +337,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 				log.error(e.getMessage());
 			}
 			if (deletedDate != null) {
-				Statement delDateStmnt = vf.createStatement(entryURI, RepositoryProperties.Deleted, vf.createLiteral(deletedDate), this.resourceURI);
-				rc.add(delDateStmnt, this.resourceURI);
+				Statement delDateStatement = vf.createStatement(entryURI, RepositoryProperties.Deleted, vf.createLiteral(deletedDate), this.resourceURI);
+				rc.add(delDateStatement, this.resourceURI);
 			}
 			URI deletedBy = entry.getRepositoryManager().getPrincipalManager().getAuthenticatedUserURI();
 			if (deletedBy != null) {
-				Statement delByStmnt = vf.createStatement(entryURI, RepositoryProperties.DeletedBy, vf.createIRI(deletedBy.toString()), this.resourceURI);
-				rc.add(delByStmnt, this.resourceURI);
+				Statement delByStatement = vf.createStatement(entryURI, RepositoryProperties.DeletedBy, vf.createIRI(deletedBy.toString()), this.resourceURI);
+				rc.add(delByStatement, this.resourceURI);
 			}
 		}
 	}
@@ -356,8 +356,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 		synchronized (this.entry.repository) {
 			try {
 				rc = entry.getRepository().getConnection();
-				delDates = rc.getStatements(null, RepositoryProperties.Deleted, null, false, this.resourceURI).asList();
-				delPrincipals = rc.getStatements(null, RepositoryProperties.DeletedBy, null, false, this.resourceURI).asList();
+				delDates = rc.getStatements(null, RepositoryProperties.Deleted, null, false, this.resourceURI).stream().toList();
+				delPrincipals = rc.getStatements(null, RepositoryProperties.DeletedBy, null, false, this.resourceURI).stream().toList();
 			} catch (RepositoryException e) {
 				log.error(e.getMessage());
 			} finally {
@@ -371,23 +371,25 @@ public class ContextImpl extends ResourceImpl implements Context {
 			}
 		}
 
-		Map<URI, Date> uri2date = new HashMap<URI, Date>();
+		Map<URI, Date> uri2date = new HashMap<>();
 		if (delDates != null) {
-			for (Statement dateStmnt : delDates) {
-				URI deletedEntryURI = URI.create(dateStmnt.getSubject().stringValue());
-				Date deletionDate = ((Literal) dateStmnt.getObject()).calendarValue().toGregorianCalendar().getTime();
+			for (Statement dateStatement : delDates) {
+				URI deletedEntryURI = URI.create(dateStatement.getSubject().stringValue());
+				Date deletionDate = ((Literal) dateStatement.getObject()).calendarValue().toGregorianCalendar().getTime();
 				uri2date.put(deletedEntryURI, deletionDate);
 			}
 		}
 
-		Map<URI, URI> uri2principal = new HashMap<URI, URI>();
-		for (Statement principalStmnt : delPrincipals) {
-			URI deletedEntryURI = URI.create(principalStmnt.getSubject().stringValue());
-			URI deletedBy = URI.create(principalStmnt.getObject().stringValue());
-			uri2principal.put(deletedEntryURI, deletedBy);
+		Map<URI, URI> uri2principal = new HashMap<>();
+		if (delPrincipals != null) {
+			for (Statement principalStatement : delPrincipals) {
+				URI deletedEntryURI = URI.create(principalStatement.getSubject().stringValue());
+				URI deletedBy = URI.create(principalStatement.getObject().stringValue());
+				uri2principal.put(deletedEntryURI, deletedBy);
+			}
 		}
 
-		Map<URI, DeletedEntryInfo> result = new HashMap<URI, DeletedEntryInfo>();
+		Map<URI, DeletedEntryInfo> result = new HashMap<>();
 		for (URI delEntryURI : uri2principal.keySet()) {
 			DeletedEntryInfo delEntryInfo = new DeletedEntryInfo(delEntryURI, uri2date.get(delEntryURI), uri2principal.get(delEntryURI));
 			result.put(delEntryURI, delEntryInfo);
@@ -401,13 +403,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 			return getDeletedEntries();
 		}
 
-		Map<URI, DeletedEntryInfo> result = new HashMap<URI, DeletedEntryInfo>();
+		Map<URI, DeletedEntryInfo> result = new HashMap<>();
 		Map<URI, DeletedEntryInfo> allDeletedEntries = getDeletedEntries();
 		for (URI delEntryURI : allDeletedEntries.keySet()) {
 			boolean inRange = true;
 			DeletedEntryInfo delEntryInfo = allDeletedEntries.get(delEntryURI);
 			Date deletionDate = delEntryInfo.getDeletionDate();
-			if (delEntryInfo != null &&	deletionDate != null) {
+			if (deletionDate != null) {
 				if (from != null && !deletionDate.after(from)) {
 					inRange = false;
 				}
@@ -425,31 +427,31 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	synchronized protected EntryImpl createNewMinimalItem(URI resourceURI, URI metadataURI, EntryType lType, GraphType bType, ResourceType rType, String entryId) {
 		try {
-			//Factory and connection.
+			// Factory and connection.
 			try (RepositoryConnection rc = entry.repository.getConnection()) {
 				ValueFactory vf = entry.repository.getValueFactory();
 				rc.begin();
 
-				//Find current counter
+				// Find current counter
 				if (counter == -1) {
 					List<Statement> counters = rc.getStatements(
-							this.resourceURI,
-							RepositoryProperties.counter,
-							null,
-							false,
-							this.resourceURI).asList();
+						this.resourceURI,
+						RepositoryProperties.counter,
+						null,
+						false,
+						this.resourceURI).stream().toList();
 
 					if (!counters.isEmpty()) {
-						counter = ((Literal) counters.get(0).getObject()).intValue();
+						counter = ((Literal) counters.getFirst().getObject()).intValue();
 					} else {
 						counter = 0;
 					}
 				}
 
-				//Find new information identity
+				// Find new information identity
 				String base = entry.repositoryManager.getRepositoryURL().toString();
-				List<Statement> infoRecord = null;
-				String identity = null;
+				List<Statement> infoRecord;
+				String identity;
 				if (entryId != null) {
 					identity = entryId;
 				} else {
@@ -457,18 +459,18 @@ public class ContextImpl extends ResourceImpl implements Context {
 						counter++;
 						identity = Long.toString(counter);
 						IRI entryUri = vf.createIRI(base + this.id + "/" + RepositoryProperties.ENTRY_PATH + "/" + counter);
-						infoRecord = rc.getStatements(null, null, null, false, entryUri).asList();
-					} while (!infoRecord.isEmpty()); //keep counting if candidate is taken
+						infoRecord = rc.getStatements(null, null, null, false, entryUri).stream().toList();
+					} while (!infoRecord.isEmpty()); // keep counting if a candidate is taken
 				}
 
-				//resURI - resourceURI
+				// resURI - resourceURI
 				IRI resURI;
 				if (resourceURI != null) {
 					String resourceURIStr = resourceURI.toString().replace("_newId", identity);
 					resURI = vf.createIRI(resourceURIStr);
 				} else {
 					if (bType == GraphType.Context ||
-							bType == GraphType.SystemContext) {
+						bType == GraphType.SystemContext) {
 						resURI = vf.createIRI(URISplit.createURI(base, identity).toString());
 					} else {
 						resURI = vf.createIRI(URISplit.createURI(base, this.id, RepositoryProperties.getResourcePath(bType), identity).toString());
@@ -477,10 +479,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 				EntryImpl newEntry = null;
 				try {
-					//Initialize a new item and new info.
+					// Initialize a new item and new info.
 					newEntry = new EntryImpl(identity, this, this.entry.repositoryManager, this.entry.getRepository());
 
-					//Initialize a new information object.
+					// Initialize a new information object.
 					if (lType == EntryType.Reference || lType == EntryType.LinkReference) {
 						newEntry.create(resURI, vf.createIRI(metadataURI.toString()), bType, lType, rType, rc);
 					} else {
@@ -488,17 +490,16 @@ public class ContextImpl extends ResourceImpl implements Context {
 					}
 					initResource(newEntry);
 
-
-					//Update index with new item.
+					// Update index with new item.
 					addToIndex(newEntry.getSesameEntryURI(), newEntry.getSesameResourceURI(), newEntry.getSesameExternalMetadataURI(), rc);
 
-					//Update the index counter.
-					List<Statement> counters = rc.getStatements(this.resourceURI, RepositoryProperties.counter, null, false, this.resourceURI).asList();
+					// Update the index counter.
+					List<Statement> counters = rc.getStatements(this.resourceURI, RepositoryProperties.counter, null, false, this.resourceURI).stream().toList();
 					rc.remove(counters, this.resourceURI);
 					rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(counter), this.resourceURI);
 
 					rc.commit();
-					cache.put(newEntry);
+					softCache.put(newEntry);
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
 					return newEntry;
 				} catch (Exception e) {
@@ -520,29 +521,29 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 
 		switch (newEntry.getGraphType()) {
-		case None:
-		case PipelineResult:
-			if (newEntry.getEntryType() == EntryType.Local) {
-				//TODO check Representationtype as well.
-				newEntry.setResource(new DataImpl(newEntry));
-			}
-			break;
-		case List:
-			newEntry.setResource(new ListImpl(newEntry, newEntry.getSesameResourceURI()));
-			break;
-		case ResultList:
-			//TODO
-			break;
-		case String:
-			newEntry.setResource(new StringResource(newEntry, newEntry.getSesameResourceURI()));
-			break;
-		case Graph:
-		case Pipeline:
-			newEntry.setResource(new RDFResource(newEntry, newEntry.getSesameResourceURI()));
-			break;
-		default:
-			//All other cases are only allowed by ContextManager or PrincipalManager. See overridden method there.
-			break;
+			case None:
+			case PipelineResult:
+				if (newEntry.getEntryType() == EntryType.Local) {
+					//TODO check Representationtype as well.
+					newEntry.setResource(new DataImpl(newEntry));
+				}
+				break;
+			case List:
+				newEntry.setResource(new ListImpl(newEntry, newEntry.getSesameResourceURI()));
+				break;
+			case ResultList:
+				//TODO
+				break;
+			case String:
+				newEntry.setResource(new StringResource(newEntry, newEntry.getSesameResourceURI()));
+				break;
+			case Graph:
+			case Pipeline:
+				newEntry.setResource(new RDFResource(newEntry, newEntry.getSesameResourceURI()));
+				break;
+			default:
+				// All other cases are only allowed by ContextManager or PrincipalManager. See overridden method there.
+				break;
 		}
 	}
 
@@ -551,7 +552,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			URI listEntryURI = new URISplit(listURI, this.entry.getRepositoryManager().getRepositoryURL()).getMetaMetadataURI();
 			Entry listItem = getByEntryURI(listEntryURI);
 			if (listItem.getGraphType() == GraphType.List &&
-					listItem.getEntryType() == EntryType.Local) {
+				listItem.getEntryType() == EntryType.Local) {
 				return (ListImpl) listItem.getResource();
 			}
 		}
@@ -559,10 +560,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 *
 	 * @param secondChance typically a list to check if access is given in that list only.
-	 * @param ap the kind of access requested.
-	 * @return true if user is owner of current context, false otherwise.
+	 * @param ap           the kind of access requested.
+	 * @return true if a user is an owner of current context, false otherwise.
 	 * @throws AuthorizationException
 	 */
 	protected boolean checkAccess(Entry secondChance, AccessProperty ap) throws AuthorizationException {
@@ -642,9 +642,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 		synchronized (this.entry.repository) {
 			EntryImpl entry = createNewMinimalItem(null, null, EntryType.Local, buiType, repType, entryId);
 			if (list != null) {
-				log.info("Adding entry " + entry.getEntryURI() + " to list " + list.getURI());
+				log.info("Adding entry {} to list {}", entry.getEntryURI(), list.getURI());
 				list.addChild(entry.getEntryURI());
-				log.info("Copying ACL from list " + list.getURI() + " to entry " + entry.getEntryURI());
+				log.info("Copying ACL from list {} to entry {}", list.getURI(), entry.getEntryURI());
 				copyACL(list, entry);
 				if (!isOwner) {
 					entry.setOriginalListSynchronized(listURI.toString());
@@ -664,14 +664,14 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} else {
 					entry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, entry.getResourceURI());
 				}
-            }
+			}
 
 			return entry;
 		}
 	}
 
 	public void copyACL(org.entrystore.List fromList, Entry toEntry) {
-		if (toEntry instanceof EntryImpl entry) {
+		if (toEntry instanceof EntryImpl entryImpl) {
 			Set<URI> adminPrincipals = fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.Administer);
 			if (toEntry.getGraphType() != GraphType.List || toEntry.getEntryType() != EntryType.Local) {
 				PrincipalManager pm = toEntry.getRepositoryManager().getPrincipalManager();
@@ -681,11 +681,11 @@ public class ContextImpl extends ResourceImpl implements Context {
 					adminPrincipals.add(pm.getAuthenticatedUserURI());
 				}
 			}
-			entry.updateAllowedPrincipalsFor(AccessProperty.Administer, adminPrincipals, false, true);
-			entry.updateAllowedPrincipalsFor(AccessProperty.ReadMetadata, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.ReadMetadata), false, true);
-			entry.updateAllowedPrincipalsFor(AccessProperty.ReadResource, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.ReadResource), false, true);
-			entry.updateAllowedPrincipalsFor(AccessProperty.WriteMetadata, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.WriteMetadata), false, true);
-			entry.updateAllowedPrincipalsFor(AccessProperty.WriteResource, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.WriteResource), false, true);
+			entryImpl.updateAllowedPrincipalsFor(AccessProperty.Administer, adminPrincipals, false, true);
+			entryImpl.updateAllowedPrincipalsFor(AccessProperty.ReadMetadata, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.ReadMetadata), false, true);
+			entryImpl.updateAllowedPrincipalsFor(AccessProperty.ReadResource, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.ReadResource), false, true);
+			entryImpl.updateAllowedPrincipalsFor(AccessProperty.WriteMetadata, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.WriteMetadata), false, true);
+			entryImpl.updateAllowedPrincipalsFor(AccessProperty.WriteResource, fromList.getEntry().getAllowedPrincipalsFor(AccessProperty.WriteResource), false, true);
 		} else {
 			log.warn("copyACL(fromList, toEntry): Not setting an ACL: toEntry is not an instance of EntryImpl");
 		}
@@ -697,13 +697,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	public Entry get(String entryId) {
 		return getByEntryURI(URISplit.createURI(
-				entry.getRepositoryManager().getRepositoryURL().toString(),
-				id, RepositoryProperties.ENTRY_PATH, entryId));
+			entry.getRepositoryManager().getRepositoryURL().toString(),
+			id, RepositoryProperties.ENTRY_PATH, entryId));
 	}
 
 	public Entry getByEntryURI(URI entryURI) {
-		synchronized (cache) {
-			Entry entry = cache.getByEntryURI(entryURI);
+		synchronized (softCache) {
+			Entry entry = softCache.getByEntryURI(entryURI);
 			if (entry != null) {
 				//			checkAccess(entry, AccessProperty.ReadMetadata);
 				return entry;
@@ -720,7 +720,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	private Entry getByMMdURIDirect(URI entryURI) throws RepositoryException {
 		RepositoryConnection rc = null;
-		Entry result = null;
+		Entry result;
 		try {
 			rc = this.entry.getRepository().getConnection();
 			result = getByMMdURIDirect(entryURI, rc);
@@ -740,26 +740,30 @@ public class ContextImpl extends ResourceImpl implements Context {
 		EntryImpl newEntry = null;
 		try {
 			URISplit split = new URISplit(entryURI, this.entry.getRepositoryManager().getRepositoryURL());
-			if (split == null || !this.id.equals(split.getContextId())) {
+			if (!this.id.equals(split.getContextId())) {
 				return null;
 			}
-			newEntry = new EntryImpl(split.getId(), this, this.entry.repositoryManager, this.entry.getRepository());
-			if (newEntry.load(rc)) {
-				if(newEntry.getEntryType() == EntryType.Local) {
+			try {
+				newEntry = new EntryImpl(split.getId(), this, this.entry.repositoryManager, this.entry.getRepository());
+			} catch (IllegalArgumentException iae) {
+				log.error("Error when creating entry object: {}", iae.getMessage());
+			}
+			if (newEntry != null && newEntry.load(rc)) {
+				if (newEntry.getEntryType() == EntryType.Local) {
 					initResource(newEntry);
 				}
-				cache.put(newEntry);
+				softCache.put(newEntry);
 				if (GraphType.Context.equals(newEntry.getGraphType()) &&
-						EntryType.Local.equals(newEntry.getEntryType())) {
+					EntryType.Local.equals(newEntry.getEntryType())) {
 					org.entrystore.Resource resource = newEntry.getResource();
 					if (resource != null) {
 						((Context) resource).initializeSystemEntries();
 					} else {
-						log.error("Entry's resource is null: " + newEntry.getEntryURI());
+						log.error("Entry's resource is null: {}", newEntry.getEntryURI());
 					}
 				}
 
-				//				checkAccess(newEntry, AccessProperty.ReadMetadata);
+				// checkAccess(newEntry, AccessProperty.ReadMetadata);
 			} else {
 				newEntry = null;
 			}
@@ -776,7 +780,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (extMdUri2entry == null) {
 			loadIndex();
 		}
-		HashSet<Entry> entries = new HashSet<Entry>();
+		HashSet<Entry> entries = new HashSet<>();
 		Object value = extMdUri2entry.get(metadataURI);
 		if (value != null) {
 			if (value instanceof URI) {
@@ -795,7 +799,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 		if (res2entry == null) {
 			loadIndex();
 		}
-		HashSet<Entry> entries = new HashSet<Entry>();
+		HashSet<Entry> entries = new HashSet<>();
 		Object value = res2entry.get(resourceURI);
 		if (value != null) {
 			if (value instanceof URI) {
@@ -819,13 +823,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 			loadIndex();
 		}
 
-		Set<URI> entries = new HashSet<URI>();
+		Set<URI> entries = new HashSet<>();
 		Collection<Object> val = res2entry.values();
 		for (Object object : val) {
 			if (object instanceof URI) {
-				entries.add((URI)object);
+				entries.add((URI) object);
 			} else {
-				entries.addAll((Collection<URI>)object);
+				entries.addAll((Collection<URI>) object);
 			}
 		}
 
@@ -854,15 +858,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 			checkAccess(removeEntry, AccessProperty.Administer);
 
 			try {
-				Iterator<URI> it = removeEntry.getReferringListsInSameContext().iterator();
-				while (it.hasNext()) {
-					URI uri = it.next();
+				for (URI uri : removeEntry.getReferringListsInSameContext()) {
 					Entry listItem = getByResourceURI(uri).iterator().next();
 					((ListImpl) listItem.getResource()).removeChild(entryURI, false);
 				}
 			} catch (Exception e) {
 				log.error(e.getMessage(), e);
-				throw new org.entrystore.repository.RepositoryException("An error occured when removing the entry from one or more lists", e);
+				throw new org.entrystore.repository.RepositoryException("An error occurred when removing the entry from one or more lists", e);
 			}
 
 			RepositoryConnection rc = null;
@@ -873,12 +875,12 @@ public class ContextImpl extends ResourceImpl implements Context {
 				removeEntry.remove(rc);
 				this.entry.updateModifiedDateSynchronized(rc, this.entry.repository.getValueFactory());
 				rc.commit();
-				cache.remove(removeEntry);
+				softCache.remove(removeEntry);
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(removeEntry, RepositoryEvent.EntryDeleted));
 			} catch (Exception e) {
 				try {
 					rc.rollback();
-				} catch (RepositoryException e1) {
+				} catch (NullPointerException | RepositoryException e1) {
 					log.error(e1.getMessage());
 					throw new org.entrystore.repository.RepositoryException("Error when rolling back transaction", e);
 				}
@@ -887,7 +889,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 			} finally {
 				try {
 					rc.close();
-				} catch (RepositoryException e) {
+				} catch (NullPointerException | RepositoryException e) {
 					log.error(e.getMessage(), e);
 				}
 			}
@@ -917,7 +919,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 * @see org.entrystore.Context#hasDefaultQuota()
+	 * @see Context#hasDefaultQuota()
 	 */
 	public boolean hasDefaultQuota() {
 		RepositoryConnection rc = null;
@@ -927,19 +929,17 @@ public class ContextImpl extends ResourceImpl implements Context {
 		} catch (RepositoryException re) {
 			log.error(re.getMessage(), re);
 		} finally {
-			if (rc != null) {
-				try {
-					rc.close();
-				} catch (RepositoryException e) {
-					log.error(e.getMessage());
-				}
+			try {
+				rc.close();
+			} catch (NullPointerException | RepositoryException e) {
+				log.error(e.getMessage());
 			}
 		}
 		return true;
 	}
 
 	/**
-	 * @see org.entrystore.Context#getQuota()
+	 * @see Context#getQuota()
 	 */
 	public long getQuota() {
 		if (this.quota == Quota.VALUE_UNCACHED) {
@@ -948,8 +948,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 				RepositoryConnection rc = null;
 				try {
 					rc = entry.repository.getConnection();
-					List<Statement> quotaStmnt = rc.getStatements(this.resourceURI, RepositoryProperties.Quota, null, false, this.resourceURI).asList();
-					for (Statement statement : quotaStmnt) {
+					List<Statement> quotaStatement = rc.getStatements(this.resourceURI, RepositoryProperties.Quota, null, false, this.resourceURI).stream().toList();
+					for (Statement statement : quotaStatement) {
 						if (statement.getObject() instanceof Literal) {
 							queriedQuota = ((Literal) statement).longValue();
 							break;
@@ -958,12 +958,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} catch (RepositoryException re) {
 					log.error(re.getMessage(), re);
 				} finally {
-					if (rc != null) {
-						try {
-							rc.close();
-						} catch (RepositoryException e) {
-							log.error(e.getMessage());
-						}
+					try {
+						rc.close();
+					} catch (NullPointerException | RepositoryException e) {
+						log.error(e.getMessage());
 					}
 				}
 			}
@@ -974,7 +972,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 * @see org.entrystore.Context#setQuota(long)
+	 * @see Context#setQuota(long)
 	 */
 	public void setQuota(long quotaInBytes) {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
@@ -1000,23 +998,21 @@ public class ContextImpl extends ResourceImpl implements Context {
 				log.error(re.getMessage(), re);
 				try {
 					rc.rollback();
-				} catch (RepositoryException e) {
+				} catch (NullPointerException | RepositoryException e) {
 					log.error(e.getMessage());
 				}
 			} finally {
-				if (rc != null) {
-					try {
-						rc.close();
-					} catch (RepositoryException e) {
-						log.error(e.getMessage());
-					}
+				try {
+					rc.close();
+				} catch (NullPointerException | RepositoryException e) {
+					log.error(e.getMessage());
 				}
 			}
 		}
 	}
 
 	/**
-	 * @see org.entrystore.Context#removeQuota()
+	 * @see Context#removeQuota()
 	 */
 	public void removeQuota() {
 		PrincipalManager pm = this.entry.getRepositoryManager().getPrincipalManager();
@@ -1038,19 +1034,17 @@ public class ContextImpl extends ResourceImpl implements Context {
 			} catch (RepositoryException re) {
 				log.error(re.getMessage(), re);
 			} finally {
-				if (rc != null) {
-					try {
-						rc.close();
-					} catch (RepositoryException e) {
-						log.error(e.getMessage());
-					}
+				try {
+					rc.close();
+				} catch (NullPointerException | RepositoryException e) {
+					log.error(e.getMessage());
 				}
 			}
 		}
 	}
 
 	/**
-	 * @see org.entrystore.Context#getQuotaFillLevel()
+	 * @see Context#getQuotaFillLevel()
 	 */
 	public long getQuotaFillLevel() {
 		long queriedQuotaFillLevel = Quota.VALUE_UNKNOWN;
@@ -1059,8 +1053,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 				RepositoryConnection rc = null;
 				try {
 					rc = entry.repository.getConnection();
-					List<Statement> quotaStmnt = rc.getStatements(this.resourceURI, RepositoryProperties.QuotaFillLevel, null, false, this.resourceURI).asList();
-					for (Statement statement : quotaStmnt) {
+					List<Statement> quotaStatement = rc.getStatements(this.resourceURI, RepositoryProperties.QuotaFillLevel, null, false, this.resourceURI).stream().toList();
+					for (Statement statement : quotaStatement) {
 						if (statement.getObject() instanceof Literal) {
 							queriedQuotaFillLevel = ((Literal) statement.getObject()).longValue();
 							break;
@@ -1069,12 +1063,10 @@ public class ContextImpl extends ResourceImpl implements Context {
 				} catch (RepositoryException re) {
 					log.error(re.getMessage(), re);
 				} finally {
-					if (rc != null) {
-						try {
-							rc.close();
-						} catch (RepositoryException e) {
-							log.error(e.getMessage());
-						}
+					try {
+						rc.close();
+					} catch (NullPointerException | RepositoryException e) {
+						log.error(e.getMessage());
 					}
 				}
 			}
@@ -1106,12 +1098,12 @@ public class ContextImpl extends ResourceImpl implements Context {
 				}
 			}
 		}
-		log.info("Calculation of quota fill level took " + (new Date().getTime() - before.getTime()) + " ms");
+		log.info("Calculation of quota fill level took {} ms", new Date().getTime() - before.getTime());
 		return fillLevel;
 	}
 
 	/**
-	 * @see org.entrystore.Context#increaseQuotaFillLevel(long)
+	 * @see Context#increaseQuotaFillLevel(long)
 	 */
 	public void increaseQuotaFillLevel(long bytes) throws QuotaException {
 		long quota = getQuota();
@@ -1126,7 +1118,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	/**
-	 * @see org.entrystore.Context#decreaseQuotaFillLevel(long)
+	 * @see Context#decreaseQuotaFillLevel(long)
 	 */
 	public void decreaseQuotaFillLevel(long bytes) {
 		synchronized (quotaMutex) {
@@ -1136,7 +1128,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 
 	/**
 	 * FIXME ENTRYSTORE-418
-	 *
+	 * <p>
 	 * This method should only be called by increaseQuotaFillLevel() and
 	 * decreaseQuotaFillLevel().
 	 *
@@ -1156,16 +1148,14 @@ public class ContextImpl extends ResourceImpl implements Context {
 				log.error(re.getMessage(), re);
 				try {
 					rc.rollback();
-				} catch (RepositoryException e) {
+				} catch (NullPointerException | RepositoryException e) {
 					log.error(e.getMessage());
 				}
 			} finally {
-				if (rc != null) {
-					try {
-						rc.close();
-					} catch (RepositoryException e) {
-						log.error(e.getMessage());
-					}
+				try {
+					rc.close();
+				} catch (NullPointerException | RepositoryException e) {
+					log.error(e.getMessage());
 				}
 			}
 		}

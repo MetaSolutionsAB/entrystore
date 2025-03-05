@@ -16,6 +16,7 @@
 
 package org.entrystore.rest;
 
+import lombok.Getter;
 import org.apache.commons.fileupload.servlet.FileCleanerCleanup;
 import org.apache.commons.io.FileCleaningTracker;
 import org.entrystore.ContextManager;
@@ -111,6 +112,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -127,6 +129,7 @@ public class EntryStoreApplication extends Application {
 	public static final String ENV_CONFIG_URI = "ENTRYSTORE_CONFIG_URI";
 	public static final String OAI_DC = "oai_dc";
 	public static final String RDN_DC = "rdn_dc";
+	@Getter
 	private static Date startupDate;
 
 
@@ -134,14 +137,18 @@ public class EntryStoreApplication extends Application {
 	private RepositoryManagerImpl rm;
 
 	private BackupScheduler backupScheduler;
+	@Getter
 	private ArrayList<Harvester> harvesters = new ArrayList<>();
 	private final Component component;
 
 	private final ContextManager cm;
 	private final PrincipalManager pm;
 
+	@Getter
 	private LoginTokenCache loginTokenCache = null;
+	@Getter
 	private final UserTempLockoutCache userTempLockoutCache;
+	@Getter
 	private final Set<String> reservedNames = new HashSet<>();
 
 	public EntryStoreApplication(Context parentContext) {
@@ -149,6 +156,10 @@ public class EntryStoreApplication extends Application {
 	}
 
 	public EntryStoreApplication(URI configPath, Context parentContext, Component component) {
+		this(configPath, null, parentContext, component);
+	}
+
+	public EntryStoreApplication(URI configPath, Map<String, String> configOverride, Context parentContext, Component component) {
 		super(parentContext);
 		Date startupBegin = new Date();
 		this.component = component;
@@ -156,7 +167,7 @@ public class EntryStoreApplication extends Application {
 		getContext().getAttributes().put(KEY, this);
 
 		/*
-		 * should fix the hangs in Acrobat Reader that occur sometimes when
+		 * should fix the hangs in Acrobat Reader that sometimes occur when
 		 * Acrobat tries to fetch parts of files
 		 */
 		getRangeService().setEnabled(false);
@@ -189,7 +200,7 @@ public class EntryStoreApplication extends Application {
 					configURI = URI.create(envConfigURI);
 				} else {
 					// We try the context
-					javax.naming.Context env = null;
+					javax.naming.Context env;
 					try {
 						env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
 						if (env != null && env.lookup("entrystore.config") != null) {
@@ -205,7 +216,7 @@ public class EntryStoreApplication extends Application {
 			ConfigurationManager confManager;
 			try {
 				if (configURI != null) {
-					log.info("Manually specified config location at " + configURI);
+					log.info("Manually specified config location at {}", configURI);
 					confManager = new ConfigurationManager(configURI);
 				} else {
 					log.info("No config location specified, looking within classpath");
@@ -213,11 +224,15 @@ public class EntryStoreApplication extends Application {
 				}
 			} catch (IOException e) {
 				confManager = null;
-				log.error("Unable to load configuration: " + e.getMessage());
+				log.error("Unable to load configuration: {}", e.getMessage());
 				System.exit(1);
 			}
 
 			Config config = confManager.getConfiguration();
+			if (configOverride != null) {
+				config.getProperties().putAll(configOverride);
+			}
+
 			String baseURI = config.getString(Settings.BASE_URL);
 			if (baseURI == null) {
 				log.error("No Base URI specified, exiting");
@@ -236,7 +251,7 @@ public class EntryStoreApplication extends Application {
 			Password.loadRules(config);
 
 			if ("on".equalsIgnoreCase(config.getString(Settings.STORE_INIT_WITH_TEST_DATA, "off"))) {
-				// Check for existence of Donald
+				// Check for the existence of Donald
 				Entry donald = rm.getPrincipalManager().getPrincipalEntry("Donald");
 				// We only initialize of test suite has not been loaded before,
 				// otherwise we end up with duplicates (if store is persisted)
@@ -265,15 +280,15 @@ public class EntryStoreApplication extends Application {
 
 		}
 		startupDate = new Date();
-		log.info("EntryStore startup completed in " + (startupDate.getTime() - startupBegin.getTime()) + " ms");
+		log.info("EntryStore startup completed in {} ms", startupDate.getTime() - startupBegin.getTime());
 	}
 
 	/**
 	 * Creates a root Restlet that will receive all incoming calls.
-	 *
+	 * <p>
 	 * Because Restlets impose no restrictions on resource design,
-	 * the resource classes and the URIs they expose flow naturally
-	 * from considerations of ROA design. Below you have a mapping from
+	 * the resource classes and the URIs, they expose flow naturally
+	 * from considerations of ROA design. Below, you have a mapping from
 	 * URIs to the resources in the REST module.
 	 */
 	@Override
@@ -395,7 +410,7 @@ public class EntryStoreApplication extends Application {
 
 		ignoreAuth.setNext(cookieAuth);
 
-		// If password authentication is disabled we only allow cookie verification (as this may verify auth_tokens
+		// If password authentication is disabled, we only allow cookie verification (as this may verify auth_tokens
 		// generated through a CAS-login), but not basic authentication (as this always requires username/password).
 		// Also, we only allow HTTP Basic authentication if explicitly enabled in configuration.
 		if (passwordAuthOff || !config.getBoolean(Settings.AUTH_HTTP_BASIC, false)) {
@@ -420,8 +435,8 @@ public class EntryStoreApplication extends Application {
 
 		if (config.getBoolean(Settings.REPOSITORY_REWRITE_BASEREFERENCE, true)) {
 			// The following Filter resolves a problem that occurs with reverse
-			// proxying, i.e., the internal base reference (as seen e.g. by Tomcat)
-			// is different from the external one (as seen e.g. by Apache)
+			// proxying, i.e., the internal base reference (as seen e.g., by Tomcat)
+			// is different from the external one (as seen e.g., by Apache)
 			log.info("Rewriting of base reference is enabled");
 			Filter referenceFix = new Filter(getContext()) {
 				@Override
@@ -456,14 +471,6 @@ public class EntryStoreApplication extends Application {
 		return this.rm;
 	}
 
-	public Set<String> getReservedNames() {
-		return this.reservedNames;
-	}
-
-	public UserTempLockoutCache getUserTempLockoutCache() {
-		return this.userTempLockoutCache;
-	}
-
 	private void startBackupScheduler() {
 		URI userURI = getPM().getAuthenticatedUserURI();
 		try {
@@ -478,28 +485,22 @@ public class EntryStoreApplication extends Application {
 		}
 	}
 
-	public ArrayList<Harvester> getHarvesters() {
-		return harvesters;
-	}
-
 	private void startHarvesters() {
 		URI realURI = getPM().getAuthenticatedUserURI();
 		try {
 			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
 			Set<URI> entries = getCM().getEntries();
-			java.util.Iterator<URI> iter = entries.iterator();
-			while (iter.hasNext()) {
-				URI entryURI = iter.next();
+			for (URI entryURI : entries) {
 				Entry entry = getCM().getByEntryURI(entryURI);
 
 				if (entry == null) {
-					log.warn("Entry with URI " + entryURI + " cannot be found and is null");
+					log.warn("Entry with URI {} cannot be found and is null", entryURI);
 					continue;
 				}
 
-				if (entry != null && entry.getGraphType() == GraphType.Context) {
+				if (entry.getGraphType() == GraphType.Context) {
 					OAIHarvesterFactory fac = new OAIHarvesterFactory();
-					if(fac.isOAIHarvester(entry)) {
+					if (fac.isOAIHarvester(entry)) {
 						try {
 							Harvester har = fac.getHarvester(rm, entry.getEntryURI());
 							har.run();
@@ -517,14 +518,6 @@ public class EntryStoreApplication extends Application {
 
 	public static String getVersion() {
 		return RepositoryManagerImpl.getVersion();
-	}
-
-	public static Date getStartupDate() {
-		return startupDate;
-	}
-
-	public LoginTokenCache getLoginTokenCache() {
-		return loginTokenCache;
 	}
 
 	@Override

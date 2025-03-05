@@ -11,11 +11,11 @@ import java.util.List;
 public class MultipleTransactions {
 
 	public static void runBenchmark(
-			RepositoryManager repositoryManager,
-			List<Object> persons,
-			int modulo,
-			boolean withMultiContext,
-			boolean isWithAcl) {
+		RepositoryManager repositoryManager,
+		List<Object> persons,
+		int modulo,
+		boolean withMultiContext,
+		boolean isWithAcl) {
 
 		LogUtils.logType("   ADD  ");
 
@@ -26,7 +26,7 @@ public class MultipleTransactions {
 		PrincipalManager principalManager = repositoryManager.getPrincipalManager();
 
 		Entry newContext = contextManager.createResource(null, GraphType.Context, null, null);
-		contextManager.setName(newContext.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS + "_0");
+		contextManager.setName(newContext.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS + "_1");
 
 		User benchmarkUser;
 
@@ -45,7 +45,7 @@ public class MultipleTransactions {
 
 		persons.forEach(BenchmarkCommons.withCounter((i, person) -> {
 			if (person != null) {
-				Context moduloContext = contextManager.getContext(BenchmarkCommons.CONTEXT_ALIAS + "_" + (withMultiContext && modulo > 0 ? i / modulo : 0));
+				Context moduloContext = contextManager.getContext(BenchmarkCommons.CONTEXT_ALIAS + "_" + ((withMultiContext && modulo > 0 ? (i / modulo) : 0) + 1));
 
 				if (modulo < 0 || i % modulo > 0) {
 					ObjectMapper.mapObjectToContext(moduloContext, person);
@@ -63,15 +63,20 @@ public class MultipleTransactions {
 							principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
 						}
 
-						Entry newModuloContext = contextManager.createResource(null, GraphType.Context, null, null);
-						contextManager.setName(newModuloContext.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS + "_" + (i + 1) / modulo); // FIXME may add unnecessary overhead
+						Entry newModuloContext;
+						if (moduloContext != null) {
+							newModuloContext = moduloContext.getEntry();
+						} else {
+							newModuloContext = contextManager.createResource(null, GraphType.Context, null, null);
+							contextManager.setName(newModuloContext.getResource().getURI(), BenchmarkCommons.CONTEXT_ALIAS + "_" + ((i / modulo) + 1)); // FIXME may add unnecessary overhead
+						}
 
 						if (isWithAcl) {
 							newModuloContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, benchmarkUser.getURI());
 							principalManager.setAuthenticatedUserURI(benchmarkUser.getURI());
 						}
 
-						ObjectMapper.mapObjectToContext((Context) newModuloContext.getResource(), person);
+						ObjectMapper.mapObjectToContext((Context) newModuloContext.getResource(), injectedPerson);
 
 					} else {
 						ObjectMapper.mapObjectToContext(moduloContext, injectedPerson);

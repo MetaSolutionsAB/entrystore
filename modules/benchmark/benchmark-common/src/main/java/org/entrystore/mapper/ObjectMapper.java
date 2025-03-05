@@ -44,7 +44,6 @@ public class ObjectMapper {
 	}
 
 	public static Entry mapObjectToContext(Context context, Object object) {
-
 		Entry entry = context.createResource(null, GraphType.None, ResourceType.NamedResource, null);
 
 		Model model = new LinkedHashModel();

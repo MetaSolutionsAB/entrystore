@@ -75,15 +75,18 @@ import static org.restlet.data.MediaType.TEXT_RDF_N3;
 public class EntryResource extends BaseResource {
 
 	private final Logger log = LoggerFactory.getLogger(EntryResource.class);
+
+	// TODO: Use GraphUtil.supportedMediaTypes instead of this list?
 	private final List<MediaType> supportedMediaTypes = List.of(
-			APPLICATION_RDF_XML,
-			APPLICATION_JSON,
-			TEXT_RDF_N3,
-			new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()),
-			new MediaType(RDFFormat.TRIX.getDefaultMIMEType()),
-			new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()),
-			new MediaType(RDFFormat.TRIG.getDefaultMIMEType()),
-			new MediaType(RDFFormat.JSONLD.getDefaultMIMEType())
+		APPLICATION_RDF_XML,
+		APPLICATION_JSON,
+		TEXT_RDF_N3,
+		new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()),
+		new MediaType(RDFFormat.TRIX.getDefaultMIMEType()),
+		new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()),
+		new MediaType(RDFFormat.TRIG.getDefaultMIMEType()),
+		new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()),
+		new MediaType(RDFFormat.RDFJSON.getDefaultMIMEType())
 	);
 
 	private UserTempLockoutCache userTempLockoutCache;
@@ -115,7 +118,7 @@ public class EntryResource extends BaseResource {
 
 	/**
 	 * GET
-	 *
+	 * <p>
 	 * From the REST API:
 	 *
 	 * <pre>
@@ -133,9 +136,9 @@ public class EntryResource extends BaseResource {
 			}
 
 			// the check for resource safety is necessary to avoid an implicit
-			// getMetadata() in the case of a PUT on (not yet) existant metadata
+			// getMetadata() in the case of a PUT on (not yet) existent metadata
 			// - this is e.g. the case if conditional requests are issued
-			Optional<MediaType> preferredMediaType = Optional.of(getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes));
+			Optional<MediaType> preferredMediaType = Optional.ofNullable(getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes));
 
 			MediaType rdfFormat = MediaType.APPLICATION_JSON;
 			if (RDFFormat.JSONLD.getDefaultMIMEType().equals(parameters.get("rdfFormat"))) {
@@ -198,7 +201,7 @@ public class EntryResource extends BaseResource {
 	}
 
 	private Representation getEntry(MediaType mediaType, MediaType rdfFormat) {
-		String serializedGraph = null;
+		String serializedGraph;
 		/* if (MediaType.TEXT_HTML.equals(mediaType)) {
 			return getEntryInHTML();
 		} else */
@@ -383,7 +386,7 @@ public class EntryResource extends BaseResource {
 
 	private void modifyEntry(MediaType mediaType) throws AuthorizationException {
 
-		String graphString = null;
+		String graphString;
 		try {
 			graphString = getRequest().getEntity().getText();
 		} catch (IOException e) {
@@ -392,7 +395,7 @@ public class EntryResource extends BaseResource {
 			return;
 		}
 
-		Model deserializedGraph = null;
+		Model deserializedGraph;
 		if (APPLICATION_JSON.equals(mediaType)) {
 			try {
 				JSONObject rdfJSON = new JSONObject(graphString);
@@ -411,8 +414,8 @@ public class EntryResource extends BaseResource {
 		} else {
 			entry.setGraph(deserializedGraph);
 			if (parameters.containsKey("applyACLtoChildren") &&
-					GraphType.List.equals(entry.getGraphType()) &&
-					Local.equals(entry.getEntryType())) {
+				GraphType.List.equals(entry.getGraphType()) &&
+				Local.equals(entry.getEntryType())) {
 				((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			getResponse().setStatus(Status.SUCCESS_OK);

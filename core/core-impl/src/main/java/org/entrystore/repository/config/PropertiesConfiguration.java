@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,10 @@
 
 package org.entrystore.repository.config;
 
-import java.time.Duration;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.config.Config;
+import org.entrystore.config.DurationStyle;
 
 import java.awt.*;
 import java.beans.PropertyChangeListener;
@@ -34,11 +34,12 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
-import org.entrystore.config.DurationStyle;
+import java.util.Properties;
 
 /**
  * Wrapper around Java's Properties.
@@ -46,7 +47,7 @@ import org.entrystore.config.DurationStyle;
  *
  * <p>
  * See the static methods of the class Configurations for wrappers around the
- * Config interface, e.g. to get synchronized view of the object.
+ * Config interface, e.g., to get synchronized view of the object.
  *
  * <p>
  * If a key maps only to one value, it is done the standard way:<br>
@@ -69,11 +70,11 @@ public class PropertiesConfiguration implements Config {
 	/**
 	 * The main resource in this object. Contains the configuration.
 	 */
-	private SortedProperties config;
+	private final SortedProperties config;
 
-	private PropertyChangeSupport pcs;
+	private final PropertyChangeSupport pcs;
 
-	private String configName;
+	private final String configName;
 
 	private boolean modified = false;
 
@@ -106,7 +107,7 @@ public class PropertiesConfiguration implements Config {
 
 	private void checkFirePropertyChange(String key, Object oldValue, Object newValue) {
 		if ((oldValue == null) && (newValue != null)) {
-			pcs.firePropertyChange(key, oldValue, newValue);
+			pcs.firePropertyChange(key, null, newValue);
 		} else if ((oldValue != null) && (!oldValue.equals(newValue))) {
 			pcs.firePropertyChange(key, oldValue, newValue);
 		}
@@ -220,9 +221,11 @@ public class PropertiesConfiguration implements Config {
 	public void load(URL configURL) throws IOException {
 		InputStreamReader isr = null;
 		try {
-			URL escapedURL = new URL(configURL.toString().replaceAll(" ", "%20"));
+			URL escapedURL = new URI(configURL.toString().replaceAll(" ", "%20")).toURL();
 			isr = new InputStreamReader(escapedURL.openStream(), StandardCharsets.UTF_8);
 			config.load(isr);
+		} catch (URISyntaxException e) {
+			log.error(e.getMessage());
 		} finally {
 			if (isr != null) {
 				isr.close();
@@ -234,9 +237,9 @@ public class PropertiesConfiguration implements Config {
 	public void save(URL configURL) throws IOException {
 		try {
 			String escapedURL = configURL.toString().replaceAll(" ", "%20");
-			URI url = new URI(escapedURL.toString());
+			URI url = new URI(escapedURL);
 			File file = new File(url);
-			OutputStreamWriter output = new OutputStreamWriter(Files.newOutputStream(file.toPath()), "UTF-8");
+			OutputStreamWriter output = new OutputStreamWriter(Files.newOutputStream(file.toPath()), StandardCharsets.UTF_8);
 			config.store(output, configName);
 			output.close();
 		} catch (URISyntaxException e) {
@@ -308,7 +311,7 @@ public class PropertiesConfiguration implements Config {
 
 	@Override
 	public void setProperty(String key, Object value) {
-		String oldValue = null;
+		String oldValue;
 		oldValue = getString(key);
 		config.setProperty(key, value.toString());
 		setModified(true);
@@ -346,7 +349,7 @@ public class PropertiesConfiguration implements Config {
 	@Override
 	public List<String> getKeyList(String prefix) {
 		Enumeration keyIterator = config.propertyNames();
-		ArrayList<String> result = new ArrayList<String>();
+		ArrayList<String> result = new ArrayList<>();
 
 		while (keyIterator.hasMoreElements()) {
 			String next = (String) keyIterator.nextElement();
@@ -420,7 +423,7 @@ public class PropertiesConfiguration implements Config {
 	@Override
 	public byte getByte(String key, byte defaultValue) {
 		String strValue = config.getProperty(key);
-		byte byteValue = 0;
+		byte byteValue;
 
 		if (strValue != null) {
 			byteValue = Byte.parseByte(strValue);
@@ -446,7 +449,7 @@ public class PropertiesConfiguration implements Config {
 	@Override
 	public double getDouble(String key, double defaultValue) {
 		String strValue = config.getProperty(key);
-		double doubleValue = 0;
+		double doubleValue;
 
 		if (strValue != null) {
 			doubleValue = Double.parseDouble(strValue);
@@ -472,8 +475,7 @@ public class PropertiesConfiguration implements Config {
 	@Override
 	public float getFloat(String key, float defaultValue) {
 		String strValue = config.getProperty(key);
-		float floatValue = 0;
-
+		float floatValue;
 
 		if (strValue != null) {
 			floatValue = Float.parseFloat(strValue);
@@ -499,7 +501,7 @@ public class PropertiesConfiguration implements Config {
 	@Override
 	public int getInt(String key, int defaultValue) {
 		String strValue = config.getProperty(key);
-		int intValue = 0;
+		int intValue;
 
 		if (strValue != null) {
 			intValue = Integer.parseInt(strValue);
@@ -525,7 +527,7 @@ public class PropertiesConfiguration implements Config {
 	@Override
 	public long getLong(String key, long defaultValue) {
 		String strValue = config.getProperty(key);
-		long longValue = 0;
+		long longValue;
 
 		if (strValue != null) {
 			longValue = Long.parseLong(strValue);
@@ -551,7 +553,7 @@ public class PropertiesConfiguration implements Config {
 	@Override
 	public short getShort(String key, short defaultValue) {
 		String strValue = config.getProperty(key);
-		short shortValue = 0;
+		short shortValue;
 
 		if (strValue != null) {
 			shortValue = Short.parseShort(strValue);
@@ -588,15 +590,15 @@ public class PropertiesConfiguration implements Config {
 		try {
 			String uri = config.getProperty(key);
 			if (uri != null) {
-				return new URL(uri);
+				return new URI(uri).toURL();
 			}
-		} catch (MalformedURLException ignored) {
+		} catch (URISyntaxException | MalformedURLException ignored) {
 		}
 		return null;
 	}
 
     @Override
-		public URL getURL(String key, URL defaultValue) {
+	public URL getURL(String key, URL defaultValue) {
 		URL result = getURL(key);
 		if (result == null) {
 			return defaultValue;
@@ -605,7 +607,7 @@ public class PropertiesConfiguration implements Config {
     }
 
     @Override
-		public Color getColor(String key) {
+	public Color getColor(String key) {
 		Color result = null;
 		String value = getString(key);
 
@@ -665,7 +667,12 @@ public class PropertiesConfiguration implements Config {
 		if (durationString == null) {
 			return Duration.ofMillis(defaultValue);
 		}
-		Duration duration = DurationStyle.detectAndParse(durationString);
-		return duration;
+		return DurationStyle.detectAndParse(durationString);
 	}
+
+	@Override
+	public Properties getProperties() {
+		return this.config;
+	}
+
 }

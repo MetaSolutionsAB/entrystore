@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2024 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,44 +16,34 @@
 
 package org.entrystore.repository.backup;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class BackupJobTest {
 
-	@Disabled("To be implemented")
 	@Test
-	public void testExecute() throws Exception {
-		// TODO
-	}
+	public void interrupt() {
+		BackupJob job = new BackupJob();
+		job.interrupt();
 
-	@Disabled("To be implemented")
-	@Test
-	public void testRunBackup() throws Exception {
-		// TODO
-	}
+		try {
+			job.execute(null);
+		} catch(RuntimeException e) {
+			assertEquals("Backup job \"execute()\" was interrupted", e.getMessage());
+		}
 
-	@Disabled("To be implemented")
-	@Test
-	public void testRunBackupMaintenance() throws Exception {
-		// TODO
-	}
+		try {
+			BackupJob.runBackup(null);
+		} catch(RuntimeException e) {
+			assertEquals("Backup job \"runBackup()\" was interrupted", e.getMessage());
+		}
 
-	@Disabled("To be implemented")
-	@Test
-	public void testDeleteDirectory() throws Exception {
-		// TODO
-	}
+		try {
+			BackupJob.runBackupMaintenance(null);
+		} catch(RuntimeException e) {
+			assertEquals("Backup job \"runBackupMaintenance()\" was interrupted", e.getMessage());
+		}
 
-	@Disabled("To be implemented")
-	@Test
-	public void testDaysBetween() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
-	public void testInterrupt() throws Exception {
-		// TODO
 	}
 }

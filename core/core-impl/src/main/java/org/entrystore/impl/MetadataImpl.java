@@ -17,6 +17,7 @@
 
 package org.entrystore.impl;
 
+import lombok.Getter;
 import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
@@ -45,6 +46,7 @@ public class MetadataImpl implements Metadata {
 	private IRI uri;
 	private IRI resourceUri;
 	private org.eclipse.rdf4j.model.Resource mdContext;
+	@Getter
 	private boolean cached;
 	private boolean localCache;
 	Logger log = LoggerFactory.getLogger(MetadataImpl.class);
@@ -156,7 +158,7 @@ public class MetadataImpl implements Metadata {
 
 					EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(entryURI);
 					if (sourceEntry != null) {
-						sourceEntry.removeRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
+						sourceEntry.removeRelationSynchronized(statement, rc);
 					}
 				}
 			}
@@ -192,15 +194,11 @@ public class MetadataImpl implements Metadata {
 					// can't update the inverse relational cache and the whole operation would fail
 					EntryImpl sourceEntry = (EntryImpl) ((ContextManagerImpl) this.entry.getRepositoryManager().getContextManager()).getEntryIgnoreACL(entryURI);
 					if (sourceEntry != null) {
-						sourceEntry.addRelationSynchronized(statement, rc, this.entry.repository.getValueFactory());
+						sourceEntry.addRelationSynchronized(statement, rc);
 					}
 				}
 			}
 		}
-	}
-
-	public boolean isCached() {
-		return cached;
 	}
 
 }

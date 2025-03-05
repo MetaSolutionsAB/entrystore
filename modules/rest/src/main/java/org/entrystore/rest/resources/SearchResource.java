@@ -16,14 +16,7 @@
 
 package org.entrystore.rest.resources;
 
-import com.rometools.rome.feed.synd.SyndContent;
-import com.rometools.rome.feed.synd.SyndContentImpl;
-import com.rometools.rome.feed.synd.SyndEntry;
-import com.rometools.rome.feed.synd.SyndEntryImpl;
 import com.rometools.rome.feed.synd.SyndFeed;
-import com.rometools.rome.feed.synd.SyndFeedImpl;
-import com.rometools.rome.io.FeedException;
-import com.rometools.rome.io.SyndFeedOutput;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.response.FacetField;
@@ -43,11 +36,10 @@ import org.entrystore.Resource;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.util.GraphUtil;
-import org.entrystore.rest.util.RDFJSON;
+import org.entrystore.rest.util.Syndication;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -60,7 +52,6 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -68,12 +59,12 @@ import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
-import static java.lang.String.format;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.restlet.data.Status.*;
+import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
+import static org.restlet.data.Status.SERVER_ERROR_INTERNAL;
+import static org.restlet.data.Status.SERVER_ERROR_SERVICE_UNAVAILABLE;
 
 
 /**
@@ -107,10 +98,10 @@ public class SearchResource extends BaseResource {
 	public Representation represent() throws ResourceException {
 		try {
 			// Query parameter: type
-			String type = decodeMandatoryParameter("type").toLowerCase();
+			String type = getMandatoryParameter("type").toLowerCase();
 
 			// Query parameter: query
-			String queryValue = decodeMandatoryParameter("query");
+			String queryValue = getMandatoryParameter("query");
 			if (queryValue.length() < 3) {
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation("{\"error\":\"Query too short\"}");
@@ -122,36 +113,36 @@ public class SearchResource extends BaseResource {
 			}
 
 			// Query parameter: syndication
-			var syndication = decodeOptionalParameter("syndication", null);
+			var syndication = getOptionalParameter("syndication", null);
 
 			// Query parameter: lang
-			var language = decodeOptionalParameter("lang", null);
+			var language = getOptionalParameter("lang", "en");
 
 			// Query parameter: sort
-			String sorting = decodeOptionalParameter("sort", null);
+			String sorting = getOptionalParameter("sort", null);
 			if (syndication != null && sorting != null) {
 				String msg = "Query parameter 'sort' not supported with syndication";
 				log.info(msg);
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation(
-						"{\"error\":\"" + msg + "\"}");
+					"{\"error\":\"" + msg + "\"}");
 			}
 
 			// Query parameter: offset
-			int offset = decodeOptionalParameterInteger("offset", 0);
+			int offset = getOptionalParameterAsInteger("offset", 0);
 			if (syndication != null && offset > 0) {
 				String msg = "Query parameter 'offset' not supported with syndication";
 				log.info(msg);
 				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 				return new JsonRepresentation(
-						"{\"error\":\"" + msg + "\"}");
+					"{\"error\":\"" + msg + "\"}");
 			}
 			if (offset < 0) {
 				offset = 0;
 			}
 
 			// Query parameter: limit
-			int limit = decodeOptionalParameterInteger("limit", DEFAULT_LIMIT);
+			int limit = getOptionalParameterAsInteger("limit", DEFAULT_LIMIT);
 			if (limit > MAX_LIMIT) {
 				limit = MAX_LIMIT;
 			} else if (limit < 0) {
@@ -162,7 +153,7 @@ public class SearchResource extends BaseResource {
 			// Query parameter: filterQuery
 			List<String> filterQueries = new ArrayList<>();
 			{
-				String filterQueriesStr = decodeOptionalParameter("filterQuery", null);
+				String filterQueriesStr = getOptionalParameter("filterQuery", null);
 				if (filterQueriesStr != null) {
 					// We URLDecode after the split because we want to be able to use comma
 					// as separator (unencoded) for FQs and as content inside FQs (encoded)
@@ -175,22 +166,22 @@ public class SearchResource extends BaseResource {
 			SolrSearchIndex.FacetSettings facetSettings = new SolrSearchIndex.FacetSettings();
 
 			// Query parameter: facetFields
-			facetSettings.fields = decodeOptionalParameter("facetFields", null);
+			facetSettings.fields = getOptionalParameter("facetFields", null);
 
 			// Query parameter: facetMinCount
-			facetSettings.minCount = decodeOptionalParameterInteger("facetMinCount", 1);
+			facetSettings.minCount = getOptionalParameterAsInteger("facetMinCount", 1);
 
 			// Query parameter: facetLimit
-			facetSettings.limit = Math.min(decodeOptionalParameterInteger("facetLimit", DEFAULT_FACET_LIMIT), MAX_FACET_LIMIT);
+			facetSettings.limit = Math.min(getOptionalParameterAsInteger("facetLimit", DEFAULT_FACET_LIMIT), MAX_FACET_LIMIT);
 			if (facetSettings.limit < 1) {
 				facetSettings.limit = DEFAULT_FACET_LIMIT;
 			}
 
 			// Query parameter: facetMatches
-			facetSettings.matches = decodeOptionalParameter("facetMatches", null);
+			facetSettings.matches = getOptionalParameter("facetMatches", null);
 
 			// Query parameter: missing
-			facetSettings.missing = decodeOptionalParameterBoolean("facetMissing", false);
+			facetSettings.missing = getOptionalParameterAsBoolean("facetMissing", false);
 
 			// Logic
 			QueryResults queryResults = new QueryResults(List.of(), -1, List.of());
@@ -212,81 +203,22 @@ public class SearchResource extends BaseResource {
 		}
 	}
 
-	public Representation generateSyndication(List<Entry> entries, String type, String language, int limit) {
+	public Representation generateSyndication(List<Entry> entries, String feedType, String language, int limit) {
 		try {
-			SyndFeed feed = new SyndFeedImpl();
-			feed.setFeedType(type);
-
+			SyndFeed feed = Syndication.createFeedFromEntries(getRM().getPrincipalManager(), entries, language, limit);
 			feed.setTitle("Syndication feed of search");
-			feed.setDescription(format("Syndication feed containing max %d items", limit));
 			feed.setLink(getRequest().getResourceRef().getIdentifier());
+			feed.setFeedType(feedType);
 
-			List<SyndEntry> syndEntries = new ArrayList<>();
-			int limitedCount = 0;
-			for (Entry entry : entries) {
+			String feedXml = Syndication.convertSyndFeedToXml(feed);
 
-				String title = EntryUtil.getTitle(entry, language);
-				String description = EntryUtil.getDescription(entry, language);
-
-				if (title == null && description == null) {
-					break;
-				}
-
-				SyndContent syndConcentDescription = new SyndContentImpl();
-				syndConcentDescription.setType("text/plain");
-				syndConcentDescription.setValue(description);
-
-				SyndEntry syndEntry = new SyndEntryImpl();
-				syndEntry.setTitle(title);
-				syndEntry.setDescription(syndConcentDescription);
-
-				syndEntry.setPublishedDate(entry.getCreationDate());
-				syndEntry.setUpdatedDate(entry.getModifiedDate());
-				syndEntry.setLink(entry.getResourceURI().toString());
-
-				URI creator = entry.getCreator();
-				if (creator != null) {
-					Entry creatorEntry = getRM().getPrincipalManager().getByEntryURI(creator);
-					String creatorName = EntryUtil.getName(creatorEntry);
-					if (creatorName != null) {
-						syndEntry.setAuthor(creatorName);
-					}
-				}
-
-				syndEntries.add(syndEntry);
-
-				if (limitedCount++ >= limit) {
-					break;
-				}
-			}
-
-			feed.setEntries(syndEntries);
-			String s;
-			try {
-				s = new SyndFeedOutput().outputString(feed, true);
-			} catch (FeedException fe) {
-				log.error(fe.getMessage());
-				s = fe.getMessage();
-			}
-
-			String feedType = feed.getFeedType();
-			MediaType mediaType = null;
-			if (feedType != null) {
-				if (feedType.startsWith("rss_")) {
-					mediaType = MediaType.APPLICATION_RSS;
-				} else if (feedType.startsWith("atom_")) {
-					mediaType = MediaType.APPLICATION_ATOM;
-				}
-			}
-
-			StringRepresentation rep;
+			MediaType mediaType = Syndication.convertFeedTypeToMediaType(feedType);
 			if (mediaType != null) {
-				rep = new StringRepresentation(s, mediaType);
+				return new StringRepresentation(feedXml, mediaType);
 			} else {
-				rep = new StringRepresentation(s);
+				return new StringRepresentation(feedXml);
 			}
 
-			return rep;
 		} catch (IllegalArgumentException e) {
 			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 			return new JsonRepresentation(new JSONObject().put("error", e.getMessage()));
@@ -416,14 +348,6 @@ public class SearchResource extends BaseResource {
 		}
 		result.put("facetFields", facetFieldsArr);
 
-		// TODO remove the commented four lines below if there is no use found for it
-                /*
-				JSONArray jaRights = new JSONArray();
-				jaRights.put("readmetadata");
-				jaRights.put("readresource");
-				result.put("rights", jaRights);
-				*/
-
 		long timeDiff = new Date().getTime() - before.getTime();
 		log.debug("Graph fetching and serialization took " + timeDiff + " ms");
 
@@ -431,17 +355,17 @@ public class SearchResource extends BaseResource {
 	}
 
 	private QueryResults searchSolr(
-			String queryValue,
-			String sorting,
-			int offset,
-			int limit,
-			List<String> filterQueries,
-			SolrSearchIndex.FacetSettings facetSettings) throws JsonErrorException {
+		String queryValue,
+		String sorting,
+		int offset,
+		int limit,
+		List<String> filterQueries,
+		SolrSearchIndex.FacetSettings facetSettings) throws JsonErrorException {
 
 		try {
 
 			List<Entry> entries;
-			long results ;
+			long results;
 			List<FacetField> responseFacetFields;
 
 			if (getRM().getIndex() == null) {
@@ -514,68 +438,16 @@ public class SearchResource extends BaseResource {
 		List<Entry> entries;
 		try {
 			String query =
-					"PREFIX dc:<http://purl.org/dc/terms/> " +
-							"SELECT ?x " +
-							"WHERE { " +
-							"?x " + queryValue + " ?y }";
+				"PREFIX dc:<http://purl.org/dc/terms/> " +
+					"SELECT ?x " +
+					"WHERE { " +
+					"?x " + queryValue + " ?y }";
 			entries = getCM().search(query, null, null);
 		} catch (Exception e) {
 			log.error(e.getMessage());
 			throw new JsonErrorException(URLEncoder.encode(e.getMessage(), UTF_8));
 		}
 		return new QueryResults(entries, entries.size());
-	}
-
-	private String decodeMandatoryParameter(String parameter) throws JsonErrorException {
-		return Optional.ofNullable(parameters.get(parameter))
-				.map(param -> URLDecoder.decode(param, UTF_8))
-				.orElseThrow(() -> {
-					String msg = "Mandatory parameter '" + parameter + "' is missing";
-					log.info(msg);
-					getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-					return new JsonErrorException(msg);
-				});
-	}
-
-	private String decodeOptionalParameter(String parameter, String defaultValue) {
-		return Optional.ofNullable(parameters.get(parameter))
-				.map(param -> URLDecoder.decode(param, UTF_8))
-				.orElse(defaultValue);
-	}
-
-	private Integer decodeOptionalParameterInteger(String parameter, int defaultValue) {
-		try {
-			return Integer.valueOf(decodeOptionalParameter(parameter, Integer.valueOf(defaultValue).toString()));
-		} catch (NumberFormatException e) {
-			log.info(e.getMessage());
-			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-			return defaultValue;
-		}
-	}
-
-	private Boolean decodeOptionalParameterBoolean(String parameter, boolean defaultValue) {
-		return Boolean.valueOf(decodeOptionalParameter(parameter, Boolean.valueOf(defaultValue).toString()));
-	}
-
-	static class JsonErrorException extends Throwable {
-
-		private final JsonRepresentation representation;
-
-		public JsonErrorException() {
-			representation = new JsonRepresentation("{\"error\":\"An error has occurred\"}");
-		}
-
-		public JsonErrorException(String error) {
-			this.representation = new JsonRepresentation("{\"error\":\"" + error + "\"}");
-		}
-
-		public JsonErrorException(JsonRepresentation jsonErrorRepresentation) {
-			this.representation = jsonErrorRepresentation;
-		}
-
-		public JsonRepresentation getRepresentation() {
-			return representation;
-		}
 	}
 
 	record QueryResults(List<Entry> entries, long results, List<FacetField> responseFacetFields) {

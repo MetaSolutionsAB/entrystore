@@ -202,8 +202,8 @@ public interface ContextManager extends Context {
 	 *            than SCAM.
 	 * @throws RepositoryException
 	 */
-	public void exportContext(Entry contextEntry, File destFile, Set<URI> users, boolean metadataOnly, Class<? extends RDFWriter> writer) throws RepositoryException;
+	void exportContext(Entry contextEntry, File destFile, Set<URI> users, boolean metadataOnly, Class<? extends RDFWriter> writer) throws RepositoryException;
 	
-	public void importContext(Entry contextEntry, File srcFile) throws RepositoryException, IOException;
+	void importContext(Entry contextEntry, File srcFile) throws RepositoryException, IOException;
 
 }

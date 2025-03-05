@@ -79,22 +79,14 @@ public class GroupImpl extends ListImpl implements Group {
 
 	public Context getHomeContext() {
 		if (this.homeContext == null) {
-			RepositoryConnection rc = null;
-			try {
-				rc = this.entry.repository.getConnection();
+			try (RepositoryConnection rc = this.entry.repository.getConnection()) {
 				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI()).asList();
 				if (!matches.isEmpty()) {
-					this.homeContext = URI.create(matches.get(0).getObject().stringValue());
+					this.homeContext = URI.create(matches.getFirst().getObject().stringValue());
 				}
 			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 				log.error(e.getMessage(), e);
 				throw new RepositoryException("Failed to connect to repository", e);
-			} finally {
-				try {
-					rc.close();
-				} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
-					log.error(e.getMessage(), e);
-				}
 			}
 		}
 
@@ -124,7 +116,7 @@ public class GroupImpl extends ListImpl implements Group {
                     URI sourceEntryURI = URI.create(statement.getObject().stringValue());
                     EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
                     if (sourceEntry != null) {
-                        sourceEntry.removeRelationSynchronized(statement, rc, vf);
+                        sourceEntry.removeRelationSynchronized(statement, rc);
                     }
                     rc.remove(statement, entry.getSesameEntryURI());
                 }
@@ -134,7 +126,7 @@ public class GroupImpl extends ListImpl implements Group {
                 if (context != null) {
                     Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
                     rc.add(newStatement);
-                    ((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc, this.entry.repository.getValueFactory());
+                    ((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc);
                 }
                 rc.commit();
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));

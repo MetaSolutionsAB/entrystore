@@ -550,8 +550,15 @@ public class SolrSearchIndex implements SearchIndex {
 					return null;
 				}
 				if (entryURI != null) {
-					Entry entry = cm.getEntry(entryURI);
+					Entry entry;
+					try {
+						entry = cm.getEntry(entryURI);
+					} catch (Exception e) {
+						log.error("Unable to load entry with URI {} due to error: {}", entryURI, e.getMessage());
+						continue;
+					}
 					if (entry == null) {
+						log.warn("Unable to load entry with URI {}", entryURI);
 						continue;
 					}
 					synchronized (postQueue) {
@@ -856,7 +863,7 @@ public class SolrSearchIndex implements SearchIndex {
 		for (Statement s : metadata) {
 			// predicate
 			String predString = s.getPredicate().stringValue();
-			String predMD5Trunc8 = Hashing.md5(predString).substring(0, 8);
+			String predMD5Trunc8 = Hashing.hash(predString, HashType.MD5).substring(0, 8);
 
 			// object
 			if (s.getObject() instanceof IRI) {
@@ -877,10 +884,10 @@ public class SolrSearchIndex implements SearchIndex {
 				// predicate value is included in the parameter name, the object value is the field value
 				addFieldValueOnce(doc,prefix + "metadata.predicate.literal_s." + predMD5Trunc8, l.getLabel());
 
-				// special handling of integer values, to be used for e.g. sorting
+				// special handling of integer values, to be used for e.g., sorting
 				if (MetadataUtil.isIntegerLiteral(l)) {
 					try {
-						// it's a single-value field so we call setField instead of addField just in case there should be
+						// it's a single-value field, so we call setField instead of addField just in case there should be
 						doc.setField(prefix + "metadata.predicate.integer." + predMD5Trunc8, l.longValue());
 					} catch (NumberFormatException nfe) {
 						log.debug("Unable to index integer literal: {}. (Subject: {}, Predicate: {}, Object: {})", nfe.getMessage(), s.getSubject(), predString, l.getLabel());
