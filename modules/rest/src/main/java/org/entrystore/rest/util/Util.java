@@ -114,8 +114,7 @@ public class Util {
 	/**
 	 * Takes the parameters from the URL and puts them into a map instead.
 	 *
-	 * @param request
-	 *            the request which contains the parameters.
+	 * @param request the request which contains the parameters.
 	 * @return A map with the parameters.
 	 */
 	public static HashMap<String, String> parseRequest(String request) {
@@ -128,9 +127,7 @@ public class Util {
 		try {
 			for (String argument : arguments) {
 				String[] elements = StringUtils.split(argument, '=');
-				// URLDecoder is for application/x-www-form-urlencoded decoding, which is not exact with URL params decoding
-				// (includes '+' to 'space' replacement), hence need to replace '+' with '%2B'
-				argsAndVal.put(elements[0], elements.length == 1 ? "" : URLDecoder.decode(elements[1].trim().replace("+", "%2B"), UTF_8));
+				argsAndVal.put(elements[0], elements.length == 1 ? "" : decodeHttpParameterIfNeeded(elements[0], elements[1]));
 			}
 		} catch (IndexOutOfBoundsException e) {
 			// special case!
@@ -140,12 +137,34 @@ public class Util {
 	}
 
 	/**
+	 * Decodes {value} parameter from x-www-form-urlencoded values
+	 * <p>
+	 * Check for param name is due to '+' to 'space' decoding, which we want for Solr queries, but do not want for params
+	 * like: format and rdfFormat (and possibly others) which need the plus symbol to not be converted to space
+	 * (e.g. a value of application/ld+json)
+	 *
+	 * @param name Parameter name
+	 * @param value Parameter value
+	 * @return Decoded value
+	 */
+	private static String decodeHttpParameterIfNeeded(String name, String value) {
+		switch (name) {
+			case "format":
+			case "rdfFormat":
+				value = value.replace("+", "%2B");
+		}
+		// URLDecoder is for application/x-www-form-urlencoded decoding, which is not exact with URL params decoding
+		// (includes '+' to 'space' replacement)
+		return URLDecoder.decode(value.trim(), UTF_8);
+	}
+
+	/**
 	 * We support If-Unmodified-Since (this is a dirty hack due some
 	 * shortcomings of the current Restlet version). Restlets seem to evaluate
 	 * the conditions even before the representation methods are called, so our
 	 * only way on reacting on HTTP conditions is here in the constructor by
 	 * setting the affected date to null if the request is ok.
-	 *
+	 * <p>
 	 * THIS IS ONLY A HACK AND SHOULD BE REPLACED WITH PROPER HANDLING DIRECTLY
 	 * IN RESTLETS WHEN SUPPORTED.
 	 */
@@ -187,7 +206,7 @@ public class Util {
 			throw new IllegalArgumentException("Context must not be null");
 		}
 		// Content with size above 100kB is cached on disk
-		DiskFileItemFactory dfif = new DiskFileItemFactory(1024*100, null);
+		DiskFileItemFactory dfif = new DiskFileItemFactory(1024 * 100, null);
 		RestletFileUpload upload = new RestletFileUpload(dfif);
 		ServletContext sc = EntryStoreApplication.getServletContext(context);
 		if (sc != null) {

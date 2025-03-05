@@ -63,6 +63,32 @@ class SearchIT extends BaseSpec {
 		Thread.sleep(1500)
 	}
 
+	def "GET /search?type=solr with complex Solr query should be properly decoded and return search results"() {
+		when:
+		// fetch syndication feed
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=id:randomNonExistingId+OR+description.pl:opissearch') //title.pl:tytuł
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		respJson['offset'] == 0
+		respJson['results'] == 1
+		respJson['resource'] != null
+		respJson['resource']['children'] != null
+		def results = respJson['resource']['children'].collect()
+		results.size() == 1
+		results[0]['metadata'] != null
+		def metadata = results[0]['metadata'][EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId]
+		metadata != null
+		metadata[NameSpaceConst.DC_TERM_TITLE] != null
+		metadata[NameSpaceConst.DC_TERM_TITLE].collect().size() == 3
+		metadata[NameSpaceConst.DC_TERM_TITLE].collect().contains([type : 'literal',
+																   value: 'lokalne metadane tytuł jawnie po polsku',
+																   lang : 'pl'])
+
+	}
+
 	def "GET /search?type=solr&syndication=rss_2.0 should return syndication feed for the entry"() {
 		when:
 		// fetch syndication feed
