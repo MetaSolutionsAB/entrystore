@@ -36,6 +36,7 @@ public class Settings {
 	public static String AUTH_SAML_ASSERTION_CONSUMER_SERVICE_URL = "entrystore.auth.saml.assertion-consumer-service.url";
 	public static String AUTH_SAML_REDIRECT_SUCCESS_URL = "entrystore.auth.saml.redirect-success.url";
 	public static String AUTH_SAML_REDIRECT_FAILURE_URL = "entrystore.auth.saml.redirect-failure.url";
+	public static String AUTH_SAML_REDIRECT_DOMAIN_WHITELIST = "entrystore.auth.saml.redirect-domain-whitelist";
 
 	public static String AUTH_SAML_DEFAULT_IDP = "entrystore.auth.saml.default-idp";
 	public static String AUTH_SAML_IDPS = "entrystore.auth.saml.idps";

@@ -88,6 +88,8 @@ public class SamlLoginResource extends BaseResource {
 
 	private static Config config;
 
+	private static List<String> redirectDomainWhitelist;
+
 	@Getter
 	@Setter
 	@NoArgsConstructor
@@ -134,6 +136,11 @@ public class SamlLoginResource extends BaseResource {
 					log.info("Generic SAML Assertion Consumer Service URL: {}", assertionConsumerService);
 				}
 
+				redirectDomainWhitelist = config.getStringList(Settings.AUTH_SAML_REDIRECT_DOMAIN_WHITELIST, new ArrayList<>());
+				for (String domain : redirectDomainWhitelist) {
+					log.info("Allowed domain for redirects: {}", domain);
+				}
+
 				List<String> idps = config.getStringList(Settings.AUTH_SAML_IDPS);
 				if (idps == null) {
 					return;
@@ -169,13 +176,13 @@ public class SamlLoginResource extends BaseResource {
 
 	private void logIdpInfo(SamlIdpInfo info) {
 		String prefix = "SAML IdP \"" + info.getId() + "\" ";
-		log.info(prefix + "Domains: {}", info.getDomains());
-		log.info(prefix + "Relying Party ID: {}", info.getRelyingPartyId());
-		log.info(prefix + "Metadata URL: {}", info.getMetadataUrl());
-		log.info(prefix + "Metadata Max Age: {}", info.getMetadataMaxAge());
-		log.info(prefix + "Auto Provisioning: {}", info.isAutoProvisioning());
-		log.info(prefix + "Redirect Method: {}", info.getRedirectMethod());
-		log.info(prefix + "Client: {}", info.getSamlClient() != null ? "successfully initialized" : "initialization failed");
+		log.info("{} Domains: {}", prefix, info.getDomains());
+		log.info("{} Relying Party ID: {}", prefix, info.getRelyingPartyId());
+		log.info("{} Metadata URL: {}", prefix, info.getMetadataUrl());
+		log.info("{} Metadata Max Age: {}", prefix, info.getMetadataMaxAge());
+		log.info("{} Auto Provisioning: {}", prefix, info.isAutoProvisioning());
+		log.info("{} Redirect Method: {}", prefix, info.getRedirectMethod());
+		log.info("{} Client: {}", prefix, info.getSamlClient() != null ? "successfully initialized" : "initialization failed");
 	}
 
 	private void loadMetadataAndInitSamlClient(SamlIdpInfo samlIdpInfo) {
@@ -240,7 +247,8 @@ public class SamlLoginResource extends BaseResource {
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
 		boolean authSuccess = false;
 
-		String encodedResponse = new Form(r).getFirstValue("SAMLResponse");
+		Form samlResponseForm = new Form(r);
+		String encodedResponse = samlResponseForm.getFirstValue("SAMLResponse");
 		if (encodedResponse != null) {
 			String userName = null;
 			try {
@@ -285,14 +293,17 @@ public class SamlLoginResource extends BaseResource {
 				EntryStoreApplication app = (EntryStoreApplication) getApplication();
 				new CookieVerifier(app, getRM()).createAuthToken(userName, null, getRequest(), getResponse());
 
-				// TODO cache SAML ticket together with auth_token (probably necessary for logouts originating from SAML)
-
-				if (redirSuccess != null) {
-					getResponse().redirectTemporary(URLDecoder.decode(redirSuccess, StandardCharsets.UTF_8));
+				String redirectUrl = samlResponseForm.getFirstValue("RelayState");
+				if (redirectUrl != null) {
+					getResponse().redirectTemporary(URLDecoder.decode(redirectUrl, StandardCharsets.UTF_8));
 				} else {
-					getResponse().setStatus(Status.SUCCESS_OK);
-					if (html) {
-						getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
+					if (redirSuccess != null) {
+						getResponse().redirectTemporary(URLDecoder.decode(redirSuccess, StandardCharsets.UTF_8));
+					} else {
+						getResponse().setStatus(Status.SUCCESS_OK);
+						if (html) {
+							getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
+						}
 					}
 				}
 
@@ -322,6 +333,10 @@ public class SamlLoginResource extends BaseResource {
 	private void redirectToIdentityProvider(SamlIdpInfo idpInfo, Response response) throws SamlException {
 		Map<String, String> values = new HashMap<>();
 		values.put("SAMLRequest", idpInfo.getSamlClient().getSamlRequest());
+		String successUrl = parameters.get("successurl");
+		if (isValidRedirectTarget(successUrl)) {
+			values.put("RelayState", successUrl);
+		}
 		if ("post".equalsIgnoreCase(idpInfo.getRedirectMethod())) {
 			redirectWithPost(idpInfo.getSamlClient().getIdentityProviderUrl(), response, values);
 		} else {
@@ -402,6 +417,13 @@ public class SamlLoginResource extends BaseResource {
 		cacheDirs.add(CacheDirective.noCache());
 		cacheDirs.add(CacheDirective.noStore());
 		response.setCacheDirectives(cacheDirs);
+	}
+
+	private boolean isValidRedirectTarget(String url) {
+		if (url != null) {
+			return redirectDomainWhitelist.contains(URI.create(url).getHost());
+		}
+		return false;
 	}
 
 }
