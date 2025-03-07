@@ -17,4 +17,9 @@ public class StatusController {
 	public StatusResponse getStatus() {
 		return statusService.getStatus();
 	}
+
+	@GetMapping(path = "/management/status/extended", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
+	public StatusResponse getStatusExtended() {
+		return statusService.getStatus();
+	}
 }
