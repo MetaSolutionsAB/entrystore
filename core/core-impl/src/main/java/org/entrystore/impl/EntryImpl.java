@@ -1844,15 +1844,17 @@ public class EntryImpl implements Entry {
 	}
 
 	public List<Statement> getRelations() {
-		if (this.relations == null) {
-			try (RepositoryConnection rc = this.repository.getConnection()) {
-				this.relations = Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
-			} catch (RepositoryException e) {
-				log.error(e.getMessage());
-				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+		synchronized (this) {
+			if (this.relations == null) {
+				try (RepositoryConnection rc = this.repository.getConnection()) {
+					this.relations = Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
+				} catch (RepositoryException e) {
+					log.error(e.getMessage());
+					throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+				}
 			}
+			return this.relations;
 		}
-		return this.relations;
 	}
 
 	protected void addRelationSynchronized(Statement statement, RepositoryConnection rc) {
