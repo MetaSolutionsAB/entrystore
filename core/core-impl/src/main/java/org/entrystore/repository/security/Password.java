@@ -267,7 +267,7 @@ public class Password {
 	}
 
 	public static void loadRules(Config config) {
-		Rules rules = new Rules();
+		rules = new Rules();
 		rules.lowercase = config.getBoolean(Settings.AUTH_PASSWORD_RULE_LOWERCASE, defaultRules.isLowercase());
 		rules.uppercase = config.getBoolean(Settings.AUTH_PASSWORD_RULE_UPPERCASE, defaultRules.isUppercase());
 		rules.number = config.getBoolean(Settings.AUTH_PASSWORD_RULE_NUMBER, defaultRules.isNumber());
