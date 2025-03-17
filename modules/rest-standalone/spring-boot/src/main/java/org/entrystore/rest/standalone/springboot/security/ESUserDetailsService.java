@@ -1,4 +1,4 @@
-package org.entrystore.rest.standalone.springboot.service;
+package org.entrystore.rest.standalone.springboot.security;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
