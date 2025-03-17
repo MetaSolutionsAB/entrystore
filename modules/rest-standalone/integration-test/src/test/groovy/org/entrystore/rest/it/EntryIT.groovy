@@ -8,16 +8,20 @@ import org.entrystore.rest.it.util.NameSpaceConst
 
 import java.time.Year
 
-import static java.net.HttpURLConnection.*
+import static java.net.HttpURLConnection.HTTP_CONFLICT
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
+import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class EntryIT extends BaseSpec {
 
 	def static contextId = '10'
 	def resourceUrl = 'https://bbc.co.uk'
 
-	def setupSpec() {
-		getOrCreateContext([contextId: contextId])
-	}
+		def setupSpec() {
+			getOrCreateContext([contextId: contextId])
+		}
 
 	def "POST /{context-id}?entrytype=link without metadata, should create a new link entry with empty metadata"() {
 		given:
