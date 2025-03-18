@@ -149,6 +149,7 @@ public class Util {
 	 */
 	private static String decodeHttpParameterIfNeeded(String name, String value) {
 		switch (name) {
+			case "url":
 			case "format":
 			case "rdfFormat":
 				value = value.replace("+", "%2B");

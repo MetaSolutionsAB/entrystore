@@ -38,9 +38,7 @@ import org.slf4j.LoggerFactory;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URLDecoder;
 import java.net.UnknownHostException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -54,9 +52,6 @@ import java.util.regex.Pattern;
  * This class provides support for proxying requests to web services on other
  * servers.
  *
- * If a request with the URL-parameter fromFormat is received, the response is
- * converted into RDF/JSON, otherwise the content is only proxied without conversion.
- * 
  * @author Hannes Ebner
  */
 public class ProxyResource extends BaseResource {
@@ -93,7 +88,7 @@ public class ProxyResource extends BaseResource {
 					whitelistAnon.add(domain.toLowerCase());
 				}
 			}
-			if (whitelistAnon.size() > 0) {
+			if (!whitelistAnon.isEmpty()) {
 				log.info("Proxy whitelist for guest users initialized with following domains: " +
 						Joiner.on(", ").join(whitelistAnon)+
 						"; Requests to other domains require authentication");
@@ -105,10 +100,7 @@ public class ProxyResource extends BaseResource {
 
 	@Get
 	public Representation represent() {
-		String extResourceURL = null;
-		if (parameters.containsKey("url")) {
-			extResourceURL = URLDecoder.decode(parameters.get("url"), StandardCharsets.UTF_8);
-		}
+		String extResourceURL = parameters.get("url");
 
 		if (extResourceURL == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
@@ -275,7 +267,7 @@ public class ProxyResource extends BaseResource {
 	}
 	
 	private Set<String> getKeywords(String htmlString) {
-		Set<String> result = new HashSet<String>();
+		Set<String> result = new HashSet<>();
 		String[] lines = htmlString.split("\\r?\\n");
 		for (String s : lines) {
 			String keywords = getMetaValue("keywords", s);
