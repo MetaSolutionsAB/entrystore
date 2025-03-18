@@ -41,13 +41,13 @@ import java.util.regex.Pattern;
 
 /**
  * Helper methods for handling hashed and salted passwords, using PBKDF2.
- * 
+ *
  * Inspired by Martin Konicek's code on StackOverflow.
- * 
+ *
  * @author Hannes Ebner
  */
 public class Password {
-	
+
 	private static final Logger log = LoggerFactory.getLogger(Password.class);
 
 	// Higher number of iterations causes more work for both the attacker and
@@ -67,11 +67,11 @@ public class Password {
 	private static final int saltLen = 16;
 
 	private static final int desiredKeyLen = 192;
-	
+
 	public static final int PASSWORD_MAX_LENGTH = 2048;
 
 	private static SecureRandom random;
-	
+
 	private static SecretKeyFactory secretKeyFactory;
 
 	@Getter
@@ -122,7 +122,7 @@ public class Password {
 		try {
 			random = SecureRandom.getInstance("SHA1PRNG");
 			secretKeyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-			
+
 			long before = new Date().getTime();
 			random.setSeed(random.generateSeed(saltLen));
 			log.info("Seeding of SecureRandom took {} ms", new Date().getTime() - before);
@@ -131,6 +131,7 @@ public class Password {
 		}
 	}
 
+	// TODO: Security issue - we should not use String type to pass passwords - Use char[] or byte[] instead.
 	/**
 	 * Computes a salted PBKDF2. Empty passwords are not supported.
 	 */
@@ -139,7 +140,7 @@ public class Password {
 
 		byte[] salt = new byte[saltLen];
 		random.nextBytes(salt);
-		
+
 		// return the salt along with the salted and hashed password
 		return Base64.encodeBase64String(salt) + "$" + hash(password, salt);
 	}
@@ -178,13 +179,13 @@ public class Password {
 		}
 		return null;
 	}
-	
+
 	public static String getRandomBase64(int length) {
 		byte[] result = new byte[length];
 		random.nextBytes(result);
 		return Base64.encodeBase64String(result);
 	}
-	
+
 	public static String sha256(String s) {
 		MessageDigest digester;
 		try {
