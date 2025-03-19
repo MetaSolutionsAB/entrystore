@@ -558,7 +558,7 @@ public class EntryImpl implements Entry {
 	}
 
 	public Set<URI> getContributors() {
-		Set<URI> result = new HashSet<URI>();
+		Set<URI> result = new HashSet<>();
 		for (IRI contribURI : this.contributors) {
 			result.add(URI.create(contribURI.stringValue()));
 		}
@@ -601,7 +601,7 @@ public class EntryImpl implements Entry {
 	}
 
     public Set<URI> getReferringListsInSameContext() {
-		HashSet<URI> set = new HashSet<URI>();
+		HashSet<URI> set = new HashSet<>();
 		List<Statement> relations = getRelations();
 		for (Statement statement : relations) {
 			if (statement.getPredicate().equals(RepositoryProperties.hasListMember) ||
@@ -928,10 +928,10 @@ public class EntryImpl implements Entry {
 			IRI subject = getAccessSubject(prop);
 			IRI predicate = getAccessPredicate(prop);
 			List<Statement> statements = Iterations.asList(rc.getStatements(subject, predicate, null, false, entryURI));
-			set = new HashSet<URI>();
+			set = new HashSet<>();
 			for (Statement statement : statements) {
 				if (statement.getObject() instanceof IRI) {
-					set.add(URI.create(((IRI) statement.getObject()).stringValue()));
+					set.add(URI.create(statement.getObject().stringValue()));
 				}
 			}
 			setCachedAllowedPrincipalsFor(prop, set);
@@ -948,14 +948,14 @@ public class EntryImpl implements Entry {
 
 	public void addAllowedPrincipalsFor(AccessProperty prop, URI principal) {
 		checkAdministerRights();
-		HashSet<URI> principals = new HashSet<URI>();
+		HashSet<URI> principals = new HashSet<>();
 		principals.add(principal);
 		updateAllowedPrincipalsFor(prop, principals, false, true);
 	}
 
 	public boolean removeAllowedPrincipalsFor(AccessProperty prop, URI principal) {
 		checkAdministerRights();
-		HashSet<URI> principals = new HashSet<URI>();
+		HashSet<URI> principals = new HashSet<>();
 		principals.add(principal);
 		return updateAllowedPrincipalsFor(prop, principals, false, false);
 	}
@@ -1845,14 +1845,14 @@ public class EntryImpl implements Entry {
 
 	public List<Statement> getRelations() {
 		synchronized (this) {
-			if (this.relations == null) {
+			//if (this.relations == null) {
 				try (RepositoryConnection rc = this.repository.getConnection()) {
 					this.relations = Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
 				} catch (RepositoryException e) {
 					log.error(e.getMessage());
 					throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 				}
-			}
+			//}
 			return this.relations;
 		}
 	}
@@ -1868,7 +1868,7 @@ public class EntryImpl implements Entry {
 			rc.add(statement, relationURI);
 			// we force a reload upon next call of getRelations(), this is less error
 			// prone than trying to keep this.relations up-to-date manually
-			this.relations = null;
+			//this.relations = null;
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);
