@@ -420,21 +420,16 @@ class ResourceIT extends BaseSpec {
 		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
 
-		def request1Body = JsonOutput.toJson([user1EntryId])
-		def request2Body = JsonOutput.toJson([user2EntryId])
+		def requestBody = JsonOutput.toJson([user1EntryId, user2EntryId])
 
 		when:
 		// add user to group
-		def addUser1ToGroupConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, request1Body)
-		def addUser2ToGroupConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, request2Body)
+		def addUsersToGroupConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, requestBody)
 
 		then:
-		addUser1ToGroupConn.getResponseCode() == HTTP_NO_CONTENT
-		def addResourceResp1Text = addUser1ToGroupConn.getInputStream().text
-		addResourceResp1Text == ''
-		addUser2ToGroupConn.getResponseCode() == HTTP_NO_CONTENT
-		def addResourceResp2Text = addUser2ToGroupConn.getInputStream().text
-		addResourceResp2Text == ''
+		addUsersToGroupConn.getResponseCode() == HTTP_NO_CONTENT
+		def addResourceRespText = addUsersToGroupConn.getInputStream().text
+		addResourceRespText == ''
 		// fetch Group details
 		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
 		assert groupResourceConn.getResponseCode() == HTTP_OK
