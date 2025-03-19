@@ -1844,15 +1844,27 @@ public class EntryImpl implements Entry {
 	}
 
 	public List<Statement> getRelations() {
-		if (this.relations == null) {
+		synchronized (this) {
+			/* FIXME we have a potential synchronization problem here, this.relations seems to be out of sync
+			    with the state of the triple store, that's we currently load it directly without caching it using
+			    this.relations
+			if (this.relations == null) {
+				try (RepositoryConnection rc = this.repository.getConnection()) {
+					this.relations = Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
+				} catch (RepositoryException e) {
+					log.error(e.getMessage());
+					throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+				}
+			}
+			return this.relations;
+			 */
 			try (RepositoryConnection rc = this.repository.getConnection()) {
-				this.relations = Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
+				return Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
 			} catch (RepositoryException e) {
 				log.error(e.getMessage());
 				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 			}
 		}
-		return this.relations;
 	}
 
 	protected void addRelationSynchronized(Statement statement, RepositoryConnection rc) {

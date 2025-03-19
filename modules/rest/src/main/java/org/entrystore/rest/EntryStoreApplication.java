@@ -233,6 +233,9 @@ public class EntryStoreApplication extends Application {
 				config.getProperties().putAll(configOverride);
 			}
 
+			// see https://github.com/eclipse-rdf4j/rdf4j/issues/5148
+			System.setProperty(Settings.RDF4J_SOFT_FAIL_ON_CORRUPT_DATA_AND_REPAIR_INDEXES, config.getString(Settings.RDF4J_SOFT_FAIL_ON_CORRUPT_DATA_AND_REPAIR_INDEXES, "false"));
+
 			String baseURI = config.getString(Settings.BASE_URL);
 			if (baseURI == null) {
 				log.error("No Base URI specified, exiting");
