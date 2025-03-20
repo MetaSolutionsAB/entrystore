@@ -204,20 +204,20 @@ public class SamlLoginResource extends BaseResource {
 		log.info("{} Client: {}", prefix, info.getSamlClient() != null ? "initialized" : "not initialized");
 	}
 
-	private void loadMetadataAndInitSamlClient(SamlIdpInfo samlIdpInfo) {
+	private void loadMetadataAndInitSamlClient(SamlIdpInfo samlIdpInfo) throws SamlException {
 		try {
 			Reader idpMetadataReader = new BufferedReader(new InputStreamReader(URI.create(samlIdpInfo.getMetadataUrl()).toURL().openStream(), StandardCharsets.UTF_8));
 			samlIdpInfo.setSamlClient(SamlClient.fromMetadata(samlIdpInfo.getRelyingPartyId(), samlIdpInfo.getAssertionConsumerServiceUrl(), idpMetadataReader));
 			samlIdpInfo.setMetadataLoaded(new Date());
 			log.info("Loaded SAML metadata for IdP \"{}\" from {}", samlIdpInfo.getId(), samlIdpInfo.getMetadataUrl());
-		} catch (IOException | SamlException e) {
+		} catch (IOException e) {
 			log.error(e.getMessage());
 		}
 	}
 
-	private void checkAndInitSamlClient(SamlIdpInfo info) {
+	private void checkAndInitSamlClient(SamlIdpInfo info) throws SamlException {
 		synchronized (mutex) {
-			if (info.getMetadataLoaded() == null || ((new Date().getTime() - info.getMetadataLoaded().getTime()) > info.getMetadataMaxAge())) {
+			if (info.getMetadataLoaded() == null || ((System.currentTimeMillis() - info.getMetadataLoaded().getTime()) > info.getMetadataMaxAge())) {
 				log.info("Loading SAML metadata for \"{}\"", info.getId());
 				loadMetadataAndInitSamlClient(info);
 			}
@@ -231,8 +231,9 @@ public class SamlLoginResource extends BaseResource {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			return new StringRepresentation("No matching IdP configuration found for request");
 		}
-		checkAndInitSamlClient(idpInfo);
+
 		try {
+			checkAndInitSamlClient(idpInfo);
 			redirectToIdentityProvider(idpInfo, getResponse());
 		} catch (SamlException e) {
 			log.error(e.getMessage());
@@ -254,7 +255,14 @@ public class SamlLoginResource extends BaseResource {
 			getResponse().setEntity(new StringRepresentation("No matching IdP configuration found for request"));
 			return;
 		}
-		checkAndInitSamlClient(idpInfo);
+
+		try {
+			checkAndInitSamlClient(idpInfo);
+		} catch (SamlException e) {
+			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
+			getResponse().setEntity(new StringRepresentation(e.getMessage()));
+			return;
+		}
 
 		boolean html = MediaType.TEXT_HTML.equals(getRequest().getClientInfo().getPreferredMediaType(Arrays.asList(MediaType.TEXT_HTML, MediaType.APPLICATION_ALL)));
 		boolean authSuccess = false;
