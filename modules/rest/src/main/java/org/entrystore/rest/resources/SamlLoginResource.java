@@ -78,8 +78,6 @@ public class SamlLoginResource extends BaseResource {
 
 	private static Map<String, SamlIdpInfo> samlIDPs;
 
-	private static String assertionConsumerService;
-
 	private static String redirSuccess;
 
 	private static String redirFailure;
@@ -91,9 +89,12 @@ public class SamlLoginResource extends BaseResource {
 	private static List<String> redirectDomainWhitelist;
 
 	@Getter
+	private static String defaultIdp;
+
+	@Getter
 	@Setter
 	@NoArgsConstructor
-	static class SamlIdpInfo {
+	protected static class SamlIdpInfo {
 
 		private String id;
 
@@ -102,6 +103,8 @@ public class SamlLoginResource extends BaseResource {
 		private String relyingPartyId;
 
 		private String metadataUrl;
+
+		private String assertionConsumerServiceUrl;
 
 		private Date metadataLoaded = new Date();
 
@@ -127,13 +130,14 @@ public class SamlLoginResource extends BaseResource {
 			if (config == null) {
 				config = getRM().getConfiguration();
 			}
+
 			if (samlIDPs == null) {
-				assertionConsumerService = config.getString(Settings.AUTH_SAML_ASSERTION_CONSUMER_SERVICE_URL);
-				if (assertionConsumerService == null) {
-					log.error("No SAML Assertion Consumer Service URL configured");
+				String assertionConsumerServiceBaseUrl = config.getString(Settings.AUTH_SAML_ASSERTION_CONSUMER_SERVICE_URL);
+				if (assertionConsumerServiceBaseUrl == null) {
+					log.error("No SAML Assertion Consumer Service Base URL configured");
 					return;
 				} else {
-					log.info("Generic SAML Assertion Consumer Service URL: {}", assertionConsumerService);
+					log.info("SAML Assertion Consumer Service Base URL: {}", assertionConsumerServiceBaseUrl);
 				}
 
 				redirectDomainWhitelist = config.getStringList(Settings.AUTH_SAML_REDIRECT_DOMAIN_WHITELIST, new ArrayList<>());
@@ -151,18 +155,27 @@ public class SamlLoginResource extends BaseResource {
 				for (String idp : idps) {
 					SamlIdpInfo idpInfo = new SamlIdpInfo();
 					idpInfo.setId(idp);
-					idpInfo.setDomains(config.getStringList(Settings.AUTH_SAML_IDP_DOMAINS, List.of("*")));
-					idpInfo.setRelyingPartyId(config.getString(Settings.AUTH_SAML_IDP_RELYING_PARTY_ID));
-					idpInfo.setMetadataUrl(config.getString(Settings.AUTH_SAML_IDP_METADATA_URL));
-					idpInfo.setMetadataMaxAge(config.getLong(Settings.AUTH_SAML_IDP_METADATA_MAXAGE, 604800) * 1000);
-					idpInfo.setAutoProvisioning(config.getBoolean(Settings.AUTH_SAML_IDP_USER_AUTO_PROVISIONING, false));
-					idpInfo.setRedirectMethod(config.getString(Settings.AUTH_SAML_IDP_REDIRECT_METHOD, "get"));
+					idpInfo.setDomains(config.getStringList(idpSetting(Settings.AUTH_SAML_IDP_DOMAINS, idp), List.of("*")));
+					idpInfo.setRelyingPartyId(config.getString(idpSetting(Settings.AUTH_SAML_IDP_RELYING_PARTY_ID, idp)));
+					idpInfo.setMetadataUrl(config.getString(idpSetting(Settings.AUTH_SAML_IDP_METADATA_URL, idp)));
+					idpInfo.setMetadataMaxAge(config.getLong(idpSetting(Settings.AUTH_SAML_IDP_METADATA_MAXAGE, idp), 604800) * 1000);
+					idpInfo.setAutoProvisioning(config.getBoolean(idpSetting(Settings.AUTH_SAML_IDP_USER_AUTO_PROVISIONING, idp), false));
+					idpInfo.setRedirectMethod(config.getString(idpSetting(Settings.AUTH_SAML_IDP_REDIRECT_METHOD, idp), "get"));
 
-					if (idpInfo.getRelyingPartyId() != null && idpInfo.getMetadataUrl() != null) {
-						samlIDPs.put(idp, idpInfo);
-						loadMetadataAndInitSamlClient(idpInfo);
+					String acsWithIdp = assertionConsumerServiceBaseUrl;
+					if (acsWithIdp.contains("?")) {
+						acsWithIdp += "&";
 					} else {
-						log.error("Configuration of SAML IdP \"{}\" is incomplete", idp);
+						acsWithIdp += "?";
+					}
+					acsWithIdp += "idp=" + idpInfo.getId();
+					idpInfo.setAssertionConsumerServiceUrl(acsWithIdp);
+
+					if (idpInfo.getRelyingPartyId() != null && idpInfo.getMetadataUrl() != null && idpInfo.getAssertionConsumerServiceUrl() != null) {
+						samlIDPs.put(idp, idpInfo);
+						//loadMetadataAndInitSamlClient(idpInfo);
+					} else {
+						log.error("Configuration of SAML IdP \"{}\" is incomplete and its SAML client was therefore not loaded", idp);
 					}
 
 					logIdpInfo(idpInfo);
@@ -171,31 +184,30 @@ public class SamlLoginResource extends BaseResource {
 				redirSuccess = config.getString(Settings.AUTH_SAML_REDIRECT_SUCCESS_URL);
 				redirFailure = config.getString(Settings.AUTH_SAML_REDIRECT_FAILURE_URL);
 			}
+
+			if (defaultIdp == null) {
+				defaultIdp = config.getString(Settings.AUTH_SAML_DEFAULT_IDP);
+				log.info("SAML Default IdP: {}", defaultIdp);
+			}
 		}
 	}
 
 	private void logIdpInfo(SamlIdpInfo info) {
-		String prefix = "SAML IdP \"" + info.getId() + "\" ";
+		String prefix = "SAML IdP \"" + info.getId() + "\" -";
 		log.info("{} Domains: {}", prefix, info.getDomains());
 		log.info("{} Relying Party ID: {}", prefix, info.getRelyingPartyId());
 		log.info("{} Metadata URL: {}", prefix, info.getMetadataUrl());
-		log.info("{} Metadata Max Age: {}", prefix, info.getMetadataMaxAge());
+		log.info("{} Metadata Max Age: {} seconds", prefix, info.getMetadataMaxAge() / 1000);
+		log.info("{} Assertion Consumer Service URL: {}", prefix, info.getAssertionConsumerServiceUrl());
 		log.info("{} Auto Provisioning: {}", prefix, info.isAutoProvisioning());
 		log.info("{} Redirect Method: {}", prefix, info.getRedirectMethod());
-		log.info("{} Client: {}", prefix, info.getSamlClient() != null ? "successfully initialized" : "initialization failed");
+		log.info("{} Client: {}", prefix, info.getSamlClient() != null ? "initialized" : "not initialized");
 	}
 
 	private void loadMetadataAndInitSamlClient(SamlIdpInfo samlIdpInfo) {
 		try {
-			String acsWithIdp = assertionConsumerService;
-			if (acsWithIdp.contains("?")) {
-				acsWithIdp += "&";
-			} else {
-				acsWithIdp += "?";
-			}
-			acsWithIdp += "idp=" + samlIdpInfo.getId();
 			Reader idpMetadataReader = new BufferedReader(new InputStreamReader(URI.create(samlIdpInfo.getMetadataUrl()).toURL().openStream(), StandardCharsets.UTF_8));
-			samlIdpInfo.setSamlClient(SamlClient.fromMetadata(samlIdpInfo.getRelyingPartyId(), acsWithIdp, idpMetadataReader));
+			samlIdpInfo.setSamlClient(SamlClient.fromMetadata(samlIdpInfo.getRelyingPartyId(), samlIdpInfo.getAssertionConsumerServiceUrl(), idpMetadataReader));
 			samlIdpInfo.setMetadataLoaded(new Date());
 			log.info("Loaded SAML metadata for IdP \"{}\" from {}", samlIdpInfo.getId(), samlIdpInfo.getMetadataUrl());
 		} catch (IOException | SamlException e) {
@@ -378,9 +390,9 @@ public class SamlLoginResource extends BaseResource {
 		response.redirectTemporary(targetUrl);
 	}
 
-	private String findIdpForDomain(String domain) {
+	protected String findIdpForDomain(String domain) {
 		String wildcardIdp = null;
-		for (SamlIdpInfo idpInfo : samlIDPs.values()) {
+		for (SamlIdpInfo idpInfo : getSamlIDPs().values()) {
 			if (idpInfo.getDomains().contains("*")) {
 				wildcardIdp = idpInfo.getId();
 			}
@@ -393,21 +405,20 @@ public class SamlLoginResource extends BaseResource {
 		return wildcardIdp;
 	}
 
-	private SamlIdpInfo findIdpForRequest(Request request) {
+	protected SamlIdpInfo findIdpForRequest(Request request) {
 		Map<String, String> parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
 		if (parameters.containsKey("username")) {
 			String domain = StringUtils.substringAfter(parameters.get("username"), "@");
-			if (domain != null && domain.isEmpty()) {
-				return samlIDPs.get(findIdpForDomain(domain));
+			if (domain != null && !domain.isEmpty()) {
+				return getSamlIDPs().get(findIdpForDomain(domain));
 			}
 		} else if (parameters.containsKey("idp") && !parameters.get("idp").isEmpty()) {
-			return samlIDPs.get(parameters.get("idp"));
+			return getSamlIDPs().get(parameters.get("idp"));
 		} else {
-			String defaultIdp = config.getString(Settings.AUTH_SAML_DEFAULT_IDP);
-			if (defaultIdp == null || defaultIdp.isEmpty()) {
+			if (getDefaultIdp() == null || getDefaultIdp().isEmpty()) {
 				log.warn("IdP parameter missing and no default IdP configured, unable to properly initialize SAML request");
 			}
-			return samlIDPs.get(defaultIdp);
+			return getSamlIDPs().get(getDefaultIdp());
 		}
 		return null;
 	}
@@ -424,6 +435,14 @@ public class SamlLoginResource extends BaseResource {
 			return redirectDomainWhitelist.contains(URI.create(url).getHost());
 		}
 		return false;
+	}
+
+	private String idpSetting(String configKey, String idp) {
+		return String.format(configKey, idp);
+	}
+
+	protected Map<String, SamlIdpInfo> getSamlIDPs() {
+		return samlIDPs;
 	}
 
 }
