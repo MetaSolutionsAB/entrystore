@@ -282,6 +282,7 @@ public class SamlLoginResource extends BaseResource {
 			}
 
 			if ("admin".equalsIgnoreCase(userName)) {
+				log.warn("Ignoring received username \"admin\" from SAML IdP \"{}\"", idpInfo.getId());
 				userName = null;
 			}
 
@@ -317,9 +318,11 @@ public class SamlLoginResource extends BaseResource {
 
 				String redirectUrl = samlResponseForm.getFirstValue("RelayState");
 				if (redirectUrl != null) {
+					log.debug("Received redirect URL from SAML RelayState: {}", redirectUrl);
 					getResponse().redirectTemporary(URLDecoder.decode(redirectUrl, StandardCharsets.UTF_8));
 				} else {
 					if (redirSuccess != null) {
+						log.debug("Redirecting to default success URL: {}", redirSuccess);
 						getResponse().redirectTemporary(URLDecoder.decode(redirSuccess, StandardCharsets.UTF_8));
 					} else {
 						getResponse().setStatus(Status.SUCCESS_OK);
@@ -357,6 +360,7 @@ public class SamlLoginResource extends BaseResource {
 		values.put("SAMLRequest", idpInfo.getSamlClient().getSamlRequest());
 		String successUrl = parameters.get("successurl");
 		if (isValidRedirectTarget(successUrl)) {
+			log.debug("Setting RelayState in SAMLRequest to redirect URL: {}", successUrl);
 			values.put("RelayState", successUrl);
 		}
 		if ("post".equalsIgnoreCase(idpInfo.getRedirectMethod())) {
