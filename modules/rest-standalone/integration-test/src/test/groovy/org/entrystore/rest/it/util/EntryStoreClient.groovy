@@ -3,6 +3,7 @@ package org.entrystore.rest.it.util
 import groovy.json.JsonOutput
 import org.apache.commons.lang3.StringUtils
 
+import static java.net.HttpURLConnection.HTTP_MOVED_TEMP
 import static java.net.HttpURLConnection.HTTP_OK
 
 class EntryStoreClient {
@@ -40,6 +41,7 @@ class EntryStoreClient {
 		}
 		connection.setRequestMethod('POST')
 		connection.setRequestProperty('Content-Type', contentType)
+		connection.setInstanceFollowRedirects(false)
 		if (body != null) {
 			connection.setDoOutput(true)
 			connection.getOutputStream().write(body.getBytes())
@@ -91,10 +93,10 @@ class EntryStoreClient {
 		def conn = postRequest('/auth/cookie', bodyParams, null,
 			'application/x-www-form-urlencoded')
 
-		assert conn.getResponseCode() == HTTP_OK
+		assert conn.getResponseCode() in [HTTP_OK, HTTP_MOVED_TEMP]  // 200 when POST /auth/cookie does not redirect to default page, 302 when it does
 		def cookies = conn.getHeaderField('Set-Cookie')
 		assert cookies != null
-		assert cookies.contains('auth_token=')
+		assert cookies.contains('auth_token=') || cookies.contains('JSESSIONID=')  // auth_token for restlet ES, JSESSIONID for Spring-boot ES
 		return cookies
 	}
 

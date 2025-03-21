@@ -12,8 +12,11 @@ stepdefinitions:
       script:
         - java -version
         - mvn --version
-        - mvn clean install
+        - export TESTCONTAINERS_RYUK_DISABLED=true
+        - mvn -B -ntp clean install
         - rm -rf ~/.m2/repository/org/entrystore/
+      services:
+          - docker
       artifacts:
         - modules/rest-standalone/*/target/**
         - modules/rest-standalone/integration-test/target/site/jacoco-aggregate/**

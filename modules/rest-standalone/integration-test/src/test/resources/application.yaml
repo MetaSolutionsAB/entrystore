@@ -1,0 +1,16 @@
+server.port: 8181
+
+info.app.version: @project.version@
+
+
+spring.mvc.problemdetails.enabled: false
+
+
+entrystore:
+    configuration.path: file:src/test/resources/entrystore-it.properties
+    solr.url: value-not-used-will-be-overridden-by-tests
+
+
+logging:
+    level:
+        org.springframework.security: DEBUG

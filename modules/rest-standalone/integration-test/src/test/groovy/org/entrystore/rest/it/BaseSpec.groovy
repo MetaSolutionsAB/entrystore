@@ -6,6 +6,12 @@ import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.standalone.springboot.EntryStoreApplicationStandaloneSpringBoot
 import org.slf4j.LoggerFactory
+import org.testcontainers.containers.SolrContainer
+import org.testcontainers.containers.output.Slf4jLogConsumer
+import org.testcontainers.spock.Testcontainers
+import org.testcontainers.utility.DockerImageName
+import org.testcontainers.utility.MountableFile
+import spock.lang.Shared
 import spock.lang.Specification
 
 import java.util.concurrent.TimeUnit
@@ -16,19 +22,32 @@ import static java.net.HttpURLConnection.HTTP_OK
 import static java.nio.charset.StandardCharsets.UTF_8
 import static org.awaitility.Awaitility.await
 
+@Testcontainers
 abstract class BaseSpec extends Specification {
 
 	def static log = LoggerFactory.getLogger(this.class)
 	def static JSON_PARSER = new JsonSlurper()
-
 	def static appStarted = false
+
+	// make sure Solr version matches the version used in the parent pom - 'solr.version' property
+	@Shared
+	def static solrContainer = new SolrContainer(DockerImageName.parse('solr:9.8.1'))
+		.withEnv('SOLR_MODULES', 'analysis-extras')
+		.withCopyFileToContainer(MountableFile.forClasspathResource('solr/'), "/opt/solr/server/")
+		.withCollection('entrystore-core')
 
 	def setupSpec() {
 		if (!appStarted) {
-			def args = ['-c', 'file:src/test/resources/entrystore-it.properties', '-p', EntryStoreClient.port.toString()] as String[]
+			log.info('Starting Solr container')
+			solrContainer.start()
+			// below 2 lines allow to stream Solr container logs to the console
+			def logConsumer = new Slf4jLogConsumer(log)
+			solrContainer.followOutput(logConsumer)
+
 			log.info('Starting EntryStoreApp')
-			appStarted = true
+			def args = ['--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core'] as String[]
 			EntryStoreApplicationStandaloneSpringBoot.main(args)
+			appStarted = true
 		} else {
 			log.info('EntryStoreApp already started')
 		}
