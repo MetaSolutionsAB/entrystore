@@ -19,10 +19,13 @@ package org.entrystore.rest.resources;
 import com.coveo.saml.SamlClient;
 import com.coveo.saml.SamlException;
 import com.coveo.saml.SamlResponse;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.apache.commons.lang.StringEscapeUtils;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.entrystore.Entry;
@@ -60,6 +63,7 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.Security;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -89,6 +93,8 @@ public class SamlLoginResource extends BaseResource {
 	private static Config config;
 
 	private static List<String> redirectDomainWhitelist;
+
+	private static final Cache<String, String> relayStateCache;
 
 	@Getter
 	private static String defaultIdp;
@@ -122,6 +128,7 @@ public class SamlLoginResource extends BaseResource {
 
 	static {
 		Security.addProvider(new BouncyCastleProvider());
+		relayStateCache = CacheBuilder.newBuilder().expireAfterWrite(Duration.ofSeconds(60)).build();
 	}
 
 	@Override
@@ -316,11 +323,16 @@ public class SamlLoginResource extends BaseResource {
 				EntryStoreApplication app = (EntryStoreApplication) getApplication();
 				new CookieVerifier(app, getRM()).createAuthToken(userName, null, getRequest(), getResponse());
 
-				String redirectUrl = samlResponseForm.getFirstValue("RelayState");
-				if (redirectUrl != null) {
-					String decodedRedirectUrl = URLDecoder.decode(redirectUrl, StandardCharsets.UTF_8);
-					log.debug("Received redirect URL from SAML RelayState: {}", decodedRedirectUrl);
-					getResponse().redirectTemporary(decodedRedirectUrl);
+				String relayStateToken = samlResponseForm.getFirstValue("RelayState");
+				if (relayStateToken != null) {
+					log.debug("Received token via SAML RelayState: {}", relayStateToken);
+					String redirectUrl = relayStateCache.getIfPresent(relayStateToken);
+					if (redirectUrl != null) {
+						log.debug("Redirecting to URL: {}", redirectUrl);
+						getResponse().redirectTemporary(redirectUrl);
+					} else {
+						log.debug("Token {} not found in relay state cache", relayStateToken);
+					}
 				} else {
 					if (redirSuccess != null) {
 						log.debug("Redirecting to default success URL: {}", redirSuccess);
@@ -361,8 +373,10 @@ public class SamlLoginResource extends BaseResource {
 		values.put("SAMLRequest", idpInfo.getSamlClient().getSamlRequest());
 		String successUrl = parameters.get("successurl");
 		if (isValidRedirectTarget(successUrl)) {
-			log.debug("Setting RelayState in SAMLRequest to redirect URL: {}", successUrl);
-			values.put("RelayState", successUrl);
+			String relayStateToken = RandomStringUtils.secure().nextAlphanumeric(16);
+			relayStateCache.put(relayStateToken, successUrl);
+			log.debug("Setting RelayState token {} in SAMLRequest, mapped to redirect URL: {}", relayStateToken, successUrl);
+			values.put("RelayState", relayStateToken);
 		}
 
 		log.debug("Redirecting to SAML IdP \"{}\" using {}" , idpInfo.getId(), idpInfo.getRedirectMethod().toUpperCase());
@@ -381,12 +395,7 @@ public class SamlLoginResource extends BaseResource {
 
 		for (String key : values.keySet()) {
 			String encodedKey = StringEscapeUtils.escapeHtml(key);
-			String encodedValue;
-			if (key.equalsIgnoreCase("RelayState")) {
-				encodedValue = URLEncoder.encode(values.get(key), StandardCharsets.UTF_8);
-			} else {
-				encodedValue = StringEscapeUtils.escapeHtml(values.get(key));
-			}
+			String encodedValue = StringEscapeUtils.escapeHtml(values.get(key));
 			sb.append("<input type='hidden' id='").append(encodedKey).
 					append("' name='").append(encodedKey).
 					append("' value='").append(encodedValue).
