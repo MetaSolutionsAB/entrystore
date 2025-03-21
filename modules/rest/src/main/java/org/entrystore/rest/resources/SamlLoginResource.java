@@ -361,7 +361,7 @@ public class SamlLoginResource extends BaseResource {
 		String successUrl = parameters.get("successurl");
 		if (isValidRedirectTarget(successUrl)) {
 			log.debug("Setting RelayState in SAMLRequest to redirect URL: {}", successUrl);
-			values.put("RelayState", URLEncoder.encode(successUrl, StandardCharsets.UTF_8));
+			values.put("RelayState", successUrl);
 		}
 		if ("post".equalsIgnoreCase(idpInfo.getRedirectMethod())) {
 			redirectWithPost(idpInfo.getSamlClient().getIdentityProviderUrl(), response, values);
@@ -391,17 +391,19 @@ public class SamlLoginResource extends BaseResource {
 	}
 
 	private void redirectWithGet(String url, Response response, Map<String, String> values) {
-		String targetUrl = url;
-		if (values.containsKey("SAMLRequest")) {
-			if (targetUrl.contains("?")) {
-				targetUrl += "&";
+		StringBuilder targetUrl = new StringBuilder(url);
+		for (String key : values.keySet()) {
+			String encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8);
+			String encodedValue = URLEncoder.encode(values.get(key), StandardCharsets.UTF_8);
+			if (targetUrl.toString().contains("?")) {
+				targetUrl.append("&");
 			} else {
-				targetUrl += "?";
+				targetUrl.append("?");
 			}
-			targetUrl += "SAMLRequest=" + URLEncoder.encode(values.get("SAMLRequest"), StandardCharsets.UTF_8);
+			targetUrl.append(encodedKey).append("=").append(encodedValue);
 		}
 		setCacheDirectives(response);
-		response.redirectTemporary(targetUrl);
+		response.redirectTemporary(targetUrl.toString());
 	}
 
 	protected String findIdpForDomain(String domain) {
