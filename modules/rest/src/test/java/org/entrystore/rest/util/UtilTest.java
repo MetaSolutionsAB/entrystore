@@ -1,10 +1,11 @@
 package org.entrystore.rest.util;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
-import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 class UtilTest {
 
@@ -67,4 +68,16 @@ class UtilTest {
 				.hasSize(2)
 				.isEqualTo(expected);
 	}
+
+	@Test
+	void parseRequestWithUrl() {
+		Map<String, String> expected = Map.of("url", "https://some.host.tld/store/3/metadata/2?recursive=dcat&format=application/rdf+xml");
+
+		HashMap<String, String> params = Util.parseRequest("url=https%3A%2F%2Fsome.host.tld%2Fstore%2F3%2Fmetadata%2F2%3Frecursive%3Ddcat%26format%3Dapplication%2Frdf%2Bxml");
+
+		assertThat(params)
+			.hasSize(1)
+			.isEqualTo(expected);
+	}
+
 }

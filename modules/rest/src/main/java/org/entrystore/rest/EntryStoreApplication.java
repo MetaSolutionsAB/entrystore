@@ -61,6 +61,7 @@ import org.entrystore.rest.resources.GroupResource;
 import org.entrystore.rest.resources.HarvesterResource;
 import org.entrystore.rest.resources.ImportResource;
 import org.entrystore.rest.resources.IndexResource;
+import org.entrystore.rest.resources.LegacySamlLoginResource;
 import org.entrystore.rest.resources.LocalMetadataResource;
 import org.entrystore.rest.resources.LoggingResource;
 import org.entrystore.rest.resources.LoginResource;
@@ -69,6 +70,7 @@ import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
 import org.entrystore.rest.resources.MergedMetadataResource;
 import org.entrystore.rest.resources.MessageResource;
+import org.entrystore.rest.resources.SamlLoginResource;
 import org.entrystore.rest.resources.NameResource;
 import org.entrystore.rest.resources.PasswordResetResource;
 import org.entrystore.rest.resources.PerformanceMetricsResource;
@@ -76,7 +78,6 @@ import org.entrystore.rest.resources.ProxyResource;
 import org.entrystore.rest.resources.QuotaResource;
 import org.entrystore.rest.resources.RelationResource;
 import org.entrystore.rest.resources.ResourceResource;
-import org.entrystore.rest.resources.SamlLoginResource;
 import org.entrystore.rest.resources.SearchResource;
 import org.entrystore.rest.resources.ShutdownResource;
 import org.entrystore.rest.resources.SignupResource;
@@ -232,6 +233,9 @@ public class EntryStoreApplication extends Application {
 				config.getProperties().putAll(configOverride);
 			}
 
+			// see https://github.com/eclipse-rdf4j/rdf4j/issues/5148
+			System.setProperty(Settings.RDF4J_SOFT_FAIL_ON_CORRUPT_DATA_AND_REPAIR_INDEXES, config.getString(Settings.RDF4J_SOFT_FAIL_ON_CORRUPT_DATA_AND_REPAIR_INDEXES, "false"));
+
 			String baseURI = config.getString(Settings.BASE_URL);
 			if (baseURI == null) {
 				log.error("No Base URI specified, exiting");
@@ -343,7 +347,11 @@ public class EntryStoreApplication extends Application {
 		}
 
 		// SAML
-		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_SAML, "off"))) {
+		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_SAML))) {
+			router.attach("/auth/saml", LegacySamlLoginResource.class);
+			log.info("Legacy SAML authentication enabled");
+		} else if ("new".equalsIgnoreCase(config.getString(Settings.AUTH_SAML))) {
+			// FIXME make "new" default (activate for "on") and provide legacy only via "legacy" in a future version
 			router.attach("/auth/saml", SamlLoginResource.class);
 			log.info("SAML authentication enabled");
 		}
