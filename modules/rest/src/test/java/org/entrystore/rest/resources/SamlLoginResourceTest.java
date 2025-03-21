@@ -46,8 +46,8 @@ class SamlLoginResourceTest {
 
 		lenient().when(samlLoginResource.getRM()).thenReturn(rm);
 		lenient().when(rm.getConfiguration()).thenReturn(config);
-		doCallRealMethod().when(samlLoginResource).init(any(Context.class), any(Request.class), any(Response.class));
-		doCallRealMethod().when(samlLoginResource).getSamlIDPs();
+		lenient().doCallRealMethod().when(samlLoginResource).init(any(Context.class), any(Request.class), any(Response.class));
+		lenient().doCallRealMethod().when(samlLoginResource).getSamlIDPs();
 		lenient().doCallRealMethod().when(samlLoginResource).findIdpForDomain(anyString());
 		lenient().doCallRealMethod().when(samlLoginResource).findIdpForRequest(any(Request.class));
 	}
@@ -106,7 +106,7 @@ class SamlLoginResourceTest {
 	}
 
 	@Test
-	void findIdpForRequestTestNoWildcardDomain() {
+	void findIdpForRequestNoWildcardDomainTest() {
 		config.getProperties().remove("entrystore.auth.saml.idp.entryscape.domains.2");
 		samlLoginResource.init(context, request, response);
 		Request requestIdpUsername = buildRequest("https://entryscape.dev/store/auth/saml?username=abc@random.tld");
@@ -114,11 +114,24 @@ class SamlLoginResourceTest {
 	}
 
 	@Test
-	void findIdpForRequestTestNoDefaultIdp() {
+	void findIdpForRequestNoDefaultIdpTest() {
 		config.getProperties().remove("entrystore.auth.saml.default-idp");
 		samlLoginResource.init(context, request, response);
 		Request requestIdpNoParam = buildRequest("https://entryscape.dev/store/auth/saml");
 		assertThat(samlLoginResource.findIdpForRequest(requestIdpNoParam)).isNull();
+	}
+
+	@Test
+	void isValidRedirectTargetTest() {
+		doCallRealMethod().when(samlLoginResource).isValidRedirectTarget(anyString());
+		samlLoginResource.init(context, request, response);
+		assertThat(samlLoginResource.isValidRedirectTarget("https://entryscape.dev/landing")).isTrue();
+		assertThat(samlLoginResource.isValidRedirectTarget("https://www.customer.com")).isTrue();
+		assertThat(samlLoginResource.isValidRedirectTarget("http://www.customer.com")).isTrue();
+		assertThat(samlLoginResource.isValidRedirectTarget("https://www.customer.com:8080/something")).isTrue();
+		assertThat(samlLoginResource.isValidRedirectTarget("https://customer.com")).isFalse();
+		assertThat(samlLoginResource.isValidRedirectTarget(null)).isFalse();
+		assertThat(samlLoginResource.isValidRedirectTarget("")).isFalse();
 	}
 
 	Config buildConfig() {
@@ -127,6 +140,8 @@ class SamlLoginResourceTest {
 		config.setProperty("entrystore.auth.saml.assertion-consumer-service.url", "https://entryscape.dev/store/auth/saml");
 		config.setProperty("entrystore.auth.saml.redirect-success.url", "https://entryscape.dev/start");
 		config.setProperty("entrystore.auth.saml.redirect-failure.url", "https://entryscape.dev/signin");
+		config.setProperty("entrystore.auth.saml.redirect-domain-whitelist.1", "entryscape.dev");
+		config.setProperty("entrystore.auth.saml.redirect-domain-whitelist.2", "www.customer.com");
 		config.setProperty("entrystore.auth.saml.default-idp", "entryscape");
 		config.setProperty("entrystore.auth.saml.idps.1", "entryscape");
 		config.setProperty("entrystore.auth.saml.idps.2", "customer");

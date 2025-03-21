@@ -438,7 +438,7 @@ public class SamlLoginResource extends BaseResource {
 		response.setCacheDirectives(cacheDirs);
 	}
 
-	private boolean isValidRedirectTarget(String url) {
+	protected boolean isValidRedirectTarget(String url) {
 		if (url != null) {
 			return redirectDomainWhitelist.contains(URI.create(url).getHost());
 		}
