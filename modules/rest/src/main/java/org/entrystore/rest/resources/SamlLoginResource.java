@@ -318,8 +318,9 @@ public class SamlLoginResource extends BaseResource {
 
 				String redirectUrl = samlResponseForm.getFirstValue("RelayState");
 				if (redirectUrl != null) {
-					log.debug("Received redirect URL from SAML RelayState: {}", redirectUrl);
-					getResponse().redirectTemporary(URLDecoder.decode(redirectUrl, StandardCharsets.UTF_8));
+					String decodedRedirectUrl = URLDecoder.decode(redirectUrl, StandardCharsets.UTF_8);
+					log.debug("Received redirect URL from SAML RelayState: {}", decodedRedirectUrl);
+					getResponse().redirectTemporary(decodedRedirectUrl);
 				} else {
 					if (redirSuccess != null) {
 						log.debug("Redirecting to default success URL: {}", redirSuccess);
@@ -363,6 +364,8 @@ public class SamlLoginResource extends BaseResource {
 			log.debug("Setting RelayState in SAMLRequest to redirect URL: {}", successUrl);
 			values.put("RelayState", successUrl);
 		}
+
+		log.debug("Redirecting to SAML IdP \"{}\" using {}" , idpInfo.getId(), idpInfo.getRedirectMethod().toUpperCase());
 		if ("post".equalsIgnoreCase(idpInfo.getRedirectMethod())) {
 			redirectWithPost(idpInfo.getSamlClient().getIdentityProviderUrl(), response, values);
 		} else {
@@ -378,7 +381,12 @@ public class SamlLoginResource extends BaseResource {
 
 		for (String key : values.keySet()) {
 			String encodedKey = StringEscapeUtils.escapeHtml(key);
-			String encodedValue = StringEscapeUtils.escapeHtml(values.get(key));
+			String encodedValue;
+			if (key.equalsIgnoreCase("RelayState")) {
+				encodedValue = URLEncoder.encode(values.get(key), StandardCharsets.UTF_8);
+			} else {
+				encodedValue = StringEscapeUtils.escapeHtml(values.get(key));
+			}
 			sb.append("<input type='hidden' id='").append(encodedKey).
 					append("' name='").append(encodedKey).
 					append("' value='").append(encodedValue).
