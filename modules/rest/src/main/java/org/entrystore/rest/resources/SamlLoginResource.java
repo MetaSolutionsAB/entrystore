@@ -361,7 +361,7 @@ public class SamlLoginResource extends BaseResource {
 		String successUrl = parameters.get("successurl");
 		if (isValidRedirectTarget(successUrl)) {
 			log.debug("Setting RelayState in SAMLRequest to redirect URL: {}", successUrl);
-			values.put("RelayState", successUrl);
+			values.put("RelayState", URLEncoder.encode(successUrl, StandardCharsets.UTF_8));
 		}
 		if ("post".equalsIgnoreCase(idpInfo.getRedirectMethod())) {
 			redirectWithPost(idpInfo.getSamlClient().getIdentityProviderUrl(), response, values);
