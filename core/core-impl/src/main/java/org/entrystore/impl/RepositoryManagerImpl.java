@@ -808,6 +808,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
 			registerListener(updater, RepositoryEvent.ResourceUpdated);
+			registerListener(updater, RepositoryEvent.RelationsUpdated);
 
 			RepositoryListener remover = new RepositoryListener() {
 				@Override
@@ -853,6 +854,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
 			registerListener(updater, RepositoryEvent.ResourceUpdated);
+			registerListener(updater, RepositoryEvent.RelationsUpdated);
 
 			// delete
 			RepositoryListener remover = new RepositoryListener() {
