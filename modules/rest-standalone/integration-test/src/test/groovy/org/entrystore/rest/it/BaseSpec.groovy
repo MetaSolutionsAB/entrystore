@@ -25,7 +25,7 @@ abstract class BaseSpec extends Specification {
 
 	def setupSpec() {
 		if (!appStarted) {
-			def args = ['-c', 'file:src/test/resources/entrystore-it.properties', '-p', EntryStoreClient.port.toString()] as String[]
+			def args = ['-c', 'file:src/test/resources/entrystore-it.properties', '-p', EntryStoreClient.port.toString(), '--log-level', 'debug'] as String[]
 			log.info('Starting EntryStoreApp')
 			appStarted = true
 			EntryStoreApplicationStandaloneJetty.main(args)
