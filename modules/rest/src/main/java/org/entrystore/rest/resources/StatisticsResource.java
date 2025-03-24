@@ -562,7 +562,7 @@ public class StatisticsResource extends BaseResource {
 		for (User user: users) {
 			//The competence-profile is stored in a separate entry
 			//and can be found in relations
-			List<Statement> stats = user.getEntry().getRelations();
+			Model stats = user.getEntry().getRelations();
 			for (Statement s : stats){
 				IRI pred = s.getPredicate();
 				if("http://scam.sf.net/schema#aboutPerson".equals(pred.toString())){

@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.AuthorizationException;
 import org.entrystore.rest.util.GraphUtil;
@@ -73,7 +72,7 @@ public class RelationResource extends BaseResource {
 			}
 			MediaType prefFormat = (format != null) ? format : preferredMediaType;
 
-			String serializedGraph = GraphUtil.serializeGraph(new LinkedHashModel(entry.getRelations()), prefFormat);
+			String serializedGraph = GraphUtil.serializeGraph(entry.getRelations(), prefFormat);
 
 			if (serializedGraph != null) {
 				getResponse().setStatus(Status.SUCCESS_OK);

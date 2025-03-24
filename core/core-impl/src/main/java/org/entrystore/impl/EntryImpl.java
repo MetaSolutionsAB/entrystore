@@ -103,7 +103,6 @@ public class EntryImpl implements Entry {
 	private volatile Set<URI> writeMetadataPrincipals;
 	private volatile Set<URI> writeResourcePrincipals;
 	private volatile Set<URI> readResourcePrincipals;
-	private volatile List<Statement> relations;
 	protected boolean invRelations = false;
 	private volatile String format;
 	private volatile long fileSize = -1;
@@ -603,12 +602,14 @@ public class EntryImpl implements Entry {
 	}
 
 	public Set<URI> getReferringListsInSameContext() {
-		HashSet<URI> set = new HashSet<>();
-		List<Statement> relations = getRelations();
-		for (Statement statement : relations) {
-			if (statement.getPredicate().equals(RepositoryProperties.hasListMember) ||
-				statement.getPredicate().equals(RepositoryProperties.hasGroupMember)) {
-				set.add(URI.create(statement.getSubject().toString()));
+		Set<URI> set = new HashSet<>();
+		Model relations = getRelations();
+		if (relations != null) {
+			for (Statement statement : relations) {
+				if (statement.getPredicate().equals(RepositoryProperties.hasListMember) ||
+					statement.getPredicate().equals(RepositoryProperties.hasGroupMember)) {
+					set.add(URI.create(statement.getSubject().toString()));
+				}
 			}
 		}
 		return set;
@@ -1583,7 +1584,6 @@ public class EntryImpl implements Entry {
 
 		if (relationURI != null) {
 			rc.clear(relationURI);
-			relations = null;
 		}
 
 		localMetadata = null;
@@ -1845,17 +1845,12 @@ public class EntryImpl implements Entry {
 		}
 	}
 
-	public List<Statement> getRelations() {
-		synchronized (this) {
-			if (this.relations == null) {
-				try (RepositoryConnection rc = this.repository.getConnection()) {
-					this.relations = Iterations.asList(rc.getStatements(null, null, null, false, this.relationURI));
-				} catch (RepositoryException e) {
-					log.error(e.getMessage());
-					throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
-				}
-			}
-			return this.relations;
+	public Model getRelations() {
+		try (RepositoryConnection rc = this.repository.getConnection()) {
+			return Iterations.addAll(rc.getStatements(null, null, null, false, this.relationURI), new LinkedHashModel());
+		} catch (RepositoryException e) {
+			log.error(e.getMessage());
+			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
 		}
 	}
 
@@ -1868,9 +1863,6 @@ public class EntryImpl implements Entry {
 	private void addRelation(Statement statement, RepositoryConnection rc) {
 		try {
 			rc.add(statement, relationURI);
-			// we force a reload upon next call of getRelations(), this is less error
-			// prone than trying to keep this.relations up-to-date manually
-			this.relations = null;
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);
@@ -1886,9 +1878,6 @@ public class EntryImpl implements Entry {
 	private void removeRelation(Statement statement, RepositoryConnection rc) {
 		try {
 			rc.remove(statement, relationURI);
-			// we force a reload upon next call of getRelations(), this is less error
-			// prone than trying to keep this.relations up-to-date manually
-			this.relations = null;
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to repository", e);

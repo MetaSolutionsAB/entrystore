@@ -17,8 +17,6 @@
 package org.entrystore.rest.resources;
 
 import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.Statement;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
@@ -350,9 +348,9 @@ public class EntryResource extends BaseResource {
 		/*
 		 *	Relations
 		 */
-		List<Statement> relations = entry.getRelations();
+		Model relations = entry.getRelations();
 		if (relations != null) {
-			JSONObject relationsJsonObject = GraphUtil.serializeGraphToJson(new LinkedHashModel(relations), rdfFormat);
+			JSONObject relationsJsonObject = GraphUtil.serializeGraphToJson(relations, rdfFormat);
 			mainJsonObject.accumulate(RepositoryProperties.RELATION, relationsJsonObject);
 		}
 
