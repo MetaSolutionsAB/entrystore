@@ -64,7 +64,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.Security;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -114,7 +114,7 @@ public class SamlLoginResource extends BaseResource {
 
 		private String assertionConsumerServiceUrl;
 
-		private LocalDateTime metadataLoaded;
+		private Instant metadataLoaded;
 
 		private long metadataMaxAge;
 
@@ -217,7 +217,7 @@ public class SamlLoginResource extends BaseResource {
 		try {
 			Reader idpMetadataReader = new BufferedReader(new InputStreamReader(URI.create(samlIdpInfo.getMetadataUrl()).toURL().openStream(), StandardCharsets.UTF_8));
 			samlIdpInfo.setSamlClient(SamlClient.fromMetadata(samlIdpInfo.getRelyingPartyId(), samlIdpInfo.getAssertionConsumerServiceUrl(), idpMetadataReader));
-			samlIdpInfo.setMetadataLoaded(LocalDateTime.now());
+			samlIdpInfo.setMetadataLoaded(Instant.now());
 			log.info("Loaded SAML metadata for IdP \"{}\" from {}", samlIdpInfo.getId(), samlIdpInfo.getMetadataUrl());
 		} catch (IOException e) {
 			log.error(e.getMessage());
@@ -226,7 +226,7 @@ public class SamlLoginResource extends BaseResource {
 
 	private void checkAndInitSamlClient(SamlIdpInfo info) throws SamlException {
 		synchronized (mutex) {
-			if (info.getMetadataLoaded() == null || (MILLIS.between(LocalDateTime.now(), info.getMetadataLoaded()) > info.getMetadataMaxAge())) {
+			if (info.getMetadataLoaded() == null || (MILLIS.between(Instant.now(), info.getMetadataLoaded()) > info.getMetadataMaxAge())) {
 				log.info("Loading SAML metadata for \"{}\"", info.getId());
 				loadMetadataAndInitSamlClient(info);
 			}
