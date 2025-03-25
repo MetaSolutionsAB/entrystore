@@ -472,11 +472,13 @@ public class UserImpl extends RDFResource implements User {
 	}
 
 	public Set<URI> getGroups() {
-		HashSet<URI> set = new HashSet<URI>();
-		List<Statement> relations = this.entry.getRelations();
-		for (Statement statement : relations) {
-			if (statement.getPredicate().equals(RepositoryProperties.hasGroupMember)) {
-				set.add(URI.create(statement.getSubject().toString()));
+		Set<URI> set = new HashSet<>();
+		Model relations = this.entry.getRelations();
+		if (relations != null) {
+			for (Statement statement : relations) {
+				if (statement.getPredicate().equals(RepositoryProperties.hasGroupMember)) {
+					set.add(URI.create(statement.getSubject().toString()));
+				}
 			}
 		}
 		return set;

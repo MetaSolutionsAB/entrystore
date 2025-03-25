@@ -1,7 +1,6 @@
 package org.entrystore.rest.serializer;
 
 import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -37,9 +36,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.entrystore.EntryType.*;
+import static org.entrystore.EntryType.Link;
+import static org.entrystore.EntryType.LinkReference;
+import static org.entrystore.EntryType.Local;
+import static org.entrystore.EntryType.Reference;
 import static org.entrystore.GraphType.SystemContext;
-import static org.entrystore.PrincipalManager.AccessProperty.*;
+import static org.entrystore.PrincipalManager.AccessProperty.Administer;
+import static org.entrystore.PrincipalManager.AccessProperty.ReadMetadata;
+import static org.entrystore.PrincipalManager.AccessProperty.ReadResource;
+import static org.entrystore.PrincipalManager.AccessProperty.WriteMetadata;
+import static org.entrystore.PrincipalManager.AccessProperty.WriteResource;
 
 public class ResourceJsonSerializer {
 
@@ -88,8 +94,8 @@ public class ResourceJsonSerializer {
 					}
 
 					//Relations for every user in this group.
-					if (u.getEntry().getRelations() != null) {
-						Model childRelationsGraph = new LinkedHashModel(u.getEntry().getRelations());
+					Model childRelationsGraph = u.getEntry().getRelations();
+					if (childRelationsGraph != null) {
 						JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
 						childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 					}
@@ -267,8 +273,8 @@ public class ResourceJsonSerializer {
 					JSONObject childInfo = GraphUtil.serializeGraphToJson(childEntryGraph, rdfFormat);
 					childJSON.accumulate("info", childInfo);
 
-					if (childEntry.getRelations() != null) {
-						Model childRelationsGraph = new LinkedHashModel(childEntry.getRelations());
+					Model childRelationsGraph = childEntry.getRelations();
+					if (childRelationsGraph != null) {
 						JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
 						childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 					}
@@ -280,7 +286,6 @@ public class ResourceJsonSerializer {
 				resourceObj.put("size", childrenURIs.size());
 				resourceObj.put("limit", limit);
 				resourceObj.put("offset", offset);
-
 
 				JSONArray childrenIDArray = new JSONArray();
 				for (String id : childrenIDs) {

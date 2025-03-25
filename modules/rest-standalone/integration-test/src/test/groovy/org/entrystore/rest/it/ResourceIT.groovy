@@ -1,11 +1,8 @@
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
-import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
-
-import java.time.Year
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -269,6 +266,198 @@ class ResourceIT extends BaseSpec {
 		resourceJson2['name'] == requestResourceName['name'].toLowerCase()
 		resourceJson2['language'] == null
 		resourceJson2['customProperties'] == [:]
+	}
+
+	def "PUT /_principals/{entry-id} should add user to a group and the user should have the information in relations object"() {
+		given:
+		// create a User entry
+		def userParams = [graphtype: 'user']
+		def userRequestResourceName = [name: 'UserPUT']
+		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
+		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
+		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
+
+		// create a Group entry
+		def groupParams = [graphtype: 'group']
+		def groupRequestResourceName = [name: 'GroupPUT']
+		def groupBody = JsonOutput.toJson([resource: groupRequestResourceName])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		// fetch URI of created Group
+		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.getInputStream().text)
+		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		def requestBody = JsonOutput.toJson([userEntryId])
+
+		when:
+		// add user to group
+		def addUserToGroupConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, requestBody)
+
+		then:
+		addUserToGroupConn.getResponseCode() == HTTP_NO_CONTENT
+		def addResourceRespText = addUserToGroupConn.getInputStream().text
+		addResourceRespText == ''
+		// fetch Group details
+		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
+		assert groupResourceConn.getResponseCode() == HTTP_OK
+		assert groupResourceConn.getContentType().contains('application/json')
+		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.getInputStream().text)
+		assert groupResourceJson['children'] instanceof List
+		def groupMembers = groupResourceJson['children'].collect()
+		groupMembers.size() == 1
+		groupMembers[0]['name'] == 'userput'
+		// fetch User details
+		def userResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + "?includeAll")
+		assert userResourceConn.getResponseCode() == HTTP_OK
+		assert userResourceConn.getContentType().contains('application/json')
+		def userResourceJson = JSON_PARSER.parseText(userResourceConn.getInputStream().text)
+		assert userResourceJson['relations'] instanceof Map
+		def relations = userResourceJson['relations']
+		def userGroupRelation = relations[groupResourceUri] // Normally, a LazyMap should be populated now
+		assert  userGroupRelation != null
+	}
+
+	def "PUT /_principals/{entry-id} should add user to 2 groups and the user should have the information in relations object"() {
+		given:
+		// create a User entry
+		def userParams = [graphtype: 'user']
+		def userRequestResourceName = [name: 'UserPUTInto2groups']
+		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
+		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
+		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
+
+		// create a Group entry
+		def groupParams = [graphtype: 'group']
+		def group1RequestResourceName = [name: 'GroupPUT1']
+		def group1Body = JsonOutput.toJson([resource: group1RequestResourceName])
+		def group1Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), group1Body)
+		def group1EntryId = JSON_PARSER.parseText(group1Connection.getInputStream().text)['entryId'].toString()
+		// fetch URI of created Group
+		def group1EntryConn = EntryStoreClient.getRequest('/_principals/entry/' + group1EntryId)
+		def group1EntryRespJson = JSON_PARSER.parseText(group1EntryConn.getInputStream().text)
+		def group1EntryRespJsonKeys = (group1EntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def group1ResourceUri = group1EntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		// create a Group entry
+		def group2RequestResourceName = [name: 'GroupPUT1']
+		def group2Body = JsonOutput.toJson([resource: group2RequestResourceName])
+		def group2Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), group2Body)
+		def group2EntryId = JSON_PARSER.parseText(group2Connection.getInputStream().text)['entryId'].toString()
+		// fetch URI of created Group
+		def group2EntryConn = EntryStoreClient.getRequest('/_principals/entry/' + group2EntryId)
+		def group2EntryRespJson = JSON_PARSER.parseText(group2EntryConn.getInputStream().text)
+		def group2EntryRespJsonKeys = (group2EntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def group2ResourceUri = group2EntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		def requestBody = JsonOutput.toJson([userEntryId])
+
+		when:
+		// add user to group
+		def addUserToGroup1Conn = EntryStoreClient.putRequest('/_principals/resource/' + group1EntryId, requestBody)
+		def addUserToGroup2Conn = EntryStoreClient.putRequest('/_principals/resource/' + group2EntryId, requestBody)
+
+		then:
+		addUserToGroup1Conn.getResponseCode() == HTTP_NO_CONTENT
+		def addResourceResp1Text = addUserToGroup1Conn.getInputStream().text
+		addResourceResp1Text == ''
+		addUserToGroup2Conn.getResponseCode() == HTTP_NO_CONTENT
+		def addResourceResp2Text = addUserToGroup2Conn.getInputStream().text
+		addResourceResp2Text == ''
+		// fetch Group details
+		def group1ResourceConn = EntryStoreClient.getRequest(group1ResourceUri)
+		assert group1ResourceConn.getResponseCode() == HTTP_OK
+		assert group1ResourceConn.getContentType().contains('application/json')
+		def group1ResourceJson = JSON_PARSER.parseText(group1ResourceConn.getInputStream().text)
+		assert group1ResourceJson['children'] instanceof List
+		def group1Members = group1ResourceJson['children'].collect()
+		group1Members.size() == 1
+		group1Members[0]['name'] == 'userputinto2groups'
+		def group2ResourceConn = EntryStoreClient.getRequest(group1ResourceUri)
+		assert group2ResourceConn.getResponseCode() == HTTP_OK
+		assert group2ResourceConn.getContentType().contains('application/json')
+		def group2ResourceJson = JSON_PARSER.parseText(group2ResourceConn.getInputStream().text)
+		assert group2ResourceJson['children'] instanceof List
+		def group2Members = group1ResourceJson['children'].collect()
+		group2Members.size() == 1
+		group2Members[0]['name'] == 'userputinto2groups'
+		// fetch User details
+		def userResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + "?includeAll")
+		assert userResourceConn.getResponseCode() == HTTP_OK
+		assert userResourceConn.getContentType().contains('application/json')
+		def userResourceJson = JSON_PARSER.parseText(userResourceConn.getInputStream().text)
+		assert userResourceJson['relations'] instanceof Map
+		def relations = userResourceJson['relations']
+		def userGroup1Relation = relations[group1ResourceUri]
+		assert  userGroup1Relation != null
+		def userGroup2Relation = relations[group2ResourceUri]
+		assert  userGroup2Relation != null
+	}
+
+	def "PUT /_principals/{entry-id} should add 2 users to a group and users should have the information in relations object"() {
+		given:
+		// create a User entry
+		def userParams = [graphtype: 'user']
+		def user1RequestResourceName = [name: 'UserPUT1']
+		def user1Body = JsonOutput.toJson([resource: user1RequestResourceName])
+		def user1Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), user1Body)
+		def user1EntryId = JSON_PARSER.parseText(user1Connection.getInputStream().text)['entryId'].toString()
+		def user2RequestResourceName = [name: 'UserPUT2']
+		def user2Body = JsonOutput.toJson([resource: user2RequestResourceName])
+		def user2Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), user2Body)
+		def user2EntryId = JSON_PARSER.parseText(user2Connection.getInputStream().text)['entryId'].toString()
+
+		// create a Group entry
+		def groupParams = [graphtype: 'group']
+		def groupRequestResourceName = [name: 'GroupPUTboth']
+		def groupBody = JsonOutput.toJson([resource: groupRequestResourceName])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		// fetch URI of created Group
+		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.getInputStream().text)
+		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		def requestBody = JsonOutput.toJson([user1EntryId, user2EntryId])
+
+		when:
+		// add user to group
+		def addUsersToGroupConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, requestBody)
+
+		then:
+		addUsersToGroupConn.getResponseCode() == HTTP_NO_CONTENT
+		def addResourceRespText = addUsersToGroupConn.getInputStream().text
+		addResourceRespText == ''
+		// fetch Group details
+		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
+		assert groupResourceConn.getResponseCode() == HTTP_OK
+		assert groupResourceConn.getContentType().contains('application/json')
+		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.getInputStream().text)
+		assert groupResourceJson['children'] instanceof List
+		def groupMembers = groupResourceJson['children'].collect()
+		groupMembers.size() == 2
+		groupMembers[0]['name'] == 'userput1'
+		groupMembers[1]['name'] == 'userput2'
+		// fetch User details
+		def user1ResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + user1EntryId + "?includeAll")
+		assert user1ResourceConn.getResponseCode() == HTTP_OK
+		assert user1ResourceConn.getContentType().contains('application/json')
+		def user1ResourceJson = JSON_PARSER.parseText(user1ResourceConn.getInputStream().text)
+		assert user1ResourceJson['relations'] instanceof Map
+		def relations1 = user1ResourceJson['relations']
+		def user1GroupRelation = relations1[groupResourceUri]
+		assert user1GroupRelation != null
+		// fetch User details
+		def user2ResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + user2EntryId + "?includeAll")
+		assert user2ResourceConn.getResponseCode() == HTTP_OK
+		assert user2ResourceConn.getContentType().contains('application/json')
+		def user2ResourceJson = JSON_PARSER.parseText(user2ResourceConn.getInputStream().text)
+		assert user2ResourceJson['relations'] instanceof Map
+		def relations2 = user1ResourceJson['relations']
+		def user2GroupRelation = relations2[groupResourceUri]
+		assert user2GroupRelation != null
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} should edit other User-resource properties"() {

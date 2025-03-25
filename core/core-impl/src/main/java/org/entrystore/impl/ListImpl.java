@@ -220,6 +220,7 @@ public class ListImpl extends RDFResource implements List {
 					children.add(nEntry);
 					entry.registerEntryModified(rc, vf);
 					rc.commit();
+					
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 				} catch (Exception e) {
@@ -511,6 +512,7 @@ public class ListImpl extends RDFResource implements List {
 				try {
 					rc.begin();
 					children = new Vector<>(newChildren);
+					java.util.List<EntryImpl> updatedChildEntries = new ArrayList<>();
 					saveChildren(rc);
 					for (URI uri : toAdd) {
 						EntryImpl childEntry = (EntryImpl) this.entry.getContext().getByEntryURI(uri);
@@ -519,7 +521,7 @@ public class ListImpl extends RDFResource implements List {
 							if (isOwnerOfContext) {
 								childEntry.setOriginalListSynchronized(null, rc, entry.repository.getValueFactory());
 							}
-							entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
+							updatedChildEntries.add(childEntry);
 						}
 					}
 					for (URI uri : toRemove) {
@@ -529,10 +531,14 @@ public class ListImpl extends RDFResource implements List {
 							if (isOwnerOfContext) {
 								childEntry.setOriginalListSynchronized(null, rc, entry.repository.getValueFactory());
 							}
-							entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
+							updatedChildEntries.add(childEntry);
 						}
 					}
 					rc.commit();
+
+					for (EntryImpl updatedChildEntry : updatedChildEntries) {
+						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(updatedChildEntry, RepositoryEvent.RelationsUpdated));
+					}
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 				} catch (Exception e) {
 					log.error(e.getMessage());

@@ -17,12 +17,10 @@
 package org.entrystore;
 
 import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.Statement;
 import org.entrystore.repository.RepositoryManager;
 
 import java.net.URI;
 import java.util.Date;
-import java.util.List;
 import java.util.Set;
 
 
@@ -133,9 +131,8 @@ public interface Entry {
 	 * @return a RDF graph (Sesame {@link Model}) containing the entry information.
 	 */
 	Model getGraph();
-	
-	// TODO need comments
-	List<Statement> getRelations();
+
+	Model getRelations();
 	
 	/**
 	 * @param entryInfo the new graph, should not violate any restriction

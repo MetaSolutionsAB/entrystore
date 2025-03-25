@@ -22,7 +22,6 @@ import org.apache.solr.client.solrj.SolrQuery.ORDER;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.common.SolrException;
 import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
@@ -309,8 +308,8 @@ public class SearchResource extends BaseResource {
 					}
 
 					try {
-						if (e.getRelations() != null) {
-							Model childRelationsGraph = new LinkedHashModel(e.getRelations());
+						Model childRelationsGraph = e.getRelations();
+						if (childRelationsGraph != null) {
 							JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
 							childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 						}
