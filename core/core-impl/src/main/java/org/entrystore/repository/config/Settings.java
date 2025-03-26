@@ -182,6 +182,7 @@ public class Settings {
 	public static String REPOSITORY_TRACK_DELETED_CLEANUP = "entrystore.repository.track-deleted-entries.cleanup";
 
 	public static String PROXY_WHITELIST_ANONYMOUS = "entrystore.proxy.whitelist.anonymous";
+	public static String PROXY_WHITELIST_LOCAL = "entrystore.proxy.whitelist.local";
 
 	public static String SMTP_HOST = "entrystore.smtp.host";
 	public static String SMTP_PORT = "entrystore.smtp.port";

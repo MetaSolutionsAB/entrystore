@@ -64,6 +64,8 @@ public class ProxyResource extends BaseResource {
 
 	private static List<String> whitelistAnon;
 
+	private static List<String> whitelistLocal;
+
 	private final static List<Pattern> blacklistRegEx;
 
 	static {
@@ -94,6 +96,23 @@ public class ProxyResource extends BaseResource {
 						"; Requests to other domains require authentication");
 			} else {
 				log.info("No domains provided for proxy whitelist; only authenticated users are allowed to perform proxy requests");
+			}
+		}
+		if (whitelistLocal == null) {
+			whitelistLocal = new ArrayList<>();
+			List<String> tmpWhitelistLocal = getRM().getConfiguration().getStringList(Settings.PROXY_WHITELIST_LOCAL);
+			// we normalize the list to lower case and to not contain null
+			for (String domain : tmpWhitelistLocal) {
+				if (domain != null) {
+					whitelistLocal.add(domain.toLowerCase());
+				}
+			}
+			if (!whitelistLocal.isEmpty()) {
+				log.info("Proxy whitelist for authenticated requests against local domains initialized with following domains (to bypass built-in proxy blacklist): " +
+					Joiner.on(", ").join(whitelistLocal)+
+					"; Requests to other local domains will be blocked");
+			} else {
+				log.info("No domains provided for local proxy whitelist; no requests against local hosts will be allowed");
 			}
 		}
 	}
@@ -191,7 +210,7 @@ public class ProxyResource extends BaseResource {
 			return errorResponse;
 		}
 
-		if (isBlacklisted(host)) {
+		if (!isWhitelisted(host) && isBlacklisted(host)) {
 			Response errorResponse = new Response(new Request());
 			errorResponse.setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 			return errorResponse;
@@ -278,6 +297,10 @@ public class ProxyResource extends BaseResource {
 			}
 		}
 		return result;
+	}
+
+	private boolean isWhitelisted(String host) {
+		return whitelistLocal.contains(host.toLowerCase());
 	}
 
 	private boolean isBlacklisted(String host) {
