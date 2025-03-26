@@ -8,6 +8,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,18 +20,27 @@ import java.net.URI;
 @RequiredArgsConstructor
 public class EntryStoreConfiguration {
 
+	@Value("${entrystore.solr.url}")
+	private String solrUrl;
+
 	private final EntryStorePropertiesConfiguration propertiesConfiguration;
 
 	@Bean
 	public Config createEntryStoreConfiguration() throws IOException {
 		var configURI = propertiesConfiguration.configuration().path();
+		Config config;
 		if (configURI != null) {
 			log.info("Manually specified config location at {}", configURI);
-			return new ConfigurationManager(URI.create(configURI)).getConfiguration();
+			config = new ConfigurationManager(URI.create(configURI)).getConfiguration();
 		} else {
 			log.info("No config location specified, looking within classpath");
-			return new ConfigurationManager(ConfigurationManager.getConfigurationURI()).getConfiguration();
+			config = new ConfigurationManager(ConfigurationManager.getConfigurationURI()).getConfiguration();
 		}
+
+		if (solrUrl != null) {
+			config.setProperty("entrystore.solr.url", solrUrl);
+		}
+		return config;
 	}
 
 	@Bean

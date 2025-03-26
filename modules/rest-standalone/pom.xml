@@ -16,7 +16,7 @@
 	<name>EntryStore REST Standalone</name>
 
 	<modules>
-		<!-- <module>integration-test</module>-->
+		<module>integration-test</module>
 		<module>spring-boot</module>
 	</modules>
 
