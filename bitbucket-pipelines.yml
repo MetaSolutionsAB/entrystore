@@ -12,7 +12,7 @@ stepdefinitions:
       script:
         - java -version
         - mvn --version
-        - mvn clean install
+        - mvn -B -ntp clean install
         - rm -rf ~/.m2/repository/org/entrystore/
       artifacts:
         - modules/rest-standalone/*/target/**
