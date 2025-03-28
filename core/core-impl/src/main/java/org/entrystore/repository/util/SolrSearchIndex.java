@@ -890,7 +890,7 @@ public class SolrSearchIndex implements SearchIndex {
 						// it's a single-value field, so we call setField instead of addField just in case there should be
 						doc.setField(prefix + "metadata.predicate.integer." + predMD5Trunc8, l.longValue());
 					} catch (NumberFormatException nfe) {
-						log.debug("Unable to index integer literal: {}. (Subject: {}, Predicate: {}, Object: {})", nfe.getMessage(), s.getSubject(), predString, l.getLabel());
+						log.warn("Unable to index integer literal: {}. (Subject: {}, Predicate: {}, Object: {})", nfe.getMessage(), s.getSubject(), predString, l.getLabel());
 					}
 				}
 
@@ -898,7 +898,7 @@ public class SolrSearchIndex implements SearchIndex {
 					try {
 						doc.setField(prefix + "metadata.predicate.date." + predMD5Trunc8, dateToSolrDateString(l.calendarValue()));
 					} catch (IllegalArgumentException iae) {
-						log.debug("Unable to index date literal: {}. (Subject: {}, Predicate: {}, Object: {})", iae.getMessage(), s.getSubject(), predString, l.getLabel());
+						log.warn("Unable to index date literal: {}. (Subject: {}, Predicate: {}, Object: {})", iae.getMessage(), s.getSubject(), predString, l.getLabel());
 					}
 				}
 			}
