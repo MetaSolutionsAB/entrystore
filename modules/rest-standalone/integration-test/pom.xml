@@ -7,11 +7,11 @@
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-rest-standalone</artifactId>
-        <version>5.6.0</version>
+        <version>5.7-SNAPSHOT</version>
     </parent>
 
     <artifactId>entrystore-rest-standalone-integration-test</artifactId>
-    <version>5.6.0</version>
+    <version>5.7-SNAPSHOT</version>
     <name>EntryStore REST Integration Tests</name>
 
     <build>
