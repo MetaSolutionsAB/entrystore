@@ -1,5 +1,81 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 5.6.0 (2025-03-28)
+
+### Improvement
+
+[ENTRYSTORE-627](https://metasolutions.atlassian.net/browse/ENTRYSTORE-627) Support multiple identity providers for SAML
+
+[ENTRYSTORE-833](https://metasolutions.atlassian.net/browse/ENTRYSTORE-833) Add more finegrained control of logging levels
+
+[ENTRYSTORE-837](https://metasolutions.atlassian.net/browse/ENTRYSTORE-837) Upon resource download only use MIME type from metadata if the value is a literal
+
+[ENTRYSTORE-838](https://metasolutions.atlassian.net/browse/ENTRYSTORE-838) Allow to change configuration properties using command line parameters
+
+[ENTRYSTORE-842](https://metasolutions.atlassian.net/browse/ENTRYSTORE-842) Whitelist redirectURLs for SSO integration
+
+[ENTRYSTORE-844](https://metasolutions.atlassian.net/browse/ENTRYSTORE-844) Do not allow deactivated users to reset their password
+
+[ENTRYSTORE-855](https://metasolutions.atlassian.net/browse/ENTRYSTORE-855) Allow whitelisting of redirect targets for SSO
+
+[ENTRYSTORE-856](https://metasolutions.atlassian.net/browse/ENTRYSTORE-856) Add relation info to status resource
+
+[ENTRYSTORE-872](https://metasolutions.atlassian.net/browse/ENTRYSTORE-872) ProxyResource: allow whitelisting of local domains to bypass built-in blacklist
+
+### Story
+
+[ENTRYSTORE-823](https://metasolutions.atlassian.net/browse/ENTRYSTORE-823) Add Rest Integration Tests
+
+[ENTRYSTORE-852](https://metasolutions.atlassian.net/browse/ENTRYSTORE-852) Add Rest Integration Tests for search endpoint \(syndication\)
+
+[ENTRYSTORE-854](https://metasolutions.atlassian.net/browse/ENTRYSTORE-854) Fix internationalization logic in ResourceResource for Syndication generation
+
+### Task
+
+[ENTRYSTORE-812](https://metasolutions.atlassian.net/browse/ENTRYSTORE-812) Decide on framework to replace Restlet
+
+[ENTRYSTORE-843](https://metasolutions.atlassian.net/browse/ENTRYSTORE-843) Create Spring-Boot based PoC
+
+[ENTRYSTORE-845](https://metasolutions.atlassian.net/browse/ENTRYSTORE-845) Create Javalin based PoC
+
+[ENTRYSTORE-849](https://metasolutions.atlassian.net/browse/ENTRYSTORE-849) Upgrade to Restlet 2.5
+
+[ENTRYSTORE-851](https://metasolutions.atlassian.net/browse/ENTRYSTORE-851) Create Quarkus based PoC
+
+### New Feature
+
+[ENTRYSTORE-743](https://metasolutions.atlassian.net/browse/ENTRYSTORE-743) Provide SPARQL endpoint via external triple store
+
+[ENTRYSTORE-869](https://metasolutions.atlassian.net/browse/ENTRYSTORE-869) Support RDF4J config parameter for corrupted stores in EntryStore configuration
+
+### Bug
+
+[ENTRYSTORE-830](https://metasolutions.atlassian.net/browse/ENTRYSTORE-830) Ensure URL parameters are properly decoded
+
+[ENTRYSTORE-831](https://metasolutions.atlassian.net/browse/ENTRYSTORE-831) Bug "GET /entry/" in "application/ld\+json" format returns 500
+
+[ENTRYSTORE-832](https://metasolutions.atlassian.net/browse/ENTRYSTORE-832) Bug "GET /entry/" in "application/rdf\+json" format returns 500
+
+[ENTRYSTORE-834](https://metasolutions.atlassian.net/browse/ENTRYSTORE-834) Bug - removing the name of a context returns 500
+
+[ENTRYSTORE-839](https://metasolutions.atlassian.net/browse/ENTRYSTORE-839) Incorrect entry URIs may cause entry loading mechanism to produce errors
+
+[ENTRYSTORE-848](https://metasolutions.atlassian.net/browse/ENTRYSTORE-848) Syndication support appears to be broken
+
+[ENTRYSTORE-850](https://metasolutions.atlassian.net/browse/ENTRYSTORE-850) JSON-LD support is broken due to use of new JSON-LD serializer which lacks support for hierarchical view
+
+[ENTRYSTORE-853](https://metasolutions.atlassian.net/browse/ENTRYSTORE-853) Relations graph is not removed properly upon deletion of entry
+
+[ENTRYSTORE-863](https://metasolutions.atlassian.net/browse/ENTRYSTORE-863) Fix for Solr URL parameters to properly decode plus symbol
+
+[ENTRYSTORE-865](https://metasolutions.atlassian.net/browse/ENTRYSTORE-865) Relations object of entry is not always properly updated
+
+[ENTRYSTORE-867](https://metasolutions.atlassian.net/browse/ENTRYSTORE-867) Custom password rules configuration is not respected
+
+[ENTRYSTORE-868](https://metasolutions.atlassian.net/browse/ENTRYSTORE-868) RDF4J ValueStore does not return value due to failed precondition
+
+[ENTRYSTORE-870](https://metasolutions.atlassian.net/browse/ENTRYSTORE-870) Proxy resource decodes URL parameter twice
+
 ## Version 5.5.0 (2024-10-15)
 
 ### Improvement
