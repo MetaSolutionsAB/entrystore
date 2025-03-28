@@ -1,6 +1,7 @@
 package org.entrystore.rest.standalone.springboot.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.entrystore.rest.standalone.springboot.model.api.StatusExtendedResponse;
 import org.entrystore.rest.standalone.springboot.model.api.StatusResponse;
 import org.entrystore.rest.standalone.springboot.service.StatusService;
 import org.springframework.http.MediaType;
@@ -19,7 +20,7 @@ public class StatusController {
 	}
 
 	@GetMapping(path = "/management/status/extended", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
-	public StatusResponse getStatusExtended() {
-		return statusService.getStatus();
+	public StatusExtendedResponse getStatusExtended() {
+		return statusService.getStatusExtended();
 	}
 }

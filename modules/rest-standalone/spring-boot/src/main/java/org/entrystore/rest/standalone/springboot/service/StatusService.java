@@ -3,6 +3,7 @@ package org.entrystore.rest.standalone.springboot.service;
 import lombok.RequiredArgsConstructor;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.rest.standalone.springboot.configuration.InfoAppPropertiesConfiguration;
+import org.entrystore.rest.standalone.springboot.model.api.StatusExtendedResponse;
 import org.entrystore.rest.standalone.springboot.model.api.StatusResponse;
 import org.springframework.stereotype.Service;
 
@@ -18,5 +19,11 @@ public class StatusService {
 		return new StatusResponse(
 			configuration.app().version(),
 			repositoryManager != null ? "online" : "offline");
+	}
+
+	public StatusExtendedResponse getStatusExtended() {
+		return StatusExtendedResponse
+			.fromStatusResponse(getStatus())
+			.build();
 	}
 }
