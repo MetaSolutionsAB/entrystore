@@ -500,11 +500,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					solrIndex.shutdown();
 				}
 				if (repository != null) {
-					log.info("Shutting down Sesame repository");
+					log.info("Shutting down RDF4J repository");
 					try {
 						repository.shutDown();
 					} catch (RepositoryException re) {
-						log.error("Error when shutting down Sesame repository: {}", re.getMessage());
+						log.error("Error when shutting down RDF4J repository: {}", re.getMessage());
 						re.printStackTrace();
 					}
 				}
@@ -513,11 +513,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					publicRepository.shutdown();
 				}
 				if (provenanceRepository != null) {
-					log.info("Shutting down Sesame provenance repository");
+					log.info("Shutting down RDF4J provenance repository");
 					try {
 						provenanceRepository.shutDown();
 					} catch (RepositoryException re) {
-						log.error("Error when shutting down Sesame provenance repository: {}", re.getMessage());
+						log.error("Error when shutting down RDF4J provenance repository: {}", re.getMessage());
 					}
 				}
 				if (solrServer != null) {
