@@ -7,11 +7,11 @@
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-modules</artifactId>
-        <version>5.5.0</version>
+        <version>5.6.0</version>
     </parent>
     <artifactId>entrystore-rest</artifactId>
     <packaging>war</packaging>
-    <version>5.5.0</version>
+    <version>5.6.0</version>
     <name>EntryStore REST</name>
 
     <build>
@@ -105,32 +105,32 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.restlet.jee</groupId>
+            <groupId>org.restlet</groupId>
             <artifactId>org.restlet</artifactId>
             <version>${restlet.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.restlet.jee</groupId>
+            <groupId>org.restlet</groupId>
             <artifactId>org.restlet.ext.servlet</artifactId>
             <version>${restlet.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.restlet.jee</groupId>
+            <groupId>org.restlet</groupId>
             <artifactId>org.restlet.ext.rdf</artifactId>
             <version>${restlet.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.restlet.jee</groupId>
+            <groupId>org.restlet</groupId>
             <artifactId>org.restlet.ext.json</artifactId>
             <version>${restlet.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.restlet.jee</groupId>
+            <groupId>org.restlet</groupId>
             <artifactId>org.restlet.ext.fileupload</artifactId>
             <version>${restlet.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.restlet.jee</groupId>
+            <groupId>org.restlet</groupId>
             <artifactId>org.restlet.ext.slf4j</artifactId>
             <version>${restlet.version}</version>
         </dependency>
@@ -250,11 +250,6 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.rest-assured</groupId>
-            <artifactId>rest-assured</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

@@ -59,6 +59,8 @@ public class BenchmarkCommons {
 		Option isWithTransactionsOption = createOption("t", "transaction", "TRANSACTION", "Run with multiple transactions: @boolean.", false);
 		Option isWithInterContextsOption = createOption("i", "intercontexts", "INTERCONTEXTS", "Run with interim contexts: @boolean.", false);
 		Option isWithAclOption = createOption("a", "acl", "ACL", "Run with ACL: @boolean.", false);
+		Option storePathOption = createOption("p", "path", "PATH", "Store path: @string.", false);
+		Option baseUrlOption = createOption("b", "base", "BASE", "Base URL: @string.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -68,6 +70,8 @@ public class BenchmarkCommons {
 		options.addOption(isWithTransactionsOption);
 		options.addOption(isWithInterContextsOption);
 		options.addOption(isWithAclOption);
+		options.addOption(storePathOption);
+		options.addOption(baseUrlOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -75,8 +79,12 @@ public class BenchmarkCommons {
 
 			String storeType = commandLine.hasOption("s") ? commandLine.getOptionValue(storTypeOption) : null;
 			if (NATIVE.equals(storeType) || MEMORY.equals(storeType) || LMDB.equals(storeType)) {
+				arguments.setBaseUrl(commandLine.getOptionValue(baseUrlOption) != null ? commandLine.getOptionValue(baseUrlOption) : BASE_URL);
+				if (commandLine.getOptionValue(storePathOption) != null) {
+					arguments.setStorePath(commandLine.getOptionValue(storePathOption));
+				}else arguments.setStorePath();
+
 				arguments.setStoreType(storeType);
-				arguments.setStorePath();
 				arguments.setSolrPath();
 				System.setProperty("log.storeType", storeType);
 			} else {
@@ -103,7 +111,7 @@ public class BenchmarkCommons {
 				arguments.setComplex(false);
 				System.setProperty("log.complexity", SIMPLE);
 			} else if (SIMPLE.equals(complexityType) || COMPLEX.equals(complexityType)) {
-				arguments.setComplex(SIMPLE.equals(complexityType));
+				arguments.setComplex(COMPLEX.equals(complexityType));
 				System.setProperty("log.complexity", complexityType);
 			} else {
 				System.err.println("Complexity type not supported.");

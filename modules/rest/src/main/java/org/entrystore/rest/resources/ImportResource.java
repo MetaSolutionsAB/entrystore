@@ -44,7 +44,7 @@ import java.util.List;
 /**
  * This class supports the import of single contexts. If a context is imported,
  * all existing entries are thrown away.
- * 
+ *
  * @author Hannes Ebner
  */
 public class ImportResource extends BaseResource {
@@ -55,19 +55,19 @@ public class ImportResource extends BaseResource {
 	public void doInit() {
 
 	}
-		
+
 	@Post
 	public void acceptRepresentation(Representation r) {
 		try {
-			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
-				throw new AuthorizationException(getPM().getUser(getPM().getAuthenticatedUserURI()), context.getEntry(), AccessProperty.Administer);
-			}
-			
 			if (context == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
-			
+
+			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
+				throw new AuthorizationException(getPM().getUser(getPM().getAuthenticatedUserURI()), context.getEntry(), AccessProperty.Administer);
+			}
+
 			File tmpFile = null;
 			try {
 				String version = this.parameters.get("version");
@@ -77,20 +77,29 @@ public class ImportResource extends BaseResource {
 					s2i.doImport();
 				} else {
 					tmpFile = File.createTempFile("scam_import", null);
-					InputStream input = null;
+					InputStream input;
 					if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 						input = getStreamFromForm(getRequest());
 					} else {
 						input = getRequestEntity().getStream();
 					}
 					if (input != null) {
-						FileOperations.copyFile(input, Files.newOutputStream(tmpFile.toPath()));
-						getCM().importContext(context.getEntry(), tmpFile);
+						try {
+							FileOperations.copyFile(input, Files.newOutputStream(tmpFile.toPath()));
+						} catch (IOException e) {
+							log.error(e.getMessage(), e);
+						}
+
+						try {
+							getCM().importContext(context.getEntry(), tmpFile);
+						} catch (IOException e) {
+							log.error(e.getMessage(), e);
+						}
+
 						getResponse().setEntity("<textarea></textarea>", MediaType.TEXT_HTML);
 					} else {
 						log.error("Unable to import file, received invalid data");
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Unable to import file, received invalid data");
-						return;
 					}
 				}
 			} catch (IOException e) {
@@ -109,7 +118,7 @@ public class ImportResource extends BaseResource {
 			unauthorizedPOST();
 		}
 	}
-	
+
 	private InputStream getStreamFromForm(Request request) {
 		try {
 			RestletFileUpload upload = new RestletFileUpload(new DiskFileItemFactory());

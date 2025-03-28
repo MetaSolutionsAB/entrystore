@@ -500,11 +500,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					solrIndex.shutdown();
 				}
 				if (repository != null) {
-					log.info("Shutting down Sesame repository");
+					log.info("Shutting down RDF4J repository");
 					try {
 						repository.shutDown();
 					} catch (RepositoryException re) {
-						log.error("Error when shutting down Sesame repository: {}", re.getMessage());
+						log.error("Error when shutting down RDF4J repository: {}", re.getMessage());
 						re.printStackTrace();
 					}
 				}
@@ -513,11 +513,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					publicRepository.shutdown();
 				}
 				if (provenanceRepository != null) {
-					log.info("Shutting down Sesame provenance repository");
+					log.info("Shutting down RDF4J provenance repository");
 					try {
 						provenanceRepository.shutDown();
 					} catch (RepositoryException re) {
-						log.error("Error when shutting down Sesame provenance repository: {}", re.getMessage());
+						log.error("Error when shutting down RDF4J provenance repository: {}", re.getMessage());
 					}
 				}
 				if (solrServer != null) {
@@ -712,10 +712,19 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				log.info("Solr directory is empty, scheduling conditional reindexing of repository");
 				reindex = true;
 				reindexWait = true;
-				log.info("Writing EntryStore version to schema version file at {}", solrSchemaVersionFile);
-				FileOperations.writeStringToFile(solrSchemaVersionFile, getVersion());
-				log.info("Writing Solr version to version file at {}", solrVersionFile);
-				FileOperations.writeStringToFile(solrVersionFile, SolrVersion.LATEST.toString());
+				try {
+					log.info("Writing EntryStore version to schema version file at {}", solrSchemaVersionFile);
+					FileOperations.writeStringToFile(solrSchemaVersionFile, getVersion());
+				} catch (IOException e) {
+					log.error(e.getMessage());
+				}
+
+				try {
+					log.info("Writing Solr version to version file at {}", solrVersionFile);
+					FileOperations.writeStringToFile(solrVersionFile, SolrVersion.LATEST.toString());
+				} catch (IOException e) {
+					log.error(e.getMessage());
+				}
 			}
 
 			File solrCoreConfDir = new File(new File(solrDir, coreName), "conf");
@@ -799,6 +808,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
 			registerListener(updater, RepositoryEvent.ResourceUpdated);
+			registerListener(updater, RepositoryEvent.RelationsUpdated);
 
 			RepositoryListener remover = new RepositoryListener() {
 				@Override
@@ -844,6 +854,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			registerListener(updater, RepositoryEvent.MetadataUpdated);
 			registerListener(updater, RepositoryEvent.ExternalMetadataUpdated);
 			registerListener(updater, RepositoryEvent.ResourceUpdated);
+			registerListener(updater, RepositoryEvent.RelationsUpdated);
 
 			// delete
 			RepositoryListener remover = new RepositoryListener() {

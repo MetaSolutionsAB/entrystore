@@ -15,6 +15,7 @@ import java.util.UUID;
 @Setter
 public class Arguments {
 	String storeType;
+	String baseUrl;
 	int sizeToGenerate = 0;
 	boolean isComplex = false;
 	boolean withTransactions = false;
@@ -28,6 +29,10 @@ public class Arguments {
 	public void setStorePath() throws IOException {
 		Path path = Paths.get(FileUtils.getTempDirectory().getAbsolutePath(), "benchmark-store-" + UUID.randomUUID());
 		this.storePath = Files.createDirectories(path).toFile();
+	}
+
+	public void setStorePath(String storePath) {
+		this.storePath = new File(storePath);
 	}
 
 	public void setSolrPath() throws IOException {

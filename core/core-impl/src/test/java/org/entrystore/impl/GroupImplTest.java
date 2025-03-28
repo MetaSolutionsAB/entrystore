@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,68 +16,56 @@
 
 package org.entrystore.impl;
 
-import org.junit.jupiter.api.Disabled;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.Group;
+import org.entrystore.User;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-public class GroupImplTest {
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
-	@Disabled("To be implemented")
-	@Test
-	public void testGetName() throws Exception {
-		// TODO
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class GroupImplTest extends AbstractCoreTest {
+
+	@BeforeEach
+	public void setUp() {
+		super.setUpWithoutSuite();
+		((ContextImpl) cm).getSoftCache().clear();
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testSetName() throws Exception {
-		// TODO
-	}
+	public void testCreateGroup() {
+		String userName = "TestUser";
+		String groupName = "TestGroup";
 
-	@Disabled("To be implemented")
-	@Test
-	public void testGetHomeContext() throws Exception {
-		// TODO
-	}
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
-	@Disabled("To be implemented")
-	@Test
-	public void testSetHomeContext() throws Exception {
-		// TODO
-	}
+		Entry userEntry = pm.createResource(null, GraphType.User, null, null);
+		pm.setPrincipalName(userEntry.getResourceURI(), userName);
+		User user = (User) userEntry.getResource();
 
-	@Disabled("To be implemented")
-	@Test
-	public void testAddMember() throws Exception {
-		// TODO
-	}
+		Entry groupEntry = pm.createResource(null, GraphType.Group, null, null);
+		pm.setPrincipalName(groupEntry.getResourceURI(), groupName);
+		Group group = (Group) groupEntry.getResource();
+		//group.addMember(user);
+		List<URI> users = new ArrayList<>();
+		users.add(user.getEntry().getEntryURI());
+		group.setChildren(users);
 
-	@Disabled("To be implemented")
-	@Test
-	public void testRemoveMember() throws Exception {
-		// TODO
-	}
+		assertEquals(1, group.members().size());
+		Entry groupMember = group.members().getFirst().getEntry();
+		assertEquals(user.getURI(), groupMember.getResourceURI());
+		assertEquals(1, groupMember.getRelations().size());
 
-	@Disabled("To be implemented")
-	@Test
-	public void testIsMember() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
-	public void testMemberUris() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
-	public void testMembers() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
-	public void testSetChildren() throws Exception {
-		// TODO
+		User userQueried = (User) pm.getPrincipalEntry(userName).getResource();
+		Group groupQueried = (Group) pm.getPrincipalEntry(groupName).getResource();
+		assertEquals(1, groupQueried.members().size());
+		Entry groupQueriedMember = groupQueried.members().getFirst().getEntry();
+		assertEquals(userQueried.getURI(), groupQueriedMember.getResourceURI());
+		assertEquals(1, groupQueriedMember.getRelations().size());
 	}
 }

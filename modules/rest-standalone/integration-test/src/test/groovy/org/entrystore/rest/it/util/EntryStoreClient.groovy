@@ -1,6 +1,7 @@
 package org.entrystore.rest.it.util
 
 import groovy.json.JsonOutput
+import org.apache.commons.lang3.StringUtils
 
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -21,7 +22,7 @@ class EntryStoreClient {
 	}
 
 	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json') {
-		def connection = (HttpURLConnection) new URI(origin + path).toURL().openConnection()
+		def connection = createConnection(path)
 		if (requestAcceptType?.trim()) {
 			connection.setRequestProperty('Accept', requestAcceptType)
 		}
@@ -33,16 +34,56 @@ class EntryStoreClient {
 	}
 
 	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
-		def connection = (HttpURLConnection) new URI(origin + path).toURL().openConnection()
+		def connection = createConnection(path)
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
 		connection.setRequestMethod('POST')
 		connection.setRequestProperty('Content-Type', contentType)
+		if (body != null) {
+			connection.setDoOutput(true)
+			connection.getOutputStream().write(body.getBytes())
+			connection.connect()
+		}
+		return connection
+	}
+
+	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
+		def connection = createConnection(path)
+		if (asUser?.trim()) {
+			connection.setRequestProperty('Cookie', cookies[asUser].toString())
+		}
+		connection.setRequestMethod('PUT')
+		connection.setRequestProperty('Content-Type', contentType)
 		connection.setDoOutput(true)
 		connection.getOutputStream().write(body.getBytes())
 		connection.connect()
 		return connection
+	}
+
+	def static deleteRequest(String path, String asUser = 'admin') {
+		def connection = createConnection(path)
+		if (asUser?.trim()) {
+			connection.setRequestProperty('Cookie', cookies[asUser].toString())
+		}
+		connection.setRequestMethod('DELETE')
+		connection.connect()
+		return connection
+	}
+
+	/**
+	 *
+	 * @param path can be a local path. e.g. /_contexts/entry/_principals or a full URL
+	 * @return
+	 */
+	def static createConnection(String path) {
+		def hostInfo = ''
+		if (path.startsWith('/')) {
+			hostInfo = origin
+		} else {
+			path = StringUtils.replaceOnce(path, '/store', '')
+		}
+		return (HttpURLConnection) new URI(hostInfo + path).toURL().openConnection()
 	}
 
 	def static authorize(String asUser) {

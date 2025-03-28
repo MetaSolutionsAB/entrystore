@@ -69,12 +69,13 @@ public class PasswordResetResource extends BaseResource {
 
 	@Get
 	public Representation represent() throws ResourceException {
-		if (!parameters.containsKey("confirm")) {
+		String token = parameters.get("confirm");
+
+		if (token == null) {
 			boolean reCaptcha = "on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.AUTH_RECAPTCHA, "off"));
 			return new StringRepresentation(constructHtmlForm(reCaptcha), MediaType.TEXT_HTML, Language.ENGLISH);
 		}
 
-		String token = parameters.get("confirm");
 		SignupTokenCache tc = SignupTokenCache.getInstance();
 		SignupInfo ci = tc.getTokenValue(token);
 		if (ci == null) {
@@ -111,11 +112,11 @@ public class PasswordResetResource extends BaseResource {
 			if (u.setSaltedHashedSecret(ci.getSaltedHashedPassword())) {
 				LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
 				loginTokenCache.removeTokens(ci.getEmail());
-				log.debug("Removed any authentication tokens belonging to user " + u.getURI());
+				log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
 				Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), u.getEntry());
-				log.info("Reset password for user " + u.getURI());
+				log.info("Reset password for user {}", u.getURI());
 			} else {
-				log.error("Error when resetting password for user " + u.getURI());
+				log.error("Error when resetting password for user {}", u.getURI());
 				getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 				if (ci.getUrlFailure() != null) {
 					getResponse().redirectTemporary(URLDecoder.decode(ci.getUrlFailure(), UTF_8));
@@ -261,22 +262,28 @@ public class PasswordResetResource extends BaseResource {
 
 			// to avoid spamming etc we only send emails to users that exist
 			if (u != null) {
+				if (u.isDisabled()) {
+					log.info("User {} is disabled, not allowing password reset", ci.getEmail());
+					getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+					return;
+				}
+
 				String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 				String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
-				log.info("Generated password reset token for " + ci.getEmail());
+				log.info("Generated password reset token for {}", ci.getEmail());
 
 				boolean sendSuccessful = Email.sendPasswordResetConfirmation(getRM().getConfiguration(), ci.getEmail(), confirmationLink);
 				if (sendSuccessful) {
 					ci.setSaltedHashedPassword(Password.getSaltedHash(password));
 					SignupTokenCache.getInstance().putToken(token, ci);
-					log.info("Sent confirmation request to " + ci.getEmail());
+					log.info("Sent confirmation request to {}", ci.getEmail());
 				} else {
-					log.info("Failed to send confirmation request to " + ci.getEmail());
+					log.info("Failed to send confirmation request to {}", ci.getEmail());
 					getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 					return;
 				}
 			} else {
-				log.info("Ignoring password reset attempt for non-existing user " + ci.getEmail());
+				log.info("Ignoring password reset attempt for non-existing user {}", ci.getEmail());
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(authUser);

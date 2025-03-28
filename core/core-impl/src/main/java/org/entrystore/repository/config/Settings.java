@@ -33,14 +33,28 @@ public class Settings {
 	public static String AUTH_CAS_REDIRECT_FAILURE_URL = "entrystore.auth.cas.redirect-failure.url";
 
 	public static String AUTH_SAML = "entrystore.auth.saml";
-	public static String AUTH_SAML_RELYING_PARTY_ID = "entrystore.auth.saml.relying-party-id";
 	public static String AUTH_SAML_ASSERTION_CONSUMER_SERVICE_URL = "entrystore.auth.saml.assertion-consumer-service.url";
-	public static String AUTH_SAML_IDP_METADATA_URL = "entrystore.auth.saml.idp-metadata.url";
-	public static String AUTH_SAML_IDP_METADATA_MAXAGE = "entrystore.auth.saml.idp-metadata.max-age";
-	public static String AUTH_SAML_USER_AUTO_PROVISIONING = "entrystore.auth.saml.user-auto-provisioning";
-	public static String AUTH_SAML_REDIRECT_METHOD = "entrystore.auth.saml.redirect-method";
 	public static String AUTH_SAML_REDIRECT_SUCCESS_URL = "entrystore.auth.saml.redirect-success.url";
 	public static String AUTH_SAML_REDIRECT_FAILURE_URL = "entrystore.auth.saml.redirect-failure.url";
+	public static String AUTH_SAML_REDIRECT_DOMAIN_WHITELIST = "entrystore.auth.saml.redirect-domain-whitelist";
+
+	public static String AUTH_SAML_DEFAULT_IDP = "entrystore.auth.saml.default-idp";
+	public static String AUTH_SAML_IDPS = "entrystore.auth.saml.idps";
+	public static String AUTH_SAML_IDP_RELYING_PARTY_ID = "entrystore.auth.saml.idp.%s.relying-party-id";
+	public static String AUTH_SAML_IDP_METADATA_URL = "entrystore.auth.saml.idp.%s.metadata.url";
+	public static String AUTH_SAML_IDP_METADATA_MAXAGE = "entrystore.auth.saml.idp.%s.metadata.max-age";
+	public static String AUTH_SAML_IDP_USER_AUTO_PROVISIONING = "entrystore.auth.saml.idp.%s.user-auto-provisioning";
+	public static String AUTH_SAML_IDP_REDIRECT_METHOD = "entrystore.auth.saml.idp.%s.redirect-method";
+	public static String AUTH_SAML_IDP_DOMAINS = "entrystore.auth.saml.idp.%s.domains";
+
+	public static String AUTH_SAML_LEGACY_RELYING_PARTY_ID = "entrystore.auth.saml.relying-party-id";
+	public static String AUTH_SAML_LEGACY_ASSERTION_CONSUMER_SERVICE_URL = "entrystore.auth.saml.assertion-consumer-service.url";
+	public static String AUTH_SAML_LEGACY_IDP_METADATA_URL = "entrystore.auth.saml.idp-metadata.url";
+	public static String AUTH_SAML_LEGACY_IDP_METADATA_MAXAGE = "entrystore.auth.saml.idp-metadata.max-age";
+	public static String AUTH_SAML_LEGACY_USER_AUTO_PROVISIONING = "entrystore.auth.saml.user-auto-provisioning";
+	public static String AUTH_SAML_LEGACY_REDIRECT_METHOD = "entrystore.auth.saml.redirect-method";
+	public static String AUTH_SAML_LEGACY_REDIRECT_SUCCESS_URL = "entrystore.auth.saml.redirect-success.url";
+	public static String AUTH_SAML_LEGACY_REDIRECT_FAILURE_URL = "entrystore.auth.saml.redirect-failure.url";
 
 	public static String AUTH_COOKIE_PATH = "entrystore.auth.cookie.path";
 	public static String AUTH_COOKIE_HTTPONLY = "entrystore.auth.cookie.httponly";
@@ -168,6 +182,7 @@ public class Settings {
 	public static String REPOSITORY_TRACK_DELETED_CLEANUP = "entrystore.repository.track-deleted-entries.cleanup";
 
 	public static String PROXY_WHITELIST_ANONYMOUS = "entrystore.proxy.whitelist.anonymous";
+	public static String PROXY_WHITELIST_LOCAL = "entrystore.proxy.whitelist.local";
 
 	public static String SMTP_HOST = "entrystore.smtp.host";
 	public static String SMTP_PORT = "entrystore.smtp.port";
@@ -204,6 +219,8 @@ public class Settings {
 	public static String HTTP_ALLOW_MEDIA_TYPE_JAVASCRIPT = "entrystore.http.allow-media-type-javascript";
 
 	public static String HTTP_HEADER_SERVER = "entrystore.http.header.server";
+
+	public static String RDF4J_SOFT_FAIL_ON_CORRUPT_DATA_AND_REPAIR_INDEXES = "org.eclipse.rdf4j.sail.nativerdf.softFailOnCorruptDataAndRepairIndexes";
 
 	public static String METRICS = "entrystore.metrics";
 

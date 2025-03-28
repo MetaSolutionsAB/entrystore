@@ -7,7 +7,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.entrystore</groupId>
     <artifactId>entrystore-parent</artifactId>
-    <version>5.5.0</version>
+    <version>5.6.0</version>
     <packaging>pom</packaging>
     <name>EntryStore</name>
     <url>https://entrystore.org</url>
@@ -19,8 +19,8 @@
 
     <!-- ================= Default Properties ================= -->
     <properties>
-        <restlet.version>2.4.4</restlet.version>
-        <rdf4j.version>5.0.2</rdf4j.version>
+        <restlet.version>2.5.0</restlet.version>
+        <rdf4j.version>5.0.3</rdf4j.version>
         <solr.version>9.1.1</solr.version>
         <slf4j.version>2.0.16</slf4j.version>
         <log4j.version>2.24.0</log4j.version>
@@ -36,7 +36,6 @@
         <junit.version>5.10.1</junit.version>
         <assertj.version>3.25.3</assertj.version>
         <bytebuddy.version>1.14.13</bytebuddy.version>
-        <rest-assured.version>5.3.2</rest-assured.version>
         <zookeeper.version>3.9.2</zookeeper.version>
         <xmlsec.version>3.0.4</xmlsec.version>
         <httpmime.version>4.5.14</httpmime.version>
@@ -249,15 +248,18 @@
             <url>https://maven.entrystore.org</url>
         </repository>
         <repository>
-            <id>Restlet</id>
-            <name>Restlet Framework repository</name>
-            <url>https://maven.restlet.talend.com</url>
+            <id>Maven Central</id>
+            <url>https://repo.maven.apache.org/maven2/</url>
         </repository>
     </repositories>
     <pluginRepositories>
         <pluginRepository>
             <id>EntryStore</id>
             <url>https://maven.entrystore.org</url>
+        </pluginRepository>
+        <pluginRepository>
+            <id>Maven Central</id>
+            <url>https://repo.maven.apache.org/maven2/</url>
         </pluginRepository>
     </pluginRepositories>
 
@@ -531,12 +533,12 @@
                 <version>${jetty.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.restlet.jee</groupId>
+                <groupId>org.restlet</groupId>
                 <artifactId>org.restlet.ext.servlet</artifactId>
                 <version>${restlet.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.restlet.jee</groupId>
+                <groupId>org.restlet</groupId>
                 <artifactId>org.restlet</artifactId>
                 <version>${restlet.version}</version>
             </dependency>
@@ -564,11 +566,6 @@
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-layout-template-json</artifactId>
                 <version>${log4j.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.rest-assured</groupId>
-                <artifactId>rest-assured</artifactId>
-                <version>${rest-assured.version}</version>
             </dependency>
             <!-- TODO: The mockito dependencies below shouldn't be needed, as we import the Mockito BOM. Investigate why the BOM does not work!-->
             <dependency>

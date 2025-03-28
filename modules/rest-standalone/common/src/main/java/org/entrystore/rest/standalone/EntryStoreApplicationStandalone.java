@@ -25,6 +25,7 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PatternOptionBuilder;
 import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.config.Configurator;
 import org.entrystore.rest.EntryStoreApplication;
 import org.restlet.Application;
@@ -36,10 +37,11 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Class to provide common functionality for other standalone wrappers.
- *
  * Should not be used directly.
  *
  * @author Hannes Ebner
@@ -47,6 +49,8 @@ import java.net.URISyntaxException;
 public abstract class EntryStoreApplicationStandalone extends Application {
 
 	private final static org.slf4j.Logger log = LoggerFactory.getLogger(EntryStoreApplicationStandalone.class);
+
+	public static String ENV_CONFIG_PROPERTIES = "ENTRYSTORE_CONFIG_PROPERTIES";
 
 	public static String ENV_CONNECTOR_PARAMS = "ENTRYSTORE_CONNECTOR_PARAMS";
 
@@ -56,35 +60,49 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 		CommandLineParser parser = new DefaultParser();
 		Options options = new Options();
 		options.addOption(Option.builder("c").
-				longOpt("config").
-				required(System.getenv(EntryStoreApplication.ENV_CONFIG_URI) == null).
-				desc("URL of configuration file, may be omitted if environment variable ENTRYSTORE_CONFIG_URI is set").
-				hasArg().
-				argName("URL").
-				type(PatternOptionBuilder.URL_VALUE).
-				build());
+			longOpt("config").
+			required(System.getenv(EntryStoreApplication.ENV_CONFIG_URI) == null).
+			desc("URL of configuration file, may be omitted if environment variable ENTRYSTORE_CONFIG_URI is set").
+			hasArg().
+			argName("URL").
+			type(PatternOptionBuilder.URL_VALUE).
+			build());
 		options.addOption(Option.builder("p").
-				longOpt("port").
-				desc("port to listen on; default: 8181").
-				hasArg().
-				argName("PORT").
-				type(PatternOptionBuilder.NUMBER_VALUE).
-				build());
+			longOpt("port").
+			desc("port to listen on; default: 8181").
+			hasArg().
+			argName("PORT").
+			type(PatternOptionBuilder.NUMBER_VALUE).
+			build());
 		options.addOption(Option.builder("l").
-				longOpt("log-level").
-				desc("log level, one of: ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF; default: INFO").
-				hasArg().
-				argName("LEVEL").
-				build());
+			longOpt("log-level").
+			desc("log level for root level (excludes Solr and Jetty), one of: ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF; default: INFO").
+			hasArg().
+			argName("LEVEL").
+			build());
 		options.addOption(Option.builder().
-				longOpt("connector-params").
-				desc("comma separated list of parameters to be used for the server connector, " +
-						"the environment variable ENTRYSTORE_CONNECTOR_PARAMS may be used instead. " +
-						"Example for Jetty: \"threadPool.minThreads=50,threadPool.maxThreads=250\"; " +
-						"see the JavaDoc of JettyServerHelper for available parameters").
-				hasArg().
-				argName("SETTINGS").
-				build());
+			longOpt("log-level-all").
+			desc("log level for all levels (including Solr and Jetty), overrides \"--log-level\",  one of: ALL, TRACE, DEBUG, INFO, WARN, ERROR, FATAL, OFF; default: INFO").
+			hasArg().
+			argName("LEVEL").
+			build());
+		options.addOption(Option.builder().
+			longOpt("config-properties").
+			desc("comma separated list of configuration properties (key/value pairs) to be used on top of the regular configuration file, " +
+				"overrides existing properties in configuration, the environment variable ENTRYSTORE_CONFIG_PROPERTIES may be used instead.\n" +
+				"Example for changing base URI: \"entrystore.baseurl.folder=http://localhost:8585/store/\"").
+			hasArg().
+			argName("PROPERTIES").
+			build());
+		options.addOption(Option.builder().
+			longOpt("connector-params").
+			desc("comma separated list of parameters (key/value pairs) to be used for the server connector, " +
+				"the environment variable ENTRYSTORE_CONNECTOR_PARAMS may be used instead.\n" +
+				"Example for Jetty: \"threadPool.minThreads=50,threadPool.maxThreads=250\"; " +
+				"see the JavaDoc of JettyServerHelper for available parameters").
+			hasArg().
+			argName("SETTINGS").
+			build());
 		options.addOption(Option.builder("h").longOpt("help").desc("display this help").build());
 
 		CommandLine cl = null;
@@ -124,7 +142,7 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 			System.exit(1);
 		}
 
-		configureLogging(cl.getOptionValue("log-level", "INFO"));
+		configureLogging(cl.getOptionValue("log-level", "INFO"), cl.getOptionValue("log-level-all"));
 
 		Component component = new Component();
 		Server server = component.getServers().add(Protocol.HTTP, port);
@@ -137,13 +155,35 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 		}
 		if (conParams != null) {
 			for (String param : conParams.split(",")) {
-				if (param.length() > 0) {
+				if (!param.isEmpty()) {
 					String[] kv = param.split("=");
 					if (kv.length == 2) {
 						log.debug("Adding connector parameter: {}={}", kv[0], kv[1]);
 						server.getContext().getParameters().add(kv[0].trim(), kv[1].trim());
 					} else {
-						System.err.println("Invalid connector parameter: " + param);
+						log.error("Invalid connector parameter: {}", param);
+						System.exit(1);
+					}
+				}
+			}
+		}
+
+		String configParams;
+		if (cl.hasOption("config-properties")) {
+			configParams = cl.getOptionValue("config-properties");
+		} else {
+			configParams = System.getenv(ENV_CONFIG_PROPERTIES);
+		}
+		Map<String, String> configOverride = new HashMap<>();
+		if (configParams != null) {
+			for (String param : configParams.split(",")) {
+				if (!param.isEmpty()) {
+					String[] kv = param.split("=");
+					if (kv.length == 2) {
+						log.debug("Adding config parameter: {}={}", kv[0], kv[1]);
+						configOverride.put(kv[0].trim(), kv[1].trim());
+					} else {
+						log.error("Invalid config parameter: {}", param);
 						System.exit(1);
 					}
 				}
@@ -156,14 +196,14 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 		component.getClients().add(Protocol.HTTPS);
 		server.getContext().getParameters().add("useForwardedForHeader", "true");
 		Context childContext = component.getContext().createChildContext();
-		EntryStoreApplication esApp = new EntryStoreApplication(config, childContext, component);
+		EntryStoreApplication esApp = new EntryStoreApplication(config, configOverride, childContext, component);
 		childContext.getAttributes().put(EntryStoreApplication.KEY, esApp);
 		component.getDefaultHost().attach(esApp);
 
 		try {
 			component.start();
 		} catch (Exception e) {
-			e.printStackTrace();
+			log.error(e.getMessage(), e);
 		}
 	}
 
@@ -178,17 +218,15 @@ public abstract class EntryStoreApplicationStandalone extends Application {
 		System.out.println(s);
 	}
 
-	private static void configureLogging(String logLevel) {
-		Level l = Level.toLevel(logLevel, Level.INFO);
-		Configurator.setRootLevel(l);
+	private static void configureLogging(String rootLevel, String allLevels) {
+		Level lRoot = Level.toLevel(rootLevel, Level.INFO);
+		Configurator.setRootLevel(lRoot);
+		out("Root log level set to " + lRoot);
 
-		// the next line is commented because in most cases we don't want to have debug info for namespaces that
-		// are explicitly defined in log4j2.properties, e.g. org.apache.solr - if more info is needed for org.apache.solr
-		// then this should be changed in the configuration file instead of here.
-		// Leaving it here for documentation purposes.
-		//Configurator.setAllLevels(LogManager.getRootLogger().getName(), l);
-
-		out("Log level set to " + l);
+		if (allLevels != null) {
+			Level lAll = Level.toLevel(allLevels, Level.INFO);
+			Configurator.setAllLevels(LogManager.getRootLogger().getName(), lAll);
+		}
 	}
 
 }

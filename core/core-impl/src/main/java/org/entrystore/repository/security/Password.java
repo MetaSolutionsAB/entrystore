@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,9 @@
 package org.entrystore.repository.security;
 
 import com.google.common.collect.Sets;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.apache.commons.codec.binary.Base64;
 import org.entrystore.config.Config;
@@ -41,13 +43,13 @@ import java.util.regex.Pattern;
 
 /**
  * Helper methods for handling hashed and salted passwords, using PBKDF2.
- * 
+ * <p>
  * Inspired by Martin Konicek's code on StackOverflow.
- * 
+ *
  * @author Hannes Ebner
  */
 public class Password {
-	
+
 	private static final Logger log = LoggerFactory.getLogger(Password.class);
 
 	// Higher number of iterations causes more work for both the attacker and
@@ -67,11 +69,11 @@ public class Password {
 	private static final int saltLen = 16;
 
 	private static final int desiredKeyLen = 192;
-	
+
 	public static final int PASSWORD_MAX_LENGTH = 2048;
 
 	private static SecureRandom random;
-	
+
 	private static SecretKeyFactory secretKeyFactory;
 
 	@Getter
@@ -81,9 +83,9 @@ public class Password {
 	@Getter
 	private static final Rules defaultRules = new Rules(true, true, false, true, 10, null);
 
-	@lombok.AllArgsConstructor
-	@lombok.Getter
-	@lombok.NoArgsConstructor
+	@AllArgsConstructor
+	@Getter
+	@NoArgsConstructor
 	public static class Rules {
 
 		/**
@@ -122,7 +124,7 @@ public class Password {
 		try {
 			random = SecureRandom.getInstance("SHA1PRNG");
 			secretKeyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-			
+
 			long before = new Date().getTime();
 			random.setSeed(random.generateSeed(saltLen));
 			log.info("Seeding of SecureRandom took {} ms", new Date().getTime() - before);
@@ -139,7 +141,7 @@ public class Password {
 
 		byte[] salt = new byte[saltLen];
 		random.nextBytes(salt);
-		
+
 		// return the salt along with the salted and hashed password
 		return Base64.encodeBase64String(salt) + "$" + hash(password, salt);
 	}
@@ -171,20 +173,14 @@ public class Password {
 		try {
 			long before = new Date().getTime();
 			SecretKey key = secretKeyFactory.generateSecret(new PBEKeySpec(password.toCharArray(), salt, iterations, desiredKeyLen));
-			log.info("Password hashing took " + (new Date().getTime()-before) + " ms");
+			log.info("Password hashing took {} ms", new Date().getTime() - before);
 			return Base64.encodeBase64String(key.getEncoded());
 		} catch (GeneralSecurityException gse) {
 			log.error(gse.getMessage());
 		}
 		return null;
 	}
-	
-	public static String getRandomBase64(int length) {
-		byte[] result = new byte[length];
-		random.nextBytes(result);
-		return Base64.encodeBase64String(result);
-	}
-	
+
 	public static String sha256(String s) {
 		MessageDigest digester;
 		try {
@@ -271,7 +267,7 @@ public class Password {
 	}
 
 	public static void loadRules(Config config) {
-		Rules rules = new Rules();
+		rules = new Rules();
 		rules.lowercase = config.getBoolean(Settings.AUTH_PASSWORD_RULE_LOWERCASE, defaultRules.isLowercase());
 		rules.uppercase = config.getBoolean(Settings.AUTH_PASSWORD_RULE_UPPERCASE, defaultRules.isUppercase());
 		rules.number = config.getBoolean(Settings.AUTH_PASSWORD_RULE_NUMBER, defaultRules.isNumber());

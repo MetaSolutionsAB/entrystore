@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import lombok.Getter;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -52,9 +53,13 @@ import java.util.Set;
 public class PrincipalManagerImpl extends EntryNamesContext implements PrincipalManager {
 	private static final Logger log = LoggerFactory.getLogger(PrincipalManagerImpl.class);
 	private static final ThreadLocal<URI> authenticatedUserURI = new ThreadLocal<>();
+	@Getter
 	public User adminUser = null;
+	@Getter
 	public Group adminGroup = null;
+	@Getter
 	public User guestUser = null;
+	@Getter
 	public Group userGroup = null;
 
 	private EntryImpl allPrincipals;
@@ -65,10 +70,10 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	 * Creates a principal manager
 	 * @param entry this principal managers entry
 	 * @param uri this principal managers URI
-	 * @param cache
+	 * @param softCache
 	 */
-	public PrincipalManagerImpl(EntryImpl entry, String uri, SoftCache cache) {
-		super(entry, uri, cache);
+	public PrincipalManagerImpl(EntryImpl entry, String uri, SoftCache softCache) {
+		super(entry, uri, softCache);
 	}
 
 
@@ -507,22 +512,6 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		return Password.conformsToRules(secret);
 	}
 
-	public User getAdminUser() {
-		return adminUser;
-	}
-
-	public Group getAdminGroup() {
-		return adminGroup;
-	}
-
-	public User getGuestUser() {
-		return guestUser;
-	}
-
-	public Group getUserGroup() {
-		return userGroup;
-	}
-
 	@Override
 	public void initResource(EntryImpl newEntry) throws RepositoryException {
 		if (newEntry.getEntryType() != EntryType.Local) {
@@ -530,10 +519,10 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		}
 		switch (newEntry.getGraphType()) {
 		case User:
-			newEntry.setResource(new UserImpl(newEntry, newEntry.getSesameResourceURI(), cache));
+			newEntry.setResource(new UserImpl(newEntry, newEntry.getSesameResourceURI(), softCache));
 			break;
 		case Group:
-			newEntry.setResource(new GroupImpl(newEntry, newEntry.getSesameResourceURI(), cache));
+			newEntry.setResource(new GroupImpl(newEntry, newEntry.getSesameResourceURI(), softCache));
 			break;
 		default:
 			super.initResource(newEntry);
