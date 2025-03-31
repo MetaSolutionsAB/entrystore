@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -172,20 +172,11 @@ public class EntryImpl implements Entry {
 	}
 
 	protected void initMetadataObjects() {
-		if (locType == EntryType.Local || locType == EntryType.Link) {
+		if (locType == EntryType.Local || locType == EntryType.Link || locType == EntryType.LinkReference) {
 			this.localMetadata = new MetadataImpl(this, localMdURI, resURI, false);
 		}
 
-		if (locType == EntryType.LinkReference) {
-			this.localMetadata = new MetadataImpl(this, localMdURI, resURI, false);
-			if (externalMdURI.stringValue().startsWith(this.repositoryManager.getRepositoryURL().toString())) {
-				this.cachedExternalMetadata = new LocalMetadataWrapper(this);
-			} else {
-				this.cachedExternalMetadata = new MetadataImpl(this, cachedExternalMdURI, resURI, true);
-			}
-		}
-
-		if (locType == EntryType.Reference) {
+		if (locType == EntryType.LinkReference || locType == EntryType.Reference) {
 			if (externalMdURI.stringValue().startsWith(this.repositoryManager.getRepositoryURL().toString())) {
 				this.cachedExternalMetadata = new LocalMetadataWrapper(this);
 			} else {
@@ -292,11 +283,10 @@ public class EntryImpl implements Entry {
 		ResourceType repType = ResourceType.InformationResource;
 		GraphType graphType = GraphType.None;
 
-		//Following are cached on request. (Move more values here if possible)
+		// The following are cached on request. (Move more values here if possible.)
 		String format = null;
 		long fileSize = -1;
 		String filename = null;
-		IRI status = null;
 		boolean invRelations = false;
 
 		RepositoryConnection rc = null;
@@ -304,7 +294,7 @@ public class EntryImpl implements Entry {
 		try {
 			String base = repositoryManager.getRepositoryURL().toString();
 			rc = this.repository.getConnection();
-//			referredIn = new HashSet<URI>();
+			//referredIn = new HashSet<>();
 			for (Statement statement : existingStatements) {
 				IRI predicate = statement.getPredicate();
 				if (predicate.equals(RepositoryProperties.resource)) {
@@ -643,7 +633,7 @@ public class EntryImpl implements Entry {
 				RepositoryConnection rc = this.repository.getConnection();
 				rc.begin();
 				try {
-					// we add an MD triple of we convert from Reference to LinkReference
+					// we add a metadata triple, or we convert from Reference to LinkReference
 					if (EntryType.Reference.equals(locType) && EntryType.LinkReference.equals(entryType)) {
 						rc.add(entryURI, RepositoryProperties.metadata, this.localMdURI, entryURI);
 					}

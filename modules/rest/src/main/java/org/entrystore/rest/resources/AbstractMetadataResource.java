@@ -71,7 +71,6 @@ import java.util.Set;
 
 /**
  * Provides methods to read/write metadata graphs.
- *
  * Subclasses need to implement getMetadata().
  *
  * @author Hannes Ebner
@@ -110,7 +109,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
-			Representation result = null;
+			Representation result;
 			if (Method.GET.equals(getRequest().getMethod())) {
 				MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
 				if (preferredMediaType == null) {
@@ -124,7 +123,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				}
 
 				if (parameters.containsKey("recursive")) {
-					String traversalParam = null;
+					String traversalParam;
 					traversalParam = URLDecoder.decode(parameters.get("recursive"), StandardCharsets.UTF_8);
 					Set<URI> predicatesToFollow = resolvePredicates(traversalParam);
 					if (predicatesToFollow.isEmpty()) {
@@ -391,7 +390,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @return A set of URIs.
 	 */
 	private Set<URI> loadTraversalProfile(String profileName) {
-		List<String> predicates = getRM().getConfiguration().getStringList(Settings.TRAVERSAL_PROFILE + "." + profileName, new ArrayList<String>());
+		List<String> predicates = getRM().getConfiguration().getStringList(Settings.TRAVERSAL_PROFILE + "." + profileName, new ArrayList<>());
 		Set<URI> result = new HashSet<>();
 		for (String s : predicates) {
 			result.add(URI.create(s));
