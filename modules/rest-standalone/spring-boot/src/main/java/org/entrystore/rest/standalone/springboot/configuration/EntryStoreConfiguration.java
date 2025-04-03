@@ -44,7 +44,7 @@ public class EntryStoreConfiguration {
 	}
 
 	@Bean
-	public RepositoryManager createRepositoryManager(Config config) {
+	public RepositoryManagerImpl createRepositoryManager(Config config) {
 		String baseURI = config.getString(Settings.BASE_URL);
 		if (baseURI == null) {
 			log.error("No Base URI specified, exiting");

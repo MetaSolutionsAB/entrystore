@@ -7,9 +7,11 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ManagementStatusIT extends BaseSpec {
 
-	def "GET /management/status should reply with text status UP, when no Accept header defined"() {
+	// Spring boot defaults to JSON when no content type is specified
+
+	def "GET /management/status should reply with text status UP, when text Accept header is defined"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status', null, null)
+		def connection = EntryStoreClient.getRequest('/management/status', null, 'text/plain')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -17,9 +19,9 @@ class ManagementStatusIT extends BaseSpec {
 		connection.getInputStream().text == 'UP'
 	}
 
-	def "GET /management/status should reply with json status, when json Accept header is defined"() {
+	def "GET /management/status should reply with json status, when no Accept header is defined"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status', null)
+		def connection = EntryStoreClient.getRequest('/management/status', null, null)
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -59,9 +61,9 @@ class ManagementStatusIT extends BaseSpec {
 		responseJson['stats'] == null
 	}
 
-	def "GET /management/status/extended&includeStats should reply with detailed status and stats for admin user"() {
+	def "GET /management/status/extended?include=countStats should reply with detailed status and stats for admin user"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status/extended&includeStats')
+		def connection = EntryStoreClient.getRequest('/management/status/extended?include=countStats')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -75,12 +77,12 @@ class ManagementStatusIT extends BaseSpec {
 		responseJson['solr']['enabled']
 		responseJson['solr']['status'] == 'online'
 		responseJson['startupTime'] != null
-		responseJson['stats'] != null
-		responseJson['stats']['groupCount'] != null
-		responseJson['stats']['userCount'] != null
-		responseJson['stats']['contextCount'] != null
-		responseJson['stats']['tripleCount'] != null
-		responseJson['stats']['namedGraphCount'] != null
+		responseJson['countStats'] != null
+		responseJson['countStats']['groupCount'] != null
+		responseJson['countStats']['userCount'] != null
+		responseJson['countStats']['contextCount'] != null
+		responseJson['countStats']['tripleCount'] != null
+		responseJson['countStats']['namedGraphCount'] != null
 	}
 
 	def "GET /management/status/extended&includeStats should reply with Unauthorized for non-admin user"() {

@@ -24,7 +24,9 @@ public record StatusExtendedResponse(
 	Map<String, Object> backup,
 	Map<String, Object> cors,
 	Map<String, Object> auth,
-	Map<String, Object> solr
+	Map<String, Object> solr,
+	Map<String, Object> countStats,
+	Map<String, Object> relationStats
 ) {
 
 	public static StatusExtendedResponseBuilder fromStatusResponse(StatusResponse statusResponse) {
