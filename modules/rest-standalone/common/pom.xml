@@ -7,11 +7,11 @@
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-rest-standalone</artifactId>
-        <version>5.6.0</version>
+        <version>5.6.1</version>
     </parent>
     <artifactId>entrystore-rest-standalone-common</artifactId>
     <packaging>jar</packaging>
-    <version>5.6.0</version>
+    <version>5.6.1</version>
     <name>EntryStore REST Standalone Common</name>
 
     <build>
