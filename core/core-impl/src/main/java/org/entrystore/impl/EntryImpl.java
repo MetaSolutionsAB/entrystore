@@ -1282,6 +1282,8 @@ public class EntryImpl implements Entry {
 								if (lt == EntryType.LinkReference && Arrays.asList(EntryType.Reference, EntryType.Link).contains(locType)) {
 									if (locType == EntryType.Reference) {
 										localMdURI = vf.createIRI(URISplit.createURI(repositoryManager.getRepositoryURL().toString(), context.id, RepositoryProperties.MD_PATH, this.id).toString());
+									} else if (locType == EntryType.Link) {
+										cachedExternalMdURI = vf.createIRI(URISplit.createURI(repositoryManager.getRepositoryURL().toString(), context.id, RepositoryProperties.EXTERNAL_MD_PATH, this.id).toString());
 									}
 									locType = lt;
 								}
