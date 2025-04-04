@@ -19,9 +19,9 @@ class EntryIT extends BaseSpec {
 	def static contextId = '10'
 	def resourceUrl = 'https://bbc.co.uk'
 
-		def setupSpec() {
-			getOrCreateContext([contextId: contextId])
-		}
+	def setupSpec() {
+		getOrCreateContext([contextId: contextId])
+	}
 
 	def "POST /{context-id}?entrytype=link without metadata, should create a new link entry with empty metadata"() {
 		given:
@@ -505,8 +505,8 @@ class EntryIT extends BaseSpec {
 		assert otherEntryId.length() > 0
 
 		def params = [entrytype: 'link',
-					  resource: resourceUrl,
-					  template: EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + otherEntryId]
+					  resource : resourceUrl,
+					  template : EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + otherEntryId]
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE)    : [[
 													 type : 'literal',
@@ -1407,7 +1407,7 @@ class EntryIT extends BaseSpec {
 		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
 	}
 
-	def "PUT /{context-id}/entry/{entry-id} with body in json format, should edit the information about the entry"() {
+	def "PUT /{context-id}/entry/{entry-id} with body in rdf/json format, should edit the information about the entry"() {
 		given:
 		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'
@@ -1425,7 +1425,7 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		def putBody = [(EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId): [
-				(NameSpaceConst.TERM_RESOURCE): [[
+			(NameSpaceConst.TERM_RESOURCE): [[
 												 type : 'uri',
 												 value: resourceUrl + 'v2'
 											 ]]
@@ -1692,5 +1692,134 @@ class EntryIT extends BaseSpec {
 		// GET entry by ID should respond with 404
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} should convert existing entry reference type to link-reference type"() {
+		given:
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
+		def entryId = createEntry(contextId, params)
+
+		def putBody = [(EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId): [
+			(NameSpaceConst.RDF_TYPE)     : [[
+												 type : 'uri',
+												 value: NameSpaceConst.TERM_LINK_REFERENCE
+											 ]]
+		]]
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId,
+			JsonOutput.toJson(putBody), 'admin', 'application/json')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_NO_CONTENT
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		getEntryConn.getResponseCode() == HTTP_OK
+		getEntryConn.getContentType().contains('application/json')
+		def entryRespJson = JSON_PARSER.parseText(getEntryConn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+
+		entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE] != null
+		def entryTypes = entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE].collect()
+		entryTypes.size() == 1
+		entryTypes[0]['type'] == 'uri'
+		entryTypes[0]['value'] == NameSpaceConst.TERM_LINK_REFERENCE
+
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA] != null
+		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
+		entryMetadata.size() == 1
+		entryMetadata[0]['type'] == 'uri'
+		entryMetadata[0]['value'] != null
+		entryMetadata[0]['value'].toString().contains('/store/' + contextId + '/metadata/')
+
+		entryRespJson['metadata'] != null
+		entryRespJson['metadata'] as Map == [:]
+		entryRespJson['cached-external-metadata'] != null
+		entryRespJson['cached-external-metadata'] as Map == [:]
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} should convert existing entry link type to link-reference type"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'Cool entry'
+											 ]],
+		]]]
+		def entryId = createEntry(contextId, params, body)
+
+		def putBody = [(EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId): [
+			(NameSpaceConst.RDF_TYPE): [[
+											type : 'uri',
+											value: NameSpaceConst.TERM_LINK_REFERENCE
+										]]
+		]]
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId,
+			JsonOutput.toJson(putBody), 'admin', 'application/json')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_NO_CONTENT
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		getEntryConn.getResponseCode() == HTTP_OK
+		getEntryConn.getContentType().contains('application/json')
+		def entryRespJson = JSON_PARSER.parseText(getEntryConn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+
+		entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE] != null
+		def entryTypes = entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE].collect()
+		entryTypes.size() == 1
+		entryTypes[0]['type'] == 'uri'
+		entryTypes[0]['value'] == NameSpaceConst.TERM_LINK_REFERENCE
+
+		entryRespJson['metadata'] != null
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA] != null
+		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
+		entryMetadata.size() == 1
+		entryMetadata[0]['type'] == 'uri'
+		entryMetadata[0]['value'] != null
+		entryMetadata[0]['value'].toString().contains('/store/' + contextId + '/metadata/')
+		def storedMetadataUrl = entryMetadata[0]['value'].toString()
+
+		// fetch local metadata
+		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/json')
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
+		(entryMetaRespJson as Map).keySet().size() == 1
+		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
+		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcTitles = entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcTitles.size() == 1
+		dcTitles[0]['type'] == 'literal'
+		dcTitles[0]['value'] == 'Cool entry'
+
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_CACHED_EXTERNAL_METADATA] != null
+		def entryCachedExternalMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_CACHED_EXTERNAL_METADATA].collect()
+		entryCachedExternalMetadata.size() == 1
+		entryCachedExternalMetadata[0]['type'] == 'uri'
+		entryCachedExternalMetadata[0]['value'] != null
+		entryCachedExternalMetadata[0]['value'].toString().contains('/store/' + contextId + '/cached-external-metadata/')
+		def storedCachedExternalMetadataUrl = entryCachedExternalMetadata[0]['value'].toString()
+
+		entryRespJson['cached-external-metadata'] != null
+		entryRespJson['cached-external-metadata'] as Map == [:]
+		// fetch cached external metadata
+		def entryCachedExternalMetaConn = EntryStoreClient.getRequest(storedCachedExternalMetadataUrl)
+		entryCachedExternalMetaConn.getResponseCode() == HTTP_OK
+		entryCachedExternalMetaConn.getContentType().contains('application/json')
+		def entryCachedExternalMetaRespJson = JSON_PARSER.parseText(entryCachedExternalMetaConn.getInputStream().text)
+		(entryCachedExternalMetaRespJson as Map).keySet().size() == 0
 	}
 }
