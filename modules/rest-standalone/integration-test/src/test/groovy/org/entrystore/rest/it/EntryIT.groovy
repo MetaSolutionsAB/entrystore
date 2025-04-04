@@ -1745,7 +1745,14 @@ class EntryIT extends BaseSpec {
 	def "PUT /{context-id}/entry/{entry-id} should convert existing entry link type to link-reference type"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
-		def entryId = createEntry(contextId, params)
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'Cool entry'
+											 ]],
+		]]]
+		def entryId = createEntry(contextId, params, body)
 
 		def putBody = [(EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId): [
 			(NameSpaceConst.RDF_TYPE): [[
@@ -1782,8 +1789,23 @@ class EntryIT extends BaseSpec {
 		entryMetadata[0]['type'] == 'uri'
 		entryMetadata[0]['value'] != null
 		entryMetadata[0]['value'].toString().contains('/store/' + contextId + '/metadata/')
+		def storedMetadataUrl = entryMetadata[0]['value'].toString()
 
 		entryRespJson['metadata'] != null
-		entryRespJson['metadata'] as Map == [:]
+		// fetch local metadata
+		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/json')
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
+		(entryMetaRespJson as Map).keySet().size() == 1
+		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
+		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcTitles = entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcTitles.size() == 1
+		dcTitles[0]['type'] == 'literal'
+		dcTitles[0]['value'] == 'Cool entry'
+
+		entryRespJson['cached-external-metadata'] != null
+		entryRespJson['cached-external-metadata'] as Map == [:]
 	}
 }
