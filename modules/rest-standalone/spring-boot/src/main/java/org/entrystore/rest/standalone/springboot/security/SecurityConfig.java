@@ -21,6 +21,7 @@ public class SecurityConfig {
 				.requestMatchers("/error").permitAll()
 				.requestMatchers("/management/status").permitAll()
 				.requestMatchers("/auth/login", "/auth/cookie", "/auth/signup", "/auth/logout").permitAll()
+				.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs*/**").permitAll()
 				.requestMatchers("/management/status/extended").hasRole(UserAuthRole.ADMIN.name())
 				.anyRequest().authenticated()
 			)
