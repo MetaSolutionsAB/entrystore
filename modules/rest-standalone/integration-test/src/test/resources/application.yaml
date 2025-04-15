@@ -13,4 +13,5 @@ entrystore:
 
 logging:
     level:
+        org.entrystore: DEBUG
         org.springframework.security: DEBUG

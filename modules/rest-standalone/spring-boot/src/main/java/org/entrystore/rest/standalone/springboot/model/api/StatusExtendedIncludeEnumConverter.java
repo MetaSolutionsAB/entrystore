@@ -8,9 +8,9 @@ import org.springframework.stereotype.Component;
 public class StatusExtendedIncludeEnumConverter implements Converter<String, StatusExtendedIncludeEnum> {
 
 	@Override
-	public StatusExtendedIncludeEnum convert(String source) {
+	public StatusExtendedIncludeEnum convert(String input) {
 		try {
-			return StatusExtendedIncludeEnum.fromString(source);
+			return StatusExtendedIncludeEnum.fromString(input);
 		} catch (IllegalArgumentException ex) {
 			throw new BadRequestException(ex.getMessage());
 		}

@@ -1,6 +1,7 @@
 package org.entrystore.rest.standalone.springboot.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import java.util.List;
 
+@Slf4j
 @ControllerAdvice
 public class AppExceptionHandler {
 
@@ -41,6 +43,7 @@ public class AppExceptionHandler {
 	@ExceptionHandler(BadRequestException.class)
 	public ResponseEntity<ErrorResponse> handleBadRequestException(BadRequestException ex,
 																   HttpServletRequest request) {
+		log.debug("BadRequestException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 			.status(HttpStatus.BAD_REQUEST.value())
 			.path(request.getRequestURI())
