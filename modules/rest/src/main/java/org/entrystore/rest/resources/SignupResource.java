@@ -56,9 +56,10 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -87,7 +88,7 @@ public class SignupResource extends BaseResource {
 		synchronized (mutex) {
 			if (domainWhitelist == null) {
 				Config config = getRM().getConfiguration();
-				List<String> tmpDomainWhitelist = config.getStringList(Settings.SIGNUP_WHITELIST, new ArrayList<String>());
+				List<String> tmpDomainWhitelist = config.getStringList(Settings.SIGNUP_WHITELIST, new ArrayList<>());
 				domainWhitelist = new HashSet<>();
 				// we normalize the list to lower case and to not contain null
 				for (String domain : tmpDomainWhitelist) {
@@ -95,8 +96,8 @@ public class SignupResource extends BaseResource {
 						domainWhitelist.add(domain.toLowerCase());
 					}
 				}
-				if (domainWhitelist.size() > 0) {
-					log.info("Sign-up whitelist initialized with following domains: " + Joiner.on(", ").join(domainWhitelist));
+				if (!domainWhitelist.isEmpty()) {
+					log.info("Sign-up whitelist initialized with following domains: {}", Joiner.on(", ").join(domainWhitelist));
 				} else {
 					log.info("No domains provided for sign-up whitelist; sign-ups for any domain are allowed");
 				}
@@ -160,18 +161,18 @@ public class SignupResource extends BaseResource {
 			if (ci.getCustomProperties() != null) {
 				u.setCustomProperties(ci.getCustomProperties());
 			}
-			log.info("Created user " + u.getURI());
+			log.info("Created user {}", u.getURI());
 
 			if ("on".equalsIgnoreCase(getRM().getConfiguration().getString(Settings.SIGNUP_CREATE_HOME_CONTEXT, "off"))) {
 				// Create context and set ACL and alias
 				Entry homeContext = getCM().createResource(null, GraphType.Context, null, null);
 				homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
 				getCM().setName(homeContext.getEntryURI(), ci.getEmail());
-				log.info("Created context " + homeContext.getResourceURI());
+				log.info("Created context {}", homeContext.getResourceURI());
 
 				// Set home context of user
 				u.setHomeContext((Context) homeContext.getResource());
-				log.info("Set home context of user " + u.getURI() + " to " + homeContext.getResourceURI());
+				log.info("Set home context of user {} to {}", u.getURI(), homeContext.getResourceURI());
 			}
 		} finally {
 			pm.setAuthenticatedUserURI(authUser);
@@ -195,7 +196,7 @@ public class SignupResource extends BaseResource {
 		}
 
 		SignupInfo ci = new SignupInfo(getRM());
-		ci.setExpirationDate(new Date(new Date().getTime() + (24 * 3600 * 1000))); // 24 hours later
+		ci.setExpirationDate(LocalDateTime.now(Clock.systemDefaultZone()).plusDays(1)); // 24 hours later
 		ci.setCustomProperties(new HashMap<>());
 		String rcChallenge = null;
 		String rcResponse = null;
@@ -237,7 +238,7 @@ public class SignupResource extends BaseResource {
 				// Extract custom properties
 				Iterator<String> siJsonKeyIt = siJson.keys();
 				while (siJsonKeyIt.hasNext()) {
-					String key = (String) siJsonKeyIt.next();
+					String key = siJsonKeyIt.next();
 					if (key.startsWith(customPropPrefix) && (key.length() > customPropPrefix.length())) {
 						ci.getCustomProperties().put(key.substring(customPropPrefix.length()), siJson.getString(key));
 					}
@@ -303,7 +304,7 @@ public class SignupResource extends BaseResource {
 
 		Config config = getRM().getConfiguration();
 
-		log.info("Received sign-up request for " + ci.getEmail());
+		log.info("Received sign-up request for {}", ci.getEmail());
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
@@ -312,10 +313,10 @@ public class SignupResource extends BaseResource {
 				getResponse().setEntity(html.representation("reCaptcha information missing"));
 				return;
 			}
-			log.info("Checking reCaptcha for " + ci.getEmail());
+			log.info("Checking reCaptcha for {}", ci.getEmail());
 
 			String remoteAddr = getRequest().getClientInfo().getUpstreamAddress();
-			boolean reCaptchaIsValid = false;
+			boolean reCaptchaIsValid;
 
 			if (rcResponseV2 != null) {
 				RecaptchaVerifier rcVerifier = new RecaptchaVerifier(config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
@@ -328,9 +329,9 @@ public class SignupResource extends BaseResource {
 			}
 
 			if (reCaptchaIsValid) {
-				log.info("Valid reCaptcha for " + ci.getEmail());
+				log.info("Valid reCaptcha for {}", ci.getEmail());
 			} else {
-				log.info("Invalid reCaptcha for " + ci.getEmail());
+				log.info("Invalid reCaptcha for {}", ci.getEmail());
 				getResponse().setStatus(Status.CLIENT_ERROR_EXPECTATION_FAILED);
 				getResponse().setEntity(html.representation("Invalid reCaptcha received."));
 				return;

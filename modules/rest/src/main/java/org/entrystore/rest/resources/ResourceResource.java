@@ -206,6 +206,7 @@ public class ResourceResource extends BaseResource {
 
 	@Delete
 	public void removeRepresentation() {
+
 		if (entry == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			return;
@@ -609,7 +610,7 @@ public class ResourceResource extends BaseResource {
 			if (entry.getResourceType() == ResourceType.InformationResource) {
 				Data data = (Data) entry.getResource();
 				if (!data.delete()) {
-					log.error("Unable to delete resource of entry " + entry.getEntryURI());
+					log.error("Unable to delete resource of entry {}", entry.getEntryURI());
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorUnknownKind));
 				}
@@ -667,7 +668,7 @@ public class ResourceResource extends BaseResource {
 					if (!entry.isDirectory() && (nameLC.endsWith(".xml") || nameLC.endsWith(".rdf"))) {
 						InputStream fileIS = zipFile.getInputStream(entry);
 						if (fileIS == null) {
-							log.error("Unable to get InputStream of ZipEntry: " + nameLC);
+							log.error("Unable to get InputStream of ZipEntry: {}", nameLC);
 							continue;
 						}
 						String fileString;
@@ -680,9 +681,7 @@ public class ResourceResource extends BaseResource {
 								continue;
 							}
 						} finally {
-							if (fileIS != null) {
-								fileIS.close();
-							}
+							fileIS.close();
 						}
 						if (nameLC.endsWith(".rdf")) {
 							importRDFResource(fileString);
@@ -1033,7 +1032,7 @@ public class ResourceResource extends BaseResource {
 						LoginTokenCache loginTokenCache = ((EntryStoreApplication) getApplication()).getLoginTokenCache();
 						loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
 						Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
-						return;
+						//return;  WHY DO WE WANT TO RETURN HERE AND NOT CONTINUE FOR OTHER PARAMS?
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Password must conform to configured rules.\"}"));

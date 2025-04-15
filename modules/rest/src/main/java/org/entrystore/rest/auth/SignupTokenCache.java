@@ -16,7 +16,8 @@
 
 package org.entrystore.rest.auth;
 
-import java.util.Date;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
@@ -38,10 +39,16 @@ public class SignupTokenCache extends TokenCache<String, SignupInfo> {
 	public void cleanup() {
 		synchronized (tokenCache) {
 			for (Map.Entry<String, SignupInfo> e : tokenCache.entrySet()) {
-				if (e.getValue().getExpirationDate().before(new Date())) {
+				if (e.getValue().getExpirationDate().isBefore(LocalDateTime.now(Clock.systemDefaultZone()))) {
 					tokenCache.remove(e.getKey());
 				}
 			}
+		}
+	}
+
+	public void removeAllTokens() {
+		synchronized (tokenCache) {
+			tokenCache.clear();
 		}
 	}
 

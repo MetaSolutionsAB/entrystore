@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,7 +51,8 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.security.SecureRandom;
-import java.util.Date;
+import java.time.Clock;
+import java.time.LocalDateTime;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
@@ -90,7 +91,7 @@ public class PasswordResetResource extends BaseResource {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
 			Entry userEntry = pm.getPrincipalEntry(ci.getEmail());
-			User u = null;
+			User u;
 			if (userEntry != null) {
 				log.debug("Loaded user entry via email adress");
 				u = (User) userEntry.getResource();
@@ -112,6 +113,7 @@ public class PasswordResetResource extends BaseResource {
 			if (u.setSaltedHashedSecret(ci.getSaltedHashedPassword())) {
 				LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
 				loginTokenCache.removeTokens(ci.getEmail());
+				tc.removeAllTokens();
 				log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
 				Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), u.getEntry());
 				log.info("Reset password for user {}", u.getURI());
@@ -146,7 +148,7 @@ public class PasswordResetResource extends BaseResource {
 		}
 
 		SignupInfo ci = new SignupInfo(getRM());
-		ci.setExpirationDate(new Date(new Date().getTime() + (24 * 3600 * 1000))); // 24 hours later
+		ci.setExpirationDate(LocalDateTime.now(Clock.systemDefaultZone()).plusDays(1)); // 24 hours later
 		String rcChallenge = null;
 		String rcResponse = null;
 		String rcResponseV2 = null;
@@ -211,7 +213,7 @@ public class PasswordResetResource extends BaseResource {
 
 		Config config = getRM().getConfiguration();
 
-		log.info("Received password reset request for " + ci.getEmail());
+		log.info("Received password reset request for {}", ci.getEmail());
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
@@ -220,10 +222,10 @@ public class PasswordResetResource extends BaseResource {
 				getResponse().setEntity(html.representation("reCaptcha information missing"));
 				return;
 			}
-			log.info("Checking reCaptcha for " + ci.getEmail());
+			log.info("Checking reCaptcha for {}", ci.getEmail());
 
 			String remoteAddr = getRequest().getClientInfo().getUpstreamAddress();
-			boolean reCaptchaIsValid = false;
+			boolean reCaptchaIsValid;
 
 			if (rcResponseV2 != null) {
 				RecaptchaVerifier rcVerifier = new RecaptchaVerifier(config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
@@ -236,9 +238,9 @@ public class PasswordResetResource extends BaseResource {
 			}
 
 			if (reCaptchaIsValid) {
-				log.info("Valid reCaptcha for " + ci.getEmail());
+				log.info("Valid reCaptcha for {}", ci.getEmail());
 			} else {
-				log.info("Invalid reCaptcha for " + ci.getEmail());
+				log.info("Invalid reCaptcha for {}", ci.getEmail());
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				getResponse().setEntity(html.representation("Invalid reCaptcha received."));
 				return;
@@ -251,7 +253,7 @@ public class PasswordResetResource extends BaseResource {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
 			Entry userEntry = pm.getPrincipalEntry(ci.getEmail());
-			User u = null;
+			User u;
 			if (userEntry != null) {
 				log.debug("Loaded user entry via email adress");
 				u = (User) userEntry.getResource();
@@ -260,7 +262,7 @@ public class PasswordResetResource extends BaseResource {
 				u = pm.getUserByExternalID(ci.getEmail());
 			}
 
-			// to avoid spamming etc we only send emails to users that exist
+			// to avoid spamming etc. we only send emails to users that exist
 			if (u != null) {
 				if (u.isDisabled()) {
 					log.info("User {} is disabled, not allowing password reset", ci.getEmail());

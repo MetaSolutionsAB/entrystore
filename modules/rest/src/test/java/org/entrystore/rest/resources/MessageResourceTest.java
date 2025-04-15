@@ -9,7 +9,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.EntryStoreApplication;
-import org.entrystore.rest.auth.LoginTokenCache;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,8 +30,12 @@ import java.io.IOException;
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-import static org.restlet.data.Status.*;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
+import static org.restlet.data.Status.CLIENT_ERROR_FORBIDDEN;
+import static org.restlet.data.Status.CLIENT_ERROR_UNAUTHORIZED;
+import static org.restlet.data.Status.SUCCESS_OK;
 
 @ExtendWith(MockitoExtension.class)
 class MessageResourceTest {
@@ -41,15 +45,13 @@ class MessageResourceTest {
 	@Mock EntryStoreApplication app;
 	@Mock RepositoryManagerImpl rm;
 	@Mock PrincipalManagerImpl pm;
-	@Mock	Context context;
+	@Mock Context context;
 	@Mock Entry entry;
 	@Mock MessageResource messageResource;
 	Response response;
 
-	@BeforeEach
-	void beforeEach() {
+	private static @NotNull Config getConfig() {
 		Config config = new PropertiesConfiguration("EntryStore Configuration");
-		LoginTokenCache loginTokenCache = new LoginTokenCache(config);
 		config.setProperty(Settings.STORE_TYPE, "memory");
 		config.setProperty(Settings.BASE_URL, "http://localhost:8181/");
 		config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
@@ -58,6 +60,12 @@ class MessageResourceTest {
 		config.setProperty(Settings.SMTP_EMAIL_FROM, "info@meta.se");
 		config.setProperty(Settings.SMTP_HOST, "localhost");
 		config.setProperty(Settings.SMTP_PORT, mail.getSmtp().getPort());
+		return config;
+	}
+
+	@BeforeEach
+	void beforeEach() {
+		Config config = getConfig();
 
 		Request request = new Request();
 		request.setResourceRef("");
@@ -107,7 +115,7 @@ class MessageResourceTest {
 	}
 
 	@Test
-	void userNotAllowedToSendMessageTest() throws MessagingException, IOException {
+	void userNotAllowedToSendMessageTest() {
 		when(pm.getPrincipalEntry("nonexistinguser@moto.se")).thenReturn(null);
 		when(pm.currentUserIsGuest()).thenReturn(false);
 
@@ -130,7 +138,7 @@ class MessageResourceTest {
 	}
 
 	@Test
-	void guestUserShouldNotBeAbleToSendMessageTest() throws MessagingException, IOException {
+	void guestUserShouldNotBeAbleToSendMessageTest() throws IOException {
 		when(pm.currentUserIsGuest()).thenReturn(true);
 
 		String json =
