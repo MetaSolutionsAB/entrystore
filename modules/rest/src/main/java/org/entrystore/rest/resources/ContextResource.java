@@ -88,11 +88,11 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * GET
-	 *
+	 * <p>
 	 * List entries in a portfolio.
-	 *
+	 * <p>
 	 * This URL can be requested from a Web browser etc. This method will
-	 * execute a requests and deliver a response.
+	 * execute a request and deliver a response.
 	 * <ul>
 	 * <li>GET {base-uri}/{context-id}</li>
 	 * </ul>
@@ -146,7 +146,7 @@ public class ContextResource extends BaseResource {
 	 *
 	 * Creates new entries.
 	 *
-	 * These URL:s can be requested from a Web browser etc. This method will
+	 * These URL:s can be requested from a Web browser, etc. This method will
 	 * execute these requests and deliver a response.
 	 * <ul>
 	 * <li>POST {base-uri}/{portfolio-id}?entryType=local&resourcetype={resourcetype}[&listURI={uri}]</li>
@@ -438,8 +438,8 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * Creates a local entry
-	 * @param entry a reference to a entry
-	 * @return the new created entry
+	 * @param entry a reference to an entry
+	 * @return the newly created entry
 	 */
 	private Entry createLocalEntry(Entry entry) {
 		if (isGraphTypeForbidden()) {
@@ -476,9 +476,9 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * Sets resource to an entry.
-	 * @param entry a reference to a entry
-	 * @return false if there is a resource provided but it cannot be interpreted.
-	 * @throws JSONException Exception if payload is malformed
+	 * @param entry a reference to an entry
+	 * @return false if there is a resource provided, but it cannot be interpreted.
+	 * @throws JSONException Exception if the payload is malformed
 	 */
 	private boolean setResource(Entry entry) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
@@ -486,7 +486,7 @@ public class ContextResource extends BaseResource {
 			jsonObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 		}
 
-		//If there is no resource there is nothing to do yet.
+		//If there is no resource, there is nothing to do yet.
 		if (!jsonObj.has("resource")) {
 			return true;
 		}
@@ -574,8 +574,8 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * Creates a link entry.
-	 * @param entry a reference to a entry
-	 * @return the new created entry
+	 * @param entry a reference to an entry
+	 * @return the newly created entry
 	 */
 	private Entry createLinkEntry(Entry entry) {
 		if (isGraphTypeForbidden()) {
@@ -583,7 +583,7 @@ public class ContextResource extends BaseResource {
 		}
 
 		//check the request
-		URI resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
+		URI resourceURI = URI.create(parameters.get("resource"));
 
 		if (parameters.containsKey("list")) {
 			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("list")));
