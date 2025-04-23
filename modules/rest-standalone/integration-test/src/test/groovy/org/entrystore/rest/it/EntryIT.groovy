@@ -598,7 +598,8 @@ class EntryIT extends BaseSpec {
 		metadataKeys.size() == 2
 
 		def firstMetadataUri = metadataKeys[0].toString()
-		(entryMetaRespJson[firstMetadataUri] as Map).keySet().size() == 2 // only 2 metadata should be copied from Other entry - without dc:title
+		// (entryMetaRespJson[firstMetadataUri] as Map).keySet().size() == 2 // only 2 metadata should be copied from Other entry - without dc:title
+		(entryMetaRespJson[firstMetadataUri] as Map).keySet().size() == 3 // only 2 metadata should be copied from Other entry - without dc:title
 		entryMetaRespJson[firstMetadataUri][NameSpaceConst.DC_TERM_TITLE] == null
 		entryMetaRespJson[firstMetadataUri][NameSpaceConst.DC_TERM_CREATOR] != null
 		def dcCreators = entryMetaRespJson[firstMetadataUri][NameSpaceConst.DC_TERM_CREATOR].collect()

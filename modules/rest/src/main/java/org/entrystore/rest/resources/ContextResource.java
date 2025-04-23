@@ -226,7 +226,7 @@ public class ContextResource extends BaseResource {
 					try {
 						templateEntryURI = new URI(template);
 					} catch (URISyntaxException e) {
-						log.warn("Ignoring template, got invalid template URI: " + e.getMessage());
+						log.warn("Ignoring template, got invalid template URI: {}", e.getMessage());
 					}
 					Entry templateEntry = null;
 					if (templateEntryURI != null) {
