@@ -18,6 +18,7 @@ class EntryIT extends BaseSpec {
 
 	def static contextId = '10'
 	def resourceUrl = 'https://bbc.co.uk'
+	def encodedUrl = 'http://example.com/test%20ing'
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
@@ -143,6 +144,36 @@ class EntryIT extends BaseSpec {
 		dcTitles.size() == 1
 		dcTitles[0]['type'] == 'literal'
 		dcTitles[0]['value'] == 'Cool entry'
+	}
+
+	def "POST /{context-id}?entrytype=link should create a new link entry with encoded resource link"() {
+		given:
+		def params = [entrytype: 'link', resource: encodedUrl]
+
+		when:
+		def entryId = createEntry(contextId, params)
+
+		then:
+		entryId.length() > 0
+		// fetch created entry
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/json')
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+		entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE] != null
+		def entryTypes = entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE].collect()
+		entryTypes.size() == 1
+		entryTypes[0]['type'] == 'uri'
+		entryTypes[0]['value'] == NameSpaceConst.TERM_LINK
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		entryResources.size() == 1
+		entryResources[0]['type'] == 'uri'
+		entryResources[0]['value'] == encodedUrl
 	}
 
 	def "POST /{context-id}?entrytype=linkreference without metadata, should create a new link-reference entry with empty local metadata"() {
