@@ -514,15 +514,14 @@ class EntryIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	/*
-	def "POST /{context-id}?entrytype=link&template=otherEntry with metadata in the body, should create a new link entry with local metadata combined with MD from template entry"() {
+	def "POST /{context-id}?entrytype=link&template=templateEntry with metadata in the body, should create a new link entry with local metadata combined with MD from template entry"() {
 		given:
-		def otherEntryParams = [entrytype: 'link', resource: resourceUrl]
+		def templateEntryParams = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def otherEntryBody = [metadata: [(newResourceIri): [
+		def templateEntryBody = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE)  : [[
 												   type : 'literal',
-												   value: 'Other Entry Title'
+												   value: 'Template Entry Title'
 											   ]],
 			(NameSpaceConst.RDF_TYPE)       : [[
 												   type : 'uri',
@@ -530,15 +529,15 @@ class EntryIT extends BaseSpec {
 											   ]],
 			(NameSpaceConst.DC_TERM_CREATOR): [[
 												   type : 'literal',
-												   value: 'Other Entry Creator'
+												   value: 'Template Entry Creator'
 											   ]]
 		]]]
-		def otherEntryId = createEntry(contextId, otherEntryParams, otherEntryBody)
-		assert otherEntryId.length() > 0
+		def tempalteEntryId = createEntry(contextId, templateEntryParams, templateEntryBody)
+		assert tempalteEntryId.length() > 0
 
 		def params = [entrytype: 'link',
 					  resource : resourceUrl,
-					  template : EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + otherEntryId]
+					  template : EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + tempalteEntryId]
 		def body = [metadata: [(newResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE)    : [[
 													 type : 'literal',
@@ -598,40 +597,39 @@ class EntryIT extends BaseSpec {
 		def metadataKeys = (entryMetaRespJson as Map).keySet()
 		metadataKeys.size() == 2
 
-		def firstMetadataUri = metadataKeys[0].toString()
-		(entryMetaRespJson[firstMetadataUri] as Map).keySet().size() == 3 // only 2 metadata should be copied from Other entry - without dc:title
-		entryMetaRespJson[firstMetadataUri][NameSpaceConst.DC_TERM_TITLE] == null
-		entryMetaRespJson[firstMetadataUri][NameSpaceConst.DC_TERM_CREATOR] != null
-		def dcCreators = entryMetaRespJson[firstMetadataUri][NameSpaceConst.DC_TERM_CREATOR].collect()
+		def templateEntryResourceUri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + tempalteEntryId
+		(entryMetaRespJson[templateEntryResourceUri] as Map).keySet().size() == 2 // only 2 metadata should be copied from template entry - without dc:title
+		entryMetaRespJson[templateEntryResourceUri][NameSpaceConst.DC_TERM_TITLE] == null
+		entryMetaRespJson[templateEntryResourceUri][NameSpaceConst.DC_TERM_CREATOR] != null
+		def dcCreators = entryMetaRespJson[templateEntryResourceUri][NameSpaceConst.DC_TERM_CREATOR].collect()
 		dcCreators.size() == 1
 		dcCreators[0]['type'] == 'literal'
-		dcCreators[0]['value'] == 'Other Entry Creator'
-		entryMetaRespJson[firstMetadataUri][NameSpaceConst.RDF_TYPE] != null
-		def rdfTypes = entryMetaRespJson[firstMetadataUri][NameSpaceConst.RDF_TYPE].collect()
+		dcCreators[0]['value'] == 'Template Entry Creator'
+		entryMetaRespJson[templateEntryResourceUri][NameSpaceConst.RDF_TYPE] != null
+		def rdfTypes = entryMetaRespJson[templateEntryResourceUri][NameSpaceConst.RDF_TYPE].collect()
 		rdfTypes.size() == 1
 		rdfTypes[0]['type'] == 'uri'
 		rdfTypes[0]['value'] == NameSpaceConst.NS_DCAT_DATASET
 
-		def secondMetadataUri = metadataKeys[1].toString()
-		(entryMetaRespJson[secondMetadataUri] as Map).keySet().size() == 3 // All 3 metadata should be copied from New entry
-		entryMetaRespJson[secondMetadataUri][NameSpaceConst.DC_TERM_TITLE] != null
-		def dcTitles = entryMetaRespJson[secondMetadataUri][NameSpaceConst.DC_TERM_TITLE].collect()
+		def newEntryResourceUri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryId
+		(entryMetaRespJson[newEntryResourceUri] as Map).keySet().size() == 3 // All 3 metadata should be copied from New entry
+		entryMetaRespJson[newEntryResourceUri][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcTitles = entryMetaRespJson[newEntryResourceUri][NameSpaceConst.DC_TERM_TITLE].collect()
 		dcTitles.size() == 1
 		dcTitles[0]['type'] == 'literal'
 		dcTitles[0]['value'] == 'New Entry Title'
-		entryMetaRespJson[secondMetadataUri][NameSpaceConst.DC_TERM_CREATOR] == null
-		entryMetaRespJson[secondMetadataUri][NameSpaceConst.DC_TERM_PUBLISHER] != null
-		def dcPublishers = entryMetaRespJson[secondMetadataUri][NameSpaceConst.DC_TERM_PUBLISHER].collect()
+		entryMetaRespJson[newEntryResourceUri][NameSpaceConst.DC_TERM_CREATOR] == null
+		entryMetaRespJson[newEntryResourceUri][NameSpaceConst.DC_TERM_PUBLISHER] != null
+		def dcPublishers = entryMetaRespJson[newEntryResourceUri][NameSpaceConst.DC_TERM_PUBLISHER].collect()
 		dcPublishers.size() == 1
 		dcPublishers[0]['type'] == 'literal'
 		dcPublishers[0]['value'] == 'New Entry Publisher'
-		entryMetaRespJson[secondMetadataUri][NameSpaceConst.RDF_TYPE] != null
-		def rdf2Types = entryMetaRespJson[secondMetadataUri][NameSpaceConst.RDF_TYPE].collect()
+		entryMetaRespJson[newEntryResourceUri][NameSpaceConst.RDF_TYPE] != null
+		def rdf2Types = entryMetaRespJson[newEntryResourceUri][NameSpaceConst.RDF_TYPE].collect()
 		rdf2Types.size() == 1
 		rdf2Types[0]['type'] == 'uri'
 		rdf2Types[0]['value'] == NameSpaceConst.TERM_NAMED_RESOURCE
 	}
-	 */
 
 	def "GET /{context-id}/entry/{entry-id}?includeAll for a link entry, should return extra information about the entry"() {
 		given:
