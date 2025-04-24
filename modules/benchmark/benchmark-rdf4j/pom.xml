@@ -4,14 +4,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <artifactId>entrystore-benchmark-rdf4j</artifactId>
-    <version>5.6.1</version>
+    <version>5.6.2</version>
     <packaging>jar</packaging>
     <name>EntryStore Benchmark RDF4J</name>
 
     <parent>
         <groupId>org.entrystore</groupId>
         <artifactId>entrystore-benchmark</artifactId>
-        <version>5.6.1</version>
+        <version>5.6.2</version>
     </parent>
 
     <dependencies>
