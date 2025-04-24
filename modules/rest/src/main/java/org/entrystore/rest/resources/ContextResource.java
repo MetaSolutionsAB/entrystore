@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,12 +57,9 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.regex.Pattern;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 
 /**
@@ -88,11 +85,11 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * GET
-	 *
+	 * <p>
 	 * List entries in a portfolio.
-	 *
+	 * <p>
 	 * This URL can be requested from a Web browser etc. This method will
-	 * execute a requests and deliver a response.
+	 * execute a request and deliver a response.
 	 * <ul>
 	 * <li>GET {base-uri}/{context-id}</li>
 	 * </ul>
@@ -143,10 +140,10 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * POST
-	 *
+	 * <p>
 	 * Creates new entries.
-	 *
-	 * These URL:s can be requested from a Web browser etc. This method will
+	 * <p>
+	 * These URL:s can be requested from a Web browser, etc. This method will
 	 * execute these requests and deliver a response.
 	 * <ul>
 	 * <li>POST {base-uri}/{portfolio-id}?entryType=local&resourcetype={resourcetype}[&listURI={uri}]</li>
@@ -226,7 +223,7 @@ public class ContextResource extends BaseResource {
 					try {
 						templateEntryURI = new URI(template);
 					} catch (URISyntaxException e) {
-						log.warn("Ignoring template, got invalid template URI: " + e.getMessage());
+						log.warn("Ignoring template, got invalid template URI: {}", e.getMessage());
 					}
 					Entry templateEntry = null;
 					if (templateEntryURI != null) {
@@ -291,8 +288,8 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * Creates a LinkReference entry.
-	 * @param entry a reference to a entry object.
-	 * @return the new created entry object.
+	 * @param entry a reference to an entry object.
+	 * @return the newly created entry object.
 	 */
 	private Entry createLinkReferenceEntry(Entry entry) {
 		if (isGraphTypeForbidden()) {
@@ -303,8 +300,8 @@ public class ContextResource extends BaseResource {
 			if (parameters.get("resource") != null
 					&& "linkreference".equalsIgnoreCase(parameters.get("entrytype"))) {
 
-				URI resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
-				URI metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), UTF_8));
+				URI resourceURI = URI.create(parameters.get("resource"));
+				URI metadataURI = URI.create(parameters.get("cached-external-metadata"));
 
 				if (parameters.containsKey("list")) {
 					entry = context.createLinkReference(parameters.get("id"), resourceURI, metadataURI, new URI(parameters.get("list")));
@@ -341,8 +338,8 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * Creates a Reference entry.
-	 * @param entry a reference to a entry
-	 * @return the new created entry
+	 * @param entry a reference to an entry
+	 * @return the newly created entry
 	 */
 	private Entry createReferenceEntry(Entry entry) {
 		if (isGraphTypeForbidden()) {
@@ -353,8 +350,8 @@ public class ContextResource extends BaseResource {
 			if ((parameters.get("resource") != null) &&
 					(parameters.get("cached-external-metadata") != null) &&
 					("reference".equalsIgnoreCase(parameters.get("entrytype")))) {
-				URI resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
-				URI metadataURI = URI.create(URLDecoder.decode(parameters.get("cached-external-metadata"), UTF_8));
+				URI resourceURI = URI.create(parameters.get("resource"));
+				URI metadataURI = URI.create(parameters.get("cached-external-metadata"));
 
 				if (parameters.containsKey("list")) {
 					entry = context.createReference(parameters.get("id"), resourceURI, metadataURI, new URI(parameters.get("list")));
@@ -364,20 +361,18 @@ public class ContextResource extends BaseResource {
 				ResourceType rt = getResourceType(parameters.get("informationresource"));
 				entry.setResourceType(rt);
 
-				if (entry != null) {
-					setCachedMetadataGraph(entry);
-					setEntryGraph(entry);
-					if (parameters.containsKey("graphtype")) {
-						GraphType bt = getGraphType(parameters.get("graphtype"));
-						entry.setGraphType(bt);
-					}
-					if (parameters.containsKey("list")) {
-						try {
-							URI listURI = new URI((parameters.get("list")));
-							((ContextImpl) context).copyACL(listURI, entry);
-						} catch (URISyntaxException e) {
-							log.warn(e.getMessage());
-						}
+				setCachedMetadataGraph(entry);
+				setEntryGraph(entry);
+				if (parameters.containsKey("graphtype")) {
+					GraphType bt = getGraphType(parameters.get("graphtype"));
+					entry.setGraphType(bt);
+				}
+				if (parameters.containsKey("list")) {
+					try {
+						URI listURI = new URI((parameters.get("list")));
+						((ContextImpl) context).copyACL(listURI, entry);
+					} catch (URISyntaxException e) {
+						log.warn(e.getMessage());
 					}
 				}
 
@@ -438,8 +433,8 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * Creates a local entry
-	 * @param entry a reference to a entry
-	 * @return the new created entry
+	 * @param entry a reference to an entry
+	 * @return the newly created entry
 	 */
 	private Entry createLocalEntry(Entry entry) {
 		if (isGraphTypeForbidden()) {
@@ -476,9 +471,9 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * Sets resource to an entry.
-	 * @param entry a reference to a entry
-	 * @return false if there is a resource provided but it cannot be interpreted.
-	 * @throws JSONException Exception if payload is malformed
+	 * @param entry a reference to an entry
+	 * @return false if there is a resource provided, but it cannot be interpreted.
+	 * @throws JSONException Exception if the payload is malformed
 	 */
 	private boolean setResource(Entry entry) throws JSONException {
 		JSONObject jsonObj = new JSONObject();
@@ -486,7 +481,7 @@ public class ContextResource extends BaseResource {
 			jsonObj = new JSONObject(requestText.replaceAll("_newId", entry.getId()));
 		}
 
-		//If there is no resource there is nothing to do yet.
+		//If there is no resource, there is nothing to do yet.
 		if (!jsonObj.has("resource")) {
 			return true;
 		}
@@ -551,7 +546,7 @@ public class ContextResource extends BaseResource {
 				try {
 					cont.setQuota(jsonObj.getLong("quota"));
 				} catch (JSONException jsone) {
-					log.warn("Unable to parse new quota value: " + jsone.getMessage());
+					log.warn("Unable to parse new quota value: {}", jsone.getMessage());
 				}
 			}
 			break;
@@ -574,8 +569,8 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * Creates a link entry.
-	 * @param entry a reference to a entry
-	 * @return the new created entry
+	 * @param entry a reference to an entry
+	 * @return the newly created entry
 	 */
 	private Entry createLinkEntry(Entry entry) {
 		if (isGraphTypeForbidden()) {
@@ -583,7 +578,7 @@ public class ContextResource extends BaseResource {
 		}
 
 		//check the request
-		URI resourceURI = URI.create(URLDecoder.decode(parameters.get("resource"), UTF_8));
+		URI resourceURI = URI.create(parameters.get("resource"));
 
 		if (parameters.containsKey("list")) {
 			entry = context.createLink(parameters.get("id"), resourceURI, URI.create(parameters.get("list")));
@@ -610,7 +605,7 @@ public class ContextResource extends BaseResource {
 	}
 
 	/**
-	 * Extracts metadata from the request and sets it as the entrys local metadata graph.
+	 * Extracts metadata from the request and sets it as the entry's local metadata graph.
 	 * @param entry The entry to set the metadata on.
 	 */
 	private void setLocalMetadataGraph(Entry entry) {
@@ -663,9 +658,9 @@ public class ContextResource extends BaseResource {
 	}
 
 	/**
-	 * Extracts entryinfo from the request and sets it as the entrys local metadata graph.
-	 * Since it assumes this is the creation step, the Entries URIs was not available
-	 * on the client, hence the special "_newId" entryId has been used.
+	 * Extracts entryinfo from the request and sets it as the entry's local metadata graph.
+	 * Since it assumes this is the creation step, the Entries URIs were not available
+	 * on the client; hence the special "_newId" entryId has been used.
 	 * Make sure this is replaced with the new entryId first.
 	 *
 	 * @param entry The entry to set the metadata on.
@@ -711,7 +706,7 @@ public class ContextResource extends BaseResource {
 
 	/**
 	 * Returns false if the Graph Type provided in the parameters
-	 * cannot be used for manually created entries
+	 * cannot be used for manually created entries.
 	 *
 	 * @return True if Graph Type is forbidden/blacklisted.
 	 */
@@ -727,7 +722,7 @@ public class ContextResource extends BaseResource {
 	/**
 	 * Checks whether the provided ID only contains allowed characters.
 	 *
-	 * @return True if supplied ID is valid.
+	 * @return True, if supplied, ID is valid.
 	 */
 	private boolean isEntryIdValid(String id) {
 		return Pattern.compile("^[\\w\\-]+$").matcher(id).matches();
