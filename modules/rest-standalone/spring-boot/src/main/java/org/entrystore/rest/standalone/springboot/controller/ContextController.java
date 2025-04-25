@@ -49,15 +49,19 @@ public class ContextController {
 		@RequestParam(required = false, name = "cached-external-metadata") URI cachedExternalMetadataUri,
 		@RequestParam(required = false, name = "informationresource") String informationResource,
 		@RequestParam(required = false, name = "template") URI templateUri,
-		@RequestBody CreateEntryRequestBody body) {
+		@RequestBody(required = false) CreateEntryRequestBody body) {
 
 		if (graphType == GraphType.PipelineResult) {
 			throw new BadRequestException("Pipeline results may only be created by Pipelines");
 		}
 
+		String bodyResource = null;
+		if (body != null) {
+			bodyResource = body.resource();
+		}
 
 		Entry entry = contextService.createEntry(contextId, entryId, entryType, graphType, resourceUri, listUri,
-			groupUri, cachedExternalMetadataUri, informationResource, templateUri, body);
+			groupUri, cachedExternalMetadataUri, informationResource, templateUri, bodyResource);
 
 
 		CreateEntryResponse responseBody = new CreateEntryResponse(entry.getId());

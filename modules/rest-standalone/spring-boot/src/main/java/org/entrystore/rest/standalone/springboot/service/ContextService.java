@@ -16,7 +16,6 @@ import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.NS;
-import org.entrystore.rest.standalone.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.springframework.stereotype.Service;
 
@@ -72,7 +71,7 @@ public class ContextService {
 
 	public Entry createEntry(String contextId, String entryId, EntryType entryType, GraphType graphType,
 							 URI resourceUri, URI listUri, URI groupUri, URI cachedExternalMetadataUri,
-							 String informationResource, URI templateUri, CreateEntryRequestBody body) {
+							 String informationResource, URI templateUri, String bodyResource) {
 
 		Context context = getContext(contextId);
 		if (context == null) {
@@ -94,25 +93,25 @@ public class ContextService {
 		try {
 			// Local
 			if (entryType == null || entryType == EntryType.Local) {
-				entry = entryService.createLocalEntry(context, entryId, graphType, listUri, groupUri, body.resource());
+				entry = entryService.createLocalEntry(context, entryId, graphType, listUri, groupUri, bodyResource);
 			} else {
 				// Link
 				if (entryType == EntryType.Link && resourceUri != null) {
-					entry = entryService.createLinkEntry(context, entryId, graphType, resourceUri, listUri, body.resource());
+					entry = entryService.createLinkEntry(context, entryId, graphType, resourceUri, listUri, bodyResource);
 				}
 				// Reference
 				else if (entryType == EntryType.Reference
 					&& resourceUri != null
 					&& cachedExternalMetadataUri != null) {
 
-					entry = entryService.createReferenceEntry(context, entryId, graphType, resourceUri, listUri, cachedExternalMetadataUri, body.resource());
+					entry = entryService.createReferenceEntry(context, entryId, graphType, resourceUri, listUri, cachedExternalMetadataUri, bodyResource);
 				}
 				// LinkReference
 				else if (entryType == EntryType.LinkReference
 					&& resourceUri != null
 					&& cachedExternalMetadataUri != null) {
 
-					entry = entryService.createLinkReferenceEntry(context, entryId, graphType, resourceUri, listUri, cachedExternalMetadataUri, body.resource());
+					entry = entryService.createLinkReferenceEntry(context, entryId, graphType, resourceUri, listUri, cachedExternalMetadataUri, bodyResource);
 				}
 			}
 		} catch (IllegalArgumentException iae) {
