@@ -47,12 +47,14 @@ public class ESUserDetailsService implements UserDetailsService {
 
 	private UserDetails mapESUserToUserDetails(User user) {
 
-		return org.springframework.security.core.userdetails.User
+		UserDetails userDetails = org.springframework.security.core.userdetails.User
 			.withUsername(user.getName())
 			.password(user.getSaltedHashedSecret())
 			.disabled(user.isDisabled())
 			.roles(isAdmin(user) ? UserAuthRole.ADMIN.name() : UserAuthRole.USER.name())
 			.build();
+
+		return new ESUserDetails(userDetails, user);
 	}
 
 	private boolean isAdmin(User user) {

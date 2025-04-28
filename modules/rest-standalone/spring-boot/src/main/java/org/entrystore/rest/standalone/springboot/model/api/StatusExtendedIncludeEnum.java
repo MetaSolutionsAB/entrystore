@@ -3,6 +3,8 @@ package org.entrystore.rest.standalone.springboot.model.api;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Arrays;
+
 @Getter
 public enum StatusExtendedIncludeEnum {
 	COUNT_STATS,
@@ -18,6 +20,6 @@ public enum StatusExtendedIncludeEnum {
 			}
 		}
 		throw new IllegalArgumentException(
-			"No enum constant of StatusExtendedIncludeEnum." + input);
+			"Unknown value for StatusExtendedIncludeEnum: '" + input + "'. Allowed values: " + Arrays.toString(values()));
 	}
 }

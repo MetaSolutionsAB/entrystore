@@ -1,5 +1,6 @@
 package org.entrystore.rest.standalone.springboot.security;
 
+import lombok.RequiredArgsConstructor;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.standalone.springboot.model.UserAuthRole;
 import org.springframework.context.annotation.Bean;
@@ -9,9 +10,13 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+	private final PostAuthenticationFilter postAuthenticationFilter;
 
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -36,7 +41,8 @@ public class SecurityConfig {
 			.logout(logout -> logout
 				.logoutUrl("/auth/logout")
 				.permitAll())
-			.httpBasic(Customizer.withDefaults());
+			.httpBasic(Customizer.withDefaults())
+			.addFilterAfter(postAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 		return http.build();
 	}
 
