@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +35,7 @@ public class AppExceptionHandler {
 		ErrorResponse responseBody = ErrorResponse.builder()
 			.status(HttpStatus.BAD_REQUEST.value())
 			.path(request.getRequestURI())
-			.errors(errorMessages.toString())
+			.error(errorMessages.toString())
 			.build();
 
 		return ResponseEntity.badRequest().body(responseBody);
@@ -47,9 +48,21 @@ public class AppExceptionHandler {
 		ErrorResponse responseBody = ErrorResponse.builder()
 			.status(HttpStatus.BAD_REQUEST.value())
 			.path(request.getRequestURI())
-			.errors(ex.getMessage())
+			.error(ex.getMessage())
 			.build();
 		return ResponseEntity.badRequest().body(responseBody);
+	}
+
+	@ExceptionHandler(EntityNotFoundException.class)
+	public ResponseEntity<ErrorResponse> handleEntityNotFoundException(EntityNotFoundException ex,
+																	   HttpServletRequest request) {
+		log.debug("EntityNotFoundException: {}", ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+			.status(HttpStatus.NOT_FOUND.value())
+			.path(request.getRequestURI())
+			.error(ex.getMessage())
+			.build();
+		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(responseBody);
 	}
 
 	@ExceptionHandler(HttpMessageNotReadableException.class)
@@ -58,7 +71,7 @@ public class AppExceptionHandler {
 		ErrorResponse responseBody = ErrorResponse.builder()
 			.status(HttpStatus.BAD_REQUEST.value())
 			.path(request.getRequestURI())
-			.errors(ex.getMessage())
+			.error(ex.getMessage())
 			.build();
 		return ResponseEntity.badRequest().body(responseBody);
 	}
