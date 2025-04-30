@@ -158,8 +158,8 @@ public class StatisticsResource extends BaseResource {
 		ValueFactory vf = getRM().getValueFactory();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
-		getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
 		try {
+			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
 			Set<URI> entries = context.getEntries();
 			
 			// Map<predicate, Set<entryID>>
@@ -266,8 +266,8 @@ public class StatisticsResource extends BaseResource {
 		ValueFactory vf = getRM().getValueFactory();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
-		getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
 		try {
+			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
 			Set<URI> entries = context.getEntries();
 			
 			// Map<predicate, Set<entryID>>
@@ -406,8 +406,8 @@ public class StatisticsResource extends BaseResource {
 		ValueFactory vf = getRM().getValueFactory();
 		
 		URI currentUserURI = getPM().getAuthenticatedUserURI();
-		getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
 		try {
+			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
 			Set<URI> entries = context.getEntries();
 			
 			// Map<predicate, Set<entryID>>
