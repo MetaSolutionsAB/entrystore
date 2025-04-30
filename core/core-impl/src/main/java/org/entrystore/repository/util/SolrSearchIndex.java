@@ -813,15 +813,19 @@ public class SolrSearchIndex implements SearchIndex {
 		// publicly viewable metadata?
 		boolean guestReadable = false;
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
-		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
-			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
-			guestReadable = true;
-		} catch (AuthorizationException ignored) {
-		} catch (IllegalArgumentException iae) {
-			log.warn(iae.getMessage());
+			pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+			try {
+				pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadMetadata);
+				guestReadable = true;
+			} catch (AuthorizationException ignored) {
+			} catch (IllegalArgumentException iae) {
+				log.warn(iae.getMessage());
+			}
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
 		}
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		doc.setField("public", guestReadable);
 
 		addGenericMetadataFields(doc, mdGraph, false);
@@ -974,8 +978,8 @@ public class SolrSearchIndex implements SearchIndex {
 	public void postEntry(Entry entry) {
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			URI entryURI = entry.getEntryURI();
 			synchronized (postQueue) {
 				if (postQueue.getIfPresent(entryURI) != null) {

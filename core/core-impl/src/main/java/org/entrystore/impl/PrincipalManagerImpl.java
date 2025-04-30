@@ -129,22 +129,25 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		throw new org.entrystore.repository.RepositoryException("Given URI does not refer to a Principal.");
 	}
 
-    public boolean isUserAdminOrAdminGroup(URI principal) {
-        URI currentUserURI = getAuthenticatedUserURI();
-        URI adminUserURI = getAdminUser().getURI();
-        setAuthenticatedUserURI(adminUserURI);
-        if (principal == null) {
-            principal = currentUserURI;
-        }
-        User user = getUser(principal);
-        if (adminUserURI.equals(principal)
-                || getAdminGroup().isMember(user)) {
-            setAuthenticatedUserURI(currentUserURI);
-            return true;
-        }
-        setAuthenticatedUserURI(currentUserURI);
-        return false;
-    }
+	public boolean isUserAdminOrAdminGroup(URI principal) {
+		URI currentUserURI = getAuthenticatedUserURI();
+		if (principal == null) {
+			principal = currentUserURI;
+		}
+		URI adminUserURI = getAdminUser().getURI();
+
+		try {
+			setAuthenticatedUserURI(adminUserURI);
+			User user = getUser(principal);
+			if (adminUserURI.equals(principal) || getAdminGroup().isMember(user)) {
+				return true;
+			}
+		} finally {
+			setAuthenticatedUserURI(currentUserURI);
+		}
+
+		return false;
+	}
 
 
     /**
@@ -328,11 +331,11 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 				(accessProperty == AccessProperty.ReadMetadata || accessProperty == AccessProperty.ReadResource)) {
 			return;
 		}
-		//Switch to admin so that the PrincipalManager can perform all
-		//neccessary checks without being hindered by itself (results in loops).
-		setAuthenticatedUserURI(getAdminUser().getURI());
 
 		try {
+			//Switch to admin so that the PrincipalManager can perform all
+			//neccessary checks without being hindered by itself (results in loops).
+			setAuthenticatedUserURI(getAdminUser().getURI());
 
 			//Fetch the current user from thread local.
 			User currentUser = getUser(currentUserURI);
@@ -439,7 +442,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 		//is anyone logged in on this thread?
 		if (currentUserURI == null) {
 			//TODO, should we perhaps assume guest if none set?
-			log.error("Authenticated user not set, should at least be guest.");
+			log.error("Authenticated user not set, should at least be guest");
 			throw new AuthorizationException(null, entry, null);
 		}
 
@@ -449,11 +452,10 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			return set;
 		}
 
-		//Switch to admin so that the PrincipalManager can perform all
-		//neccessary checks without being hindered by itself (results in loops).
-		setAuthenticatedUserURI(getAdminUser().getURI());
-
 		try {
+			//Switch to admin so that the PrincipalManager can perform all
+			//neccessary checks without being hindered by itself (results in loops).
+			setAuthenticatedUserURI(getAdminUser().getURI());
 
 			//Fetch the current user from thread local.
 			User currentUser = getUser(currentUserURI);
