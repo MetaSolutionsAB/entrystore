@@ -9,7 +9,7 @@ public record ErrorResponse(
 	LocalDateTime timestamp,
 	int status,
 	String path,
-	String errors
+	String error
 ) {
 	public static class ErrorResponseBuilder {
 		ErrorResponseBuilder() {

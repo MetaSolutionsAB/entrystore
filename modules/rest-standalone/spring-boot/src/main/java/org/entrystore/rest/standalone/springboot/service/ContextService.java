@@ -14,15 +14,18 @@ import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
+import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -34,11 +37,29 @@ public class ContextService {
 	private final ReservedNamesService reservedNames;
 
 
-	public List<String> getContextEntries(String contextId) {
+	public List<String> getContextEntries(String contextId, boolean deletedEntries, String entryName) {
 
 		Context context = getContext(contextId);
 		if (context == null) {
 			throw new BadRequestException("No context with id '" + contextId + "' found");
+		}
+
+		if (deletedEntries) {
+
+			return context.getDeletedEntries().keySet()
+				.stream()
+				.map(URI::toString)
+				.map(uri -> uri.substring(uri.lastIndexOf("/") + 1))
+				.collect(Collectors.toList());
+
+		} else if (context instanceof EntryNamesContext && entryName != null) {
+
+			Entry matchedEntry = ((EntryNamesContext) context).getEntryByName(entryName);
+			if (matchedEntry != null) {
+				return List.of(matchedEntry.getId());
+			} else {
+				throw new EntityNotFoundException("Entity with name '" + entryName + "' not found in context '" + contextId + "'");
+			}
 		}
 
 		return context.getEntries()

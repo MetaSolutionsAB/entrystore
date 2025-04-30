@@ -87,6 +87,73 @@ class ContextIT extends BaseSpec {
 		responseJson['info'] != null
 	}
 
+	def "GET /{context-id} should return context entries for admin user"() {
+
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson.collect().contains('_contexts')
+		responseJson.collect().contains('_principals')
+	}
+
+	def "GET /{context-id}?deleted should return empty list of entries for admin user"() {
+
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts?deleted')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson.collect().size() == 0
+	}
+
+	def "GET /{context-id} should respond with UNAUTHORIZED for non-admin user"() {
+
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts', null)
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		responseJson['error'] != null
+		responseJson['status'] != null
+		responseJson['timestamp'] != null
+	}
+
+	def "GET /{context-id}?entryname=some-random-name should return NOT_FOUND for admin user"() {
+
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts?entryname=some-random-name')
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		responseJson['error'] != null
+		responseJson['status'] != null
+		responseJson['timestamp'] != null
+	}
+
+	def "GET /{context-id}?entryname=some-random-name should respond with UNAUTHORIZED for non-admin user"() {
+
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts?entryname=some-random-name', null)
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		responseJson['error'] != null
+		responseJson['status'] != null
+		responseJson['timestamp'] != null
+	}
+
 	def "POST /_contexts?id={id} should create a new context with specified ID"() {
 		given:
 		def contextId = 'new-context'

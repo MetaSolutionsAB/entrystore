@@ -13,6 +13,7 @@ import org.entrystore.rest.standalone.springboot.service.ContextService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,10 +31,15 @@ public class ContextController {
 
 	private final ContextService contextService;
 
+	@PreAuthorize("hasRole('ADMIN')")
 	@Operation(summary = "Returns an array of IDs of a context's entries")
 	@GetMapping(path = "/{context-id}", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
-	public List<String> getContextEntries(@PathVariable("context-id") String contextId) {
-		return contextService.getContextEntries(contextId);
+	public List<String> getContextEntries(
+		@PathVariable("context-id") String contextId,
+		@RequestParam(required = false, name = "entryname") String entryName,
+		@RequestParam(required = false, name = "deleted") String deletedEntries
+	) {
+		return contextService.getContextEntries(contextId, deletedEntries != null, entryName);
 	}
 
 	@Operation(summary = "Creates a new entry inside the given context")
