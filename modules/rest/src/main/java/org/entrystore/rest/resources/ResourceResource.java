@@ -746,7 +746,7 @@ public class ResourceResource extends BaseResource {
 			alias = EntryUtil.getTitle(entry, language);
 		}
 
-		SyndFeed feed = Syndication.createFeedFromEntries(getRM().getPrincipalManager(), recursiveEntries, language, feedSize);
+		SyndFeed feed = Syndication.createFeedFromEntries(getRM(), recursiveEntries, language, feedSize, parameters.get(Syndication.URL_PARAM_TEMPLATE));
 		feed.setTitle("Feed of \"" + alias + "\"");
 		feed.setLink(entry.getResourceURI().toString());
 		feed.setFeedType(feedType);
