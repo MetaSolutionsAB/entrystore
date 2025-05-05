@@ -220,6 +220,8 @@ public class Settings {
 
 	public static String HTTP_HEADER_SERVER = "entrystore.http.header.server";
 
+	public static String JSONP = "entrystore.jsonp";
+
 	public static String RDF4J_SOFT_FAIL_ON_CORRUPT_DATA_AND_REPAIR_INDEXES = "org.eclipse.rdf4j.sail.nativerdf.softFailOnCorruptDataAndRepairIndexes";
 
 	public static String METRICS = "entrystore.metrics";
