@@ -112,20 +112,13 @@ public class SearchResource extends BaseResource {
 			}
 
 			// Query parameter: syndication
-			var syndication = getOptionalParameter("syndication", null);
+			String syndication = getOptionalParameter("syndication", null);
 
 			// Query parameter: lang
-			var language = getOptionalParameter("lang", "en");
+			String language = getOptionalParameter("lang", "en");
 
 			// Query parameter: sort
 			String sorting = getOptionalParameter("sort", null);
-			if (syndication != null && sorting != null) {
-				String msg = "Query parameter 'sort' not supported with syndication";
-				log.info(msg);
-				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-				return new JsonRepresentation(
-					"{\"error\":\"" + msg + "\"}");
-			}
 
 			// Query parameter: offset
 			int offset = getOptionalParameterAsInteger("offset", 0);
