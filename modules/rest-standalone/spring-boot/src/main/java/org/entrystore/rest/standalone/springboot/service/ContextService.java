@@ -81,6 +81,7 @@ public class ContextService {
 		ContextManager cm = repositoryManager.getContextManager();
 
 		if (cm != null && contextId != null) {
+			// TODO: Why do we verify contextId against reservedNames on each context fetch? Should be done on Context creation only
 			if (reservedNames.contains(contextId.toLowerCase())) {
 				log.error("Context ID is a reserved term and must not be used: \"{}\". This error is likely to be caused by an error in the REST routing.", contextId);
 			} else {
