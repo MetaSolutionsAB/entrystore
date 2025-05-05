@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Objects;
 
 import static java.lang.String.format;
+import static java.net.URLEncoder.encode;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Slf4j
 public class Syndication {
@@ -129,10 +131,10 @@ public class Syndication {
 	private static String constructSyndLinkFromUrlTemplate(Config config, String templateName, Entry entry) {
 		String template = config.getString(Settings.SYNDICATION_URL_TEMPLATE + "." + templateName);
 		if (template != null) {
-			return template.replaceAll(VAR_ENTRYID, entry.getId()).
-				replaceAll(VAR_CONTEXTID, entry.getContext().getEntry().getId()).
-				replaceAll(VAR_ENTRYURI, entry.getEntryURI().toString()).
-				replaceAll(VAR_RESOURCEURI, entry.getResourceURI().toString());
+			return template.replaceAll(VAR_ENTRYID, encode(entry.getId(), UTF_8)).
+				replaceAll(VAR_CONTEXTID, encode(entry.getContext().getEntry().getId(), UTF_8)).
+				replaceAll(VAR_ENTRYURI, encode(entry.getEntryURI().toString(), UTF_8)).
+				replaceAll(VAR_RESOURCEURI, encode(entry.getResourceURI().toString(), UTF_8));
 		}
 		return null;
 	}
