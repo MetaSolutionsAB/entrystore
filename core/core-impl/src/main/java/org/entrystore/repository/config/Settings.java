@@ -160,6 +160,8 @@ public class Settings {
 	public static String SOLR_RELATED = "entrystore.solr.related";
 	public static String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";
 
+	public static String SYNDICATION_URL_TEMPLATE = "entrystore.syndication.url-template";
+
 	public static String REPOSITORY_REWRITE_BASEREFERENCE = "entrystore.repository.rewrite-basereference";
 
 	public static String REPOSITORY_CACHE = "entrystore.repository.cache";
