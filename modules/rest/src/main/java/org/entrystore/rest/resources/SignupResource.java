@@ -56,8 +56,8 @@ import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
-import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -196,7 +196,7 @@ public class SignupResource extends BaseResource {
 		}
 
 		SignupInfo ci = new SignupInfo(getRM());
-		ci.setExpirationDate(LocalDateTime.now(Clock.systemDefaultZone()).plusDays(1)); // 24 hours later
+		ci.setExpirationDate(Instant.now().plus(1, ChronoUnit.DAYS)); // 24 hours later
 		ci.setCustomProperties(new HashMap<>());
 		String rcChallenge = null;
 		String rcResponse = null;

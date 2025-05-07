@@ -51,8 +51,8 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.security.SecureRandom;
-import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
@@ -113,7 +113,7 @@ public class PasswordResetResource extends BaseResource {
 			if (u.setSaltedHashedSecret(ci.getSaltedHashedPassword())) {
 				LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
 				loginTokenCache.removeTokens(ci.getEmail());
-				tc.removeAllTokens();
+				tc.removeAllTokens(ci.getEmail());
 				log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
 				Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), u.getEntry());
 				log.info("Reset password for user {}", u.getURI());
@@ -148,7 +148,11 @@ public class PasswordResetResource extends BaseResource {
 		}
 
 		SignupInfo ci = new SignupInfo(getRM());
-		ci.setExpirationDate(LocalDateTime.now(Clock.systemDefaultZone()).plusDays(1)); // 24 hours later
+		if (System.getProperty("mockito.now") != null && !"".equals(System.getProperty("mockito.now"))) {
+			ci.setExpirationDate(Instant.parse(System.getProperty("mockito.now")));
+		} else {
+			ci.setExpirationDate(Instant.now().plus(1, ChronoUnit.DAYS)); // 24 hours later
+		}
 		String rcChallenge = null;
 		String rcResponse = null;
 		String rcResponseV2 = null;
