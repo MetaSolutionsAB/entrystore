@@ -148,11 +148,7 @@ public class PasswordResetResource extends BaseResource {
 		}
 
 		SignupInfo ci = new SignupInfo(getRM());
-		if (System.getProperty("mockito.now") != null && !"".equals(System.getProperty("mockito.now"))) {
-			ci.setExpirationDate(Instant.parse(System.getProperty("mockito.now")));
-		} else {
-			ci.setExpirationDate(Instant.now().plus(1, ChronoUnit.DAYS)); // 24 hours later
-		}
+		ci.setExpirationDate(Instant.now().plus(1, ChronoUnit.DAYS)); // 24 hours later
 		String rcChallenge = null;
 		String rcResponse = null;
 		String rcResponseV2 = null;
@@ -234,7 +230,7 @@ public class PasswordResetResource extends BaseResource {
 			if (rcResponseV2 != null) {
 				RecaptchaVerifier rcVerifier = new RecaptchaVerifier(config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
 				reCaptchaIsValid = rcVerifier.verify(rcResponseV2, remoteAddr);
-			} else {
+			} else { // TODO this reCaptcha version is a dead code, to be removed with ENTRYSTORE-897
 				ReCaptchaImpl captcha = new ReCaptchaImpl();
 				captcha.setPrivateKey(config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
 				ReCaptchaResponse reCaptchaResponse = captcha.checkAnswer(remoteAddr, rcChallenge, rcResponse);
@@ -312,7 +308,7 @@ public class PasswordResetResource extends BaseResource {
 			if (siteKey == null) {
 				log.warn("reCaptcha site key must be configured; rendering form without reCaptcha");
 			} else {
-				/* reCaptcha 1.0 (deprecated)
+				/* reCaptcha 1.0 (deprecated) TODO ENTRYSTORE-897
 				String publicKey = config.getString(Settings.AUTH_RECAPTCHA_PUBLIC_KEY);
 				ReCaptcha c = ReCaptchaFactory.newReCaptcha(publicKey, privateKey, false);
 				reCaptchaHtml = c.createRecaptchaHtml(null, null);
