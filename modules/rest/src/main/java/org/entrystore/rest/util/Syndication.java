@@ -1,5 +1,6 @@
 package org.entrystore.rest.util;
 
+import com.google.common.html.HtmlEscapers;
 import com.rometools.rome.feed.synd.SyndContent;
 import com.rometools.rome.feed.synd.SyndContentImpl;
 import com.rometools.rome.feed.synd.SyndEntry;
@@ -137,6 +138,17 @@ public class Syndication {
 				replaceAll(VAR_RESOURCEURI, encode(entry.getResourceURI().toString(), UTF_8));
 		}
 		return null;
+	}
+
+	public static String sanitizeFeedTitle(String feedTitle) {
+		String result = feedTitle;
+		if (result != null) {
+			if (result.length() > 64) {
+				result = result.substring(0, 63);
+			}
+			result = HtmlEscapers.htmlEscaper().escape(result);
+		}
+		return result;
 	}
 
 }

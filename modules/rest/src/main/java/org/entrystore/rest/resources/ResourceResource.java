@@ -746,7 +746,7 @@ public class ResourceResource extends BaseResource {
 		}
 
 		SyndFeed feed = Syndication.createFeedFromEntries(getRM(), recursiveEntries, language, feedSize, parameters.get(Syndication.URL_PARAM_TEMPLATE));
-		feed.setTitle("Feed of \"" + alias + "\"");
+		feed.setTitle(Syndication.sanitizeFeedTitle(getOptionalParameter("feedtitle", "Feed of \"" + alias + "\"")));
 		feed.setLink(entry.getResourceURI().toString());
 		feed.setFeedType(feedType);
 

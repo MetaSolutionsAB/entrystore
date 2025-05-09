@@ -198,7 +198,7 @@ public class SearchResource extends BaseResource {
 	public Representation generateSyndication(List<Entry> entries, String feedType, String language, int limit) {
 		try {
 			SyndFeed feed = Syndication.createFeedFromEntries(getRM(), entries, language, limit, getOptionalParameter(Syndication.URL_PARAM_TEMPLATE, null));
-			feed.setTitle("Syndication feed of search");
+			feed.setTitle(Syndication.sanitizeFeedTitle(getOptionalParameter("feedtitle", "Syndication feed of search")));
 			feed.setLink(getRequest().getResourceRef().getIdentifier());
 			feed.setFeedType(feedType);
 
