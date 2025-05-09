@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,16 +24,16 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Verifies the validity of a reCaptcha user response token.
- *
+ * <p>
  * Uses reCaptcha API 2.0.
  *
  * @author Hannes Ebner
  */
 public class RecaptchaVerifier {
 
-	private static Logger log = LoggerFactory.getLogger(RecaptchaVerifier.class);
+	private static final Logger log = LoggerFactory.getLogger(RecaptchaVerifier.class);
 
-	private String secret;
+	private final String secret;
 
 	public RecaptchaVerifier(String secret) {
 		if (secret == null) {
@@ -43,7 +43,7 @@ public class RecaptchaVerifier {
 	}
 
 	/**
-	 * Verifies a user response token using reCaptcha 2.0 API.
+		 * Verifies a user response token using reCaptcha 2.0 API.
 	 *
 	 * @param userResponse The user response token (usually contained in g-recaptcha-response POST parameter).
 	 * @param userIP The user's IP-address. Optional, i.e., may be null.
@@ -61,7 +61,7 @@ public class RecaptchaVerifier {
 			reCaptchaUrl.append("&remoteip=").append(userIP);
 		}
 
-		log.debug("reCaptcha URL: " + reCaptchaUrl.toString());
+		log.debug("reCaptcha URL: {}", reCaptchaUrl);
 
 		Response response = HttpUtil.getResourceFromURL(reCaptchaUrl.toString());
 		if (!response.getStatus().isSuccess()) {
