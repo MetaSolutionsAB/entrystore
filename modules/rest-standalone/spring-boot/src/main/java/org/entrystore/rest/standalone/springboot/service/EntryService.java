@@ -8,6 +8,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
@@ -15,12 +18,20 @@ import org.entrystore.EntryType;
 import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.List;
+import org.entrystore.Metadata;
+import org.entrystore.Resource;
 import org.entrystore.User;
 import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
+import org.entrystore.rest.standalone.springboot.model.api.GetEntryResponse;
+import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
+import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.entrystore.rest.standalone.springboot.util.RDFJSON;
+import org.entrystore.rest.standalone.springboot.util.ResourceJsonSerializer;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.stereotype.Service;
@@ -29,24 +40,196 @@ import java.net.URI;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import static org.entrystore.EntryType.Link;
+import static org.entrystore.EntryType.LinkReference;
+import static org.entrystore.EntryType.Local;
+import static org.entrystore.EntryType.Reference;
+import static org.entrystore.rest.standalone.springboot.util.ResourceJsonSerializer.IMMUTABLE_EMPTY_JSONOBJECT;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class EntryService {
 
+	private static final int JSON_OBJECT_TO_STRING_INDENT_SIZE = 2;
 	private static final Pattern ENTRY_ID_PATTERN = Pattern.compile("^[\\w\\-]+$");
 
-	private final ObjectMapper objectMapper;
 	private final RepositoryManagerImpl repositoryManager;
+	private final ResourceJsonSerializer resourceSerializer;
+
+	private final ObjectMapper objectMapper;
 
 	/**
-	 * Checks whether the provided ID only contains allowed characters.
+	 * Checks whether the provided ID contains only allowed characters.
 	 *
 	 * @return True if supplied ID is valid.
 	 */
 	public static boolean isEntryIdValid(String id) {
 		return ENTRY_ID_PATTERN.matcher(id).matches();
 	}
+
+	public GetEntryResponse getEntryInJsonFormat(String contextId, String entryId, String rdfFormat, boolean includeAll, ListFilter listFilter) {
+		Context context = getContext(contextId);
+		if (context == null) {
+			// throw the same exception message for missing Context and missing Entry to avoid leaking information about context existence
+			throw new EntityNotFoundException("No entry with id '" + entryId + "' found in context '" + contextId + "'");
+		}
+
+		Entry entry = context.get(entryId);
+		if (entry == null) {
+			throw new EntityNotFoundException("No entry with id '" + entryId + "' found in context '" + contextId + "'");
+		}
+
+		return convertEntryToResponseModel(entry, rdfFormat, includeAll, listFilter);
+	}
+
+	private Context getContext(String contextId) {
+		ContextManager cm = repositoryManager.getContextManager();
+		if (cm != null && contextId != null) {
+			return cm.getContext(contextId);
+		}
+		return null;
+	}
+
+	private GetEntryResponse convertEntryToResponseModel(Entry entry, String rdfFormat, boolean includeAll, ListFilter listFilter) throws JSONException {
+
+		ContextManager cm = repositoryManager.getContextManager();
+
+		var responseBuilder = GetEntryResponse.builder();
+
+		GraphType graphType = entry.getGraphType();
+		EntryType entryType = entry.getEntryType();
+
+		/*
+		 * Entry id
+		 */
+		responseBuilder.entryId(entry.getId());
+
+		/*
+		 * Context or SystemContext
+		 */
+		if ((graphType == GraphType.Context || graphType == GraphType.SystemContext) && entryType == Local) {
+			responseBuilder.name(cm.getName(entry.getResourceURI()));
+			if (entry.getRepositoryManager().hasQuotas()) {
+				JSONObject quotaObj = new JSONObject();
+				Context c = cm.getContext(entry.getId());
+				if (c != null) {
+					quotaObj.put("quota", c.getQuota());
+					quotaObj.put("fillLevel", c.getQuotaFillLevel());
+					quotaObj.put("hasDefaultQuota", c.hasDefaultQuota());
+				}
+				responseBuilder.quota(quotaObj.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE));
+			}
+		}
+
+		/*
+		 * Entry information
+		 */
+		Model entryGraph = entry.getGraph();
+		JSONObject entryObj = GraphUtil.serializeGraphToJson(entryGraph, rdfFormat);
+		responseBuilder.info(entryObj.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE));
+
+		/*
+		 * If the parameter includeAll is set we must return more JDIl with
+		 * example local metadata, cached external metadata and maybe a
+		 * resource. If not set, return now.
+		 */
+		if (!includeAll) {
+			return responseBuilder.build();
+		}
+
+		/*
+		 * Cached External Metadata
+		 */
+		if (entryType == LinkReference || entryType == Reference) {
+			try {
+				Metadata cachedExternalMetadata = entry.getCachedExternalMetadata();
+				Model cachedMetadataGraph = cachedExternalMetadata.getGraph();
+				if (cachedMetadataGraph != null) {
+					JSONObject cachedExternalMetadataJsonObject = GraphUtil.serializeGraphToJson(cachedMetadataGraph, rdfFormat);
+					responseBuilder.cachedExternalMetadata(cachedExternalMetadataJsonObject.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE));
+				}
+			} catch (AuthorizationException ae) {
+				//mainJsonObject.accumulate("noAccessToMetadata", true);
+				//TODO: Replaced by using "rights" in json, do something else in this catch-clause
+			}
+		}
+
+		/*
+		 * Local Metadata
+		 */
+		if (entryType == Local || entryType == Link || entryType == LinkReference) {
+			try {
+				Metadata localMetadata = entry.getLocalMetadata();
+				Model localMetadataGraph = localMetadata.getGraph();
+				if (localMetadataGraph != null) {
+					JSONObject localMetaDataJsonObject = GraphUtil.serializeGraphToJson(localMetadataGraph, rdfFormat);
+					responseBuilder.metadata(localMetaDataJsonObject.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE));
+				}
+			} catch (AuthorizationException ae) {
+				/*if (!mainJsonObject.has("noAccessToMetadata")) {
+					mainJsonObject.accumulate("noAccessToMetadata", true);
+				}*/
+				//TODO: Replaced by using "rights" in json, do something else in this catch-clause
+			}
+		}
+
+		/*
+		 *	Relations
+		 */
+		java.util.List<Statement> relations = entry.getRelations();
+		if (relations != null) {
+			JSONObject relationsJsonObject = GraphUtil.serializeGraphToJson(new LinkedHashModel(relations), rdfFormat);
+			responseBuilder.relations(relationsJsonObject.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE));
+		}
+
+		/*
+		 * Rights
+		 */
+		JSONArray rights = resourceSerializer.serializeRights(entry);
+		responseBuilder.rights(rights.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE));
+
+		/*
+		 * Local resource
+		 */
+		if (entryType == Local) {
+			Resource resource = entry.getResource();
+
+			String resourceString = null;
+			if (graphType == GraphType.String) {
+				resourceString = resourceSerializer.serializeResourceString(resource);
+			} else {
+				JSONObject resourceObject = serializeResourceToJson(resource, graphType, rdfFormat, listFilter);
+				if (resourceObject != null) {
+					resourceString = resourceObject.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE);
+				}
+			}
+
+			if (resourceString != null) {
+				responseBuilder.resource(resourceString);
+			}
+		}
+		return responseBuilder.build();
+	}
+
+	private JSONObject serializeResourceToJson(Resource resource, GraphType graphType, String rdfFormat, ListFilter listFilter) {
+		if (graphType == null) {
+			return IMMUTABLE_EMPTY_JSONOBJECT;
+		}
+		return switch (graphType) {
+			case List ->
+				resourceSerializer.serializeResourceList(resource, new ResourceJsonSerializer.ListParams(listFilter), rdfFormat);
+			case User -> resourceSerializer.serializeResourceUser(resource);
+			case Group -> resourceSerializer.serializeResourceGroup(resource, rdfFormat);
+			case None -> resourceSerializer.serializeResourceNone(resource);
+			case Graph -> resourceSerializer.serializeResourceGraph(resource, rdfFormat);
+			case Pipeline -> resourceSerializer.serializeResourcePipeline(resource, rdfFormat);
+			case String -> null;
+			// TODO: other types, for example Context, SystemContext, PrincipalManager, etc
+			case ResultList, PipelineResult, Context, SystemContext -> IMMUTABLE_EMPTY_JSONOBJECT;
+		};
+	}
+
 
 	/**
 	 * Creates a local entry
