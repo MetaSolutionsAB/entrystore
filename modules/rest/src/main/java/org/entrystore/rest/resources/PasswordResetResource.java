@@ -66,10 +66,9 @@ public class PasswordResetResource extends BaseResource {
 
 	private static final Logger log = LoggerFactory.getLogger(PasswordResetResource.class);
 
-	private final SimpleHTML html = new SimpleHTML("Password reset");
-
 	@Get
 	public Representation represent() throws ResourceException {
+		final SimpleHTML html = new SimpleHTML("Password reset");
 		String token = parameters.get("confirm");
 
 		if (token == null) {
@@ -141,6 +140,7 @@ public class PasswordResetResource extends BaseResource {
 
 	@Post
 	public void acceptRepresentation(Representation r) {
+		final SimpleHTML html = new SimpleHTML("Password reset");
 		if (HttpUtil.isLargerThan(r, 32768)) {
 			log.warn("The size of the representation is larger than 32KB or unknown, request blocked");
 			getResponse().setStatus(CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
@@ -292,12 +292,13 @@ public class PasswordResetResource extends BaseResource {
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);
-		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.getEmail() + " if the user exists."));
+		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.getEmail() + ", if the user exists."));
 	}
 
 	private String constructHtmlForm(boolean reCaptcha) {
 		Config config = getRM().getConfiguration();
 
+		final SimpleHTML html = new SimpleHTML("Password reset");
 		StringBuilder sb = new StringBuilder();
 		sb.append(html.header());
 		sb.append("<form action=\"\" method=\"post\">\n");
