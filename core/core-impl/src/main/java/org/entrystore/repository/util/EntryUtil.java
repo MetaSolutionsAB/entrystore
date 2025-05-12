@@ -681,7 +681,7 @@ public class EntryUtil {
 			}
 
 			if (limit > 0 && visited.size() >= limit) {
-				log.info("Stopping traversal because limit of {} entries is reached", limit);
+				log.info("Stopping traversal because limit of {} entries has been reached", limit);
 				break;
 			}
 
