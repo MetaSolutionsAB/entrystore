@@ -226,15 +226,15 @@ public class Email {
 		return sendMessage(config, recipientEmail, subject, messageText);
 	}
 
-	public static boolean sendPasswordChangeConfirmation(Config config, Entry userEntry) {
+	public static void sendPasswordChangeConfirmation(Config config, Entry userEntry) {
 		String msgTo = ((User) userEntry.getResource()).getName();
 		if (!msgTo.contains("@")) {
 			msgTo = EntryUtil.getEmail(userEntry);
 		}
 
 		if (msgTo == null || !msgTo.contains("@")) {
-			log.warn("Unable to send email, invalid email address of recipient: " + msgTo);
-			return false;
+			log.warn("Unable to send email, invalid email address of recipient: {}", msgTo);
+			return;
 		}
 
 		if (messageBodyPasswordChanged == null) {
@@ -247,7 +247,7 @@ public class Email {
 
 		if (messageBodyPasswordChanged == null) {
 			log.error("Unable to load email template for password change confirmation");
-			return false;
+			return;
 		}
 
 		String messageText = messageBodyPasswordChanged.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
@@ -259,7 +259,7 @@ public class Email {
 		}
 		messageText = messageText.replaceAll("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
 
-		return sendMessage(config, msgTo, msgSubject, messageText);
+		sendMessage(config, msgTo, msgSubject, messageText);
 	}
 
 	private static String loadTemplate(String url) {

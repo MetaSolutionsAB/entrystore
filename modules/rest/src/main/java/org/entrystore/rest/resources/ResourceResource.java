@@ -705,7 +705,7 @@ public class ResourceResource extends BaseResource {
 
 	public File writeStreamToTmpFile(InputStream is) throws IOException {
 		File tmpFile = File.createTempFile("scam_import_", ".zip");
-		log.info("[IMPORT] Created temporary file: " + tmpFile);
+		log.info("[IMPORT] Created temporary file: {}", tmpFile);
 		OutputStream fos = Files.newOutputStream(tmpFile.toPath());
 		FileOperations.copyFile(is, fos);
 		return tmpFile;
@@ -1032,7 +1032,6 @@ public class ResourceResource extends BaseResource {
 						LoginTokenCache loginTokenCache = ((EntryStoreApplication) getApplication()).getLoginTokenCache();
 						loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
 						Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
-						//return;  WHY DO WE WANT TO RETURN HERE AND NOT CONTINUE FOR OTHER PARAMS?
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Password must conform to configured rules.\"}"));
