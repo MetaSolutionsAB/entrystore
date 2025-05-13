@@ -48,8 +48,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 
 /**
  * Helper methods to make Entry handling easier, mostly sorting methods.
@@ -668,7 +666,7 @@ public class EntryUtil {
 	 * @param rm A RepositoryManager instance.
 	 * @return Returns the merged metadata graphs of all matching entries.
 	 */
-	public static TraversalResult traverseAndLoadEntryMetadata(Set<IRI> entries, Set<URI> propertiesToFollow, Map<String, String> blacklist, int level, int depth, Multimap<IRI, Integer> visited, Context context, RepositoryManager rm) {
+	public static TraversalResult traverseAndLoadEntryMetadata(Set<IRI> entries, Set<URI> propertiesToFollow, Map<String, String> blacklist, int level, int depth, int limit, Multimap<IRI, Integer> visited, Context context, RepositoryManager rm) {
 		Model resultGraph = new LinkedHashModel();
 		Set<IRI> accessDenied = new HashSet<>();
 		Date latestModified = null;
@@ -680,6 +678,11 @@ public class EntryUtil {
 			if (visited.containsEntry(r, level)) {
 				log.debug("Skipping <{}>, entry already fetched and traversed on level {}", r, level);
 				continue;
+			}
+
+			if (limit > 0 && visited.size() >= limit) {
+				log.info("Stopping traversal because limit of {} entries has been reached", limit);
+				break;
 			}
 
 			Model graph = null;
@@ -762,6 +765,7 @@ public class EntryUtil {
 									blacklist,
 									level + 1,
 									depth,
+									limit,
 									visited,
 									context,
 									rm);
@@ -783,6 +787,7 @@ public class EntryUtil {
 		for (IRI objectToRemove : accessDenied) {
 			resultGraph.removeIf(s -> objectToRemove.equals(s.getObject()));
 		}
+
 		return new TraversalResult(resultGraph, latestModified, accessDenied);
 	}
 
