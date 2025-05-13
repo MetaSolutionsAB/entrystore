@@ -310,12 +310,12 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	}
 
 	/**
-	 * @return Returns the metadata object. May be null.
+	 * @return Returns the metadata object. Can be null.
 	 */
 	protected abstract Metadata getMetadata();
 
 	/**
-	 * @return Returns the metadata graph. May be null.
+	 * @return Returns the metadata graph. Can be null.
 	 */
 	protected Model getMetadataGraph() {
 		if (getMetadata() != null) {
@@ -365,7 +365,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @param predCSV A comma-separated list of predicates and/or
 	 *                traversal profiles (need to be defined in configuration).
 	 * @return Returns a set of URIs. Traversal profile names are resolved
-	 * in their member URIs and namespaces URIs are expanded.
+	 * in their member URIs, and namespaces' URIs are expanded.
 	 */
 	private Set<URI> resolvePredicates(String predCSV) {
 		Set<URI> result = new HashSet<>();
