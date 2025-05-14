@@ -210,13 +210,9 @@ public class Settings {
 	public static String NONADMIN_GROUPCONTEXT_CREATION = "entrystore.nonadmin.group-context-creation";
 
 	public static String TRAVERSAL_PROFILE = "entrystore.traversal.%s";
-
 	public static String TRAVERSAL_PROFILE_MAX_DEPTH = "entrystore.traversal.%s.max-depth";
-
 	public static String TRAVERSAL_PROFILE_LIMIT = "entrystore.traversal.%s.limit";
-
 	public static String TRAVERSAL_PROFILE_REPOSITORY_SCOPE = "entrystore.traversal.%s.repository-scope";
-
 	public static String TRAVERSAL_PROFILE_BLACKLIST = "entrystore.traversal.%s.blacklist";
 
 	public static String ROWSTORE_URL = "entrystore.rowstore.url";

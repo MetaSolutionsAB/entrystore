@@ -150,11 +150,12 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 					int limit = 1000; // default
 					limit = firstDetectedProfile != null ? getRM().getConfiguration().getInt(traversalSetting(Settings.TRAVERSAL_PROFILE_LIMIT, firstDetectedProfile), limit) : limit;
-
 					boolean repositoryScope = true; // default
-					repositoryScope = parameters.containsKey("repository"); // we allow an override by parameter
-					// but config takes precedence
 					repositoryScope = firstDetectedProfile != null ? getRM().getConfiguration().getBoolean(traversalSetting(Settings.TRAVERSAL_PROFILE_REPOSITORY_SCOPE, firstDetectedProfile), repositoryScope) : repositoryScope;
+					if (parameters.containsKey("scope")) {
+						// we allow an override by parameter
+						repositoryScope = !"context".equalsIgnoreCase(parameters.get("scope"));
+					}
 
 					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), predicatesToFollow, blacklist, repositoryScope, depth, limit);
 					if (graphQuery != null) {
