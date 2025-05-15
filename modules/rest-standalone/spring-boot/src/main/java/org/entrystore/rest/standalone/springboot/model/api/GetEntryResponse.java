@@ -1,18 +1,23 @@
 package org.entrystore.rest.standalone.springboot.model.api;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonRawValue;
 import lombok.Builder;
 
 @Builder
 public record GetEntryResponse(
 	String entryId,
 	String name,
-	String quota,
-	String info,
-	@JsonProperty("cached-external-metadata") String cachedExternalMetadata,
-	String metadata,
-	String relations,
-	String rights,
-	String resource
+
+	@JsonRawValue String quota,
+
+	@JsonRawValue String info,
+
+	@JsonProperty("cached-external-metadata") @JsonRawValue String cachedExternalMetadata,
+
+	@JsonRawValue String metadata,
+	@JsonRawValue String relations,
+	@JsonRawValue String rights,
+	@JsonRawValue String resource
 ) {
 }

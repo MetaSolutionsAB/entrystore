@@ -51,7 +51,7 @@ import static org.entrystore.rest.standalone.springboot.util.ResourceJsonSeriali
 @RequiredArgsConstructor
 public class EntryService {
 
-	private static final int JSON_OBJECT_TO_STRING_INDENT_SIZE = 2;
+	private static final int JSON_OBJECT_TO_STRING_INDENT_SIZE = 0;
 	private static final Pattern ENTRY_ID_PATTERN = Pattern.compile("^[\\w\\-]+$");
 
 	private final RepositoryManagerImpl repositoryManager;

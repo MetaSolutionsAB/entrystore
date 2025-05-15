@@ -7,6 +7,7 @@ import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.standalone.springboot.model.UserAuthRole;
+import org.entrystore.rest.standalone.springboot.service.UserService;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -20,6 +21,7 @@ import java.net.URI;
 public class ESUserDetailsService implements UserDetailsService {
 
 	private final PrincipalManager pm;
+	private final UserService userService;
 
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -51,14 +53,9 @@ public class ESUserDetailsService implements UserDetailsService {
 			.withUsername(user.getName())
 			.password(user.getSaltedHashedSecret())
 			.disabled(user.isDisabled())
-			.roles(isAdmin(user) ? UserAuthRole.ADMIN.name() : UserAuthRole.USER.name())
+			.roles(userService.isAdmin(user) ? UserAuthRole.ADMIN.name() : UserAuthRole.USER.name())
 			.build();
 
 		return new ESUserDetails(userDetails, user);
-	}
-
-	private boolean isAdmin(User user) {
-		return pm.getAdminUser().getURI().equals(user.getURI()) ||
-			pm.getAdminGroup().isMember(user);
 	}
 }
