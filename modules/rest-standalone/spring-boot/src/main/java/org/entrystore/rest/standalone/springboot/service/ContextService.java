@@ -18,6 +18,7 @@ import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 
@@ -106,7 +107,7 @@ public class ContextService {
 			}
 			Entry preExistingEntry = context.get(entryId);
 			if (preExistingEntry != null) {
-				throw new BadRequestException("Invalid entry ID of '" + entryId + "'");
+				throw new DataConflictException("Entry with provided ID already exists. EntryID: '" + entryId + "'");
 			}
 		}
 

@@ -1654,11 +1654,10 @@ class EntryIT extends BaseSpec {
 
 		then:
 		entryConn.getResponseCode() == HTTP_UNAUTHORIZED
-		entryConn.getContentType().contains('text/html')
+		entryConn.getContentType().contains('application/json')
 		def response = entryConn.getErrorStream().text
-		response.contains('<title>Status page</title>')
+		response.contains('401')
 		response.contains('Unauthorized')
-		response.contains('The request requires user authentication')
 	}
 
 	def "DELETE /{context-id}/entry/{entry-id} should delete the entry"() {
