@@ -30,6 +30,11 @@ public class EntryController {
 		@RequestParam(required = false) String includeAll,
 		@ModelAttribute ListFilter listFilter
 	) {
+		// for rdfFormat param, data should be sent properly - encoded e.g. '+' as %2B
+		// however, for some reason, we need to accept also the non-encoded values here, hence the space to '+' replace
+		if (rdfFormat != null) {
+			rdfFormat = rdfFormat.trim().replace(' ', '+');
+		}
 		return entryService.getEntryInJsonFormat(contextId, entryId, rdfFormat, includeAll != null, listFilter);
 	}
 
