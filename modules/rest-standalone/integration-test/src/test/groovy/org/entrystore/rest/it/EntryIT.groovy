@@ -1114,7 +1114,7 @@ class EntryIT extends BaseSpec {
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
 	}
 
-	def "GET /{context-id}/entry/{entry-id} in unsupported format, should return information about the entry in RDF+XML format"() {
+	def "GET /{context-id}/entry/{entry-id} without specifying accept format, should return information about the entry in RDF+XML format"() {
 		given:
 		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'
@@ -1132,7 +1132,7 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/rdf+soup')
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', null)
 
 		then:
 		entryConn.getResponseCode() == HTTP_OK
@@ -1202,6 +1202,31 @@ class EntryIT extends BaseSpec {
 		entryExternalMetaConn.getContentType().contains('application/json')
 		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
+	}
+
+	// Verified with Hannes - if accept contains something that we don't understand we respond with 406
+	def "GET /{context-id}/entry/{entry-id} in unsupported format, should respond with 406 - Not Acceptable"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/rdf+soup')
+
+		then:
+		entryConn.getResponseCode() == HTTP_NOT_ACCEPTABLE
 	}
 
 	def "GET /{context-id}/entry/{entry-id} in text/n3 format for a linkreference entry, should return information about the entry in text/n3 format"() {

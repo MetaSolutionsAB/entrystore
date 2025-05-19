@@ -48,7 +48,7 @@ public class ContextController {
 		@PathVariable("context-id") String contextId,
 		@RequestParam(required = false, name = "id") String entryId,
 		@RequestParam(required = false, name = "entrytype") EntryType entryType,
-		@RequestParam(required = false, name = "graphtype") GraphType graphType,
+		@RequestParam(required = false, name = "graphtype", defaultValue = "none") GraphType graphType,
 		@RequestParam(required = false, name = "resource") URI resourceUri,
 		@RequestParam(required = false, name = "list") URI listUri,
 		@RequestParam(required = false) URI groupUri,
