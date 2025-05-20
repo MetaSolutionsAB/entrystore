@@ -4,7 +4,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -62,12 +64,37 @@ public class AppExceptionHandler {
 			.path(request.getRequestURI())
 			.error(ex.getMessage())
 			.build();
-		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(responseBody);
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
+	}
+
+	@ExceptionHandler(UnauthorizedException.class)
+	public ResponseEntity<ErrorResponse> handleUnauthorizedException(UnauthorizedException ex,
+																	 HttpServletRequest request) {
+		log.info("UnauthorizedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+			.status(HttpStatus.UNAUTHORIZED.value())
+			.path(request.getRequestURI())
+			.error(ex.getMessage())
+			.build();
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
+	}
+
+	@ExceptionHandler(DataConflictException.class)
+	public ResponseEntity<ErrorResponse> handleDataConflictException(DataConflictException ex,
+																	 HttpServletRequest request) {
+		log.debug("DataConflictException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+			.status(HttpStatus.CONFLICT.value())
+			.path(request.getRequestURI())
+			.error(ex.getMessage())
+			.build();
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
 	@ExceptionHandler(HttpMessageNotReadableException.class)
 	public ResponseEntity<ErrorResponse> handleHttpMessageNotReadableException(Exception ex,
 																			   HttpServletRequest request) {
+		log.debug("HttpMessageNotReadableException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 			.status(HttpStatus.BAD_REQUEST.value())
 			.path(request.getRequestURI())
