@@ -233,7 +233,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryDeleteConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter and full depth"() {
+	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter and full max-depth"() {
 		given:
 		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/1']
 		def entryD3ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -372,6 +372,142 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcDepth2Creators.size() == 1
 		dcDepth2Creators[0]['type'] == 'uri'
 		dcDepth2Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id
+	}
+
+	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter with max-depth, even if the data is deeper and depth parameter is higher"() {
+		given:
+		def entryD4params = [entrytype: 'link', resource: resourceUrl + '/0']
+		def entryD4ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD4body = [metadata: [(entryD4ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Depth4']
+			]
+		]]]
+		def entryD4Id = createEntry(contextId, entryD4params, entryD4body)
+		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/1']
+		def entryD3ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD3body = [metadata: [(entryD3ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Depth3']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD4Id]
+			]
+		]]]
+		def entryD3Id = createEntry(contextId, entryD3params, entryD3body)
+
+		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
+		def entryD2ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD2body = [metadata: [(entryD2ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Depth2']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id]
+			]
+		]]]
+		def entryD2Id = createEntry(contextId, entryD2params, entryD2body)
+
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
+				[type: 'literal', value: 'Depth1']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id]
+			]
+		]]]
+		def entryD1Id = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD1Id
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct")
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/json')
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
+		(entryMetaRespJson as Map).keySet().size() == 3
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcDepth1Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcDepth1Titles.size() == 1
+		dcDepth1Titles[0]['type'] == 'literal'
+		dcDepth1Titles[0]['value'] == 'Depth1'
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_CREATOR] != null
+		def dcDepth1Creators = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_CREATOR].collect()
+		dcDepth1Creators.size() == 1
+		dcDepth1Creators[0]['type'] == 'uri'
+		dcDepth1Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcDepth2Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcDepth2Titles.size() == 1
+		dcDepth2Titles[0]['type'] == 'literal'
+		dcDepth2Titles[0]['value'] == 'Depth2'
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_CREATOR] != null
+		def dcDepth2Creators = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_CREATOR].collect()
+		dcDepth2Creators.size() == 1
+		dcDepth2Creators[0]['type'] == 'uri'
+		dcDepth2Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id
+	}
+
+	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter and full max-depth, but with blacklisted profile"() {
+		given:
+		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/1']
+		def entryD3ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD3body = [metadata: [(entryD3ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Depth3']
+			]
+		]]]
+		def entryD3Id = createEntry(contextId, entryD3params, entryD3body)
+
+		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
+		def entryD2ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD2body = [metadata: [(entryD2ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Depth2']
+			]
+		]]]
+		def entryD2Id = createEntry(contextId, entryD2params, entryD2body)
+
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
+				[type: 'literal', value: 'Depth1']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id]
+			],
+			(NameSpaceConst.DC_TERM_PUBLISHER): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id]
+			]
+		]]]
+		def entryD1Id = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD1Id
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct")
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/json')
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
+		(entryMetaRespJson as Map).keySet().size() == 2
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcDepth1Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcDepth1Titles.size() == 1
+		dcDepth1Titles[0]['type'] == 'literal'
+		dcDepth1Titles[0]['value'] == 'Depth1'
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_PUBLISHER] == null
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_CREATOR] != null
+
 	}
 
 	def "GET /{context-id}/metadata/{entryId} should not fetch local metadata with a valid recursive parameter, when that is not part of the metadata"() {

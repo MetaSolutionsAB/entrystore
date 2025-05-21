@@ -138,6 +138,10 @@ public abstract class AbstractMetadataResource extends BaseResource {
 							if (depthParam > 0 && depthParam <= depthMax) { // cannot be higher then config maxDepth
 								depth = depthParam;
 							}
+						} else {
+							if (depthMax < depth) {
+								depth = depthMax;
+							}
 						}
 					} catch (NumberFormatException e) {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
