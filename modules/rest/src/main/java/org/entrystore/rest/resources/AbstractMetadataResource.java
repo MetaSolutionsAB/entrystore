@@ -117,6 +117,9 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				MediaType prefFormat = (format != null) ? format : preferredMediaType;
 
 				String graphQuery = null;
+				if (parameters.containsKey("graphQuery")) {
+					graphQuery = parameters.get("graphQuery");
+				}
 
 				if (parameters.containsKey("recursive")) {
 					String traversalParam = parameters.get("recursive");
