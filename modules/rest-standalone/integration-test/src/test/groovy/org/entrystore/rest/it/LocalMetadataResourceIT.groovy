@@ -233,33 +233,45 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryDeleteConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
+	def "GET /{context-id}/metadata/{entryId} should not fetch local metadata with a valid recursive parameter, when that is not part of the metadata"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.TERM_EXTERNAL_METADATA): [[type : 'literal',
+																							 value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct")
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/json')
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
+		(entryMetaRespJson as Map).keySet().size() == 1
+		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
+		entryMetaRespJson[metaResourceUrl][NameSpaceConst.TERM_EXTERNAL_METADATA] != null
+		def dcTitles = entryMetaRespJson[metaResourceUrl][NameSpaceConst.TERM_EXTERNAL_METADATA].collect()
+		dcTitles.size() == 1
+		dcTitles[0]['type'] == 'literal'
+		dcTitles[0]['value'] == 'Cool entry'
+	}
+
 	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter and full max-depth"() {
 		given:
-		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/1']
-		def entryD3ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD3body = [metadata: [(entryD3ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Depth3']
-			]
-		]]]
-		def entryD3Id = createEntry(contextId, entryD3params, entryD3body)
-
 		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
 		def entryD2ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def entryD2body = [metadata: [(entryD2ResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [
 				[type: 'literal', value: 'Depth2']
-			],
-			(NameSpaceConst.DC_TERM_CREATOR): [
-				[type : 'uri',
-				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id]
 			]
 		]]]
 		def entryD2Id = createEntry(contextId, entryD2params, entryD2body)
 
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
+		def entryD1params = [entrytype: 'link', resource: resourceUrl + '/1']
+		def entryD1ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD1body = [metadata: [(entryD1ResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE)  : [
 				[type: 'literal', value: 'Depth1']
 			],
@@ -268,8 +280,21 @@ class LocalMetadataResourceIT extends BaseSpec {
 				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id]
 			]
 		]]]
-		def entryD1Id = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD1Id
+		def entryD1Id = createEntry(contextId, entryD1params, entryD1body)
+
+		def entryD0params = [entrytype: 'link', resource: resourceUrl + '/0']
+		def entryD0ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD0body = [metadata: [(entryD0ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
+				[type: 'literal', value: 'Depth0']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id]
+			]
+		]]]
+		def entryD0Id = createEntry(contextId, entryD0params, entryD0body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD0Id
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct")
@@ -279,6 +304,16 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getContentType().contains('application/json')
 		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 3
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcDepth0Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcDepth0Titles.size() == 1
+		dcDepth0Titles[0]['type'] == 'literal'
+		dcDepth0Titles[0]['value'] == 'Depth0'
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_CREATOR] != null
+		def dcDepth0Creators = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_CREATOR].collect()
+		dcDepth0Creators.size() == 1
+		dcDepth0Creators[0]['type'] == 'uri'
+		dcDepth0Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id
 		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE] != null
 		def dcDepth1Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE].collect()
 		dcDepth1Titles.size() == 1
@@ -294,45 +329,22 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcDepth2Titles.size() == 1
 		dcDepth2Titles[0]['type'] == 'literal'
 		dcDepth2Titles[0]['value'] == 'Depth2'
-		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_CREATOR] != null
-		def dcDepth2Creators = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_CREATOR].collect()
-		dcDepth2Creators.size() == 1
-		dcDepth2Creators[0]['type'] == 'uri'
-		dcDepth2Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id
-		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id][NameSpaceConst.DC_TERM_TITLE] != null
-		def dcDepth3Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id][NameSpaceConst.DC_TERM_TITLE].collect()
-		dcDepth3Titles.size() == 1
-		dcDepth3Titles[0]['type'] == 'literal'
-		dcDepth3Titles[0]['value'] == 'Depth3'
 	}
 
-	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter with depth=2, even if the data is deeper"() {
+	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter with depth=1, even if the data is deeper"() {
 		given:
-		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/1']
-		def entryD3ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD3body = [metadata: [(entryD3ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Depth3']
-			]
-		]]]
-		def entryD3Id = createEntry(contextId, entryD3params, entryD3body)
-
 		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
 		def entryD2ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def entryD2body = [metadata: [(entryD2ResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [
 				[type: 'literal', value: 'Depth2']
-			],
-			(NameSpaceConst.DC_TERM_CREATOR): [
-				[type : 'uri',
-				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id]
 			]
 		]]]
 		def entryD2Id = createEntry(contextId, entryD2params, entryD2body)
 
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
+		def entryD1params = [entrytype: 'link', resource: resourceUrl + '/']
+		def entryD1ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD1body = [metadata: [(entryD1ResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE)  : [
 				[type: 'literal', value: 'Depth1']
 			],
@@ -341,8 +353,21 @@ class LocalMetadataResourceIT extends BaseSpec {
 				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id]
 			]
 		]]]
-		def entryD1Id = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD1Id
+		def entryD1Id = createEntry(contextId, entryD1params, entryD1body)
+
+		def entryD0params = [entrytype: 'link', resource: resourceUrl + '/0']
+		def entryD0ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD0Body = [metadata: [(entryD0ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
+				[type: 'literal', value: 'Depth0']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id]
+			]
+		]]]
+		def entryD0Id = createEntry(contextId, entryD0params, entryD0Body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD0Id
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct&depth=1")
@@ -352,6 +377,16 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getContentType().contains('application/json')
 		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 2
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcDepth0Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcDepth0Titles.size() == 1
+		dcDepth0Titles[0]['type'] == 'literal'
+		dcDepth0Titles[0]['value'] == 'Depth0'
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_CREATOR] != null
+		def dcDepth0Creators = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_CREATOR].collect()
+		dcDepth0Creators.size() == 1
+		dcDepth0Creators[0]['type'] == 'uri'
+		dcDepth0Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id
 		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE] != null
 		def dcDepth1Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE].collect()
 		dcDepth1Titles.size() == 1
@@ -362,37 +397,15 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcDepth1Creators.size() == 1
 		dcDepth1Creators[0]['type'] == 'uri'
 		dcDepth1Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id
-		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_TITLE] != null
-		def dcDepth2Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_TITLE].collect()
-		dcDepth2Titles.size() == 1
-		dcDepth2Titles[0]['type'] == 'literal'
-		dcDepth2Titles[0]['value'] == 'Depth2'
-		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_CREATOR] != null
-		def dcDepth2Creators = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_CREATOR].collect()
-		dcDepth2Creators.size() == 1
-		dcDepth2Creators[0]['type'] == 'uri'
-		dcDepth2Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id
 	}
 
 	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter with max-depth, even if the data is deeper and depth parameter is higher"() {
 		given:
-		def entryD4params = [entrytype: 'link', resource: resourceUrl + '/0']
-		def entryD4ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def entryD4body = [metadata: [(entryD4ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
-				[type: 'literal', value: 'Depth4']
-			]
-		]]]
-		def entryD4Id = createEntry(contextId, entryD4params, entryD4body)
-		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/1']
+		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/3']
 		def entryD3ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def entryD3body = [metadata: [(entryD3ResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE): [
 				[type: 'literal', value: 'Depth3']
-			],
-			(NameSpaceConst.DC_TERM_CREATOR): [
-				[type : 'uri',
-				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD4Id]
 			]
 		]]]
 		def entryD3Id = createEntry(contextId, entryD3params, entryD3body)
@@ -400,7 +413,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
 		def entryD2ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def entryD2body = [metadata: [(entryD2ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
 				[type: 'literal', value: 'Depth2']
 			],
 			(NameSpaceConst.DC_TERM_CREATOR): [
@@ -410,9 +423,9 @@ class LocalMetadataResourceIT extends BaseSpec {
 		]]]
 		def entryD2Id = createEntry(contextId, entryD2params, entryD2body)
 
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
+		def entryD1params = [entrytype: 'link', resource: resourceUrl + '/1']
+		def entryD1ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD1body = [metadata: [(entryD1ResourceIri): [
 			(NameSpaceConst.DC_TERM_TITLE)  : [
 				[type: 'literal', value: 'Depth1']
 			],
@@ -421,17 +434,41 @@ class LocalMetadataResourceIT extends BaseSpec {
 				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id]
 			]
 		]]]
-		def entryD1Id = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD1Id
+		def entryD1Id = createEntry(contextId, entryD1params, entryD1body)
+
+		def entryD0Params = [entrytype: 'link', resource: resourceUrl + '/0']
+		def entryD0ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD0Body = [metadata: [(entryD0ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
+				[type: 'literal', value: 'Depth0']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id]
+			]
+		]]]
+		def entryD0Id = createEntry(contextId, entryD0Params, entryD0Body)
+
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD0Id
 
 		when:
-		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct")
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct&depth=3")
 
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
 		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 3
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcDepth0Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcDepth0Titles.size() == 1
+		dcDepth0Titles[0]['type'] == 'literal'
+		dcDepth0Titles[0]['value'] == 'Depth0'
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_CREATOR] != null
+		def dcDepth0Creators = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_CREATOR].collect()
+		dcDepth0Creators.size() == 1
+		dcDepth0Creators[0]['type'] == 'uri'
+		dcDepth0Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id
 		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE] != null
 		def dcDepth1Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE].collect()
 		dcDepth1Titles.size() == 1
@@ -442,16 +479,6 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcDepth1Creators.size() == 1
 		dcDepth1Creators[0]['type'] == 'uri'
 		dcDepth1Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id
-		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_TITLE] != null
-		def dcDepth2Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_TITLE].collect()
-		dcDepth2Titles.size() == 1
-		dcDepth2Titles[0]['type'] == 'literal'
-		dcDepth2Titles[0]['value'] == 'Depth2'
-		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_CREATOR] != null
-		def dcDepth2Creators = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id][NameSpaceConst.DC_TERM_CREATOR].collect()
-		dcDepth2Creators.size() == 1
-		dcDepth2Creators[0]['type'] == 'uri'
-		dcDepth2Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id
 	}
 
 	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter and full max-depth, but with blacklisted profile"() {
@@ -477,10 +504,10 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [metadata: [(newResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE)  : [
+			(NameSpaceConst.DC_TERM_TITLE)    : [
 				[type: 'literal', value: 'Depth1']
 			],
-			(NameSpaceConst.DC_TERM_CREATOR): [
+			(NameSpaceConst.DC_TERM_CREATOR)  : [
 				[type : 'uri',
 				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id]
 			],
@@ -501,23 +528,116 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 2
 		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcDepth0Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcDepth0Titles.size() == 1
+		dcDepth0Titles[0]['type'] == 'literal'
+		dcDepth0Titles[0]['value'] == 'Depth1'
+		def dcDepth0Creators = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_CREATOR].collect()
+		dcDepth0Creators.size() == 1
+		dcDepth0Creators[0]['type'] == 'uri'
+		dcDepth0Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE] != null
 		def dcDepth1Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE].collect()
 		dcDepth1Titles.size() == 1
 		dcDepth1Titles[0]['type'] == 'literal'
 		dcDepth1Titles[0]['value'] == 'Depth1'
-		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_PUBLISHER] == null
-		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_CREATOR] != null
-
+		def dcDepth0Publishers = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_PUBLISHER].collect()
+		dcDepth0Publishers.size() == 1
+		dcDepth0Publishers[0]['type'] == 'uri'
+		dcDepth0Publishers[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id
+		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id] == null
 	}
 
-	def "GET /{context-id}/metadata/{entryId} should not fetch local metadata with a valid recursive parameter, when that is not part of the metadata"() {
+	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter with limit number of entries"() {
 		given:
-		def params = [entrytype: 'link', resource: resourceUrl]
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [(NameSpaceConst.TERM_EXTERNAL_METADATA): [[type : 'literal',
-																							 value: 'Cool entry']],]]]
-		def entryId = createEntry(contextId, params, body)
-		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def entryD6params = [entrytype: 'link', resource: resourceUrl + '/6']
+		def entryD6ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD6body = [metadata: [(entryD6ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Width6']
+			]
+		]]]
+		def entryD6Id = createEntry(contextId, entryD6params, entryD6body)
+
+		def entryD5params = [entrytype: 'link', resource: resourceUrl + '/5']
+		def entryD5ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD5body = [metadata: [(entryD5ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Width5']
+			]
+		]]]
+		def entryD5Id = createEntry(contextId, entryD5params, entryD5body)
+
+		def entryD4params = [entrytype: 'link', resource: resourceUrl + '/4']
+		def entryD4ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD4body = [metadata: [(entryD4ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Width4']
+			]
+		]]]
+		def entryD4Id = createEntry(contextId, entryD4params, entryD4body)
+
+		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/3']
+		def entryD3ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD3body = [metadata: [(entryD3ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Depth3']
+			]
+		]]]
+		def entryD3Id = createEntry(contextId, entryD3params, entryD3body)
+
+		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
+		def entryD2ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD2body = [metadata: [(entryD2ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
+				[type: 'literal', value: 'Depth2']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id]
+			]
+		]]]
+		def entryD2Id = createEntry(contextId, entryD2params, entryD2body)
+
+		def entryD1params = [entrytype: 'link', resource: resourceUrl + '/1']
+		def entryD1ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD1body = [metadata: [(entryD1ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
+				[type: 'literal', value: 'Depth1']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id]
+			]
+		]]]
+		def entryD1Id = createEntry(contextId, entryD1params, entryD1body)
+
+		def entryD0Params = [entrytype: 'link', resource: resourceUrl + '/0']
+		def entryD0ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD0Body = [metadata: [(entryD0ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
+				[type: 'literal', value: 'Depth0']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id]
+			],
+			(NameSpaceConst.DC_TERM_PUBLISHER): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD4Id]
+			],
+			(NameSpaceConst.DC_TERM_SUBJECT): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD5Id]
+			],
+			(NameSpaceConst.DC_TERM_DESCRIPTION): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD6Id]
+			]
+		]]]
+		def entryD0Id = createEntry(contextId, entryD0Params, entryD0Body)
+
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD0Id
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct")
@@ -526,12 +646,6 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
 		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
-		(entryMetaRespJson as Map).keySet().size() == 1
-		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
-		entryMetaRespJson[metaResourceUrl][NameSpaceConst.TERM_EXTERNAL_METADATA] != null
-		def dcTitles = entryMetaRespJson[metaResourceUrl][NameSpaceConst.TERM_EXTERNAL_METADATA].collect()
-		dcTitles.size() == 1
-		dcTitles[0]['type'] == 'literal'
-		dcTitles[0]['value'] == 'Cool entry'
+		(entryMetaRespJson as Map).keySet().size() == 4
 	}
 }

@@ -132,15 +132,15 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 					int depth = 10; // default
 					int depthMax = firstDetectedProfile != null ? getRM().getConfiguration().getInt(traversalSetting(Settings.TRAVERSAL_PROFILE_MAX_DEPTH, firstDetectedProfile), depth) : depth;
+					if (depthMax < depth) {
+						depth = depthMax;
+					}
+
 					try {
 						if (parameters.containsKey("depth")) {
 							int depthParam = Integer.parseInt(parameters.get("depth"));
-							if (depthParam > 0 && depthParam <= depthMax) { // cannot be higher then config maxDepth
+							if (depthParam > 0 && depthParam <= depth) { // cannot be higher then config maxDepth
 								depth = depthParam;
-							}
-						} else {
-							if (depthMax < depth) {
-								depth = depthMax;
 							}
 						}
 					} catch (NumberFormatException e) {
