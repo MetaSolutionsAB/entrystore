@@ -25,6 +25,7 @@ import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
+import org.entrystore.rest.standalone.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
@@ -237,13 +238,13 @@ public class EntryService {
 	 * @return the new created entry
 	 */
 	public Entry createLocalEntry(Context context, String entryId, GraphType graphType,
-								  URI listUri, URI groupUri, String bodyResource) {
+								  URI listUri, URI groupUri, CreateEntryRequestBody body) {
 
 		Entry entry = context.createResource(entryId, graphType, null, listUri);
 		try {
-			if (setResource(context, entry, bodyResource, groupUri)) {
-				setLocalMetadataGraph(entry, bodyResource);
-				setEntryGraph(entry, bodyResource);
+			if (setResource(context, entry, body, groupUri)) {
+				setLocalMetadataGraph(entry, body);
+				setEntryGraph(entry, body);
 				if (listUri != null) {
 					((ContextImpl) context).copyACL(listUri, entry);
 				}
@@ -262,13 +263,13 @@ public class EntryService {
 	 *
 	 * @return the new created entry
 	 */
-	public Entry createLinkEntry(Context context, String entryId, GraphType graphType, URI resourceUri, URI listUri, String bodyResource) {
+	public Entry createLinkEntry(Context context, String entryId, GraphType graphType, URI resourceUri, URI listUri, CreateEntryRequestBody body) {
 
 		Entry entry = context.createLink(entryId, resourceUri, listUri);
 
 		if (entry != null) {
-			setLocalMetadataGraph(entry, bodyResource);
-			setEntryGraph(entry, bodyResource);
+			setLocalMetadataGraph(entry, body);
+			setEntryGraph(entry, body);
 			if (graphType != null) {
 				entry.setGraphType(graphType);
 			}
@@ -285,7 +286,7 @@ public class EntryService {
 	 * @return the new created entry
 	 */
 	public Entry createReferenceEntry(Context context, String entryId, GraphType graphType, URI resourceUri,
-									  URI listUri, URI cachedExternalMetadataUri, String bodyResource) {
+									  URI listUri, URI cachedExternalMetadataUri, CreateEntryRequestBody body) {
 
 		if (resourceUri != null &&
 			cachedExternalMetadataUri != null) {
@@ -293,8 +294,8 @@ public class EntryService {
 			Entry entry = context.createReference(entryId, resourceUri, cachedExternalMetadataUri, listUri);
 
 			if (entry != null) {
-				setCachedMetadataGraph(entry, bodyResource);
-				setEntryGraph(entry, bodyResource);
+				setCachedMetadataGraph(entry, body);
+				setEntryGraph(entry, body);
 				if (graphType != null) {
 					entry.setGraphType(graphType);
 				}
@@ -317,16 +318,16 @@ public class EntryService {
 	 * @return the new created entry object.
 	 */
 	public Entry createLinkReferenceEntry(Context context, String entryId, GraphType graphType, URI resourceUri,
-										  URI listUri, URI cachedExternalMetadataUri, String bodyResource) {
+										  URI listUri, URI cachedExternalMetadataUri, CreateEntryRequestBody body) {
 
 		if (resourceUri != null) {
 
 			Entry entry = context.createLinkReference(entryId, resourceUri, cachedExternalMetadataUri, listUri);
 
 			if (entry != null) {
-				setLocalMetadataGraph(entry, bodyResource);
-				setCachedMetadataGraph(entry, bodyResource);
-				setEntryGraph(entry, bodyResource);
+				setLocalMetadataGraph(entry, body);
+				setCachedMetadataGraph(entry, body);
+				setEntryGraph(entry, body);
 
 				if (graphType != null) {
 					entry.setGraphType(graphType);
@@ -346,24 +347,22 @@ public class EntryService {
 	/**
 	 * Sets resource to an entry.
 	 *
-	 * @param entry a reference to a entry
-	 * @return false if there is a resource provided but it cannot be interpreted.
-	 * @throws JsonProcessingException Exception if payload is malformed
+	 * @param context
+	 * @param entry       Entry to set the resource on
+	 * @param requestBody Input data with "resource" field to be read
+	 * @param groupUri
+	 * @return false if there is a resource provided, but it cannot be interpreted.
+	 * @throws JsonProcessingException Exception if request resource is a malformed JSON
 	 */
-	private boolean setResource(Context context, Entry entry, String requestResource, URI groupUri) throws JsonProcessingException {
+	private boolean setResource(Context context, Entry entry, CreateEntryRequestBody requestBody, URI groupUri) throws JsonProcessingException {
 
 		ContextManager cm = repositoryManager.getContextManager();
 
-		if (StringUtils.isEmpty(requestResource)) {
+		if (requestBody == null || StringUtils.isEmpty(requestBody.resource())) {
 			return true;
 		}
 
-		String resource = requestResource.replaceAll("_newId", entry.getId());
-
-		// If there is no resource there is nothing to do yet
-		if (StringUtils.isEmpty(resource)) {
-			return true;
-		}
+		String resource = requestBody.resource().replaceAll("_newId", entry.getId());
 
 		switch (entry.getGraphType()) {
 
@@ -460,13 +459,13 @@ public class EntryService {
 	}
 
 	/**
-	 * Extracts metadata from the request and sets it as the entrys local metadata graph.
+	 * Extracts metadata from the request body and sets it as the entry's local metadata graph.
 	 *
-	 * @param entry The entry to set the metadata on.
+	 * @param entry The entry to set the metadata on
 	 */
-	private void setLocalMetadataGraph(Entry entry, String requestResource) {
+	private void setLocalMetadataGraph(Entry entry, CreateEntryRequestBody requestBody) {
 
-		if (StringUtils.isEmpty(requestResource)) {
+		if (requestBody == null || StringUtils.isEmpty(requestBody.metadata())) {
 			return;
 		}
 		if (EntryType.Reference.equals(entry.getEntryType())) {
@@ -474,13 +473,10 @@ public class EntryService {
 		}
 
 		try {
-			JSONObject mdObj = new JSONObject(requestResource.replaceAll("_newId", entry.getId()));
-			if (mdObj.has("metadata")) {
-				JSONObject obj = (JSONObject) mdObj.get("metadata");
-				Model graph = RDFJSON.rdfJsonToGraph(obj);
-				if (graph != null) {
-					entry.getLocalMetadata().setGraph(graph);
-				}
+			JSONObject mdObj = new JSONObject(requestBody.metadata().replaceAll("_newId", entry.getId()));
+			Model graph = RDFJSON.rdfJsonToGraph(mdObj);
+			if (graph != null) {
+				entry.getLocalMetadata().setGraph(graph);
 			}
 		} catch (JsonException e) {
 			log.warn(e.getMessage());
@@ -492,22 +488,19 @@ public class EntryService {
 	 *
 	 * @param entry The entry to set the metadata on.
 	 */
-	private void setCachedMetadataGraph(Entry entry, String requestResource) {
+	private void setCachedMetadataGraph(Entry entry, CreateEntryRequestBody requestBody) {
 
-		if (StringUtils.isEmpty(requestResource)) {
+		if (requestBody == null || StringUtils.isEmpty(requestBody.cachedExternalMetadata())) {
 			return;
 		}
 
 		if (EntryType.Reference.equals(entry.getEntryType()) ||
 			EntryType.LinkReference.equals(entry.getEntryType())) {
 			try {
-				JSONObject mdObj = new JSONObject(requestResource.replaceAll("_newId", entry.getId()));
-				if (mdObj.has("cached-external-metadata")) {
-					JSONObject obj = (JSONObject) mdObj.get("cached-external-metadata");
-					Model graph = RDFJSON.rdfJsonToGraph(obj);
-					if (graph != null) {
-						entry.getCachedExternalMetadata().setGraph(graph);
-					}
+				JSONObject mdObj = new JSONObject(requestBody.cachedExternalMetadata().replaceAll("_newId", entry.getId()));
+				Model graph = RDFJSON.rdfJsonToGraph(mdObj);
+				if (graph != null) {
+					entry.getCachedExternalMetadata().setGraph(graph);
 				}
 			} catch (JSONException e) {
 				log.warn(e.getMessage());
@@ -517,27 +510,24 @@ public class EntryService {
 
 
 	/**
-	 * Extracts entryinfo from the request and sets it as the entrys local metadata graph.
+	 * Extracts entry info from the request body and sets it as the entry's local metadata graph.
 	 * Since it assumes this is the creation step, the Entries URIs was not available
 	 * on the client, hence the special "_newId" entryId has been used.
 	 * Make sure this is replaced with the new entryId first.
 	 *
 	 * @param entry The entry to set the metadata on.
 	 */
-	private void setEntryGraph(Entry entry, String requestResource) {
+	private void setEntryGraph(Entry entry, CreateEntryRequestBody requestBody) {
 
-		if (StringUtils.isEmpty(requestResource)) {
+		if (requestBody == null || StringUtils.isEmpty(requestBody.info())) {
 			return;
 		}
 
 		try {
-			JSONObject mdObj = new JSONObject(requestResource.replaceAll("_newId", entry.getId()));
-			if (mdObj.has("info")) {
-				JSONObject obj = (JSONObject) mdObj.get("info");
-				Model graph = RDFJSON.rdfJsonToGraph(obj);
-				if (graph != null) {
-					entry.setGraph(graph);
-				}
+			JSONObject infoJsonObj = new JSONObject(requestBody.info().replaceAll("_newId", entry.getId()));
+			Model graph = RDFJSON.rdfJsonToGraph(infoJsonObj);
+			if (graph != null) {
+				entry.setGraph(graph);
 			}
 		} catch (JSONException e) {
 			log.warn(e.getMessage());

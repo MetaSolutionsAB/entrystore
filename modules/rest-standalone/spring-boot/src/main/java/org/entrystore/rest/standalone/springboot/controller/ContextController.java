@@ -48,7 +48,7 @@ public class ContextController {
 		@PathVariable("context-id") String contextId,
 		@RequestParam(required = false, name = "id") String entryId,
 		@RequestParam(required = false, name = "entrytype") EntryType entryType,
-		@RequestParam(required = false, name = "graphtype") GraphType graphType,
+		@RequestParam(required = false, name = "graphtype", defaultValue = "none") GraphType graphType,
 		@RequestParam(required = false, name = "resource") URI resourceUri,
 		@RequestParam(required = false, name = "list") URI listUri,
 		@RequestParam(required = false) URI groupUri,
@@ -61,13 +61,8 @@ public class ContextController {
 			throw new BadRequestException("Pipeline results may only be created by Pipelines");
 		}
 
-		String bodyResource = null;
-		if (body != null) {
-			bodyResource = body.resource();
-		}
-
 		Entry entry = contextService.createEntry(contextId, entryId, entryType, graphType, resourceUri, listUri,
-			groupUri, cachedExternalMetadataUri, informationResource, templateUri, bodyResource);
+			groupUri, cachedExternalMetadataUri, informationResource, templateUri, body);
 
 
 		CreateEntryResponse responseBody = new CreateEntryResponse(entry.getId());
