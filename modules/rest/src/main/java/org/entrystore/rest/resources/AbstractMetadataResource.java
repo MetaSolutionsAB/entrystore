@@ -56,7 +56,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -118,9 +117,6 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				MediaType prefFormat = (format != null) ? format : preferredMediaType;
 
 				String graphQuery = null;
-				if (parameters.containsKey("graphQuery")) {
-					graphQuery = URLDecoder.decode(parameters.get("graphQuery"), StandardCharsets.UTF_8);
-				}
 
 				if (parameters.containsKey("recursive")) {
 					String traversalParam = parameters.get("recursive");
@@ -139,7 +135,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 					try {
 						if (parameters.containsKey("depth")) {
 							int depthParam = Integer.parseInt(parameters.get("depth"));
-							if (depthParam > 0 && depthParam <= depthMax) {
+							if (depthParam > 0 && depthParam <= depthMax) { // cannot be higher then config maxDepth
 								depth = depthParam;
 							}
 						}
@@ -199,7 +195,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				}
 				fileName += "." + getFileExtensionForMediaType(prefFormat);
 
-				// offer download in case client requested this
+				// offer download in case the client requested this
 				Disposition disp = new Disposition();
 				disp.setFilename(fileName);
 				if (parameters.containsKey("download")) {
@@ -213,8 +209,8 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				result = new EmptyRepresentation();
 			}
 
-			// set modification date only in case it has not been
-			// set before (e.g. when handling recursive-requests)
+			// set a modification date only in case it has not been
+			// set before (e.g., when handling recursive-requests)
 			Date lastMod = getModificationDate();
 			if (lastMod != null && result.getModificationDate() == null) {
 				result.setModificationDate(lastMod);
