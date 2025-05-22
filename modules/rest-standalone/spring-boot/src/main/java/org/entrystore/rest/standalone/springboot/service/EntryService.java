@@ -28,6 +28,7 @@ import org.entrystore.impl.StringResource;
 import org.entrystore.rest.standalone.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
+import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.entrystore.rest.standalone.springboot.util.RDFJSON;
@@ -35,6 +36,7 @@ import org.entrystore.rest.standalone.springboot.util.ResourceJsonSerializer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -70,6 +72,11 @@ public class EntryService {
 	}
 
 	public GetEntryResponse getEntryInJsonFormat(String contextId, String entryId, String rdfFormat, boolean includeAll, ListFilter listFilter) {
+		Entry entry = getEntryByContextIdAndEntryId(contextId, entryId);
+		return convertEntryToResponseModel(entry, rdfFormat, includeAll, listFilter);
+	}
+
+	public Entry getEntryByContextIdAndEntryId(String contextId, String entryId) {
 		Context context = getContext(contextId);
 		if (context == null) {
 			// throw the same exception message for missing Context and missing Entry to avoid leaking information about context existence
@@ -81,7 +88,7 @@ public class EntryService {
 			throw new EntityNotFoundException("No entry with id '" + entryId + "' found in context '" + contextId + "'");
 		}
 
-		return convertEntryToResponseModel(entry, rdfFormat, includeAll, listFilter);
+		return entry;
 	}
 
 	private Context getContext(String contextId) {
@@ -343,6 +350,40 @@ public class EntryService {
 
 		return null;
 	}
+
+	public Entry modifyEntry(String contextId, String entryId, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
+		Entry entry = getEntryByContextIdAndEntryId(contextId, entryId);
+		return modifyEntry(entry, body, mediaType, applyACLtoChildren);
+	}
+
+	public Entry modifyEntry(Entry entry, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
+
+		Model deserializedGraph;
+		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType)) {
+			try {
+				JSONObject rdfJSON = new JSONObject(body);
+				deserializedGraph = RDFJSON.rdfJsonToGraph(rdfJSON);
+			} catch (JSONException e) {
+				log.info(e.getMessage());
+				throw new BadRequestException("Exception processing request body: " + e.getMessage());
+			}
+		} else {
+			deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
+		}
+
+		if (deserializedGraph == null) {
+			throw new BadRequestException("Unable to parse the request body in the requested format: " + mediaType);
+		} else {
+			entry.setGraph(deserializedGraph);
+			if (applyACLtoChildren &&
+				GraphType.List.equals(entry.getGraphType()) &&
+				Local.equals(entry.getEntryType())) {
+				((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
+			}
+			return entry;
+		}
+	}
+
 
 	/**
 	 * Sets resource to an entry.

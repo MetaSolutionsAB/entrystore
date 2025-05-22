@@ -34,12 +34,19 @@ import org.eclipse.rdf4j.rio.helpers.JSONLDMode;
 import org.eclipse.rdf4j.rio.helpers.JSONLDSettings;
 import org.eclipse.rdf4j.rio.helpers.StatementCollector;
 import org.eclipse.rdf4j.rio.helpers.XMLParserSettings;
+import org.eclipse.rdf4j.rio.jsonld.JSONLDParser;
 import org.eclipse.rdf4j.rio.jsonld.JSONLDWriter;
+import org.eclipse.rdf4j.rio.n3.N3ParserFactory;
 import org.eclipse.rdf4j.rio.n3.N3Writer;
+import org.eclipse.rdf4j.rio.ntriples.NTriplesParser;
 import org.eclipse.rdf4j.rio.ntriples.NTriplesWriter;
+import org.eclipse.rdf4j.rio.rdfxml.RDFXMLParser;
 import org.eclipse.rdf4j.rio.rdfxml.util.RDFXMLPrettyWriter;
+import org.eclipse.rdf4j.rio.trig.TriGParser;
 import org.eclipse.rdf4j.rio.trig.TriGWriter;
+import org.eclipse.rdf4j.rio.trix.TriXParser;
 import org.eclipse.rdf4j.rio.trix.TriXWriter;
+import org.eclipse.rdf4j.rio.turtle.TurtleParser;
 import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.repository.util.NS;
 import org.json.JSONObject;
@@ -201,42 +208,52 @@ public class GraphUtil {
 		return new LinkedHashModel(collector.getStatements());
 	}
 
-	/*
-		public static Model deserializeGraph(String graphString, MediaType mediaType) {
-			try {
-				return deserializeGraphUnsafe(graphString, mediaType);
-			} catch (RDFHandlerException | RDFParseException | IOException e) {
-				log.error(e.getMessage());
-			}
-			return null;
+	public static Model deserializeGraph(String graphString, String mediaType) {
+		try {
+			return deserializeGraphUnsafe(graphString, mediaType);
+		} catch (RDFHandlerException | RDFParseException | IOException e) {
+			log.error(e.getMessage());
+		}
+		return null;
+	}
+
+	public static Model deserializeGraphUnsafe(String graphString, String mediaType)
+		throws RDFHandlerException, IOException, RDFParseException {
+
+		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {
+			return RDFJSON.rdfJsonToGraph(graphString);
 		}
 
-		public static Model deserializeGraphUnsafe(String graphString, MediaType mediaType) throws RDFHandlerException, IOException, RDFParseException {
-			Model deserializedGraph = null;
-			if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
-				deserializedGraph = RDFJSON.rdfJsonToGraph(graphString);
-			} else if (mediaType.equals(MediaType.APPLICATION_RDF_XML)) {
-				RDFXMLParser rdfXmlParser = new RDFXMLParser();
-				rdfXmlParser.setParserConfig(constructSafeXmlParserConfig());
-				deserializedGraph = deserializeGraphUnsafe(graphString, rdfXmlParser);
-			} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
-				deserializedGraph = deserializeGraphUnsafe(graphString, new N3ParserFactory().getParser());
-			} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-				deserializedGraph = deserializeGraphUnsafe(graphString, new TurtleParser());
-			} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-				TriXParser trixParser = new TriXParser();
-				trixParser.setParserConfig(constructSafeXmlParserConfig());
-				deserializedGraph = deserializeGraphUnsafe(graphString, trixParser);
-			} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-				deserializedGraph = deserializeGraphUnsafe(graphString, new NTriplesParser());
-			} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-				deserializedGraph = deserializeGraphUnsafe(graphString, new TriGParser());
-			} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-				deserializedGraph = deserializeGraphUnsafe(graphString, new JSONLDParser());
-			}
-			return deserializedGraph;
+		RDFParser parser = createRdfParserForMediaType(mediaType);
+		if (parser != null) {
+			return deserializeGraphUnsafe(graphString, parser);
+		} else {
+			return null;
 		}
-	*/
+	}
+
+	private static RDFParser createRdfParserForMediaType(String mediaType) {
+		RDFParser parser = null;
+		if (RDFFormat.RDFXML.getDefaultMIMEType().equals(mediaType)) {
+			parser = new RDFXMLParser();
+			parser.setParserConfig(constructSafeXmlParserConfig());
+		} else if (RDFFormat.N3.getDefaultMIMEType().equals(mediaType)) {
+			parser = new N3ParserFactory().getParser();
+		} else if (RDFFormat.TURTLE.getDefaultMIMEType().equals(mediaType)) {
+			parser = new TurtleParser();
+		} else if (RDFFormat.TRIX.getDefaultMIMEType().equals(mediaType)) {
+			parser = new TriXParser();
+			parser.setParserConfig(constructSafeXmlParserConfig());
+		} else if (RDFFormat.NTRIPLES.getDefaultMIMEType().equals(mediaType)) {
+			parser = new NTriplesParser();
+		} else if (RDFFormat.TRIG.getDefaultMIMEType().equals(mediaType)) {
+			parser = new TriGParser();
+		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(mediaType)) {
+			parser = new JSONLDParser();
+		}
+		return parser;
+	}
+
 	public static String serializeGraph(Model graph, String mediaType) {
 		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {
 			return RDFJSON.graphToRdfJson(graph);
