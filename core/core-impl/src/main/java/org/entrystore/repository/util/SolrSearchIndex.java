@@ -1068,7 +1068,6 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public QueryResult sendQuery(SolrQuery query) throws SolrException {
-		Set<URI> entries = new LinkedHashSet<>();
 		Set<Entry> result = new LinkedHashSet<>();
 		long hits = -1;
 		long inaccessibleHits = 0;
@@ -1093,9 +1092,10 @@ public class SolrSearchIndex implements SearchIndex {
 				offset += Math.min(limit, 50);
 				log.warn("Increasing offset to " + offset + " in an attempt to fill the result limit");
 			}
-			hits = sendQueryForEntryURIs(query, entries, facetFields, solrServer, offset, -1);
+			Set<URI> entryURIs = new LinkedHashSet<>();
+			hits = sendQueryForEntryURIs(query, entryURIs, facetFields, solrServer, offset, -1);
 			Date before = new Date();
-			for (URI uri : entries) {
+			for (URI uri : entryURIs) {
 				try {
 					Entry entry = rm.getContextManager().getEntry(uri);
 					if (entry != null) {
@@ -1139,9 +1139,14 @@ public class SolrSearchIndex implements SearchIndex {
 		// setting the hit count to zero in certain conditions. Should protect against malicious
 		// probing requests.
 		//
-		// Test if the condition covers to much and add "offset == 0 &&" if necessary
+		// Test if the condition covers too much and add "offset == 0 &&" if necessary
 		if (result.isEmpty() && hits > 0) {
 			adjustedHitCount = 0;
+		}
+
+		if (adjustedHitCount < 0) {
+			log.warn("Adjusted hit count is negative, this should not happen");
+			// TODO perhaps we should just set it to a high number in order not to break clients, e.g. Integer.MAX_VALUE
 		}
 
 		return new QueryResult(result, adjustedHitCount, facetFields);
