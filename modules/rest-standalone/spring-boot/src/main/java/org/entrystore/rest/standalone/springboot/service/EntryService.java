@@ -21,6 +21,7 @@ import org.entrystore.List;
 import org.entrystore.Metadata;
 import org.entrystore.Resource;
 import org.entrystore.User;
+import org.entrystore.exception.EntryMissingException;
 import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
@@ -30,6 +31,7 @@ import org.entrystore.rest.standalone.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.entrystore.rest.standalone.springboot.util.RDFJSON;
 import org.entrystore.rest.standalone.springboot.util.ResourceJsonSerializer;
@@ -381,6 +383,37 @@ public class EntryService {
 				((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			return entry;
+		}
+	}
+
+	public void deleteEntry(String contextId, String entryId, boolean recursive) {
+
+		Context context = getContext(contextId);
+		if (context == null) {
+			// throw the same exception message for missing Context and missing Entry to avoid leaking information about context existence
+			throw new EntityNotFoundException("No entry with id '" + entryId + "' found in context '" + contextId + "'");
+		}
+
+		Entry entry = context.get(entryId);
+		if (entry == null) {
+			throw new EntityNotFoundException("No entry with id '" + entryId + "' found in context '" + contextId + "'");
+		}
+
+		try {
+			if (GraphType.List.equals(entry.getGraphType()) && recursive) {
+				org.entrystore.List l = (org.entrystore.List) entry.getResource();
+				if (l != null) {
+					l.removeTree();
+				} else {
+					log.warn("Resource of the following list is null: {}", entry.getEntryURI());
+				}
+			} else {
+				context.remove(entry.getEntryURI());
+			}
+		} catch (AuthorizationException e) {
+			throw new UnauthorizedException("Not authorized");
+		} catch (EntryMissingException e) {
+			throw new EntityNotFoundException("Entry requested for deletion was not found. Error: " + e.getMessage());
 		}
 	}
 

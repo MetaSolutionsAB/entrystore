@@ -10,6 +10,7 @@ import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,6 +48,9 @@ public class EntryController {
 		return entryService.getEntryInJsonFormat(contextId, entryId, rdfFormat, includeAll != null, listFilter);
 	}
 
+	@Operation(
+		summary = "Sets the entry information.",
+		description = "Overrides entry data with data in the request body.")
 	@PutMapping(path = "/{context-id}/entry/{entry-id}")
 	public ResponseEntity<Void> modifyEntry(
 		@PathVariable("context-id") String contextId,
@@ -79,5 +83,22 @@ public class EntryController {
 		}
 
 		return responseBuilder.build();
+	}
+
+	@Operation(
+		summary = "Deletes the entry.",
+		description = "Deletes given entry. If parameter 'recursive' is set then also deletes all its children.")
+	@DeleteMapping(path = "/{context-id}/entry/{entry-id}", produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<Void> deleteEntry(
+		@PathVariable("context-id") String contextId,
+		@PathVariable("entry-id") String entryId,
+		@RequestParam(required = false) String recursive
+	) {
+
+		entryService.deleteEntry(contextId, entryId, recursive != null);
+
+		return ResponseEntity
+			.noContent()
+			.build();
 	}
 }
