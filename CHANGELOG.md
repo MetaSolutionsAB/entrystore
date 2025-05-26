@@ -1,5 +1,43 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 5.7.0 (2025-05-26)
+
+### Improvement
+
+[ENTRYSTORE-840](https://metasolutions.atlassian.net/browse/ENTRYSTORE-840) Improve configuration possibilities of traversal functionality
+
+[ENTRYSTORE-866](https://metasolutions.atlassian.net/browse/ENTRYSTORE-866) Allow Links to be changed to Link references
+
+[ENTRYSTORE-883](https://metasolutions.atlassian.net/browse/ENTRYSTORE-883) Allow sorting for search based syndication feeds
+
+[ENTRYSTORE-885](https://metasolutions.atlassian.net/browse/ENTRYSTORE-885) Change log level when detecting incorrect entry URIs
+
+[ENTRYSTORE-887](https://metasolutions.atlassian.net/browse/ENTRYSTORE-887) Make JSONP support configurable
+
+[ENTRYSTORE-889](https://metasolutions.atlassian.net/browse/ENTRYSTORE-889) Support failure URL for new SAML implementation
+
+[ENTRYSTORE-890](https://metasolutions.atlassian.net/browse/ENTRYSTORE-890) Restrict amount of returned entries for recursive requests
+
+[ENTRYSTORE-893](https://metasolutions.atlassian.net/browse/ENTRYSTORE-893) Improve handling of temporary user changes
+
+[ENTRYSTORE-894](https://metasolutions.atlassian.net/browse/ENTRYSTORE-894) RSS: parameter for URL control \(entry URL point to ES or to Blocks\)
+
+[ENTRYSTORE-898](https://metasolutions.atlassian.net/browse/ENTRYSTORE-898) Allow client to set title for syndication feeds
+
+[ENTRYSTORE-900](https://metasolutions.atlassian.net/browse/ENTRYSTORE-900) Upgrade dependencies
+
+[ENTRYSTORE-902](https://metasolutions.atlassian.net/browse/ENTRYSTORE-902) Integration tests for \*MetadataResource
+
+### New Feature
+
+[ENTRYSTORE-888](https://metasolutions.atlassian.net/browse/ENTRYSTORE-888) Support configurable URL patterns for RSS feeds
+
+### Bug
+
+[ENTRYSTORE-826](https://metasolutions.atlassian.net/browse/ENTRYSTORE-826) IRI contains null values as string - check logs
+
+[ENTRYSTORE-904](https://metasolutions.atlassian.net/browse/ENTRYSTORE-904) Solr adjusted hit count sometimes becomes negative
+
 ## Version 5.6.0 (2025-03-28)
 
 ### Improvement
