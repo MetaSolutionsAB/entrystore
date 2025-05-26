@@ -288,4 +288,27 @@ class SearchIT extends BaseSpec {
 		itemDateNode.value().size() == 1
 		(itemDateNode.value()[0] as String).contains(Year.now().toString())
 	}
+
+	def "GET /search?type=solr&syndication=rss_2.0&urltemplate=test123 should return syndication feed with links based on a URL template"() {
+		when:
+		// fetch syndication feed
+		def resourceConn = EntryStoreClient.getRequest('/search?type=solr&query=description.pl:opissearch&syndication=rss_2.0&urltemplate=test123')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/rss+xml')
+		def respXml = new XmlParser(false, false).parseText(resourceConn.getInputStream().text)
+		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
+		respXml.attributes()['version'] != null
+		respXml.value().size() == 1
+		respXml['channel'].size() == 1
+
+		def channelNode = respXml['channel'][0] as Node
+		channelNode['link'].size() == 1
+		def channelItemNode = channelNode['item'][0] as Node
+		def itemLinkNode = channelItemNode['link'][0] as Node
+		itemLinkNode.value().size() == 1
+		itemLinkNode.value()[0] == 'http://localhost?cid=searchContextId&eid=searchEntryId&euri=http%3A%2F%2Flocalhost%3A8181%2Fstore%2FsearchContextId%2Fentry%2FsearchEntryId&ruri=http%3A%2F%2Flocalhost%3A8181%2Fstore%2FsearchContextId%2Fresource%2FsearchEntryId'
+	}
+
 }

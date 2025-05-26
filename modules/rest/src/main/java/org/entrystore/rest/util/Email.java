@@ -39,7 +39,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.URL;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.Calendar;
 import java.util.Properties;
@@ -51,7 +51,7 @@ import java.util.Properties;
  */
 public class Email {
 
-	private static Logger log = LoggerFactory.getLogger(Email.class);
+	private static final Logger log = LoggerFactory.getLogger(Email.class);
 
 	private static String messageBodySignup;
 
@@ -112,7 +112,7 @@ public class Email {
 
 		//props.put("mail.debug", "true");
 
-		Session session = null;
+		Session session;
 
 		// Authentication
 		if (username != null && password != null) {
@@ -226,15 +226,15 @@ public class Email {
 		return sendMessage(config, recipientEmail, subject, messageText);
 	}
 
-	public static boolean sendPasswordChangeConfirmation(Config config, Entry userEntry) {
+	public static void sendPasswordChangeConfirmation(Config config, Entry userEntry) {
 		String msgTo = ((User) userEntry.getResource()).getName();
 		if (!msgTo.contains("@")) {
 			msgTo = EntryUtil.getEmail(userEntry);
 		}
 
 		if (msgTo == null || !msgTo.contains("@")) {
-			log.warn("Unable to send email, invalid email address of recipient: " + msgTo);
-			return false;
+			log.warn("Unable to send email, invalid email address of recipient: {}", msgTo);
+			return;
 		}
 
 		if (messageBodyPasswordChanged == null) {
@@ -242,14 +242,12 @@ public class Email {
 			if (templatePath == null) {
 				templatePath = new File(ConfigurationManager.getConfigurationURI("email_pwchange.html")).getAbsolutePath();
 			}
-			if (templatePath != null) {
-				messageBodyPasswordChanged = loadTemplate(templatePath);
-			}
+			messageBodyPasswordChanged = loadTemplate(templatePath);
 		}
 
 		if (messageBodyPasswordChanged == null) {
 			log.error("Unable to load email template for password change confirmation");
-			return false;
+			return;
 		}
 
 		String messageText = messageBodyPasswordChanged.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
@@ -261,7 +259,7 @@ public class Email {
 		}
 		messageText = messageText.replaceAll("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
 
-		return sendMessage(config, msgTo, msgSubject, messageText);
+		sendMessage(config, msgTo, msgSubject, messageText);
 	}
 
 	private static String loadTemplate(String url) {
@@ -272,12 +270,12 @@ public class Email {
 		InputStream is = null;
 		try {
 			if (url.startsWith("http://") || url.startsWith("https://")) {
-				is = new URL(url).openStream();
+				is = new URI(url).toURL().openStream();
 			} else {
 				is = Files.newInputStream(new File(url).toPath());
 			}
 			return IOUtils.toString(is, Charsets.UTF_8);
-		} catch (IOException e) {
+		} catch (IOException | URISyntaxException e) {
 			log.error(e.getMessage());
 		} finally {
 			if (is != null) {

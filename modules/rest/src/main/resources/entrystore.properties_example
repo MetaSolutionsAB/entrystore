@@ -36,7 +36,7 @@ entrystore.data.folder=/srv/entrystore/files/
 ## SMTP settings, required for e.g. sign-up
 # entrystore.smtp.host=smtp.host.tld
 # entrystore.smtp.port=587
-# entrystore.smtp.ssl=starttls|ssl|off
+# entrystore.smtp.security=starttls|ssl|off
 # entrystore.smtp.username=smtp-user
 # entrystore.smtp.password=smtp-password
 
@@ -47,7 +47,7 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.recaptcha.public-key=your-public-recaptcha-key
 # entrystore.auth.recaptcha.private-key=your-private-recaptcha-key
 
-# Every time a logged in user performs an operation, the expiry date
+# Every time a logged-in user performs an operation, the expiry date
 # is renewed based on the current time/date. (default: off)
 # entrystore.auth.cookie.update.expiry=on|off
 

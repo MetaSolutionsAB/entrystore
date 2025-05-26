@@ -94,7 +94,7 @@ public class SamlLoginResource extends BaseResource {
 
 	private static List<String> redirectDomainWhitelist;
 
-	private static final Cache<String, String> relayStateCache;
+	private static final Cache<String, Map<String, String>> relayStateCache;
 
 	@Getter
 	private static String defaultIdp;
@@ -278,7 +278,27 @@ public class SamlLoginResource extends BaseResource {
 
 		Form samlResponseForm = new Form(r);
 		String encodedResponse = samlResponseForm.getFirstValue("SAMLResponse");
+
 		if (encodedResponse != null) {
+			String redirectSuccessUrlFromRelayState = null;
+			String redirectFailureUrlFromRelayState = null;
+
+			String relayStateToken = samlResponseForm.getFirstValue("RelayState");
+			if (relayStateToken != null) {
+				log.debug("Received token via SAML RelayState: {}", relayStateToken);
+				Map<String, String> relayStateInfo = relayStateCache.getIfPresent(relayStateToken);
+				if (relayStateInfo != null) {
+					if (relayStateInfo.containsKey("successurl")) {
+						redirectSuccessUrlFromRelayState = relayStateInfo.get("successurl");
+					}
+					if (relayStateInfo.containsKey("failureurl")) {
+						redirectFailureUrlFromRelayState = relayStateInfo.get("failureurl");
+					}
+				} else {
+					log.debug("Token {} not found in relay state cache", relayStateToken);
+				}
+			}
+
 			String userName = null;
 			try {
 				SamlResponse samlResponse = idpInfo.getSamlClient().decodeAndValidateSamlResponse(encodedResponse, "POST");
@@ -323,25 +343,16 @@ public class SamlLoginResource extends BaseResource {
 				EntryStoreApplication app = (EntryStoreApplication) getApplication();
 				new CookieVerifier(app, getRM()).createAuthToken(userName, null, getRequest(), getResponse());
 
-				String relayStateToken = samlResponseForm.getFirstValue("RelayState");
-				if (relayStateToken != null) {
-					log.debug("Received token via SAML RelayState: {}", relayStateToken);
-					String redirectUrl = relayStateCache.getIfPresent(relayStateToken);
-					if (redirectUrl != null) {
-						log.debug("Redirecting to URL: {}", redirectUrl);
-						getResponse().redirectTemporary(redirectUrl);
-					} else {
-						log.debug("Token {} not found in relay state cache", relayStateToken);
-					}
+				if (redirectSuccessUrlFromRelayState != null) {
+					log.debug("Redirecting to custom success URL: {}", redirectSuccessUrlFromRelayState);
+					getResponse().redirectTemporary(redirectSuccessUrlFromRelayState);
+				} else if (redirSuccess != null) {
+					log.debug("Redirecting to default success URL: {}", redirSuccess);
+					getResponse().redirectTemporary(URLDecoder.decode(redirSuccess, StandardCharsets.UTF_8));
 				} else {
-					if (redirSuccess != null) {
-						log.debug("Redirecting to default success URL: {}", redirSuccess);
-						getResponse().redirectTemporary(URLDecoder.decode(redirSuccess, StandardCharsets.UTF_8));
-					} else {
-						getResponse().setStatus(Status.SUCCESS_OK);
-						if (html) {
-							getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
-						}
+					getResponse().setStatus(Status.SUCCESS_OK);
+					if (html) {
+						getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
 					}
 				}
 
@@ -349,8 +360,12 @@ public class SamlLoginResource extends BaseResource {
 			}
 
 			if (!authSuccess) {
-				log.info("Login failed with username {} via IdP \"{}\"", userName, idpInfo.getId());
-				if (redirFailure != null) {
+				log.info("Login failed with username {} via IdP {}", userName, idpInfo.getId());
+				if (redirectFailureUrlFromRelayState != null) {
+					log.debug("Redirecting to custom failure URL: {}", redirectFailureUrlFromRelayState);
+					getResponse().redirectTemporary(redirectFailureUrlFromRelayState);
+				} else if (redirFailure != null) {
+					log.debug("Redirecting to default failure URL: {}", redirFailure);
 					getResponse().redirectTemporary(URLDecoder.decode(redirFailure, StandardCharsets.UTF_8));
 				} else {
 					getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
@@ -371,12 +386,22 @@ public class SamlLoginResource extends BaseResource {
 	private void redirectToIdentityProvider(SamlIdpInfo idpInfo, Response response) throws SamlException {
 		Map<String, String> values = new HashMap<>();
 		values.put("SAMLRequest", idpInfo.getSamlClient().getSamlRequest());
+
+		Map<String, String> relayStateInfo = new HashMap<>();
 		String successUrl = parameters.get("successurl");
 		if (isValidRedirectTarget(successUrl)) {
+			relayStateInfo.put("successurl", successUrl);
+		}
+		String failureUrl = parameters.get("failureurl");
+		if (isValidRedirectTarget(failureUrl)) {
+			relayStateInfo.put("failureurl", failureUrl);
+		}
+
+		if (!relayStateInfo.isEmpty()) {
 			String relayStateToken = RandomStringUtils.secure().nextAlphanumeric(16);
-			relayStateCache.put(relayStateToken, successUrl);
-			log.debug("Setting RelayState token {} in SAMLRequest, mapped to redirect URL: {}", relayStateToken, successUrl);
+			relayStateCache.put(relayStateToken, relayStateInfo);
 			values.put("RelayState", relayStateToken);
+			log.debug("Setting RelayState token {} in SAMLRequest, mapped to redirect URL: {}", relayStateToken, successUrl);
 		}
 
 		log.debug("Redirecting to SAML IdP \"{}\" using {}" , idpInfo.getId(), idpInfo.getRedirectMethod().toUpperCase());

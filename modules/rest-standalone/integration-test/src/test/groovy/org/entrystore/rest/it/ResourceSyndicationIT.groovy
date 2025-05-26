@@ -86,7 +86,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def channelTitleNode = channelNode['title'][0] as Node
 		channelTitleNode.attributes().size() == 0
 		channelTitleNode.value().size() == 1
-		channelTitleNode.value()[0] == 'Feed of "Syndication Test"'
+		channelTitleNode.value()[0] == 'Feed of Syndication Test'
 
 		channelNode['link'].size() == 1
 		def channelLinkNode = channelNode['link'][0] as Node
@@ -146,7 +146,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def channelTitleNode = channelNode['title'][0] as Node
 		channelTitleNode.attributes().size() == 0
 		channelTitleNode.value().size() == 1
-		channelTitleNode.value()[0] == 'Feed of "Syndication Test"'
+		channelTitleNode.value()[0] == 'Feed of Syndication Test'
 
 		channelNode['link'].size() == 1
 		def channelLinkNode = channelNode['link'][0] as Node
@@ -206,7 +206,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def channelTitleNode = channelNode['title'][0] as Node
 		channelTitleNode.attributes().size() == 0
 		channelTitleNode.value().size() == 1
-		channelTitleNode.value()[0] == 'Feed of "Syndication Test"'
+		channelTitleNode.value()[0] == 'Feed of Syndication Test'
 
 		channelNode['link'].size() == 1
 		def channelLinkNode = channelNode['link'][0] as Node
@@ -262,7 +262,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def titleNode = respXml['title'][0] as Node
 		titleNode.attributes().size() == 0
 		titleNode.value().size() == 1
-		titleNode.value()[0] == 'Feed of "Syndication Test"'
+		titleNode.value()[0] == 'Feed of Syndication Test'
 
 		respXml['link'].size() == 1
 		def linkNode = respXml['link'][0] as Node
@@ -328,7 +328,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def titleNode = respXml['title'][0] as Node
 		titleNode.attributes().size() == 0
 		titleNode.value().size() == 1
-		titleNode.value()[0] == 'Feed of "Syndication Test"'
+		titleNode.value()[0] == 'Feed of Syndication Test'
 
 		respXml['link'].size() == 1
 		def linkNode = respXml['link'][0] as Node
@@ -394,7 +394,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		def titleNode = respXml['title'][0] as Node
 		titleNode.attributes().size() == 0
 		titleNode.value().size() == 1
-		titleNode.value()[0] == 'Feed of "Syndication Test"'
+		titleNode.value()[0] == 'Feed of Syndication Test'
 
 		respXml['link'].size() == 1
 		def linkNode = respXml['link'][0] as Node

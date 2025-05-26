@@ -56,7 +56,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -71,7 +70,6 @@ import java.util.Set;
 
 /**
  * Provides methods to read/write metadata graphs.
- *
  * Subclasses need to implement getMetadata().
  *
  * @author Hannes Ebner
@@ -110,7 +108,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
-			Representation result = null;
+			Representation result;
 			if (Method.GET.equals(getRequest().getMethod())) {
 				MediaType preferredMediaType = getRequest().getClientInfo().getPreferredMediaType(supportedMediaTypes);
 				if (preferredMediaType == null) {
@@ -120,24 +118,31 @@ public abstract class AbstractMetadataResource extends BaseResource {
 
 				String graphQuery = null;
 				if (parameters.containsKey("graphQuery")) {
-					graphQuery = URLDecoder.decode(parameters.get("graphQuery"), StandardCharsets.UTF_8);
+					graphQuery = parameters.get("graphQuery");
 				}
 
 				if (parameters.containsKey("recursive")) {
-					String traversalParam = null;
-					traversalParam = URLDecoder.decode(parameters.get("recursive"), StandardCharsets.UTF_8);
+					String traversalParam = parameters.get("recursive");
 					Set<URI> predicatesToFollow = resolvePredicates(traversalParam);
 					if (predicatesToFollow.isEmpty()) {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						return null;
 					}
+
+					String firstDetectedProfile = getFirstProfile(traversalParam);
+
 					Map<String, String> blacklist = loadBlacklist(traversalParam);
+
 					int depth = 10; // default
-					int depthMax = getRM().getConfiguration().getInt(Settings.TRAVERSAL_MAX_DEPTH, depth);
+					int depthMax = firstDetectedProfile != null ? getRM().getConfiguration().getInt(traversalSetting(Settings.TRAVERSAL_PROFILE_MAX_DEPTH, firstDetectedProfile), depth) : depth;
+					if (depthMax < depth) {
+						depth = depthMax;
+					}
+
 					try {
 						if (parameters.containsKey("depth")) {
 							int depthParam = Integer.parseInt(parameters.get("depth"));
-							if (depthParam > 0 && depthParam <= depthMax) {
+							if (depthParam > 0 && depthParam <= depth) { // cannot be higher then config maxDepth
 								depth = depthParam;
 							}
 						}
@@ -146,7 +151,16 @@ public abstract class AbstractMetadataResource extends BaseResource {
 						return new StringRepresentation("Error parsing depth parameter: " + e.getMessage());
 					}
 
-					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), predicatesToFollow, blacklist, parameters.containsKey("repository"), depth);
+					int limit = 1000; // default
+					limit = firstDetectedProfile != null ? getRM().getConfiguration().getInt(traversalSetting(Settings.TRAVERSAL_PROFILE_LIMIT, firstDetectedProfile), limit) : limit;
+					boolean repositoryScope = true; // default
+					repositoryScope = firstDetectedProfile != null ? getRM().getConfiguration().getBoolean(traversalSetting(Settings.TRAVERSAL_PROFILE_REPOSITORY_SCOPE, firstDetectedProfile), repositoryScope) : repositoryScope;
+					if (parameters.containsKey("scope")) {
+						// we allow an override by parameter
+						repositoryScope = !"context".equalsIgnoreCase(parameters.get("scope"));
+					}
+
+					EntryUtil.TraversalResult travResult = traverse(entry.getEntryURI(), predicatesToFollow, blacklist, repositoryScope, depth, limit);
 					if (graphQuery != null) {
 						Model graphQueryResult = applyGraphQuery(graphQuery, travResult.getGraph());
 						if (graphQueryResult != null) {
@@ -188,7 +202,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				}
 				fileName += "." + getFileExtensionForMediaType(prefFormat);
 
-				// offer download in case client requested this
+				// offer download in case the client requested this
 				Disposition disp = new Disposition();
 				disp.setFilename(fileName);
 				if (parameters.containsKey("download")) {
@@ -202,8 +216,8 @@ public abstract class AbstractMetadataResource extends BaseResource {
 				result = new EmptyRepresentation();
 			}
 
-			// set modification date only in case it has not been
-			// set before (e.g. when handling recursive-requests)
+			// set a modification date only in case it has not been
+			// set before (e.g., when handling recursive-requests)
 			Date lastMod = getModificationDate();
 			if (lastMod != null && result.getModificationDate() == null) {
 				result.setModificationDate(lastMod);
@@ -300,12 +314,12 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	}
 
 	/**
-	 * @return Returns the metadata object. May be null.
+	 * @return Returns the metadata object. Can be null.
 	 */
 	protected abstract Metadata getMetadata();
 
 	/**
-	 * @return Returns the metadata graph. May be null.
+	 * @return Returns the metadata graph. Can be null.
 	 */
 	protected Model getMetadataGraph() {
 		if (getMetadata() != null) {
@@ -335,13 +349,14 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @param depth        Levels traversed.
 	 * @return Returns a Graph consisting of merged metadata graphs. Contains all metadata, including e.g. cached external.
 	 */
-	private EntryUtil.TraversalResult traverse(URI entryURI, Set<URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth) {
+	private EntryUtil.TraversalResult traverse(URI entryURI, Set<URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth, int limit) {
 		return EntryUtil.traverseAndLoadEntryMetadata(
 			ImmutableSet.of(getRM().getValueFactory().createIRI(entryURI.toString())),
 			predToFollow,
 			blacklist,
 			0,
 			depth,
+			limit,
 			HashMultimap.create(),
 			repository ? null : context,
 			getRM()
@@ -354,7 +369,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @param predCSV A comma-separated list of predicates and/or
 	 *                traversal profiles (need to be defined in configuration).
 	 * @return Returns a set of URIs. Traversal profile names are resolved
-	 * in their member URIs and namespaces URIs are expanded.
+	 * in their member URIs, and namespaces' URIs are expanded.
 	 */
 	private Set<URI> resolvePredicates(String predCSV) {
 		Set<URI> result = new HashSet<>();
@@ -377,6 +392,15 @@ public abstract class AbstractMetadataResource extends BaseResource {
 		return result;
 	}
 
+	private String getFirstProfile(String predCSV) {
+		for (String s : predCSV.split(",")) {
+			if (!loadTraversalProfile(s).isEmpty()) {
+				return s;
+			}
+		}
+		return null;
+	}
+
 	private Map<String, String> loadBlacklist(String traversalParam) {
 		Map<String, String> result = new HashMap<>();
 		for (String s : traversalParam.split(",")) {
@@ -391,7 +415,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @return A set of URIs.
 	 */
 	private Set<URI> loadTraversalProfile(String profileName) {
-		List<String> predicates = getRM().getConfiguration().getStringList(Settings.TRAVERSAL_PROFILE + "." + profileName, new ArrayList<String>());
+		List<String> predicates = getRM().getConfiguration().getStringList(traversalSetting(Settings.TRAVERSAL_PROFILE, profileName), new ArrayList<>());
 		Set<URI> result = new HashSet<>();
 		for (String s : predicates) {
 			result.add(URI.create(s));
@@ -405,7 +429,7 @@ public abstract class AbstractMetadataResource extends BaseResource {
 	 * @return A map containing the tuples of the blacklist.
 	 */
 	private Map<String, String> loadTraversalBlacklistForProfile(String profileName) {
-		List<String> blacklist = getRM().getConfiguration().getStringList(Settings.TRAVERSAL_PROFILE + "." + profileName + ".blacklist", new ArrayList<>());
+		List<String> blacklist = getRM().getConfiguration().getStringList(traversalSetting(Settings.TRAVERSAL_PROFILE_BLACKLIST, profileName), new ArrayList<>());
 		Map<String, String> result = new HashMap<>();
 		for (String tuple : blacklist) {
 			String[] tupleArr = tuple.split(",");
@@ -475,6 +499,10 @@ public abstract class AbstractMetadataResource extends BaseResource {
 			return rdfFormat.get().getDefaultFileExtension();
 		}
 		return "rdf";
+	}
+
+	private String traversalSetting(String configKey, String profile) {
+		return String.format(configKey, profile);
 	}
 
 }

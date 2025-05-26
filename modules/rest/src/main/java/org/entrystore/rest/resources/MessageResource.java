@@ -44,7 +44,7 @@ public class MessageResource extends BaseResource {
 
 			replyTo = getPM().getPrincipalName(getPM().getAuthenticatedUserURI());
 			if (replyTo != null && !replyTo.contains("@")) {
-				replyTo = null; // in case the sender does not have proper e-mail address set
+				replyTo = null; // in case the sender does not have a proper e-mail address set
 			}
 		} catch (IOException e) {
 			log.debug("Error when parsing request", e);

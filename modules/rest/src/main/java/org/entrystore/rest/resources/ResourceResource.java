@@ -206,6 +206,7 @@ public class ResourceResource extends BaseResource {
 
 	@Delete
 	public void removeRepresentation() {
+
 		if (entry == null) {
 			getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 			return;
@@ -609,7 +610,7 @@ public class ResourceResource extends BaseResource {
 			if (entry.getResourceType() == ResourceType.InformationResource) {
 				Data data = (Data) entry.getResource();
 				if (!data.delete()) {
-					log.error("Unable to delete resource of entry " + entry.getEntryURI());
+					log.error("Unable to delete resource of entry {}", entry.getEntryURI());
 					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 					getResponse().setEntity(new JsonRepresentation(JSONErrorMessages.errorUnknownKind));
 				}
@@ -667,7 +668,7 @@ public class ResourceResource extends BaseResource {
 					if (!entry.isDirectory() && (nameLC.endsWith(".xml") || nameLC.endsWith(".rdf"))) {
 						InputStream fileIS = zipFile.getInputStream(entry);
 						if (fileIS == null) {
-							log.error("Unable to get InputStream of ZipEntry: " + nameLC);
+							log.error("Unable to get InputStream of ZipEntry: {}", nameLC);
 							continue;
 						}
 						String fileString;
@@ -680,9 +681,7 @@ public class ResourceResource extends BaseResource {
 								continue;
 							}
 						} finally {
-							if (fileIS != null) {
-								fileIS.close();
-							}
+							fileIS.close();
 						}
 						if (nameLC.endsWith(".rdf")) {
 							importRDFResource(fileString);
@@ -706,7 +705,7 @@ public class ResourceResource extends BaseResource {
 
 	public File writeStreamToTmpFile(InputStream is) throws IOException {
 		File tmpFile = File.createTempFile("scam_import_", ".zip");
-		log.info("[IMPORT] Created temporary file: " + tmpFile);
+		log.info("[IMPORT] Created temporary file: {}", tmpFile);
 		OutputStream fos = Files.newOutputStream(tmpFile.toPath());
 		FileOperations.copyFile(is, fos);
 		return tmpFile;
@@ -746,8 +745,8 @@ public class ResourceResource extends BaseResource {
 			alias = EntryUtil.getTitle(entry, language);
 		}
 
-		SyndFeed feed = Syndication.createFeedFromEntries(getRM().getPrincipalManager(), recursiveEntries, language, feedSize);
-		feed.setTitle("Feed of \"" + alias + "\"");
+		SyndFeed feed = Syndication.createFeedFromEntries(getRM(), recursiveEntries, language, feedSize, parameters.get(Syndication.URL_PARAM_TEMPLATE));
+		feed.setTitle(Syndication.sanitizeFeedTitle(getOptionalParameter("feedtitle", "Feed of " + alias)));
 		feed.setLink(entry.getResourceURI().toString());
 		feed.setFeedType(feedType);
 
@@ -1033,7 +1032,6 @@ public class ResourceResource extends BaseResource {
 						LoginTokenCache loginTokenCache = ((EntryStoreApplication) getApplication()).getLoginTokenCache();
 						loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
 						Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
-						return;
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 						getResponse().setEntity(new JsonRepresentation("{\"error\":\"Password must conform to configured rules.\"}"));

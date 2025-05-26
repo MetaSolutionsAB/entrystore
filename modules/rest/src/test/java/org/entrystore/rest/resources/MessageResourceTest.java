@@ -1,15 +1,13 @@
 package org.entrystore.rest.resources;
 
 import com.icegreen.greenmail.junit5.GreenMailExtension;
-import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.config.Config;
 import org.entrystore.impl.PrincipalManagerImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.rest.EntryStoreApplication;
-import org.entrystore.rest.auth.LoginTokenCache;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,26 +28,30 @@ import java.io.IOException;
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
-import static org.restlet.data.Status.*;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
+import static org.restlet.data.Status.CLIENT_ERROR_FORBIDDEN;
+import static org.restlet.data.Status.CLIENT_ERROR_UNAUTHORIZED;
+import static org.restlet.data.Status.SUCCESS_OK;
 
 @ExtendWith(MockitoExtension.class)
 class MessageResourceTest {
 
-	@RegisterExtension static GreenMailExtension mail = new GreenMailExtension(SMTP);
+	@RegisterExtension
+	static GreenMailExtension mail = new GreenMailExtension(SMTP);
 
-	@Mock EntryStoreApplication app;
-	@Mock RepositoryManagerImpl rm;
-	@Mock PrincipalManagerImpl pm;
-	@Mock	Context context;
-	@Mock Entry entry;
-	@Mock MessageResource messageResource;
+	@Mock
+	RepositoryManagerImpl rm;
+	@Mock
+	PrincipalManagerImpl pm;
+	@Mock
+	Entry entry;
+	@Mock
+	MessageResource messageResource;
 	Response response;
 
-	@BeforeEach
-	void beforeEach() {
+	private static @NotNull Config getConfig() {
 		Config config = new PropertiesConfiguration("EntryStore Configuration");
-		LoginTokenCache loginTokenCache = new LoginTokenCache(config);
 		config.setProperty(Settings.STORE_TYPE, "memory");
 		config.setProperty(Settings.BASE_URL, "http://localhost:8181/");
 		config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
@@ -58,6 +60,13 @@ class MessageResourceTest {
 		config.setProperty(Settings.SMTP_EMAIL_FROM, "info@meta.se");
 		config.setProperty(Settings.SMTP_HOST, "localhost");
 		config.setProperty(Settings.SMTP_PORT, mail.getSmtp().getPort());
+
+		return config;
+	}
+
+	@BeforeEach
+	void beforeEach() {
+		Config config = getConfig();
 
 		Request request = new Request();
 		request.setResourceRef("");
@@ -69,7 +78,7 @@ class MessageResourceTest {
 		lenient().when(messageResource.getResponse()).thenReturn(response);
 		lenient().when(messageResource.getRequest()).thenReturn(request);
 		lenient().doCallRealMethod().when(messageResource).unauthorizedPOST();
-		doCallRealMethod().when(messageResource).sendMessage(any(JsonRepresentation.class));
+		lenient().doCallRealMethod().when(messageResource).sendMessage(any(JsonRepresentation.class));
 	}
 
 	@AfterEach
@@ -83,7 +92,7 @@ class MessageResourceTest {
 		when(pm.currentUserIsGuest()).thenReturn(false);
 
 		String json =
-				"""
+			"""
 				{
 					"to": "test@meta.se",
 					"subject": "About tomorrow",
@@ -107,12 +116,12 @@ class MessageResourceTest {
 	}
 
 	@Test
-	void userNotAllowedToSendMessageTest() throws MessagingException, IOException {
+	void userNotAllowedToSendMessageTest() {
 		when(pm.getPrincipalEntry("nonexistinguser@moto.se")).thenReturn(null);
 		when(pm.currentUserIsGuest()).thenReturn(false);
 
 		String json =
-				"""
+			"""
 				{
 					"to": "nonexistinguser@moto.se",
 					"subject": "About tomorrow",
@@ -130,11 +139,11 @@ class MessageResourceTest {
 	}
 
 	@Test
-	void guestUserShouldNotBeAbleToSendMessageTest() throws MessagingException, IOException {
+	void guestUserShouldNotBeAbleToSendMessageTest() throws IOException {
 		when(pm.currentUserIsGuest()).thenReturn(true);
 
 		String json =
-				"""
+			"""
 				{
 					"to": "nonexistinguser@moto.se",
 					"subject": "About tomorrow",
@@ -150,9 +159,9 @@ class MessageResourceTest {
 		assertThat(response.getStatus()).isEqualTo(CLIENT_ERROR_UNAUTHORIZED);
 		MimeMessage[] messages = mail.getReceivedMessages();
 		assertThat(messages).hasSize(0);
-		String expectedJson  = """
-			{"error":"Not authorized"}
-		""";
+		String expectedJson = """
+				{"error":"Not authorized"}
+			""";
 		JSONAssert.assertEquals(expectedJson, response.getEntity().getText(), true);
 	}
 

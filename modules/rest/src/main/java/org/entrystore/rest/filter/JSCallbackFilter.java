@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.filter;
 
+import org.entrystore.config.Config;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.util.Util;
 import org.restlet.Request;
 import org.restlet.Response;
@@ -36,11 +38,17 @@ import java.util.HashMap;
  */
 public class JSCallbackFilter extends Filter {
 	
-	static private Logger log = LoggerFactory.getLogger(JSCallbackFilter.class);
+	static private final Logger log = LoggerFactory.getLogger(JSCallbackFilter.class);
+
+	private final boolean enabled;
+
+	public JSCallbackFilter(Config config) {
+		enabled = config.getBoolean(Settings.JSONP, true);
+	}
 	
 	@Override
 	protected void afterHandle(Request request, Response response) {
-		if (request != null && response != null && Method.GET.equals(request.getMethod()) &&
+		if (enabled && request != null && response != null && Method.GET.equals(request.getMethod()) &&
 				response.getEntity() != null && isJSON(response.getEntity().getMediaType())) {
 			HashMap<String, String> parameters = Util.parseRequest(request.getResourceRef().getRemainingPart());
 			if (parameters.containsKey("callback")) {
@@ -49,11 +57,10 @@ public class JSCallbackFilter extends Filter {
 					callback = "callback";
 				}
 				try {
-					StringBuilder wrappedResponse = new StringBuilder();
-					wrappedResponse.append(callback).append("(");
-					wrappedResponse.append(response.getEntity().getText());
-					wrappedResponse.append(")");
-					response.setEntity(wrappedResponse.toString(), MediaType.APPLICATION_JAVASCRIPT);
+					String wrappedResponse = callback + "(" +
+						response.getEntity().getText() +
+						")";
+					response.setEntity(wrappedResponse, MediaType.APPLICATION_JAVASCRIPT);
 				} catch (IOException e) {
 					log.error(e.getMessage());
 				}
@@ -63,12 +70,9 @@ public class JSCallbackFilter extends Filter {
 
 	private boolean isJSON(MediaType mediaType) {
 		String mime = mediaType.toString();
-		if ("application/json".equals(mime) ||
-				"application/ld+json".equals(mime) ||
-				"application/rdf+json".equals(mime)) {
-			return true;
-		}
-		return false;
+		return "application/json".equals(mime) ||
+			"application/ld+json".equals(mime) ||
+			"application/rdf+json".equals(mime);
 	}
 	
 }

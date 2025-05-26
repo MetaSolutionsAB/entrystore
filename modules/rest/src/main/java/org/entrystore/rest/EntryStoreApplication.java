@@ -70,7 +70,6 @@ import org.entrystore.rest.resources.LookupResource;
 import org.entrystore.rest.resources.MergeResource;
 import org.entrystore.rest.resources.MergedMetadataResource;
 import org.entrystore.rest.resources.MessageResource;
-import org.entrystore.rest.resources.SamlLoginResource;
 import org.entrystore.rest.resources.NameResource;
 import org.entrystore.rest.resources.PasswordResetResource;
 import org.entrystore.rest.resources.PerformanceMetricsResource;
@@ -78,6 +77,7 @@ import org.entrystore.rest.resources.ProxyResource;
 import org.entrystore.rest.resources.QuotaResource;
 import org.entrystore.rest.resources.RelationResource;
 import org.entrystore.rest.resources.ResourceResource;
+import org.entrystore.rest.resources.SamlLoginResource;
 import org.entrystore.rest.resources.SearchResource;
 import org.entrystore.rest.resources.ShutdownResource;
 import org.entrystore.rest.resources.SignupResource;
@@ -408,7 +408,7 @@ public class EntryStoreApplication extends Application {
 
 		IgnoreAuthFilter ignoreAuth = new IgnoreAuthFilter();
 		ModificationLockOutFilter modLockOut = new ModificationLockOutFilter();
-		JSCallbackFilter jsCallback = new JSCallbackFilter();
+		JSCallbackFilter jsCallback = new JSCallbackFilter(config);
 		CacheControlFilter cacheControl = new CacheControlFilter();
 		PerformanceMetricsFilter performanceMetrics = new PerformanceMetricsFilter();
 

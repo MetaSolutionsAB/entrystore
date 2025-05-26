@@ -318,7 +318,6 @@ public class DataCorrection {
 	
 	public void checkAllDates() {
 		URI currentUser = pm.getAuthenticatedUserURI();
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		Writer writer = null;
 		try {
 			writer = new FileWriter(new File("/home/hannes/Desktop/dates.txt"));
@@ -326,6 +325,7 @@ public class DataCorrection {
 			e.printStackTrace();
 		}
 		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			List<Entry> entries = getEntries(getContexts());
 			for (Entry entry : entries) {
 				Set<Date> strangeDates = getStrangeDates(entry);
@@ -356,8 +356,8 @@ public class DataCorrection {
 	
 	public void fixMetadataGlobally() {
 		URI currentUser = pm.getAuthenticatedUserURI();
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			List<Entry> entries = getEntries(getContexts());
 			for (Entry entry : entries) {
 				if (!entry.getEntryType().equals(EntryType.Reference)) {// && !entry.getResourceType().equals(ResourceType.None)) {
@@ -371,8 +371,8 @@ public class DataCorrection {
 	
 	public void fixPrincipalsGlobally() {
 		URI currentUser = pm.getAuthenticatedUserURI();
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			List<User> users = pm.getUsers();
 			for (User user : users) {
 				Entry entry = user.getEntry();
@@ -387,8 +387,8 @@ public class DataCorrection {
 	
 	public void convertPasswordsToHashes() {
 		URI currentUser = pm.getAuthenticatedUserURI();
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			List<User> users = pm.getUsers();
 			for (User user : users) {
 				String secret = user.getSecret();
@@ -406,8 +406,8 @@ public class DataCorrection {
 	
 	public void printFileNamesGlobally() {
 		URI currentUser = pm.getAuthenticatedUserURI();
-		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			List<Entry> entries = getEntries(getContexts());
 			for (Entry entry : entries) {
 				if (entry.getEntryType().equals(EntryType.Local)) {

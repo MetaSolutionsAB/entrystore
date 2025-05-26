@@ -6,6 +6,7 @@ import org.entrystore.rest.it.util.NameSpaceConst
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -191,7 +192,6 @@ class ResourceIT extends BaseSpec {
 		assert resourceJson['language'] == null
 		assert resourceJson['customProperties'] == [:]
 
-		// TODO: Verify this behaviour: if 'password' is set then no other properties (than 'password and 'name') are processed, due to logic for processing 'password' has a 'return' statement
 		def requestBody = JsonOutput.toJson([
 			name    : 'New name',
 			language: 'PL',
@@ -213,7 +213,7 @@ class ResourceIT extends BaseSpec {
 		def resourceJson2 = JSON_PARSER.parseText(resourceConn2.getInputStream().text)
 		// Why the name is in the lower case, other than the data in the request
 		resourceJson2['name'] == 'new name'
-		resourceJson2['language'] == null    // Should be 'PL'
+		resourceJson2['language'] == 'PL'
 		resourceJson2['customProperties'] == [:]
 	}
 
@@ -275,6 +275,7 @@ class ResourceIT extends BaseSpec {
 		def userRequestResourceName = [name: 'UserPUT']
 		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
 		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
+		assert userConnection.getResponseCode() == HTTP_CREATED
 		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
 
 		// create a Group entry
@@ -492,6 +493,7 @@ class ResourceIT extends BaseSpec {
 		assert resourceJson['customProperties'] == [:]
 
 		def requestBody = JsonOutput.toJson([
+			password		: 'newPass1234',
 			name            : 'Newer name',
 			language        : 'PL',
 			disabled        : 'true',
@@ -516,6 +518,41 @@ class ResourceIT extends BaseSpec {
 		resourceJson2['language'] == 'PL'
 		resourceJson2['disabled'] == true
 		resourceJson2['customProperties'] == [disablingreason: 'Untruthful']
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id} should delete user"() {
+		given:
+		// create a User entry
+		def userParams = [graphtype: 'user']
+		def userRequestResourceName = [name: 'UserDelete']
+		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
+		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
+		assert userConnection.getResponseCode() == HTTP_CREATED
+		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
+		// fetch URI of the created resource
+		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId)
+		assert entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		assert entryRespJson['info'] != null
+		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
+		// fetch resource details
+		def resourceConn = EntryStoreClient.getRequest(resourceUri)
+		assert resourceConn.getResponseCode() == HTTP_OK
+		assert resourceConn.getContentType().contains('application/json')
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		assert resourceRespJson['name'] == userRequestResourceName['name'].toLowerCase()
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/_principals/entry/' + userEntryId)
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_NO_CONTENT
+		def editResourceRespText = deleteResourceConn.getInputStream().text
+		editResourceRespText == ''
+		// fetch resource details again
+		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
+		resourceConn2.getResponseCode() == HTTP_NOT_FOUND
 	}
 
 	def "DELETE /{context-id}/resource/{entry-id} should remove resource"() {
