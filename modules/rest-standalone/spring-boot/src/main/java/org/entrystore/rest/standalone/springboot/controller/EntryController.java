@@ -32,7 +32,7 @@ public class EntryController {
 		description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
 			"as specified in the response body is used.")
 	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = MediaType.APPLICATION_JSON_VALUE)
-	public GetEntryResponse getEntry(
+	public GetEntryResponse getEntryInJsonFormat(
 		@PathVariable("context-id") String contextId,
 		@PathVariable("entry-id") String entryId,
 		@RequestParam(required = false) String rdfFormat,
@@ -46,6 +46,20 @@ public class EntryController {
 			rdfFormat = rdfFormat.trim().replace(' ', '+');
 		}
 		return entryService.getEntryInJsonFormat(contextId, entryId, rdfFormat, includeAll != null, listFilter);
+	}
+
+	@Operation(
+		summary = "Returns the entry information.",
+		description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
+			"as specified in the response body is used.")
+	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = {"application/rdf+xml", "text/n3", "text/turtle",
+		"application/trix", "application/n-triples", "application/trig", "application/ld+json", "application/rdf+json"})
+	public String getEntryInRdfFormat(
+		@PathVariable("context-id") String contextId,
+		@PathVariable("entry-id") String entryId,
+		@RequestHeader(value = "Accept", required = false, defaultValue = "text/turtle") String acceptHeader
+	) {
+		return entryService.getEntryInRdfFormat(contextId, entryId, acceptHeader);
 	}
 
 	@Operation(
