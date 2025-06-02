@@ -78,6 +78,18 @@ public class EntryService {
 		return convertEntryToResponseModel(entry, rdfFormat, includeAll, listFilter);
 	}
 
+	public String getEntryInRdfFormat(String contextId, String entryId, String mediaType) {
+		Entry entry = getEntryByContextIdAndEntryId(contextId, entryId);
+
+		Model graph = entry.getGraph();
+		String serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
+		if (serializedGraph == null) {
+			// TODO: not sure we should throw a 400 here (should be 500?), but this was the Restlet logic
+			throw new BadRequestException("Bad request");
+		}
+		return serializedGraph;
+	}
+
 	public Entry getEntryByContextIdAndEntryId(String contextId, String entryId) {
 		Context context = getContext(contextId);
 		if (context == null) {
