@@ -1,19 +1,25 @@
 package org.entrystore.rest.standalone.springboot.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
+import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenException;
+import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.standalone.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.standalone.springboot.model.exception.NotImplementedException;
+import org.entrystore.rest.standalone.springboot.model.exception.PwResetBadRequestHtmlException;
 import org.entrystore.rest.standalone.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -65,6 +71,15 @@ public class AppExceptionHandler {
 			.error(ex.getMessage())
 			.build();
 		return ResponseEntity.badRequest().body(responseBody);
+	}
+
+	@ExceptionHandler(PwResetBadRequestHtmlException.class)
+	public String handlePwResetBadRequestHtmlException(PwResetBadRequestHtmlException ex, Model model,
+													   HttpServletResponse response) {
+		log.debug("BadRequestHtmlException: {}", ex.getMessage());
+		model.addAttribute("message", ex.getMessage());
+		response.setStatus(HttpStatus.BAD_REQUEST.value());
+		return "pwreset";
 	}
 
 	@ExceptionHandler(EntityNotFoundException.class)
@@ -137,5 +152,41 @@ public class AppExceptionHandler {
 			.error(ex.getMessage())
 			.build();
 		return ResponseEntity.badRequest().body(responseBody);
+	}
+
+	@ExceptionHandler(InternalServerErrorException.class)
+	public ResponseEntity<ErrorResponse> handleInternalServerErrorException(InternalServerErrorException ex,
+																   HttpServletRequest request) {
+		log.debug("InternalServerErrorException: {}", ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+			.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+			.path(request.getRequestURI())
+			.error(ex.getMessage())
+			.build();
+		return ResponseEntity.internalServerError().body(responseBody);
+	}
+
+	@ExceptionHandler(ForbiddenException.class)
+	public ResponseEntity<ErrorResponse> handleInternalServerErrorException(ForbiddenException ex,
+																			HttpServletRequest request) {
+		log.debug("ForbiddenException: {}", ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+			.status(HttpStatus.FORBIDDEN.value())
+			.path(request.getRequestURI())
+			.error(ex.getMessage())
+			.build();
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
+	}
+
+	@ExceptionHandler(EntityTooLargeException.class)
+	public ResponseEntity<ErrorResponse> handleEntityTooLargeException(EntityTooLargeException ex,
+																			HttpServletRequest request) {
+		log.debug("EntityTooLargeException: {}", ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+			.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
+			.path(request.getRequestURI())
+			.error(ex.getMessage())
+			.build();
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 }

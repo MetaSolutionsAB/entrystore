@@ -1,8 +1,11 @@
 package org.entrystore.rest.standalone.springboot.util;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class HttpUtil {
 
@@ -20,5 +23,17 @@ public class HttpUtil {
 	 */
 	public static String createStrongETag(String tag) {
 		return "\"" + tag + "\"";
+	}
+
+
+	public static boolean isLargerThan(HttpServletRequest r, long maxSize) {
+		if (r == null) {
+			return false;
+		}
+		long repSize = r.getContentLength();
+		if (repSize == -1L) {
+			log.warn("Size of representation is unknown");
+			return true;
+		} else return repSize > maxSize;
 	}
 }

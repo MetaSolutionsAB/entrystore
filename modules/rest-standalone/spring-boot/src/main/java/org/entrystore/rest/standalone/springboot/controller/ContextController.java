@@ -57,7 +57,7 @@ public class ContextController {
 		@RequestParam(required = false, name = "template") URI templateUri,
 		@RequestBody(required = false) CreateEntryRequestBody body) {
 
-		if (graphType == GraphType.PipelineResult) {
+		if (isGraphTypeForbidden(graphType)) {
 			throw new BadRequestException("Pipeline results may only be created by Pipelines");
 		}
 
@@ -73,6 +73,21 @@ public class ContextController {
 			.eTag(HttpUtil.createStrongETag(Long.toString(entry.getModifiedDate().getTime())))
 			.body(responseBody);
 
+	}
+
+	/**
+	 * Returns false if the Graph Type provided in the parameters
+	 * cannot be used for manually created entries
+	 *
+	 * @return True if Graph Type is forbidden/blacklisted.
+	 */
+	private boolean isGraphTypeForbidden(GraphType graphType) {
+		// Pipeline results may only be created by Pipelines
+		if (GraphType.PipelineResult.equals(graphType)) {
+			log.debug("Pipeline results may only be created by Pipelines");
+			return true;
+		}
+		return false;
 	}
 
 }
