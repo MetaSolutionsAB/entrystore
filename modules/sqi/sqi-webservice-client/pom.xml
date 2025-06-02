@@ -17,7 +17,7 @@
 	<name>EntryStore SQI webservice client</name>
 
 	<properties>
-                <cxf.version>2.7.4</cxf.version>
+                <cxf.version>3.1.16</cxf.version>
 	</properties>
 
 	<build>
