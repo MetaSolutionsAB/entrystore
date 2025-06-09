@@ -13,8 +13,9 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * This class is to override the default response media type to "application/rdf+xml", when no Accept header is defined
- * Applies only for the entry endpoint. Other endpoints default reply format is JSON.
+ * This class overrides the default response media type to "application/rdf+xml", when no Accept header is defined
+ * Applies only for the entry endpoint. Other endpoints default reply format is set to JSON by MvcConfiguration.
+ * The value produced by this Strategy is used to match with the correct endpoint in the controller.
  */
 @RequiredArgsConstructor
 public class EntryEndpointContentNegotiationStrategy implements ContentNegotiationStrategy {
