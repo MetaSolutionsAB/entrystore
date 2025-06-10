@@ -3,6 +3,7 @@ package org.entrystore.rest.standalone.springboot.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Entry;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
@@ -24,6 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 public class EntryController {
+
+	private static final String DEFAULT_MEDIA_TYPE = "application/rdf+xml";
 
 	private final EntryService entryService;
 
@@ -57,8 +60,12 @@ public class EntryController {
 	public String getEntryInRdfFormat(
 		@PathVariable("context-id") String contextId,
 		@PathVariable("entry-id") String entryId,
-		@RequestHeader(value = "Accept", required = false, defaultValue = "text/turtle") String acceptHeader
+		@RequestHeader(value = "Accept", required = false, defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
 	) {
+
+		if (StringUtils.isEmpty(acceptHeader) || MediaType.ALL_VALUE.equals(acceptHeader)) {
+			acceptHeader = DEFAULT_MEDIA_TYPE;
+		}
 		return entryService.getEntryInRdfFormat(contextId, entryId, acceptHeader);
 	}
 
