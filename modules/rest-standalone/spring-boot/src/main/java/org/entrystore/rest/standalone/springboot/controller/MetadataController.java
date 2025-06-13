@@ -9,6 +9,7 @@ import org.entrystore.Entry;
 import org.entrystore.rest.standalone.springboot.model.api.MetadataType;
 import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.service.MetadataService;
+import org.entrystore.rest.standalone.springboot.util.HttpUtil;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -16,13 +17,17 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -41,8 +46,7 @@ public class MetadataController {
 	@Operation(
 		summary = "Returns an entry's metadata graph.",
 		description = "desc")
-	@GetMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}",
-		produces = MediaType.APPLICATION_JSON_VALUE)
+	@GetMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<String> getMetadata(
 		@PathVariable("context-id") String contextId,
 		@PathVariable("type") MetadataType metadataType,
@@ -52,7 +56,7 @@ public class MetadataController {
 		@RequestParam(required = false, defaultValue = "10") Integer depth,
 		@RequestParam(required = false) String recursive,
 		@RequestParam(required = false) String scope,
-		@RequestParam(required = false) String rev,
+		@RequestParam(name = "rev", required = false) String revision,
 		@RequestParam(required = false) String download,
 		@RequestHeader(value = "Accept", required = false, defaultValue = "application/rdf+xml") String acceptHeader
 	) {
@@ -68,10 +72,49 @@ public class MetadataController {
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 
-		String responseBody = metadataService.getMetadata(entry, metadataType, mediaType, graphQuery, depth, recursive, scope, rev);
+		String responseBody = metadataService.getMetadata(entry, metadataType, mediaType, graphQuery, depth, recursive, scope, revision);
 
 		HttpHeaders headers = buildResponseHeaders(entry, mediaType, download != null);
 		return new ResponseEntity<>(responseBody, headers, HttpStatus.OK);
+	}
+
+	@Operation(
+		summary = "Sets an entry's metadata graph.",
+		description = "desc")
+	@PutMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
+	public ResponseEntity<Void> setMetadata(
+		@PathVariable("context-id") String contextId,
+		@PathVariable("type") MetadataType metadataType,
+		@PathVariable("entry-id") String entryId,
+		@RequestParam(required = false) String format,
+		@RequestParam(name = "rev", required = false) String revision,
+		@RequestHeader("Content-Type") String contentType,
+		@RequestBody String body
+	) {
+		String mediaType;
+		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
+		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
+		// (+ is replaced with a space) we need to replace the space back to '+'
+		if (format != null) {
+			mediaType = format.trim().replace(' ', '+');
+		} else {
+			mediaType = contentType;
+		}
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		metadataService.setEntryMetadata(entry, metadataType, mediaType, body, revision);
+
+		// Set modification date in the response header
+		ResponseEntity.HeadersBuilder<?> responseBuilder = ResponseEntity.noContent();
+
+		Date modificationDate = getModificationDate(entry, metadataType);
+		if (modificationDate != null) {
+			responseBuilder
+				.lastModified(modificationDate.getTime())
+				.eTag(HttpUtil.createStrongETag(Long.toString(modificationDate.getTime())));
+		}
+
+		return responseBuilder.build();
 	}
 
 	private static HttpHeaders buildResponseHeaders(Entry entry, String mediaType, boolean isDownload) {
@@ -118,4 +161,18 @@ public class MetadataController {
 		return "rdf";
 	}
 
+	private static Date getModificationDate(Entry entry, MetadataType metadataType) {
+		return switch (metadataType) {
+			case LOCAL_METADATA -> entry.getModifiedDate();
+			case CACHED_EXTERNAL_METADATA -> entry.getExternalMetadataCacheDate();
+			case MERGED_METADATA -> latest(entry.getExternalMetadataCacheDate(), entry.getModifiedDate());
+		};
+	}
+
+	private static Date latest(Date... dates) {
+		return Arrays.stream(dates)
+			.filter(Objects::nonNull)
+			.max(Date::compareTo)
+			.orElse(null);
+	}
 }
