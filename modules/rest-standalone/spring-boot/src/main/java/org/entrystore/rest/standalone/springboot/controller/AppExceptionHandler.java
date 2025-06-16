@@ -6,6 +6,7 @@ import org.entrystore.rest.standalone.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.standalone.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
@@ -61,6 +62,18 @@ public class AppExceptionHandler {
 		log.debug("EntityNotFoundException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 			.status(HttpStatus.NOT_FOUND.value())
+			.path(request.getRequestURI())
+			.error(ex.getMessage())
+			.build();
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
+	}
+
+	@ExceptionHandler(MethodNotAllowedException.class)
+	public ResponseEntity<ErrorResponse> handleMethodNotAllowedException(MethodNotAllowedException ex,
+																	   HttpServletRequest request) {
+		log.debug("MethodNotAllowedException: {}", ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+			.status(HttpStatus.METHOD_NOT_ALLOWED.value())
 			.path(request.getRequestURI())
 			.error(ex.getMessage())
 			.build();

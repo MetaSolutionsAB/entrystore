@@ -31,6 +31,7 @@ import org.entrystore.repository.util.NS;
 import org.entrystore.rest.standalone.springboot.model.api.MetadataType;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.standalone.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.springframework.stereotype.Service;
 
@@ -101,28 +102,24 @@ public class MetadataService {
 	/**
 	 * Sets the metadata of entry to graphString.
 	 *
-	 * @param entry Entry
-	 * @param metadataType Metadata type
-	 * @param mediaType Type format of the new metadata
-	 * @param graphString New metadata to be set
-	 * @param revision Revision
+	 * @param entry            Entry
+	 * @param metadataType     Metadata type
+	 * @param newMetadataGraph New metadata to be set
+	 * @param revision         Revision
 	 */
-	public void setEntryMetadata(Entry entry, MetadataType metadataType, String mediaType, String graphString, String revision) {
+	public void setEntryMetadata(Entry entry, MetadataType metadataType, Model newMetadataGraph, String revision) {
 
 		Metadata metadata = switch (metadataType) {
 			case LOCAL_METADATA -> getEntryLocalMetadata(entry, revision);
 			case CACHED_EXTERNAL_METADATA -> getEntryCachedExternalMetadata(entry);
-			case MERGED_METADATA -> throw new BadRequestException("Unable to set Merged Metadata");
+			case MERGED_METADATA -> throw new BadRequestException("Unable to set Merged Metadata on entry: " + entry.getEntryURI());
 		};
 
-		if (metadata != null && graphString != null) {
-			Model deserializedGraph = GraphUtil.deserializeGraph(graphString, mediaType);
-			if (deserializedGraph != null) {
-				metadata.setGraph(deserializedGraph);
-				return;
-			}
+		if (metadata != null && newMetadataGraph != null) {
+			metadata.setGraph(newMetadataGraph);
+			return;
 		}
-		throw new IllegalStateException("Something went wrong setting metadata");
+		throw new MethodNotAllowedException("Metadata is empty for entry: " + entry.getEntryURI());
 	}
 
 	private Metadata getEntryLocalMetadata(Entry entry, String revision) {

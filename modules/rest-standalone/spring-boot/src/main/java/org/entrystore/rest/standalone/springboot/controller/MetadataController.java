@@ -3,18 +3,22 @@ package org.entrystore.rest.standalone.springboot.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.Entry;
 import org.entrystore.rest.standalone.springboot.model.api.MetadataType;
 import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.service.MetadataService;
+import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -38,7 +42,6 @@ public class MetadataController {
 	private static final RDFFormat RDFJSON_WITH_APPLICATION_JSON
 		= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("json"),
 		SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
-
 
 	private final MetadataService metadataService;
 	private final EntryService entryService;
@@ -102,7 +105,8 @@ public class MetadataController {
 		}
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		metadataService.setEntryMetadata(entry, metadataType, mediaType, body, revision);
+		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
+		metadataService.setEntryMetadata(entry, metadataType, deserializedGraph, revision);
 
 		// Set modification date in the response header
 		ResponseEntity.HeadersBuilder<?> responseBuilder = ResponseEntity.noContent();
@@ -115,6 +119,23 @@ public class MetadataController {
 		}
 
 		return responseBuilder.build();
+	}
+
+	@Operation(
+		summary = "Deletes an entry's metadata graph.",
+		description = "desc")
+	@DeleteMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
+	public ResponseEntity<Void> deleteMetadata(
+		@PathVariable("context-id") String contextId,
+		@PathVariable("type") MetadataType metadataType,
+		@PathVariable("entry-id") String entryId,
+		@RequestParam(name = "rev", required = false) String revision
+	) {
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		metadataService.setEntryMetadata(entry, metadataType, new LinkedHashModel(), revision);
+
+		return ResponseEntity.noContent().build();
 	}
 
 	private static HttpHeaders buildResponseHeaders(Entry entry, String mediaType, boolean isDownload) {
