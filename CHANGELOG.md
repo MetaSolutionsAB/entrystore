@@ -1,5 +1,11 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 5.7.1 (2025-06-17)
+
+### Bug
+
+[ENTRYSTORE-907](https://metasolutions.atlassian.net/browse/ENTRYSTORE-907) Update URISplit.java to accept URI with base URI and search params only
+
 ## Version 5.7.0 (2025-05-26)
 
 ### Improvement
