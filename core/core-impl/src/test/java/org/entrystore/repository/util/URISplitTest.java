@@ -31,7 +31,6 @@ public class URISplitTest {
 	private static final URI anyURI = URI.create("https://slashdot.org/example");
 	private static final String anyURIStringBase = "https://slashdot.org/";
 	private static final String anyURIStringBaseWithPort = "https://slashdot.org:8081/";
-	private static final String anyURIStringBaseWithStore = "https://slashdot.org/store/";
 	private static final String contextURIString = "https://slashdot.org/12/";
 	private static final String entryURIString = "https://slashdot.org/12/entry/13";
 	private static final String entryURIStringWithPort = "https://slashdot.org:8081/12/entry/13";
@@ -46,7 +45,7 @@ public class URISplitTest {
 	private static final String goodURIString1 = "urn:oasis:names:specification:docbook:dtd:xml:4.1.2";
 	private static final String goodURIString2 = "https://slashdot.org:8081/store/context-export";
 	private static final String goodURIString3 = "https://slashdot.org:8081/store/new-context";
-	private static final String baseOnlyURIString = "https://slashdot.org/store/search?type=solr&query=rdfType:http%5C%3A%2F%2Fpurl.org%2Fdc%2Fdcmitype%2FText";
+	private static final String baseOnlyURIString = "https://slashdot.org/search?type=solr&query=rdfType:http%5C%3A%2F%2Fpurl.org%2Fdc%2Fdcmitype%2FText";
 
 	@Test
 	public void constructor_badURL() {
@@ -160,7 +159,7 @@ public class URISplitTest {
 
 	@Test
 	public void constructor_baseOnlyURI() throws MalformedURLException {
-		URISplit uriSplit = new URISplit(URI.create(baseOnlyURIString), URI.create(anyURIStringBaseWithStore).toURL());
+		URISplit uriSplit = new URISplit(URI.create(baseOnlyURIString), URI.create(anyURIStringBase).toURL());
 		assertEquals(URIType.Unknown, uriSplit.getUriType());
 	}
 

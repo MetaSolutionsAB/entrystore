@@ -54,7 +54,8 @@ public class URISplit {
 						id = st.nextToken();
 					} else throw new IllegalArgumentException("URI is incompatible with EntryStore");
 				} else if (!anyURIWithoutBase.matches(URI_REGEX)) {
-					throw new IllegalArgumentException("URI is malformed or encoded");
+					uriType = URIType.Unknown;
+					return;
 				} else {
 					id = contextId;
 					path = RepositoryProperties.DATA_PATH;
