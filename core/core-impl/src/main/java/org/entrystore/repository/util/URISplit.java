@@ -32,6 +32,7 @@ public class URISplit {
 
 	private static final String SLASH_DELIMITER = "/";
 	private static final String URI_REGEX = "^_?[a-zA-Z0-9-_]+/?";
+	private static final String URI_PARAMS_REGEX = "^_?[a-zA-Z0-9-_]+\\?\\S+";
 
 	URIType uriType;
 	String contextId;
@@ -53,9 +54,11 @@ public class URISplit {
 					if (st.hasMoreTokens()) {
 						id = st.nextToken();
 					} else throw new IllegalArgumentException("URI is incompatible with EntryStore");
-				} else if (!anyURIWithoutBase.matches(URI_REGEX)) {
+				} else if (anyURIWithoutBase.matches(URI_PARAMS_REGEX)) {
 					uriType = URIType.Unknown;
 					return;
+				} else if (!anyURIWithoutBase.matches(URI_REGEX)) {
+					throw new IllegalArgumentException("URI is malformed or encoded");
 				} else {
 					id = contextId;
 					path = RepositoryProperties.DATA_PATH;
