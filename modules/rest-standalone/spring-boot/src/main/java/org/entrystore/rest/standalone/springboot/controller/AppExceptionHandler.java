@@ -7,6 +7,7 @@ import org.entrystore.rest.standalone.springboot.model.exception.BadRequestExcep
 import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.model.exception.MethodNotAllowedException;
+import org.entrystore.rest.standalone.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
@@ -98,6 +99,18 @@ public class AppExceptionHandler {
 		log.debug("DataConflictException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 			.status(HttpStatus.CONFLICT.value())
+			.path(request.getRequestURI())
+			.error(ex.getMessage())
+			.build();
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
+	}
+
+	@ExceptionHandler(NotImplementedException.class)
+	public ResponseEntity<ErrorResponse> handleNotImplementedException(NotImplementedException ex,
+																	   HttpServletRequest request) {
+		log.warn("NotImplementedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+			.status(HttpStatus.NOT_IMPLEMENTED.value())
 			.path(request.getRequestURI())
 			.error(ex.getMessage())
 			.build();

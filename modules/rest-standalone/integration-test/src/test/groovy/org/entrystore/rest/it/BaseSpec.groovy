@@ -8,6 +8,7 @@ import org.entrystore.rest.standalone.springboot.EntryStoreApplicationStandalone
 import org.slf4j.LoggerFactory
 import org.testcontainers.containers.SolrContainer
 import org.testcontainers.containers.output.Slf4jLogConsumer
+import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.spock.Testcontainers
 import org.testcontainers.utility.DockerImageName
 import org.testcontainers.utility.MountableFile
@@ -33,8 +34,7 @@ abstract class BaseSpec extends Specification {
 	@Shared
 	def static solrContainer = new SolrContainer(DockerImageName.parse('solr:9.8.1'))
 		.withEnv('SOLR_MODULES', 'analysis-extras')
-		.withCopyFileToContainer(MountableFile.forClasspathResource('solr/'), "/opt/solr/server/")
-		.withCollection('entrystore-core')
+		.withCopyFileToContainer(MountableFile.forClasspathResource('solr/'), '/entrystore-core/conf')
 
 	def setupSpec() {
 		if (!appStarted) {
@@ -43,6 +43,13 @@ abstract class BaseSpec extends Specification {
 			// below 2 lines allow to stream Solr container logs to the console
 			def logConsumer = new Slf4jLogConsumer(log)
 			solrContainer.followOutput(logConsumer)
+			solrContainer.setWaitStrategy(Wait.forHttp('/solr/admin/cores').forStatusCode(200))
+
+			// solrContainer.withCommand('solr-precreate') - to pre create core on startup, does not seem to work here,
+			// as probably the Solr image creates its own ENTRYPOINT cmd that overrides the custom given command on startup
+			solrContainer.execInContainer(
+				'solr', 'create_core', '-c', 'entrystore-core', '-d', '/entrystore-core'
+			)
 
 			log.info('Starting EntryStoreApp')
 			def args = ['--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core'] as String[]
@@ -135,7 +142,7 @@ abstract class BaseSpec extends Specification {
 		def connection = EntryStoreClient.getRequest('/management/status?extended=true')
 		assert connection.getResponseCode() == HTTP_OK
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
-		return (Integer) responseJson['solr']['postQueueSize']
+		return (Integer) responseJson?.solr?.postQueueSize ?: null
 	}
 
 	def waitForSolrProcessing() {
@@ -143,7 +150,7 @@ abstract class BaseSpec extends Specification {
 			.conditionEvaluationListener(new ConditionEvaluationLogger(log::info))
 			.pollInterval(10, TimeUnit.MILLISECONDS)
 			.atMost(30, TimeUnit.SECONDS)
-			// separate supplier and predicate for better await logging
+		// separate supplier and predicate for better await logging
 			.until({ getSolrQueueSize() }, { it == 0 })
 	}
 
