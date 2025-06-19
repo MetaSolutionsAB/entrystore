@@ -31,6 +31,7 @@ import org.entrystore.repository.util.NS;
 import org.entrystore.rest.standalone.springboot.model.api.MetadataType;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.standalone.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.springframework.stereotype.Service;
 
@@ -50,7 +51,7 @@ public class MetadataService {
 
 	private final RepositoryManagerImpl repositoryManager;
 
-	public String getMetadata(Entry entry, MetadataType metadataType, String format, String graphQuery, Integer depth, String recursive, String scope, String rev) {
+	public String getMetadata(Entry entry, MetadataType metadataType, String format, String graphQuery, Integer depth, String recursive, String scope, String revision) {
 
 		if (recursive != null) {
 			Set<URI> predicatesToFollow = resolvePredicates(recursive);
@@ -63,7 +64,7 @@ public class MetadataService {
 		Model metadataGraph = switch (metadataType) {
 
 			case LOCAL_METADATA -> {
-				Metadata metadata = getEntryLocalMetadata(entry, rev);
+				Metadata metadata = getEntryLocalMetadata(entry, revision);
 				if (metadata == null) {
 					throw new EntityNotFoundException("Local Metadata not found");
 				}
@@ -98,13 +99,36 @@ public class MetadataService {
 		}
 	}
 
-	private Metadata getEntryLocalMetadata(Entry entry, String rev) {
+	/**
+	 * Sets the metadata of entry to graphString.
+	 *
+	 * @param entry            Entry
+	 * @param metadataType     Metadata type
+	 * @param newMetadataGraph New metadata to be set
+	 * @param revision         Revision
+	 */
+	public void setEntryMetadata(Entry entry, MetadataType metadataType, Model newMetadataGraph, String revision) {
+
+		Metadata metadata = switch (metadataType) {
+			case LOCAL_METADATA -> getEntryLocalMetadata(entry, revision);
+			case CACHED_EXTERNAL_METADATA -> getEntryCachedExternalMetadata(entry);
+			case MERGED_METADATA -> throw new BadRequestException("Unable to set Merged Metadata on entry: " + entry.getEntryURI());
+		};
+
+		if (metadata != null && newMetadataGraph != null) {
+			metadata.setGraph(newMetadataGraph);
+			return;
+		}
+		throw new MethodNotAllowedException("Metadata is empty for entry: " + entry.getEntryURI());
+	}
+
+	private Metadata getEntryLocalMetadata(Entry entry, String revision) {
 
 		EntryType et = entry.getEntryType();
 		if (EntryType.Local.equals(et) || EntryType.Link.equals(et) || EntryType.LinkReference.equals(et)) {
 			Provenance provenance = entry.getProvenance();
-			if (rev != null && provenance != null) {
-				Entity entity = provenance.getEntityFor(rev, ProvenanceType.Metadata);
+			if (revision != null && provenance != null) {
+				Entity entity = provenance.getEntityFor(revision, ProvenanceType.Metadata);
 				if (entity instanceof GraphEntity) {
 					return ((GraphEntity) entity);
 				}
