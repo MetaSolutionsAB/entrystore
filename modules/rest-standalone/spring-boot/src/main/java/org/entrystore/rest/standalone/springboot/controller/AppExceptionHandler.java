@@ -8,6 +8,7 @@ import org.entrystore.rest.standalone.springboot.model.exception.DataConflictExc
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.standalone.springboot.model.exception.NotImplementedException;
+import org.entrystore.rest.standalone.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,15 @@ import java.util.List;
 @Slf4j
 @ControllerAdvice
 public class AppExceptionHandler {
+
+	@ExceptionHandler(RedirectSeeOtherException.class)
+	public ResponseEntity<Void> handleRedirectSeeOtherException(RedirectSeeOtherException ex) {
+
+		return ResponseEntity
+			.status(HttpStatus.SEE_OTHER)
+			.location(ex.getLocation())
+			.build();
+	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	public ResponseEntity<ErrorResponse> handleValidationExceptions(
@@ -71,7 +81,7 @@ public class AppExceptionHandler {
 
 	@ExceptionHandler(MethodNotAllowedException.class)
 	public ResponseEntity<ErrorResponse> handleMethodNotAllowedException(MethodNotAllowedException ex,
-																	   HttpServletRequest request) {
+																		 HttpServletRequest request) {
 		log.debug("MethodNotAllowedException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 			.status(HttpStatus.METHOD_NOT_ALLOWED.value())
