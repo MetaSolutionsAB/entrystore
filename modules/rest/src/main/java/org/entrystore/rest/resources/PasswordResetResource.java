@@ -207,7 +207,7 @@ public class PasswordResetResource extends BaseResource {
 
 		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(html.representation("Invalid email address: " + ci.getEmail()));
+			getResponse().setEntity(html.representation("Invalid email address: " + ci.getEmail() + "."));
 			return;
 		}
 
@@ -219,7 +219,7 @@ public class PasswordResetResource extends BaseResource {
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
 			if ((rcChallenge == null || rcResponse == null) && rcResponseV2 == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				getResponse().setEntity(html.representation("reCaptcha information missing"));
+				getResponse().setEntity(html.representation("reCaptcha information missing."));
 				return;
 			}
 			log.info("Checking reCaptcha for {}", ci.getEmail());
