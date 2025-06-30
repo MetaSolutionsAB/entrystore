@@ -31,7 +31,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def fileContents = new File('./src/test/resources/lorem.txt').text
 		def requestBody = JsonOutput.toJson([
-			email             : fileContents.split(),
+			email             : fileContents,
 			password          : newPassword,
 			grecaptcharesponse: grecaptcharesponse
 		])
