@@ -57,8 +57,8 @@ class ResourceSyndicationIT extends BaseSpec {
 
 		entryId = getOrCreateEntry(contextId, params, body)
 		assert entryId.length() > 0
-		Thread.sleep(100)
-		waitForSolrProcessing()
+		Thread.sleep(1000)
+//		waitForSolrProcessing()
 		// Solr needs even more time to finish processing
 		Thread.sleep(1500)
 	}

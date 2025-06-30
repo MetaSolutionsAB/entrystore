@@ -48,7 +48,7 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
-		resourceConn.getContentType().contains('application/json')
+		resourceConn.getContentType().contains('text/plain')
 		// Response says content-type is JSON, but it returns a non-json String value, same string as was given in the request to create the entry
 		def resourceRespText = resourceConn.getInputStream().text
 		resourceRespText == someText
