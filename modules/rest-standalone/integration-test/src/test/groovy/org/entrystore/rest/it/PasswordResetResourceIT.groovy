@@ -12,6 +12,7 @@ import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 
 class PasswordResetResourceIT extends BaseSpec {
 
@@ -24,6 +25,22 @@ class PasswordResetResourceIT extends BaseSpec {
 
 	def cleanup() {
 		greenMail.stop()
+	}
+
+	def "POST /auth/pwreset should fail if the data sent to server is larger then 32KB or unknown"() {
+		given:
+		def fileContents = new File('./src/test/resources/lorem.txt').text
+		def requestBody = JsonOutput.toJson([
+			email             : fileContents.split(),
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
+		])
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
 	}
 
 	def "POST /auth/pwreset should send an email with generated token to an existing user"() {
