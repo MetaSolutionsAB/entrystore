@@ -18,7 +18,7 @@ class ResourceIT extends BaseSpec {
 		getOrCreateContext([contextId: contextId])
 	}
 
-	def "GET /{context-id}/resource/{entry-id} should return created resource data"() {
+	def "GET /{context-id}/resource/{entry-id} on String graph should return the text data"() {
 		given:
 		// create local String entry
 		def someText = 'Some text'
@@ -50,6 +50,177 @@ class ResourceIT extends BaseSpec {
 		// Response says content-type is JSON, but it returns a non-json String value, same string as was given in the request to create the entry
 		def resourceRespText = resourceConn.getInputStream().text
 		resourceRespText == someText
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on List graph should return the entries list"() {
+		given:
+		// create minimal entry to be used in the list
+		def givenEntryId = createEntry(contextId, [:])
+		// create list entry
+		def resourceVal = [givenEntryId, 'non-existing-id']
+		def params = [graphtype: 'list']
+		def body = [resource: resourceVal]
+		def entryId = createEntry(contextId, params, body)
+		assert entryId.length() > 0
+		// fetch URI of created resource for the local entry
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		assert entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		assert entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		assert entryRespJson['info'][entryUri] != null
+		assert entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		entryResources.size() == 1
+		assert entryResources[0]['value'] != null
+		def createdResourceUri = entryResources[0]['value'].toString()
+		assert createdResourceUri.startsWith(EntryStoreClient.baseUrl + '/' + contextId + '/resource/')
+
+		when:
+		// fetch created resource
+		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		// entries list should not contain the 'non-existing-id'
+		resourceResp == [givenEntryId]
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on Context graph should return the entries list that are in the context"() {
+		given:
+		// create minimal entry in the context
+		def givenEntryId = createEntry(contextId, [:])
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceResp.collect().contains(givenEntryId)
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on User graph should return data about the user"() {
+		given:
+		// create User entry
+		def params = [graphtype: 'user']
+		def requestResourceName = [name: 'Resource Test User name 2']
+		def body = JsonOutput.toJson([resource: requestResourceName])
+		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
+		connection.getResponseCode() == HTTP_CREATED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson['entryId'] != null
+		def entryId = responseJson['entryId'].toString()
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceResp['name'] == requestResourceName['name'].toLowerCase()
+		resourceResp['language'] == null
+		resourceResp['customProperties'] == [:]
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on Group graph should return data about the group"() {
+		given:
+		def requestResourceName = [name: 'Test Grouppppen']
+		def params = [graphtype: 'group']
+		def body = JsonOutput.toJson([resource: requestResourceName])
+		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
+		connection.getResponseCode() == HTTP_CREATED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson['entryId'] != null
+		def entryId = responseJson['entryId'].toString()
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceResp['name'] == requestResourceName['name'].toLowerCase()
+		resourceResp['children'] == []
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on None graph should return 204 (No Content) when file was not sent with the entry"() {
+		given:
+		def requestResourceName = [name: 'None graph entry']
+		def body = [resource: requestResourceName]
+		def entryId = createEntry(contextId, [:], body)
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_NO_CONTENT
+		resourceConn.getInputStream().text == ''
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on None graph entry with octet-stream file should return the entry's file"() {
+		given:
+		def requestResourceName = [name: 'None graph entry']
+		def body = [resource: requestResourceName]
+		def entryId = getOrCreateEntry(contextId, [id: 'noneId'], body)
+		assert entryId.length() > 0
+
+		// create a test binary file with some data
+		def testBinFile = File.createTempFile('test', '.bin')
+		testBinFile.withOutputStream { out ->
+			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
+			out.write("Hello".bytes)
+		}
+		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
+			'admin', 'application/octet-stream')
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+		// ResourceResource class defines a json response with 'success' field, but later in the code it is replaced with Empty response
+//		def sendFileJsonResponse = JSON_PARSER.parseText(sendFileConn.getInputStream().text)
+//		assert sendFileJsonResponse['success'] == 'The file was uploaded'
+//		assert sendFileJsonResponse['format'] == 'application/octet-stream'
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType() == 'application/octet-stream'
+		resourceConn.getInputStream().readAllBytes() == testBinFile.getBytes()
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on None graph entry with multi-part file should return the entry's file"() {
+		given:
+		def requestResourceName = [name: 'None graph entry']
+		def body = [resource: requestResourceName]
+		def entryId = getOrCreateEntry(contextId, [id: 'noneId'], body)
+		assert entryId.length() > 0
+
+		// create a test binary file with some data
+		def testBinFile = File.createTempFile('test', '.bin')
+		testBinFile.withOutputStream { out ->
+			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
+			out.write("Hello-again".bytes)
+		}
+		def sendFileConn = EntryStoreClient.putRequestMultiPart('/' + contextId + '/resource/' + entryId, testBinFile)
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType() == 'application/octet-stream'
+		resourceConn.getInputStream().readAllBytes() == testBinFile.getBytes()
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} should edit String-resource"() {
@@ -221,7 +392,7 @@ class ResourceIT extends BaseSpec {
 		given:
 		// create a User entry
 		def params = [graphtype: 'user']
-		def requestResourceName = [name: 'Resource Test User name 2']
+		def requestResourceName = [name: 'Resource Test User name 20']
 		def body = JsonOutput.toJson([resource: requestResourceName])
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
 		connection.getResponseCode() == HTTP_CREATED
@@ -317,7 +488,7 @@ class ResourceIT extends BaseSpec {
 		assert userResourceJson['relations'] instanceof Map
 		def relations = userResourceJson['relations']
 		def userGroupRelation = relations[groupResourceUri] // Normally, a LazyMap should be populated now
-		assert  userGroupRelation != null
+		assert userGroupRelation != null
 	}
 
 	def "PUT /_principals/{entry-id} should add user to 2 groups and the user should have the information in relations object"() {
@@ -391,9 +562,9 @@ class ResourceIT extends BaseSpec {
 		assert userResourceJson['relations'] instanceof Map
 		def relations = userResourceJson['relations']
 		def userGroup1Relation = relations[group1ResourceUri]
-		assert  userGroup1Relation != null
+		assert userGroup1Relation != null
 		def userGroup2Relation = relations[group2ResourceUri]
-		assert  userGroup2Relation != null
+		assert userGroup2Relation != null
 	}
 
 	def "PUT /_principals/{entry-id} should add 2 users to a group and users should have the information in relations object"() {
@@ -493,7 +664,7 @@ class ResourceIT extends BaseSpec {
 		assert resourceJson['customProperties'] == [:]
 
 		def requestBody = JsonOutput.toJson([
-			password		: 'newPass1234',
+			password        : 'newPass1234',
 			name            : 'Newer name',
 			language        : 'PL',
 			disabled        : 'true',
@@ -590,6 +761,38 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('application/json')
 		resourceConn2.getInputStream().text == '[]'
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id} on resource with file should remove the file"() {
+		given:
+		def requestResourceName = [name: 'None graph entry']
+		def body = [resource: requestResourceName]
+		def entryId = getOrCreateEntry(contextId, [id: 'noneId'], body)
+		assert entryId.length() > 0
+
+		// create a test binary file with some data
+		def testBinFile = File.createTempFile('test', '.bin')
+		testBinFile.withOutputStream { out ->
+			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
+			out.write("Hello".bytes)
+		}
+		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
+			'admin', 'application/octet-stream')
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_NO_CONTENT
+		resourceConn.getInputStream().text == ''
+
+		// fetch resource details again
+		def resourceConn2 = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+		// TODO: Seems to be a bug here: after deleting a resource file and fetching the resource again, the resource = null is being returned, instead of a representation
+//		resourceConn2.getResponseCode() == HTTP_OK
+//		resourceConn2.getContentType().contains('application/json')
+		resourceConn2.getInputStream().text == ''
 	}
 
 	def "DELETE /{context-id}/resource/{entry-id} does not delete resource if it has type String"() {
