@@ -36,7 +36,7 @@
         <junit.version>5.10.1</junit.version>
         <assertj.version>3.25.3</assertj.version>
         <bytebuddy.version>1.14.13</bytebuddy.version>
-        <zookeeper.version>3.9.2</zookeeper.version>
+        <zookeeper.version>3.9.3</zookeeper.version>
         <xmlsec.version>3.0.6</xmlsec.version>
         <httpmime.version>4.5.14</httpmime.version>
         <commonscli.version>1.6.0</commonscli.version>
