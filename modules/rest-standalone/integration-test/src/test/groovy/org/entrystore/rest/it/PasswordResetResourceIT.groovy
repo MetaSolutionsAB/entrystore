@@ -5,6 +5,7 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 
 import javax.mail.internet.InternetAddress
+import org.apache.commons.lang.RandomStringUtils
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -29,7 +30,7 @@ class PasswordResetResourceIT extends BaseSpec {
 
 	def "POST /auth/pwreset should fail if the data sent to server is larger then 32KB or unknown"() {
 		given:
-		def fileContents = new File('./src/test/resources/lorem.txt').text
+		def fileContents = RandomStringUtils.random(32769)
 		def requestBody = JsonOutput.toJson([
 			email             : fileContents,
 			password          : newPassword,
