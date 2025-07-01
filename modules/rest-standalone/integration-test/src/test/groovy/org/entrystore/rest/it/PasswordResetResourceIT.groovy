@@ -5,6 +5,7 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 
 import javax.mail.internet.InternetAddress
+import org.apache.commons.lang.RandomStringUtils
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -12,6 +13,7 @@ import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 
 class PasswordResetResourceIT extends BaseSpec {
 
@@ -24,6 +26,22 @@ class PasswordResetResourceIT extends BaseSpec {
 
 	def cleanup() {
 		greenMail.stop()
+	}
+
+	def "POST /auth/pwreset should fail if the data sent to server is larger then 32KB or unknown"() {
+		given:
+		def fileContents = RandomStringUtils.random(32769)
+		def requestBody = JsonOutput.toJson([
+			email             : fileContents,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
+		])
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
 	}
 
 	def "POST /auth/pwreset should send an email with generated token to an existing user"() {
