@@ -5,7 +5,7 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 
 import javax.mail.internet.InternetAddress
-import org.apache.commons.lang.RandomStringUtils
+import org.apache.commons.lang3.RandomStringUtils
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -30,9 +30,9 @@ class PasswordResetResourceIT extends BaseSpec {
 
 	def "POST /auth/pwreset should fail if the data sent to server is larger then 32KB or unknown"() {
 		given:
-		def fileContents = RandomStringUtils.random(32769)
+		def longString = RandomStringUtils.secure().nextAlphabetic(32769)
 		def requestBody = JsonOutput.toJson([
-			email             : fileContents,
+			email             : longString,
 			password          : newPassword,
 			grecaptcharesponse: grecaptcharesponse
 		])
@@ -70,6 +70,34 @@ class PasswordResetResourceIT extends BaseSpec {
 		message.getFrom().contains(new InternetAddress("info@meta.se"))
 		message.getSubject() == "Password reset request"
 		message.getAllRecipients().contains(new InternetAddress("user@test.com"))
+		def messageContent = message.getContent()
+		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		token.length() == 16
+	}
+
+	def "POST /auth/pwreset should send an email with generated token to an existing user when posted as an html form"() {
+		given:
+		// create user
+		def userParams = [graphtype: 'user']
+		def userRequestResourceName = [name: 'userForm@test.com']
+		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
+		EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody).getResponseCode() == HTTP_OK
+		def bodyParams = 'email=userForm@test.com&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', bodyParams, null, 'application/x-www-form-urlencoded')
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_OK
+		resetPasswordConn.getContentType().contains('text/html')
+		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to userform@test.com, if the user exists.")
+		def messages = greenMail.getReceivedMessages()
+		messages.size() == 1
+		def message = messages[0]
+		message.getFrom().contains(new InternetAddress("info@meta.se"))
+		message.getSubject() == "Password reset request"
+		message.getAllRecipients().contains(new InternetAddress("userform@test.com"))
 		def messageContent = message.getContent()
 		def startIndex = messageContent.toString().indexOf("?confirm") + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -147,6 +175,20 @@ class PasswordResetResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
+	def "POST /auth/pwreset should not send an email with generated token when required parameters in form are missing - email"() {
+		given:
+		def bodyParams = 'password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', bodyParams, null, 'application/x-www-form-urlencoded')
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
+		resetPasswordConn.getContentType().contains('text/html')
+		resetPasswordConn.getErrorStream().text.contains("One or more parameters are missing.")
+		greenMail.getReceivedMessages().size() == 0
+	}
+
 	def "POST /auth/pwreset should not send an email with generated token when required parameters are missing - password"() {
 		given:
 		def requestBody = JsonOutput.toJson([
@@ -164,6 +206,20 @@ class PasswordResetResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
+	def "POST /auth/pwreset should not send an email with generated token when required parameters in form are missing - password"() {
+		given:
+		def bodyParams = 'email=userResetNoPasswordForm@test.com&g-recaptcha-response=' + grecaptcharesponse
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', bodyParams, null, 'application/x-www-form-urlencoded')
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
+		resetPasswordConn.getContentType().contains('text/html')
+		resetPasswordConn.getErrorStream().text.contains("One or more parameters are missing.")
+		greenMail.getReceivedMessages().size() == 0
+	}
+
 	def "POST /auth/pwreset should not send an email with generated token when required parameters are missing - grecaptcharesponse"() {
 		given:
 		def requestBody = JsonOutput.toJson([
@@ -173,6 +229,20 @@ class PasswordResetResourceIT extends BaseSpec {
 
 		when:
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
+		resetPasswordConn.getContentType().contains('text/html')
+		resetPasswordConn.getErrorStream().text.contains("reCaptcha information missing.")
+		greenMail.getReceivedMessages().size() == 0
+	}
+
+	def "POST /auth/pwreset should not send an email with generated token when required parameters in form are missing - g-captcha-response"() {
+		given:
+		def bodyParams = 'email=userResetNoRecaptchaForm@test.com&password=' + newPassword
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', bodyParams, null, 'application/x-www-form-urlencoded')
 
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
