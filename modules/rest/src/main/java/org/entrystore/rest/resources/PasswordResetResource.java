@@ -184,7 +184,9 @@ public class PasswordResetResource extends BaseResource {
 			}
 		} else {
 			Form form = new Form(getRequest().getEntity());
-			ci.setEmail(form.getFirstValue("email", true));
+			if (form.getFirstValue("email", true) != null && !form.getFirstValue("email", true).isEmpty()) {
+				ci.setEmail(form.getFirstValue("email", true));
+			}
 			password = form.getFirstValue("password", true);
 			rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
 			rcResponse = form.getFirstValue("recaptcha_response_field", true);
