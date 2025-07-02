@@ -38,6 +38,8 @@ public class AuthService {
 	private final String recaptchaInvalidMessage = "Invalid reCaptcha received.";
 	private final String failedToSendEmailMessage = "Failed to send confirmation request to {}.";
 
+	private final String RECAPTCHA_URL_DEFAULT = "https://www.google.com/recaptcha/api/siteverify";
+
 	private final RepositoryManagerImpl repositoryManager;
 	private final PrincipalManager principalManager;
 
@@ -87,7 +89,7 @@ public class AuthService {
 				String remoteAddr = request.getRemoteAddr();
 
 				RecaptchaVerifier rcVerifier = new RecaptchaVerifier(
-					config.getString(Settings.AUTH_RECAPTCHA_URL),
+					config.getString(Settings.AUTH_RECAPTCHA_URL, RECAPTCHA_URL_DEFAULT),
 					config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY));
 
 				if (rcVerifier.verify(rcResponseV2, remoteAddr)) {
