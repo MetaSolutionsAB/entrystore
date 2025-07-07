@@ -65,7 +65,7 @@ public class MetadataService {
 
 			case LOCAL_METADATA -> {
 				Metadata metadata = getEntryLocalMetadata(entry, revision);
-				if (metadata  == null) {
+				if (metadata == null) {
 					throw new EntityNotFoundException("Local Metadata not found");
 				}
 				yield metadata.getGraph();

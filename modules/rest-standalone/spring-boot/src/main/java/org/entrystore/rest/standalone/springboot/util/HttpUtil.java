@@ -34,6 +34,8 @@ public class HttpUtil {
 		if (repSize == -1L) {
 			log.warn("Size of representation is unknown");
 			return true;
-		} else return repSize > maxSize;
+		}
+
+		return repSize > maxSize;
 	}
 }

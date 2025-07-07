@@ -83,11 +83,7 @@ public class ContextController {
 	 */
 	private boolean isGraphTypeForbidden(GraphType graphType) {
 		// Pipeline results may only be created by Pipelines
-		if (GraphType.PipelineResult.equals(graphType)) {
-			log.debug("Pipeline results may only be created by Pipelines");
-			return true;
-		}
-		return false;
+		return GraphType.PipelineResult == graphType;
 	}
 
 }

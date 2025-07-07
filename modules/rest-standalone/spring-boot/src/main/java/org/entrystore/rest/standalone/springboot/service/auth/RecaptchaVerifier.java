@@ -16,14 +16,18 @@
 
 package org.entrystore.rest.standalone.springboot.service.auth;
 
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.config.Settings;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
@@ -35,20 +39,23 @@ import org.springframework.web.client.RestTemplate;
  *
  * @author Hannes Ebner
  */
+@Slf4j
+@Service
+@RequiredArgsConstructor
 public class RecaptchaVerifier {
 
-	private static final Logger log = LoggerFactory.getLogger(RecaptchaVerifier.class);
+	private final String RECAPTCHA_URL_DEFAULT = "https://www.google.com/recaptcha/api/siteverify";
 
-	//@Value("${entrystore.auth.recaptcha.url}")
-	private final String url;
-	private final String secret;
+	private final RepositoryManagerImpl repositoryManager;
+	private final RestTemplate restTemplate;
 
-	public RecaptchaVerifier(String url, String secret) {
-		if (url == null || secret == null) {
-			throw new IllegalArgumentException("reCaptcha url and secret must not be null");
-		}
-		this.url = url;
-		this.secret = secret;
+	private static String url;
+	private static String secret;
+
+	@PostConstruct
+	public void init() {
+		url = repositoryManager.getConfiguration().getString(Settings.AUTH_RECAPTCHA_URL, RECAPTCHA_URL_DEFAULT);
+		secret = repositoryManager.getConfiguration().getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
 	}
 
 	/**
@@ -80,7 +87,6 @@ public class RecaptchaVerifier {
 		}
 
 		HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
-		RestTemplate restTemplate = new RestTemplate();
 		ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
 
 		if (!response.getStatusCode().is2xxSuccessful()) {
