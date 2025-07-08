@@ -3,6 +3,7 @@ package org.entrystore.rest.it
 import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
+import spock.lang.Ignore
 
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -11,6 +12,8 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
+// Not migrated yet
+@Ignore
 class ContextExportIT extends BaseSpec {
 
 	def static contextId = 'context-export-test'

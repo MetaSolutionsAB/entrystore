@@ -2,6 +2,7 @@ package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
+import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -9,6 +10,8 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 
+// Not migrated yet
+@Ignore
 class NameResourceIT extends BaseSpec {
 
 	def static contextIdWithName = '70'

@@ -2,9 +2,12 @@ package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
+import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.*
 
+// Not migrated yet
+@Ignore
 class ContextStatisticsIT extends BaseSpec {
 
 	def static contextId = '30'

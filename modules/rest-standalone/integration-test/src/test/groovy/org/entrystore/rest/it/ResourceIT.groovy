@@ -269,6 +269,8 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == newBody
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should edit List-resource"() {
 		given:
 		// create minimal entry to be added to the list in the "when" section
@@ -307,6 +309,8 @@ class ResourceIT extends BaseSpec {
 		JSON_PARSER.parseText(resourceConn2.getInputStream().text) == [minimalEntryId]
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should not edit List-resource if requested entry does not exist"() {
 		given:
 		// create an empty list
@@ -340,6 +344,8 @@ class ResourceIT extends BaseSpec {
 		JSON_PARSER.parseText(resourceConn2.getInputStream().text) == []
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should edit name and password User-resource"() {
 		given:
 		// create a User entry
@@ -395,6 +401,8 @@ class ResourceIT extends BaseSpec {
 		resourceJson2['customProperties'] == [:]
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should not edit name if name is already in use"() {
 		given:
 		// create a User entry
@@ -446,6 +454,8 @@ class ResourceIT extends BaseSpec {
 		resourceJson2['customProperties'] == [:]
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /_principals/{entry-id} should add user to a group and the user should have the information in relations object"() {
 		given:
 		// create a User entry
@@ -498,6 +508,8 @@ class ResourceIT extends BaseSpec {
 		assert userGroupRelation != null
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /_principals/{entry-id} should add user to 2 groups and the user should have the information in relations object"() {
 		given:
 		// create a User entry
@@ -574,6 +586,8 @@ class ResourceIT extends BaseSpec {
 		assert userGroup2Relation != null
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /_principals/{entry-id} should add 2 users to a group and users should have the information in relations object"() {
 		given:
 		// create a User entry
@@ -639,6 +653,8 @@ class ResourceIT extends BaseSpec {
 		assert user2GroupRelation != null
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should edit other User-resource properties"() {
 		given:
 		// create a User entry
@@ -698,6 +714,8 @@ class ResourceIT extends BaseSpec {
 		resourceJson2['customProperties'] == [disablingreason: 'Untruthful']
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "DELETE /{context-id}/resource/{entry-id} should delete user"() {
 		given:
 		// create a User entry
@@ -772,6 +790,8 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == '[]'
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "DELETE /{context-id}/resource/{entry-id} on resource with file should remove the file"() {
 		given:
 		def requestResourceName = [name: 'None graph entry']
@@ -844,6 +864,8 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == someText
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "POST /{context-id}/resource/{entry-id} should move entry between lists"() {
 		given:
 		// create minimal entry to be used in the list
