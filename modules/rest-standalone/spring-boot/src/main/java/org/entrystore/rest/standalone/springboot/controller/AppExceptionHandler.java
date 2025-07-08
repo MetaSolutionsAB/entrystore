@@ -154,20 +154,8 @@ public class AppExceptionHandler {
 		return ResponseEntity.badRequest().body(responseBody);
 	}
 
-	@ExceptionHandler(InternalServerErrorException.class)
-	public ResponseEntity<ErrorResponse> handleInternalServerErrorException(InternalServerErrorException ex,
-																   HttpServletRequest request) {
-		log.debug("InternalServerErrorException: {}", ex.getMessage());
-		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
-		return ResponseEntity.internalServerError().body(responseBody);
-	}
-
 	@ExceptionHandler(ForbiddenException.class)
-	public ResponseEntity<ErrorResponse> handleInternalServerErrorException(ForbiddenException ex,
+	public ResponseEntity<ErrorResponse> handleForbiddenException(ForbiddenException ex,
 																			HttpServletRequest request) {
 		log.debug("ForbiddenException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
@@ -188,5 +176,17 @@ public class AppExceptionHandler {
 			.error(ex.getMessage())
 			.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
+	}
+
+	@ExceptionHandler(Exception.class)
+	public ResponseEntity<ErrorResponse> handleGenericException(Exception ex,
+																HttpServletRequest request) {
+		log.error("Exception at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+			.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+			.path(request.getRequestURI())
+			.error(ex.getMessage())
+			.build();
+		return ResponseEntity.internalServerError().body(responseBody);
 	}
 }
