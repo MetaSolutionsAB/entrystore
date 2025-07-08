@@ -6,9 +6,9 @@ package org.entrystore.rest.standalone.springboot.model.exception;
  * - common response model, with "error" set as exception message
  * - exception message logged in the logs at debug level
  */
-public class BadRequestException extends RuntimeException {
+public class PwResetBadRequestHtmlException extends RuntimeException {
 
-	public BadRequestException(String message) {
+	public PwResetBadRequestHtmlException(String message) {
 		super(message);
 	}
 }

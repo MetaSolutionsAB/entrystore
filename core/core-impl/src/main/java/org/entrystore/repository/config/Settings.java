@@ -81,6 +81,7 @@ public class Settings {
 	public static String AUTH_BCC_EMAIL_DEPRECATED = "entrystore.auth.email.bcc";
 
 	public static String AUTH_RECAPTCHA = "entrystore.auth.recaptcha";
+	public static String AUTH_RECAPTCHA_URL = "entrystore.auth.recaptcha.url";
 	public static String AUTH_RECAPTCHA_PRIVATE_KEY = "entrystore.auth.recaptcha.private-key";
 	public static String AUTH_RECAPTCHA_PUBLIC_KEY = "entrystore.auth.recaptcha.public-key";
 
