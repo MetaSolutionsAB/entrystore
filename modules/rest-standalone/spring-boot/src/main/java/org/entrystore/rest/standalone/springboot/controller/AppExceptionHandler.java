@@ -9,7 +9,6 @@ import org.entrystore.rest.standalone.springboot.model.exception.DataConflictExc
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenException;
-import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.standalone.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.standalone.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.standalone.springboot.model.exception.PwResetBadRequestHtmlException;
@@ -23,6 +22,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.List;
 
@@ -61,8 +61,8 @@ public class AppExceptionHandler {
 		return ResponseEntity.badRequest().body(responseBody);
 	}
 
-	@ExceptionHandler(BadRequestException.class)
-	public ResponseEntity<ErrorResponse> handleBadRequestException(BadRequestException ex,
+	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class})
+	public ResponseEntity<ErrorResponse> handleBadRequestException(RuntimeException ex,
 																   HttpServletRequest request) {
 		log.debug("BadRequestException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()

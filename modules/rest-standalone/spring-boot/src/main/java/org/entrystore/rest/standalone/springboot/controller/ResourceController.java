@@ -79,6 +79,9 @@ public class ResourceController {
 		} else if (entry.getEntryType() == EntryType.Local && entry.getGraphType() == GraphType.None) {
 
 			File file = resourceService.serializeResourceNoneAsFile(entry);
+			if (file == null) {
+				return ResponseEntity.noContent().build();
+			}
 			String responseMediaTypeStr = resourceService.determineMediaTypeForDownload(entry);
 			HttpHeaders httpHeaders = buildFileDownloadResponseHeaders(entry, responseMediaTypeStr, download != null);
 
