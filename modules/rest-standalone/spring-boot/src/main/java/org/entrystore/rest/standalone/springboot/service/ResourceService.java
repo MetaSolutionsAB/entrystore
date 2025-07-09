@@ -230,7 +230,7 @@ public class ResourceService {
 				return MediaType.ALL_VALUE;
 			}
 		} else {
-			return MediaType.ALL_VALUE;
+			return MediaType.APPLICATION_OCTET_STREAM_VALUE;
 		}
 
 	}

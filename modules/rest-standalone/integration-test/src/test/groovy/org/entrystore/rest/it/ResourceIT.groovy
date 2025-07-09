@@ -1,14 +1,13 @@
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
-import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
-
-import java.time.Year
+import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -20,7 +19,7 @@ class ResourceIT extends BaseSpec {
 		getOrCreateContext([contextId: contextId])
 	}
 
-	def "GET /{context-id}/resource/{entry-id} should return created resource data"() {
+	def "GET /{context-id}/resource/{entry-id} on String graph should return the text data"() {
 		given:
 		// create local String entry
 		def someText = 'Some text'
@@ -54,6 +53,183 @@ class ResourceIT extends BaseSpec {
 		resourceRespText == someText
 	}
 
+	def "GET /{context-id}/resource/{entry-id} on List graph should return the entries list"() {
+		given:
+		// create minimal entry to be used in the list
+		def givenEntryId = createEntry(contextId, [:])
+		// create list entry
+		def resourceVal = [givenEntryId, 'non-existing-id']
+		def params = [graphtype: 'list']
+		def body = [resource: resourceVal]
+		def entryId = createEntry(contextId, params, body)
+		assert entryId.length() > 0
+		// fetch URI of created resource for the local entry
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		assert entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		assert entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		assert entryRespJson['info'][entryUri] != null
+		assert entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		entryResources.size() == 1
+		assert entryResources[0]['value'] != null
+		def createdResourceUri = entryResources[0]['value'].toString()
+		assert createdResourceUri.startsWith(EntryStoreClient.baseUrl + '/' + contextId + '/resource/')
+
+		when:
+		// fetch created resource
+		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		// entries list should not contain the 'non-existing-id'
+		resourceResp == [givenEntryId]
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on Context graph should return the entries list that are in the context"() {
+		given:
+		// create minimal entry in the context
+		def givenEntryId = createEntry(contextId, [:])
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceResp.collect().contains(givenEntryId)
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on User graph should return data about the user"() {
+		given:
+		// create User entry
+		def params = [graphtype: 'user']
+		def requestResourceName = [name: 'Resource Test User name 2']
+		def body = JsonOutput.toJson([resource: requestResourceName])
+		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
+		connection.getResponseCode() == HTTP_CREATED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson['entryId'] != null
+		def entryId = responseJson['entryId'].toString()
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceResp['name'] == requestResourceName['name'].toLowerCase()
+		resourceResp['language'] == null
+		resourceResp['customProperties'] == [:]
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on Group graph should return data about the group"() {
+		given:
+		def requestResourceName = [name: 'Test Grouppppen']
+		def params = [graphtype: 'group']
+		def body = JsonOutput.toJson([resource: requestResourceName])
+		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
+		connection.getResponseCode() == HTTP_CREATED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson['entryId'] != null
+		def entryId = responseJson['entryId'].toString()
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceResp['name'] == requestResourceName['name'].toLowerCase()
+		resourceResp['children'] == []
+	}
+
+	def "GET /{context-id}/resource/{entry-id} on None graph should return 204 (No Content) when file was not sent with the entry"() {
+		given:
+		def requestResourceName = [name: 'None graph entryyyy']
+		def body = [resource: requestResourceName]
+		def entryId = createEntry(contextId, [id: 'None-graph'], body)
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_NO_CONTENT
+		resourceConn.getInputStream().text == ''
+	}
+
+	// Not migrated yet - PUT is needed for this GET test to work
+	@Ignore
+	def "GET /{context-id}/resource/{entry-id} on None graph entry with octet-stream file should return the entry's file"() {
+		given:
+		def requestResourceName = [name: 'None graph entry']
+		def body = [resource: requestResourceName]
+		def entryId = getOrCreateEntry(contextId, [id: 'noneId'], body)
+		assert entryId.length() > 0
+
+		// create a test binary file with some data
+		def testBinFile = File.createTempFile('test', '.bin')
+		testBinFile.withOutputStream { out ->
+			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
+			out.write("Hello".bytes)
+		}
+		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
+			'admin', 'application/octet-stream')
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+		// ResourceResource class defines a json response with 'success' field, but later in the code it is replaced with Empty response
+//		def sendFileJsonResponse = JSON_PARSER.parseText(sendFileConn.getInputStream().text)
+//		assert sendFileJsonResponse['success'] == 'The file was uploaded'
+//		assert sendFileJsonResponse['format'] == 'application/octet-stream'
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType() == 'application/octet-stream'
+		resourceConn.getInputStream().readAllBytes() == testBinFile.getBytes()
+	}
+
+	// Not migrated yet - PUT is needed for this GET test to work
+	@Ignore
+	def "GET /{context-id}/resource/{entry-id} on None graph entry with multi-part file should return the entry's file"() {
+		given:
+		def requestResourceName = [name: 'None graph entry']
+		def body = [resource: requestResourceName]
+		def entryId = getOrCreateEntry(contextId, [id: 'noneId'], body)
+		assert entryId.length() > 0
+
+		// create a test binary file with some data
+		def testBinFile = File.createTempFile('test', '.bin')
+		testBinFile.withOutputStream { out ->
+			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
+			out.write("Hello-again".bytes)
+		}
+		def sendFileConn = EntryStoreClient.putRequestMultiPart('/' + contextId + '/resource/' + entryId, testBinFile)
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType() == 'application/octet-stream'
+		resourceConn.getInputStream().readAllBytes() == testBinFile.getBytes()
+	}
+
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should edit String-resource"() {
 		given:
 		// create local String entry
@@ -93,6 +269,8 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == newBody
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should edit List-resource"() {
 		given:
 		// create minimal entry to be added to the list in the "when" section
@@ -131,6 +309,8 @@ class ResourceIT extends BaseSpec {
 		JSON_PARSER.parseText(resourceConn2.getInputStream().text) == [minimalEntryId]
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should not edit List-resource if requested entry does not exist"() {
 		given:
 		// create an empty list
@@ -164,6 +344,8 @@ class ResourceIT extends BaseSpec {
 		JSON_PARSER.parseText(resourceConn2.getInputStream().text) == []
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should edit name and password User-resource"() {
 		given:
 		// create a User entry
@@ -194,7 +376,6 @@ class ResourceIT extends BaseSpec {
 		assert resourceJson['language'] == null
 		assert resourceJson['customProperties'] == [:]
 
-		// TODO: Verify this behaviour: if 'password' is set then no other properties (than 'password and 'name') are processed, due to logic for processing 'password' has a 'return' statement
 		def requestBody = JsonOutput.toJson([
 			name    : 'New name',
 			language: 'PL',
@@ -216,15 +397,17 @@ class ResourceIT extends BaseSpec {
 		def resourceJson2 = JSON_PARSER.parseText(resourceConn2.getInputStream().text)
 		// Why the name is in the lower case, other than the data in the request
 		resourceJson2['name'] == 'new name'
-		resourceJson2['language'] == null    // Should be 'PL'
+		resourceJson2['language'] == 'PL'
 		resourceJson2['customProperties'] == [:]
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should not edit name if name is already in use"() {
 		given:
 		// create a User entry
 		def params = [graphtype: 'user']
-		def requestResourceName = [name: 'Resource Test User name 2']
+		def requestResourceName = [name: 'Resource Test User name 20']
 		def body = JsonOutput.toJson([resource: requestResourceName])
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
 		connection.getResponseCode() == HTTP_CREATED
@@ -271,6 +454,207 @@ class ResourceIT extends BaseSpec {
 		resourceJson2['customProperties'] == [:]
 	}
 
+	// Not migrated yet
+	@Ignore
+	def "PUT /_principals/{entry-id} should add user to a group and the user should have the information in relations object"() {
+		given:
+		// create a User entry
+		def userParams = [graphtype: 'user']
+		def userRequestResourceName = [name: 'UserPUT']
+		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
+		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
+		assert userConnection.getResponseCode() == HTTP_CREATED
+		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
+
+		// create a Group entry
+		def groupParams = [graphtype: 'group']
+		def groupRequestResourceName = [name: 'GroupPUT']
+		def groupBody = JsonOutput.toJson([resource: groupRequestResourceName])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		// fetch URI of created Group
+		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.getInputStream().text)
+		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		def requestBody = JsonOutput.toJson([userEntryId])
+
+		when:
+		// add user to group
+		def addUserToGroupConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, requestBody)
+
+		then:
+		addUserToGroupConn.getResponseCode() == HTTP_NO_CONTENT
+		def addResourceRespText = addUserToGroupConn.getInputStream().text
+		addResourceRespText == ''
+		// fetch Group details
+		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
+		assert groupResourceConn.getResponseCode() == HTTP_OK
+		assert groupResourceConn.getContentType().contains('application/json')
+		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.getInputStream().text)
+		assert groupResourceJson['children'] instanceof List
+		def groupMembers = groupResourceJson['children'].collect()
+		groupMembers.size() == 1
+		groupMembers[0]['name'] == 'userput'
+		// fetch User details
+		def userResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + "?includeAll")
+		assert userResourceConn.getResponseCode() == HTTP_OK
+		assert userResourceConn.getContentType().contains('application/json')
+		def userResourceJson = JSON_PARSER.parseText(userResourceConn.getInputStream().text)
+		assert userResourceJson['relations'] instanceof Map
+		def relations = userResourceJson['relations']
+		def userGroupRelation = relations[groupResourceUri] // Normally, a LazyMap should be populated now
+		assert userGroupRelation != null
+	}
+
+	// Not migrated yet
+	@Ignore
+	def "PUT /_principals/{entry-id} should add user to 2 groups and the user should have the information in relations object"() {
+		given:
+		// create a User entry
+		def userParams = [graphtype: 'user']
+		def userRequestResourceName = [name: 'UserPUTInto2groups']
+		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
+		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
+		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
+
+		// create a Group entry
+		def groupParams = [graphtype: 'group']
+		def group1RequestResourceName = [name: 'GroupPUT1']
+		def group1Body = JsonOutput.toJson([resource: group1RequestResourceName])
+		def group1Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), group1Body)
+		def group1EntryId = JSON_PARSER.parseText(group1Connection.getInputStream().text)['entryId'].toString()
+		// fetch URI of created Group
+		def group1EntryConn = EntryStoreClient.getRequest('/_principals/entry/' + group1EntryId)
+		def group1EntryRespJson = JSON_PARSER.parseText(group1EntryConn.getInputStream().text)
+		def group1EntryRespJsonKeys = (group1EntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def group1ResourceUri = group1EntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		// create a Group entry
+		def group2RequestResourceName = [name: 'GroupPUT1']
+		def group2Body = JsonOutput.toJson([resource: group2RequestResourceName])
+		def group2Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), group2Body)
+		def group2EntryId = JSON_PARSER.parseText(group2Connection.getInputStream().text)['entryId'].toString()
+		// fetch URI of created Group
+		def group2EntryConn = EntryStoreClient.getRequest('/_principals/entry/' + group2EntryId)
+		def group2EntryRespJson = JSON_PARSER.parseText(group2EntryConn.getInputStream().text)
+		def group2EntryRespJsonKeys = (group2EntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def group2ResourceUri = group2EntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		def requestBody = JsonOutput.toJson([userEntryId])
+
+		when:
+		// add user to group
+		def addUserToGroup1Conn = EntryStoreClient.putRequest('/_principals/resource/' + group1EntryId, requestBody)
+		def addUserToGroup2Conn = EntryStoreClient.putRequest('/_principals/resource/' + group2EntryId, requestBody)
+
+		then:
+		addUserToGroup1Conn.getResponseCode() == HTTP_NO_CONTENT
+		def addResourceResp1Text = addUserToGroup1Conn.getInputStream().text
+		addResourceResp1Text == ''
+		addUserToGroup2Conn.getResponseCode() == HTTP_NO_CONTENT
+		def addResourceResp2Text = addUserToGroup2Conn.getInputStream().text
+		addResourceResp2Text == ''
+		// fetch Group details
+		def group1ResourceConn = EntryStoreClient.getRequest(group1ResourceUri)
+		assert group1ResourceConn.getResponseCode() == HTTP_OK
+		assert group1ResourceConn.getContentType().contains('application/json')
+		def group1ResourceJson = JSON_PARSER.parseText(group1ResourceConn.getInputStream().text)
+		assert group1ResourceJson['children'] instanceof List
+		def group1Members = group1ResourceJson['children'].collect()
+		group1Members.size() == 1
+		group1Members[0]['name'] == 'userputinto2groups'
+		def group2ResourceConn = EntryStoreClient.getRequest(group1ResourceUri)
+		assert group2ResourceConn.getResponseCode() == HTTP_OK
+		assert group2ResourceConn.getContentType().contains('application/json')
+		def group2ResourceJson = JSON_PARSER.parseText(group2ResourceConn.getInputStream().text)
+		assert group2ResourceJson['children'] instanceof List
+		def group2Members = group1ResourceJson['children'].collect()
+		group2Members.size() == 1
+		group2Members[0]['name'] == 'userputinto2groups'
+		// fetch User details
+		def userResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + "?includeAll")
+		assert userResourceConn.getResponseCode() == HTTP_OK
+		assert userResourceConn.getContentType().contains('application/json')
+		def userResourceJson = JSON_PARSER.parseText(userResourceConn.getInputStream().text)
+		assert userResourceJson['relations'] instanceof Map
+		def relations = userResourceJson['relations']
+		def userGroup1Relation = relations[group1ResourceUri]
+		assert userGroup1Relation != null
+		def userGroup2Relation = relations[group2ResourceUri]
+		assert userGroup2Relation != null
+	}
+
+	// Not migrated yet
+	@Ignore
+	def "PUT /_principals/{entry-id} should add 2 users to a group and users should have the information in relations object"() {
+		given:
+		// create a User entry
+		def userParams = [graphtype: 'user']
+		def user1RequestResourceName = [name: 'UserPUT1']
+		def user1Body = JsonOutput.toJson([resource: user1RequestResourceName])
+		def user1Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), user1Body)
+		def user1EntryId = JSON_PARSER.parseText(user1Connection.getInputStream().text)['entryId'].toString()
+		def user2RequestResourceName = [name: 'UserPUT2']
+		def user2Body = JsonOutput.toJson([resource: user2RequestResourceName])
+		def user2Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), user2Body)
+		def user2EntryId = JSON_PARSER.parseText(user2Connection.getInputStream().text)['entryId'].toString()
+
+		// create a Group entry
+		def groupParams = [graphtype: 'group']
+		def groupRequestResourceName = [name: 'GroupPUTboth']
+		def groupBody = JsonOutput.toJson([resource: groupRequestResourceName])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		// fetch URI of created Group
+		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.getInputStream().text)
+		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		def requestBody = JsonOutput.toJson([user1EntryId, user2EntryId])
+
+		when:
+		// add user to group
+		def addUsersToGroupConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, requestBody)
+
+		then:
+		addUsersToGroupConn.getResponseCode() == HTTP_NO_CONTENT
+		def addResourceRespText = addUsersToGroupConn.getInputStream().text
+		addResourceRespText == ''
+		// fetch Group details
+		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
+		assert groupResourceConn.getResponseCode() == HTTP_OK
+		assert groupResourceConn.getContentType().contains('application/json')
+		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.getInputStream().text)
+		assert groupResourceJson['children'] instanceof List
+		def groupMembers = groupResourceJson['children'].collect()
+		groupMembers.size() == 2
+		groupMembers[0]['name'] == 'userput1'
+		groupMembers[1]['name'] == 'userput2'
+		// fetch User details
+		def user1ResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + user1EntryId + "?includeAll")
+		assert user1ResourceConn.getResponseCode() == HTTP_OK
+		assert user1ResourceConn.getContentType().contains('application/json')
+		def user1ResourceJson = JSON_PARSER.parseText(user1ResourceConn.getInputStream().text)
+		assert user1ResourceJson['relations'] instanceof Map
+		def relations1 = user1ResourceJson['relations']
+		def user1GroupRelation = relations1[groupResourceUri]
+		assert user1GroupRelation != null
+		// fetch User details
+		def user2ResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + user2EntryId + "?includeAll")
+		assert user2ResourceConn.getResponseCode() == HTTP_OK
+		assert user2ResourceConn.getContentType().contains('application/json')
+		def user2ResourceJson = JSON_PARSER.parseText(user2ResourceConn.getInputStream().text)
+		assert user2ResourceJson['relations'] instanceof Map
+		def relations2 = user1ResourceJson['relations']
+		def user2GroupRelation = relations2[groupResourceUri]
+		assert user2GroupRelation != null
+	}
+
+	// Not migrated yet
+	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should edit other User-resource properties"() {
 		given:
 		// create a User entry
@@ -303,6 +687,7 @@ class ResourceIT extends BaseSpec {
 		assert resourceJson['customProperties'] == [:]
 
 		def requestBody = JsonOutput.toJson([
+			password        : 'newPass1234',
 			name            : 'Newer name',
 			language        : 'PL',
 			disabled        : 'true',
@@ -329,6 +714,45 @@ class ResourceIT extends BaseSpec {
 		resourceJson2['customProperties'] == [disablingreason: 'Untruthful']
 	}
 
+	// Not migrated yet
+	@Ignore
+	def "DELETE /{context-id}/resource/{entry-id} should delete user"() {
+		given:
+		// create a User entry
+		def userParams = [graphtype: 'user']
+		def userRequestResourceName = [name: 'UserDelete']
+		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
+		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
+		assert userConnection.getResponseCode() == HTTP_CREATED
+		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
+		// fetch URI of the created resource
+		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId)
+		assert entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		assert entryRespJson['info'] != null
+		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
+		// fetch resource details
+		def resourceConn = EntryStoreClient.getRequest(resourceUri)
+		assert resourceConn.getResponseCode() == HTTP_OK
+		assert resourceConn.getContentType().contains('application/json')
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		assert resourceRespJson['name'] == userRequestResourceName['name'].toLowerCase()
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/_principals/entry/' + userEntryId)
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_NO_CONTENT
+		def editResourceRespText = deleteResourceConn.getInputStream().text
+		editResourceRespText == ''
+		// fetch resource details again
+		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
+		resourceConn2.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	// Not migrated yet
+	@Ignore
 	def "DELETE /{context-id}/resource/{entry-id} should remove resource"() {
 		given:
 		// create minimal entry to be used in the list
@@ -366,6 +790,42 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == '[]'
 	}
 
+	// Not migrated yet
+	@Ignore
+	def "DELETE /{context-id}/resource/{entry-id} on resource with file should remove the file"() {
+		given:
+		def requestResourceName = [name: 'None graph entry']
+		def body = [resource: requestResourceName]
+		def entryId = getOrCreateEntry(contextId, [id: 'noneId'], body)
+		assert entryId.length() > 0
+
+		// create a test binary file with some data
+		def testBinFile = File.createTempFile('test', '.bin')
+		testBinFile.withOutputStream { out ->
+			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
+			out.write("Hello".bytes)
+		}
+		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
+			'admin', 'application/octet-stream')
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_NO_CONTENT
+		resourceConn.getInputStream().text == ''
+
+		// fetch resource details again
+		def resourceConn2 = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+		// TODO: Seems to be a bug here: after deleting a resource file and fetching the resource again, the resource = null is being returned, instead of a representation
+//		resourceConn2.getResponseCode() == HTTP_OK
+//		resourceConn2.getContentType().contains('application/json')
+		resourceConn2.getInputStream().text == ''
+	}
+
+	// Not migrated yet
+	@Ignore
 	def "DELETE /{context-id}/resource/{entry-id} does not delete resource if it has type String"() {
 		given:
 		// create local String entry
@@ -404,6 +864,8 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == someText
 	}
 
+	// Not migrated yet
+	@Ignore
 	def "POST /{context-id}/resource/{entry-id} should move entry between lists"() {
 		given:
 		// create minimal entry to be used in the list

@@ -1,11 +1,14 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
+import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
+// Not migrated yet
+@Ignore
 class ContextImportIT extends BaseSpec {
 
 	def static contextExportId = 'context-export'

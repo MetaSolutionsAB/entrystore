@@ -51,15 +51,46 @@ class EntryStoreClient {
 	}
 
 	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
+		return putRequestStream(path, new ByteArrayInputStream(body.getBytes()), asUser, contentType)
+	}
+
+	def static putRequestFile(String path, File file, String asUser = 'admin', String contentType = 'application/octet-stream') {
+		file.withInputStream { inputStream ->
+			def extraHeaders = [
+				'Content-Length'     : file.length().toString(),
+				'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
+			]
+			return putRequestStream(path, inputStream, asUser, contentType, extraHeaders)
+		}
+	}
+
+	def static putRequestMultiPart(String path, File file, String asUser = 'admin', Map<String, String> formData = [:]) {
+		def boundary = '----FormBoundary' + System.currentTimeMillis()
+		def contentType = 'multipart/form-data; boundary=' + boundary
+
+		def content = buildMultipartContent(file, formData, boundary)
+		def inputStream = new ByteArrayInputStream(content)
+
+		return putRequestStream(path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
+	}
+
+	def static putRequestStream(String path, InputStream inputStream, String asUser, String contentType, Map<String, String> extraHeaders = [:]) {
 		def connection = createConnection(path)
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
 		connection.setRequestMethod('PUT')
-		connection.setRequestProperty('Content-Type', contentType)
 		connection.setDoOutput(true)
-		connection.getOutputStream().write(body.getBytes())
+		connection.setRequestProperty('Content-Type', contentType)
+		extraHeaders.each { key, value ->
+			connection.setRequestProperty(key, value)
+		}
+
+		connection.outputStream.withStream { output ->
+			output << inputStream
+		}
 		connection.connect()
+
 		return connection
 	}
 
@@ -98,6 +129,24 @@ class EntryStoreClient {
 		assert cookies != null
 		assert cookies.contains('auth_token=') || cookies.contains('JSESSIONID=')  // auth_token for restlet ES, JSESSIONID for Spring-boot ES
 		return cookies
+	}
+
+	def static buildMultipartContent(File file, Map<String, String> formData, String boundary) {
+		def os = new ByteArrayOutputStream()
+
+		formData.each { name, value ->
+			os.write("--${boundary}\r\n".bytes)
+			os.write("Content-Disposition: form-data; name=\"${name}\"\r\n\r\n".bytes)
+			os.write("${value}\r\n".bytes)
+		}
+
+		os.write("--${boundary}\r\n".bytes)
+		os.write("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"\r\n".bytes)
+		os.write("Content-Type: application/octet-stream\r\n\r\n".bytes)
+		os.write(file.bytes)
+		os.write("\r\n--${boundary}--\r\n".bytes)
+
+		return os.toByteArray()
 	}
 
 }
