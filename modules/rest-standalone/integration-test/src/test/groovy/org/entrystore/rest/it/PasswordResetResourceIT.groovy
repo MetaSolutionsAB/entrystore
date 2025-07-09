@@ -2,18 +2,18 @@ package org.entrystore.rest.it
 
 import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
+import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 
 import javax.mail.internet.InternetAddress
-import org.apache.commons.lang3.RandomStringUtils
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
-import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 
 class PasswordResetResourceIT extends BaseSpec {
 
@@ -26,6 +26,17 @@ class PasswordResetResourceIT extends BaseSpec {
 
 	def cleanup() {
 		greenMail.stop()
+	}
+
+	def "POST /auth/pwreset should fail if the data sent to server is said to be JSON but is not JSON"() {
+		given:
+		def requestBody = "foo"
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
 	def "POST /auth/pwreset should fail if the data sent to server is larger then 32KB or unknown"() {
@@ -286,6 +297,18 @@ class PasswordResetResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
+	def "GET /store/auth/pwreset should not confirm password reset without providing a token"() {
+		given:
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset')
+
+		then:
+		confirmConn.getResponseCode() == HTTP_OK
+		confirmConn.getContentType().contains('text/html')
+		confirmConn.getInputStream().text.contains("<input type=\"submit\" value=\"Reset password\" />")
+	}
+
 	def "GET /store/auth/pwreset should confirm password reset for a valid token"() {
 		given:
 		// create user
@@ -309,7 +332,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_OK
 		confirmConn.getContentType().contains('text/html')
-		confirmConn.getInputStream().text.contains("<title>Password reset</title>")
+		confirmConn.getInputStream().text.contains("Password reset was successful.")
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 2
 		def message = messages[1]
