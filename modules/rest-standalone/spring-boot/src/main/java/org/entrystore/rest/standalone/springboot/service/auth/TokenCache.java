@@ -44,11 +44,6 @@ public abstract class TokenCache<K, V> {
 		}
 	}
 
-	public boolean hasToken(K token) {
-		cleanup();
-		return tokenCache.containsKey(token);
-	}
-
 	abstract void cleanup();
 
 	public int size() {

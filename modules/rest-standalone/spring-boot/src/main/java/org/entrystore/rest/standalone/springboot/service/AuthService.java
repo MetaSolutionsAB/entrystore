@@ -12,16 +12,21 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.standalone.springboot.model.api.PwResetRequestBody;
+import org.entrystore.rest.standalone.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenException;
+import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.standalone.springboot.model.exception.PwResetBadRequestHtmlException;
+import org.entrystore.rest.standalone.springboot.model.exception.PwResetEntityNotFoundHtmlException;
+import org.entrystore.rest.standalone.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.standalone.springboot.service.auth.EmailValidator;
+import org.entrystore.rest.standalone.springboot.service.auth.LoginTokenCache;
 import org.entrystore.rest.standalone.springboot.service.auth.RecaptchaVerifier;
-import org.entrystore.rest.standalone.springboot.service.auth.SignupInfo;
 import org.entrystore.rest.standalone.springboot.service.auth.SignupTokenCache;
 import org.entrystore.rest.standalone.springboot.util.Email;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.security.SecureRandom;
 import java.util.Date;
 
@@ -30,17 +35,77 @@ import java.util.Date;
 @RequiredArgsConstructor
 public class AuthService {
 
-	private final String successMessage = "A confirmation message was sent to {}, if the user exists.";
+	private final String resetSuccessMessage = "A confirmation message was sent to {}, if the user exists.";
+	private final String confirmSuccessMessage = "Password reset was successful.";
 	private final String parametersMissingMessage = "One or more parameters are missing.";
 	private final String shortPasswordMessage = "The password has to consist of at least 8 characters.";
 	private final String invalidEmailMessage = "Invalid email address: {}.";
 	private final String recaptchaMissingMessage = "reCaptcha information missing.";
 	private final String recaptchaInvalidMessage = "Invalid reCaptcha received.";
 	private final String failedToSendEmailMessage = "Failed to send confirmation request to {}.";
+	private final String invalidTokenMessage = "The confirmation token is invalid or has been used already.";
+	private final String userNotFoundMessage = "User with provided email address does not exist.";
+	private final String internalErrorMessage = "Unable to reset password due to internal error.";
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final PrincipalManager principalManager;
 	private final RecaptchaVerifier rcVerifier;
+	private final LoginTokenCache loginTokenCache;
+	private final SignupTokenCache signupTokenCache;
+
+	public String confirmPassword(String token) {
+		SignupInfo ci = signupTokenCache.getTokenValue(token);
+		if (ci == null) {
+			throw new PwResetBadRequestHtmlException(invalidTokenMessage);
+		}
+		signupTokenCache.removeToken(token);
+
+		URI authUser = principalManager.getAuthenticatedUserURI();
+		try {
+			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
+
+			Entry userEntry = principalManager.getPrincipalEntry(ci.getEmail());
+			User u;
+			if (userEntry != null) {
+				log.debug("Loaded user entry via email adress");
+				u = (User) userEntry.getResource();
+			} else {
+				log.debug("Trying to load user entry via external ID");
+				u = principalManager.getUserByExternalID(ci.getEmail());
+			}
+			if (u == null) {
+				if (ci.getUrlFailure() != null) {
+					handleUrlRedirect(ci.getUrlFailure());
+				} else {
+					throw new PwResetEntityNotFoundHtmlException(userNotFoundMessage);
+				}
+			} else {
+				// Reset password
+				if (u.setSaltedHashedSecret(ci.getSaltedHashedPassword())) {
+					loginTokenCache.removeTokens(ci.getEmail());
+					signupTokenCache.removeAllTokens(ci.getEmail());
+					log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
+					Email.sendPasswordChangeConfirmation(repositoryManager.getConfiguration(), u.getEntry());
+					log.info("Reset password for user {}", u.getURI());
+				} else {
+					log.error("Error when resetting password for user {}", u.getURI());
+					if (ci.getUrlFailure() != null) {
+						handleUrlRedirect(ci.getUrlFailure());
+					} else {
+						throw new InternalServerErrorException(internalErrorMessage);
+					}
+				}
+			}
+		} finally {
+			principalManager.setAuthenticatedUserURI(authUser);
+		}
+
+		if (ci.getUrlSuccess() != null) {
+			handleUrlRedirect(ci.getUrlSuccess());
+		}
+
+		return confirmSuccessMessage;
+	}
 
 	public String pwReset(HttpServletRequest request, PwResetRequestBody requestBody) {
 		SignupInfo ci = new SignupInfo(repositoryManager);
@@ -81,7 +146,7 @@ public class AuthService {
 		log.info("Received password reset request for {}", ci.getEmail());
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
-			&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
+				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
 			if (requestBody.rcResponseV2() != null && !requestBody.rcResponseV2().isEmpty()) {
 				log.info("Checking reCaptcha for {}", ci.getEmail());
 				rcResponseV2 = requestBody.rcResponseV2();
@@ -127,7 +192,7 @@ public class AuthService {
 				boolean sendSuccessful = Email.sendPasswordResetConfirmation(config, ci.getEmail(), confirmationLink);
 				if (sendSuccessful) {
 					ci.setSaltedHashedPassword(Password.getSaltedHash(password));
-					SignupTokenCache.getInstance().putToken(token, ci);
+					signupTokenCache.putToken(token, ci);
 					log.info("Sent confirmation request to {}", ci.getEmail());
 				} else {
 					throw new PwResetBadRequestHtmlException(failedToSendEmailMessage.replace("{}", ci.getEmail()));
@@ -139,6 +204,14 @@ public class AuthService {
 			principalManager.setAuthenticatedUserURI(authUser);
 		}
 
-		return successMessage.replace("{}", ci.getEmail());
+		return resetSuccessMessage.replace("{}", ci.getEmail());
+	}
+
+	private void handleUrlRedirect(String url) {
+		try {
+			throw new RedirectTemporaryException(new URI(url));
+		} catch (URISyntaxException ex) {
+			throw new InternalServerErrorException(ex.getMessage());
+		}
 	}
 }

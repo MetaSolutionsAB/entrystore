@@ -12,7 +12,9 @@ import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenExcept
 import org.entrystore.rest.standalone.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.standalone.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.standalone.springboot.model.exception.PwResetBadRequestHtmlException;
+import org.entrystore.rest.standalone.springboot.model.exception.PwResetEntityNotFoundHtmlException;
 import org.entrystore.rest.standalone.springboot.model.exception.RedirectSeeOtherException;
+import org.entrystore.rest.standalone.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
@@ -30,33 +32,42 @@ import java.util.List;
 @ControllerAdvice
 public class AppExceptionHandler {
 
+	@ExceptionHandler(RedirectTemporaryException.class)
+	public ResponseEntity<Void> handleUrlRedirectException(RedirectTemporaryException ex) {
+
+		return ResponseEntity
+				.status(HttpStatus.TEMPORARY_REDIRECT.value())
+				.location(ex.getLocation())
+				.build();
+	}
+
 	@ExceptionHandler(RedirectSeeOtherException.class)
 	public ResponseEntity<Void> handleRedirectSeeOtherException(RedirectSeeOtherException ex) {
 
 		return ResponseEntity
-			.status(HttpStatus.SEE_OTHER)
-			.location(ex.getLocation())
-			.build();
+				.status(HttpStatus.SEE_OTHER)
+				.location(ex.getLocation())
+				.build();
 	}
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	public ResponseEntity<ErrorResponse> handleValidationExceptions(
-		MethodArgumentNotValidException ex,
-		HttpServletRequest request) {
+			MethodArgumentNotValidException ex,
+			HttpServletRequest request) {
 
 		// Aggregate default messages from validation errors
 		List<String> errorMessages = ex.getBindingResult()
-			.getAllErrors()
-			.stream()
-			.map(DefaultMessageSourceResolvable::getDefaultMessage)
-			.toList();
+				.getAllErrors()
+				.stream()
+				.map(DefaultMessageSourceResolvable::getDefaultMessage)
+				.toList();
 
 		// Build the response body
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.BAD_REQUEST.value())
-			.path(request.getRequestURI())
-			.error(errorMessages.toString())
-			.build();
+				.status(HttpStatus.BAD_REQUEST.value())
+				.path(request.getRequestURI())
+				.error(errorMessages.toString())
+				.build();
 
 		return ResponseEntity.badRequest().body(responseBody);
 	}
@@ -66,10 +77,10 @@ public class AppExceptionHandler {
 																   HttpServletRequest request) {
 		log.debug("BadRequestException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.BAD_REQUEST.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
+				.status(HttpStatus.BAD_REQUEST.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
 		return ResponseEntity.badRequest().body(responseBody);
 	}
 
@@ -87,11 +98,20 @@ public class AppExceptionHandler {
 																	   HttpServletRequest request) {
 		log.debug("EntityNotFoundException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.NOT_FOUND.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
+				.status(HttpStatus.NOT_FOUND.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
+	}
+
+	@ExceptionHandler(PwResetEntityNotFoundHtmlException.class)
+	public String handlePwResetBadRequestHtmlException(PwResetEntityNotFoundHtmlException ex, Model model,
+													   HttpServletResponse response) {
+		log.debug("PwResetEntityNotFoundHtmlException: {}", ex.getMessage());
+		model.addAttribute("message", ex.getMessage());
+		response.setStatus(HttpStatus.NOT_FOUND.value());
+		return "pwreset";
 	}
 
 	@ExceptionHandler(MethodNotAllowedException.class)
@@ -99,10 +119,10 @@ public class AppExceptionHandler {
 																		 HttpServletRequest request) {
 		log.debug("MethodNotAllowedException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.METHOD_NOT_ALLOWED.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
+				.status(HttpStatus.METHOD_NOT_ALLOWED.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
@@ -111,10 +131,10 @@ public class AppExceptionHandler {
 																	 HttpServletRequest request) {
 		log.info("UnauthorizedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.UNAUTHORIZED.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
+				.status(HttpStatus.UNAUTHORIZED.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
@@ -123,10 +143,10 @@ public class AppExceptionHandler {
 																	 HttpServletRequest request) {
 		log.debug("DataConflictException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.CONFLICT.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
+				.status(HttpStatus.CONFLICT.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
@@ -135,10 +155,10 @@ public class AppExceptionHandler {
 																	   HttpServletRequest request) {
 		log.warn("NotImplementedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.NOT_IMPLEMENTED.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
+				.status(HttpStatus.NOT_IMPLEMENTED.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
@@ -147,34 +167,34 @@ public class AppExceptionHandler {
 																			   HttpServletRequest request) {
 		log.debug("HttpMessageNotReadableException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.BAD_REQUEST.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
+				.status(HttpStatus.BAD_REQUEST.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
 		return ResponseEntity.badRequest().body(responseBody);
 	}
 
 	@ExceptionHandler(ForbiddenException.class)
 	public ResponseEntity<ErrorResponse> handleForbiddenException(ForbiddenException ex,
-																			HttpServletRequest request) {
+																  HttpServletRequest request) {
 		log.debug("ForbiddenException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.FORBIDDEN.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
+				.status(HttpStatus.FORBIDDEN.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
 	@ExceptionHandler(EntityTooLargeException.class)
 	public ResponseEntity<ErrorResponse> handleEntityTooLargeException(EntityTooLargeException ex,
-																			HttpServletRequest request) {
+																	   HttpServletRequest request) {
 		log.debug("EntityTooLargeException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
+				.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
@@ -183,10 +203,10 @@ public class AppExceptionHandler {
 																HttpServletRequest request) {
 		log.error("Exception at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-			.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
-			.path(request.getRequestURI())
-			.error(ex.getMessage())
-			.build();
+				.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
 		return ResponseEntity.internalServerError().body(responseBody);
 	}
 }

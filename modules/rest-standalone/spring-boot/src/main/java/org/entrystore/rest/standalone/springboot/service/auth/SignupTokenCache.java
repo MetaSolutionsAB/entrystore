@@ -16,25 +16,24 @@
 
 package org.entrystore.rest.standalone.springboot.service.auth;
 
+import jakarta.transaction.Transactional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.standalone.springboot.model.auth.SignupInfo;
+import org.springframework.stereotype.Service;
+
 import java.util.Date;
 import java.util.Map;
 
 /**
  * @author Hannes Ebner
  */
+@Slf4j
+@Service
+@RequiredArgsConstructor
 public class SignupTokenCache extends TokenCache<String, SignupInfo> {
 
-	private static SignupTokenCache instance;
-
-	private SignupTokenCache() {}
-
-	public synchronized static SignupTokenCache getInstance() {
-		if (instance == null) {
-			instance = new SignupTokenCache();
-		}
-		return instance;
-	}
-
+	@Transactional
 	public void cleanup() {
 		synchronized (tokenCache) {
 			for (Map.Entry<String, SignupInfo> e : tokenCache.entrySet()) {
@@ -42,6 +41,12 @@ public class SignupTokenCache extends TokenCache<String, SignupInfo> {
 					tokenCache.remove(e.getKey());
 				}
 			}
+		}
+	}
+
+	public void removeAllTokens(String userEmail) {
+		synchronized (tokenCache) {
+			tokenCache.entrySet().removeIf(userInfo -> userEmail.equals(userInfo.getValue().getEmail()));
 		}
 	}
 
