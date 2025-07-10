@@ -13,20 +13,26 @@ import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
+import org.entrystore.rest.standalone.springboot.model.dto.CompletionState;
 import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.service.ResourceService;
 import org.entrystore.rest.standalone.springboot.service.SyndicationService;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 
@@ -42,19 +48,19 @@ public class ResourceController {
 	private final RepositoryManagerImpl repositoryManager;
 
 	@Operation(
-		summary = "Returns a resource.",
-		description = "Depending on the entry’s character the resource may be binary, JSON or RDF. See Knowledge Base for details.")
+			summary = "Returns a resource.",
+			description = "Depending on the entry’s character the resource may be binary, JSON or RDF. See Knowledge Base for details.")
 	@GetMapping(path = "/{context-id}/resource/{entry-id}")
 	public ResponseEntity<Object> getResource(
-		@PathVariable("context-id") String contextId,
-		@PathVariable("entry-id") String entryId,
-		@RequestParam(required = false) String rdfFormat,
-		@RequestParam(required = false) String syndication,
-		@RequestParam(required = false, defaultValue = "50") Integer feedSize,
-		@RequestParam(name = "lang", required = false, defaultValue = "en") String language,
-		@RequestParam(required = false) String download,
-		@ModelAttribute ListFilter listFilter,
-		@RequestHeader(value = "Accept", required = false, defaultValue = "application/rdf+xml") String acceptHeader
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(required = false) String rdfFormat,
+			@RequestParam(required = false) String syndication,
+			@RequestParam(required = false, defaultValue = "50") Integer feedSize,
+			@RequestParam(name = "lang", required = false, defaultValue = "en") String language,
+			@RequestParam(required = false) String download,
+			@ModelAttribute ListFilter listFilter,
+			@RequestHeader(value = "Accept", required = false, defaultValue = "application/rdf+xml") String acceptHeader
 	) {
 		String mediaType;
 		// for 'rdfFormat' param data should be sent properly - i.e. html encoded '+' as %2B
@@ -80,16 +86,18 @@ public class ResourceController {
 
 			File file = resourceService.serializeResourceNoneAsFile(entry);
 			if (file == null) {
-				return ResponseEntity.noContent().build();
+				return ResponseEntity
+						.noContent()
+						.build();
 			}
 			String responseMediaTypeStr = resourceService.determineMediaTypeForDownload(entry);
 			HttpHeaders httpHeaders = buildFileDownloadResponseHeaders(entry, responseMediaTypeStr, download != null);
 
 			return ResponseEntity
-				.ok()
-				.headers(httpHeaders)
-				.contentLength(file.length())
-				.body(new FileSystemResource(file));
+					.ok()
+					.headers(httpHeaders)
+					.contentLength(file.length())
+					.body(new FileSystemResource(file));
 
 		} else if (entry.getEntryType() == EntryType.Local && entry.getGraphType() == GraphType.String) {
 
@@ -102,9 +110,97 @@ public class ResourceController {
 		}
 
 		return ResponseEntity
-			.ok()
-			.contentType(responseMediaType)
-			.body(responseBody);
+				.ok()
+				.contentType(responseMediaType)
+				.body(responseBody);
+	}
+
+	@Operation(
+			summary = "Sets a resource.",
+			description = "Resource should be sent in the request body. Depending on the entry’s character the resource may be binary, " +
+					"JSON or RDF. See Knowledge Base for details.")
+	@PutMapping(
+			path = "/{context-id}/resource/{entry-id}",
+			consumes = {
+					MediaType.TEXT_PLAIN_VALUE,
+					MediaType.APPLICATION_JSON_VALUE,
+					MediaType.APPLICATION_OCTET_STREAM_VALUE,
+					"application/rdf+xml", "text/n3", "text/turtle",
+					"application/trix", "application/n-triples", "application/trig",
+					"application/ld+json", "application/rdf+json"
+			})
+	public ResponseEntity<Void> modifyResource(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(required = false) String mimeType,
+			@RequestParam(required = false) String textarea,
+			@RequestHeader("Content-Type") String contentType,
+			@RequestHeader(value = HttpHeaders.CONTENT_DISPOSITION, required = false) String contentDisposition,
+			@RequestBody byte[] body
+	) {
+
+		String filename = null;
+		if (contentDisposition != null) {
+			ContentDisposition disposition = ContentDisposition.parse(contentDisposition);
+			filename = disposition.getFilename();
+		}
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		CompletionState result = resourceService.setEntryResource(entry, body, contentType, mimeType, textarea != null, filename);
+
+		if (result != CompletionState.ERROR) {
+			entry.updateModificationDate();
+		}
+
+		ResponseEntity.BodyBuilder responseBuilder = ResponseEntity
+				.status(mapCompletionStateToHttpStatus(result));
+
+		if (result == CompletionState.CREATED) {
+			responseBuilder
+					.location(entry.getResourceURI());
+		}
+		if (result != CompletionState.ERROR) {
+			responseBuilder
+					.lastModified(entry.getModifiedDate().getTime());
+		}
+
+		return responseBuilder.build();
+	}
+
+	@Operation(
+			summary = "Sets a resource.",
+			description = "Resource should be sent in the request body. Depending on the entry’s character the resource may be binary, " +
+					"JSON or RDF. See Knowledge Base for details.")
+	@PutMapping(
+			path = "/{context-id}/resource/{entry-id}",
+			consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+	public ResponseEntity<Void> modifyResourceMultipart(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(required = false) String mimeType,
+			@RequestPart("file") MultipartFile file
+	) {
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		CompletionState result = resourceService.setEntryResourceMultipart(entry, file, mimeType);
+
+		if (result != CompletionState.ERROR) {
+			entry.updateModificationDate();
+		}
+
+		ResponseEntity.BodyBuilder responseBuilder = ResponseEntity
+				.status(mapCompletionStateToHttpStatus(result));
+
+		if (result == CompletionState.CREATED) {
+			responseBuilder
+					.location(entry.getResourceURI());
+		}
+		if (result != CompletionState.ERROR) {
+			responseBuilder
+					.lastModified(entry.getModifiedDate().getTime());
+		}
+
+		return responseBuilder.build();
 	}
 
 	private static String convertSyndFeedToXml(SyndFeed feed) {
@@ -143,7 +239,7 @@ public class ResourceController {
 
 		ContentDisposition contentDisposition;
 		if (!repositoryManager.getConfiguration().getBoolean(Settings.HTTP_ALLOW_CONTENT_DISPOSITION_INLINE, true)
-			|| isDownload) {
+				|| isDownload) {
 			contentDisposition = ContentDisposition.attachment().filename(fileName).build();
 		} else {
 			contentDisposition = ContentDisposition.inline().filename(fileName).build();
@@ -160,4 +256,12 @@ public class ResourceController {
 		return headers;
 	}
 
+	private static HttpStatus mapCompletionStateToHttpStatus(CompletionState state) {
+		return switch (state) {
+			case CREATED -> HttpStatus.CREATED;
+			case UPDATED -> HttpStatus.NO_CONTENT;
+			case OK -> HttpStatus.OK;
+			default -> HttpStatus.INTERNAL_SERVER_ERROR;
+		};
+	}
 }
