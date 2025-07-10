@@ -19,6 +19,7 @@ package org.entrystore.rest.resources;
 import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
+import org.apache.commons.lang.StringUtils;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
@@ -184,7 +185,7 @@ public class PasswordResetResource extends BaseResource {
 			}
 		} else {
 			Form form = new Form(getRequest().getEntity());
-			if (form.getFirstValue("email", true) != null && !form.getFirstValue("email", true).isEmpty()) {
+			if (StringUtils.isNotEmpty(form.getFirstValue("email", true))) {
 				ci.setEmail(form.getFirstValue("email", true));
 			}
 			password = form.getFirstValue("password", true);
