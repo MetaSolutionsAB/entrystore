@@ -72,6 +72,21 @@ public class AuthController {
 		return "pwreset";
 	}
 
+	@Operation(summary = "Checks if the password-reset-token is valid and confirms user's password change")
+	@GetMapping(path = "/auth/pwreset")
+	public String confirmPasswordReset(
+			Model model,
+			@RequestParam(required = false) String confirm
+	) {
+		if (confirm == null || confirm.isEmpty()) {
+			return "pwreset_form";
+		}
+
+		String message = authService.confirmPassword(confirm);
+		model.addAttribute("message", message);
+		return "pwreset";
+	}
+
 	private void checkRequestSize(HttpServletRequest request) {
 		if (HttpUtil.isLargerThan(request, MAX_REQUEST_SIZE)) {
 			throw new EntityTooLargeException("The size of the representation is larger than 32KB or unknown, request blocked.");

@@ -9,7 +9,12 @@ import spock.lang.Ignore
 import javax.mail.internet.InternetAddress
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
-import static java.net.HttpURLConnection.*
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
+import static java.net.HttpURLConnection.HTTP_OK
 
 class PasswordResetResourceIT extends BaseSpec {
 
@@ -22,6 +27,17 @@ class PasswordResetResourceIT extends BaseSpec {
 
 	def cleanup() {
 		greenMail.stop()
+	}
+
+	def "POST /auth/pwreset should fail if the data sent to server is said to be JSON but is not JSON"() {
+		given:
+		def requestBody = "foo"
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
 	def "POST /auth/pwreset should fail if the data sent to server is larger then 32KB or unknown"() {
@@ -247,7 +263,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
-	// Not sure why
+	// disabling user is not implemented yet
 	@Ignore
 	def "POST /auth/pwreset should not send an email with generated token for a disabled user"() {
 		given:
@@ -262,7 +278,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
 		def editRequestBody = JsonOutput.toJson([
-				disabled          : 'true'
+				disabled: 'true'
 		])
 		EntryStoreClient.putRequest(resourceUri, editRequestBody).getResponseCode() == HTTP_NO_CONTENT
 		// fetch resource details again
@@ -284,8 +300,19 @@ class PasswordResetResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
-	// Not migrated yet
-	@Ignore
+	def "GET /store/auth/pwreset should not confirm password reset without providing a token"() {
+		given:
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset')
+
+		then:
+		confirmConn.getResponseCode() == HTTP_OK
+		confirmConn.getContentType().contains('text/html')
+		confirmConn.getInputStream().text.contains("<input type=\"submit\" value=\"Reset password\" />")
+	}
+
+
 	def "GET /store/auth/pwreset should confirm password reset for a valid token"() {
 		given:
 		// create user
@@ -309,7 +336,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_OK
 		confirmConn.getContentType().contains('text/html')
-		confirmConn.getInputStream().text.contains("<title>Password reset</title>")
+		confirmConn.getInputStream().text.contains("Password reset was successful.")
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 2
 		def message = messages[1]
@@ -318,8 +345,6 @@ class PasswordResetResourceIT extends BaseSpec {
 		message.getAllRecipients().contains(new InternetAddress("userresetconfirm@test.com"))
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "GET /store/auth/pwreset should not confirm password reset for an invalid token"() {
 		given:
 		// create user
@@ -343,8 +368,6 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmConn.getErrorStream().text.contains("The confirmation token is invalid or has been used already.")
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "GET /store/auth/pwreset should not confirm password reset for a non-existing user"() {
 		given:
 		// create user
@@ -355,8 +378,8 @@ class PasswordResetResourceIT extends BaseSpec {
 		userConnection.getResponseCode() == HTTP_OK
 		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
 		def requestBody = JsonOutput.toJson([
-				email   : 'userResetNotExisting@test.com',
-				password: newPassword,
+				email             : 'userResetNotExisting@test.com',
+				password          : newPassword,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
@@ -376,8 +399,6 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmConn.getErrorStream().text.contains("User with provided email address does not exist.")
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "GET /store/auth/pwreset should not confirm password reset for already used token"() {
 		given:
 		// create user
@@ -386,8 +407,8 @@ class PasswordResetResourceIT extends BaseSpec {
 		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
 		EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody).getResponseCode() == HTTP_OK
 		def requestBody = JsonOutput.toJson([
-				email   : 'userResetAlreadyUsedToken@test.com',
-				password: newPassword,
+				email             : 'userResetAlreadyUsedToken@test.com',
+				password          : newPassword,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
@@ -405,46 +426,6 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmAgainConn.getErrorStream().text.contains("The confirmation token is invalid or has been used already.")
 	}
 
-	/* Mockito will not set Instant.now() across threads, will write Unit tests
-	def "GET /store/auth/pwreset should not confirm password reset for an expired token"() {
-
-		given:
-		// create user
-		def userParams = [graphtype: 'user']
-		def userRequestResourceName = [name: 'userResetExpiredToken@test.com']
-		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
-		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
-		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
-		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId)
-		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
-		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
-		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
-		def body = JsonOutput.toJson([
-			password: oldPassword
-		])
-		def editResourceConn = EntryStoreClient.putRequest(resourceUri, body)
-		def requestBody = JsonOutput.toJson([
-			email   : 'userResetExpiredToken@test.com',
-			password: newPassword,
-			grecaptcharesponse: grecaptcharesponse
-		])
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
-		resetPasswordConn.getResponseCode() == HTTP_OK
-		def messageContent = greenMail.getReceivedMessages()[0].getContent()
-		def startIndex = messageContent.toString().indexOf("?confirm") + 9
-		def token = messageContent.toString().substring(startIndex, startIndex + 16)
-		System.setProperty("mockito.now", "")
-
-		when:
-		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)
-
-		then:
-		confirmConn.getResponseCode() == HTTP_BAD_REQUEST
-	}
-	*/
-
-	// Not migrated yet
-	@Ignore
 	def "GET /store/auth/pwreset should not confirm password reset for another token that was generated before a password change was successful"() {
 		given:
 		// create user
@@ -453,8 +434,8 @@ class PasswordResetResourceIT extends BaseSpec {
 		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
 		EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody).getResponseCode() == HTTP_OK
 		def requestBody = JsonOutput.toJson([
-				email   : 'userResetOldToken@test.com',
-				password: newPassword,
+				email             : 'userResetOldToken@test.com',
+				password          : newPassword,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
@@ -476,8 +457,6 @@ class PasswordResetResourceIT extends BaseSpec {
 		oldConfirmConn.getErrorStream().text.contains("The confirmation token is invalid or has been used already.")
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "GET /store/auth/pwreset should not remove tokens of another user"() {
 		given:
 		// create user1
@@ -486,8 +465,8 @@ class PasswordResetResourceIT extends BaseSpec {
 		def user1Body = JsonOutput.toJson([resource: user1RequestResourceName])
 		EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(user1Params), user1Body).getResponseCode() == HTTP_OK
 		def request1Body = JsonOutput.toJson([
-				email   : 'user1ResetOldToken@test.com',
-				password: newPassword,
+				email             : 'user1ResetOldToken@test.com',
+				password          : newPassword,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		// create user2
@@ -496,8 +475,8 @@ class PasswordResetResourceIT extends BaseSpec {
 		def user2Body = JsonOutput.toJson([resource: user2RequestResourceName])
 		EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(user2Params), user2Body).getResponseCode() == HTTP_OK
 		def request2Body = JsonOutput.toJson([
-				email   : 'user2ResetOldToken@test.com',
-				password: 'newPass22345',
+				email             : 'user2ResetOldToken@test.com',
+				password          : 'newPass22345',
 				grecaptcharesponse: grecaptcharesponse
 		])
 
@@ -522,8 +501,6 @@ class PasswordResetResourceIT extends BaseSpec {
 		user2ConfirmConn.getInputStream().text.contains("Password reset was successful.")
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "GET /store/auth/pwreset should confirm password reset and redirect to provided permitted url"() {
 		given:
 		// create user
@@ -533,9 +510,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody).getResponseCode() == HTTP_OK
 		def urlSuccess = "http://localhost:8181/123"
 		def requestBody = JsonOutput.toJson([
-				email     : 'userResetSuccessUrlPermitted@test.com',
-				password  : newPassword,
-				urlsuccess: urlSuccess,
+				email             : 'userResetSuccessUrlPermitted@test.com',
+				password          : newPassword,
+				urlsuccess        : urlSuccess,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
@@ -551,8 +528,6 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmConn.getURL().toString() == urlSuccess
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "GET /store/auth/pwreset should confirm password reset and not redirect to provided not permitted url"() {
 		given:
 		// create user
@@ -562,9 +537,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody).getResponseCode() == HTTP_OK
 		def urlSuccess = "http://example.org/store/blabla/999"
 		def requestBody = JsonOutput.toJson([
-				email     : 'userResetSuccessUrlNotPermitted@test.com',
-				password  : newPassword,
-				urlsuccess: urlSuccess,
+				email             : 'userResetSuccessUrlNotPermitted@test.com',
+				password          : newPassword,
+				urlsuccess        : urlSuccess,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
@@ -580,8 +555,6 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmConn.getURL().toString() == 'http://localhost:8181/auth/pwreset?confirm=' + token
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "GET /store/auth/pwreset should not confirm password reset for a non-existing user and redirect to failure url"() {
 		given:
 		// create user
@@ -592,9 +565,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
 		def urlfailure = "http://localhost:8181/123"
 		def requestBody = JsonOutput.toJson([
-				email   : 'userResetNotExistingFailureUrl@test.com',
-				password: newPassword,
-				urlfailure: urlfailure,
+				email             : 'userResetNotExistingFailureUrl@test.com',
+				password          : newPassword,
+				urlfailure        : urlfailure,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK

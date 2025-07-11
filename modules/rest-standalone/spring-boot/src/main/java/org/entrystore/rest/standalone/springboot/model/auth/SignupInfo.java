@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.standalone.springboot.service.auth;
+package org.entrystore.rest.standalone.springboot.model.auth;
 
+import lombok.Getter;
 import lombok.NonNull;
+import lombok.Setter;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
@@ -29,10 +31,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
-* @author Hannes Ebner
-*/
-@lombok.Getter
-@lombok.Setter
+ * @author Hannes Ebner
+ */
+@Getter
+@Setter
 public class SignupInfo {
 
 	private static final Logger log = LoggerFactory.getLogger(SignupInfo.class);
