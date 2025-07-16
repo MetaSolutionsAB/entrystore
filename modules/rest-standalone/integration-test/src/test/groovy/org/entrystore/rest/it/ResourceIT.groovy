@@ -604,8 +604,8 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		addUsersToGroupConn.getResponseCode() == HTTP_NO_CONTENT
-		def addResourceRespText = addUsersToGroupConn.getInputStream().text
-		addResourceRespText == ''
+		addUsersToGroupConn.getInputStream().text == ''
+
 		// fetch Group details
 		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
 		assert groupResourceConn.getResponseCode() == HTTP_OK
@@ -847,8 +847,6 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == someText
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "POST /{context-id}/resource/{entry-id} should move entry between lists"() {
 		given:
 		// create minimal entry to be used in the list
