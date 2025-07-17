@@ -70,7 +70,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to usersignup@test.com.")
+		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to usersignup@test.com")
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -93,7 +93,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to usersignupform@test.com.")
+		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to usersignupform@test.com")
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -182,7 +182,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("Invalid email address: userresetbademail@.")
+		resetPasswordConn.getErrorStream().text.contains("Invalid email address: userresetbademail@")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -367,7 +367,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == 417 // Status.CLIENT_ERROR_EXPECTATION_FAILED
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("The email domain is not allowed for sign-up: notwhitelisted.com.")
+		resetPasswordConn.getErrorStream().text.contains("The email domain is not allowed for sign-up: notwhitelisted.com")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -393,7 +393,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to usersignupexisting@test.com.")
+		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to usersignupexisting@test.com")
 		greenMail.getReceivedMessages().size() == 1
 	}
 

@@ -291,7 +291,7 @@ public class SignupResource extends BaseResource {
 
 		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(html.representation("Invalid email address: " + ci.getEmail() + "."));
+			getResponse().setEntity(html.representation("Invalid email address: " + ci.getEmail()));
 			return;
 		}
 
@@ -299,7 +299,7 @@ public class SignupResource extends BaseResource {
 			String emailDomain = ci.getEmail().substring(ci.getEmail().indexOf("@") + 1).toLowerCase();
 			if (!domainWhitelist.contains(emailDomain)) {
 				getResponse().setStatus(Status.CLIENT_ERROR_EXPECTATION_FAILED);
-				getResponse().setEntity(html.representation("The email domain is not allowed for sign-up: " + emailDomain + "."));
+				getResponse().setEntity(html.representation("The email domain is not allowed for sign-up: " + emailDomain));
 				return;
 			}
 		}
@@ -356,7 +356,7 @@ public class SignupResource extends BaseResource {
 		}
 
 		getResponse().setStatus(Status.SUCCESS_OK);
-		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.getEmail() + "."));
+		getResponse().setEntity(html.representation("A confirmation message was sent to " + ci.getEmail()));
 	}
 
 	private String constructHtmlForm(boolean reCaptcha) {

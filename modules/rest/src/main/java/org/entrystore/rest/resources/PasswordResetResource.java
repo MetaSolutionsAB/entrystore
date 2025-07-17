@@ -202,7 +202,9 @@ public class PasswordResetResource extends BaseResource {
 			return;
 		}
 
-		if (password.trim().length() < 8) {
+		password = password.trim();
+
+		if (password.length() < 8) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("The password has to consist of at least 8 characters."));
 			return;
