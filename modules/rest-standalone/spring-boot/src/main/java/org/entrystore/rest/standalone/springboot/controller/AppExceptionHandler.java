@@ -141,7 +141,7 @@ public class AppExceptionHandler {
 	@ExceptionHandler(DataConflictException.class)
 	public ResponseEntity<ErrorResponse> handleDataConflictException(DataConflictException ex,
 																	 HttpServletRequest request) {
-		log.debug("DataConflictException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		log.warn("DataConflictException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.CONFLICT.value())
 				.path(request.getRequestURI())
