@@ -309,7 +309,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmConn.getInputStream().text.contains("<input type=\"submit\" value=\"Reset password\" />")
 	}
 
-	def "GET /store/auth/pwreset should confirm password reset for a valid token"() {
+	def "GET /auth/pwreset should confirm password reset for a valid token"() {
 		given:
 		// create user
 		def userParams = [graphtype: 'user']
@@ -341,7 +341,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		message.getAllRecipients().contains(new InternetAddress("userresetconfirm@test.com"))
 	}
 
-	def "GET /store/auth/pwreset should not confirm password reset for an invalid token"() {
+	def "GET /auth/pwreset should not confirm password reset for an invalid token"() {
 		given:
 		// create user
 		def userParams = [graphtype: 'user']
@@ -364,7 +364,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmConn.getErrorStream().text.contains("The confirmation token is invalid or has been used already.")
 	}
 
-	def "GET /store/auth/pwreset should not confirm password reset for a non-existing user"() {
+	def "GET /auth/pwreset should not confirm password reset for a non-existing user"() {
 		given:
 		// create user
 		def userParams = [graphtype: 'user']
@@ -395,7 +395,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmConn.getErrorStream().text.contains("User with provided email address does not exist.")
 	}
 
-	def "GET /store/auth/pwreset should not confirm password reset for already used token"() {
+	def "GET /auth/pwreset should not confirm password reset for already used token"() {
 		given:
 		// create user
 		def userParams = [graphtype: 'user']
@@ -460,7 +460,7 @@ class PasswordResetResourceIT extends BaseSpec {
 	}
 	*/
 
-	def "GET /store/auth/pwreset should not confirm password reset for another token that was generated before a password change was successful"() {
+	def "GET /auth/pwreset should not confirm password reset for another token that was generated before a password change was successful"() {
 		given:
 		// create user
 		def userParams = [graphtype: 'user']
@@ -491,7 +491,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		oldConfirmConn.getErrorStream().text.contains("The confirmation token is invalid or has been used already.")
 	}
 
-	def "GET /store/auth/pwreset should not remove tokens of another user"() {
+	def "GET /auth/pwreset should not remove tokens of another user"() {
 		given:
 		// create user1
 		def user1Params = [graphtype: 'user']
@@ -535,7 +535,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		user2ConfirmConn.getInputStream().text.contains("Password reset was successful.")
 	}
 
-	def "GET /store/auth/pwreset should confirm password reset and redirect to provided permitted url"() {
+	def "GET /auth/pwreset should confirm password reset and redirect to provided permitted url"() {
 		given:
 		// create user
 		def userParams = [graphtype: 'user']
@@ -562,7 +562,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmConn.getURL().toString() == urlSuccess
 	}
 
-	def "GET /store/auth/pwreset should confirm password reset and not redirect to provided not permitted url"() {
+	def "GET /auth/pwreset should confirm password reset and not redirect to provided not permitted url"() {
 		given:
 		// create user
 		def userParams = [graphtype: 'user']
@@ -589,7 +589,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmConn.getURL().toString() == 'http://localhost:8181/auth/pwreset?confirm=' + token
 	}
 
-	def "GET /store/auth/pwreset should not confirm password reset for a non-existing user and redirect to failure url"() {
+	def "GET /auth/pwreset should not confirm password reset for a non-existing user and redirect to failure url"() {
 		given:
 		// create user
 		def userParams = [graphtype: 'user']

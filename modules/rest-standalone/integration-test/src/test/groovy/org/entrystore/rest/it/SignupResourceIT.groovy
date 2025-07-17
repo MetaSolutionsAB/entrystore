@@ -371,7 +371,6 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
-
 	def "POST /auth/signup should send an email also if the user already exists"() {
 		given:
 		// create user
@@ -397,4 +396,244 @@ class SignupResourceIT extends BaseSpec {
 		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to usersignupexisting@test.com.")
 		greenMail.getReceivedMessages().size() == 1
 	}
+
+	def "GET /auth/signup should confirm creating new user after signing up with a valid token"() {
+		given:
+		def requestBody = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email             : 'userSignupConfirm@test.com',
+				password          : newPassword,
+				grecaptcharesponse: grecaptcharesponse
+		])
+		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
+
+		then:
+		confirmConn.getResponseCode() == HTTP_CREATED
+		confirmConn.getContentType().contains('text/html')
+		confirmConn.getInputStream().text.contains("Sign-up successful.")
+		greenMail.getReceivedMessages().size() == 1
+	}
+
+	def "GET /auth/signup should not confirm creating new user after signing up with an invalid token"() {
+		given:
+		def requestBody = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email             : 'userSignupConfirmBadToken@test.com',
+				password          : newPassword,
+				grecaptcharesponse: grecaptcharesponse
+		])
+		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def token = "something123"
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
+
+		then:
+		confirmConn.getResponseCode() == HTTP_BAD_REQUEST
+		confirmConn.getContentType().contains('text/html')
+		confirmConn.getErrorStream().text.contains("Invalid confirmation link.")
+	}
+
+	def "GET /auth/signup should not confirm creating new user after signing up with already used token"() {
+		given:
+		def requestBody = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email             : 'userSignupConfirmUsedToken@test.com',
+				password          : newPassword,
+				grecaptcharesponse: grecaptcharesponse
+		])
+		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		EntryStoreClient.getRequest('/auth/signup?confirm=' + token).getResponseCode() == HTTP_CREATED
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
+
+		then:
+		confirmConn.getResponseCode() == HTTP_BAD_REQUEST
+		confirmConn.getContentType().contains('text/html')
+		confirmConn.getErrorStream().text.contains("Invalid confirmation link.")
+	}
+
+	def "GET /auth/signup should not confirm if the user already exists"() {
+		given:
+		// create user
+		def userParams = [graphtype: 'user']
+		def userRequestResourceName = [name: 'userSignupConfirmExisting@test.com']
+		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
+		EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody).getResponseCode() == HTTP_OK
+
+		def requestBody = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email             : 'userSignupConfirmExisting@test.com',
+				password          : newPassword,
+				grecaptcharesponse: grecaptcharesponse
+		])
+		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
+
+		then:
+		confirmConn.getResponseCode() == HTTP_CONFLICT
+		confirmConn.getContentType().contains('text/html')
+		confirmConn.getErrorStream().text.contains("User with submitted email address exists already.")
+	}
+
+	def "GET /auth/signup should not confirm user signup for another token that was generated before another user signup was successful"() {
+		given:
+		def requestBody = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email   : 'userConfirmOldToken@test.com',
+				password: newPassword,
+				grecaptcharesponse: grecaptcharesponse
+		])
+		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def oldMessageContent = greenMail.getReceivedMessages()[0].getContent()
+		def oldStartIndex = oldMessageContent.toString().indexOf("?confirm") + 9
+		def oldToken = oldMessageContent.toString().substring(oldStartIndex, oldStartIndex + 16)
+		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def newMessageContent = greenMail.getReceivedMessages()[1].getContent()
+		def newStartIndex = newMessageContent.toString().indexOf("?confirm") + 9
+		def newToken = newMessageContent.toString().substring(newStartIndex, newStartIndex + 16)
+		EntryStoreClient.getRequest('/auth/signup?confirm=' + newToken).getResponseCode() == HTTP_OK
+
+		when:
+		def oldConfirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + oldToken)
+
+		then:
+		oldConfirmConn.getResponseCode() == HTTP_CONFLICT
+		oldConfirmConn.getContentType().contains('text/html')
+		oldConfirmConn.getErrorStream().text.contains("User with submitted email address exists already.")
+	}
+
+	def "GET /auth/signup should not remove tokens of another user"() {
+		given:
+		def request1Body = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email   : 'user1SignupOldToken@test.com',
+				password: newPassword,
+				grecaptcharesponse: grecaptcharesponse
+		])
+		// create user2
+		def request2Body = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email   : 'user2SignupOldToken@test.com',
+				password: 'newPass22345',
+				grecaptcharesponse: grecaptcharesponse
+		])
+
+		EntryStoreClient.postRequest('/auth/signup', request1Body).getResponseCode() == HTTP_OK
+		def user1MessageContent = greenMail.getReceivedMessages()[0].getContent()
+		def user1StartIndex = user1MessageContent.toString().indexOf("?confirm") + 9
+		def user1Token = user1MessageContent.toString().substring(user1StartIndex, user1StartIndex + 16)
+
+		EntryStoreClient.postRequest('/auth/signup', request2Body).getResponseCode() == HTTP_OK
+		def user2MessageContent = greenMail.getReceivedMessages()[1].getContent()
+		def user2StartIndex = user2MessageContent.toString().indexOf("?confirm") + 9
+		def user2Token = user2MessageContent.toString().substring(user2StartIndex, user2StartIndex + 16)
+
+		EntryStoreClient.getRequest('/auth/signup?confirm=' + user1Token).getResponseCode() == HTTP_OK
+
+		when:
+		def user2ConfirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + user2Token)
+
+		then:
+		user2ConfirmConn.getResponseCode() == HTTP_CREATED
+		user2ConfirmConn.getContentType().contains('text/html')
+		user2ConfirmConn.getInputStream().text.contains("Sign-up successful.")
+	}
+
+	def "GET /auth/signup should confirm user signup and redirect to provided permitted url"() {
+		given:
+		// create user
+		def urlSuccess = "http://localhost:8181/123"
+		def requestBody = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email     : 'userSignupSuccessUrlPermitted@test.com',
+				password  : newPassword,
+				urlsuccess: urlSuccess,
+				grecaptcharesponse: grecaptcharesponse
+		])
+		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
+
+		then:
+		confirmConn.getHeaderField("Location") == null
+		confirmConn.getURL().toString() == urlSuccess
+	}
+
+	def "GET /auth/signup should confirm user signup and not redirect to provided not permitted url"() {
+		given:
+		def urlSuccess = "http://example.org/store/blabla/999"
+		def requestBody = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email     : 'userSignupSuccessUrlNotPermitted@test.com',
+				password  : newPassword,
+				urlsuccess: urlSuccess,
+				grecaptcharesponse: grecaptcharesponse
+		])
+		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
+
+		then:
+		confirmConn.getResponseCode() == HTTP_CREATED
+		confirmConn.getURL().toString() == 'http://localhost:8181/auth/signup?confirm=' + token
+	}
+
+	/* not sure how to invoke 500 server error
+	def "GET /auth/signup should not confirm user signup and redirect to failure url"() {
+		given:
+		def urlfailure = "http://localhost:8181/123"
+		def requestBody = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email   : 'userSignupFailureUrl@test.com',
+				password: newPassword,
+				urlfailure: urlfailure,
+				grecaptcharesponse: grecaptcharesponse
+		])
+		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
+
+		then:
+		confirmConn.getHeaderField("Location") == null
+		confirmConn.getURL().toString() == urlfailure
+	} */
+
 }
