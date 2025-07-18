@@ -13,6 +13,7 @@ import org.entrystore.impl.DataImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
+import org.entrystore.rest.standalone.springboot.model.api.ModifyListResourceResponse;
 import org.entrystore.rest.standalone.springboot.model.dto.CompletionState;
 import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.service.ResourceService;
@@ -26,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -129,7 +131,7 @@ public class ResourceController {
 					"application/trix", "application/n-triples", "application/trig",
 					"application/ld+json", "application/rdf+json"
 			})
-	public ResponseEntity<Void> modifyResource(
+	public ResponseEntity<Void> setResource(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
 			@RequestParam(required = false) String mimeType,
@@ -174,7 +176,7 @@ public class ResourceController {
 	@PutMapping(
 			path = "/{context-id}/resource/{entry-id}",
 			consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-	public ResponseEntity<Void> modifyResourceMultipart(
+	public ResponseEntity<Void> setResourceMultipart(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
 			@RequestParam(required = false) String mimeType,
@@ -201,6 +203,44 @@ public class ResourceController {
 		}
 
 		return responseBuilder.build();
+	}
+
+	@Operation(
+			summary = "Modifies a list resource.",
+			// The description from current swagger state seems outdated/invalid
+			description = "Among other functionality, fallback if PUT and DELETE cannot be used by the client.")
+	@PostMapping(path = "/{context-id}/resource/{entry-id}")
+	public ModifyListResourceResponse modifyListResource(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam String moveEntry,
+			@RequestParam String fromList,
+			@RequestParam(required = false) String removeAll
+	) {
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		Entry movedEntry = resourceService.modifyListEntryResource(entry, moveEntry, fromList, removeAll != null);
+
+		return new ModifyListResourceResponse(movedEntry.getEntryURI().toString());
+	}
+
+	// below is not implemented in Restlet yet, however all the params handling was there, hence below Spring version
+	@Operation(
+			summary = "Imports a ZIP file resource.")
+	@PostMapping(
+			path = "/{context-id}/resource/{entry-id}",
+			consumes = "application/zip")
+	public ModifyListResourceResponse importListResource(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(name = "import") String importParam,
+			@RequestBody byte[] body
+	) {
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		Entry movedEntry = resourceService.importEntryResource(entry, body, importParam != null);
+
+		return new ModifyListResourceResponse(movedEntry.getEntryURI().toString());
 	}
 
 	private static String convertSyndFeedToXml(SyndFeed feed) {

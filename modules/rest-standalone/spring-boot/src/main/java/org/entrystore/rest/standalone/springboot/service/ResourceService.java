@@ -3,6 +3,7 @@ package org.entrystore.rest.standalone.springboot.service;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.model.Model;
 import org.entrystore.Context;
@@ -16,6 +17,7 @@ import org.entrystore.QuotaException;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
+import org.entrystore.impl.ListImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
@@ -23,6 +25,7 @@ import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.EntryUtil;
+import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
 import org.entrystore.rest.standalone.springboot.model.dto.CompletionState;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
@@ -50,10 +53,15 @@ import org.springframework.web.server.NotAcceptableStatusException;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.StringWriter;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -61,6 +69,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 @Slf4j
 @Service
@@ -441,6 +451,57 @@ public class ResourceService {
 		}
 	}
 
+	public Entry importEntryResource(Entry entry, byte[] requestBody, boolean isImport) {
+
+		GraphType graphType = entry.getGraphType();
+
+		if (graphType == GraphType.List
+				&& isImport) {
+
+			// Below code does not mutate anything on the entry, only reads a zip file into memory
+			importFromZIP(requestBody);
+			return null;
+		} else {
+			throw new BadRequestException("Bad request: supports only Entry graphType of List (given: " + graphType + ") and import with 'application/zip' format and 'import' parameter");
+		}
+	}
+
+	public Entry modifyListEntryResource(Entry entry, String moveEntry, String fromList, boolean removeAll) {
+
+		GraphType graphType = entry.getGraphType();
+
+		if (graphType == GraphType.List
+				&& moveEntry != null
+				&& fromList != null) {
+
+			// POST 3/resource/45?moveEntry=2/entry/34&fromList=2/resource/67
+			ListImpl dest = (ListImpl) entry.getResource();
+
+			String baseURI = repositoryManager.getRepositoryURL().toString();
+			if (!baseURI.endsWith("/")) {
+				baseURI += "/";
+			}
+
+			// Entry URI of the Entry to be moved
+			URI movableEntry = moveEntry.startsWith("http://") ? URI.create(moveEntry) : URI.create(baseURI + moveEntry);
+			// Resource URI of the source List
+			URI movableEntrySource = fromList.startsWith("http://") ? URI.create(fromList) : URI.create(baseURI + fromList);
+
+			Entry movedEntry;
+			try {
+				movedEntry = dest.moveEntryHere(movableEntry, movableEntrySource, removeAll);
+			} catch (QuotaException qe) {
+				throw new EntityTooLargeException(qe.getMessage());
+			} catch (IOException ioe) {
+				throw new InternalServerErrorException(ioe.getMessage());
+			}
+
+			return movedEntry;
+		} else {
+			throw new BadRequestException("Bad request: supports only Entry graphType of List (given: " + graphType + ") and moving Entry with 'moveEntry' and 'fromList' parameters.");
+		}
+	}
+
 	private String serializeJsonRepresentationResourceList(Entry entry,
 														   ListFilter listFilter) {
 		JSONArray array = new JSONArray();
@@ -518,6 +579,65 @@ public class ResourceService {
 			return MediaType.APPLICATION_OCTET_STREAM_VALUE;
 		}
 
+	}
+
+	private void importFromZIP(byte[] requestBody) {
+		File tmpFile = null;
+		try {
+			tmpFile = writeStreamToTmpFile(new ByteArrayInputStream(requestBody));
+			if (tmpFile != null && tmpFile.exists()) {
+				ZipFile zipFile = new ZipFile(tmpFile);
+				Enumeration<? extends ZipEntry> zipEntries = zipFile.entries();
+				while (zipEntries.hasMoreElements()) {
+					ZipEntry entry = zipEntries.nextElement();
+					String nameLC = entry.getName();
+					if (!entry.isDirectory() && (nameLC.endsWith(".xml") || nameLC.endsWith(".rdf"))) {
+						InputStream fileIS = zipFile.getInputStream(entry);
+						if (fileIS == null) {
+							log.error("Unable to get InputStream of ZipEntry: {}", nameLC);
+							continue;
+						}
+						String fileString;
+						try {
+							StringWriter writer = new StringWriter();
+							IOUtils.copy(fileIS, writer, StandardCharsets.UTF_8);
+							fileString = writer.toString();
+							if (fileString == null) {
+								log.error("[IMPORT] Problem with reading ZipEntry into String");
+								continue;
+							}
+						} finally {
+							if (fileIS != null) {
+								fileIS.close();
+							}
+						}
+						if (nameLC.endsWith(".rdf")) {
+							importRDFResource(fileString);
+						}
+					}
+				}
+			} else {
+				throw new InternalServerErrorException("Unable to create temporary file for ZIP import");
+			}
+		} catch (IOException ioe) {
+			throw new InternalServerErrorException(ioe.getMessage());
+		} finally {
+			if (tmpFile != null) {
+				tmpFile.delete();
+			}
+		}
+	}
+
+	private File writeStreamToTmpFile(InputStream is) throws IOException {
+		File tmpFile = File.createTempFile("scam_import_", ".zip");
+		log.info("[IMPORT] Created temporary file: {}", tmpFile);
+		OutputStream fos = Files.newOutputStream(tmpFile.toPath());
+		FileOperations.copyFile(is, fos);
+		return tmpFile;
+	}
+
+	private void importRDFResource(String rdfString) {
+		// TODO
 	}
 
 }
