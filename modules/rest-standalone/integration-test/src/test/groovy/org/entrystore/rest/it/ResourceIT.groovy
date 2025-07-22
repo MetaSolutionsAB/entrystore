@@ -697,8 +697,6 @@ class ResourceIT extends BaseSpec {
 		resourceJson2['customProperties'] == [disablingreason: 'Untruthful']
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "DELETE /{context-id}/resource/{entry-id} should delete user"() {
 		given:
 		// create a User entry
@@ -734,8 +732,6 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "DELETE /{context-id}/resource/{entry-id} should remove resource"() {
 		given:
 		// create minimal entry to be used in the list
@@ -773,8 +769,6 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == '[]'
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "DELETE /{context-id}/resource/{entry-id} on resource with file should remove the file"() {
 		given:
 		def requestResourceName = [name: 'None graph entry']
@@ -807,8 +801,6 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == ''
 	}
 
-	// Not migrated yet
-	@Ignore
 	def "DELETE /{context-id}/resource/{entry-id} does not delete resource if it has type String"() {
 		given:
 		// create local String entry
@@ -828,7 +820,7 @@ class ResourceIT extends BaseSpec {
 		// fetch resource details
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
-		assert resourceConn.getContentType().contains('application/json')
+		assert resourceConn.getContentType().contains('text/plain')
 		assert resourceConn.getInputStream().text == someText
 
 		when:
@@ -843,7 +835,7 @@ class ResourceIT extends BaseSpec {
 		// TODO: Should return 404 or empty body, however currently ResourceResource class has implemented delete only for List entry type,
 		// hence calling delete in this test, did not modify anything, even tho the delete call response is a non-error
 		resourceConn2.getResponseCode() == HTTP_OK
-		resourceConn2.getContentType().contains('application/json')
+		resourceConn2.getContentType().contains('text/plain')
 		resourceConn2.getInputStream().text == someText
 	}
 
