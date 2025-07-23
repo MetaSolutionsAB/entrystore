@@ -1,9 +1,12 @@
 package org.entrystore.rest.standalone.springboot.service;
 
+import com.google.common.base.Joiner;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
@@ -12,10 +15,12 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.standalone.springboot.model.api.PwResetRequestBody;
+import org.entrystore.rest.standalone.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.standalone.springboot.model.auth.SignupInfo;
+import org.entrystore.rest.standalone.springboot.model.exception.BadRequestHtmlException;
+import org.entrystore.rest.standalone.springboot.model.exception.ExpectationFailedHtmlException;
 import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
-import org.entrystore.rest.standalone.springboot.model.exception.PwResetBadRequestHtmlException;
 import org.entrystore.rest.standalone.springboot.model.exception.PwResetEntityNotFoundHtmlException;
 import org.entrystore.rest.standalone.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.standalone.springboot.service.auth.EmailValidator;
@@ -28,24 +33,33 @@ import org.springframework.stereotype.Service;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
+	private final int TTL = 24 * 3600 * 1000; // 24 hours later
+
 	private final String resetSuccessMessage = "A confirmation message was sent to {}, if the user exists.";
 	private final String confirmSuccessMessage = "Password reset was successful.";
 	private final String parametersMissingMessage = "One or more parameters are missing.";
 	private final String shortPasswordMessage = "The password has to consist of at least 8 characters.";
+	private final String badPasswordFormatMessage = "The password must conform to the configured rules.";
 	private final String invalidEmailMessage = "Invalid email address: {}.";
+	private final String invalidNameMessage = "Invalid name.";
 	private final String recaptchaMissingMessage = "reCaptcha information missing.";
 	private final String recaptchaInvalidMessage = "Invalid reCaptcha received.";
 	private final String failedToSendEmailMessage = "Failed to send confirmation request to {}.";
 	private final String invalidTokenMessage = "The confirmation token is invalid or has been used already.";
 	private final String userNotFoundMessage = "User with provided email address does not exist.";
 	private final String internalErrorMessage = "Unable to reset password due to internal error.";
+	private final String domainNotWhitelistedMessage = "The email domain is not allowed for sign-up: {}";
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final PrincipalManager principalManager;
@@ -53,10 +67,35 @@ public class AuthService {
 	private final LoginTokenCache loginTokenCache;
 	private final SignupTokenCache signupTokenCache;
 
-	public String confirmPassword(String token) {
+	private static final Object mutex = new Object();
+	private static Set<String> domainWhitelist = null;
+
+	@PostConstruct
+	public void init() {
+		synchronized (mutex) {
+			if (domainWhitelist == null) {
+				Config config = repositoryManager.getConfiguration();
+				List<String> tmpDomainWhitelist = config.getStringList(Settings.SIGNUP_WHITELIST, new ArrayList<>());
+				domainWhitelist = new HashSet<>();
+				// we normalize the list to lower case and to not contain null
+				for (String domain : tmpDomainWhitelist) {
+					if (domain != null) {
+						domainWhitelist.add(domain.toLowerCase());
+					}
+				}
+				if (!domainWhitelist.isEmpty()) {
+					log.info("Sign-up whitelist initialized with following domains: {}", Joiner.on(", ").join(domainWhitelist));
+				} else {
+					log.info("No domains provided for sign-up whitelist; sign-ups for any domain are allowed");
+				}
+			}
+		}
+	}
+
+	public String confirmPassword(String token, String title) {
 		SignupInfo ci = signupTokenCache.getTokenValue(token);
 		if (ci == null) {
-			throw new PwResetBadRequestHtmlException(invalidTokenMessage);
+			throw new BadRequestHtmlException(invalidTokenMessage, title);
 		}
 		signupTokenCache.removeToken(token);
 
@@ -107,37 +146,36 @@ public class AuthService {
 		return confirmSuccessMessage;
 	}
 
-	public String pwReset(HttpServletRequest request, PwResetRequestBody requestBody) {
+	public String pwReset(HttpServletRequest request, PwResetRequestBody requestBody, String title) {
 		SignupInfo ci = new SignupInfo(repositoryManager);
-		ci.setExpirationDate(new Date(new Date().getTime() + (24 * 3600 * 1000))); // 24 hours later
+		ci.setExpirationDate(new Date(new Date().getTime() + TTL));
 
 		String rcResponseV2;
 		String password;
 
-		if (requestBody.email() != null && !requestBody.email().isEmpty()) {
+		if (StringUtils.isNotEmpty(requestBody.email())) {
 			ci.setEmail(requestBody.email());
 		} else {
-			throw new PwResetBadRequestHtmlException(parametersMissingMessage);
+			throw new BadRequestHtmlException(parametersMissingMessage, title);
 		}
 
 		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
-			throw new PwResetBadRequestHtmlException(invalidEmailMessage.replace("{}", ci.getEmail()));
+			throw new BadRequestHtmlException(invalidEmailMessage.replace("{}", ci.getEmail()), title);
 		}
 
-		if (requestBody.password() != null && !requestBody.password().isEmpty()) {
-			password = requestBody.password();
+		if (StringUtils.isNotEmpty(requestBody.password())) {
+			password = requestBody.password().trim();
+			if (password.length() < 8) {
+				throw new BadRequestHtmlException(shortPasswordMessage, title);
+			}
 		} else {
-			throw new PwResetBadRequestHtmlException(parametersMissingMessage);
+			throw new BadRequestHtmlException(parametersMissingMessage, title);
 		}
 
-		if (password.trim().length() < 8) {
-			throw new PwResetBadRequestHtmlException(shortPasswordMessage);
-		}
-
-		if (requestBody.urlFailure() != null && !requestBody.urlFailure().isEmpty()) {
+		if (StringUtils.isNotEmpty(requestBody.urlFailure())) {
 			ci.setUrlFailure(requestBody.urlFailure());
 		}
-		if (requestBody.urlSuccess() != null && !requestBody.urlSuccess().isEmpty()) {
+		if (StringUtils.isNotEmpty(requestBody.urlSuccess())) {
 			ci.setUrlSuccess(requestBody.urlSuccess());
 		}
 
@@ -147,7 +185,7 @@ public class AuthService {
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
-			if (requestBody.rcResponseV2() != null && !requestBody.rcResponseV2().isEmpty()) {
+			if (StringUtils.isNotEmpty(requestBody.rcResponseV2())) {
 				log.info("Checking reCaptcha for {}", ci.getEmail());
 				rcResponseV2 = requestBody.rcResponseV2();
 				String remoteAddr = request.getRemoteAddr();
@@ -156,10 +194,10 @@ public class AuthService {
 					log.info("Valid reCaptcha for {}", ci.getEmail());
 				} else {
 					log.info("Invalid reCaptcha for {}", ci.getEmail());
-					throw new PwResetBadRequestHtmlException(recaptchaInvalidMessage);
+					throw new BadRequestHtmlException(recaptchaInvalidMessage, title);
 				}
 			} else {
-				throw new PwResetBadRequestHtmlException(recaptchaMissingMessage);
+				throw new BadRequestHtmlException(recaptchaMissingMessage, title);
 			}
 		}
 
@@ -195,7 +233,7 @@ public class AuthService {
 					signupTokenCache.putToken(token, ci);
 					log.info("Sent confirmation request to {}", ci.getEmail());
 				} else {
-					throw new PwResetBadRequestHtmlException(failedToSendEmailMessage.replace("{}", ci.getEmail()));
+					throw new BadRequestHtmlException(failedToSendEmailMessage.replace("{}", ci.getEmail()), title);
 				}
 			} else {
 				log.info("Ignoring password reset attempt for non-existing user {}", ci.getEmail());
@@ -207,11 +245,113 @@ public class AuthService {
 		return resetSuccessMessage.replace("{}", ci.getEmail());
 	}
 
+	public String signup(HttpServletRequest request, SignupRequestBody requestBody, String title) {
+		SignupInfo ci = new SignupInfo(repositoryManager);
+		ci.setExpirationDate(new Date(new Date().getTime() + TTL));
+
+		String rcResponseV2;
+		String password;
+
+		if (StringUtils.isNotEmpty(requestBody.email())) {
+			ci.setEmail(requestBody.email());
+		} else {
+			throw new BadRequestHtmlException(parametersMissingMessage, title);
+		}
+
+		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
+			throw new BadRequestHtmlException(invalidEmailMessage.replace("{}", ci.getEmail()), title);
+		}
+
+		if (StringUtils.isNotEmpty(requestBody.password())) {
+			password = requestBody.password().trim();
+			if (password.length() < 8) {
+				throw new BadRequestHtmlException(badPasswordFormatMessage, title);
+			}
+		} else {
+			throw new BadRequestHtmlException(parametersMissingMessage, title);
+		}
+
+		if (StringUtils.isNotEmpty(requestBody.firstName()) && StringUtils.isNotEmpty(requestBody.lastName())) {
+			ci.setFirstName(requestBody.firstName());
+			ci.setLastName(requestBody.lastName());
+		} else {
+			throw new BadRequestHtmlException(parametersMissingMessage, title);
+		}
+
+		if (isInvalidName(ci.getFirstName()) || isInvalidName(ci.getLastName())) {
+			throw new BadRequestHtmlException(invalidNameMessage, title);
+		}
+
+		if (StringUtils.isNotEmpty(requestBody.urlFailure())) {
+			ci.setUrlFailure(requestBody.urlFailure());
+		}
+		if (StringUtils.isNotEmpty(requestBody.urlSuccess())) {
+			ci.setUrlSuccess(requestBody.urlSuccess());
+		}
+
+		if (!domainWhitelist.isEmpty()) {
+			String emailDomain = ci.getEmail().substring(ci.getEmail().indexOf("@") + 1).toLowerCase();
+			if (!domainWhitelist.contains(emailDomain)) {
+				throw new ExpectationFailedHtmlException(domainNotWhitelistedMessage.replace("{}", emailDomain), title);
+			}
+		}
+
+		Config config = repositoryManager.getConfiguration();
+
+		log.info("Received sign-up request for {}", ci.getEmail());
+
+		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
+				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
+			if (StringUtils.isNotEmpty(requestBody.rcResponseV2())) {
+				log.info("Checking reCaptcha for {}", ci.getEmail());
+				rcResponseV2 = requestBody.rcResponseV2();
+				String remoteAddr = request.getRemoteAddr();
+
+				if (rcVerifier.verify(rcResponseV2, remoteAddr)) {
+					log.info("Valid reCaptcha for {}", ci.getEmail());
+				} else {
+					log.info("Invalid reCaptcha for {}", ci.getEmail());
+					throw new BadRequestHtmlException(recaptchaInvalidMessage, title);
+				}
+			} else {
+				throw new BadRequestHtmlException(recaptchaMissingMessage, title);
+			}
+		}
+
+		String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
+		String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
+		log.info("Generated sign-up token for {}", ci.getEmail());
+
+		boolean sendSuccessful = Email.sendSignupConfirmation(config, ci.getFirstName() + " " + ci.getLastName(), ci.getEmail(), confirmationLink);
+		if (sendSuccessful) {
+			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
+			signupTokenCache.putToken(token, ci);
+			log.info("Sent confirmation request to {}", ci.getEmail());
+		} else {
+			throw new BadRequestHtmlException(failedToSendEmailMessage.replace("{}", ci.getEmail()), title);
+		}
+
+		return resetSuccessMessage.replace("{}", ci.getEmail());
+	}
+
 	private void handleUrlRedirect(String url) {
 		try {
 			throw new RedirectTemporaryException(new URI(url));
 		} catch (URISyntaxException ex) {
 			throw new InternalServerErrorException(ex.getMessage());
 		}
+	}
+
+	private boolean isInvalidName(String name) {
+		// must not be null or too short
+		if (name == null || name.length() < 2) {
+			return true;
+		}
+		// must not be a URL (covers mailto: and others with slash)
+		if (name.contains(":") || name.contains("/")) {
+			return true;
+		}
+		// must not consist of more than five words (counting spaces in between words)
+		return StringUtils.countMatches(name, " ") >= 5;
 	}
 }
