@@ -2,7 +2,6 @@ package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
-import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -10,8 +9,6 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 
-// Not migrated yet
-@Ignore
 class NameResourceIT extends BaseSpec {
 
 	def static contextIdWithName = '70'
@@ -28,7 +25,9 @@ class NameResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
-		connection.getContentType().contains('application/octet-stream') // content-type is octet-stream for some reason, no body
+		connection.getContentType().contains('application/json')
+		def jsonResponse = JSON_PARSER.parseText(connection.getErrorStream().text)
+		jsonResponse['error'] == 'No entry with id \'randomEntryId\' found in context \'70\''
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/name on a String entry without name should return 404"() {
@@ -45,7 +44,9 @@ class NameResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
-		connection.getContentType().contains('application/octet-stream') // content-type is octet-stream for some reason, no body
+		connection.getContentType().contains('application/json')
+		def jsonResponse = JSON_PARSER.parseText(connection.getErrorStream().text)
+		jsonResponse['error'] == 'Entry with id \'' + entryId + '\' has no name set'
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/name on a Context entry should return context name"() {

@@ -240,7 +240,7 @@ public class EntryService {
 		}
 		return switch (graphType) {
 			case List ->
-				resourceSerializer.serializeResourceList(resource, new ResourceJsonSerializer.ListParams(listFilter), rdfFormat);
+					resourceSerializer.serializeResourceList(resource, new ResourceJsonSerializer.ListParams(listFilter), rdfFormat);
 			case User -> resourceSerializer.serializeResourceUser(resource);
 			case Group -> resourceSerializer.serializeResourceGroup(resource, rdfFormat);
 			case None -> resourceSerializer.serializeResourceNone(resource);
@@ -310,7 +310,7 @@ public class EntryService {
 									  URI listUri, URI cachedExternalMetadataUri, CreateEntryRequestBody body) {
 
 		if (resourceUri != null &&
-			cachedExternalMetadataUri != null) {
+				cachedExternalMetadataUri != null) {
 
 			Entry entry = context.createReference(entryId, resourceUri, cachedExternalMetadataUri, listUri);
 
@@ -390,8 +390,8 @@ public class EntryService {
 		} else {
 			entry.setGraph(deserializedGraph);
 			if (applyACLtoChildren &&
-				GraphType.List.equals(entry.getGraphType()) &&
-				Local.equals(entry.getEntryType())) {
+					GraphType.List.equals(entry.getGraphType()) &&
+					Local.equals(entry.getEntryType())) {
 				((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			return entry;
@@ -400,16 +400,7 @@ public class EntryService {
 
 	public void deleteEntry(String contextId, String entryId, boolean recursive) {
 
-		Context context = getContext(contextId);
-		if (context == null) {
-			// throw the same exception message for missing Context and missing Entry to avoid leaking information about context existence
-			throw new EntityNotFoundException("No entry with id '" + entryId + "' found in context '" + contextId + "'");
-		}
-
-		Entry entry = context.get(entryId);
-		if (entry == null) {
-			throw new EntityNotFoundException("No entry with id '" + entryId + "' found in context '" + contextId + "'");
-		}
+		Entry entry = getEntryByContextIdAndEntryId(contextId, entryId);
 
 		try {
 			if (GraphType.List.equals(entry.getGraphType()) && recursive) {
@@ -420,7 +411,7 @@ public class EntryService {
 					log.warn("Resource of the following list is null: {}", entry.getEntryURI());
 				}
 			} else {
-				context.remove(entry.getEntryURI());
+				entry.getContext().remove(entry.getEntryURI());
 			}
 		} catch (AuthorizationException e) {
 			throw new UnauthorizedException("Not authorized");
@@ -429,6 +420,20 @@ public class EntryService {
 		}
 	}
 
+	public String getEntryName(Entry entry) {
+		String name = null;
+		GraphType bt = entry.getGraphType();
+		if (GraphType.Group.equals(bt)) {
+			name = ((Group) entry.getResource()).getName();
+		} else if (GraphType.User.equals(bt)) {
+			name = ((User) entry.getResource()).getName();
+		} else if (GraphType.Context.equals(bt)) {
+			ContextManager cm = repositoryManager.getContextManager();
+			Context c = cm.getContext(entry.getId());
+			name = cm.getName(c.getURI());
+		}
+		return name;
+	}
 
 	/**
 	 * Sets resource to an entry.
@@ -581,7 +586,7 @@ public class EntryService {
 		}
 
 		if (EntryType.Reference.equals(entry.getEntryType()) ||
-			EntryType.LinkReference.equals(entry.getEntryType())) {
+				EntryType.LinkReference.equals(entry.getEntryType())) {
 			try {
 				JSONObject mdObj = new JSONObject(requestBody.cachedExternalMetadata().replaceAll("_newId", entry.getId()));
 				Model graph = RDFJSON.rdfJsonToGraph(mdObj);
