@@ -45,8 +45,12 @@ import org.entrystore.rest.standalone.springboot.util.ResourceJsonSerializer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.NotAcceptableStatusException;
 
@@ -69,6 +73,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Vector;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -84,6 +89,8 @@ public class ResourceService {
 	private final RepositoryManagerImpl repositoryManager;
 	private final ResourceJsonSerializer resourceSerializer;
 	private final LoginTokenCache loginTokenCache;
+
+	private final RestTemplate restTemplate;
 
 	@PostConstruct
 	public void init() {
@@ -499,6 +506,86 @@ public class ResourceService {
 			return movedEntry;
 		} else {
 			throw new BadRequestException("Bad request: supports only Entry graphType of List (given: " + graphType + ") and moving Entry with 'moveEntry' and 'fromList' parameters.");
+		}
+	}
+
+	public void deleteResource(Entry entry, String proxy, boolean isRecursive) {
+		EntryType entryType = entry.getEntryType();
+
+		if ((entryType == EntryType.Link || entryType == EntryType.Reference || entryType == EntryType.LinkReference)
+				&& "true".equalsIgnoreCase(proxy)) {
+
+			deleteRemoteResource(entry.getResourceURI().toString(), 0);
+		} else {
+			deleteLocalResource(entry, isRecursive);
+		}
+	}
+
+	private void deleteRemoteResource(String url, int redirectCount) {
+
+		if (redirectCount > 10) {
+			log.warn("More than 10 redirect loops detected, aborting");
+			return;
+		}
+
+		/*
+		 * RestTemplate does not automatically follow redirects for DELETE requests.
+		 * Instead, it treats a 3xx status code as a client-side error and throws an HttpClientErrorException
+		 */
+		try {
+			ResponseEntity<String> response = restTemplate.exchange(
+					url,
+					HttpMethod.DELETE,
+					null,
+					String.class
+			);
+			// no exception = successfully deleted
+
+		} catch (HttpClientErrorException e) {
+
+			if (e.getStatusCode().is3xxRedirection()) {
+				if (e.getResponseHeaders() != null && e.getResponseHeaders().getLocation() != null) {
+					String redirectUrl = e.getResponseHeaders().getLocation().toString();
+					log.info("DELETE Request redirected to {}", redirectUrl);
+					deleteRemoteResource(redirectUrl, ++redirectCount);
+				} else {
+					throw new InternalServerErrorException("Redirect response received without a Location header.", e);
+				}
+			} else {
+				// Other errors (4xx, 5xx)
+				throw new InternalServerErrorException("Delete request received an error response. Message: " + e.getResponseBodyAsString(), e);
+			}
+		}
+	}
+
+	/**
+	 * Deletes the resource if the entry has any.
+	 */
+	private void deleteLocalResource(Entry entry, boolean isRecursive) {
+		/*
+		 * List
+		 */
+		if (entry.getGraphType() == GraphType.List) {
+			ListImpl l = (ListImpl) entry.getResource();
+			if (isRecursive) {
+				l.removeTree();
+			} else {
+				l.setChildren(new Vector<>());
+			}
+		}
+
+		/*
+		 * None
+		 */
+		if (entry.getGraphType() == GraphType.None) {
+			if (entry.getResourceType() == ResourceType.InformationResource) {
+				Data data = (Data) entry.getResource();
+				if (!data.delete()) {
+					log.error("Unable to delete resource of entry {}", entry.getEntryURI());
+					// Not sure why 400, should be 500?
+					throw new BadRequestException("Unable to delete resource of entry " + entry.getEntryURI());
+				}
+			}
 		}
 	}
 

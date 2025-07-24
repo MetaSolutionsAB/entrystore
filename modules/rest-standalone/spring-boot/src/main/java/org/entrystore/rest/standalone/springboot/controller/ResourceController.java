@@ -24,6 +24,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -241,6 +242,21 @@ public class ResourceController {
 		Entry movedEntry = resourceService.importEntryResource(entry, body, importParam != null);
 
 		return new ModifyListResourceResponse(movedEntry.getEntryURI().toString());
+	}
+
+	@Operation(
+			summary = "Deletes a resource.")
+	@DeleteMapping("/{context-id}/resource/{entry-id}")
+	public ResponseEntity<Void> deleteResource(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(required = false) String proxy,
+			@RequestParam(required = false) String recursive) {
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		resourceService.deleteResource(entry, proxy, recursive != null);
+
+		return ResponseEntity.noContent().build();
 	}
 
 	private static String convertSyndFeedToXml(SyndFeed feed) {
