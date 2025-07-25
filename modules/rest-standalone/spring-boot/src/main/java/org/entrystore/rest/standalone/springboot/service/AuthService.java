@@ -44,7 +44,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AuthService {
 
-	private final int TTL = 24 * 3600 * 1000; // 24 hours later
+	private final int TTL = 24 * 3600 * 1000;
 
 	private final String resetSuccessMessage = "A confirmation message was sent to {}, if the user exists.";
 	private final String confirmSuccessMessage = "Password reset was successful.";
@@ -66,6 +66,7 @@ public class AuthService {
 	private final RecaptchaVerifier rcVerifier;
 	private final LoginTokenCache loginTokenCache;
 	private final SignupTokenCache signupTokenCache;
+	private final Config config;
 
 	private static final Object mutex = new Object();
 	private static Set<String> domainWhitelist = null;
@@ -74,7 +75,6 @@ public class AuthService {
 	public void init() {
 		synchronized (mutex) {
 			if (domainWhitelist == null) {
-				Config config = repositoryManager.getConfiguration();
 				List<String> tmpDomainWhitelist = config.getStringList(Settings.SIGNUP_WHITELIST, new ArrayList<>());
 				domainWhitelist = new HashSet<>();
 				// we normalize the list to lower case and to not contain null
@@ -124,7 +124,7 @@ public class AuthService {
 					loginTokenCache.removeTokens(ci.getEmail());
 					signupTokenCache.removeAllTokens(ci.getEmail());
 					log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
-					Email.sendPasswordChangeConfirmation(repositoryManager.getConfiguration(), u.getEntry());
+					Email.sendPasswordChangeConfirmation(config, u.getEntry());
 					log.info("Reset password for user {}", u.getURI());
 				} else {
 					log.error("Error when resetting password for user {}", u.getURI());
@@ -148,7 +148,7 @@ public class AuthService {
 
 	public String pwReset(HttpServletRequest request, PwResetRequestBody requestBody, String title) {
 		SignupInfo ci = new SignupInfo(repositoryManager);
-		ci.setExpirationDate(new Date(new Date().getTime() + TTL));
+		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 
 		String rcResponseV2;
 		String password;
@@ -178,8 +178,6 @@ public class AuthService {
 		if (StringUtils.isNotEmpty(requestBody.urlSuccess())) {
 			ci.setUrlSuccess(requestBody.urlSuccess());
 		}
-
-		Config config = repositoryManager.getConfiguration();
 
 		log.info("Received password reset request for {}", ci.getEmail());
 
@@ -247,7 +245,7 @@ public class AuthService {
 
 	public String signup(HttpServletRequest request, SignupRequestBody requestBody, String title) {
 		SignupInfo ci = new SignupInfo(repositoryManager);
-		ci.setExpirationDate(new Date(new Date().getTime() + TTL));
+		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 
 		String rcResponseV2;
 		String password;
@@ -295,8 +293,6 @@ public class AuthService {
 				throw new ExpectationFailedHtmlException(domainNotWhitelistedMessage.replace("{}", emailDomain), title);
 			}
 		}
-
-		Config config = repositoryManager.getConfiguration();
 
 		log.info("Received sign-up request for {}", ci.getEmail());
 
