@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.PwResetRequestBody;
+import org.entrystore.rest.standalone.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.standalone.springboot.service.AuthService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
@@ -23,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 public class AuthController {
 
 	private final int MAX_REQUEST_SIZE = 32 * 1024;
+	private final String signupTitle = "Sign-up";
+	private final String passwordResetTitle = "Password reset";
 	private final AuthService authService;
 
 	@Operation(
@@ -45,9 +48,10 @@ public class AuthController {
 			Model model,
 			@RequestBody PwResetRequestBody pwResetRequestBody) {
 		checkRequestSize(request);
-		String message = authService.pwReset(request, pwResetRequestBody);
+		String message = authService.pwReset(request, pwResetRequestBody, passwordResetTitle);
+		model.addAttribute("title", passwordResetTitle);
 		model.addAttribute("message", message);
-		return "pwreset";
+		return "auth";
 	}
 
 	@Operation(summary = "Generates new link for password change confirmation and sends an email to the User. Request is an html form.")
@@ -67,9 +71,10 @@ public class AuthController {
 				paramMap.getFirst("urlsuccess"),
 				paramMap.getFirst("urlfailure"),
 				paramMap.getFirst("g-recaptcha-response"));
-		String message = authService.pwReset(request, pwResetRequestBody);
+		String message = authService.pwReset(request, pwResetRequestBody, passwordResetTitle);
+		model.addAttribute("title", passwordResetTitle);
 		model.addAttribute("message", message);
-		return "pwreset";
+		return "auth";
 	}
 
 	@Operation(summary = "Checks if the password-reset-token is valid and confirms user's password change")
@@ -82,9 +87,51 @@ public class AuthController {
 			return "pwreset_form";
 		}
 
-		String message = authService.confirmPassword(confirm);
+		String message = authService.confirmPassword(confirm, passwordResetTitle);
+		model.addAttribute("title", passwordResetTitle);
 		model.addAttribute("message", message);
-		return "pwreset";
+		return "auth";
+	}
+
+	@Operation(summary = "Generates new link for user sign-up confirmation and sends an email to provided email address.")
+	@PostMapping(path = "/auth/signup",
+			consumes = {MediaType.APPLICATION_JSON_VALUE},
+			produces = {MediaType.TEXT_HTML_VALUE}
+	)
+	public String signup(
+			HttpServletRequest request,
+			Model model,
+			@RequestBody SignupRequestBody signupRequestBody) {
+		checkRequestSize(request);
+		String message = authService.signup(request, signupRequestBody, signupTitle);
+		model.addAttribute("title", signupTitle);
+		model.addAttribute("message", message);
+		return "auth";
+	}
+
+	@Operation(summary = "Generates new link for user sign-up confirmation and sends an email to provided email address. Request is an html form.")
+	@PostMapping(path = "/auth/signup",
+			consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE},
+			produces = {MediaType.TEXT_HTML_VALUE}
+	)
+	public String signupViaForm(
+			HttpServletRequest request,
+			Model model,
+			@RequestParam MultiValueMap<String, String> paramMap) {
+		checkRequestSize(request);
+
+		SignupRequestBody signupRequestBody = new SignupRequestBody(
+				paramMap.getFirst("email"),
+				paramMap.getFirst("password"),
+				paramMap.getFirst("firstname"),
+				paramMap.getFirst("lastname"),
+				paramMap.getFirst("urlsuccess"),
+				paramMap.getFirst("urlfailure"),
+				paramMap.getFirst("g-recaptcha-response"));
+		String message = authService.signup(request, signupRequestBody, signupTitle);
+		model.addAttribute("title", signupTitle);
+		model.addAttribute("message", message);
+		return "auth";
 	}
 
 	private void checkRequestSize(HttpServletRequest request) {
