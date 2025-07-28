@@ -61,6 +61,7 @@ public class EntryService {
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final ResourceJsonSerializer resourceSerializer;
+	private final ReservedNamesService reservedNamesService;
 
 	private final ObjectMapper objectMapper;
 
@@ -433,6 +434,41 @@ public class EntryService {
 			name = cm.getName(c.getURI());
 		}
 		return name;
+	}
+
+	public boolean setEntryName(Entry entry, String requestName) {
+
+		String newName;
+		if (StringUtils.isEmpty(requestName)) {
+			newName = null;
+		} else {
+			newName = requestName.trim();
+		}
+
+		GraphType bt = entry.getGraphType();
+		boolean success = false;
+
+		if (GraphType.Group.equals(bt)) {
+			success = ((Group) entry.getResource()).setName(newName);
+
+		} else if (GraphType.User.equals(bt)) {
+			// Users must always have a name
+			if (newName == null) {
+				throw new BadRequestException("User must have a name.");
+			}
+			success = ((User) entry.getResource()).setName(newName);
+
+		} else if (GraphType.Context.equals(bt)) {
+			if (reservedNamesService.isReservedName(StringUtils.trimToEmpty(newName).toLowerCase())) {
+				throw new BadRequestException("Requested name to be set of '" + newName + "' is a reserved word.");
+			} else {
+				ContextManager cm = repositoryManager.getContextManager();
+				Context c = cm.getContext(entry.getId());
+				success = cm.setName(c.getURI(), newName);
+			}
+		}
+
+		return success;
 	}
 
 	/**

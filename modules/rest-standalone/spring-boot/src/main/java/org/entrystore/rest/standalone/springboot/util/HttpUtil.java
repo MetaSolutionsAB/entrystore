@@ -6,6 +6,9 @@ import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.http.ResponseEntity;
+
+import java.util.Date;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
@@ -31,6 +34,28 @@ public class HttpUtil {
 		return "\"" + tag + "\"";
 	}
 
+	/**
+	 * Updates the response headers with the last modification date and a strong ETag
+	 * based on the provided modification date.
+	 * If the modification date is null a warning is logged, and
+	 * the headers are not updated.
+	 *
+	 * @param responseBuilder the response builder used to set the headers
+	 * @param modifiedDate    the modification date used for generating the headers
+	 */
+	public static ResponseEntity.HeadersBuilder<?> updateResponseWithModificationDateAndETag(
+			ResponseEntity.HeadersBuilder<?> responseBuilder,
+			Date modifiedDate) {
+
+		if (modifiedDate == null) {
+			log.warn("Last-Modified header could not be set because the modification date is null");
+			return responseBuilder;
+		} else {
+			return responseBuilder
+					.lastModified(modifiedDate.getTime())
+					.eTag(HttpUtil.createStrongETag(Long.toString(modifiedDate.getTime())));
+		}
+	}
 
 	public static boolean isLargerThan(HttpServletRequest request, long maxSize) {
 		if (request == null) {

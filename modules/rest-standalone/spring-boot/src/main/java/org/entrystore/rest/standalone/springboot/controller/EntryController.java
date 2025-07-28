@@ -8,6 +8,8 @@ import org.entrystore.Entry;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryNameResponse;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
+import org.entrystore.rest.standalone.springboot.model.api.SetEntryNameRequestBody;
+import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
@@ -96,16 +98,10 @@ public class EntryController {
 
 		Entry modifiedEntry = entryService.modifyEntry(contextId, entryId, body, mediaType, applyACLtoChildren != null);
 
-		ResponseEntity.HeadersBuilder<?> responseBuilder = ResponseEntity.noContent();
-		if (modifiedEntry.getModifiedDate() == null) {
-			log.warn("Last-Modified header could not be set because the entry does not have a modification date: {}", modifiedEntry.getEntryURI());
-		} else {
-			responseBuilder
-					.lastModified(modifiedEntry.getModifiedDate().getTime())
-					.eTag(HttpUtil.createStrongETag(Long.toString(modifiedEntry.getModifiedDate().getTime())));
-		}
-
-		return responseBuilder.build();
+		return HttpUtil.updateResponseWithModificationDateAndETag(
+						ResponseEntity.noContent(),
+						modifiedEntry.getModifiedDate())
+				.build();
 	}
 
 	@Operation(
@@ -142,4 +138,24 @@ public class EntryController {
 		return new GetEntryNameResponse(name);
 	}
 
+	@Operation(summary = "Sets the entry's name (alias).")
+	@PutMapping(path = "/{context-id}/entry/{entry-id}/name", produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<Void> setEntryName(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestBody SetEntryNameRequestBody body
+	) {
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		boolean success = entryService.setEntryName(entry, body.name());
+
+		if (!success) {
+			throw new DataConflictException("Unable to set new name for Entry with id '" + entry.getId() + "'");
+		}
+
+		return HttpUtil.updateResponseWithModificationDateAndETag(
+						ResponseEntity.noContent(),
+						entry.getModifiedDate())
+				.build();
+	}
 }
