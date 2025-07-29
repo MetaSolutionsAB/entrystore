@@ -397,6 +397,18 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 1
 	}
 
+	def "GET /auth/pwreset should not confirm password reset without providing a token"() {
+		given:
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup')
+
+		then:
+		confirmConn.getResponseCode() == HTTP_OK
+		confirmConn.getContentType().contains('text/html')
+		confirmConn.getInputStream().text.contains("<input type=\"submit\" value=\"Sign-up\" />")
+	}
+
 	def "GET /auth/signup should confirm creating new user after signing up with a valid token"() {
 		given:
 		def requestBody = JsonOutput.toJson([
