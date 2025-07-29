@@ -5,8 +5,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Entry;
+import org.entrystore.rest.standalone.springboot.model.api.GetEntryNameResponse;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
+import org.entrystore.rest.standalone.springboot.model.api.SetEntryNameRequestBody;
+import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
+import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
 import org.springframework.http.MediaType;
@@ -31,16 +35,16 @@ public class EntryController {
 	private final EntryService entryService;
 
 	@Operation(
-		summary = "Returns the entry information.",
-		description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
-			"as specified in the response body is used.")
+			summary = "Returns the entry information.",
+			description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
+					"as specified in the response body is used.")
 	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = MediaType.APPLICATION_JSON_VALUE)
 	public GetEntryResponse getEntryInJsonFormat(
-		@PathVariable("context-id") String contextId,
-		@PathVariable("entry-id") String entryId,
-		@RequestParam(required = false) String rdfFormat,
-		@RequestParam(required = false) String includeAll,
-		@ModelAttribute ListFilter listFilter
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(required = false) String rdfFormat,
+			@RequestParam(required = false) String includeAll,
+			@ModelAttribute ListFilter listFilter
 	) {
 		// for rdfFormat param, data should be sent properly - i.e. html encoded '+' as %2B
 		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
@@ -52,15 +56,15 @@ public class EntryController {
 	}
 
 	@Operation(
-		summary = "Returns the entry information.",
-		description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
-			"as specified in the response body is used.")
+			summary = "Returns the entry information.",
+			description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
+					"as specified in the response body is used.")
 	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = {"application/rdf+xml", "text/n3", "text/turtle",
-		"application/trix", "application/n-triples", "application/trig", "application/ld+json", "application/rdf+json"})
+			"application/trix", "application/n-triples", "application/trig", "application/ld+json", "application/rdf+json"})
 	public String getEntryInRdfFormat(
-		@PathVariable("context-id") String contextId,
-		@PathVariable("entry-id") String entryId,
-		@RequestHeader(value = "Accept", required = false, defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestHeader(value = "Accept", required = false, defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
 	) {
 
 		if (StringUtils.isEmpty(acceptHeader) || MediaType.ALL_VALUE.equals(acceptHeader)) {
@@ -70,16 +74,16 @@ public class EntryController {
 	}
 
 	@Operation(
-		summary = "Sets the entry information.",
-		description = "Overrides entry data with data in the request body.")
+			summary = "Sets the entry information.",
+			description = "Overrides entry data with data in the request body.")
 	@PutMapping(path = "/{context-id}/entry/{entry-id}")
 	public ResponseEntity<Void> modifyEntry(
-		@PathVariable("context-id") String contextId,
-		@PathVariable("entry-id") String entryId,
-		@RequestParam(required = false) String format,
-		@RequestParam(required = false) String applyACLtoChildren,
-		@RequestHeader("Content-Type") String contentType,
-		@RequestBody String body
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(required = false) String format,
+			@RequestParam(required = false) String applyACLtoChildren,
+			@RequestHeader("Content-Type") String contentType,
+			@RequestBody String body
 	) {
 
 		String mediaType;
@@ -94,32 +98,64 @@ public class EntryController {
 
 		Entry modifiedEntry = entryService.modifyEntry(contextId, entryId, body, mediaType, applyACLtoChildren != null);
 
-		ResponseEntity.HeadersBuilder<?> responseBuilder = ResponseEntity.noContent();
-		if (modifiedEntry.getModifiedDate() == null) {
-			log.warn("Last-Modified header could not be set because the entry does not have a modification date: {}", modifiedEntry.getEntryURI());
-		} else {
-			responseBuilder
-				.lastModified(modifiedEntry.getModifiedDate().getTime())
-				.eTag(HttpUtil.createStrongETag(Long.toString(modifiedEntry.getModifiedDate().getTime())));
-		}
-
-		return responseBuilder.build();
+		return HttpUtil.updateResponseWithModificationDateAndETag(
+						ResponseEntity.noContent(),
+						modifiedEntry.getModifiedDate())
+				.build();
 	}
 
 	@Operation(
-		summary = "Deletes the entry.",
-		description = "Deletes given entry. If parameter 'recursive' is set then also deletes all its children.")
+			summary = "Deletes the entry.",
+			description = "Deletes given entry. If parameter 'recursive' is set then also deletes all its children.")
 	@DeleteMapping(path = "/{context-id}/entry/{entry-id}", produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<Void> deleteEntry(
-		@PathVariable("context-id") String contextId,
-		@PathVariable("entry-id") String entryId,
-		@RequestParam(required = false) String recursive
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(required = false) String recursive
 	) {
 
 		entryService.deleteEntry(contextId, entryId, recursive != null);
 
 		return ResponseEntity
-			.noContent()
-			.build();
+				.noContent()
+				.build();
+	}
+
+	@Operation(summary = "Returns the entry's name (alias).")
+	@GetMapping(path = "/{context-id}/entry/{entry-id}/name", produces = MediaType.APPLICATION_JSON_VALUE)
+	public GetEntryNameResponse getEntryName(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId
+	) {
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		String name = entryService.getEntryName(entry);
+
+		if (name == null) {
+			throw new EntityNotFoundException("Entry with id '" + entry.getId() + "' has no name set");
+		}
+
+		return new GetEntryNameResponse(name);
+	}
+
+	@Operation(summary = "Sets the entry's name (alias).")
+	@PutMapping(path = "/{context-id}/entry/{entry-id}/name", produces = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<Void> setEntryName(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId,
+			@RequestBody SetEntryNameRequestBody body
+	) {
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		boolean success = entryService.setEntryName(entry, body.name());
+
+		if (!success) {
+			throw new DataConflictException("Unable to set new name for Entry with id '" + entry.getId() + "'");
+		}
+
+		return HttpUtil.updateResponseWithModificationDateAndETag(
+						ResponseEntity.noContent(),
+						entry.getModifiedDate())
+				.build();
 	}
 }

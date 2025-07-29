@@ -40,28 +40,28 @@ import java.util.Optional;
 public class MetadataController {
 
 	private static final RDFFormat RDFJSON_WITH_APPLICATION_JSON
-		= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("json"),
-		SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
+			= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("json"),
+			SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
 
 	private final MetadataService metadataService;
 	private final EntryService entryService;
 
 	@Operation(
-		summary = "Returns an entry's metadata graph.",
-		description = "desc")
+			summary = "Returns an entry's metadata graph.",
+			description = "desc")
 	@GetMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<String> getMetadata(
-		@PathVariable("context-id") String contextId,
-		@PathVariable("type") MetadataType metadataType,
-		@PathVariable("entry-id") String entryId,
-		@RequestParam(required = false) String format,
-		@RequestParam(required = false) String graphQuery,
-		@RequestParam(required = false, defaultValue = "10") Integer depth,
-		@RequestParam(required = false) String recursive,
-		@RequestParam(required = false) String scope,
-		@RequestParam(name = "rev", required = false) String revision,
-		@RequestParam(required = false) String download,
-		@RequestHeader(value = "Accept", required = false, defaultValue = "application/rdf+xml") String acceptHeader
+			@PathVariable("context-id") String contextId,
+			@PathVariable("type") MetadataType metadataType,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(required = false) String format,
+			@RequestParam(required = false) String graphQuery,
+			@RequestParam(required = false, defaultValue = "10") Integer depth,
+			@RequestParam(required = false) String recursive,
+			@RequestParam(required = false) String scope,
+			@RequestParam(name = "rev", required = false) String revision,
+			@RequestParam(required = false) String download,
+			@RequestHeader(value = "Accept", required = false, defaultValue = "application/rdf+xml") String acceptHeader
 	) {
 		String mediaType;
 		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
@@ -82,17 +82,17 @@ public class MetadataController {
 	}
 
 	@Operation(
-		summary = "Sets an entry's metadata graph.",
-		description = "desc")
+			summary = "Sets an entry's metadata graph.",
+			description = "desc")
 	@PutMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<Void> setMetadata(
-		@PathVariable("context-id") String contextId,
-		@PathVariable("type") MetadataType metadataType,
-		@PathVariable("entry-id") String entryId,
-		@RequestParam(required = false) String format,
-		@RequestParam(name = "rev", required = false) String revision,
-		@RequestHeader("Content-Type") String contentType,
-		@RequestBody String body
+			@PathVariable("context-id") String contextId,
+			@PathVariable("type") MetadataType metadataType,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(required = false) String format,
+			@RequestParam(name = "rev", required = false) String revision,
+			@RequestHeader("Content-Type") String contentType,
+			@RequestBody String body
 	) {
 		String mediaType;
 		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
@@ -108,28 +108,22 @@ public class MetadataController {
 		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
 		metadataService.setEntryMetadata(entry, metadataType, deserializedGraph, revision);
 
-		// Set modification date in the response header
-		ResponseEntity.HeadersBuilder<?> responseBuilder = ResponseEntity.noContent();
-
 		Date modificationDate = getModificationDate(entry, metadataType);
-		if (modificationDate != null) {
-			responseBuilder
-				.lastModified(modificationDate.getTime())
-				.eTag(HttpUtil.createStrongETag(Long.toString(modificationDate.getTime())));
-		}
-
-		return responseBuilder.build();
+		return HttpUtil.updateResponseWithModificationDateAndETag(
+						ResponseEntity.noContent(),
+						modificationDate)
+				.build();
 	}
 
 	@Operation(
-		summary = "Deletes an entry's metadata graph.",
-		description = "desc")
+			summary = "Deletes an entry's metadata graph.",
+			description = "desc")
 	@DeleteMapping(path = "/{context-id}/{type:metadata|cached-external-metadata|merged-metadata}/{entry-id}")
 	public ResponseEntity<Void> deleteMetadata(
-		@PathVariable("context-id") String contextId,
-		@PathVariable("type") MetadataType metadataType,
-		@PathVariable("entry-id") String entryId,
-		@RequestParam(name = "rev", required = false) String revision
+			@PathVariable("context-id") String contextId,
+			@PathVariable("type") MetadataType metadataType,
+			@PathVariable("entry-id") String entryId,
+			@RequestParam(name = "rev", required = false) String revision
 	) {
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
@@ -163,18 +157,18 @@ public class MetadataController {
 
 	private static String getFileExtensionForMediaType(String mt) {
 		Optional<RDFFormat> rdfFormat = RDFFormat.matchMIMEType(mt, Arrays.asList(
-			RDFFormat.RDFXML,
-			RDFFormat.NTRIPLES,
-			RDFFormat.TURTLE,
-			RDFFormat.N3,
-			RDFFormat.TRIX,
-			RDFFormat.TRIG,
-			RDFFormat.BINARY,
-			RDFFormat.NQUADS,
-			RDFFormat.JSONLD,
-			RDFFormat.RDFJSON,
-			RDFFormat.RDFA,
-			RDFJSON_WITH_APPLICATION_JSON)
+				RDFFormat.RDFXML,
+				RDFFormat.NTRIPLES,
+				RDFFormat.TURTLE,
+				RDFFormat.N3,
+				RDFFormat.TRIX,
+				RDFFormat.TRIG,
+				RDFFormat.BINARY,
+				RDFFormat.NQUADS,
+				RDFFormat.JSONLD,
+				RDFFormat.RDFJSON,
+				RDFFormat.RDFA,
+				RDFJSON_WITH_APPLICATION_JSON)
 		);
 		if (rdfFormat.isPresent() && rdfFormat.get().getDefaultFileExtension() != null) {
 			return rdfFormat.get().getDefaultFileExtension();
@@ -192,8 +186,8 @@ public class MetadataController {
 
 	private static Date latest(Date... dates) {
 		return Arrays.stream(dates)
-			.filter(Objects::nonNull)
-			.max(Date::compareTo)
-			.orElse(null);
+				.filter(Objects::nonNull)
+				.max(Date::compareTo)
+				.orElse(null);
 	}
 }

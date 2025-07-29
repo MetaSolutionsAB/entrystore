@@ -1,22 +1,27 @@
 package org.entrystore.rest.standalone.springboot.service;
 
+import lombok.NoArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.HashSet;
+import java.util.Set;
 
 @Service
-public class ReservedNamesService extends HashSet<String> {
+@NoArgsConstructor
+public class ReservedNamesService {
 
-	public ReservedNamesService() {
-		add("favicon.ico");
-		add("echo");
-		add("lookup");
-		add("proxy");
-		add("search");
-		add("sparql");
-		add("validator");
-		add("message");
-		add("auth");
-		add("management");
+	private final static Set<String> RESERVED_NAMES_SET = Set.of(
+			"favicon.ico",
+			"echo",
+			"lookup",
+			"proxy",
+			"search",
+			"sparql",
+			"validator",
+			"message",
+			"auth",
+			"management");
+
+	public boolean isReservedName(String name) {
+		return RESERVED_NAMES_SET.contains(name);
 	}
 }

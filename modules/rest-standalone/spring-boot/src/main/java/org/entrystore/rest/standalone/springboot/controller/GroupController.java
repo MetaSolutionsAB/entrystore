@@ -21,15 +21,14 @@ public class GroupController {
 	@Operation(summary = "Creates a group with a linked home context. A helper resource for non-admins.")
 	@PostMapping(path = "/_principals/groups")
 	public ResponseEntity<Void> createGroup(
-		@RequestParam(required = false) String contextId,
-		@RequestParam(required = false) String name) {
+			@RequestParam(required = false) String contextId,
+			@RequestParam(required = false) String name) {
 
 		Entry newGroupEntry = groupService.createGroup(contextId, name);
 
-		return ResponseEntity
-			.created(newGroupEntry.getEntryURI())
-			.lastModified(newGroupEntry.getModifiedDate().getTime())
-			.eTag(HttpUtil.createStrongETag(Long.toString(newGroupEntry.getModifiedDate().getTime())))
-			.build();
+		return HttpUtil.updateResponseWithModificationDateAndETag(
+						ResponseEntity.created(newGroupEntry.getEntryURI()),
+						newGroupEntry.getModifiedDate())
+				.build();
 	}
 }

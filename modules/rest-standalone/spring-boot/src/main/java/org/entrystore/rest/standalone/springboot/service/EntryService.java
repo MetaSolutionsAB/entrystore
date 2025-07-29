@@ -61,6 +61,7 @@ public class EntryService {
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final ResourceJsonSerializer resourceSerializer;
+	private final ReservedNamesService reservedNamesService;
 
 	private final ObjectMapper objectMapper;
 
@@ -240,7 +241,7 @@ public class EntryService {
 		}
 		return switch (graphType) {
 			case List ->
-				resourceSerializer.serializeResourceList(resource, new ResourceJsonSerializer.ListParams(listFilter), rdfFormat);
+					resourceSerializer.serializeResourceList(resource, new ResourceJsonSerializer.ListParams(listFilter), rdfFormat);
 			case User -> resourceSerializer.serializeResourceUser(resource);
 			case Group -> resourceSerializer.serializeResourceGroup(resource, rdfFormat);
 			case None -> resourceSerializer.serializeResourceNone(resource);
@@ -310,7 +311,7 @@ public class EntryService {
 									  URI listUri, URI cachedExternalMetadataUri, CreateEntryRequestBody body) {
 
 		if (resourceUri != null &&
-			cachedExternalMetadataUri != null) {
+				cachedExternalMetadataUri != null) {
 
 			Entry entry = context.createReference(entryId, resourceUri, cachedExternalMetadataUri, listUri);
 
@@ -390,8 +391,8 @@ public class EntryService {
 		} else {
 			entry.setGraph(deserializedGraph);
 			if (applyACLtoChildren &&
-				GraphType.List.equals(entry.getGraphType()) &&
-				Local.equals(entry.getEntryType())) {
+					GraphType.List.equals(entry.getGraphType()) &&
+					Local.equals(entry.getEntryType())) {
 				((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
 			}
 			return entry;
@@ -400,16 +401,7 @@ public class EntryService {
 
 	public void deleteEntry(String contextId, String entryId, boolean recursive) {
 
-		Context context = getContext(contextId);
-		if (context == null) {
-			// throw the same exception message for missing Context and missing Entry to avoid leaking information about context existence
-			throw new EntityNotFoundException("No entry with id '" + entryId + "' found in context '" + contextId + "'");
-		}
-
-		Entry entry = context.get(entryId);
-		if (entry == null) {
-			throw new EntityNotFoundException("No entry with id '" + entryId + "' found in context '" + contextId + "'");
-		}
+		Entry entry = getEntryByContextIdAndEntryId(contextId, entryId);
 
 		try {
 			if (GraphType.List.equals(entry.getGraphType()) && recursive) {
@@ -420,7 +412,7 @@ public class EntryService {
 					log.warn("Resource of the following list is null: {}", entry.getEntryURI());
 				}
 			} else {
-				context.remove(entry.getEntryURI());
+				entry.getContext().remove(entry.getEntryURI());
 			}
 		} catch (AuthorizationException e) {
 			throw new UnauthorizedException("Not authorized");
@@ -429,6 +421,55 @@ public class EntryService {
 		}
 	}
 
+	public String getEntryName(Entry entry) {
+		String name = null;
+		GraphType bt = entry.getGraphType();
+		if (GraphType.Group.equals(bt)) {
+			name = ((Group) entry.getResource()).getName();
+		} else if (GraphType.User.equals(bt)) {
+			name = ((User) entry.getResource()).getName();
+		} else if (GraphType.Context.equals(bt)) {
+			ContextManager cm = repositoryManager.getContextManager();
+			Context c = cm.getContext(entry.getId());
+			name = cm.getName(c.getURI());
+		}
+		return name;
+	}
+
+	public boolean setEntryName(Entry entry, String requestName) {
+
+		String newName;
+		if (StringUtils.isEmpty(requestName)) {
+			newName = null;
+		} else {
+			newName = requestName.trim();
+		}
+
+		GraphType bt = entry.getGraphType();
+		boolean success = false;
+
+		if (GraphType.Group.equals(bt)) {
+			success = ((Group) entry.getResource()).setName(newName);
+
+		} else if (GraphType.User.equals(bt)) {
+			// Users must always have a name
+			if (newName == null) {
+				throw new BadRequestException("User must have a name.");
+			}
+			success = ((User) entry.getResource()).setName(newName);
+
+		} else if (GraphType.Context.equals(bt)) {
+			if (reservedNamesService.isReservedName(StringUtils.trimToEmpty(newName).toLowerCase())) {
+				throw new BadRequestException("Requested name to be set of '" + newName + "' is a reserved word.");
+			} else {
+				ContextManager cm = repositoryManager.getContextManager();
+				Context c = cm.getContext(entry.getId());
+				success = cm.setName(c.getURI(), newName);
+			}
+		}
+
+		return success;
+	}
 
 	/**
 	 * Sets resource to an entry.
@@ -581,7 +622,7 @@ public class EntryService {
 		}
 
 		if (EntryType.Reference.equals(entry.getEntryType()) ||
-			EntryType.LinkReference.equals(entry.getEntryType())) {
+				EntryType.LinkReference.equals(entry.getEntryType())) {
 			try {
 				JSONObject mdObj = new JSONObject(requestBody.cachedExternalMetadata().replaceAll("_newId", entry.getId()));
 				Model graph = RDFJSON.rdfJsonToGraph(mdObj);
