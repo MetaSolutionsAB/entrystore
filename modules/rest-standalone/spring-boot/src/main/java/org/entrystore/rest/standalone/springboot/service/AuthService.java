@@ -7,17 +7,24 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.entrystore.Entry;
+import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.repository.util.NS;
 import org.entrystore.rest.standalone.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.standalone.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.standalone.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestHtmlException;
+import org.entrystore.rest.standalone.springboot.model.exception.DataConflictHtmlException;
 import org.entrystore.rest.standalone.springboot.model.exception.ExpectationFailedHtmlException;
 import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
@@ -32,8 +39,10 @@ import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -46,8 +55,9 @@ public class AuthService {
 
 	private final int TTL = 24 * 3600 * 1000;
 
-	private final String resetSuccessMessage = "A confirmation message was sent to {}, if the user exists.";
-	private final String confirmSuccessMessage = "Password reset was successful.";
+	private final String postSuccessMessage = "A confirmation message was sent to {}, if the user exists.";
+	private final String confirmPasswordResetSuccessMessage = "Password reset was successful.";
+	private final String confirmSignupSuccessMessage = "Sign-up successful.";
 	private final String parametersMissingMessage = "One or more parameters are missing.";
 	private final String shortPasswordMessage = "The password has to consist of at least 8 characters.";
 	private final String badPasswordFormatMessage = "The password must conform to the configured rules.";
@@ -58,8 +68,17 @@ public class AuthService {
 	private final String failedToSendEmailMessage = "Failed to send confirmation request to {}.";
 	private final String invalidTokenMessage = "The confirmation token is invalid or has been used already.";
 	private final String userNotFoundMessage = "User with provided email address does not exist.";
+	private final String userAlreadyExistsMessage = "User with submitted email address exists already.";
 	private final String internalErrorMessage = "Unable to reset password due to internal error.";
 	private final String domainNotWhitelistedMessage = "The email domain is not allowed for sign-up: {}";
+	private final String invalidSignupTokenMessage = "<h4>Invalid confirmation link.</h4>" +
+			"This may be due to one of the following reasons:<br/>" +
+			"<ul><li>You have clicked the link twice and you already have an account.</li>" +
+			"<li>The confirmation link has expired.</li>" +
+			"<li>The link's confirmation token has never existed.</li></ul>" +
+			"Click here to sign up again and to receive a new confirmation link:<br/>" +
+			"<a href=\"{1}\"><pre>{2}</pre></a>";
+	private final String unableToCreateUserMessage = "Unable to create user.";
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final PrincipalManager principalManager;
@@ -116,7 +135,7 @@ public class AuthService {
 				if (ci.getUrlFailure() != null) {
 					handleUrlRedirect(ci.getUrlFailure());
 				} else {
-					throw new PwResetEntityNotFoundHtmlException(userNotFoundMessage);
+					throw new PwResetEntityNotFoundHtmlException(userNotFoundMessage, title);
 				}
 			} else {
 				// Reset password
@@ -143,7 +162,7 @@ public class AuthService {
 			handleUrlRedirect(ci.getUrlSuccess());
 		}
 
-		return confirmSuccessMessage;
+		return confirmPasswordResetSuccessMessage;
 	}
 
 	public String pwReset(HttpServletRequest request, PwResetRequestBody requestBody, String title) {
@@ -240,7 +259,59 @@ public class AuthService {
 			principalManager.setAuthenticatedUserURI(authUser);
 		}
 
-		return resetSuccessMessage.replace("{}", ci.getEmail());
+		return postSuccessMessage.replace("{}", ci.getEmail());
+	}
+
+	public String confirmSignup(String token, String title) {
+		SignupInfo singupInfo = signupTokenCache.getTokenValue(token);
+		if (singupInfo == null) {
+			URL bURL = repositoryManager.getRepositoryURL();
+			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + (Arrays.asList(-1, 80, 443).contains(bURL.getPort()) ? "" : ":" + bURL.getPort());
+			throw new BadRequestHtmlException(invalidSignupTokenMessage.replace("{1}", bURL.toString()).replace("{2}", appURL), title);
+		}
+		signupTokenCache.removeToken(token);
+
+		URI authUser = principalManager.getAuthenticatedUserURI();
+		try {
+			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
+
+			Entry userEntry = principalManager.getPrincipalEntry(singupInfo.getEmail());
+
+			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
+					principalManager.getUserByExternalID(singupInfo.getEmail()) != null) {
+				throw new DataConflictHtmlException(userAlreadyExistsMessage, title);
+			}
+
+			// Create user
+			Entry entry = principalManager.createResource(null, GraphType.User, null, null);
+			if (entry == null) {
+				log.error("Error when creating new user during sign-up ");
+				if (singupInfo.getUrlFailure() != null) {
+					handleUrlRedirect(singupInfo.getUrlFailure());
+				} else {
+					throw new InternalServerErrorException(unableToCreateUserMessage);
+				}
+			} else {
+				// Set alias, metadata and password
+				principalManager.setPrincipalName(entry.getResourceURI(), singupInfo.getEmail());
+				setFoafMetadata(entry, singupInfo);
+				User u = (User) entry.getResource();
+				u.setSaltedHashedSecret(singupInfo.getSaltedHashedPassword());
+				if (singupInfo.getCustomProperties() != null) {
+					u.setCustomProperties(singupInfo.getCustomProperties());
+				}
+				log.info("Created user {}", u.getURI());
+			}
+
+		} finally {
+			principalManager.setAuthenticatedUserURI(authUser);
+		}
+
+		if (singupInfo.getUrlSuccess() != null) {
+			handleUrlRedirect(singupInfo.getUrlSuccess());
+		}
+
+		return confirmSignupSuccessMessage;
 	}
 
 	public String signup(HttpServletRequest request, SignupRequestBody requestBody, String title) {
@@ -327,7 +398,7 @@ public class AuthService {
 			throw new BadRequestHtmlException(failedToSendEmailMessage.replace("{}", ci.getEmail()), title);
 		}
 
-		return resetSuccessMessage.replace("{}", ci.getEmail());
+		return postSuccessMessage.replace("{}", ci.getEmail());
 	}
 
 	private void handleUrlRedirect(String url) {
@@ -349,5 +420,32 @@ public class AuthService {
 		}
 		// must not consist of more than five words (counting spaces in between words)
 		return StringUtils.countMatches(name, " ") >= 5;
+	}
+
+	private void setFoafMetadata(Entry entry, SignupInfo signupInfo) {
+		Model graph = entry.getLocalMetadata().getGraph();
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		IRI resourceURI = vf.createIRI(entry.getResourceURI().toString());
+		String fullname = null;
+		if (signupInfo.getFirstName() != null) {
+			fullname = signupInfo.getFirstName();
+			graph.add(vf.createStatement(resourceURI, vf.createIRI(NS.foaf, "givenName"), vf.createLiteral(signupInfo.getFirstName())));
+		}
+		if (signupInfo.getLastName() != null) {
+			if (fullname != null) {
+				fullname = fullname + " " + signupInfo.getLastName();
+			} else {
+				fullname = signupInfo.getLastName();
+			}
+			graph.add(vf.createStatement(resourceURI, vf.createIRI(NS.foaf, "familyName"), vf.createLiteral(signupInfo.getLastName())));
+		}
+		if (fullname != null) {
+			graph.add(vf.createStatement(resourceURI, vf.createIRI(NS.foaf, "name"), vf.createLiteral(fullname)));
+		}
+		if (signupInfo.getEmail() != null) {
+			graph.add(vf.createStatement(resourceURI, vf.createIRI(NS.foaf, "mbox"), vf.createIRI("mailto:", signupInfo.getEmail())));
+		}
+
+		entry.getLocalMetadata().setGraph(graph);
 	}
 }

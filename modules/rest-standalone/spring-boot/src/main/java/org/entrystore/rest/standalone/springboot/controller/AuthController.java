@@ -2,6 +2,7 @@ package org.entrystore.rest.standalone.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.PwResetRequestBody;
@@ -9,6 +10,7 @@ import org.entrystore.rest.standalone.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.standalone.springboot.service.AuthService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -131,6 +133,24 @@ public class AuthController {
 		String message = authService.signup(request, signupRequestBody, signupTitle);
 		model.addAttribute("title", signupTitle);
 		model.addAttribute("message", message);
+		return "auth";
+	}
+
+	@Operation(summary = "Checks if the signup-token is valid and confirms new user creation")
+	@GetMapping(path = "/auth/signup")
+	public String confirmSignup(
+			Model model,
+			@RequestParam(required = false) String confirm,
+			HttpServletResponse response
+	) {
+		if (confirm == null || confirm.isEmpty()) {
+			return "signup_form";
+		}
+
+		String message = authService.confirmSignup(confirm, signupTitle);
+		model.addAttribute("title", signupTitle);
+		model.addAttribute("message", message);
+		response.setStatus(HttpStatus.CREATED.value());
 		return "auth";
 	}
 

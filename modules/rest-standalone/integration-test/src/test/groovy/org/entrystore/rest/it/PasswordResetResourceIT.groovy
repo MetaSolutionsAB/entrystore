@@ -4,7 +4,6 @@ import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
-import spock.lang.Ignore
 
 import javax.mail.internet.InternetAddress
 
@@ -263,8 +262,6 @@ class PasswordResetResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
-	// disabling user is not implemented yet
-	@Ignore
 	def "POST /auth/pwreset should not send an email with generated token for a disabled user"() {
 		given:
 		// create a user

@@ -1,6 +1,6 @@
 package org.entrystore.rest.standalone.springboot.model.exception;
 
-import lombok.Getter;
+import org.springframework.http.HttpStatus;
 
 /**
  * A custom exception to be used to return 417 (CLIENT_ERROR) by the service and unify the behavior in ControllerAdvice (ExceptionHandler).
@@ -8,13 +8,9 @@ import lombok.Getter;
  * - common response model, with "error" set as exception message
  * - exception message logged in the logs at debug level
  */
-@Getter
-public class ExpectationFailedHtmlException extends RuntimeException {
-
-	private final String title;
+public class ExpectationFailedHtmlException extends HtmlResponseException {
 
 	public ExpectationFailedHtmlException(String message, String title) {
-		super(message);
-		this.title = title;
+		super(message, title, HttpStatus.EXPECTATION_FAILED);
 	}
 }
