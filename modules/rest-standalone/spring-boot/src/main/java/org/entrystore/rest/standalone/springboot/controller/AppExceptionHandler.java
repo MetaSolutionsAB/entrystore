@@ -14,12 +14,15 @@ import org.entrystore.rest.standalone.springboot.model.exception.MethodNotAllowe
 import org.entrystore.rest.standalone.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.standalone.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.standalone.springboot.model.exception.RedirectTemporaryException;
+import org.entrystore.rest.standalone.springboot.model.exception.TextareaHtmlResponseException;
 import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.ui.Model;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -101,6 +104,18 @@ public class AppExceptionHandler {
 		log.debug("MethodNotAllowedException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.METHOD_NOT_ALLOWED.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
+	}
+
+	@ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+	public ResponseEntity<ErrorResponse> handleHttpMediaTypeNotSupportedException(HttpMediaTypeNotSupportedException ex,
+																				  HttpServletRequest request) {
+		log.debug("HttpMediaTypeNotSupportedException: {}", ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
@@ -192,12 +207,29 @@ public class AppExceptionHandler {
 	}
 
 	@ExceptionHandler(HtmlResponseException.class)
-	public String handleHtmlException(HtmlResponseException ex, Model model,
+	public String handleHtmlException(HtmlResponseException ex,
+									  Model model,
 									  HttpServletResponse response) {
-		log.debug("HtmlException: {}", ex.getMessage());
+
+		log.debug("HtmlResponseException: {}", ex.getMessage());
 		model.addAttribute("title", ex.getTitle());
 		model.addAttribute("message", ex.getMessage());
 		response.setStatus(ex.getStatus().value());
 		return "auth";
+	}
+
+	@ExceptionHandler(TextareaHtmlResponseException.class)
+	public String handleTextareaHtmlResponseException(TextareaHtmlResponseException ex,
+													  Model model,
+													  HttpServletResponse response) {
+
+		log.debug("TextareaHtmlResponseException: {}", ex.getMessage());
+
+		String textAreaVal = "status:" + ex.getStatus().value() + "\n" + ex.getMessage();
+		model.addAttribute("textareaValue", textAreaVal);
+
+		response.setStatus(ex.getStatus().value());
+		response.setContentType(MediaType.TEXT_HTML_VALUE);
+		return "textarea";
 	}
 }

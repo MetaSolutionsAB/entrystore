@@ -11,7 +11,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 
 @EnableMethodSecurity
 @Configuration
@@ -23,28 +23,29 @@ public class SecurityConfig {
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		http
-			.csrf(AbstractHttpConfigurer::disable)
-			.authorizeHttpRequests(auth -> auth
-				.requestMatchers("/error").permitAll()
-				.requestMatchers("/management/status").permitAll()
-				.requestMatchers("/auth/login", "/auth/cookie", "/auth/signup", "/auth/logout", "/auth/pwreset").permitAll()
-				.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs*/**").permitAll()
-				.requestMatchers("/management/status/extended").hasRole(UserAuthRole.ADMIN.name())
-				.anyRequest().authenticated()
-			)
-			.formLogin(login -> login
-				.loginPage("/auth/login")
-				.loginProcessingUrl("/auth/cookie")
-				.defaultSuccessUrl("/management/status")
-				.usernameParameter("auth_username")
-				.passwordParameter("auth_password")
-				.permitAll()
-			)
-			.logout(logout -> logout
-				.logoutUrl("/auth/logout")
-				.permitAll())
-			.httpBasic(Customizer.withDefaults())
-			.addFilterAfter(postAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+				.csrf(AbstractHttpConfigurer::disable)
+				.authorizeHttpRequests(auth -> auth
+						.requestMatchers("/error").permitAll()
+						.requestMatchers("/echo").permitAll() // needs textarea response, otherwise default Spring-boot Unauthorized json response is returned
+						.requestMatchers("/management/status").permitAll()
+						.requestMatchers("/auth/login", "/auth/cookie", "/auth/signup", "/auth/logout", "/auth/pwreset").permitAll()
+						.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs*/**").permitAll()
+						.requestMatchers("/management/status/extended").hasRole(UserAuthRole.ADMIN.name())
+						.anyRequest().authenticated()
+				)
+				.formLogin(login -> login
+						.loginPage("/auth/login")
+						.loginProcessingUrl("/auth/cookie")
+						.defaultSuccessUrl("/management/status")
+						.usernameParameter("auth_username")
+						.passwordParameter("auth_password")
+						.permitAll()
+				)
+				.logout(logout -> logout
+						.logoutUrl("/auth/logout")
+						.permitAll())
+				.httpBasic(Customizer.withDefaults())
+				.addFilterAfter(postAuthenticationFilter, AnonymousAuthenticationFilter.class);
 		return http.build();
 	}
 

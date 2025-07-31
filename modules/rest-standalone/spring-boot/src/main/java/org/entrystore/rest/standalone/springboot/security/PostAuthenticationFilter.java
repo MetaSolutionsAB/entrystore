@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -26,13 +27,15 @@ public class PostAuthenticationFilter extends OncePerRequestFilter {
 
 	@Override
 	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-		throws ServletException, IOException {
+			throws ServletException, IOException {
 
 		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
 		if (auth != null && auth.isAuthenticated()) {
-			// Cookie has been verified and user is authenticated
-			if (auth.getPrincipal() instanceof ESUserDetails esUser && esUser.getEsUser() != null) {
+			if (auth instanceof AnonymousAuthenticationToken) {
+				pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+			} else if (auth.getPrincipal() instanceof ESUserDetails esUser && esUser.getEsUser() != null) {
+				// Cookie has been verified and user is authenticated
 				pm.setAuthenticatedUserURI(esUser.getEsUser().getURI());
 			} else {
 				log.warn("User Authenticated in Spring-boot, but has invalid principal type: {}", auth.getPrincipal());
