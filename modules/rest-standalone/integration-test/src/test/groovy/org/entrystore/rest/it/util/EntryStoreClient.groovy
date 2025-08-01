@@ -2,6 +2,7 @@ package org.entrystore.rest.it.util
 
 import groovy.json.JsonOutput
 import org.apache.commons.lang3.StringUtils
+import org.eclipse.jetty.http.HttpMethod
 
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -49,7 +50,7 @@ class EntryStoreClient {
 	}
 
 	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
-		return putRequestStream(path, new ByteArrayInputStream(body.getBytes()), asUser, contentType)
+		return sendRequestAsStream(HttpMethod.PUT, path, new ByteArrayInputStream(body.getBytes()), asUser, contentType)
 	}
 
 	def static putRequestFile(String path, File file, String asUser = 'admin', String contentType = 'application/octet-stream') {
@@ -58,7 +59,7 @@ class EntryStoreClient {
 				'Content-Length'     : file.length().toString(),
 				'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
 			]
-			return putRequestStream(path, inputStream, asUser, contentType, extraHeaders)
+			return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, extraHeaders)
 		}
 	}
 
@@ -69,15 +70,25 @@ class EntryStoreClient {
 		def content = buildMultipartContent(file, formData, boundary)
 		def inputStream = new ByteArrayInputStream(content)
 
-		return putRequestStream(path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
+		return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
 	}
 
-	def static putRequestStream(String path, InputStream inputStream, String asUser, String contentType, Map<String, String> extraHeaders = [:]) {
+	def static postRequestMultiPart(String path, File file, String asUser = 'admin', Map<String, String> formData = [:]) {
+		def boundary = '----FormBoundary' + System.currentTimeMillis()
+		def contentType = 'multipart/form-data; boundary=' + boundary
+
+		def content = buildMultipartContent(file, formData, boundary)
+		def inputStream = new ByteArrayInputStream(content)
+
+		return sendRequestAsStream(HttpMethod.POST, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
+	}
+
+	def static sendRequestAsStream(HttpMethod method, String path, InputStream inputStream, String asUser, String contentType, Map<String, String> extraHeaders = [:]) {
 		def connection = createConnection(path)
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
-		connection.setRequestMethod('PUT')
+		connection.setRequestMethod(method.name())
 		connection.setDoOutput(true)
 		connection.setRequestProperty('Content-Type', contentType)
 		extraHeaders.each { key, value ->
