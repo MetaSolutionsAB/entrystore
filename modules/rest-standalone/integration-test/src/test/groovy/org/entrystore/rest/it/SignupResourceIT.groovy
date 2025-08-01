@@ -403,7 +403,18 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 1
 	}
 
-	@Ignore
+	def "GET /auth/signup should not confirm sign up without providing a token"() {
+		given:
+
+		when:
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup')
+
+		then:
+		confirmConn.getResponseCode() == HTTP_OK
+		confirmConn.getContentType().contains('text/html')
+		confirmConn.getInputStream().text.contains("<input type=\"submit\" value=\"Sign-up\" />")
+	}
+
 	def "GET /auth/signup should confirm creating new user after signing up with a valid token"() {
 		given:
 		def requestBody = JsonOutput.toJson([
@@ -428,7 +439,6 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 1
 	}
 
-	@Ignore
 	def "GET /auth/signup should not confirm creating new user after signing up with an invalid token"() {
 		given:
 		def requestBody = JsonOutput.toJson([
@@ -450,7 +460,6 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getErrorStream().text.contains("Invalid confirmation link.")
 	}
 
-	@Ignore
 	def "GET /auth/signup should not confirm creating new user after signing up with already used token"() {
 		given:
 		def requestBody = JsonOutput.toJson([
@@ -475,7 +484,6 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getErrorStream().text.contains("Invalid confirmation link.")
 	}
 
-	@Ignore
 	def "GET /auth/signup should not confirm if the user already exists"() {
 		given:
 		// create user
@@ -505,7 +513,6 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getErrorStream().text.contains("User with submitted email address exists already.")
 	}
 
-	@Ignore
 	def "GET /auth/signup should not confirm user signup for another token that was generated before another user signup was successful"() {
 		given:
 		def requestBody = JsonOutput.toJson([
@@ -534,7 +541,6 @@ class SignupResourceIT extends BaseSpec {
 		oldConfirmConn.getErrorStream().text.contains("User with submitted email address exists already.")
 	}
 
-	@Ignore
 	def "GET /auth/signup should not remove tokens of another user"() {
 		given:
 		def request1Body = JsonOutput.toJson([
@@ -574,7 +580,6 @@ class SignupResourceIT extends BaseSpec {
 		user2ConfirmConn.getInputStream().text.contains("Sign-up successful.")
 	}
 
-	@Ignore
 	def "GET /auth/signup should confirm user signup and redirect to provided permitted url"() {
 		given:
 		// create user
@@ -600,7 +605,6 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getURL().toString() == urlSuccess
 	}
 
-	@Ignore
 	def "GET /auth/signup should confirm user signup and not redirect to provided not permitted url"() {
 		given:
 		def urlSuccess = "http://example.org/store/blabla/999"
