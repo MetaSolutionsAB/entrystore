@@ -3,6 +3,7 @@ package org.entrystore.rest.it
 import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.apache.commons.lang3.RandomStringUtils
+import org.entrystore.Entry
 import org.entrystore.rest.it.util.EntryStoreClient
 
 import javax.mail.internet.InternetAddress
@@ -12,16 +13,27 @@ import static java.net.HttpURLConnection.*
 
 class SignupResourceIT extends BaseSpec {
 
-	def newPassword = 'newPass12345'
+	static def newPassword = 'newPass12345'
 	def grecaptcharesponse = 'anything'
 	def firstName = 'First'
 	def lastName = 'Last'
 
 	static GreenMail greenMail = new GreenMail(SMTP)
+	static def genericCredsClone = [:]
 
-	def setup() { greenMail.start() }
+	def setupSpec() {
+		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.creds.put('userSignupCustomPropsConfirm@test.com', newPassword)
+		EntryStoreClient.creds.put('userSignupCustomPropsFormConfirm@test.com', newPassword)
+		greenMail.start()
+	}
 
 	def cleanup() {
+		greenMail.purgeEmailFromAllMailboxes()
+	}
+
+	def cleanupSpec() {
+		EntryStoreClient.creds = genericCredsClone
 		greenMail.stop()
 	}
 
@@ -30,10 +42,10 @@ class SignupResourceIT extends BaseSpec {
 		def requestBody = "foo"
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
 	def "POST /auth/signup should fail if the data sent to server is larger then 32KB or unknown"() {
@@ -48,10 +60,10 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+		signupConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
 	}
 
 	def "POST /auth/signup should send an email with generated token to a new user"() {
@@ -65,12 +77,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_OK
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to usersignup@test.com")
+		signupConn.getResponseCode() == HTTP_OK
+		signupConn.getContentType().contains('text/html')
+		signupConn.getInputStream().text.contains("A confirmation message was sent to usersignup@test.com")
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -88,12 +100,12 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=userSignupForm@test.com&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_OK
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to usersignupform@test.com")
+		signupConn.getResponseCode() == HTTP_OK
+		signupConn.getContentType().contains('text/html')
+		signupConn.getInputStream().text.contains("A confirmation message was sent to usersignupform@test.com")
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -117,12 +129,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("The password must conform to the configured rules.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("The password must conform to the configured rules.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -137,12 +149,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("Invalid name.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("Invalid name.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -157,12 +169,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("Invalid name.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("Invalid name.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -177,12 +189,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("Invalid email address: userresetbademail@")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("Invalid email address: userresetbademail@")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -196,12 +208,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("One or more parameters are missing.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("One or more parameters are missing.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -210,12 +222,12 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("One or more parameters are missing.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("One or more parameters are missing.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -229,12 +241,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("One or more parameters are missing.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("One or more parameters are missing.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -243,12 +255,12 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=userResetNoPasswordForm@test.com&g-recaptcha-response=' + grecaptcharesponse
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("One or more parameters are missing.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("One or more parameters are missing.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -262,12 +274,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("reCaptcha information missing.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("reCaptcha information missing.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -276,12 +288,12 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=userResetNoRecaptchaForm@test.com&password=' + newPassword
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("reCaptcha information missing.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("reCaptcha information missing.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -295,12 +307,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("One or more parameters are missing.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("One or more parameters are missing.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -309,12 +321,12 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'lastname=' + lastName + '&email=userResetNoFirstname@test.com&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("One or more parameters are missing.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("One or more parameters are missing.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -328,12 +340,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("One or more parameters are missing.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("One or more parameters are missing.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -342,12 +354,12 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&email=userResetNoLastname@test.com&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("One or more parameters are missing.")
+		signupConn.getResponseCode() == HTTP_BAD_REQUEST
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("One or more parameters are missing.")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -362,12 +374,12 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == 417 // Status.CLIENT_ERROR_EXPECTATION_FAILED
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains("The email domain is not allowed for sign-up: notwhitelisted.com")
+		signupConn.getResponseCode() == 417 // Status.CLIENT_ERROR_EXPECTATION_FAILED
+		signupConn.getContentType().contains('text/html')
+		signupConn.getErrorStream().text.contains("The email domain is not allowed for sign-up: notwhitelisted.com")
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -380,20 +392,20 @@ class SignupResourceIT extends BaseSpec {
 		EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody).getResponseCode() == HTTP_OK
 
 		def requestBody = JsonOutput.toJson([
-			firstname         : firstName,
-			lastname          : lastName,
-			email             : 'userSignupExisting@test.com',
-			password          : newPassword,
-			grecaptcharesponse: grecaptcharesponse
+				firstname         : firstName,
+				lastname          : lastName,
+				email             : 'userSignupExisting@test.com',
+				password          : newPassword,
+				grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
-		def resetPasswordConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_OK
-		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getInputStream().text.contains("A confirmation message was sent to usersignupexisting@test.com")
+		signupConn.getResponseCode() == HTTP_OK
+		signupConn.getContentType().contains('text/html')
+		signupConn.getInputStream().text.contains("A confirmation message was sent to usersignupexisting@test.com")
 		greenMail.getReceivedMessages().size() == 1
 	}
 
@@ -512,8 +524,8 @@ class SignupResourceIT extends BaseSpec {
 		def requestBody = JsonOutput.toJson([
 				firstname         : firstName,
 				lastname          : lastName,
-				email   : 'userConfirmOldToken@test.com',
-				password: newPassword,
+				email             : 'userConfirmOldToken@test.com',
+				password          : newPassword,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
@@ -540,16 +552,16 @@ class SignupResourceIT extends BaseSpec {
 		def request1Body = JsonOutput.toJson([
 				firstname         : firstName,
 				lastname          : lastName,
-				email   : 'user1SignupOldToken@test.com',
-				password: newPassword,
+				email             : 'user1SignupOldToken@test.com',
+				password          : newPassword,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		// create user2
 		def request2Body = JsonOutput.toJson([
 				firstname         : firstName,
 				lastname          : lastName,
-				email   : 'user2SignupOldToken@test.com',
-				password: 'newPass22345',
+				email             : 'user2SignupOldToken@test.com',
+				password          : 'newPass22345',
 				grecaptcharesponse: grecaptcharesponse
 		])
 
@@ -581,9 +593,9 @@ class SignupResourceIT extends BaseSpec {
 		def requestBody = JsonOutput.toJson([
 				firstname         : firstName,
 				lastname          : lastName,
-				email     : 'userSignupSuccessUrlPermitted@test.com',
-				password  : newPassword,
-				urlsuccess: urlSuccess,
+				email             : 'userSignupSuccessUrlPermitted@test.com',
+				password          : newPassword,
+				urlsuccess        : urlSuccess,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
@@ -605,9 +617,9 @@ class SignupResourceIT extends BaseSpec {
 		def requestBody = JsonOutput.toJson([
 				firstname         : firstName,
 				lastname          : lastName,
-				email     : 'userSignupSuccessUrlNotPermitted@test.com',
-				password  : newPassword,
-				urlsuccess: urlSuccess,
+				email             : 'userSignupSuccessUrlNotPermitted@test.com',
+				password          : newPassword,
+				urlsuccess        : urlSuccess,
 				grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
@@ -647,5 +659,68 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getHeaderField("Location") == null
 		confirmConn.getURL().toString() == urlfailure
 	} */
+
+	def "POST /auth/signup should confirm creating new user with custom properties and new homecontext after signing up with a valid token"() {
+		given:
+		def requestBody = JsonOutput.toJson([
+				firstname         : firstName,
+				lastname          : lastName,
+				email             : 'userSignupCustomPropsConfirm@test.com',
+				password          : newPassword,
+				grecaptcharesponse: grecaptcharesponse,
+				custom_foo        : 'foo',
+				custom_boo        : 'boo'
+		])
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+
+		then:
+		signupConn.getResponseCode() == HTTP_OK
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		EntryStoreClient.getRequest('/auth/signup?confirm=' + token).getResponseCode() == HTTP_CREATED
+
+		def info = EntryStoreClient.getRequest('/auth/user', 'userSignupCustomPropsConfirm@test.com')
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		def entryId = infoRespJson['id']
+
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId)
+		resourceConn.getResponseCode() == HTTP_OK
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceRespJson != null
+		resourceRespJson['homecontext'] != null
+		resourceRespJson['customProperties']['foo'] == 'foo'
+		resourceRespJson['customProperties']['boo'] == 'boo'
+		resourceRespJson['name'] == 'userSignupCustomPropsConfirm@test.com'.toLowerCase()
+	}
+
+	def "POST /auth/signup should confirm creating new user with custom properties after signing up with a valid token posted as an html form"() {
+		given:
+		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=userSignupCustomPropsFormConfirm@test.com&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse + '&custom_foo=foo&custom_boo=boo'
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+
+		then:
+		signupConn.getResponseCode() == HTTP_OK
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		EntryStoreClient.getRequest('/auth/signup?confirm=' + token).getResponseCode() == HTTP_CREATED
+
+		def info = EntryStoreClient.getRequest('/auth/user', 'userSignupCustomPropsFormConfirm@test.com')
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		def entryId = infoRespJson['id']
+
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId)
+		resourceConn.getResponseCode() == HTTP_OK
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceRespJson != null
+		resourceRespJson['customProperties']['foo'] == 'foo'
+		resourceRespJson['customProperties']['boo'] == 'boo'
+		resourceRespJson['name'] == 'userSignupCustomPropsFormConfirm@test.com'.toLowerCase()
+	}
 
 }
