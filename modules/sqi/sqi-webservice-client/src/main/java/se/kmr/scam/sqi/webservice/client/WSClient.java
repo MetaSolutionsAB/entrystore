@@ -16,9 +16,9 @@
 
 package se.kmr.scam.sqi.webservice.client;
 
-import javax.xml.namespace.QName;
-import javax.xml.ws.Service;
-import javax.xml.ws.soap.SOAPBinding;
+import jakarta.xml.namespace.QName;
+import jakarta.xml.ws.Service;
+import jakarta.xml.ws.soap.SOAPBinding;
 
 import org.apache.cxf.interceptor.LoggingInInterceptor;
 import org.apache.cxf.interceptor.LoggingOutInterceptor;
@@ -65,7 +65,7 @@ public class WSClient {
 //        	SqiSessionManagementPort sessionPort = (SqiSessionManagementPort) factory.create();
 
                 	
-        	// Connect Alternative 3 - javax.xml.ws
+        	// Connect Alternative 3 - jakarta.xml.ws
 //        	Service targetService = Service.create(new QName("urn:www.cenorm.be/isss/ltws/wsdl/SQIv1p0", "SqiTargetService"));
 //            String endpointAddress = "http://localhost:8080/scam-sqi-webservice-module-4.0-SNAPSHOT/services/SqiTargetService";
 //            targetService.addPort(new QName("urn:www.cenorm.be/isss/ltws/wsdl/SQIv1p0", "SqiTargetPort"), SOAPBinding.SOAP11HTTP_BINDING, endpointAddress);

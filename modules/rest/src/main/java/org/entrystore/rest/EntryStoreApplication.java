@@ -101,9 +101,9 @@ import org.restlet.security.ChallengeAuthenticator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.naming.InitialContext;
-import javax.naming.NamingException;
-import javax.servlet.ServletContext;
+import jakarta.naming.InitialContext;
+import jakarta.naming.NamingException;
+import jakarta.servlet.ServletContext;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -193,9 +193,9 @@ public class EntryStoreApplication extends Application {
 					configURI = URI.create(envConfigURI);
 				} else {
 					// We try the context
-					javax.naming.Context env = null;
+					jakarta.naming.Context env = null;
 					try {
-						env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
+						env = (jakarta.naming.Context) new InitialContext().lookup("java:comp/env");
 						if (env != null && env.lookup("entrystore.config") != null) {
 							configURI = new File((String) env.lookup("entrystore.config")).toURI();
 						}

@@ -22,8 +22,8 @@ import static org.junit.Assert.fail;
 import org.junit.Test; 
 import java.net.URL;
 
-import javax.xml.namespace.QName;
-import javax.xml.ws.Endpoint;
+import jakarta.xml.namespace.QName;
+import jakarta.xml.ws.Endpoint;
 
 
 import org.junit.After;

@@ -28,13 +28,13 @@ import org.entrystore.repository.util.EntryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.mail.Message;
-import javax.mail.MessagingException;
-import javax.mail.PasswordAuthentication;
-import javax.mail.Session;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMessage;
-import javax.mail.internet.MimeUtility;
+import jakarta.mail.Message;
+import jakarta.mail.MessagingException;
+import jakarta.mail.PasswordAuthentication;
+import jakarta.mail.Session;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeUtility;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -95,7 +95,7 @@ public class Email {
 			log.debug("SSL enabled");
 			props.put("mail.smtp.ssl.enable", "true");
 			props.put("mail.smtp.socketFactory.port", port);
-			props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+			props.put("mail.smtp.socketFactory.class", "jakarta.net.ssl.SSLSocketFactory");
 			props.put("mail.smtp.socketFactory.fallback", "false");
 		}
 		if (starttls) {
@@ -117,7 +117,7 @@ public class Email {
 		// Authentication
 		if (username != null && password != null) {
 			props.put("mail.smtp.auth", "true");
-			session = Session.getInstance(props, new javax.mail.Authenticator() {
+			session = Session.getInstance(props, new jakarta.mail.Authenticator() {
 				protected PasswordAuthentication getPasswordAuthentication() {
 					return new PasswordAuthentication(username, password);
 				}
@@ -293,3 +293,4 @@ public class Email {
 	}
 
 }
+

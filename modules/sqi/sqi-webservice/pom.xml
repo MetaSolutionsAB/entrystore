@@ -191,7 +191,7 @@
 		
 		<!-- try scope provided, remove this if problem (CXF uses Sun's JAXB implementation) -->
 		<dependency>
-			<groupId>javax.xml.bind</groupId>
+			<groupId>jakarta.xml.bind</groupId>
 			<artifactId>jaxb-api</artifactId>
 			<version>${jaxb.version}</version>
 			<!-- <scope>provided</scope>-->

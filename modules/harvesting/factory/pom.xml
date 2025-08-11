@@ -35,8 +35,8 @@
 	<dependencies>
 		<!-- should not be deployed to the web container (hence the scope is 'provided')-->	  
 		<dependency>
-			<groupId>javax.servlet</groupId>
-			<artifactId>javax.servlet-api</artifactId>
+			<groupId>jakarta.servlet</groupId>
+			<artifactId>jakarta.servlet-api</artifactId>
 			<version>${servlet.version}</version>
 			<scope>provided</scope>
 		</dependency>

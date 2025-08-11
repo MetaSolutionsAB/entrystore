@@ -607,8 +607,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	private void initSolr() {
-		log.info("Manually setting property \"javax.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");
-		System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
+		log.info("Manually setting property \"jakarta.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");
+		System.setProperty("jakarta.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
 
 		boolean reindex = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false);
 		boolean reindexWait = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, false);

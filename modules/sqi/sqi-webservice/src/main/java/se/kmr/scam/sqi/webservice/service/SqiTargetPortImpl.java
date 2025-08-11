@@ -19,15 +19,15 @@ package se.kmr.scam.sqi.webservice.service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-//import javax.jws.WebMethod;
-//import javax.jws.WebParam;
-//import javax.jws.WebResult;
-//import javax.jws.WebService;
-//import javax.jws.soap.SOAPBinding;
-//import javax.jws.soap.SOAPBinding.ParameterStyle;
-//import javax.xml.bind.annotation.XmlSeeAlso;
-//import javax.xml.ws.RequestWrapper;
-//import javax.xml.ws.ResponseWrapper;
+//import jakarta.jws.WebMethod;
+//import jakarta.jws.WebParam;
+//import jakarta.jws.WebResult;
+//import jakarta.jws.WebService;
+//import jakarta.jws.soap.SOAPBinding;
+//import jakarta.jws.soap.SOAPBinding.ParameterStyle;
+//import jakarta.xml.bind.annotation.XmlSeeAlso;
+//import jakarta.xml.ws.RequestWrapper;
+//import jakarta.xml.ws.ResponseWrapper;
 
 import be.cenorm.isss.ltws.wsdl.sqiv1p0.AsynchronousQuery;
 import be.cenorm.isss.ltws.wsdl.sqiv1p0.FaultCodeType;
@@ -57,7 +57,7 @@ import se.kmr.scam.sqi.translate.TranslationException;
  * 
  */
 
-@javax.jws.WebService(
+@jakarta.jws.WebService(
                       serviceName = "SqiTargetService",
                       portName = "SqiTargetPort",
                       targetNamespace = "urn:www.cenorm.be/isss/ltws/wsdl/SQIv1p0",

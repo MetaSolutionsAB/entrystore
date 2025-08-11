@@ -25,9 +25,9 @@ import org.junit.Test;
 import java.io.IOException;
 import java.net.URL;
 
-import javax.xml.namespace.QName;
+import jakarta.xml.namespace.QName;
 
-import javax.xml.ws.Endpoint;
+import jakarta.xml.ws.Endpoint;
 
 import org.junit.After;
 import org.junit.AfterClass;

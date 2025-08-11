@@ -16,8 +16,8 @@
 
 package se.kmr.scam.oe;
 
-import javax.servlet.ServletContextEvent;
-import javax.servlet.ServletContextListener;
+import jakarta.servlet.ServletContextEvent;
+import jakarta.servlet.ServletContextListener;
 
 /**
  * @author Hannes Ebner
@@ -28,9 +28,9 @@ public class ContextLoaderListener implements ServletContextListener {
 
 	public void contextInitialized(ServletContextEvent event) {
 //		ServletContext context = event.getServletContext();
-//		javax.naming.Context env;
+//		jakarta.naming.Context env;
 //		try {
-//			env = (javax.naming.Context) new InitialContext().lookup("java:comp/env");
+//			env = (jakarta.naming.Context) new InitialContext().lookup("java:comp/env");
 //			log.info("SCAM config location: " + env.lookup("scam.config"));
 //		} catch (NamingException e) {
 //			log.error(e.getMessage());
