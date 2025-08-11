@@ -210,7 +210,7 @@ public class Email {
 		}
 
 		if (messageBodyPasswordReset == null) {
-			log.error("Unable to load email template for sign-up confirmation");
+			log.error("Unable to load email template for password reset confirmation");
 			return false;
 		}
 
