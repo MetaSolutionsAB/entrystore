@@ -54,6 +54,7 @@ public class EchoResource extends BaseResource {
 		if (MediaType.MULTIPART_FORM_DATA.equals(getRequest().getEntity().getMediaType(), true)) {
 			try {
 				// We don't echo payloads bigger than MAX_ENTITY_SIZE
+				// getEntity().getSize() is -1 for chunked contents, hence separate check after file is read
 				if (getRequest().getEntity().getSize() > MAX_ENTITY_SIZE) {
 					respondWith(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
 					return;
@@ -63,6 +64,10 @@ public class EchoResource extends BaseResource {
 				Iterator<FileItem> iter = items.iterator();
 				if (iter.hasNext()) {
 					FileItem item = iter.next();
+					if (item.getSize() > MAX_ENTITY_SIZE) {
+						respondWith(Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE);
+						return;
+					}
 					StringBuilder escapedContent = new StringBuilder();
 					escapedContent.append("<textarea>");
 					String payload;

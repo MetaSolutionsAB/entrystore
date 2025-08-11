@@ -2,6 +2,7 @@ package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
 
+import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNSUPPORTED_TYPE
@@ -72,9 +73,7 @@ class EchoIT extends BaseSpec {
 		echoConn.getErrorStream().text.contains('<textarea>status:415\n</textarea>')
 	}
 
-	// below test fails to send data to the server, not sure why. 9MB works, 10MB and more doesn't
-	/*
-	def 'POST /echo with multi-part file larger than 10MB should respond with BAD_REQUEST 400'() {
+	def 'POST /echo with multi-part file larger than 10MB should respond with HTTP_ENTITY_TOO_LARGE 413'() {
 		given:
 		// create a test binary file with 11MB of some data
 		def testBinFile = File.createTempFile('echoTest', '.bin')
@@ -90,9 +89,8 @@ class EchoIT extends BaseSpec {
 		def echoConn = EntryStoreClient.postRequestMultiPart('/echo', testBinFile)
 
 		then:
-		echoConn.getResponseCode() == HTTP_BAD_REQUEST
+		echoConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
 		echoConn.getContentType().contains('text/html')
-		echoConn.getErrorStream().text.contains('<textarea>status:403\n</textarea>')
+		echoConn.getErrorStream().text.contains('<textarea>status:413\n</textarea>')
 	}
-	 */
 }

@@ -95,6 +95,9 @@ class EntryStoreClient {
 			connection.setRequestProperty(key, value)
 		}
 
+		if (extraHeaders.getOrDefault('Content-Length', "0").toInteger() > 8000) {
+			connection.setChunkedStreamingMode(8192)
+		}
 		connection.outputStream.withStream { output ->
 			output << inputStream
 		}
