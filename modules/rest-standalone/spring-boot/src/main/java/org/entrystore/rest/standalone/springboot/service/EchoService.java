@@ -19,7 +19,7 @@ public class EchoService {
 		// We don't echo payloads bigger than MAX_FILE_SIZE
 		if (file.getSize() > MAX_FILE_SIZE) {
 			throw new TextareaHtmlResponseException("Received file size (of " + file.getSize()
-					+ "b) exceeds maximum allowed size of: " + MAX_FILE_SIZE + "b", HttpStatus.BAD_REQUEST);
+					+ "B) exceeds maximum allowed size of: " + MAX_FILE_SIZE + "B", HttpStatus.PAYLOAD_TOO_LARGE);
 		}
 
 		try {
