@@ -16,9 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import java.math.RoundingMode;
-import java.text.DecimalFormat;
-import java.util.Locale;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.PrincipalManager;
@@ -40,9 +37,13 @@ import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
+import java.util.Locale;
+
 
 /**
- * This resource provides basic information about the currently logged in user.
+ * This resource provides basic information about the currently logged-in user.
  *
  * @author Hannes Ebner
  */
