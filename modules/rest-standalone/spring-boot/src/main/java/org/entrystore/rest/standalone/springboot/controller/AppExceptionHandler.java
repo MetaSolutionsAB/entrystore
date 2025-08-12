@@ -16,20 +16,21 @@ import org.entrystore.rest.standalone.springboot.model.exception.RedirectSeeOthe
 import org.entrystore.rest.standalone.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.standalone.springboot.model.exception.TextareaHtmlResponseException;
 import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
-import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.ui.Model;
-import org.springframework.web.HttpMediaTypeNotSupportedException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-import java.util.List;
-
+/**
+ * Generic Exception handler to handle application specific exceptions.
+ * If an exception is thrown that implements org.springframework.web.ErrorResponse, then it will fall into generic method
+ * handler for Exception.class, however ErrorResponse is handled by Spring-boot, so we just re-throw it. Only log as error
+ * with 500 response all other exception types.
+ */
 @Slf4j
 @ControllerAdvice
 public class AppExceptionHandler {
@@ -50,28 +51,6 @@ public class AppExceptionHandler {
 				.status(HttpStatus.SEE_OTHER)
 				.location(ex.getLocation())
 				.build();
-	}
-
-	@ExceptionHandler(MethodArgumentNotValidException.class)
-	public ResponseEntity<ErrorResponse> handleValidationExceptions(
-			MethodArgumentNotValidException ex,
-			HttpServletRequest request) {
-
-		// Aggregate default messages from validation errors
-		List<String> errorMessages = ex.getBindingResult()
-				.getAllErrors()
-				.stream()
-				.map(DefaultMessageSourceResolvable::getDefaultMessage)
-				.toList();
-
-		// Build the response body
-		ErrorResponse responseBody = ErrorResponse.builder()
-				.status(HttpStatus.BAD_REQUEST.value())
-				.path(request.getRequestURI())
-				.error(errorMessages.toString())
-				.build();
-
-		return ResponseEntity.badRequest().body(responseBody);
 	}
 
 	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class})
@@ -104,18 +83,6 @@ public class AppExceptionHandler {
 		log.debug("MethodNotAllowedException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.METHOD_NOT_ALLOWED.value())
-				.path(request.getRequestURI())
-				.error(ex.getMessage())
-				.build();
-		return ResponseEntity.status(responseBody.status()).body(responseBody);
-	}
-
-	@ExceptionHandler(HttpMediaTypeNotSupportedException.class)
-	public ResponseEntity<ErrorResponse> handleHttpMediaTypeNotSupportedException(HttpMediaTypeNotSupportedException ex,
-																				  HttpServletRequest request) {
-		log.debug("HttpMediaTypeNotSupportedException: {}", ex.getMessage());
-		ErrorResponse responseBody = ErrorResponse.builder()
-				.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE.value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
@@ -196,8 +163,15 @@ public class AppExceptionHandler {
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ErrorResponse> handleGenericException(Exception ex,
-																HttpServletRequest request) {
-		log.error("Exception at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+																HttpServletRequest request) throws Exception {
+
+		if (ex instanceof org.springframework.web.ErrorResponse) {
+			// handled by Spring-boot so we don't need to here
+			log.debug("General ErrorResponse Exception of '{}' at endpoint '{}': {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+			throw ex;
+		}
+
+		log.error("Unhandled general Exception of '{}' at endpoint '{}': {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
 				.path(request.getRequestURI())
