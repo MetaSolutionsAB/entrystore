@@ -22,7 +22,7 @@ class EntryStoreClient {
 		}
 	}
 
-	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json') {
+	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> customHeaders = null) {
 		def connection = createConnection(path)
 		if (requestAcceptType?.trim()) {
 			connection.setRequestProperty('Accept', requestAcceptType)
@@ -30,6 +30,13 @@ class EntryStoreClient {
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
+
+		if (customHeaders != null) {
+			for (String header : customHeaders.keySet()) {
+				connection.setRequestProperty(header, customHeaders.get(header))
+			}
+		}
+
 		connection.connect()
 		return connection
 	}
@@ -56,8 +63,8 @@ class EntryStoreClient {
 	def static putRequestFile(String path, File file, String asUser = 'admin', String contentType = 'application/octet-stream') {
 		file.withInputStream { inputStream ->
 			def extraHeaders = [
-				'Content-Length'     : file.length().toString(),
-				'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
+					'Content-Length'     : file.length().toString(),
+					'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
 			]
 			return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, extraHeaders)
 		}
@@ -134,7 +141,7 @@ class EntryStoreClient {
 	def static authorize(String asUser) {
 		def bodyParams = 'auth_username=' + asUser + '&auth_password=' + creds[asUser]
 		def conn = postRequest('/auth/cookie', bodyParams, null,
-			'application/x-www-form-urlencoded')
+				'application/x-www-form-urlencoded')
 
 		assert conn.getResponseCode() == HTTP_OK
 		def cookies = conn.getHeaderField('Set-Cookie')
