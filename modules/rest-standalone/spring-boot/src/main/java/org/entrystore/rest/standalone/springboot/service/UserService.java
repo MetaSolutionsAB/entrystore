@@ -2,7 +2,6 @@ package org.entrystore.rest.standalone.springboot.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.tomcat.util.http.parser.AcceptLanguage;
 import org.entrystore.Context;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
@@ -12,10 +11,9 @@ import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundE
 import org.entrystore.rest.standalone.springboot.service.auth.LoginTokenCache;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.io.StringReader;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Slf4j
@@ -28,7 +26,7 @@ public class UserService {
 
 	public boolean isAdmin(User user) {
 		return principalManager.getAdminUser().getURI().equals(user.getURI()) ||
-			principalManager.getAdminGroup().isMember(user);
+				principalManager.getAdminGroup().isMember(user);
 	}
 
 	public GetAuthUserResponse getUserInfo(String locales, String authToken) {
@@ -58,22 +56,20 @@ public class UserService {
 			}
 		}
 
-		return new GetAuthUserResponse(user.getEntry().getId(), homeContext, user.getName(), user.getEntry().getEntryURI().toString(), user.getLanguage(), clientAcceptedLanguages, user.getExternalID(), authTokenExpires);
+		return new GetAuthUserResponse(user.getEntry().getId(), homeContext, user.getName(),
+				user.getEntry().getEntryURI().toString(), user.getLanguage(), clientAcceptedLanguages,
+				user.getExternalID(), authTokenExpires);
 	}
 
-	private Map<String, Double> parseLocalesHeader(String value) {
+	private static Map<String, Double> parseLocalesHeader(String value) {
 
 		Map<String, Double> acceptLanguages = new HashMap<>();
-		try {
-			List<AcceptLanguage> parsedLanguages = AcceptLanguage.parse(new StringReader(value));
-			for (AcceptLanguage language : parsedLanguages) {
-				acceptLanguages.put(language.getLocale().toLanguageTag(), language.getQuality());
-			}
-		} catch (IOException e) {
-			log.error("Cannot parse Accept-Language header {}", value);
-			return null;
-		}
 
+		List<Locale.LanguageRange> ranges = Locale.LanguageRange.parse(value);
+		for (Locale.LanguageRange range : ranges) {
+			String canonicalTag = Locale.forLanguageTag(range.getRange()).toLanguageTag();
+			acceptLanguages.put(canonicalTag, range.getWeight());
+		}
 		return acceptLanguages;
 	}
 
