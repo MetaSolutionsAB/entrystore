@@ -85,6 +85,11 @@
             <version>1.8.0</version>
             <scope>compile</scope>
         </dependency>
+		<dependency>
+			<groupId>org.apache.tomcat</groupId>
+			<artifactId>tomcat-coyote</artifactId>
+			<version>11.0.10</version>
+		</dependency>
 
 	</dependencies>
 

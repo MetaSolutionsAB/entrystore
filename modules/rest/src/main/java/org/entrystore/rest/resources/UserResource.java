@@ -16,9 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import java.math.RoundingMode;
-import java.text.DecimalFormat;
-import java.util.Locale;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.PrincipalManager;
@@ -39,6 +36,10 @@ import org.restlet.resource.Get;
 import org.restlet.resource.ResourceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
+import java.util.Locale;
 
 
 /**
@@ -99,6 +100,8 @@ public class UserResource extends BaseResource {
 			}
 
 			Cookie authTokenCookie = getRequest().getCookies().getFirst("auth_token");
+
+			LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
 			if (authTokenCookie != null) {
 				String authToken = authTokenCookie.getValue();
 				LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
