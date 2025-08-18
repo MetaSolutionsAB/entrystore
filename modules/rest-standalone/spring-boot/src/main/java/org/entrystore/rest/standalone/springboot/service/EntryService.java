@@ -7,8 +7,11 @@ import jakarta.json.JsonException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.Value;
+import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
@@ -20,16 +23,19 @@ import org.entrystore.Group;
 import org.entrystore.List;
 import org.entrystore.Metadata;
 import org.entrystore.Resource;
+import org.entrystore.ResourceType;
 import org.entrystore.User;
 import org.entrystore.exception.EntryMissingException;
 import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
+import org.entrystore.repository.util.NS;
 import org.entrystore.rest.standalone.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
@@ -42,6 +48,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -60,8 +67,9 @@ public class EntryService {
 	private static final Pattern ENTRY_ID_PATTERN = Pattern.compile("^[\\w\\-]+$");
 
 	private final RepositoryManagerImpl repositoryManager;
-	private final ResourceJsonSerializer resourceSerializer;
+	private final ContextService contextService;
 	private final ReservedNamesService reservedNamesService;
+	private final ResourceJsonSerializer resourceSerializer;
 
 	private final ObjectMapper objectMapper;
 
@@ -92,7 +100,7 @@ public class EntryService {
 	}
 
 	public Entry getEntryByContextIdAndEntryId(String contextId, String entryId) {
-		Context context = getContext(contextId);
+		Context context = contextService.getContext(contextId);
 		if (context == null) {
 			// throw the same exception message for missing Context and missing Entry to avoid leaking information about context existence
 			throw new EntityNotFoundException("No entry with id '" + entryId + "' found in context '" + contextId + "'");
@@ -104,14 +112,6 @@ public class EntryService {
 		}
 
 		return entry;
-	}
-
-	private Context getContext(String contextId) {
-		ContextManager cm = repositoryManager.getContextManager();
-		if (cm != null && contextId != null) {
-			return cm.getContext(contextId);
-		}
-		return null;
 	}
 
 	private GetEntryResponse convertEntryToResponseModel(Entry entry, String rdfFormat, boolean includeAll, ListFilter listFilter) throws JSONException {
@@ -251,6 +251,113 @@ public class EntryService {
 			// TODO: other types, for example Context, SystemContext, PrincipalManager, etc
 			case ResultList, PipelineResult, Context, SystemContext -> IMMUTABLE_EMPTY_JSONOBJECT;
 		};
+	}
+
+	public Entry createEntry(String contextId, String entryId, EntryType entryType, GraphType graphType,
+							 URI resourceUri, URI listUri, URI groupUri, URI cachedExternalMetadataUri,
+							 String informationResource, URI templateUri, CreateEntryRequestBody body) {
+
+		Context context = contextService.getContextOrThrow(contextId);
+
+		if (entryId != null) {
+			if (!EntryService.isEntryIdValid(entryId)) {
+				throw new BadRequestException("Invalid entry ID of '" + entryId + "'");
+			}
+			Entry preExistingEntry = context.get(entryId);
+			if (preExistingEntry != null) {
+				throw new DataConflictException("Entry with provided ID already exists. EntryID: '" + entryId + "'");
+			}
+		}
+
+		Entry entry = null; // A variable to store the new entry in.
+
+		try {
+			// Local
+			if (entryType == null || entryType == EntryType.Local) {
+				entry = createLocalEntry(context, entryId, graphType, listUri, groupUri, body);
+			} else {
+				// Link
+				if (entryType == EntryType.Link && resourceUri != null) {
+					entry = createLinkEntry(context, entryId, graphType, resourceUri, listUri, body);
+				}
+				// Reference
+				else if (entryType == EntryType.Reference
+						&& resourceUri != null
+						&& cachedExternalMetadataUri != null) {
+
+					entry = createReferenceEntry(context, entryId, graphType, resourceUri, listUri, cachedExternalMetadataUri, body);
+				}
+				// LinkReference
+				else if (entryType == EntryType.LinkReference
+						&& resourceUri != null
+						&& cachedExternalMetadataUri != null) {
+
+					entry = createLinkReferenceEntry(context, entryId, graphType, resourceUri, listUri, cachedExternalMetadataUri, body);
+				}
+			}
+		} catch (IllegalArgumentException iae) {
+			throw new BadRequestException(iae.getMessage());
+		}
+
+		if (entry != null) {
+			ResourceType rt = mapToResourceType(informationResource);
+			entry.setResourceType(rt);
+
+			if (templateUri != null) {
+				Entry templateEntry = context.getByEntryURI(templateUri);
+				if (templateEntry != null && templateEntry.getLocalMetadata() != null) {
+					Model templateMD = templateEntry.getLocalMetadata().getGraph();
+					Model inheritedMD = new LinkedHashModel();
+					if (templateMD != null) {
+						ValueFactory vf = repositoryManager.getValueFactory();
+						IRI oldResURI = vf.createIRI(templateEntry.getResourceURI().toString());
+						IRI newResURI = vf.createIRI(entry.getResourceURI().toString());
+
+						java.util.List<IRI> predicateBlackList = new ArrayList<>();
+						predicateBlackList.add(vf.createIRI(NS.dc, "title"));
+						predicateBlackList.add(vf.createIRI(NS.dcterms, "title"));
+						predicateBlackList.add(vf.createIRI(NS.dc, "description"));
+						predicateBlackList.add(vf.createIRI(NS.dcterms, "description"));
+						java.util.List<Value> subjectBlackList = new ArrayList<>();
+
+						for (Statement statement : templateMD) {
+							if (predicateBlackList.contains(statement.getPredicate())) {
+								subjectBlackList.add(statement.getObject());
+								continue;
+							}
+							if (subjectBlackList.contains(statement.getSubject())) {
+								continue;
+							}
+							if (statement.getSubject().equals(oldResURI)) {
+								inheritedMD.add(newResURI, statement.getPredicate(), statement.getObject(), statement.getContext());
+							} else {
+								inheritedMD.add(statement);
+							}
+						}
+					}
+					if (!inheritedMD.isEmpty() && entry.getLocalMetadata() != null) {
+						Model mergedGraph = new LinkedHashModel();
+						mergedGraph.addAll(entry.getLocalMetadata().getGraph());
+						mergedGraph.addAll(inheritedMD);
+						entry.getLocalMetadata().setGraph(mergedGraph);
+					}
+				}
+			}
+		}
+
+		if (entry == null) {
+			throw new BadRequestException("Cannot create an entry with provided JSON");
+		} else {
+			return entry;
+		}
+	}
+
+	private ResourceType mapToResourceType(String rt) {
+		if (rt == null || !rt.equals("false")) {
+			return ResourceType.InformationResource;
+		} else {
+			return ResourceType.NamedResource;
+		}
 	}
 
 

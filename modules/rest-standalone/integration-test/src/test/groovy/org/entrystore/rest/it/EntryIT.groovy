@@ -465,6 +465,25 @@ class EntryIT extends BaseSpec {
 		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
 		responseJson['error'] != null
 		responseJson['error'].toString().contains('Entry with provided ID already exists')
+		responseJson['status'] != null
+		responseJson['timestamp'] != null
+	}
+
+	def "POST /{context-id}?entrytype=link should not create a new entry if context does not exist"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/some-non-existing-context-id' + convertMapToQueryParams(params))
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		responseJson['error'] != null
+		responseJson['error'].toString().contains('Context with id \'some-non-existing-context-id\' does not exist')
+		responseJson['status'] != null
+		responseJson['timestamp'] != null
 	}
 
 	def "POST /{context-id}?entrytype=link should throw unauthorized for non-admin user"() {

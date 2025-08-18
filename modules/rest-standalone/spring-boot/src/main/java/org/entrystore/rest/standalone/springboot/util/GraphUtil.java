@@ -71,13 +71,13 @@ import java.util.Map;
 public class GraphUtil {
 
 	private static final Map<String, Class<? extends RDFWriter>> MEDIATYPE_TO_RDFWRITER_MAP = Map.of(
-		RDFFormat.RDFXML.getDefaultMIMEType(), RDFXMLPrettyWriter.class,
-		RDFFormat.N3.getDefaultMIMEType(), N3Writer.class,
-		RDFFormat.TURTLE.getDefaultMIMEType(), TurtleWriter.class,
-		RDFFormat.TRIX.getDefaultMIMEType(), TriXWriter.class,
-		RDFFormat.NTRIPLES.getDefaultMIMEType(), NTriplesWriter.class,
-		RDFFormat.TRIG.getDefaultMIMEType(), TriGWriter.class,
-		RDFFormat.JSONLD.getDefaultMIMEType(), JSONLDWriter.class
+			RDFFormat.RDFXML.getDefaultMIMEType(), RDFXMLPrettyWriter.class,
+			RDFFormat.N3.getDefaultMIMEType(), N3Writer.class,
+			RDFFormat.TURTLE.getDefaultMIMEType(), TurtleWriter.class,
+			RDFFormat.TRIX.getDefaultMIMEType(), TriXWriter.class,
+			RDFFormat.NTRIPLES.getDefaultMIMEType(), NTriplesWriter.class,
+			RDFFormat.TRIG.getDefaultMIMEType(), TriGWriter.class,
+			RDFFormat.JSONLD.getDefaultMIMEType(), JSONLDWriter.class
 	);
 
 /*
@@ -218,7 +218,7 @@ public class GraphUtil {
 	}
 
 	public static Model deserializeGraphUnsafe(String graphString, String mediaType)
-		throws RDFHandlerException, IOException, RDFParseException {
+			throws RDFHandlerException, IOException, RDFParseException {
 
 		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {
 			return RDFJSON.rdfJsonToGraph(graphString);
@@ -254,12 +254,19 @@ public class GraphUtil {
 		return parser;
 	}
 
+	public static Class<? extends RDFWriter> getRDFWriterClassForMediaType(String mediaType) {
+		if (mediaType == null) {
+			return null;
+		}
+		return MEDIATYPE_TO_RDFWRITER_MAP.get(mediaType);
+	}
+
 	public static String serializeGraph(Model graph, String mediaType) {
 		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {
 			return RDFJSON.graphToRdfJson(graph);
 		}
 
-		Class<? extends RDFWriter> writerClass = MEDIATYPE_TO_RDFWRITER_MAP.get(mediaType);
+		Class<? extends RDFWriter> writerClass = getRDFWriterClassForMediaType(mediaType);
 		if (writerClass == null) {
 			// fallback - aligns with Restlet logic, but shouldn't we throw an IllegalArgumentException here?
 			writerClass = TurtleWriter.class;

@@ -3,6 +3,7 @@ package org.entrystore.rest.standalone.springboot.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
@@ -10,7 +11,10 @@ import org.entrystore.rest.standalone.springboot.model.api.CreateEntryRequestBod
 import org.entrystore.rest.standalone.springboot.model.api.CreateEntryResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.standalone.springboot.service.ContextService;
+import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,6 +25,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.net.URI;
 import java.util.List;
 
@@ -30,14 +37,15 @@ import java.util.List;
 public class ContextController {
 
 	private final ContextService contextService;
+	private final EntryService entryService;
 
 	@PreAuthorize("hasRole('ADMIN')")
 	@Operation(summary = "Returns an array of IDs of a context's entries")
 	@GetMapping(path = "/{context-id}", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
 	public List<String> getContextEntries(
-		@PathVariable("context-id") String contextId,
-		@RequestParam(required = false, name = "entryname") String entryName,
-		@RequestParam(required = false, name = "deleted") String deletedEntries
+			@PathVariable("context-id") String contextId,
+			@RequestParam(required = false, name = "entryname") String entryName,
+			@RequestParam(required = false, name = "deleted") String deletedEntries
 	) {
 		return contextService.getContextEntries(contextId, deletedEntries != null, entryName);
 	}
@@ -45,34 +53,67 @@ public class ContextController {
 	@Operation(summary = "Creates a new entry inside the given context")
 	@PostMapping(path = "/{context-id}", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
 	public ResponseEntity<CreateEntryResponse> createEntry(
-		@PathVariable("context-id") String contextId,
-		@RequestParam(required = false, name = "id") String entryId,
-		@RequestParam(required = false, name = "entrytype") EntryType entryType,
-		@RequestParam(required = false, name = "graphtype", defaultValue = "none") GraphType graphType,
-		@RequestParam(required = false, name = "resource") URI resourceUri,
-		@RequestParam(required = false, name = "list") URI listUri,
-		@RequestParam(required = false) URI groupUri,
-		@RequestParam(required = false, name = "cached-external-metadata") URI cachedExternalMetadataUri,
-		@RequestParam(required = false, name = "informationresource") String informationResource,
-		@RequestParam(required = false, name = "template") URI templateUri,
-		@RequestBody(required = false) CreateEntryRequestBody body) {
+			@PathVariable("context-id") String contextId,
+			@RequestParam(required = false, name = "id") String entryId,
+			@RequestParam(required = false, name = "entrytype") EntryType entryType,
+			@RequestParam(required = false, name = "graphtype", defaultValue = "none") GraphType graphType,
+			@RequestParam(required = false, name = "resource") URI resourceUri,
+			@RequestParam(required = false, name = "list") URI listUri,
+			@RequestParam(required = false) URI groupUri,
+			@RequestParam(required = false, name = "cached-external-metadata") URI cachedExternalMetadataUri,
+			@RequestParam(required = false, name = "informationresource") String informationResource,
+			@RequestParam(required = false, name = "template") URI templateUri,
+			@RequestBody(required = false) CreateEntryRequestBody body) {
 
 		if (isGraphTypeForbidden(graphType)) {
 			throw new BadRequestException("Pipeline results may only be created by Pipelines");
 		}
 
-		Entry entry = contextService.createEntry(contextId, entryId, entryType, graphType, resourceUri, listUri,
-			groupUri, cachedExternalMetadataUri, informationResource, templateUri, body);
+		Entry entry = entryService.createEntry(contextId, entryId, entryType, graphType, resourceUri, listUri,
+				groupUri, cachedExternalMetadataUri, informationResource, templateUri, body);
 
 
 		CreateEntryResponse responseBody = new CreateEntryResponse(entry.getId());
 
 		return ResponseEntity
-			.created(entry.getEntryURI())
-			.lastModified(entry.getModifiedDate().getTime())
-			.eTag(HttpUtil.createStrongETag(Long.toString(entry.getModifiedDate().getTime())))
-			.body(responseBody);
+				.created(entry.getEntryURI())
+				.lastModified(entry.getModifiedDate().getTime())
+				.eTag(HttpUtil.createStrongETag(Long.toString(entry.getModifiedDate().getTime())))
+				.body(responseBody);
 
+	}
+
+	@PreAuthorize("hasRole('ADMIN')")
+	@Operation(summary = "Exports a context")
+	@GetMapping(
+			path = "/{context-id}/export"
+			// we should add the 'produces' MediaType to the endpoint to clearly inform users what type of data is returned
+			// however, then the behaviour differs from Restlet, maybe tweaking Spring-boot content-negotiation strategy will help
+			//produces = "application/zip"
+	)
+	public ResponseEntity<InputStreamResource> createContextExport(
+			@PathVariable("context-id") String contextId,
+			@RequestParam(required = false) String metadataOnly,
+			@RequestParam(required = false) String rdfFormat
+	) throws FileNotFoundException {
+
+		// for 'rdfFormat' param data should be sent properly - i.e. html encoded '+' as %2B
+		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
+		// (+ is replaced with a space) we need to replace the space back to '+'
+		if (rdfFormat != null) {
+			rdfFormat = rdfFormat.trim().replace(' ', '+');
+		}
+
+		Context context = contextService.getContextOrThrow(contextId);
+		File zipFile = contextService.exportContextToAZipFile(context, metadataOnly != null, rdfFormat);
+
+		InputStreamResource fileStream = new InputStreamResource(new FileInputStream(zipFile));
+
+		return ResponseEntity.ok()
+				.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"context_" + contextId + "_export.zip\"")
+				.contentType(MediaType.valueOf("application/zip"))
+				.contentLength(zipFile.length())
+				.body(fileStream);
 	}
 
 	/**

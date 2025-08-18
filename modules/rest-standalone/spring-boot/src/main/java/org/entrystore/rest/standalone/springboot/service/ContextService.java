@@ -2,32 +2,41 @@ package org.entrystore.rest.standalone.springboot.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.rdf4j.model.IRI;
-import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.Statement;
-import org.eclipse.rdf4j.model.Value;
-import org.eclipse.rdf4j.model.ValueFactory;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.rio.RDFWriter;
+import org.eclipse.rdf4j.rio.trig.TriGWriter;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
-import org.entrystore.EntryType;
-import org.entrystore.GraphType;
-import org.entrystore.ResourceType;
+import org.entrystore.PrincipalManager;
+import org.entrystore.User;
+import org.entrystore.config.Config;
 import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.util.NS;
-import org.entrystore.rest.standalone.springboot.model.api.CreateEntryRequestBody;
-import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
-import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
+import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
-import java.util.ArrayList;
+import java.nio.file.Files;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Properties;
+import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Slf4j
 @Service
@@ -35,16 +44,29 @@ import java.util.stream.Collectors;
 public class ContextService {
 
 	private final RepositoryManagerImpl repositoryManager;
-	private final EntryService entryService;
 	private final ReservedNamesService reservedNames;
+	private final PrincipalManager principalManager;
+	private final Config esConfig;
 
+
+	/**
+	 * Retrieves the {@link Context} associated with the given context ID or throws an exception if no such context exists.
+	 *
+	 * @param contextId the ID of the context to retrieve
+	 * @return the context associated with the given ID
+	 * @throws EntityNotFoundException if the context with the specified ID is not found
+	 */
+	public Context getContextOrThrow(String contextId) {
+		Context context = getContext(contextId);
+		if (context == null) {
+			throw new EntityNotFoundException("Context with id '" + contextId + "' does not exist");
+		}
+		return context;
+	}
 
 	public List<String> getContextEntries(String contextId, boolean deletedEntries, String entryName) {
 
-		Context context = getContext(contextId);
-		if (context == null) {
-			throw new BadRequestException("No context with id '" + contextId + "' found");
-		}
+		Context context = getContextOrThrow(contextId);
 
 		if (deletedEntries) {
 
@@ -78,6 +100,7 @@ public class ContextService {
 				.toList();
 	}
 
+
 	public Context getContext(String contextId) {
 
 		ContextManager cm = repositoryManager.getContextManager();
@@ -93,113 +116,139 @@ public class ContextService {
 		return null;
 	}
 
-	public Entry createEntry(String contextId, String entryId, EntryType entryType, GraphType graphType,
-							 URI resourceUri, URI listUri, URI groupUri, URI cachedExternalMetadataUri,
-							 String informationResource, URI templateUri, CreateEntryRequestBody body) {
+	public File exportContextToAZipFile(Context context, boolean metadataOnly, String rdfFormat) {
 
-		Context context = getContext(contextId);
-		if (context == null) {
-			throw new BadRequestException("No context with id '" + contextId + "' found");
+		Class<? extends RDFWriter> writer = GraphUtil.getRDFWriterClassForMediaType(rdfFormat);
+		if (writer == null) {
+			writer = TriGWriter.class;
 		}
 
-		if (entryId != null) {
-			if (!EntryService.isEntryIdValid(entryId)) {
-				throw new BadRequestException("Invalid entry ID of '" + entryId + "'");
-			}
-			Entry preExistingEntry = context.get(entryId);
-			if (preExistingEntry != null) {
-				throw new DataConflictException("Entry with provided ID already exists. EntryID: '" + entryId + "'");
-			}
-		}
-
-		Entry entry = null; // A variable to store the new entry in.
-
-		try {
-			// Local
-			if (entryType == null || entryType == EntryType.Local) {
-				entry = entryService.createLocalEntry(context, entryId, graphType, listUri, groupUri, body);
-			} else {
-				// Link
-				if (entryType == EntryType.Link && resourceUri != null) {
-					entry = entryService.createLinkEntry(context, entryId, graphType, resourceUri, listUri, body);
-				}
-				// Reference
-				else if (entryType == EntryType.Reference
-						&& resourceUri != null
-						&& cachedExternalMetadataUri != null) {
-
-					entry = entryService.createReferenceEntry(context, entryId, graphType, resourceUri, listUri, cachedExternalMetadataUri, body);
-				}
-				// LinkReference
-				else if (entryType == EntryType.LinkReference
-						&& resourceUri != null
-						&& cachedExternalMetadataUri != null) {
-
-					entry = entryService.createLinkReferenceEntry(context, entryId, graphType, resourceUri, listUri, cachedExternalMetadataUri, body);
-				}
-			}
-		} catch (IllegalArgumentException iae) {
-			throw new BadRequestException(iae.getMessage());
-		}
-
-		if (entry != null) {
-			ResourceType rt = mapToResourceType(informationResource);
-			entry.setResourceType(rt);
-
-			if (templateUri != null) {
-				Entry templateEntry = context.getByEntryURI(templateUri);
-				if (templateEntry != null && templateEntry.getLocalMetadata() != null) {
-					Model templateMD = templateEntry.getLocalMetadata().getGraph();
-					Model inheritedMD = new LinkedHashModel();
-					if (templateMD != null) {
-						ValueFactory vf = repositoryManager.getValueFactory();
-						IRI oldResURI = vf.createIRI(templateEntry.getResourceURI().toString());
-						IRI newResURI = vf.createIRI(entry.getResourceURI().toString());
-
-						java.util.List<IRI> predicateBlackList = new ArrayList<>();
-						predicateBlackList.add(vf.createIRI(NS.dc, "title"));
-						predicateBlackList.add(vf.createIRI(NS.dcterms, "title"));
-						predicateBlackList.add(vf.createIRI(NS.dc, "description"));
-						predicateBlackList.add(vf.createIRI(NS.dcterms, "description"));
-						java.util.List<Value> subjectBlackList = new ArrayList<>();
-
-						for (Statement statement : templateMD) {
-							if (predicateBlackList.contains(statement.getPredicate())) {
-								subjectBlackList.add(statement.getObject());
-								continue;
-							}
-							if (subjectBlackList.contains(statement.getSubject())) {
-								continue;
-							}
-							if (statement.getSubject().equals(oldResURI)) {
-								inheritedMD.add(newResURI, statement.getPredicate(), statement.getObject(), statement.getContext());
-							} else {
-								inheritedMD.add(statement);
-							}
-						}
-					}
-					if (!inheritedMD.isEmpty() && entry.getLocalMetadata() != null) {
-						Model mergedGraph = new LinkedHashModel();
-						mergedGraph.addAll(entry.getLocalMetadata().getGraph());
-						mergedGraph.addAll(inheritedMD);
-						entry.getLocalMetadata().setGraph(mergedGraph);
-					}
-				}
-			}
-		}
-
-		if (entry == null) {
-			throw new BadRequestException("Cannot create an entry with provided JSON");
-		} else {
-			return entry;
-		}
+		return getExport(context, metadataOnly, writer);
 	}
 
-	private ResourceType mapToResourceType(String rt) {
-		if (rt == null || !rt.equals("false")) {
-			return ResourceType.InformationResource;
-		} else {
-			return ResourceType.NamedResource;
+	private File getExport(Context context, boolean metadataOnly, Class<? extends RDFWriter> writer) {
+
+		String contextId = context.getEntry().getId();
+		ContextManager contextManager = repositoryManager.getContextManager();
+		String tmpPrefix = "entrystore_context_" + contextId + "_export_";
+		try {
+			Set<URI> users = new HashSet<>();
+
+			// TODO: refactor to generate the exports in-memory only and return by the endpoint, instead of current:
+			//  in-memory to disk, then disk to endpoint
+
+			// create temp files
+			File tmpExport = File.createTempFile(tmpPrefix, ".zip");
+			tmpExport.deleteOnExit();
+			File tmpTriples = File.createTempFile(tmpPrefix + "triples_", ".rdf");
+			tmpTriples.deleteOnExit();
+			File tmpProperties = File.createTempFile(tmpPrefix + "info_", ".properties");
+			tmpProperties.deleteOnExit();
+
+			// write context's triples to a rdf file
+			log.info("Exporting triples of context {}", context.getURI());
+			contextManager.exportContext(context.getEntry(), tmpTriples, users, metadataOnly, writer);
+
+			// write export properties to a property file
+			Properties exportProps = new Properties();
+			exportProps.put("contextEntryURI", context.getEntry().getEntryURI().toString());
+			exportProps.put("contextResourceURI", context.getEntry().getResourceURI().toString());
+			exportProps.put("contextMetadataURI", context.getEntry().getLocalMetadataURI().toString());
+			exportProps.put("contextRelationURI", context.getEntry().getRelationURI().toString());
+			exportProps.put("baseURI", repositoryManager.getRepositoryURL().toString());
+			exportProps.put("exportDate", new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").format(new Date()));
+			exportProps.put("exportingUser", principalManager.getAuthenticatedUserURI().toString());
+			if (!users.isEmpty()) {
+				StringBuffer userList = new StringBuffer();
+				for (URI uri : users) {
+					String uriStr = uri.toString();
+					String userID = uriStr.substring(uriStr.lastIndexOf("/") + 1);
+					userList.append(userID);
+					User u = principalManager.getUser(uri);
+					if (u != null) {
+						String alias = u.getName();
+						if (alias != null) {
+							userList.append(":").append(alias);
+						}
+					}
+					userList.append(",");
+				}
+				userList.deleteCharAt(userList.length() - 1);
+				exportProps.put("containedUsers", userList.toString());
+			}
+			OutputStream fos = Files.newOutputStream(tmpProperties.toPath());
+			exportProps.store(fos, "EntryStore export information");
+			fos.close();
+
+			// create zip stream
+			ZipOutputStream zipOS = new ZipOutputStream(new BufferedOutputStream(Files.newOutputStream(tmpExport.toPath())));
+
+			// add triples to zip file
+			ZipEntry zeTriples = new ZipEntry("triples.rdf");
+			zeTriples.setSize(tmpTriples.length());
+			zeTriples.setTime(tmpTriples.lastModified());
+			zeTriples.setMethod(ZipEntry.DEFLATED);
+			zipOS.putNextEntry(zeTriples);
+
+			int bytesRead;
+			byte[] buffer = new byte[8192];
+
+			InputStream is = new BufferedInputStream(Files.newInputStream(tmpTriples.toPath()), 8192);
+			while ((bytesRead = is.read(buffer)) != -1) {
+				zipOS.write(buffer, 0, bytesRead);
+			}
+			is.close();
+
+			// add properties to zip file
+			ZipEntry zeProperties = new ZipEntry("export.properties");
+			zeProperties.setSize(tmpProperties.length());
+			zeProperties.setTime(tmpProperties.lastModified());
+			zeProperties.setMethod(ZipEntry.DEFLATED);
+			zipOS.putNextEntry(zeProperties);
+
+			is = Files.newInputStream(tmpProperties.toPath());
+			while ((bytesRead = is.read(buffer)) != -1) {
+				zipOS.write(buffer, 0, bytesRead);
+			}
+			is.close();
+
+			// add resource files to zip file
+			String contextPath = esConfig.getString(Settings.DATA_FOLDER);
+			if (contextPath != null) {
+				File contextPathFile = new File(contextPath);
+				File contextFolder = new File(contextPathFile, contextId);
+				File[] contextFiles = contextFolder.listFiles();
+				if (contextFiles != null) {
+					for (File contextFile : contextFiles) {
+						ZipEntry zeResource = new ZipEntry("resources/" + contextFile.getName());
+						zeResource.setMethod(ZipEntry.DEFLATED);
+						zeResource.setSize(contextFile.length());
+						zeResource.setTime(contextFile.lastModified());
+						zipOS.putNextEntry(zeResource);
+						is = new BufferedInputStream(Files.newInputStream(contextFile.toPath()), 8192);
+						while ((bytesRead = is.read(buffer)) != -1) {
+							zipOS.write(buffer, 0, bytesRead);
+						}
+					}
+				} else {
+					log.warn("The data path of context {} is not a folder: {}", contextId, contextFolder);
+				}
+			} else {
+				log.error("No EntryStore data folder configured");
+			}
+
+			// some cleanup
+			zipOS.flush();
+			zipOS.close();
+			tmpTriples.delete();
+			tmpProperties.delete();
+
+			// return the zip file
+			return tmpExport;
+
+		} catch (IOException | RepositoryException ex) {
+			throw new InternalServerErrorException("Exception generating Context export for contextId '" + contextId
+					+ "'. Message: " + ex.getMessage(), ex);
 		}
 	}
 

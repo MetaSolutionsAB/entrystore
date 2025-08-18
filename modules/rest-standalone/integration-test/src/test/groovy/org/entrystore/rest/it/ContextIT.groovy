@@ -87,6 +87,28 @@ class ContextIT extends BaseSpec {
 		responseJson['info'] != null
 	}
 
+	def "POST /_contexts?id={id} should create a new context with specified ID"() {
+		given:
+		def contextId = 'new-context'
+		def params = [id: contextId, graphtype: 'context', name: 'someName3']
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_contexts' + convertMapToQueryParams(params))
+
+		then:
+		connection.getResponseCode() == HTTP_CREATED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson['entryId'] == contextId
+
+		def getConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId + '?includeAll')
+		getConn.getResponseCode() == HTTP_OK
+		getConn.getContentType().contains('application/json')
+		def getResponseJson = JSON_PARSER.parseText(getConn.getInputStream().text)
+		getResponseJson['entryId'] == contextId
+		getResponseJson['info'] != null
+	}
+
 	def "GET /{context-id} should return context entries for admin user"() {
 
 		when:
@@ -98,6 +120,20 @@ class ContextIT extends BaseSpec {
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson.collect().contains('_contexts')
 		responseJson.collect().contains('_principals')
+	}
+
+	def "GET /{context-id} should return NOT_FOUND for non-existing context"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/222-random-name-222')
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		responseJson['error'] != null
+		responseJson['error'].toString().contains('Context with id \'222-random-name-222\' does not exist')
+		responseJson['status'] != null
+		responseJson['timestamp'] != null
 	}
 
 	def "GET /{context-id}?deleted should return empty list of entries for admin user"() {
@@ -154,25 +190,4 @@ class ContextIT extends BaseSpec {
 		responseJson['timestamp'] != null
 	}
 
-	def "POST /_contexts?id={id} should create a new context with specified ID"() {
-		given:
-		def contextId = 'new-context'
-		def params = [id: contextId, graphtype: 'context', name: 'someName3']
-
-		when:
-		def connection = EntryStoreClient.postRequest('/_contexts' + convertMapToQueryParams(params))
-
-		then:
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
-		responseJson['entryId'] == contextId
-
-		def getConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId + '?includeAll')
-		getConn.getResponseCode() == HTTP_OK
-		getConn.getContentType().contains('application/json')
-		def getResponseJson = JSON_PARSER.parseText(getConn.getInputStream().text)
-		getResponseJson['entryId'] == contextId
-		getResponseJson['info'] != null
-	}
 }
