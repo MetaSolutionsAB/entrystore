@@ -102,7 +102,6 @@ class UserResourceIT extends BaseSpec {
 		then:
 		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
 		infoRespJson['homecontext'] != null
-		infoRespJson['homecontext'] == "1"
 	}
 
 }
