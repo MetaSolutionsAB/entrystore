@@ -3,11 +3,12 @@ package org.entrystore.rest.it
 import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.joda.time.Hours
-import org.joda.time.format.DateTimeFormat
-import org.joda.time.format.DateTimeFormatter
 
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.ChronoField
+import java.time.temporal.ChronoUnit
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -16,7 +17,10 @@ import static java.net.HttpURLConnection.HTTP_OK
 
 class UserResourceIT extends BaseSpec {
 
-	static DateTimeFormatter dtf = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS")
+	static DateTimeFormatter dtf = new DateTimeFormatterBuilder()
+			.appendPattern("yyyy-MM-dd'T'HH:mm:ss")
+			.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
+			.toFormatter()
 	static def newPassword = 'newPass12345'
 	static GreenMail greenMail = new GreenMail(SMTP)
 	static def genericCredsClone = [:]
@@ -72,9 +76,9 @@ class UserResourceIT extends BaseSpec {
 		infoRespJson['clientAcceptLanguage']['en-US'] == 0.69
 		infoRespJson['clientAcceptLanguage']['fr-CH'] == 0.89
 		infoRespJson['authTokenExpires'] != null
-		def authTokenExpires = dtf.parseDateTime(infoRespJson['authTokenExpires'].toString())
-		def now = dtf.parseDateTime(LocalDateTime.now().toString())
-		Hours.hoursBetween(now, authTokenExpires).hours == 23
+		def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
+		def now = LocalDateTime.now()
+		ChronoUnit.HOURS.between(now, authTokenExpires) == 23
 	}
 
 	def "GET /auth/user should return info about currently logged-in user including homecontext"() {
@@ -92,11 +96,13 @@ class UserResourceIT extends BaseSpec {
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
 		EntryStoreClient.getRequest('/auth/signup?confirm=' + token).getResponseCode() == HTTP_CREATED
 
+		when:
 		def info = EntryStoreClient.getRequest('/auth/user', 'userForInfoContext@test.com')
+
+		then:
 		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
 		infoRespJson['homecontext'] != null
-		infoRespJson['homecontext'] == 1
-
+		infoRespJson['homecontext'] == "1"
 	}
 
 }
