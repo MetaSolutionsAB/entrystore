@@ -3,8 +3,10 @@ package org.entrystore.rest.it
 import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.joda.time.format.DateTimeFormat
-import org.joda.time.format.DateTimeFormatter
+
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.ChronoField
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -13,7 +15,10 @@ import static java.net.HttpURLConnection.HTTP_OK
 
 class UserResourceIT extends BaseSpec {
 
-	static DateTimeFormatter dtf = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS")
+	static DateTimeFormatter dtf = new DateTimeFormatterBuilder()
+			.appendPattern("yyyy-MM-dd'T'HH:mm:ss")
+			.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
+			.toFormatter()
 	static def newPassword = 'newPass12345'
 	static GreenMail greenMail = new GreenMail(SMTP)
 	static def genericCredsClone = [:]

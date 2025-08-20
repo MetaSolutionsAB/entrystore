@@ -17,6 +17,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import static java.net.HttpURLConnection.HTTP_ACCEPTED
 import static java.net.HttpURLConnection.HTTP_BAD_METHOD
 import static java.net.HttpURLConnection.HTTP_CONFLICT
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ManagementLoggingIT extends BaseSpec {
 
@@ -27,7 +28,7 @@ class ManagementLoggingIT extends BaseSpec {
 	def cleanupSpec() {
 		// Set original logging config
 		def config = [
-				level: 'info',
+				level   : 'info',
 				packages: [
 						'org.entrystore.rest.standalone.springboot.controller.AppExceptionHandler': 'debug'
 				]]
@@ -51,6 +52,19 @@ class ManagementLoggingIT extends BaseSpec {
 		List<LogEvent> getEvents() {
 			return events
 		}
+	}
+
+	// TODO: Add the same test with user-account, should also be UNAUTHORIZED
+	def "PUT /management/logging as Guest should respond with UNAUTHORIZED"() {
+		given:
+		def config = [level: 'info']
+
+		when: 'a new logging config is sent as guest'
+		def conn = EntryStoreClient.putRequest('/management/logging', JsonOutput.toJson(config), null)
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		conn.getErrorStream().text.contains('"error":"Unauthorized"')
 	}
 
 	def "PUT /management/logging should update logging configuration"() {
@@ -83,7 +97,7 @@ class ManagementLoggingIT extends BaseSpec {
 
 		// New logging config to log only INFO level for AppExceptionHandler
 		def config = [
-				level: 'warn',
+				level   : 'warn',
 				packages: [
 						'org.entrystore.rest.standalone.springboot.controller.AppExceptionHandler': 'info'
 				]]

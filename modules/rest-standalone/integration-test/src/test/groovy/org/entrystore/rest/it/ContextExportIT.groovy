@@ -12,8 +12,6 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
-// Not migrated yet
-@Ignore
 class ContextExportIT extends BaseSpec {
 
 	def static contextId = 'context-export-test'
@@ -27,12 +25,12 @@ class ContextExportIT extends BaseSpec {
 		getOrCreateEntry(contextId, params)
 	}
 
-	def "GET /{context-id}/export as non-admin and for non-existing context should return a Not-Found 404 response"() {
+	def "GET /{context-id}/export as admin and for non-existing context should return a Not-Found 404 response"() {
 		given:
 		def contextId = 'non-existing-context-id'
 
 		when:
-		def connection = EntryStoreClient.getRequest('/' + contextId + '/export', '')
+		def connection = EntryStoreClient.getRequest('/' + contextId + '/export')
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND

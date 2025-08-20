@@ -11,6 +11,7 @@ import org.entrystore.rest.standalone.springboot.service.LoggingService;
 import org.entrystore.rest.standalone.springboot.service.StatusService;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,6 +30,7 @@ public class ManagementController {
 	@Operation(
 			summary = "Provides a way to temporarily override parts of the logging configuration"
 	)
+	@PreAuthorize("hasRole('ADMIN')")
 	@PutMapping(
 			path = "/management/logging",
 			consumes = MediaType.APPLICATION_JSON_VALUE)
