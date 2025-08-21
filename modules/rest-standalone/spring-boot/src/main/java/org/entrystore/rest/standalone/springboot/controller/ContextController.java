@@ -23,11 +23,16 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
 
@@ -114,6 +119,39 @@ public class ContextController {
 				.contentType(MediaType.valueOf("application/zip"))
 				.contentLength(zipFile.length())
 				.body(fileStream);
+	}
+
+	@PreAuthorize("hasRole('ADMIN')")
+	@Operation(summary = "Import of a single context")
+	@PostMapping(
+			path = "/{context-id}/import",
+			produces = MediaType.TEXT_HTML_VALUE)
+	public String importContextFromZipFile(
+			@PathVariable("context-id") String contextId,
+			@RequestBody byte[] zipFile) {
+
+		Context context = contextService.getContextOrThrow(contextId);
+		contextService.importContextDataFromFile(context, new ByteArrayInputStream(zipFile));
+
+		return "<textarea></textarea>";
+	}
+
+	@PreAuthorize("hasRole('ADMIN')")
+	@Operation(summary = "Import of a single context")
+	@PostMapping(
+			path = "/{context-id}/import",
+			consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+			produces = MediaType.TEXT_HTML_VALUE)
+	public String importContextFromMultipartForm(
+			@PathVariable("context-id") String contextId,
+			@RequestPart(value = "file") MultipartFile file) throws IOException {
+
+		Context context = contextService.getContextOrThrow(contextId);
+		try (InputStream inputStream = file.getInputStream()) {
+			contextService.importContextDataFromFile(context, inputStream);
+		}
+
+		return "<textarea></textarea>";
 	}
 
 	/**
