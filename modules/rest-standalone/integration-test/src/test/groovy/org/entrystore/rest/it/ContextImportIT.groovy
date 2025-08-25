@@ -1,38 +1,46 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
-import spock.lang.Ignore
+import org.springframework.http.HttpMethod
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
-// Not migrated yet
-@Ignore
 class ContextImportIT extends BaseSpec {
 
 	def static contextExportId = 'context-export'
 	def static contextImportId = 'context-import-test'
-	def static entryId = 'export-entry-id'
-	def static entryId2 = 'import-entry-id-should-be-overridden'
+	def static entryIdInExportOriginally = 'export-entry-id'
+	def static entryId2InImportOriginally = 'import-entry-id-should-be-overridden'
 	def static resourceUrl = 'https://bbc.co.uk'
 
 	def setupSpec() {
-		getOrCreateContext([contextId: contextExportId, name: 'contextExported'])
-		def params = [entrytype: 'link', resource: resourceUrl, id: entryId]
+		getOrCreateContext([contextId: contextExportId, name: 'context for Export'])
+		def params = [entrytype: 'link', resource: resourceUrl, id: entryIdInExportOriginally]
 		getOrCreateEntry(contextExportId, params)
 
-		getOrCreateContext([contextId: contextImportId, name: 'contextImported'])
-		def params2 = [entrytype: 'link', resource: resourceUrl, id: entryId2]
+		getOrCreateContext([contextId: contextImportId, name: 'context for Import'])
+		def params2 = [entrytype: 'link', resource: resourceUrl, id: entryId2InImportOriginally]
 		getOrCreateEntry(contextImportId, params2)
 	}
 
-	def "POST /{context-id}/import as non-admin and for non-existing context should return Bad-Request 400"() {
+	def "POST /{context-id}/import for non-existing context should return Not-Found 404"() {
 		given:
 		def contextId = 'non-existing-context-id'
 
 		when:
-		def connection = EntryStoreClient.postRequest('/' + contextId + '/import', '', '')
+		def connection = EntryStoreClient.postRequest('/' + contextId + '/import')
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "POST /{context-id}/import with invalid zip-file should return Bad-Request 400"() {
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', '[]',
+				'admin', 'application/zip')
 
 		then:
 		connection.getResponseCode() == HTTP_BAD_REQUEST
@@ -46,28 +54,26 @@ class ContextImportIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "POST /{context-id}/import should import context from a zip file, overriding existing entries"() {
+	def "POST /{context-id}/import with zip-file as body should import context from the file, overriding existing entries"() {
 		given:
 		// check existing list of entries for context that will be overridden
 		def contextConn = EntryStoreClient.getRequest('/' + contextImportId)
 		assert contextConn.getResponseCode() == HTTP_OK
 		assert contextConn.getContentType().contains('application/json')
-		assert JSON_PARSER.parseText(contextConn.getInputStream().text) == [entryId2]
+		assert JSON_PARSER.parseText(contextConn.getInputStream().text) == [entryId2InImportOriginally]
 
 		// check context name for context that will be overridden
 		def contextNameConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId + '/name')
 		assert contextNameConn.getResponseCode() == HTTP_OK
-		assert JSON_PARSER.parseText(contextNameConn.getInputStream().text) == [name: 'contextImported']
+		assert JSON_PARSER.parseText(contextNameConn.getInputStream().text) == [name: 'context for Import']
 
 		// get the ZIP file by exporting context with ID `contextExportId`
 		def exportConn = EntryStoreClient.getRequest('/' + contextExportId + '/export')
 		assert exportConn.getResponseCode() == HTTP_OK
 
 		when:
-		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', null, 'admin', 'application/zip')
-		connection.setDoOutput(true)
-		exportConn.getInputStream().transferTo(connection.getOutputStream())
-		connection.connect()
+		def connection = EntryStoreClient.sendRequestAsStream(HttpMethod.POST, '/' + contextImportId + '/import',
+				exportConn.getInputStream(), 'admin', 'application/zip')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -85,11 +91,63 @@ class ContextImportIT extends BaseSpec {
 		def contextConn2 = EntryStoreClient.getRequest('/' + contextImportId)
 		contextConn2.getResponseCode() == HTTP_OK
 		contextConn2.getContentType().contains('application/json')
-		JSON_PARSER.parseText(contextConn2.getInputStream().text) == [entryId]
+		JSON_PARSER.parseText(contextConn2.getInputStream().text) == [entryIdInExportOriginally]
 
 		// check if overridden context changed it's name
 		def contextNameConn2 = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId + '/name')
 		contextNameConn2.getResponseCode() == HTTP_OK
-		JSON_PARSER.parseText(contextNameConn2.getInputStream().text) == [name: 'contextImported']
+		JSON_PARSER.parseText(contextNameConn2.getInputStream().text) == [name: 'context for Import']
+	}
+
+	def "POST /{context-id}/import with multi-part file as body should import context from the file, overriding existing entries"() {
+		given:
+		def contextImportId = 'context-import-test2'
+		getOrCreateContext([contextId: contextImportId, name: 'context for Import 2'])
+
+		// check existing list of entries for context that will be overridden
+		def contextConn = EntryStoreClient.getRequest('/' + contextImportId)
+		assert contextConn.getResponseCode() == HTTP_OK
+		assert contextConn.getContentType().contains('application/json')
+		assert JSON_PARSER.parseText(contextConn.getInputStream().text) == []
+
+		// check context name for context that will be overridden
+		def contextNameConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId + '/name')
+		assert contextNameConn.getResponseCode() == HTTP_OK
+		assert JSON_PARSER.parseText(contextNameConn.getInputStream().text) == [name: 'context for Import 2']
+
+		// get the ZIP file by exporting context with ID `contextExportId`
+		def exportConn = EntryStoreClient.getRequest('/' + contextExportId + '/export')
+		assert exportConn.getResponseCode() == HTTP_OK
+		def tempFile = File.createTempFile('export-file' ,'.zip')
+		tempFile.withOutputStream { out ->
+			out << exportConn.getInputStream()
+		}
+
+		when:
+		def connection = EntryStoreClient.postRequestMultiPart('/' + contextImportId + '/import',
+				tempFile, 'admin')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('text/html')
+		connection.getInputStream().text == '<textarea></textarea>'
+
+		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId)
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def getResponseJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		getResponseJson['entryId'] == contextImportId
+		getResponseJson['info'] != null
+
+		// check if overridden context changed it's entries
+		def contextConn2 = EntryStoreClient.getRequest('/' + contextImportId)
+		contextConn2.getResponseCode() == HTTP_OK
+		contextConn2.getContentType().contains('application/json')
+		JSON_PARSER.parseText(contextConn2.getInputStream().text) == [entryIdInExportOriginally]
+
+		// check if overridden context changed it's name
+		def contextNameConn2 = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId + '/name')
+		contextNameConn2.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(contextNameConn2.getInputStream().text) == [name: 'context for Import 2']
 	}
 }

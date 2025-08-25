@@ -716,7 +716,7 @@ public class ResourceService {
 	}
 
 	private File writeStreamToTmpFile(InputStream is) throws IOException {
-		File tmpFile = File.createTempFile("scam_import_", ".zip");
+		File tmpFile = File.createTempFile("entrystore_res_import", ".zip");
 		log.info("[IMPORT] Created temporary file: {}", tmpFile);
 		OutputStream fos = Files.newOutputStream(tmpFile.toPath());
 		FileOperations.copyFile(is, fos);

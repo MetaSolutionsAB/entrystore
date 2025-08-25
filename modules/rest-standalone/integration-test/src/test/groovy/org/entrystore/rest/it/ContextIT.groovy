@@ -162,18 +162,16 @@ class ContextIT extends BaseSpec {
 		responseJson['timestamp'] != null
 	}
 
-	def "GET /{context-id}?entryname=some-random-name should return NOT_FOUND for admin user"() {
+	def "GET /{context-id}?entryname=non-existing-entry-name as admin should return an empty list"() {
 
 		when:
-		def connection = EntryStoreClient.getRequest('/_contexts?entryname=some-random-name')
+		def connection = EntryStoreClient.getRequest('/_contexts?entryname=non-existing-entry-name')
 
 		then:
-		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
-		responseJson['error'] != null
-		responseJson['status'] != null
-		responseJson['timestamp'] != null
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson.collect() == []
 	}
 
 	def "GET /{context-id}?entryname=some-random-name should respond with UNAUTHORIZED for non-admin user"() {

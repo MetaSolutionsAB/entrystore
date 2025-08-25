@@ -69,7 +69,7 @@ class ContextExportIT extends BaseSpec {
 		exportedZip['triples.rdf'].contains('<' + EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId + '> a es:Link;')
 		exportedZip['triples.rdf'].contains(' es:resource <' + resourceUrl + '>;')
 
-		exportedZip['export.properties'].contains('containedUsers=_admin\\:admin,')
+		exportedZip['export.properties'] =~ /containedUsers=.*_admin\\:admin.*/
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
 		exportedZip['export.properties'].contains('baseURI=http\\://localhost\\:8181/store/')
 		exportedZip['export.properties'].contains('exportDate=')
@@ -98,7 +98,7 @@ class ContextExportIT extends BaseSpec {
 		exportedZip['triples.rdf'].contains('store:' + contextId + ' a es:Context;')
 		exportedZip['triples.rdf'].contains('<' + EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId + '> es:resource store:' + contextId + ';')
 
-		exportedZip['export.properties'].contains('containedUsers=_admin\\:admin,')
+		exportedZip['export.properties'] =~ /containedUsers=.*_admin\\:admin.*/
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
 		exportedZip['export.properties'].contains('baseURI=http\\://localhost\\:8181/store/')
 		exportedZip['export.properties'].contains('exportDate=')
@@ -149,7 +149,7 @@ class ContextExportIT extends BaseSpec {
 		entryNode['es:resource'].size() == 1
 		(entryNode['es:resource'][0] as Node).attributes() == ['rdf:resource': resourceUrl]
 
-		exportedZip['export.properties'].contains('containedUsers=_admin\\:admin,')
+		exportedZip['export.properties'] =~ /containedUsers=.*_admin\\:admin.*/
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
 		exportedZip['export.properties'].contains('baseURI=http\\://localhost\\:8181/store/')
 		exportedZip['export.properties'].contains('exportDate=')

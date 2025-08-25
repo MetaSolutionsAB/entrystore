@@ -23,7 +23,7 @@ class EntryStoreClient {
 		}
 	}
 
-	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> customHeaders = null) {
+	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> customHeaders = [:]) {
 		def connection = createConnection(path)
 		if (requestAcceptType?.trim()) {
 			connection.setRequestProperty('Accept', requestAcceptType)
@@ -32,10 +32,8 @@ class EntryStoreClient {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
 
-		if (customHeaders != null) {
-			for (String header : customHeaders.keySet()) {
-				connection.setRequestProperty(header, customHeaders.get(header))
-			}
+		customHeaders.each { key, value ->
+			connection.setRequestProperty(key, value)
 		}
 
 		connection.connect()
@@ -43,19 +41,8 @@ class EntryStoreClient {
 	}
 
 	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
-		def connection = createConnection(path)
-		if (asUser?.trim()) {
-			connection.setRequestProperty('Cookie', cookies[asUser].toString())
-		}
-		connection.setRequestMethod('POST')
-		connection.setRequestProperty('Content-Type', contentType)
-		connection.setInstanceFollowRedirects(false)
-		if (body != null) {
-			connection.setDoOutput(true)
-			connection.getOutputStream().write(body.getBytes())
-			connection.connect()
-		}
-		return connection
+		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes())
+		return sendRequestAsStream(HttpMethod.POST, path, contentStream, asUser, contentType)
 	}
 
 	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
@@ -98,14 +85,19 @@ class EntryStoreClient {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
 		connection.setRequestMethod(method.name())
-		connection.setDoOutput(true)
-		connection.setRequestProperty('Content-Type', contentType)
+		connection.setInstanceFollowRedirects(false)
+		if (contentType?.trim()) {
+			connection.setRequestProperty('Content-Type', contentType)
+		}
 		extraHeaders.each { key, value ->
 			connection.setRequestProperty(key, value)
 		}
 
-		connection.outputStream.withStream { output ->
-			output << inputStream
+		if (inputStream != null) {
+			connection.setDoOutput(true)
+			connection.outputStream.withStream { output ->
+				output << inputStream
+			}
 		}
 		connection.connect()
 

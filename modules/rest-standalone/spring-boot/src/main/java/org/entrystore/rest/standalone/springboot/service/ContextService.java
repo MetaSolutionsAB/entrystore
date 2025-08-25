@@ -14,6 +14,9 @@ import org.entrystore.config.Config;
 import org.entrystore.impl.EntryNamesContext;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.repository.util.FileOperations;
+import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.standalone.springboot.model.exception.BadRequestHtmlException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
@@ -28,6 +31,7 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -82,7 +86,7 @@ public class ContextService {
 			if (matchedEntry != null) {
 				return List.of(matchedEntry.getId());
 			} else {
-				throw new EntityNotFoundException("Entity with name '" + entryName + "' not found in context '" + contextId + "'");
+				return Collections.emptyList();
 			}
 		}
 
@@ -124,6 +128,31 @@ public class ContextService {
 		}
 
 		return getExport(context, metadataOnly, writer);
+	}
+
+	public void importContextDataFromFile(Context context, InputStream input) {
+		File tmpFile = null;
+		try {
+			tmpFile = File.createTempFile("entrystore_context_import", ".zip");
+			if (input != null) {
+				try {
+					FileOperations.copyFile(input, Files.newOutputStream(tmpFile.toPath()));
+				} catch (IOException e) {
+					throw new InternalServerErrorException("Exception copying the data to a temporary file for context import. Message: " + e.getMessage(), e);
+				}
+
+				repositoryManager.getContextManager().importContext(context.getEntry(), tmpFile);
+
+			} else {
+				throw new BadRequestException("Unable to import file, received null data");
+			}
+		} catch (IOException e) {
+			throw new BadRequestHtmlException(e.getMessage(), "IOException importing the data");
+		} finally {
+			if (tmpFile != null) {
+				tmpFile.delete();
+			}
+		}
 	}
 
 	private File getExport(Context context, boolean metadataOnly, Class<? extends RDFWriter> writer) {
