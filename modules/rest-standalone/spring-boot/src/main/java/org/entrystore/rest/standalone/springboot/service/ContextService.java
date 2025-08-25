@@ -133,7 +133,7 @@ public class ContextService {
 	public void importContextDataFromFile(Context context, InputStream input) {
 		File tmpFile = null;
 		try {
-			tmpFile = File.createTempFile("scam_import", null);
+			tmpFile = File.createTempFile("entrystore_context_import", ".zip");
 			if (input != null) {
 				try {
 					FileOperations.copyFile(input, Files.newOutputStream(tmpFile.toPath()));
