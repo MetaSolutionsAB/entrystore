@@ -2,6 +2,7 @@ package org.entrystore.rest.standalone.springboot.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.ValidationException;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
@@ -53,7 +54,7 @@ public class AppExceptionHandler {
 				.build();
 	}
 
-	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class})
+	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class, ValidationException.class})
 	public ResponseEntity<ErrorResponse> handleBadRequestException(RuntimeException ex,
 																   HttpServletRequest request) {
 		log.debug("BadRequestException: {}", ex.getMessage());
