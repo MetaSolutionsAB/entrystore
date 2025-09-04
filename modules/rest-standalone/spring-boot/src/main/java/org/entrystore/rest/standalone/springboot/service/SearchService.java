@@ -3,7 +3,9 @@ package org.entrystore.rest.standalone.springboot.service;
 import com.rometools.rome.feed.synd.SyndFeed;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.response.FacetField;
+import org.apache.solr.common.SolrException;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
@@ -18,19 +20,26 @@ import org.entrystore.Resource;
 import org.entrystore.User;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
+import org.entrystore.repository.util.QueryResult;
+import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.standalone.springboot.model.dto.QueryResultsDto;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.standalone.springboot.model.exception.CustomResponseException;
+import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.entrystore.rest.standalone.springboot.util.Syndication;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import org.springframework.web.util.UriComponents;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -57,6 +66,83 @@ public class SearchService {
 		} catch (Exception e) {
 			throw new BadRequestException("Exception processing SPARQL query: " + e.getMessage());
 		}
+	}
+
+	public QueryResultsDto findEntriesSolr(
+			String queryValue,
+			String sorting,
+			int offset,
+			int limit,
+			List<String> filterQueries,
+			SolrSearchIndex.FacetSettings facetSettings) {
+
+		try {
+
+			List<Entry> entries;
+			long results;
+			List<FacetField> responseFacetFields;
+
+			if (repositoryManager.getIndex() == null) {
+				throw new CustomResponseException("Solr search is deactivated", HttpStatus.SERVICE_UNAVAILABLE);
+			}
+
+			SolrQuery q = new SolrQuery(queryValue);
+			q.setStart(offset);
+			q.setRows(limit);
+
+			if (sorting != null) {
+				for (String string : sorting.split(",")) {
+					String[] fieldAndOrder = string.split(" ");
+					if (fieldAndOrder.length == 2) {
+						String field = fieldAndOrder[0];
+						if (field.startsWith("title.")) {
+							field = field.replace("title.", "title_sort.");
+						}
+						SolrQuery.ORDER order = SolrQuery.ORDER.asc;
+						try {
+							order = SolrQuery.ORDER.valueOf(fieldAndOrder[1].toLowerCase());
+						} catch (IllegalArgumentException iae) {
+							log.warn("Unable to parse sorting value, using ascending by default");
+						}
+						q.addSort(field, order);
+					}
+				}
+			} else {
+				q.addSort("score", SolrQuery.ORDER.desc);
+				q.addSort("modified", SolrQuery.ORDER.desc);
+			}
+
+			if (facetSettings.fields != null) {
+				q.setFacet(true);
+				q.setFacetMinCount(facetSettings.minCount);
+				q.setFacetLimit(facetSettings.limit);
+				q.setFacetMissing(facetSettings.missing);
+				if (facetSettings.matches != null) {
+					q.setParam("facet.matches", facetSettings.matches);
+				}
+				for (String ff : facetSettings.fields.split(",")) {
+					q.addFacetField(ff.replace("metadata.predicate.literal.", "metadata.predicate.literal_s."));
+				}
+			}
+
+			for (String fq : filterQueries) {
+				q.addFilterQuery(fq);
+			}
+
+			try {
+				QueryResult qResult = ((SolrSearchIndex) repositoryManager.getIndex()).sendQuery(q);
+				entries = new LinkedList<>(qResult.getEntries());
+				results = qResult.getHits();
+				responseFacetFields = qResult.getFacetFields();
+			} catch (SolrException se) {
+				log.warn("SolrException: {}", se.getMessage());
+				throw new BadRequestException("Search failed due to wrong parameters");
+			}
+			return new QueryResultsDto(entries, results, responseFacetFields);
+		} catch (JSONException e) {
+			throw new InternalServerErrorException("Error during Solr search", e);
+		}
+
 	}
 
 	public String generateSyndication(List<Entry> entries, String feedType, String language, int limit) {

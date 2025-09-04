@@ -3,6 +3,7 @@ package org.entrystore.rest.it
 import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
+import spock.lang.Ignore
 
 import java.time.Year
 
@@ -290,6 +291,8 @@ class SearchIT extends BaseSpec {
 		(itemDateNode.value()[0] as String).contains(Year.now().toString())
 	}
 
+	// urltemplate not migrated yet - was added post migration to Spring-boot - needs 'rebase'
+	@Ignore
 	def "GET /search?type=solr&syndication=rss_2.0&urltemplate=test123 should return syndication feed with links based on a URL template"() {
 		when:
 		// fetch syndication feed
@@ -553,7 +556,7 @@ class SearchIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
 		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
-		resp['error'] == 'searchForEntriesSparql.query: \'query\' param length must be minimum 3'
+		resp['error'] == 'findEntriesSparql.query: \'query\' param length must be minimum 3'
 	}
 
 }

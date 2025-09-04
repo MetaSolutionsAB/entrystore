@@ -6,6 +6,7 @@ import jakarta.validation.ValidationException;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.standalone.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
@@ -156,6 +157,18 @@ public class AppExceptionHandler {
 		log.debug("EntityTooLargeException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
+	}
+
+	@ExceptionHandler(CustomResponseException.class)
+	public ResponseEntity<ErrorResponse> handleCustomResponseException(CustomResponseException ex,
+																	   HttpServletRequest request) {
+		log.info("CustomResponseException ({}): {}", ex.getStatus().value(), ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(ex.getStatus().value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
