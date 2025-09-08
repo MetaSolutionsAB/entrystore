@@ -43,7 +43,7 @@ import static org.restlet.data.Status.CLIENT_ERROR_REQUEST_ENTITY_TOO_LARGE;
 
 /**
  * This resource checks credentials and sets a cookie.
- *
+ * <p>
  * It only allows POST requests to avoid user/password in URL and therefore
  * logging in clear-text.
  *
@@ -99,18 +99,18 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
-		userName = userName.toLowerCase();
-
 		// Use case for whitelisting: enforced SSO with some users that should be able to login
 		// with their local credentials, see https://entrystore.org/#!KB/Authentication.md
-		if ((passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(userName)) ||
-				(passwordLoginBlacklist != null && passwordLoginBlacklist.contains(userName))) {
+		if ((passwordLoginBlacklist != null && passwordLoginBlacklist.contains(userName)) ||
+				(passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(userName))) {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 			if (html) {
 				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 			}
 			return;
 		}
+
+		userName = userName.toLowerCase();
 
 		if (getUserTempLockoutCache().userIsLockedOut(userName)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_TOO_MANY_REQUESTS);
