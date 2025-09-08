@@ -80,8 +80,8 @@ class CookieLoginResourceIT extends BaseSpec {
 		def userRequestResourceName = [name: 'userForLogin@test.com']
 		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getContentType().contains('application/json')
+		assert connection.getResponseCode() == HTTP_CREATED
+		assert connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		def entryId = responseJson['entryId'].toString()
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
@@ -113,8 +113,8 @@ class CookieLoginResourceIT extends BaseSpec {
 		def userRequestResourceName = [name: 'userForLoginExpired@test.com']
 		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getContentType().contains('application/json')
+		assert connection.getResponseCode() == HTTP_CREATED
+		assert connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		def entryId = responseJson['entryId'].toString()
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
@@ -146,8 +146,8 @@ class CookieLoginResourceIT extends BaseSpec {
 		def userRequestResourceName = [name: 'userForLoginBlacklist@test.com']
 		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getContentType().contains('application/json')
+		assert connection.getResponseCode() == HTTP_CREATED
+		assert connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		def entryId = responseJson['entryId'].toString()
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
@@ -176,8 +176,8 @@ class CookieLoginResourceIT extends BaseSpec {
 		def userRequestResourceName = [name: 'userForLoginBlacklistNoHtml@test.com']
 		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getContentType().contains('application/json')
+		assert connection.getResponseCode() == HTTP_CREATED
+		assert connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		def entryId = responseJson['entryId'].toString()
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
@@ -189,11 +189,10 @@ class CookieLoginResourceIT extends BaseSpec {
 		])
 		EntryStoreClient.putRequest(resourceUri, requestBody).getResponseCode() == HTTP_NO_CONTENT
 		def bodyParams = 'auth_username=userForLoginBlacklistNoHtml@test.com&auth_password=' + newPassword
-		def acceptHtml = new HashMap<String, String>()
-		acceptHtml.put('Accept', 'application/json')
+		def extraHeaders = [Accept:'application/json']
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded', acceptHtml)
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded', extraHeaders)
 
 		then:
 		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
@@ -208,8 +207,8 @@ class CookieLoginResourceIT extends BaseSpec {
 		def userRequestResourceName = [name: 'userForLoginDisabled@test.com']
 		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getContentType().contains('application/json')
+		assert connection.getResponseCode() == HTTP_CREATED
+		assert connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		def entryId = responseJson['entryId'].toString()
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)

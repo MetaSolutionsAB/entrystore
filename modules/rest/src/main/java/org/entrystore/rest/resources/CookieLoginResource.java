@@ -99,10 +99,12 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
-		// Use case for whitelisting: enforced SSO with some users that should be able to login
+		String lowerCaseUserName = userName.toLowerCase();
+
+		// Use case for whitelisting: enforced SSO with some users that should be able to log in
 		// with their local credentials, see https://entrystore.org/#!KB/Authentication.md
-		if ((passwordLoginBlacklist != null && passwordLoginBlacklist.contains(userName)) ||
-				(passwordLoginWhitelist != null && !passwordLoginWhitelist.contains(userName))) {
+		if ((passwordLoginBlacklist != null && passwordLoginBlacklist.stream().anyMatch(s -> s.equalsIgnoreCase(lowerCaseUserName))) ||
+				(passwordLoginWhitelist != null && passwordLoginWhitelist.stream().noneMatch(s -> s.equalsIgnoreCase(lowerCaseUserName)))) {
 			getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
 			if (html) {
 				getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
@@ -110,9 +112,7 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
-		userName = userName.toLowerCase();
-
-		if (getUserTempLockoutCache().userIsLockedOut(userName)) {
+		if (getUserTempLockoutCache().userIsLockedOut(lowerCaseUserName)) {
 			getResponse().setStatus(Status.CLIENT_ERROR_TOO_MANY_REQUESTS);
 			if (html) {
 				getResponse().setEntity(new SimpleHTML("Login").representation("User account is temporarily disabled. Too many failed logins."));
@@ -120,15 +120,15 @@ public class CookieLoginResource extends BaseResource {
 			return;
 		}
 
-		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), userName);
-		boolean userIsEnabled = !BasicVerifier.isUserDisabled(getPM(), userName);
+		String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(getPM(), lowerCaseUserName);
+		boolean userIsEnabled = !BasicVerifier.isUserDisabled(getPM(), lowerCaseUserName);
 		try {
 			if (saltedHashedSecret != null && Password.check(password, saltedHashedSecret)) {
 				if (userIsEnabled) {
 					EntryStoreApplication app = (EntryStoreApplication) getApplication();
-					new CookieVerifier(app, getRM()).createAuthToken(userName, maxAgeStr, getRequest(), getResponse());
+					new CookieVerifier(app, getRM()).createAuthToken(lowerCaseUserName, maxAgeStr, getRequest(), getResponse());
 					getResponse().setStatus(Status.SUCCESS_OK);
-					getUserTempLockoutCache().succeedLogin(userName);
+					getUserTempLockoutCache().succeedLogin(lowerCaseUserName);
 					if (html) {
 						getResponse().setEntity(new SimpleHTML("Login").representation("Login successful."));
 					}
@@ -151,7 +151,7 @@ public class CookieLoginResource extends BaseResource {
 		}
 
 		getResponse().setStatus(Status.CLIENT_ERROR_UNAUTHORIZED);
-		getUserTempLockoutCache().failLogin(userName);
+		getUserTempLockoutCache().failLogin(lowerCaseUserName);
 		if (html) {
 			getResponse().setEntity(new SimpleHTML("Login").representation("Login failed."));
 		}
