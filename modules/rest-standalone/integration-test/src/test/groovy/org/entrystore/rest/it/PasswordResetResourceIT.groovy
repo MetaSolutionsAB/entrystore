@@ -520,8 +520,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)
 
 		then:
-		confirmConn.getHeaderField("Location") == null
-		confirmConn.getURL().toString() == urlSuccess
+		confirmConn.getHeaderField('Location') == urlSuccess
 	}
 
 	def "GET /auth/pwreset should confirm password reset and not redirect to provided not permitted url"() {
@@ -578,7 +577,6 @@ class PasswordResetResourceIT extends BaseSpec {
 		def confirmConn = EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token)
 
 		then:
-		confirmConn.getHeaderField("Location") == null
-		confirmConn.getURL().toString() == urlfailure
+		confirmConn.getHeaderField('Location') == urlfailure
 	}
 }
