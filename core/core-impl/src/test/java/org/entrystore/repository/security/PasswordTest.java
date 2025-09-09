@@ -19,6 +19,9 @@ package org.entrystore.repository.security;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -80,5 +83,20 @@ public class PasswordTest {
 		assertTrue(Password.conformsToRules("!abcdefgh1234567890"));
 		assertTrue(Password.conformsToRules("!ABCDEFGH123456"));
 		assertFalse(Password.conformsToRules("ABCDEFGH123456"));
+	}
+
+	@Test
+	public void conformsToCustomRegex_ok() {
+		Password.Rules rules = new Password.Rules();
+		Set<String> regexes = new HashSet<>();
+		regexes.add("^[a-zA-Z0-9]{5}$");
+		rules.custom = regexes;
+		Password.setRules(rules);
+		assertTrue(Password.conformsToRules("23456"));
+		assertFalse(Password.conformsToRules("234567"));
+		assertTrue(Password.conformsToRules("23456"));
+		assertFalse(Password.conformsToRules("!1230"));
+		assertTrue(Password.conformsToRules("abcd1"));
+		assertFalse(Password.conformsToRules("AB12#"));
 	}
 }

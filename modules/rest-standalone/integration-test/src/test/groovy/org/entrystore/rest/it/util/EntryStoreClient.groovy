@@ -22,7 +22,7 @@ class EntryStoreClient {
 		}
 	}
 
-	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> customHeaders = null) {
+	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> extraHeaders = [:]) {
 		def connection = createConnection(path)
 		if (requestAcceptType?.trim()) {
 			connection.setRequestProperty('Accept', requestAcceptType)
@@ -30,21 +30,21 @@ class EntryStoreClient {
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
-
-		if (customHeaders != null) {
-			for (String header : customHeaders.keySet()) {
-				connection.setRequestProperty(header, customHeaders.get(header))
-			}
+		extraHeaders.each { key, value ->
+			connection.setRequestProperty(key, value)
 		}
 
 		connection.connect()
 		return connection
 	}
 
-	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
+	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
 		def connection = createConnection(path)
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
+		}
+		extraHeaders.each { key, value ->
+			connection.setRequestProperty(key, value)
 		}
 		connection.setRequestMethod('POST')
 		connection.setRequestProperty('Content-Type', contentType)
