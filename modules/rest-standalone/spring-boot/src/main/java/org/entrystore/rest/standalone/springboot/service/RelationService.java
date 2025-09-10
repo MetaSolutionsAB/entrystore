@@ -5,12 +5,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.RepositoryResult;
+import org.entrystore.Entry;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.URISplit;
+import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
+import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -27,6 +31,15 @@ import static org.eclipse.rdf4j.model.util.Values.iri;
 public class RelationService {
 
 	private final RepositoryManagerImpl repositoryManager;
+
+
+	public String getEntryRelations(Entry entry, String prefFormat) {
+		String serializedGraph = GraphUtil.serializeGraph(new LinkedHashModel(entry.getRelations()), prefFormat);
+		if (serializedGraph == null) {
+			throw new InternalServerErrorException("Unable to serialize the relations graph");
+		}
+		return serializedGraph;
+	}
 
 	public Map<String, Object> getRelationStats(boolean verbose) {
 		Repository repository = repositoryManager.getRepository();

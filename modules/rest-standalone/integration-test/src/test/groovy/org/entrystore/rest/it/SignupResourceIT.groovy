@@ -601,8 +601,7 @@ class SignupResourceIT extends BaseSpec {
 		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
 
 		then:
-		confirmConn.getHeaderField("Location") == null
-		confirmConn.getURL().toString() == urlSuccess
+		confirmConn.getHeaderField('Location') == urlSuccess
 	}
 
 	def "GET /auth/signup should confirm user signup and not redirect to provided not permitted url"() {
@@ -651,8 +650,7 @@ class SignupResourceIT extends BaseSpec {
 		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
 
 		then:
-		confirmConn.getHeaderField("Location") == null
-		confirmConn.getURL().toString() == urlfailure
+		confirmConn.getHeaderField('Location') == urlfailure
 	}
 
 }

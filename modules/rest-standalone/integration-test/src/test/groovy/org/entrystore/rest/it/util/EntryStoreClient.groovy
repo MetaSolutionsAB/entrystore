@@ -23,21 +23,11 @@ class EntryStoreClient {
 		}
 	}
 
-	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> customHeaders = [:]) {
-		def connection = createConnection(path)
+	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> extraHeaders = [:]) {
 		if (requestAcceptType?.trim()) {
-			connection.setRequestProperty('Accept', requestAcceptType)
+			extraHeaders['Accept'] = requestAcceptType
 		}
-		if (asUser?.trim()) {
-			connection.setRequestProperty('Cookie', cookies[asUser].toString())
-		}
-
-		customHeaders.each { key, value ->
-			connection.setRequestProperty(key, value)
-		}
-
-		connection.connect()
-		return connection
+		return sendRequestAsStream(HttpMethod.GET, path, null, asUser, null, extraHeaders)
 	}
 
 	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
@@ -52,8 +42,8 @@ class EntryStoreClient {
 	def static putRequestFile(String path, File file, String asUser = 'admin', String contentType = 'application/octet-stream') {
 		file.withInputStream { inputStream ->
 			def extraHeaders = [
-				'Content-Length'     : file.length().toString(),
-				'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
+					'Content-Length'     : file.length().toString(),
+					'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
 			]
 			return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, extraHeaders)
 		}
@@ -79,17 +69,21 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.POST, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
 	}
 
+	def static deleteRequest(String path, String asUser = 'admin') {
+		return sendRequestAsStream(HttpMethod.DELETE, path, null, asUser, null)
+	}
+
 	def static sendRequestAsStream(HttpMethod method, String path, InputStream inputStream, String asUser, String contentType, Map<String, String> extraHeaders = [:]) {
 		def connection = createConnection(path)
+		connection.setRequestMethod(method.name())
+		connection.setInstanceFollowRedirects(false)
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
-		connection.setRequestMethod(method.name())
-		connection.setInstanceFollowRedirects(false)
 		if (contentType?.trim()) {
 			connection.setRequestProperty('Content-Type', contentType)
 		}
-		extraHeaders.each { key, value ->
+		extraHeaders?.each { key, value ->
 			connection.setRequestProperty(key, value)
 		}
 
@@ -101,16 +95,6 @@ class EntryStoreClient {
 		}
 		connection.connect()
 
-		return connection
-	}
-
-	def static deleteRequest(String path, String asUser = 'admin') {
-		def connection = createConnection(path)
-		if (asUser?.trim()) {
-			connection.setRequestProperty('Cookie', cookies[asUser].toString())
-		}
-		connection.setRequestMethod('DELETE')
-		connection.connect()
 		return connection
 	}
 
@@ -132,7 +116,7 @@ class EntryStoreClient {
 	def static authorize(String asUser) {
 		def bodyParams = 'auth_username=' + asUser + '&auth_password=' + creds[asUser]
 		def conn = postRequest('/auth/cookie', bodyParams, null,
-			'application/x-www-form-urlencoded')
+				'application/x-www-form-urlencoded')
 
 		assert conn.getResponseCode() in [HTTP_OK, HTTP_MOVED_TEMP]  // 200 when POST /auth/cookie does not redirect to default page, 302 when it does
 		def cookies = conn.getHeaderField('Set-Cookie')
