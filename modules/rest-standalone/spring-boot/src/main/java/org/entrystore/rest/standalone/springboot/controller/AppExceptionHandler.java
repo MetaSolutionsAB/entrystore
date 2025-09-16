@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ValidationException;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.AuthorizationException;
 import org.entrystore.rest.standalone.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.standalone.springboot.model.exception.CustomResponseException;
@@ -91,8 +92,8 @@ public class AppExceptionHandler {
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
-	@ExceptionHandler(UnauthorizedException.class)
-	public ResponseEntity<ErrorResponse> handleUnauthorizedException(UnauthorizedException ex,
+	@ExceptionHandler({UnauthorizedException.class, AuthorizationException.class})
+	public ResponseEntity<ErrorResponse> handleUnauthorizedException(RuntimeException ex,
 																	 HttpServletRequest request) {
 		log.info("UnauthorizedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()

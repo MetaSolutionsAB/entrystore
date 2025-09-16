@@ -7,6 +7,7 @@ import jakarta.json.JsonException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.solr.common.SolrDocument;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.Statement;
@@ -22,6 +23,7 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.List;
 import org.entrystore.Metadata;
+import org.entrystore.PrincipalManager;
 import org.entrystore.Resource;
 import org.entrystore.ResourceType;
 import org.entrystore.User;
@@ -31,6 +33,7 @@ import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.NS;
+import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.standalone.springboot.model.api.CreateEntryRequestBody;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
@@ -49,6 +52,8 @@ import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -66,6 +71,7 @@ public class EntryService {
 	private static final int JSON_OBJECT_TO_STRING_INDENT_SIZE = 0;
 	private static final Pattern ENTRY_ID_PATTERN = Pattern.compile("^[\\w\\-]+$");
 
+	private final PrincipalManager principalManager;
 	private final RepositoryManagerImpl repositoryManager;
 	private final ContextService contextService;
 	private final ReservedNamesService reservedNamesService;
@@ -112,6 +118,17 @@ public class EntryService {
 		}
 
 		return entry;
+	}
+
+	/**
+	 * Validates if the currently authenticated user has the specified access property to the given entry.
+	 *
+	 * @param entry          The entry object for which access needs to be checked.
+	 * @param accessProperty The access property defining the type of access to be validated.
+	 * @throws AuthorizationException If the user does not have the required access permissions.
+	 */
+	public void checkEntryUserAccess(Entry entry, PrincipalManager.AccessProperty accessProperty) throws AuthorizationException {
+		principalManager.checkAuthenticatedUserAuthorized(entry, accessProperty);
 	}
 
 	private GetEntryResponse convertEntryToResponseModel(Entry entry, String rdfFormat, boolean includeAll, ListFilter listFilter) throws JSONException {
@@ -576,6 +593,24 @@ public class EntryService {
 		}
 
 		return success;
+	}
+
+	public Map<String, Object> getEntryIndex(Entry entry) {
+		SolrDocument doc = ((SolrSearchIndex) repositoryManager.getIndex()).fetchDocument(entry.getEntryURI().toString());
+		if (doc == null) {
+			throw new EntityNotFoundException("Entry Index data not found.");
+		}
+
+		Map<String, Object> result = new HashMap<>();
+		for (String field : doc.getFieldValuesMap().keySet()) {
+			Collection<Object> values = doc.getFieldValues(field);
+			if (values.size() > 1) {
+				result.put(field, values);
+			} else if (values.size() == 1) {
+				result.put(field, values.iterator().next());
+			}
+		}
+		return result;
 	}
 
 	/**
