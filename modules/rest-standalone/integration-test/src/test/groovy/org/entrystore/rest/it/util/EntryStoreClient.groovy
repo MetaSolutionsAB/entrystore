@@ -24,6 +24,7 @@ class EntryStoreClient {
 
 	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> extraHeaders = [:]) {
 		def connection = createConnection(path)
+		connection.setInstanceFollowRedirects(false)
 		if (requestAcceptType?.trim()) {
 			connection.setRequestProperty('Accept', requestAcceptType)
 		}

@@ -116,15 +116,15 @@ public class ResourceResource extends BaseResource {
 
 	private final EmptyRepresentation EMPTY_REPRESENTATION = new EmptyRepresentation();
 	private final List<MediaType> supportedMediaTypes = java.util.List.of(
-		MediaType.APPLICATION_RDF_XML,
-		MediaType.APPLICATION_JSON,
-		MediaType.TEXT_RDF_N3,
-		new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()),
-		new MediaType(RDFFormat.TRIX.getDefaultMIMEType()),
-		new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()),
-		new MediaType(RDFFormat.TRIG.getDefaultMIMEType()),
-		new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()),
-		new MediaType("application/rdf+json")
+			MediaType.APPLICATION_RDF_XML,
+			MediaType.APPLICATION_JSON,
+			MediaType.TEXT_RDF_N3,
+			new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()),
+			new MediaType(RDFFormat.TRIX.getDefaultMIMEType()),
+			new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()),
+			new MediaType(RDFFormat.TRIG.getDefaultMIMEType()),
+			new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()),
+			new MediaType("application/rdf+json")
 	);
 
 	private UserTempLockoutCache userTempLockoutCache;
@@ -197,8 +197,13 @@ public class ResourceResource extends BaseResource {
 
 		try {
 			modifyResource();
-			entry.updateModificationDate();
-			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
+			if (getResponse().getStatus().isSuccess()) {
+				if (getResponse().getEntity() == null) {
+					getResponse().setEntity(new EmptyRepresentation());
+				}
+				entry.updateModificationDate();
+				getResponse().getEntity().setModificationDate(entry.getModifiedDate());
+			}
 		} catch (AuthorizationException e) {
 			unauthorizedPUT();
 		}
@@ -216,7 +221,7 @@ public class ResourceResource extends BaseResource {
 
 		try {
 			if ((entryType == EntryType.Link || entryType == EntryType.Reference || entryType == EntryType.LinkReference)
-				&& "true".equalsIgnoreCase(parameters.get("proxy"))) {
+					&& "true".equalsIgnoreCase(parameters.get("proxy"))) {
 
 				final Response delResponse = deleteRemoteResource(entry.getResourceURI().toString(), 0);
 				if (delResponse != null) {
@@ -251,13 +256,13 @@ public class ResourceResource extends BaseResource {
 
 		try {
 			if (graphType == GraphType.List
-				&& parameters.containsKey("import")
-				&& MediaType.APPLICATION_ZIP.equals(getRequestEntity().getMediaType())) {
+					&& parameters.containsKey("import")
+					&& MediaType.APPLICATION_ZIP.equals(getRequestEntity().getMediaType())) {
 
 				getResponse().setStatus(importFromZIP(getRequestEntity()));
 			} else if (graphType == GraphType.List
-				&& parameters.containsKey("moveEntry")
-				&& parameters.containsKey("fromList")) {
+					&& parameters.containsKey("moveEntry")
+					&& parameters.containsKey("fromList")) {
 
 				// POST 3/resource/45?moveEntry=2/entry/34&fromList=2/resource/67
 				ListImpl dest = (ListImpl) this.entry.getResource();
@@ -426,11 +431,11 @@ public class ResourceResource extends BaseResource {
 					case None -> serializeFileRepresentationResourceNone(entry);
 					case User -> new JsonRepresentation(resourceSerializer.serializeResourceUser(resource));
 					case Group ->
-						new JsonRepresentation(resourceSerializer.serializeResourceGroup(resource, rdfFormat));
+							new JsonRepresentation(resourceSerializer.serializeResourceGroup(resource, rdfFormat));
 					case String -> new JsonRepresentation(resourceSerializer.serializeResourceString(resource));
 					case Context -> new JsonRepresentation(resourceSerializer.serializeResourceContext(resource));
 					case SystemContext ->
-						new JsonRepresentation(resourceSerializer.serializeResourceSystemContext(resource));
+							new JsonRepresentation(resourceSerializer.serializeResourceSystemContext(resource));
 					case Pipeline -> {
 						if (resource instanceof RDFResource pipeline) {
 							if (pipeline.getGraph() == null) {
@@ -483,7 +488,7 @@ public class ResourceResource extends BaseResource {
 				Disposition disp = rep.getDisposition();
 				disp.setFilename(fileName);
 				if (!getRM().getConfiguration().getBoolean(Settings.HTTP_ALLOW_CONTENT_DISPOSITION_INLINE, true)
-					|| parameters.containsKey("download")) {
+						|| parameters.containsKey("download")) {
 					disp.setType(Disposition.TYPE_ATTACHMENT);
 				} else {
 					disp.setType(Disposition.TYPE_INLINE);
@@ -647,8 +652,8 @@ public class ResourceResource extends BaseResource {
 		}
 
 		if (response.getEntity() != null &&
-			response.getEntity().getLocationRef() != null &&
-			response.getEntity().getLocationRef().getBaseRef() == null) {
+				response.getEntity().getLocationRef() != null &&
+				response.getEntity().getLocationRef().getBaseRef() == null) {
 
 			response.getEntity().getLocationRef().setBaseRef(url.substring(0, url.lastIndexOf("/") + 1));
 		}
@@ -1012,7 +1017,7 @@ public class ResourceResource extends BaseResource {
 						// (1) the user is a non-admin user, or
 						// (2) the user is an admin user and wants to set her own password
 						if (!getPM().currentUserIsAdminOrAdminGroup() ||
-							(getPM().currentUserIsAdminOrAdminGroup() && getPM().getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
+								(getPM().currentUserIsAdminOrAdminGroup() && getPM().getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
 							if (!entityJSON.has("currentPassword")) {
 								getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 								getResponse().setEntity(new JsonRepresentation("{\"error\":\"Current password is required\"}"));
@@ -1053,7 +1058,7 @@ public class ResourceResource extends BaseResource {
 					Entry entryHomeContext = getCM().get(homeContext);
 					if (entryHomeContext != null) {
 						if (!(entryHomeContext.getResource() instanceof Context)
-							|| !resourceUser.setHomeContext((Context) entryHomeContext.getResource())) {
+								|| !resourceUser.setHomeContext((Context) entryHomeContext.getResource())) {
 							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 							getResponse().setEntity(new JsonRepresentation("{\"error\":\"Given homecontext is not a context.\"}"));
 							return;
