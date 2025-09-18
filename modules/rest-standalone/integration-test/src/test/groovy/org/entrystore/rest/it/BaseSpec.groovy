@@ -102,13 +102,14 @@ abstract class BaseSpec extends Specification {
 	 * @param body key-value map which will be send in the request body, e.g. [resource: 'someText']
 	 * @return created entry ID
 	 */
-	def createEntry(String contextId, Map params, Map body = [:]) {
+	def static createEntry(String contextId, Map params, Map body = [:]) {
 		def bodyJson = JsonOutput.toJson(body)
 		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), bodyJson)
 		assert connection.getResponseCode() == HTTP_CREATED
 		assert connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		assert responseJson['entryId'] != null
+		assert responseJson['entryId'].toString().length() > 0
 		return responseJson['entryId'].toString()
 	}
 

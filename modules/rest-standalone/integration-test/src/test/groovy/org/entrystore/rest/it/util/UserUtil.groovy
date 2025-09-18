@@ -3,7 +3,6 @@ package org.entrystore.rest.it.util
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.BaseSpec
 
-import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -14,14 +13,8 @@ class UserUtil {
 
 		// create a User entry
 		def params = [graphtype: 'user']
-		def body = JsonOutput.toJson([resource: [name: username]])
-		def connection = EntryStoreClient.postRequest('/_principals' + BaseSpec.convertMapToQueryParams(params), body)
-		assert connection.getResponseCode() == HTTP_CREATED
-		assert connection.getContentType().contains('application/json')
-		def responseJson = BaseSpec.JSON_PARSER.parseText(connection.getInputStream().text)
-		assert responseJson['entryId'] != null
-		def entryId = responseJson['entryId'].toString()
-		assert entryId.length() > 0
+		def body = [resource: [name: username]]
+		def entryId = BaseSpec.createEntry('_principals', params, body)
 		user['entryId'] = entryId
 
 		// fetch URI of created resource
