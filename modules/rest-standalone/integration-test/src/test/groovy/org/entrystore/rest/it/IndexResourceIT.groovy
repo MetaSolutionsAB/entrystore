@@ -11,8 +11,6 @@ import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
 import static org.awaitility.Awaitility.await
 
-// Not migrated yet
-@Ignore
 class IndexResourceIT extends BaseSpec {
 
 	def static contextId = '60'
@@ -29,7 +27,7 @@ class IndexResourceIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
 		def json = JSON_PARSER.parseText(connection.getErrorStream().text)
-		json['error'] == 'Entry not found'
+		json['error'] == 'No entry with id \'randomEntryId\' found in context \'60\''
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/index on a String entry should return index info"() {

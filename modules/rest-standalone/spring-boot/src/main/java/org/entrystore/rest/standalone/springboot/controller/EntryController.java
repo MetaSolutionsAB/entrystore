@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Entry;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryNameResponse;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryResponse;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
@@ -24,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -157,5 +160,18 @@ public class EntryController {
 						ResponseEntity.noContent(),
 						entry.getModifiedDate())
 				.build();
+	}
+
+	@Operation(summary = "Returns entry's index")
+	@GetMapping(path = "/{context-id}/entry/{entry-id}/index", produces = MediaType.APPLICATION_JSON_VALUE)
+	public Map<String, Object> getEntryIndex(
+			@PathVariable("context-id") String contextId,
+			@PathVariable("entry-id") String entryId
+	) {
+
+		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
+		entryService.checkEntryUserAccess(entry, AccessProperty.Administer);
+
+		return entryService.getEntryIndex(entry);
 	}
 }
