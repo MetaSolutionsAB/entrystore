@@ -1,6 +1,5 @@
 package org.entrystore.rest.it
 
-
 import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
@@ -20,9 +19,9 @@ import static java.net.HttpURLConnection.HTTP_OK
 class UserResourceIT extends BaseSpec {
 
 	static DateTimeFormatter dtf = new DateTimeFormatterBuilder()
-			.appendPattern("yyyy-MM-dd'T'HH:mm:ss")
-			.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
-			.toFormatter()
+		.appendPattern("yyyy-MM-dd'T'HH:mm:ss")
+		.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
+		.toFormatter()
 	static def newPassword = 'newPass12345'
 	static GreenMail greenMail = new GreenMail(SMTP)
 	static def genericCredsClone = [:]
@@ -50,11 +49,11 @@ class UserResourceIT extends BaseSpec {
 		def entryId = user['entryId'].toString()
 		def resourceUri = user['resourceUri'].toString()
 		def requestBody = JsonOutput.toJson([
-				password: 'newPass12345',
-				language: 'SE'
+			password: 'newPass12345',
+			language: 'SE'
 		])
 		assert EntryStoreClient.putRequest(resourceUri, requestBody).getResponseCode() == HTTP_NO_CONTENT
-		def languages = ['Accept-Language':'fr-CH;q=0.9,en-US;q=0.7']
+		def languages = ['Accept-Language': 'fr-CH;q=0.9,en-US;q=0.7']
 
 		when:
 		def info = EntryStoreClient.getRequest('/auth/user', username, null, languages)
@@ -77,11 +76,11 @@ class UserResourceIT extends BaseSpec {
 		given:
 		def username = 'userForInfoContext@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : 'Home',
-				lastname          : 'Context',
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: 'anything'
+			firstname         : 'Home',
+			lastname          : 'Context',
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: 'anything'
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()

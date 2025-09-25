@@ -22,6 +22,7 @@ import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.User;
 import org.entrystore.repository.transformation.SCAM2Import;
 import org.entrystore.repository.util.FileOperations;
 import org.restlet.Request;
@@ -58,14 +59,24 @@ public class ImportResource extends BaseResource {
 
 	@Post
 	public void acceptRepresentation(Representation r) {
+		User authenticatedUser = getPM().getUser(getPM().getAuthenticatedUserURI());
+
 		try {
-			if (context == null) {
-				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+			// guests are prohibited from using this resource
+			if (authenticatedUser == null || getPM().getGuestUser().getURI().equals(authenticatedUser.getURI())) {
+				throw new AuthorizationException(authenticatedUser, context != null ? context.getEntry() : null, AccessProperty.Administer);
+			}
+
+			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
+			if (!getPM().getAdminUser().getURI().equals(authenticatedUser.getURI()) &&
+					!getPM().getAdminGroup().isMember(authenticatedUser)) {
+				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
 				return;
 			}
 
-			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
-				throw new AuthorizationException(getPM().getUser(getPM().getAuthenticatedUserURI()), context.getEntry(), AccessProperty.Administer);
+			if (context == null) {
+				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
+				return;
 			}
 
 			File tmpFile = null;
@@ -88,15 +99,17 @@ public class ImportResource extends BaseResource {
 							FileOperations.copyFile(input, Files.newOutputStream(tmpFile.toPath()));
 						} catch (IOException e) {
 							log.error(e.getMessage(), e);
+							getResponse().setStatus(Status.SERVER_ERROR_INTERNAL, "Unable to copy the file");
+							return;
 						}
 
 						try {
 							getCM().importContext(context.getEntry(), tmpFile);
+							getResponse().setEntity("<textarea></textarea>", MediaType.TEXT_HTML);
 						} catch (IOException e) {
 							log.error(e.getMessage(), e);
+							getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Unable to import file, received invalid data");
 						}
-
-						getResponse().setEntity("<textarea></textarea>", MediaType.TEXT_HTML);
 					} else {
 						log.error("Unable to import file, received invalid data");
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST, "Unable to import file, received invalid data");
@@ -116,6 +129,8 @@ public class ImportResource extends BaseResource {
 		} catch(AuthorizationException e) {
 			log.error("unauthorizedPOST");
 			unauthorizedPOST();
+		} finally {
+			getPM().setAuthenticatedUserURI(authenticatedUser.getURI());
 		}
 	}
 
