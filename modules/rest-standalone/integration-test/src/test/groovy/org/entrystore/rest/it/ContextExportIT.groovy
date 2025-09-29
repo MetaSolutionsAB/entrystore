@@ -36,6 +36,7 @@ class ContextExportIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_NOT_FOUND
 	}
 
+	// TODO: Add a test as a user (not Admin, and not guest)
 	def "GET /{context-id}/export as non-admin on existing context should return Unauthorized 401 response"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/' + contextId + '/export', '')

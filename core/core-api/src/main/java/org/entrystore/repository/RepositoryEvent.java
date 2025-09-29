@@ -33,6 +33,7 @@ public enum RepositoryEvent {
 	ExternalMetadataUpdated,
 	ExtractedMetadataUpdated, // TODO event firing not implemented yet
 	ResourceUpdated, // TODO partially implemented for ListImpl, fully implemented for DataImpl
-	ResourceDeleted // TODO partially implemented for ListImpl, fully implemented for DataImpl
+	ResourceDeleted, // TODO partially implemented for ListImpl, fully implemented for DataImpl
+	RelationsUpdated
 
 }

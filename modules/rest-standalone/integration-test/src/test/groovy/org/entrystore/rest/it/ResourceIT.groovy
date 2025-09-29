@@ -489,8 +489,7 @@ class ResourceIT extends BaseSpec {
 		assert userResourceJson['relations'] instanceof Map
 		def relations = userResourceJson['relations']
 		def userGroupRelation = relations[groupResourceUri] // Normally, a LazyMap should be populated now
-		// TODO: Entry "relations" are empty for some reason, needs investigation
-		//assert userGroupRelation != null
+		assert userGroupRelation != null
 	}
 
 	def "PUT /_principals/{entry-id} should add user to 2 groups and the user should have the information in relations object"() {
@@ -567,8 +566,7 @@ class ResourceIT extends BaseSpec {
 		def userGroup1Relation = relations[group1ResourceUri]
 		assert userGroup1Relation != null
 		def userGroup2Relation = relations[group2ResourceUri]
-		// TODO: Entry "relations" are missing for some reason, needs investigation
-		//assert userGroup2Relation != null
+		assert userGroup2Relation != null
 	}
 
 	def "PUT /_principals/{entry-id} should add 2 users to a group and users should have the information in relations object"() {
@@ -624,8 +622,7 @@ class ResourceIT extends BaseSpec {
 		assert user1ResourceJson['relations'] instanceof Map
 		def relations1 = user1ResourceJson['relations']
 		def user1GroupRelation = relations1[groupResourceUri]
-		// TODO: Entry "relations" are missing for some reason, needs investigation
-//		assert user1GroupRelation != null
+		assert user1GroupRelation != null
 		// fetch User details
 		def user2ResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + user2EntryId + "?includeAll")
 		assert user2ResourceConn.getResponseCode() == HTTP_OK
@@ -634,8 +631,7 @@ class ResourceIT extends BaseSpec {
 		assert user2ResourceJson['relations'] instanceof Map
 		def relations2 = user1ResourceJson['relations']
 		def user2GroupRelation = relations2[groupResourceUri]
-		// TODO: Entry "relations" are missing for some reason, needs investigation
-//		assert user2GroupRelation != null
+		assert user2GroupRelation != null
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} should edit other User-resource properties"() {

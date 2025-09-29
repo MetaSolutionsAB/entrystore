@@ -291,8 +291,6 @@ class SearchIT extends BaseSpec {
 		(itemDateNode.value()[0] as String).contains(Year.now().toString())
 	}
 
-	// urltemplate not migrated yet - was added post migration to Spring-boot - needs 'rebase'
-	@Ignore
 	def "GET /search?type=solr&syndication=rss_2.0&urltemplate=test123 should return syndication feed with links based on a URL template"() {
 		when:
 		// fetch syndication feed

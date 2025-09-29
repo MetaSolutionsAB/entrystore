@@ -18,6 +18,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Resource;
 import org.entrystore.User;
+import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.util.QueryResult;
@@ -51,6 +52,7 @@ public class SearchService {
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final PrincipalManager principalManager;
+	private final Config esConfig;
 
 
 	public List<Entry> findEntriesSparql(String queryValue) {
@@ -145,10 +147,12 @@ public class SearchService {
 
 	}
 
-	public String generateSyndication(List<Entry> entries, String feedType, String language, int limit) {
+	public String generateSyndication(List<Entry> entries, String feedType, String language, int limit,
+									  String urlTemplate, String feedTitle) {
 
-		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(), entries, language, limit);
-		feed.setTitle("Syndication feed of search");
+		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(), esConfig, entries,
+				language, limit, urlTemplate);
+		feed.setTitle(Syndication.sanitizeFeedTitle(feedTitle));
 		feed.setLink(buildRequestUri());
 		feed.setFeedType(feedType);
 

@@ -19,6 +19,7 @@ package org.entrystore.rest.standalone.springboot.service.auth;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.json.JSONException;
@@ -44,9 +45,10 @@ import org.springframework.web.client.RestTemplate;
 @RequiredArgsConstructor
 public class RecaptchaVerifier {
 
-	private final String RECAPTCHA_URL_DEFAULT = "https://www.google.com/recaptcha/api/siteverify";
+	private static final String RECAPTCHA_URL_DEFAULT = "https://www.google.com/recaptcha/api/siteverify";
 
 	private final RepositoryManagerImpl repositoryManager;
+	private final Config esConfig;
 	private final RestTemplate restTemplate;
 
 	private static String url;
@@ -54,8 +56,8 @@ public class RecaptchaVerifier {
 
 	@PostConstruct
 	public void init() {
-		url = repositoryManager.getConfiguration().getString(Settings.AUTH_RECAPTCHA_URL, RECAPTCHA_URL_DEFAULT);
-		secret = repositoryManager.getConfiguration().getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
+		url = esConfig.getString(Settings.AUTH_RECAPTCHA_URL, RECAPTCHA_URL_DEFAULT);
+		secret = esConfig.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
 	}
 
 	/**

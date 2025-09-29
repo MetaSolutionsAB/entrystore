@@ -499,8 +499,6 @@ public class ResourceService {
 				movedEntry = dest.moveEntryHere(movableEntry, movableEntrySource, removeAll);
 			} catch (QuotaException qe) {
 				throw new EntityTooLargeException(qe.getMessage());
-			} catch (IOException ioe) {
-				throw new InternalServerErrorException(ioe.getMessage());
 			}
 
 			return movedEntry;

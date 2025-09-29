@@ -1,5 +1,6 @@
 package org.entrystore.rest.standalone.springboot.util;
 
+import com.google.common.html.HtmlEscapers;
 import com.rometools.rome.feed.synd.SyndContent;
 import com.rometools.rome.feed.synd.SyndContentImpl;
 import com.rometools.rome.feed.synd.SyndEntry;
@@ -12,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
+import org.entrystore.config.Config;
+import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.springframework.http.MediaType;
 
@@ -21,9 +24,19 @@ import java.util.List;
 import java.util.Objects;
 
 import static java.lang.String.format;
+import static java.net.URLEncoder.encode;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Slf4j
 public class Syndication {
+
+	private static final String VAR_ENTRYID = "\\{entryid}";
+
+	private static final String VAR_CONTEXTID = "\\{contextid}";
+
+	private static final String VAR_ENTRYURI = "\\{entryuri}";
+
+	private static final String VAR_RESOURCEURI = "\\{resourceuri}";
 
 	public static String convertSyndFeedToXml(SyndFeed feed) {
 		try {
@@ -47,9 +60,11 @@ public class Syndication {
 	}
 
 	public static SyndFeed createFeedFromEntries(PrincipalManager principalManager,
+												 Config esConfig,
 												 List<Entry> entries,
 												 String language,
-												 int limit) {
+												 int limit,
+												 String urlTemplate) {
 
 		SyndFeed feed = new SyndFeedImpl();
 		feed.setDescription(format("Syndication feed containing max %d items", limit));
@@ -78,7 +93,12 @@ public class Syndication {
 
 				syndEntry.setPublishedDate(entry.getCreationDate());
 				syndEntry.setUpdatedDate(entry.getModifiedDate());
-				syndEntry.setLink(entry.getResourceURI().toString());
+
+				String link = constructSyndLinkFromUrlTemplate(esConfig, Objects.requireNonNullElse(urlTemplate, "default"), entry);
+				if (link == null) {
+					link = entry.getResourceURI().toString();
+				}
+				syndEntry.setLink(link);
 
 				URI creator = entry.getCreator();
 				if (creator != null) {
@@ -108,4 +128,27 @@ public class Syndication {
 
 		return feed;
 	}
+
+	private static String constructSyndLinkFromUrlTemplate(Config config, String templateName, Entry entry) {
+		String template = config.getString(Settings.SYNDICATION_URL_TEMPLATE + "." + templateName);
+		if (template != null) {
+			return template.replaceAll(VAR_ENTRYID, encode(entry.getId(), UTF_8)).
+					replaceAll(VAR_CONTEXTID, encode(entry.getContext().getEntry().getId(), UTF_8)).
+					replaceAll(VAR_ENTRYURI, encode(entry.getEntryURI().toString(), UTF_8)).
+					replaceAll(VAR_RESOURCEURI, encode(entry.getResourceURI().toString(), UTF_8));
+		}
+		return null;
+	}
+
+	public static String sanitizeFeedTitle(String feedTitle) {
+		String result = feedTitle;
+		if (result != null) {
+			if (result.length() > 64) {
+				result = result.substring(0, 63);
+			}
+			result = HtmlEscapers.htmlEscaper().escape(result);
+		}
+		return result;
+	}
+
 }

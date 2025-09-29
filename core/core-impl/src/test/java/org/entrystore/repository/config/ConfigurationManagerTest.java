@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2025 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,35 +19,15 @@ package org.entrystore.repository.config;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 public class ConfigurationManagerTest {
 
-	@Disabled("To be implemented")
+	@Disabled
 	@Test
-	public void testClone() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
-	public void testGetType() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
-	public void testGetConfigurationURI() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
-	public void testGetConfigurationURI1() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
-	public void testGetConfiguration() throws Exception {
-		// TODO
+	public void getConfigurationURI_ok() {
+		assertEquals(URI.create(""), ConfigurationManager.getConfigurationURI());
 	}
 }

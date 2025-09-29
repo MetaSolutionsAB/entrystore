@@ -23,8 +23,8 @@ import org.entrystore.repository.config.Settings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -45,7 +45,7 @@ public class SignupInfo {
 
 	private String saltedHashedPassword;
 
-	private Date expirationDate;
+	private Instant expirationDate;
 
 	private String urlSuccess;
 
