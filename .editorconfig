@@ -19,7 +19,7 @@ ij_continuation_indent_size = 8
 indent_style = tab
 ij_groovy_class_count_to_use_import_on_demand = 99
 ij_groovy_names_count_to_use_import_on_demand = 99
-ij_continuation_indent_size = 8
+ij_continuation_indent_size = 4
 
 [*.json]
 indent_size = 2

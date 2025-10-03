@@ -3,7 +3,6 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
-import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_METHOD
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST

@@ -5,7 +5,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
@@ -34,7 +33,7 @@ public class RelationService {
 
 
 	public String getEntryRelations(Entry entry, String prefFormat) {
-		String serializedGraph = GraphUtil.serializeGraph(new LinkedHashModel(entry.getRelations()), prefFormat);
+		String serializedGraph = GraphUtil.serializeGraph(entry.getRelations(), prefFormat);
 		if (serializedGraph == null) {
 			throw new InternalServerErrorException("Unable to serialize the relations graph");
 		}

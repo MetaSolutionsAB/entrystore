@@ -3,7 +3,6 @@ package org.entrystore.rest.it
 import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
-import spock.lang.Ignore
 
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -70,7 +69,10 @@ class ContextExportIT extends BaseSpec {
 		exportedZip['triples.rdf'].contains('<' + EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId + '> a es:Link;')
 		exportedZip['triples.rdf'].contains(' es:resource <' + resourceUrl + '>;')
 
-		exportedZip['export.properties'] =~ /containedUsers=.*_admin\\:admin.*/
+		// (?m) Multiline mode
+		// (.*,)? Optional group for other users before _admin:admin, but must end with a comma
+		// (,.*)? Optional group for other users after _admin:admin, but must start with a comma
+		exportedZip['export.properties'] =~ /(?m)^containedUsers=(.*,)?_admin\\:admin(,.*)?$/
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
 		exportedZip['export.properties'].contains('baseURI=http\\://localhost\\:8181/store/')
 		exportedZip['export.properties'].contains('exportDate=')
@@ -99,7 +101,7 @@ class ContextExportIT extends BaseSpec {
 		exportedZip['triples.rdf'].contains('store:' + contextId + ' a es:Context;')
 		exportedZip['triples.rdf'].contains('<' + EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId + '> es:resource store:' + contextId + ';')
 
-		exportedZip['export.properties'] =~ /containedUsers=.*_admin\\:admin.*/
+		exportedZip['export.properties'] =~ /(?m)^containedUsers=(.*,)?_admin\\:admin(,.*)?$/
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
 		exportedZip['export.properties'].contains('baseURI=http\\://localhost\\:8181/store/')
 		exportedZip['export.properties'].contains('exportDate=')
@@ -150,7 +152,7 @@ class ContextExportIT extends BaseSpec {
 		entryNode['es:resource'].size() == 1
 		(entryNode['es:resource'][0] as Node).attributes() == ['rdf:resource': resourceUrl]
 
-		exportedZip['export.properties'] =~ /containedUsers=.*_admin\\:admin.*/
+		exportedZip['export.properties'] =~ /(?m)^containedUsers=(.*,)?_admin\\:admin(,.*)?$/
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
 		exportedZip['export.properties'].contains('baseURI=http\\://localhost\\:8181/store/')
 		exportedZip['export.properties'].contains('exportDate=')

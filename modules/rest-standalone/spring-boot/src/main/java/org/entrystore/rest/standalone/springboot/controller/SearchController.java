@@ -131,10 +131,6 @@ public class SearchController {
 			}
 		}
 
-		if (StringUtils.isNotEmpty(syndication) && StringUtils.isNotEmpty(sort)) {
-			throw new BadRequestException("Query parameter 'sort' not supported with syndication");
-		}
-
 		SolrSearchIndex.FacetSettings facetSettings = facetRequest.toSolrFacetSettings(MAX_FACET_LIMIT, DEFAULT_FACET_LIMIT);
 
 		QueryResultsDto queryResults = searchService.findEntriesSolr(query, sort, offset, limit, filterQueries, facetSettings);

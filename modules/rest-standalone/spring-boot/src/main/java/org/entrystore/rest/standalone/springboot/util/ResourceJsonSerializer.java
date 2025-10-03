@@ -3,7 +3,6 @@ package org.entrystore.rest.standalone.springboot.util;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -89,9 +88,9 @@ public class ResourceJsonSerializer {
 						//TODO: Replaced by using "rights" in json, do something else in this catch-clause
 					}
 
-					//Relations for every user in this group.
-					if (u.getEntry().getRelations() != null) {
-						Model childRelationsGraph = new LinkedHashModel(u.getEntry().getRelations());
+					// Relations for every user in this group.
+					Model childRelationsGraph = u.getEntry().getRelations();
+					if (childRelationsGraph != null) {
 						JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
 						childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 					}
@@ -274,8 +273,8 @@ public class ResourceJsonSerializer {
 					JSONObject childInfo = GraphUtil.serializeGraphToJson(childEntryGraph, rdfFormat);
 					childJSON.accumulate("info", childInfo);
 
-					if (childEntry.getRelations() != null) {
-						Model childRelationsGraph = new LinkedHashModel(childEntry.getRelations());
+					Model childRelationsGraph = childEntry.getRelations();
+					if (childRelationsGraph != null) {
 						JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
 						childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 					}
@@ -287,7 +286,6 @@ public class ResourceJsonSerializer {
 				resourceObj.put("size", childrenURIs.size());
 				resourceObj.put("limit", limit);
 				resourceObj.put("offset", offset);
-
 
 				JSONArray childrenIDArray = new JSONArray();
 				for (String id : childrenIDs) {

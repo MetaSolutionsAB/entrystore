@@ -58,7 +58,7 @@ class UserResourceIT extends BaseSpec {
 				password: 'newPass12345',
 				language: 'SE'
 		])
-		EntryStoreClient.putRequest(resourceUri, requestBody).getResponseCode() == HTTP_NO_CONTENT
+		assert EntryStoreClient.putRequest(resourceUri, requestBody).getResponseCode() == HTTP_NO_CONTENT
 		def languages = new HashMap<String, String>()
 		languages.put('Accept-Language', 'fr-CH;q=0.9,en-US;q=0.7')
 

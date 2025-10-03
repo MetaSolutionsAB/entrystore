@@ -25,9 +25,13 @@ class SignupResourceIT extends BaseSpec {
 
 	static GreenMail greenMail = new GreenMail(SMTP)
 
-	def setup() { greenMail.start() }
+	def setupSpec() { greenMail.start() }
 
 	def cleanup() {
+		greenMail.purgeEmailFromAllMailboxes()
+	}
+
+	def cleanupSpec() {
 		greenMail.stop()
 	}
 

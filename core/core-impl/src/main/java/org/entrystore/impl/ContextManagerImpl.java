@@ -128,6 +128,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	 *
 	 * @deprecated Use Context.remove(RepositoryConnection) instead.
 	 */
+	@Deprecated
 	public void deleteContext(URI contextURI) throws RepositoryException {
 		if (contextURI == null) {
 			throw new IllegalArgumentException("Context URI must not be null");

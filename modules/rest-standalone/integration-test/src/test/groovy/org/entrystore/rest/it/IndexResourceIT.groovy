@@ -3,7 +3,6 @@ package org.entrystore.rest.it
 import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
-import spock.lang.Ignore
 
 import java.util.concurrent.TimeUnit
 

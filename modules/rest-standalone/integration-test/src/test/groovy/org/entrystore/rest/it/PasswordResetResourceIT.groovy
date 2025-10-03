@@ -22,9 +22,13 @@ class PasswordResetResourceIT extends BaseSpec {
 
 	static GreenMail greenMail = new GreenMail(SMTP)
 
-	def setup() { greenMail.start() }
+	def setupSpec() { greenMail.start() }
 
 	def cleanup() {
+		greenMail.purgeEmailFromAllMailboxes()
+	}
+
+	def cleanupSpec() {
 		greenMail.stop()
 	}
 
@@ -78,11 +82,11 @@ class PasswordResetResourceIT extends BaseSpec {
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
-		message.getFrom().contains(new InternetAddress("info@meta.se"))
-		message.getSubject() == "Password reset request"
-		message.getAllRecipients().contains(new InternetAddress("user@test.com"))
+		message.getFrom().contains(new InternetAddress('info@meta.se'))
+		message.getSubject() == 'Password reset request'
+		message.getAllRecipients().contains(new InternetAddress('user@test.com'))
 		def messageContent = message.getContent()
-		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
 		token.length() == 16
 	}
@@ -106,11 +110,11 @@ class PasswordResetResourceIT extends BaseSpec {
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
-		message.getFrom().contains(new InternetAddress("info@meta.se"))
-		message.getSubject() == "Password reset request"
+		message.getFrom().contains(new InternetAddress('info@meta.se'))
+		message.getSubject() == 'Password reset request'
 		message.getAllRecipients().contains(new InternetAddress("userform@test.com"))
 		def messageContent = message.getContent()
-		def startIndex = messageContent.toString().indexOf("?confirm") + 9
+		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
 		token.length() == 16
 	}

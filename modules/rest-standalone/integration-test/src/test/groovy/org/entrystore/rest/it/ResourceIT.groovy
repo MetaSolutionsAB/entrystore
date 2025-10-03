@@ -3,7 +3,6 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
-import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -36,7 +35,7 @@ class ResourceIT extends BaseSpec {
 		assert entryRespJson['info'][entryUri] != null
 		assert entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
 		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
-		entryResources.size() == 1
+		assert entryResources.size() == 1
 		assert entryResources[0]['value'] != null
 		def createdResourceUri = entryResources[0]['value'].toString()
 		assert createdResourceUri.startsWith(EntryStoreClient.baseUrl + '/' + contextId + '/resource/')
@@ -72,7 +71,7 @@ class ResourceIT extends BaseSpec {
 		assert entryRespJson['info'][entryUri] != null
 		assert entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
 		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
-		entryResources.size() == 1
+		assert entryResources.size() == 1
 		assert entryResources[0]['value'] != null
 		def createdResourceUri = entryResources[0]['value'].toString()
 		assert createdResourceUri.startsWith(EntryStoreClient.baseUrl + '/' + contextId + '/resource/')
@@ -136,8 +135,8 @@ class ResourceIT extends BaseSpec {
 		def params = [graphtype: 'group']
 		def body = JsonOutput.toJson([resource: requestResourceName])
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getContentType().contains('application/json')
+		assert connection.getResponseCode() == HTTP_CREATED
+		assert connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson['entryId'] != null
 		def entryId = responseJson['entryId'].toString()

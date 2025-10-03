@@ -3,7 +3,6 @@ package org.entrystore.rest.it
 import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
-import spock.lang.Ignore
 
 import java.time.Year
 
