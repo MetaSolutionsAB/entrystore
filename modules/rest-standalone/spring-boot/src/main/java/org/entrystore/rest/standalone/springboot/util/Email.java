@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.standalone.springboot.util;
 
-import com.google.common.base.Charsets;
 import com.google.common.html.HtmlEscapers;
 import org.apache.commons.io.IOUtils;
 import org.entrystore.Entry;
@@ -40,6 +39,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Calendar;
 import java.util.Properties;
@@ -274,7 +274,7 @@ public class Email {
 			} else {
 				is = Files.newInputStream(new File(url).toPath());
 			}
-			return IOUtils.toString(is, Charsets.UTF_8);
+			return IOUtils.toString(is, StandardCharsets.UTF_8);
 		} catch (IOException | URISyntaxException e) {
 			log.error(e.getMessage());
 		} finally {

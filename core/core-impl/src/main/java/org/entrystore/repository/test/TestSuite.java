@@ -76,7 +76,7 @@ public class TestSuite {
 	}
 
 	/**
-	 * Initializes the following contexts, users and groups:
+	 * Initializes the following contexts: users and groups:
 	 * <nl><li> The users "Donald", "Mickey", and "Daisy"</li>
 	 * <li> The group "Originals" consisting of Donald and Mickey.</li>
 	 * <li> The contexts "duck" and "mouse".</li></nl>
@@ -117,7 +117,7 @@ public class TestSuite {
 			User mickey = (User) mickeyE.getResource();
 			mickey.setSecret("mickeyMickey56");
 
-			//Friends of Mickey group
+			//Friends of a Mickey group
 			Entry friendsOfMickeyE = pm.createResource(null, GraphType.Group, null, null);
 			pm.setPrincipalName(friendsOfMickeyE.getResourceURI(), "friendsOfMickey");
 			setMetadata(friendsOfMickeyE, "Old friends of Mickey", null, null, null, null);
@@ -151,7 +151,7 @@ public class TestSuite {
 
 			// User entry without metadata
 			Entry emptyMd = pm.createResource(null, GraphType.User, null, null);
-			log.info("Created user without metadata: " + emptyMd.getEntryURI().toString());
+			log.info("Created user without metadata: {}", emptyMd.getEntryURI().toString());
 		} finally {
 			pm.setAuthenticatedUserURI(currentUserURI);
 		}

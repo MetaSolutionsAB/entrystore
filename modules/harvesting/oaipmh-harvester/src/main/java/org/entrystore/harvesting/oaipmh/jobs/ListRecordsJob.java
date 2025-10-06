@@ -218,8 +218,13 @@ public class ListRecordsJob implements Job, InterruptableJob {
 					exService.execute(new Runnable() {
 						public void run() {
 							try {
-								pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-								createEntry(context, recordElement, target, metadataType);
+								URI currentUser = pm.getAuthenticatedUserURI();
+								try {
+									pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+									createEntry(context, recordElement, target, metadataType);
+								} finally {
+									pm.setAuthenticatedUserURI(currentUser);
+								}
 							} catch (XPathExpressionException e) {
 								log.error(e.getMessage());
 							}

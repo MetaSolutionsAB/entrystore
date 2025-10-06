@@ -73,7 +73,6 @@ class EchoIT extends BaseSpec {
 		echoConn.getErrorStream().text.contains('<textarea>status:415\n/echo endpoint accepts only &#39;multipart/form-data&#39; requests</textarea>')
 	}
 
-
 	def 'POST /echo with multi-part file larger than 10MB should respond with HTTP_ENTITY_TOO_LARGE 413'() {
 		given:
 		// create a test binary file with 11MB of some data

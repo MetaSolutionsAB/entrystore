@@ -36,8 +36,7 @@ public abstract class AbstractCoreTest {
 	public ContextManager cm;
 	public PrincipalManager pm;
 
-	@BeforeEach
-	public void setUp() {
+	private void setUpEnvironment() {
 		Config config = new PropertiesConfiguration("EntryStore Configuration");
 		config.setProperty(Settings.STORE_TYPE, "memory");
 		config.setProperty(Settings.BASE_URL, "http://localhost:8181/");
@@ -49,7 +48,16 @@ public abstract class AbstractCoreTest {
 		rm = new RepositoryManagerImpl("http://localhost:8181/", config);
 		pm = rm.getPrincipalManager();
 		cm = rm.getContextManager();
+	}
+
+	@BeforeEach
+	public void setUp() {
+		setUpEnvironment();
 		TestSuite.initDisneySuite(rm);
+	}
+
+	public void setUpWithoutSuite() {
+		setUpEnvironment();
 	}
 
 	@AfterEach

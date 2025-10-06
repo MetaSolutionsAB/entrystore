@@ -4,6 +4,7 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableSet;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
@@ -24,6 +25,7 @@ import org.entrystore.GraphEntity;
 import org.entrystore.Metadata;
 import org.entrystore.Provenance;
 import org.entrystore.ProvenanceType;
+import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
@@ -50,6 +52,7 @@ import java.util.Set;
 public class MetadataService {
 
 	private final RepositoryManagerImpl repositoryManager;
+	private final Config esConfig;
 
 	public String getMetadata(Entry entry, MetadataType metadataType, String format, String graphQuery, Integer depth, String recursive, String scope, String revision) {
 
@@ -112,7 +115,8 @@ public class MetadataService {
 		Metadata metadata = switch (metadataType) {
 			case LOCAL_METADATA -> getEntryLocalMetadata(entry, revision);
 			case CACHED_EXTERNAL_METADATA -> getEntryCachedExternalMetadata(entry);
-			case MERGED_METADATA -> throw new BadRequestException("Unable to set Merged Metadata on entry: " + entry.getEntryURI());
+			case MERGED_METADATA ->
+					throw new BadRequestException("Unable to set Merged Metadata on entry: " + entry.getEntryURI());
 		};
 
 		if (metadata != null && newMetadataGraph != null) {
@@ -148,15 +152,33 @@ public class MetadataService {
 	}
 
 	private String getRecursiveMetadata(Entry entry, String format, String graphQuery, Integer depth, String recursive,
-										String repository, Set<URI> predicatesToFollow) {
+										String scope, Set<URI> predicatesToFollow) {
+
+		String firstDetectedProfile = getFirstProfile(recursive);
 
 		Map<String, String> blacklist = loadBlacklist(recursive);
-		int depthMax = repositoryManager.getConfiguration().getInt(Settings.TRAVERSAL_MAX_DEPTH, depth);
+
+		int depthMax = firstDetectedProfile != null ? esConfig.getInt(
+				traversalSetting(Settings.TRAVERSAL_PROFILE_MAX_DEPTH, firstDetectedProfile),
+				depth
+		) : depth;
 		if (depth > depthMax) {
 			depth = depthMax;
+		} else if (depth < 0) {
+			depth = 10;
 		}
 
-		EntryUtil.TraversalResult travResult = traverse(entry, predicatesToFollow, blacklist, repository != null, depth);
+		int limit = 1000; // default
+		limit = firstDetectedProfile != null ? esConfig.getInt(traversalSetting(Settings.TRAVERSAL_PROFILE_LIMIT, firstDetectedProfile), limit) : limit;
+
+		boolean repositoryScope = true; // default
+		repositoryScope = firstDetectedProfile != null ? esConfig.getBoolean(traversalSetting(Settings.TRAVERSAL_PROFILE_REPOSITORY_SCOPE, firstDetectedProfile), repositoryScope) : repositoryScope;
+		if (StringUtils.isNotEmpty(scope)) {
+			// we allow an override by parameter
+			repositoryScope = !"context".equalsIgnoreCase(scope);
+		}
+
+		EntryUtil.TraversalResult travResult = traverse(entry, predicatesToFollow, blacklist, repositoryScope, depth, limit);
 		if (graphQuery != null) {
 			Model graphQueryResult = applyGraphQuery(graphQuery, travResult.getGraph());
 			if (graphQueryResult != null) {
@@ -171,6 +193,15 @@ public class MetadataService {
 		/*if (travResult.getLatestModified() != null) {
 			result.setModificationDate(travResult.getLatestModified());
 		}*/
+	}
+
+	private String getFirstProfile(String predCSV) {
+		for (String s : predCSV.split(",")) {
+			if (!loadTraversalProfile(s).isEmpty()) {
+				return s;
+			}
+		}
+		return null;
 	}
 
 	/**
@@ -200,18 +231,20 @@ public class MetadataService {
 	 *                     trigger a stop of the traversal excluding the matching entry.
 	 * @param repository   Ignore context boundaries.
 	 * @param depth        Levels traversed.
+	 * @param limit        Max number of results.
 	 * @return Returns a Graph consisting of merged metadata graphs. Contains all metadata, including e.g. cached external.
 	 */
-	private EntryUtil.TraversalResult traverse(Entry entry, Set<URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth) {
+	private EntryUtil.TraversalResult traverse(Entry entry, Set<URI> predToFollow, Map<String, String> blacklist, boolean repository, int depth, int limit) {
 		return EntryUtil.traverseAndLoadEntryMetadata(
-			ImmutableSet.of(repositoryManager.getValueFactory().createIRI(entry.getEntryURI().toString())),
-			predToFollow,
-			blacklist,
-			0,
-			depth,
-			HashMultimap.create(),
-			repository ? null : entry.getContext(),
-			repositoryManager
+				ImmutableSet.of(repositoryManager.getValueFactory().createIRI(entry.getEntryURI().toString())),
+				predToFollow,
+				blacklist,
+				0,
+				depth,
+				limit,
+				HashMultimap.create(),
+				repository ? null : entry.getContext(),
+				repositoryManager
 		);
 	}
 
@@ -286,8 +319,11 @@ public class MetadataService {
 	 * @return A set of URIs.
 	 */
 	private Set<URI> loadTraversalProfile(String profileName) {
-		List<String> predicates = repositoryManager.getConfiguration()
-			.getStringList(Settings.TRAVERSAL_PROFILE + "." + profileName, new ArrayList<>());
+
+		List<String> predicates = esConfig.getStringList(
+				traversalSetting(Settings.TRAVERSAL_PROFILE, profileName),
+				new ArrayList<>()
+		);
 
 		Set<URI> result = new HashSet<>();
 		for (String s : predicates) {
@@ -311,8 +347,10 @@ public class MetadataService {
 	 * @return A map containing the tuples of the blacklist.
 	 */
 	private Map<String, String> loadTraversalBlacklistForProfile(String profileName) {
-		List<String> blacklist = repositoryManager.getConfiguration()
-			.getStringList(Settings.TRAVERSAL_PROFILE + "." + profileName + ".blacklist", new ArrayList<>());
+		List<String> blacklist = esConfig.getStringList(
+				traversalSetting(Settings.TRAVERSAL_PROFILE_BLACKLIST, profileName),
+				new ArrayList<>()
+		);
 
 		Map<String, String> result = new HashMap<>();
 		for (String tuple : blacklist) {
@@ -324,6 +362,10 @@ public class MetadataService {
 			result.put(NS.expand(tupleArr[0]).toString(), NS.expand(tupleArr[1]).toString());
 		}
 		return result;
+	}
+
+	private String traversalSetting(String configKey, String profile) {
+		return String.format(configKey, profile);
 	}
 
 }

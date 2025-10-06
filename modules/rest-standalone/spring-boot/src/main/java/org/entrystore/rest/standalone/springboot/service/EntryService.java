@@ -217,9 +217,9 @@ public class EntryService {
 		/*
 		 *	Relations
 		 */
-		java.util.List<Statement> relations = entry.getRelations();
+		Model relations = entry.getRelations();
 		if (relations != null) {
-			JSONObject relationsJsonObject = GraphUtil.serializeGraphToJson(new LinkedHashModel(relations), rdfFormat);
+			JSONObject relationsJsonObject = GraphUtil.serializeGraphToJson(relations, rdfFormat);
 			responseBuilder.relations(relationsJsonObject.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE));
 		}
 
@@ -252,6 +252,7 @@ public class EntryService {
 		return responseBuilder.build();
 	}
 
+	// TODO: move this method to ResourceSerializer class?
 	private JSONObject serializeResourceToJson(Resource resource, GraphType graphType, String rdfFormat, ListFilter listFilter) {
 		if (graphType == null) {
 			return IMMUTABLE_EMPTY_JSONOBJECT;

@@ -7,7 +7,6 @@ import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.common.SolrException;
 import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.model.impl.LinkedHashModel;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -18,6 +17,7 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.Resource;
 import org.entrystore.User;
+import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.repository.util.QueryResult;
@@ -51,6 +51,7 @@ public class SearchService {
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final PrincipalManager principalManager;
+	private final Config esConfig;
 
 
 	public List<Entry> findEntriesSparql(String queryValue) {
@@ -145,10 +146,12 @@ public class SearchService {
 
 	}
 
-	public String generateSyndication(List<Entry> entries, String feedType, String language, int limit) {
+	public String generateSyndication(List<Entry> entries, String feedType, String language, int limit,
+									  String urlTemplate, String feedTitle) {
 
-		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(), entries, language, limit);
-		feed.setTitle("Syndication feed of search");
+		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(), esConfig, entries,
+				language, limit, urlTemplate);
+		feed.setTitle(Syndication.sanitizeFeedTitle(feedTitle));
 		feed.setLink(buildRequestUri());
 		feed.setFeedType(feedType);
 
@@ -240,8 +243,8 @@ public class SearchService {
 					}
 
 					try {
-						if (e.getRelations() != null) {
-							Model childRelationsGraph = new LinkedHashModel(e.getRelations());
+						Model childRelationsGraph = e.getRelations();
+						if (childRelationsGraph != null) {
 							JSONObject childRelationObj = GraphUtil.serializeGraphToJson(childRelationsGraph, rdfFormat);
 							childJSON.accumulate(RepositoryProperties.RELATION, childRelationObj);
 						}

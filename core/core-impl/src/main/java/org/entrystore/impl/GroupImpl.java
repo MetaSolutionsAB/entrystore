@@ -40,21 +40,25 @@ import java.util.Vector;
 
 
 /**
- * A class that represents a group of users. This group may be assigned privilegies to some entries or other resources at the same way as a user may is.
- * @author olov
+ * A class that represents a group of users.
+ * This group may be assigned privileges to some entries or other resources in the same way as a user may be.
  *
+ * @author olov
  */
 public class GroupImpl extends ListImpl implements Group {
 	
-	/** Logger */
+	/**
+	 * Logger
+	 */
 	static Logger log = LoggerFactory.getLogger(UserImpl.class);
 
 	private URI homeContext;
 	
 	/**
 	 * Creates a new group with the specified URI
+	 *
 	 * @param entry the entry for the new group
-	 * @param uri the URI for the new group
+	 * @param uri   the URI for the new group
 	 */
 	public GroupImpl(EntryImpl entry, IRI uri, SoftCache cache) {
 		super(entry, uri);
@@ -62,6 +66,7 @@ public class GroupImpl extends ListImpl implements Group {
 	
 	/**
 	 * Returns the name of the user
+	 *
 	 * @return the name of the user
 	 */
 	public String getName() {
@@ -69,7 +74,8 @@ public class GroupImpl extends ListImpl implements Group {
 	}
 
 	/**
-	 * Tries to sets the users name.
+	 * Tries to set the user's name.
+	 *
 	 * @param newName the requested name
 	 * @return true if the name was approved, false otherwise
 	 */
@@ -80,7 +86,7 @@ public class GroupImpl extends ListImpl implements Group {
 	public Context getHomeContext() {
 		if (this.homeContext == null) {
 			try (RepositoryConnection rc = this.entry.repository.getConnection()) {
-				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI()).asList();
+				List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI()).stream().toList();
 				if (!matches.isEmpty()) {
 					this.homeContext = URI.create(matches.getFirst().getObject().stringValue());
 				}
@@ -111,10 +117,10 @@ public class GroupImpl extends ListImpl implements Group {
 
                 //Remove homecontext and remove inverse relation cache.
                 RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
-                while(iter.hasNext()) {
+				while (iter.hasNext()) {
                     Statement statement = iter.next();
                     URI sourceEntryURI = URI.create(statement.getObject().stringValue());
-                    EntryImpl sourceEntry =  (EntryImpl)this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
+					EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
                     if (sourceEntry != null) {
                         sourceEntry.removeRelationSynchronized(statement, rc);
                     }
@@ -152,7 +158,8 @@ public class GroupImpl extends ListImpl implements Group {
 	}
 
 	/**
-	 * Adds a user to the group through adding its URI to the groups list of URIs.
+	 * Adds a user to the group through adding its URI to the group's list of URIs.
+	 *
 	 * @param user The user to add to the group
 	 */
 	public void addMember(User user) {
@@ -161,6 +168,7 @@ public class GroupImpl extends ListImpl implements Group {
 
 	/**
 	 * Removes a user from the group.
+	 *
 	 * @param user The user to remove
 	 * @return true if the removing was successful, false otherwise
 	 */
@@ -169,8 +177,9 @@ public class GroupImpl extends ListImpl implements Group {
 	}
 
 	/**
-	 * Tells whether a user is member of the group.
-	 * @param user the user to test if has group member
+	 * Tells whether a user is a member of the group.
+	 *
+	 * @param user the user to test if is group member
 	 * @return true if the user is a member, false otherwise
 	 */
 	public boolean isMember(User user) {
@@ -187,6 +196,7 @@ public class GroupImpl extends ListImpl implements Group {
 
 	/**
 	 * Returns a list of all members URIs (entryURIs)
+	 *
 	 * @return a list of all members URIs
 	 */
 	public List<URI> memberUris() {
@@ -195,31 +205,30 @@ public class GroupImpl extends ListImpl implements Group {
 
 	/**
 	 * Returns a list of all members
+	 *
 	 * @return a list of all members
 	 */
 	public List<User> members() {
-		List<User> userList = new Vector<User>();
+		List<User> userList = new Vector<>();
 		Iterator<URI> memberUriIterator = memberUris().iterator();
 		boolean contentError = false;
 
-		while(memberUriIterator.hasNext()) {
+		while (memberUriIterator.hasNext()) {
 			URI entryURI = memberUriIterator.next();
 			try {
 				Entry userEntry = entry.getContext().getByEntryURI(entryURI);
-				if(userEntry.getGraphType() == GraphType.User) {
+				if (userEntry.getGraphType() == GraphType.User) {
 					userList.add((User) userEntry.getResource());
-				}
-				else {
+				} else {
 					contentError = true;
 				}
-			}
-			catch (NullPointerException e) {
+			} catch (NullPointerException e) {
 				log.error(e.getMessage());
 			}
 		}
 		
 		if (contentError) {
-			log.error("Error in group " + getURI().toString() + " . All members does not seem to be of the type User.");
+			log.error("Error in group {} . All members does not seem to be of the type User.", getURI().toString());
 		}
 
 		return userList;
@@ -227,8 +236,7 @@ public class GroupImpl extends ListImpl implements Group {
 
 	public Vector<URI> setChildren(Vector<URI> children) {
 		setChildren(children, true, true);
-		return new Vector<URI>(getChildren()); 
-
+		return new Vector<>(getChildren());
 	}
 
 }

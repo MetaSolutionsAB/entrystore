@@ -3,7 +3,6 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
-import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_METHOD
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -234,8 +233,6 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryDeleteConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	// Core needs rebasing to allow for recursive param to work
-	@Ignore
 	def "GET /{context-id}/metadata/{entryId} should not fetch local metadata with a valid recursive parameter, when that is not part of the metadata"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
@@ -261,8 +258,6 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcTitles[0]['value'] == 'Cool entry'
 	}
 
-	// Core needs rebasing to allow for recursive param to work
-	@Ignore
 	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter and full max-depth"() {
 		given:
 		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
@@ -336,8 +331,6 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcDepth2Titles[0]['value'] == 'Depth2'
 	}
 
-	// Core needs rebasing to allow for recursive param to work
-	@Ignore
 	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter with depth=1, even if the data is deeper"() {
 		given:
 		def entryD2params = [entrytype: 'link', resource: resourceUrl + '/2']
@@ -406,8 +399,6 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcDepth1Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id
 	}
 
-	// Core needs rebasing to allow for recursive param to work
-	@Ignore
 	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter with max-depth, even if the data is deeper and depth parameter is higher"() {
 		given:
 		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/3']
@@ -490,8 +481,6 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcDepth1Creators[0]['value'] == EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD2Id
 	}
 
-	// Core needs rebasing to allow for recursive param to work
-	@Ignore
 	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter and full max-depth, but with blacklisted profile"() {
 		given:
 		def entryD3params = [entrytype: 'link', resource: resourceUrl + '/1']
@@ -559,8 +548,6 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD3Id] == null
 	}
 
-	// Core needs rebasing to allow for recursive param to work
-	@Ignore
 	def "GET /{context-id}/metadata/{entryId} should fetch local metadata with a valid recursive parameter with limit number of entries"() {
 		given:
 		def entryD6params = [entrytype: 'link', resource: resourceUrl + '/6']
