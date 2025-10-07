@@ -145,7 +145,7 @@ class ResourceIT extends BaseSpec {
 		assert connection.getResponseCode() == HTTP_CREATED
 		assert connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
-		responseJson['entryId'] != null
+		assert responseJson['entryId'] != null
 		def entryId = responseJson['entryId'].toString()
 		assert entryId.length() > 0
 
@@ -162,9 +162,9 @@ class ResourceIT extends BaseSpec {
 
 	def "GET /{context-id}/resource/{entry-id} on None graph should return 204 (No Content) when file was not sent with the entry"() {
 		given:
-		def requestResourceName = [name: 'None graph entry']
+		def requestResourceName = [name: 'None graph entryyyy']
 		def body = [resource: requestResourceName]
-		def entryId = createEntry(contextId, [:], body)
+		def entryId = createEntry(contextId, [id: 'None-graph'], body)
 		assert entryId.length() > 0
 
 		when:
@@ -189,12 +189,11 @@ class ResourceIT extends BaseSpec {
 			out.write("Hello".bytes)
 		}
 		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
-				'admin', 'application/octet-stream')
+			'admin', 'application/octet-stream')
 		assert sendFileConn.getResponseCode() == HTTP_CREATED
-		// ResourceResource class defines a json response with 'success' field, but later in the code it is replaced with Empty response
-//		def sendFileJsonResponse = JSON_PARSER.parseText(sendFileConn.getInputStream().text)
-//		assert sendFileJsonResponse['success'] == 'The file was uploaded'
-//		assert sendFileJsonResponse['format'] == 'application/octet-stream'
+		def sendFileJsonResponse = JSON_PARSER.parseText(sendFileConn.getInputStream().text)
+		assert sendFileJsonResponse['success'] == 'The file was uploaded'
+		assert sendFileJsonResponse['format'] == 'application/octet-stream'
 
 		when:
 		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
@@ -358,9 +357,9 @@ class ResourceIT extends BaseSpec {
 
 		def newUsername = 'resourceTestUserName@test.com'
 		def requestBody = JsonOutput.toJson([
-				name    : newUsername,
-				language: 'PL',
-				password: password
+			name    : newUsername,
+			language: 'PL',
+			password: password
 		])
 
 		when:
@@ -401,7 +400,7 @@ class ResourceIT extends BaseSpec {
 		assert resourceJson['customProperties'] == [:]
 
 		def requestBody = JsonOutput.toJson([
-				name: existingUsername
+			name: existingUsername
 		])
 
 		when:
@@ -528,6 +527,7 @@ class ResourceIT extends BaseSpec {
 		def group2Members = group1ResourceJson['children'].collect()
 		group2Members.size() == 1
 		group2Members[0]['name'] == username.toLowerCase()
+
 		// fetch User details
 		def userResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + "?includeAll")
 		assert userResourceConn.getResponseCode() == HTTP_OK
@@ -570,8 +570,8 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		addUsersToGroupConn.getResponseCode() == HTTP_NO_CONTENT
-		def addResourceRespText = addUsersToGroupConn.getInputStream().text
-		addResourceRespText == ''
+		addUsersToGroupConn.getInputStream().text == ''
+
 		// fetch Group details
 		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
 		assert groupResourceConn.getResponseCode() == HTTP_OK
@@ -624,13 +624,13 @@ class ResourceIT extends BaseSpec {
 		assert resourceJson['language'] == null
 		assert resourceJson['disabled'] == null
 		assert resourceJson['customProperties'] == [:]
-		def newUsername = 'Newer name'
 
+		def newUsername = 'Newer name'
 		def requestBody = JsonOutput.toJson([
-				name            : newUsername,
-				language        : 'PL',
-				disabled        : 'true',
-				customProperties: [disablingReason: 'Untruthful']
+			name            : newUsername,
+			language        : 'PL',
+			disabled        : 'true',
+			customProperties: [disablingReason: 'Untruthful']
 		])
 
 		when:
@@ -662,8 +662,8 @@ class ResourceIT extends BaseSpec {
 		def newPassword = 'somePass1234'
 
 		def passwordChangeRequestBody = JsonOutput.toJson([
-				password       : newPassword,
-				currentPassword: password
+			password       : newPassword,
+			currentPassword: password
 		])
 
 		when:
@@ -695,7 +695,7 @@ class ResourceIT extends BaseSpec {
 		UserUtil.setUserPassword(resourceUri, password)
 
 		def passwordChangeRequestBody = JsonOutput.toJson([
-				password: 'somePass1234'
+			password: 'somePass1234'
 		])
 
 		when:
@@ -717,8 +717,8 @@ class ResourceIT extends BaseSpec {
 		UserUtil.setUserPassword(resourceUri, password)
 
 		def passwordChangeRequestBody = JsonOutput.toJson([
-				password: 'somePass1234',
-				currentPassword: 'badPassword1234'
+			password       : 'somePass1234',
+			currentPassword: 'badPassword1234'
 		])
 
 		when:
@@ -740,8 +740,8 @@ class ResourceIT extends BaseSpec {
 		UserUtil.setUserPassword(resourceUri, password)
 
 		def passwordChangeRequestBody = JsonOutput.toJson([
-				password: 'abcd',
-				currentPassword: password
+			password       : 'abcd',
+			currentPassword: password
 		])
 
 		when:
@@ -817,6 +817,14 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == '[]'
 	}
 
+	def "DELETE /{context-id}/resource/{entry-id} attempting to delete non-existing entry should return 404 Not-Found"() {
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/_principals/entry/somethingNonExisting')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_NOT_FOUND
+	}
+
 	def "DELETE /{context-id}/resource/{entry-id} on resource with file should remove the file"() {
 		given:
 		def requestResourceName = [name: 'None graph entry']
@@ -831,7 +839,7 @@ class ResourceIT extends BaseSpec {
 			out.write("Hello".bytes)
 		}
 		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
-				'admin', 'application/octet-stream')
+			'admin', 'application/octet-stream')
 		assert sendFileConn.getResponseCode() == HTTP_CREATED
 
 		when:
@@ -839,14 +847,10 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		resourceConn.getResponseCode() == HTTP_NO_CONTENT
-		resourceConn.getInputStream().text == ''
 
-		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
-		// TODO: Seems to be a bug here: after deleting a resource file and fetching the resource again, the resource = null is being returned, instead of a representation
-//		resourceConn2.getResponseCode() == HTTP_OK
-//		resourceConn2.getContentType().contains('application/json')
-		resourceConn2.getInputStream().text == ''
+		resourceConn2.getResponseCode() == HTTP_NO_CONTENT
+
 	}
 
 	def "DELETE /{context-id}/resource/{entry-id} does not delete resource if it has type String"() {

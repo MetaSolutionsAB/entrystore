@@ -22,6 +22,7 @@ import org.entrystore.Context;
 import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.User;
+import org.entrystore.rest.util.JSONErrorMessages;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.data.Status;
@@ -76,7 +77,7 @@ public class NameResource extends BaseResource {
 		}
 
 		getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
-		return new EmptyRepresentation();
+		return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 	}
 
 	@Put

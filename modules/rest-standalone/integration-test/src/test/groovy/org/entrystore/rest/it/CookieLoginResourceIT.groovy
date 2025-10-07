@@ -84,7 +84,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_OK
@@ -111,7 +111,6 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		detailsConn.getResponseCode() == HTTP_UNAUTHORIZED
-
 	}
 
 	def "POST /auth/cookie should not log in the blacklisted user"() {
@@ -123,7 +122,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
@@ -141,7 +140,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def extraHeaders = [Accept: 'application/json']
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded', extraHeaders)
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded', extraHeaders)
 
 		then:
 		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
@@ -157,12 +156,12 @@ class CookieLoginResourceIT extends BaseSpec {
 		UserUtil.setUserPassword(resourceUri, password)
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 		def requestBody = JsonOutput.toJson([
-				disabled: true
+			disabled: true
 		])
 		assert EntryStoreClient.putRequest(resourceUri, requestBody).getResponseCode() == HTTP_NO_CONTENT
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_FORBIDDEN

@@ -25,7 +25,9 @@ class NameResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
-		connection.getContentType().contains('application/octet-stream') // content-type is octet-stream for some reason, no body
+		connection.getContentType().contains('application/json')
+		def jsonResponse = JSON_PARSER.parseText(connection.getErrorStream().text)
+		jsonResponse['error'] == 'Entry not found'
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/name on a String entry without name should return 404"() {
@@ -42,7 +44,9 @@ class NameResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
-		connection.getContentType().contains('application/octet-stream') // content-type is octet-stream for some reason, no body
+		connection.getContentType().contains('application/json')
+		def jsonResponse = JSON_PARSER.parseText(connection.getErrorStream().text)
+		jsonResponse['error'] == 'Entry not found'
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/name on a Context entry should return context name"() {
@@ -84,9 +88,11 @@ class NameResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NO_CONTENT
-
 		def getConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextIdWithName + '/name')
 		getConn.getResponseCode() == HTTP_NOT_FOUND
+		getConn.getContentType().contains('application/json')
+		def jsonResponse = JSON_PARSER.parseText(getConn.getErrorStream().text)
+		jsonResponse['error'].toString().contains('Entry not found')
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/name on a Context without a name should return 404"() {
@@ -95,6 +101,9 @@ class NameResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
+		def jsonResponse = JSON_PARSER.parseText(connection.getErrorStream().text)
+		jsonResponse['error'].toString().contains('Entry not found')
 	}
 
 	def "PUT /{context-id}/entry/{entry-id}/name on a Context without name should add the context name"() {

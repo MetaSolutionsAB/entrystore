@@ -163,23 +163,19 @@ public class ResourceResource extends BaseResource {
 				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
 			}
 
-			Representation result;
+			Representation result = new EmptyRepresentation();
 
 			// the check for resource safety is necessary to avoid an implicit
-			// getMetadata() in the case of a PUT on (not yet) existant metadata
+			// getMetadata() in the case of a PUT on (not yet) existent metadata
 			// - this is e.g. the case if conditional requests are issued
-			if (Method.GET.equals(getRequest().getMethod())) {
+			if (Method.GET.equals(getRequest().getMethod()) && getResource() != null) {
 				result = getResource();
-			} else {
-				result = new EmptyRepresentation();
 			}
 
-			if (result != null) {
-				Date lastMod = entry.getModifiedDate();
-				if (lastMod != null) {
-					result.setModificationDate(lastMod);
-					result.setTag(Util.createTag(lastMod));
-				}
+			Date lastMod = entry.getModifiedDate();
+			if (lastMod != null) {
+				result.setModificationDate(lastMod);
+				result.setTag(Util.createTag(lastMod));
 			}
 
 			return result;

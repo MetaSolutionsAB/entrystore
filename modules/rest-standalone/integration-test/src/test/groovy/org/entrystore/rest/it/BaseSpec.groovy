@@ -125,7 +125,7 @@ abstract class BaseSpec extends Specification {
 			.conditionEvaluationListener(new ConditionEvaluationLogger(log::info))
 			.pollInterval(10, TimeUnit.MILLISECONDS)
 			.atMost(30, TimeUnit.SECONDS)
-			// separate supplier and predicate for better await logging
+		// separate supplier and predicate for better await logging
 			.until({ getSolrQueueSize() }, { it == 0 })
 	}
 

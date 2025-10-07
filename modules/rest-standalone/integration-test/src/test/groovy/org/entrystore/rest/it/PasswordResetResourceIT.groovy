@@ -48,9 +48,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = RandomStringUtils.secure().nextAlphabetic(32769)
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -65,9 +65,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		def username = 'user@test.com'
 		UserUtil.createUser(username)
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -118,9 +118,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userDoesNotExist@test.com'
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -137,9 +137,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetBadPassword@test.com'
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : 'badPass',
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : 'badPass',
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -156,9 +156,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetBadEmail@'
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -174,8 +174,8 @@ class PasswordResetResourceIT extends BaseSpec {
 	def "POST /auth/pwreset should not send an email with generated token when required parameters are missing - email"() {
 		given:
 		def requestBody = JsonOutput.toJson([
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -206,8 +206,8 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetNoPassword@test.com'
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -239,8 +239,8 @@ class PasswordResetResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetNoRecaptcha@test.com'
 		def requestBody = JsonOutput.toJson([
-				email   : username,
-				password: newPassword,
+			email   : username,
+			password: newPassword,
 		])
 
 		when:
@@ -274,7 +274,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		def editRequestBody = JsonOutput.toJson([
-				disabled: 'true'
+			disabled: 'true'
 		])
 		assert EntryStoreClient.putRequest(resourceUri, editRequestBody).getResponseCode() == HTTP_NO_CONTENT
 		// fetch resource details again
@@ -283,9 +283,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		JSON_PARSER.parseText(resourceConn2.getInputStream().text)['disabled'] == true
 
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -313,9 +313,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		def username = 'userResetConfirm@test.com'
 		UserUtil.createUser(username)
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -342,9 +342,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		def username = 'userResetInvalidToken@test.com'
 		UserUtil.createUser(username)
 		def requestBody = JsonOutput.toJson([
-				email   : username,
-				password: newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		def token = "something123"
@@ -364,9 +364,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		def user = UserUtil.createUser(username)
 		def entryId = user['entryId'].toString()
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -390,9 +390,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		def username = 'userResetAlreadyUsedToken@test.com'
 		UserUtil.createUser(username)
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -414,9 +414,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		def username = 'userResetOldToken@test.com'
 		UserUtil.createUser(username)
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		def oldMessageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -442,17 +442,17 @@ class PasswordResetResourceIT extends BaseSpec {
 		def username1 = 'user1ResetOldToken@test.com'
 		UserUtil.createUser(username1)
 		def request1Body = JsonOutput.toJson([
-				email             : username1,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username1,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		def username2 = 'user2ResetOldToken@test.com'
 		UserUtil.createUser(username2)
 		def request2Body = JsonOutput.toJson([
-				email             : username2,
-				password          : 'newPass22345',
-				grecaptcharesponse: grecaptcharesponse
+			email             : username2,
+			password          : 'newPass22345',
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		assert EntryStoreClient.postRequest('/auth/pwreset', request1Body).getResponseCode() == HTTP_OK
@@ -480,10 +480,10 @@ class PasswordResetResourceIT extends BaseSpec {
 		UserUtil.createUser(username)
 		def urlSuccess = "http://localhost:8181/123"
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				urlsuccess        : urlSuccess,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			urlsuccess        : urlSuccess,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -503,10 +503,10 @@ class PasswordResetResourceIT extends BaseSpec {
 		UserUtil.createUser(username)
 		def urlSuccess = "https://example.org/store/blabla/999"
 		def requestBody = JsonOutput.toJson([
-				email             : username,
-				password          : newPassword,
-				urlsuccess        : urlSuccess,
-				grecaptcharesponse: grecaptcharesponse
+			email             : username,
+			password          : newPassword,
+			urlsuccess        : urlSuccess,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -528,10 +528,10 @@ class PasswordResetResourceIT extends BaseSpec {
 		def entryId = user['entryId']
 		def urlfailure = "http://localhost:8181/123"
 		def requestBody = JsonOutput.toJson([
-				email             : 'userResetNotExistingFailureUrl@test.com',
-				password          : newPassword,
-				urlfailure        : urlfailure,
-				grecaptcharesponse: grecaptcharesponse
+			email             : 'userResetNotExistingFailureUrl@test.com',
+			password          : newPassword,
+			urlfailure        : urlfailure,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()

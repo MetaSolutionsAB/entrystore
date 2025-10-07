@@ -5,6 +5,7 @@ import groovy.json.JsonOutput
 import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
+import spock.lang.Ignore
 
 import javax.mail.internet.InternetAddress
 
@@ -16,7 +17,7 @@ import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_OK
 
 class SignupResourceIT extends BaseSpec {
-	
+
 	static def newPassword = 'newPass12345'
 	static def grecaptcharesponse = 'anything'
 	static def firstName = 'First'
@@ -56,11 +57,11 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = RandomStringUtils.secure().nextAlphabetic(32769)
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -74,11 +75,11 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userSignup@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -128,11 +129,11 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetBadPassword@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : 'badPass',
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : 'badPass',
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -149,11 +150,11 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetBadFirstName@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : 'http://ab',
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : 'http://ab',
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -170,11 +171,11 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetBadLastName@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : 'http://ab',
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : 'http://ab',
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -191,11 +192,11 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetBadEmail@'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -211,10 +212,10 @@ class SignupResourceIT extends BaseSpec {
 	def "POST /auth/signup should not send an email with generated token when required parameters are missing - email"() {
 		given:
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -245,10 +246,10 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetNoPassword@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -280,10 +281,10 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetNoRecaptcha@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname: firstName,
-				lastname : lastName,
-				email    : username,
-				password : newPassword,
+			firstname: firstName,
+			lastname : lastName,
+			email    : username,
+			password : newPassword,
 		])
 
 		when:
@@ -315,10 +316,10 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetNoFirstname@test.com'
 		def requestBody = JsonOutput.toJson([
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -350,10 +351,10 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userResetNoLastname@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -386,11 +387,11 @@ class SignupResourceIT extends BaseSpec {
 		def domain = 'notwhitelisted.com'
 		def username = 'userSignup@' + domain
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -408,11 +409,11 @@ class SignupResourceIT extends BaseSpec {
 		def username = 'userSignupExisting@test.com'
 		UserUtil.createUser(username)
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		when:
@@ -439,11 +440,11 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userSignupConfirm@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -464,11 +465,11 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userSignupConfirmBadToken@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def token = 'something123'
@@ -486,11 +487,11 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userSignupConfirmUsedToken@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -513,11 +514,11 @@ class SignupResourceIT extends BaseSpec {
 		UserUtil.createUser(username)
 
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -537,11 +538,11 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username = 'userConfirmOldToken@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def oldMessageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -566,19 +567,19 @@ class SignupResourceIT extends BaseSpec {
 		given:
 		def username1 = 'user1SignupOldToken@test.com'
 		def request1Body = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username1,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username1,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		def username2 = 'user2SignupOldToken@test.com'
 		def request2Body = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username2,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username2,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
 		])
 
 		assert EntryStoreClient.postRequest('/auth/signup', request1Body).getResponseCode() == HTTP_OK
@@ -605,12 +606,12 @@ class SignupResourceIT extends BaseSpec {
 		def urlSuccess = 'http://localhost:8181/123'
 		def username = 'userSignupSuccessUrlPermitted@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				urlsuccess        : urlSuccess,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			urlsuccess        : urlSuccess,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -629,12 +630,12 @@ class SignupResourceIT extends BaseSpec {
 		def urlSuccess = 'https://example.org/store/blabla/999'
 		def username = 'userSignupSuccessUrlNotPermitted@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				urlsuccess        : urlSuccess,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			urlsuccess        : urlSuccess,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -649,17 +650,18 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getURL().toString() == 'http://localhost:8181/auth/signup?confirm=' + token
 	}
 
-	/* not sure how to invoke 500 server error
+	// not sure how to invoke 500 server error
+	@Ignore
 	def "GET /auth/signup should not confirm user signup and redirect to failure url"() {
 		given:
 		def urlfailure = "http://localhost:8181/123"
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email   : 'userSignupFailureUrl@test.com',
-				password: newPassword,
-				urlfailure: urlfailure,
-				grecaptcharesponse: grecaptcharesponse
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : 'userSignupFailureUrl@test.com',
+			password          : newPassword,
+			urlfailure        : urlfailure,
+			grecaptcharesponse: grecaptcharesponse
 		])
 		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
@@ -672,19 +674,19 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		confirmConn.getHeaderField('Location') == null
 		confirmConn.getURL().toString() == urlfailure
-	} */
+	}
 
 	def "POST /auth/signup should confirm creating new user with custom properties and new homecontext after signing up with a valid token"() {
 		given:
 		def username = 'userSignupCustomPropsConfirm@test.com'
 		def requestBody = JsonOutput.toJson([
-				firstname         : firstName,
-				lastname          : lastName,
-				email             : username,
-				password          : newPassword,
-				grecaptcharesponse: grecaptcharesponse,
-				custom_foo        : 'foo',
-				custom_boo        : 'boo'
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse,
+			custom_foo        : 'foo',
+			custom_boo        : 'boo'
 		])
 
 		when:
