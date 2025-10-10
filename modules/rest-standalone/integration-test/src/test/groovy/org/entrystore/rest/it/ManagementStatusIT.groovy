@@ -19,9 +19,9 @@ class ManagementStatusIT extends BaseSpec {
 		connection.getInputStream().text == 'UP'
 	}
 
-	def "GET /management/status should reply with json status, when no Accept header is defined"() {
+	def "GET /management/status should reply with json status 'online', when json Accept header is defined"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status', null, null)
+		def connection = EntryStoreClient.getRequest('/management/status', null, 'application/json')
 
 		then:
 		connection.getResponseCode() == HTTP_OK

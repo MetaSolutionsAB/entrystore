@@ -30,9 +30,9 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.GET, path, null, asUser, null, extraHeaders)
 	}
 
-	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
+	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
 		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes())
-		return sendRequestAsStream(HttpMethod.POST, path, contentStream, asUser, contentType)
+		return sendRequestAsStream(HttpMethod.POST, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
 	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
@@ -42,8 +42,8 @@ class EntryStoreClient {
 	def static putRequestFile(String path, File file, String asUser = 'admin', String contentType = 'application/octet-stream') {
 		file.withInputStream { inputStream ->
 			def extraHeaders = [
-					'Content-Length'     : file.length().toString(),
-					'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
+				'Content-Length'     : file.length().toString(),
+				'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
 			]
 			return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, extraHeaders)
 		}
@@ -89,6 +89,9 @@ class EntryStoreClient {
 
 		if (inputStream != null) {
 			connection.setDoOutput(true)
+			if (extraHeaders.getOrDefault('Content-Length', "0").toInteger() > 8000) {
+				connection.setChunkedStreamingMode(8192)
+			}
 			connection.outputStream.withStream { output ->
 				output << inputStream
 			}
@@ -116,12 +119,14 @@ class EntryStoreClient {
 	def static authorize(String asUser) {
 		def bodyParams = 'auth_username=' + asUser + '&auth_password=' + creds[asUser]
 		def conn = postRequest('/auth/cookie', bodyParams, null,
-				'application/x-www-form-urlencoded')
+			'application/x-www-form-urlencoded')
 
-		assert conn.getResponseCode() in [HTTP_OK, HTTP_MOVED_TEMP]  // 200 when POST /auth/cookie does not redirect to default page, 302 when it does
+		assert conn.getResponseCode() in [HTTP_OK, HTTP_MOVED_TEMP]
+		// 200 when POST /auth/cookie does not redirect to default page, 302 when it does
 		def cookies = conn.getHeaderField('Set-Cookie')
 		assert cookies != null
-		assert cookies.contains('auth_token=') || cookies.contains('JSESSIONID=')  // auth_token for restlet ES, JSESSIONID for Spring-boot ES
+		assert cookies.contains('auth_token=') || cookies.contains('JSESSIONID=')
+		// auth_token for restlet ES, JSESSIONID for Spring-boot ES
 		return cookies
 	}
 
