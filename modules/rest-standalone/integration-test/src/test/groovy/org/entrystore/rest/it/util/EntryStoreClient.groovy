@@ -4,6 +4,7 @@ import groovy.json.JsonOutput
 import org.apache.commons.lang3.StringUtils
 import org.eclipse.jetty.http.HttpMethod
 
+import static java.net.HttpURLConnection.HTTP_MOVED_TEMP
 import static java.net.HttpURLConnection.HTTP_OK
 
 class EntryStoreClient {
@@ -23,38 +24,15 @@ class EntryStoreClient {
 	}
 
 	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> extraHeaders = [:]) {
-		def connection = createConnection(path)
-		connection.setInstanceFollowRedirects(false)
 		if (requestAcceptType?.trim()) {
-			connection.setRequestProperty('Accept', requestAcceptType)
+			extraHeaders['Accept'] = requestAcceptType
 		}
-		if (asUser?.trim()) {
-			connection.setRequestProperty('Cookie', cookies[asUser].toString())
-		}
-		extraHeaders.each { key, value ->
-			connection.setRequestProperty(key, value)
-		}
-
-		connection.connect()
-		return connection
+		return sendRequestAsStream(HttpMethod.GET, path, null, asUser, null, extraHeaders)
 	}
 
 	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
-		def connection = createConnection(path)
-		if (asUser?.trim()) {
-			connection.setRequestProperty('Cookie', cookies[asUser].toString())
-		}
-		extraHeaders.each { key, value ->
-			connection.setRequestProperty(key, value)
-		}
-		connection.setRequestMethod('POST')
-		connection.setRequestProperty('Content-Type', contentType)
-		if (body != null) {
-			connection.setDoOutput(true)
-			connection.getOutputStream().write(body.getBytes())
-			connection.connect()
-		}
-		return connection
+		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes())
+		return sendRequestAsStream(HttpMethod.POST, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
 	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
@@ -64,8 +42,8 @@ class EntryStoreClient {
 	def static putRequestFile(String path, File file, String asUser = 'admin', String contentType = 'application/octet-stream') {
 		file.withInputStream { inputStream ->
 			def extraHeaders = [
-					'Content-Length'     : file.length().toString(),
-					'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
+				'Content-Length'     : file.length().toString(),
+				'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
 			]
 			return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, extraHeaders)
 		}
@@ -91,36 +69,35 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.POST, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
 	}
 
+	def static deleteRequest(String path, String asUser = 'admin') {
+		return sendRequestAsStream(HttpMethod.DELETE, path, null, asUser, null)
+	}
+
 	def static sendRequestAsStream(HttpMethod method, String path, InputStream inputStream, String asUser, String contentType, Map<String, String> extraHeaders = [:]) {
 		def connection = createConnection(path)
+		connection.setRequestMethod(method.name())
+		connection.setInstanceFollowRedirects(false)
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
-		connection.setRequestMethod(method.name())
-		connection.setDoOutput(true)
-		connection.setRequestProperty('Content-Type', contentType)
-		extraHeaders.each { key, value ->
+		if (contentType?.trim()) {
+			connection.setRequestProperty('Content-Type', contentType)
+		}
+		extraHeaders?.each { key, value ->
 			connection.setRequestProperty(key, value)
 		}
 
-		if (extraHeaders.getOrDefault('Content-Length', "0").toInteger() > 8000) {
-			connection.setChunkedStreamingMode(8192)
-		}
-		connection.outputStream.withStream { output ->
-			output << inputStream
+		if (inputStream != null) {
+			connection.setDoOutput(true)
+			if (extraHeaders.getOrDefault('Content-Length', "0").toInteger() > 8000) {
+				connection.setChunkedStreamingMode(8192)
+			}
+			connection.outputStream.withStream { output ->
+				output << inputStream
+			}
 		}
 		connection.connect()
 
-		return connection
-	}
-
-	def static deleteRequest(String path, String asUser = 'admin') {
-		def connection = createConnection(path)
-		if (asUser?.trim()) {
-			connection.setRequestProperty('Cookie', cookies[asUser].toString())
-		}
-		connection.setRequestMethod('DELETE')
-		connection.connect()
 		return connection
 	}
 
@@ -142,12 +119,14 @@ class EntryStoreClient {
 	def static authorize(String asUser) {
 		def bodyParams = 'auth_username=' + asUser + '&auth_password=' + creds[asUser]
 		def conn = postRequest('/auth/cookie', bodyParams, null,
-				'application/x-www-form-urlencoded')
+			'application/x-www-form-urlencoded')
 
-		assert conn.getResponseCode() == HTTP_OK
+		assert conn.getResponseCode() in [HTTP_OK, HTTP_MOVED_TEMP]
+		// 200 when POST /auth/cookie does not redirect to default page, 302 when it does
 		def cookies = conn.getHeaderField('Set-Cookie')
 		assert cookies != null
-		assert cookies.contains('auth_token=')
+		assert cookies.contains('auth_token=') || cookies.contains('JSESSIONID=')
+		// auth_token for restlet ES, JSESSIONID for Spring-boot ES
 		return cookies
 	}
 

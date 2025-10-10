@@ -847,10 +847,11 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		resourceConn.getResponseCode() == HTTP_NO_CONTENT
+		resourceConn.getInputStream().text == ''
 
 		def resourceConn2 = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
 		resourceConn2.getResponseCode() == HTTP_NO_CONTENT
-
+		resourceConn2.getInputStream().text == ''
 	}
 
 	def "DELETE /{context-id}/resource/{entry-id} does not delete resource if it has type String"() {

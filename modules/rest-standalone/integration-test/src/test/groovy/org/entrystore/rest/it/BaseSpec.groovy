@@ -20,7 +20,6 @@ abstract class BaseSpec extends Specification {
 
 	def static log = LoggerFactory.getLogger(this.class)
 	def static JSON_PARSER = new JsonSlurper()
-
 	def static appStarted = false
 
 	def setupSpec() {
