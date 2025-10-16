@@ -7,8 +7,6 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ManagementStatusIT extends BaseSpec {
 
-	// Spring boot defaults to JSON when no content type is specified
-
 	def "GET /management/status should reply with text status UP, when text Accept header is defined"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status', null, 'text/plain')
@@ -19,7 +17,22 @@ class ManagementStatusIT extends BaseSpec {
 		connection.getInputStream().text == 'UP'
 	}
 
-	def "GET /management/status should reply with json status, when no Accept header is defined"() {
+	def "GET /management/status should reply with json status 'online', when json Accept header is defined"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/management/status', null, 'application/json')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson['repositoryStatus'] == 'online'
+		responseJson['version'] != null
+		(responseJson['version'] as String).length() > 2
+	}
+
+	// Spring boot defaults to JSON when no content type is specified
+
+	def "GET /management/status should reply with json status 'online', when no Accept header is defined"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status', null, null)
 

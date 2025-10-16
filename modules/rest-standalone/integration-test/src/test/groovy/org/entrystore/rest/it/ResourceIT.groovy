@@ -3,9 +3,12 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
+import org.entrystore.rest.it.util.UserUtil
+import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
@@ -13,9 +16,22 @@ import static java.net.HttpURLConnection.HTTP_OK
 class ResourceIT extends BaseSpec {
 
 	def static contextId = '80'
+	static def password = 'newPass1234'
+
+	static def genericCredsClone = [:]
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
+		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.creds.put('userChangePassword@test.com', password)
+		EntryStoreClient.creds.put('userChangePasswordBadCurrentPassword@test.com', password)
+		EntryStoreClient.creds.put('userChangePasswordNoCurrentPassword@test.com', password)
+		EntryStoreClient.creds.put('userChangePasswordBadNewPassword@test.com', password)
+		EntryStoreClient.creds.put('resourceTestUserName@test.com', password)
+	}
+
+	def cleanupSpec() {
+		EntryStoreClient.creds = genericCredsClone
 	}
 
 	def "GET /{context-id}/resource/{entry-id} on String graph should return the text data"() {
@@ -105,17 +121,9 @@ class ResourceIT extends BaseSpec {
 
 	def "GET /{context-id}/resource/{entry-id} on User graph should return data about the user"() {
 		given:
-		// create User entry
-		def params = [graphtype: 'user']
-		def requestResourceName = [name: 'Resource Test User name 2']
-		def body = JsonOutput.toJson([resource: requestResourceName])
-		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
-		responseJson['entryId'] != null
-		def entryId = responseJson['entryId'].toString()
-		assert entryId.length() > 0
+		def username = 'Resource Test User name'
+		def user = UserUtil.createUser(username)
+		def entryId = user['entryId'].toString()
 
 		when:
 		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId)
@@ -124,7 +132,7 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
 		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
-		resourceResp['name'] == requestResourceName['name'].toLowerCase()
+		resourceResp['name'] == username.toLowerCase()
 		resourceResp['language'] == null
 		resourceResp['customProperties'] == [:]
 	}
@@ -138,7 +146,7 @@ class ResourceIT extends BaseSpec {
 		assert connection.getResponseCode() == HTTP_CREATED
 		assert connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
-		responseJson['entryId'] != null
+		assert responseJson['entryId'] != null
 		def entryId = responseJson['entryId'].toString()
 		assert entryId.length() > 0
 
@@ -333,40 +341,27 @@ class ResourceIT extends BaseSpec {
 		JSON_PARSER.parseText(resourceConn2.getInputStream().text) == []
 	}
 
-	def "PUT /{context-id}/resource/{entry-id} should edit name and password User-resource"() {
+	def "PUT /{context-id}/resource/{entry-id} should edit name and password of User-resource"() {
 		given:
-		// create a User entry
-		def params = [graphtype: 'user']
-		def requestResourceName = [name: 'Resource Test User name']
-		def body = JsonOutput.toJson([resource: requestResourceName])
-		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
-		responseJson['entryId'] != null
-		def entryId = responseJson['entryId'].toString()
-		assert entryId.length() > 0
+		def username = 'Resource Test User name 2'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		def entryId = user['entryId'].toString()
 
-		// fetch URI of created resource
-		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
-		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
-		assert entryRespJson['info'] != null
-		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
-		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
 		// fetch resource details
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
 		def resourceJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
-		assert resourceJson['name'] == requestResourceName['name'].toLowerCase()
+		assert resourceJson['name'] == username.toLowerCase()
 		assert resourceJson['language'] == null
 		assert resourceJson['customProperties'] == [:]
 
+		def newUsername = 'resourceTestUserName@test.com'
 		def requestBody = JsonOutput.toJson([
-			name    : 'New name',
+			name    : newUsername,
 			language: 'PL',
-			password: 'newPass123'
+			password: password
 		])
 
 		when:
@@ -382,44 +377,32 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('application/json')
 		def resourceJson2 = JSON_PARSER.parseText(resourceConn2.getInputStream().text)
-		// Why the name is in the lower case, other than the data in the request
-		resourceJson2['name'] == 'new name'
+		resourceJson2['name'] == newUsername.toLowerCase()
 		resourceJson2['language'] == 'PL'
 		resourceJson2['customProperties'] == [:]
+		def info = EntryStoreClient.getRequest('/auth/user', newUsername)
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		entryId == infoRespJson['id']
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} should not edit name if name is already in use"() {
 		given:
-		// create a User entry with some name
-		def params = [graphtype: 'user']
-		def requestResourceName = [name: 'Some name that will be re-used']
-		def entryId = createEntry('_principals', params, [resource: requestResourceName])
-		assert entryId.length() > 0
-
-		// create a User entry with other name that will be changed to the name above
-		def params2 = [graphtype: 'user']
-		def requestResourceName2 = [name: 'Resource Test User name 20']
-		def entryId2 = createEntry('_principals', params2, [resource: requestResourceName2])
-		assert entryId2.length() > 0
-
-		// fetch URI of created resource
-		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId2)
-		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
-		assert entryRespJson['info'] != null
-		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
-		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
+		def existingUsername = 'existingUser@test.com'
+		UserUtil.createUser(existingUsername)
+		def username = 'Resource Test User name 20'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
 		// fetch resource details
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
 		def resourceJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
-		assert resourceJson['name'] == requestResourceName2['name'].toLowerCase()
+		assert resourceJson['name'] == username.toLowerCase()
 		assert resourceJson['language'] == null
 		assert resourceJson['customProperties'] == [:]
 
 		def requestBody = JsonOutput.toJson([
-			name: 'Some name that will be re-used'
+			name: existingUsername
 		])
 
 		when:
@@ -434,25 +417,20 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('application/json')
 		def resourceJson2 = JSON_PARSER.parseText(resourceConn2.getInputStream().text)
-		resourceJson2['name'] == requestResourceName2['name'].toLowerCase()
+		resourceJson2['name'] == username.toLowerCase()
 		resourceJson2['language'] == null
 		resourceJson2['customProperties'] == [:]
 	}
 
 	def "PUT /_principals/{entry-id} should add user to a group and the user should have the information in relations object"() {
 		given:
-		// create a User entry
-		def userParams = [graphtype: 'user']
-		def userRequestResourceName = [name: 'UserPUT']
-		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
-		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
-		assert userConnection.getResponseCode() == HTTP_CREATED
-		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
+		def username = 'UserPUT'
+		def user = UserUtil.createUser(username)
+		def userEntryId = user['entryId'].toString()
 
 		// create a Group entry
 		def groupParams = [graphtype: 'group']
-		def groupRequestResourceName = [name: 'GroupPUT']
-		def groupBody = JsonOutput.toJson([resource: groupRequestResourceName])
+		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUT']])
 		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
 		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
 		// fetch URI of created Group
@@ -479,7 +457,7 @@ class ResourceIT extends BaseSpec {
 		assert groupResourceJson['children'] instanceof List
 		def groupMembers = groupResourceJson['children'].collect()
 		groupMembers.size() == 1
-		groupMembers[0]['name'] == 'userput'
+		groupMembers[0]['name'] == username.toLowerCase()
 		// fetch User details
 		def userResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + "?includeAll")
 		assert userResourceConn.getResponseCode() == HTTP_OK
@@ -493,12 +471,9 @@ class ResourceIT extends BaseSpec {
 
 	def "PUT /_principals/{entry-id} should add user to 2 groups and the user should have the information in relations object"() {
 		given:
-		// create a User entry
-		def userParams = [graphtype: 'user']
-		def userRequestResourceName = [name: 'UserPUTInto2groups']
-		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
-		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
-		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
+		def username = 'UserPUTInto2groups'
+		def user = UserUtil.createUser(username)
+		def userEntryId = user['entryId'].toString()
 
 		// create a Group entry
 		def groupParams = [graphtype: 'group']
@@ -545,7 +520,7 @@ class ResourceIT extends BaseSpec {
 		assert group1ResourceJson['children'] instanceof List
 		def group1Members = group1ResourceJson['children'].collect()
 		group1Members.size() == 1
-		group1Members[0]['name'] == 'userputinto2groups'
+		group1Members[0]['name'] == username.toLowerCase()
 		def group2ResourceConn = EntryStoreClient.getRequest(group1ResourceUri)
 		assert group2ResourceConn.getResponseCode() == HTTP_OK
 		assert group2ResourceConn.getContentType().contains('application/json')
@@ -553,7 +528,7 @@ class ResourceIT extends BaseSpec {
 		assert group2ResourceJson['children'] instanceof List
 		def group2Members = group1ResourceJson['children'].collect()
 		group2Members.size() == 1
-		group2Members[0]['name'] == 'userputinto2groups'
+		group2Members[0]['name'] == username.toLowerCase()
 
 		// fetch User details
 		def userResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + "?includeAll")
@@ -570,16 +545,12 @@ class ResourceIT extends BaseSpec {
 
 	def "PUT /_principals/{entry-id} should add 2 users to a group and users should have the information in relations object"() {
 		given:
-		// create a User entry
-		def userParams = [graphtype: 'user']
-		def user1RequestResourceName = [name: 'UserPUT1']
-		def user1Body = JsonOutput.toJson([resource: user1RequestResourceName])
-		def user1Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), user1Body)
-		def user1EntryId = JSON_PARSER.parseText(user1Connection.getInputStream().text)['entryId'].toString()
-		def user2RequestResourceName = [name: 'UserPUT2']
-		def user2Body = JsonOutput.toJson([resource: user2RequestResourceName])
-		def user2Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), user2Body)
-		def user2EntryId = JSON_PARSER.parseText(user2Connection.getInputStream().text)['entryId'].toString()
+		def username1 = 'UserPUT1'
+		def user1 = UserUtil.createUser(username1)
+		def user1EntryId = user1['entryId'].toString()
+		def username2 = 'UserPUT2'
+		def user2 = UserUtil.createUser('UserPUT2')
+		def user2EntryId = user2['entryId'].toString()
 
 		// create a Group entry
 		def groupParams = [graphtype: 'group']
@@ -611,8 +582,8 @@ class ResourceIT extends BaseSpec {
 		assert groupResourceJson['children'] instanceof List
 		def groupMembers = groupResourceJson['children'].collect()
 		groupMembers.size() == 2
-		groupMembers[0]['name'] == 'userput1'
-		groupMembers[1]['name'] == 'userput2'
+		groupMembers[0]['name'] == username1.toLowerCase()
+		groupMembers[1]['name'] == username2.toLowerCase()
 		// fetch User details
 		def user1ResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + user1EntryId + "?includeAll")
 		assert user1ResourceConn.getResponseCode() == HTTP_OK
@@ -635,17 +606,9 @@ class ResourceIT extends BaseSpec {
 
 	def "PUT /{context-id}/resource/{entry-id} should edit other User-resource properties"() {
 		given:
-		// create a User entry
-		def params = [graphtype: 'user']
-		def requestResourceName = [name: 'Resource Test User name 3']
-		def body = JsonOutput.toJson([resource: requestResourceName])
-		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
-		connection.getResponseCode() == HTTP_CREATED
-		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
-		responseJson['entryId'] != null
-		def entryId = responseJson['entryId'].toString()
-		assert entryId.length() > 0
+		def username = 'something@test.com'
+		def user = UserUtil.createUser(username)
+		def entryId = user['entryId'].toString()
 
 		// fetch URI of created resource
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
@@ -659,17 +622,17 @@ class ResourceIT extends BaseSpec {
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
 		def resourceJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
-		assert resourceJson['name'] == requestResourceName['name'].toLowerCase()
+		assert resourceJson['name'] == username.toLowerCase()
 		assert resourceJson['language'] == null
 		assert resourceJson['disabled'] == null
 		assert resourceJson['customProperties'] == [:]
 
+		def newUsername = 'Newer name'
 		def requestBody = JsonOutput.toJson([
-				password        : 'newPass1234',
-				name            : 'Newer name',
-				language        : 'PL',
-				disabled        : 'true',
-				customProperties: [disablingReason: 'Untruthful']
+			name            : newUsername,
+			language        : 'PL',
+			disabled        : 'true',
+			customProperties: [disablingReason: 'Untruthful']
 		])
 
 		when:
@@ -685,38 +648,132 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('application/json')
 		def resourceJson2 = JSON_PARSER.parseText(resourceConn2.getInputStream().text)
-		// Why the name is in the lower case, other than the data in the request
-		resourceJson2['name'] == 'newer name'
+		resourceJson2['name'] == newUsername.toLowerCase()
 		resourceJson2['language'] == 'PL'
 		resourceJson2['disabled'] == true
 		resourceJson2['customProperties'] == [disablingreason: 'Untruthful']
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} should change own password with providing current password"() {
+		given:
+		def username = 'userChangePassword@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		def entryId = user['entryId'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def newPassword = 'somePass1234'
+
+		def passwordChangeRequestBody = JsonOutput.toJson([
+			password       : newPassword,
+			currentPassword: password
+		])
+
+		when:
+		// edit user data
+		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, username)
+
+		then:
+		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
+
+		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginConnection = EntryStoreClient.createConnection('/auth/cookie')
+		loginConnection.setRequestMethod('POST')
+		loginConnection.setRequestProperty('Content-Type', 'application/x-www-form-urlencoded')
+		loginConnection.setDoOutput(true)
+		loginConnection.getOutputStream().write(loginBody.getBytes())
+		loginConnection.connect()
+		loginConnection.getResponseCode() == HTTP_OK
+		def info = EntryStoreClient.getRequest('/auth/user', username)
+		info.getResponseCode() == HTTP_OK
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		entryId == infoRespJson['id']
+	}
+
+	// TODO fix
+	@Ignore
+	def "PUT /{context-id}/resource/{entry-id} should not change own password without providing current password"() {
+		given:
+		def username = 'userChangePasswordNoCurrentPassword@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+
+		def passwordChangeRequestBody = JsonOutput.toJson([
+			password: 'somePass1234'
+		])
+
+		when:
+		// edit user data
+		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, username)
+
+		then:
+		editResourceConn.getResponseCode() == HTTP_FORBIDDEN
+		editResourceConn.getContentType().contains('application/json')
+		def editRespJson = JSON_PARSER.parseText(editResourceConn.getErrorStream().text)
+		editRespJson['error'] == 'Current password is required'
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} should not change own password with providing incorrect current password"() {
+		given:
+		def username = 'userChangePasswordBadCurrentPassword@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+
+		def passwordChangeRequestBody = JsonOutput.toJson([
+			password       : 'somePass1234',
+			currentPassword: 'badPassword1234'
+		])
+
+		when:
+		// edit user data
+		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, username)
+
+		then:
+		editResourceConn.getResponseCode() == HTTP_FORBIDDEN
+		editResourceConn.getContentType().contains('application/json')
+		def editRespJson = JSON_PARSER.parseText(editResourceConn.getErrorStream().text)
+		editRespJson['error'] == 'No password set or incorrect current password provided'
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} should not change own password when new password does not meet requirements"() {
+		given:
+		def username = 'userChangePasswordBadNewPassword@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+
+		def passwordChangeRequestBody = JsonOutput.toJson([
+			password       : 'abcd',
+			currentPassword: password
+		])
+
+		when:
+		// edit user data
+		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, username)
+
+		then:
+		editResourceConn.getResponseCode() == HTTP_BAD_REQUEST
+		editResourceConn.getContentType().contains('application/json')
+		def editRespJson = JSON_PARSER.parseText(editResourceConn.getErrorStream().text)
+		editRespJson['error'] == 'Password must conform to configured rules.'
+	}
+
 	def "DELETE /{context-id}/resource/{entry-id} should delete user"() {
 		given:
-		// create a User entry
-		def userParams = [graphtype: 'user']
-		def userRequestResourceName = [name: 'UserDelete']
-		def userBody = JsonOutput.toJson([resource: userRequestResourceName])
-		def userConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(userParams), userBody)
-		assert userConnection.getResponseCode() == HTTP_CREATED
-		def userEntryId = JSON_PARSER.parseText(userConnection.getInputStream().text)['entryId'].toString()
-		// fetch URI of the created resource
-		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId)
-		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
-		assert entryRespJson['info'] != null
-		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
-		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
+		def username = 'userDelete@test.com'
+		def user = UserUtil.createUser(username)
+		def entryId = user['entryId'].toString()
+		def resourceUri = user['resourceUri'].toString()
 		// fetch resource details
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
 		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
-		assert resourceRespJson['name'] == userRequestResourceName['name'].toLowerCase()
+		assert resourceRespJson['name'] == username.toLowerCase()
 
 		when:
-		def deleteResourceConn = EntryStoreClient.deleteRequest('/_principals/entry/' + userEntryId)
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/_principals/entry/' + entryId)
 
 		then:
 		deleteResourceConn.getResponseCode() == HTTP_NO_CONTENT
@@ -764,6 +821,14 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == '[]'
 	}
 
+	def "DELETE /{context-id}/resource/{entry-id} attempting to delete non-existing entry should return 404 Not-Found"() {
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/_principals/entry/somethingNonExisting')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_NOT_FOUND
+	}
+
 	def "DELETE /{context-id}/resource/{entry-id} on resource with file should remove the file"() {
 		given:
 		def requestResourceName = [name: 'None graph entry']
@@ -790,9 +855,7 @@ class ResourceIT extends BaseSpec {
 
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
-		// TODO: Seems to be a bug here: after deleting a resource file and fetching the resource again, the resource = null is being returned, instead of a representation
-//		resourceConn2.getResponseCode() == HTTP_OK
-//		resourceConn2.getContentType().contains('application/json')
+		resourceConn2.getResponseCode() == HTTP_NO_CONTENT
 		resourceConn2.getInputStream().text == ''
 	}
 

@@ -53,13 +53,12 @@ class RelationResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def response = JSON_PARSER.parseText(connection.getInputStream().text)
-		response instanceof Map
-		(response as Map).keySet().size() == 1
-		def rootKey = (response as Map).keySet()[0].toString()
-		rootKey.contains('/_principals/resource/')
-		response[rootKey] == [(NameSpaceConst.TERM_HOME_CONTEXT): [[type : 'uri',
-																	value: EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId]]]
+		def json = JSON_PARSER.parseText(connection.getInputStream().text)
+		(json as Map).keySet().size() == 1
+		def relationJsonKey = (json as Map).keySet()[0].toString()
+		relationJsonKey.contains('/_principals/resource/')
+		json[relationJsonKey] == [(NameSpaceConst.TERM_HOME_CONTEXT): [[type : 'uri',
+																		value: EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId]]]
 	}
 
 	def "GET /{context-id}/relations/{entry-id} on a Context entry should return relation to home context, in rdf+xml format by default"() {

@@ -615,18 +615,18 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryD0Params = [entrytype: 'link', resource: resourceUrl + '/0']
 		def entryD0ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def entryD0Body = [metadata: [(entryD0ResourceIri): [
-			(NameSpaceConst.DC_TERM_TITLE)  : [
+			(NameSpaceConst.DC_TERM_TITLE)      : [
 				[type: 'literal', value: 'Depth0']
 			],
-			(NameSpaceConst.DC_TERM_CREATOR): [
+			(NameSpaceConst.DC_TERM_CREATOR)    : [
 				[type : 'uri',
 				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id]
 			],
-			(NameSpaceConst.DC_TERM_PUBLISHER): [
+			(NameSpaceConst.DC_TERM_PUBLISHER)  : [
 				[type : 'uri',
 				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD4Id]
 			],
-			(NameSpaceConst.DC_TERM_SUBJECT): [
+			(NameSpaceConst.DC_TERM_SUBJECT)    : [
 				[type : 'uri',
 				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD5Id]
 			],

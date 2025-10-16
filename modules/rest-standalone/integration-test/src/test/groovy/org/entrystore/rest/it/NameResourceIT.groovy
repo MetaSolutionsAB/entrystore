@@ -2,9 +2,9 @@ package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.entrystore.rest.it.util.UserUtil
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
-import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
@@ -88,9 +88,11 @@ class NameResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NO_CONTENT
-
 		def getConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextIdWithName + '/name')
 		getConn.getResponseCode() == HTTP_NOT_FOUND
+		getConn.getContentType().contains('application/json')
+		def jsonResponse = JSON_PARSER.parseText(getConn.getErrorStream().text)
+		jsonResponse['error'].toString().contains('Entry with id \'' + contextIdWithName + '\' has no name set')
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/name on a Context without a name should return 404"() {
@@ -99,6 +101,9 @@ class NameResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
+		def jsonResponse = JSON_PARSER.parseText(connection.getErrorStream().text)
+		jsonResponse['error'].toString().contains('Entry with id \'' + contextIdWithoutName + '\' has no name set')
 	}
 
 	def "PUT /{context-id}/entry/{entry-id}/name on a Context without name should add the context name"() {
@@ -121,60 +126,46 @@ class NameResourceIT extends BaseSpec {
 
 	def "PUT /{context-id}/entry/{entry-id}/name on a User should edit the username"() {
 		given:
-		// create user
-		def requestResourceName = [name: 'Username 1']
-		def params = [graphtype: 'user']
-		def createUserBody = JsonOutput.toJson([resource: requestResourceName])
-		def createUserConn = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), createUserBody)
-		assert createUserConn.getResponseCode() == HTTP_CREATED
-		assert createUserConn.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(createUserConn.getInputStream().text)
-		assert responseJson['entryId'] != null
-		def userEntryId = responseJson['entryId'].toString()
+		def username = 'Username 1'
+		def user = UserUtil.createUser(username)
+		def entryId = user['entryId'].toString()
 
-		def newUserName = 'totally new Name'
-		def body = JsonOutput.toJson([name: newUserName])
+		def newUsername = 'totally new Name'
+		def body = JsonOutput.toJson([name: newUsername])
 
 		when:
-		def connection = EntryStoreClient.putRequest('/_principals/entry/' + userEntryId + '/name', body)
+		def connection = EntryStoreClient.putRequest('/_principals/entry/' + entryId + '/name', body)
 
 		then:
 		connection.getResponseCode() == HTTP_NO_CONTENT
 
-		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + '/name')
+		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
 		def json = JSON_PARSER.parseText(getConn.getInputStream().text)
-		json['name'] == newUserName.toLowerCase()
+		json['name'] == newUsername.toLowerCase()
 	}
 
 	def "PUT /{context-id}/entry/{entry-id}/name with name=null on a User should not remove user name, as a username is required for a User"() {
 		given:
-		// create user
-		def requestResourceName = [name: 'Username 2']
-		def params = [graphtype: 'user']
-		def createUserBody = JsonOutput.toJson([resource: requestResourceName])
-		def createUserConn = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), createUserBody)
-		assert createUserConn.getResponseCode() == HTTP_CREATED
-		assert createUserConn.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(createUserConn.getInputStream().text)
-		assert responseJson['entryId'] != null
-		def userEntryId = responseJson['entryId'].toString()
+		def username = 'Username 2'
+		def user = UserUtil.createUser(username)
+		def entryId = user['entryId']
 
-		def newUserName = null
-		def body = JsonOutput.toJson([name: newUserName])
+		def newUsername = null
+		def body = JsonOutput.toJson([name: newUsername])
 
 		when:
-		def connection = EntryStoreClient.putRequest('/_principals/entry/' + userEntryId + '/name', body)
+		def connection = EntryStoreClient.putRequest('/_principals/entry/' + entryId + '/name', body)
 
 		then:
 		connection.getResponseCode() == HTTP_BAD_REQUEST
 
 		// Name should stay unchanged
-		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + '/name')
+		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
 		def json = JSON_PARSER.parseText(getConn.getInputStream().text)
-		json['name'] == requestResourceName['name'].toLowerCase()
+		json['name'] == username.toLowerCase()
 	}
 }
