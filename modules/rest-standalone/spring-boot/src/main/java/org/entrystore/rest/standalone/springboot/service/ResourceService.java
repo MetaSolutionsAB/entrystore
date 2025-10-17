@@ -358,7 +358,7 @@ public class ResourceService {
 						if (!pm.currentUserIsAdminOrAdminGroup() ||
 								(pm.currentUserIsAdminOrAdminGroup() && pm.getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
 							if (!entityJSON.has("currentPassword")) {
-								throw new BadRequestException("Current password is required");
+								throw new ForbiddenException("Current password is required");
 							}
 							String currentPassword = entityJSON.getString("currentPassword");
 							String saltedHashedSecret = BasicVerifier.getSaltedHashedSecret(pm, resourceUser.getName());

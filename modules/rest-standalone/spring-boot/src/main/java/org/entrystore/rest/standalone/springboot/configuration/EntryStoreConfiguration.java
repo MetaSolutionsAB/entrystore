@@ -2,6 +2,7 @@ package org.entrystore.rest.standalone.springboot.configuration;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.ContextManager;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
@@ -58,6 +59,11 @@ public class EntryStoreConfiguration {
 	@Bean
 	public PrincipalManager createPrincipalManager(RepositoryManager repositoryManager) {
 		return repositoryManager.getPrincipalManager();
+	}
+
+	@Bean
+	public ContextManager createContextManager(RepositoryManager repositoryManager) {
+		return repositoryManager.getContextManager();
 	}
 
 	@Bean

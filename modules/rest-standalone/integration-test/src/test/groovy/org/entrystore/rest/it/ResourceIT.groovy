@@ -4,7 +4,6 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 import org.entrystore.rest.it.util.UserUtil
-import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -689,8 +688,6 @@ class ResourceIT extends BaseSpec {
 		entryId == infoRespJson['id']
 	}
 
-	// TODO fix
-	@Ignore
 	def "PUT /{context-id}/resource/{entry-id} should not change own password without providing current password"() {
 		given:
 		def username = 'userChangePasswordNoCurrentPassword@test.com'
