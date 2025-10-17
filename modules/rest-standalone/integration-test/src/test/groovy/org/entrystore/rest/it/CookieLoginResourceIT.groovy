@@ -35,7 +35,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_ENTITY_TOO_LARGE
@@ -46,7 +46,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_password=' + password
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_BAD_REQUEST
@@ -58,7 +58,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_BAD_REQUEST
@@ -71,7 +71,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_BAD_REQUEST
@@ -91,7 +91,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		then:
 		loginConnection.getResponseCode() == HTTP_OK
 		loginConnection.getHeaderField('Set-Cookie') != null
-		loginConnection.getHeaderField('Set-Cookie').contains('auth_token=')
+		loginConnection.getHeaderField('Set-Cookie').contains('JSESSIONID=')
 		loginConnection.getContentType().contains('text/html')
 		loginConnection.getInputStream().text.contains('Login successful.')
 	}
@@ -104,7 +104,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=1'
-		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
 		Thread.sleep(2000)
 
 		when:

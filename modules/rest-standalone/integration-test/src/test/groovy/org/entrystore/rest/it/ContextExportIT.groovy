@@ -68,7 +68,7 @@ class ContextExportIT extends BaseSpec {
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
 
 		when:
-		def connection = EntryStoreClient.postRequest('/' + contextExportId + '/import', '', username)
+		def connection = EntryStoreClient.postRequest('/' + contextExportId + '/export', '[]', username)
 
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
@@ -85,8 +85,6 @@ class ContextExportIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	// TODO Fix
-	@Ignore
 	def "GET /{context-id}/export as member of admin group for non-existing context should return Not-Found 404"() {
 		given:
 		def username = 'userForExportAdminGroup@test.com'
