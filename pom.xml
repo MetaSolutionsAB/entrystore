@@ -36,14 +36,14 @@
         <junit.version>5.13.4</junit.version>
         <assertj.version>3.27.4</assertj.version>
         <bytebuddy.version>1.17.6</bytebuddy.version>
-        <zookeeper.version>3.9.3</zookeeper.version>
+        <zookeeper.version>3.9.4</zookeeper.version>
         <xmlsec.version>3.0.6</xmlsec.version>
         <httpmime.version>4.5.14</httpmime.version>
         <commonscli.version>1.10.0</commonscli.version>
         <snappy.version>1.1.10.8</snappy.version>
         <activation.version>1.2.2</activation.version>
-        <lombok.version>1.18.38</lombok.version>
-        <jetbrains-annotations.version>26.0.2</jetbrains-annotations.version>
+        <lombok.version>1.18.42</lombok.version>
+        <jetbrains-annotations.version>26.0.2-1</jetbrains-annotations.version>
         <site.url>https://entrystore.org</site.url>
         <distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
         <distribution.url>https://entrystore.org</distribution.url>
