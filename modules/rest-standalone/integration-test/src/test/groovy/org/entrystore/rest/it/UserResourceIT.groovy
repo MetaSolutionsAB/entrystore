@@ -4,7 +4,6 @@ import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import spock.lang.Ignore
 
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeFormatterBuilder
@@ -72,8 +71,6 @@ class UserResourceIT extends BaseSpec {
 		//ChronoUnit.HOURS.between(now, authTokenExpires) == 23
 	}
 
-	// TODO fix homecontext in userinfo
-	@Ignore
 	def "GET /auth/user should return info about currently logged-in user including homecontext"() {
 		given:
 		def username = 'userForInfoContext@test.com'

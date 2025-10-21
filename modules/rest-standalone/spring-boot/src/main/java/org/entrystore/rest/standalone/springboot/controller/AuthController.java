@@ -10,6 +10,7 @@ import org.entrystore.rest.standalone.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.standalone.springboot.service.AuthService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
+import org.entrystore.rest.standalone.springboot.util.JsonUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
@@ -19,6 +20,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Slf4j
 @Controller
@@ -103,9 +107,28 @@ public class AuthController {
 	public String signup(
 			HttpServletRequest request,
 			Model model,
-			@RequestBody SignupRequestBody signupRequestBody) {
+			@RequestBody String requestBody) {
 		checkRequestSize(request);
-		String message = authService.signup(request, signupRequestBody, signupTitle);
+
+		HashMap<String, String> parameters = JsonUtil.jsonToMap(requestBody);
+
+		SignupRequestBody signupRequestBody = new SignupRequestBody(
+				parameters.get("email"),
+				parameters.get("password"),
+				parameters.get("firstname"),
+				parameters.get("lastname"),
+				parameters.get("urlsuccess"),
+				parameters.get("urlfailure"),
+				parameters.get("grecaptcharesponse"));
+
+		parameters.remove("email");
+		parameters.remove("password");
+		parameters.remove("firstname");
+		parameters.remove("lastname");
+		parameters.remove("urlsuccess");
+		parameters.remove("urlfailure");
+		parameters.remove("grecaptcharesponse");
+		String message = authService.signup(request, signupRequestBody, parameters, signupTitle);
 		model.addAttribute("title", signupTitle);
 		model.addAttribute("message", message);
 		return "auth";
@@ -119,18 +142,27 @@ public class AuthController {
 	public String signupViaForm(
 			HttpServletRequest request,
 			Model model,
-			@RequestParam MultiValueMap<String, String> paramMap) {
+			@RequestParam Map<String,String> paramMap) {
 		checkRequestSize(request);
 
 		SignupRequestBody signupRequestBody = new SignupRequestBody(
-				paramMap.getFirst("email"),
-				paramMap.getFirst("password"),
-				paramMap.getFirst("firstname"),
-				paramMap.getFirst("lastname"),
-				paramMap.getFirst("urlsuccess"),
-				paramMap.getFirst("urlfailure"),
-				paramMap.getFirst("g-recaptcha-response"));
-		String message = authService.signup(request, signupRequestBody, signupTitle);
+				paramMap.get("email"),
+				paramMap.get("password"),
+				paramMap.get("firstname"),
+				paramMap.get("lastname"),
+				paramMap.get("urlsuccess"),
+				paramMap.get("urlfailure"),
+				paramMap.get("g-recaptcha-response"));
+
+		paramMap.remove("email");
+		paramMap.remove("password");
+		paramMap.remove("firstname");
+		paramMap.remove("lastname");
+		paramMap.remove("urlsuccess");
+		paramMap.remove("urlfailure");
+		paramMap.remove("g-recaptcha-response");
+
+		String message = authService.signup(request, signupRequestBody, paramMap, signupTitle);
 		model.addAttribute("title", signupTitle);
 		model.addAttribute("message", message);
 		return "auth";

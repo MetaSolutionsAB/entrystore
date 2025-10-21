@@ -11,6 +11,8 @@ import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.Context;
+import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
@@ -44,8 +46,10 @@ import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -82,6 +86,7 @@ public class AuthService {
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final PrincipalManager principalManager;
+	private final ContextManager contextManager;
 	private final RecaptchaVerifier rcVerifier;
 	private final LoginTokenCache loginTokenCache;
 	private final SignupTokenCache signupTokenCache;
@@ -263,8 +268,8 @@ public class AuthService {
 	}
 
 	public String confirmSignup(String token, String title) {
-		SignupInfo singupInfo = signupTokenCache.getTokenValue(token);
-		if (singupInfo == null) {
+		SignupInfo signupInfo = signupTokenCache.getTokenValue(token);
+		if (signupInfo == null) {
 			URL bURL = repositoryManager.getRepositoryURL();
 			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + (Arrays.asList(-1, 80, 443).contains(bURL.getPort()) ? "" : ":" + bURL.getPort());
 			throw new BadRequestHtmlException(invalidSignupTokenMessage.replace("{1}", bURL.toString()).replace("{2}", appURL), title);
@@ -275,10 +280,10 @@ public class AuthService {
 		try {
 			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
 
-			Entry userEntry = principalManager.getPrincipalEntry(singupInfo.getEmail());
+			Entry userEntry = principalManager.getPrincipalEntry(signupInfo.getEmail());
 
 			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
-					principalManager.getUserByExternalID(singupInfo.getEmail()) != null) {
+					principalManager.getUserByExternalID(signupInfo.getEmail()) != null) {
 				throw new DataConflictHtmlException(userAlreadyExistsMessage, title);
 			}
 
@@ -286,35 +291,47 @@ public class AuthService {
 			Entry entry = principalManager.createResource(null, GraphType.User, null, null);
 			if (entry == null) {
 				log.error("Error when creating new user during sign-up ");
-				if (singupInfo.getUrlFailure() != null) {
-					handleUrlRedirect(singupInfo.getUrlFailure());
+				if (signupInfo.getUrlFailure() != null) {
+					handleUrlRedirect(signupInfo.getUrlFailure());
 				} else {
 					throw new InternalServerErrorException(unableToCreateUserMessage);
 				}
 			} else {
 				// Set alias, metadata and password
-				principalManager.setPrincipalName(entry.getResourceURI(), singupInfo.getEmail());
-				setFoafMetadata(entry, singupInfo);
+				principalManager.setPrincipalName(entry.getResourceURI(), signupInfo.getEmail());
+				setFoafMetadata(entry, signupInfo);
 				User u = (User) entry.getResource();
-				u.setSaltedHashedSecret(singupInfo.getSaltedHashedPassword());
-				if (singupInfo.getCustomProperties() != null) {
-					u.setCustomProperties(singupInfo.getCustomProperties());
+				u.setSaltedHashedSecret(signupInfo.getSaltedHashedPassword());
+				if (signupInfo.getCustomProperties() != null) {
+					u.setCustomProperties(signupInfo.getCustomProperties());
 				}
 				log.info("Created user {}", u.getURI());
+
+				if ("on".equalsIgnoreCase(repositoryManager.getConfiguration().getString(Settings.SIGNUP_CREATE_HOME_CONTEXT, "off"))) {
+					// Create context and set ACL and alias
+					Entry homeContext = contextManager.createResource(null, GraphType.Context, null, null);
+					homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
+					contextManager.setName(homeContext.getEntryURI(), signupInfo.getEmail());
+					log.info("Created context {}", homeContext.getResourceURI());
+
+					// Set home context of user
+					u.setHomeContext((Context) homeContext.getResource());
+					log.info("Set home context of user {} to {}", u.getURI(), homeContext.getResourceURI());
+				}
 			}
 
 		} finally {
 			principalManager.setAuthenticatedUserURI(authUser);
 		}
 
-		if (singupInfo.getUrlSuccess() != null) {
-			handleUrlRedirect(singupInfo.getUrlSuccess());
+		if (signupInfo.getUrlSuccess() != null) {
+			handleUrlRedirect(signupInfo.getUrlSuccess());
 		}
 
 		return confirmSignupSuccessMessage;
 	}
 
-	public String signup(HttpServletRequest request, SignupRequestBody requestBody, String title) {
+	public String signup(HttpServletRequest request, SignupRequestBody requestBody, Map<String, String> extraProperties, String title) {
 		SignupInfo ci = new SignupInfo(repositoryManager);
 		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 
@@ -356,6 +373,15 @@ public class AuthService {
 		}
 		if (StringUtils.isNotEmpty(requestBody.urlSuccess())) {
 			ci.setUrlSuccess(requestBody.urlSuccess());
+		}
+
+		if (!extraProperties.isEmpty()) {
+			ci.setCustomProperties(new HashMap<>());
+			extraProperties.forEach((key, value) -> {
+				if (key.startsWith("custom_")) {
+					ci.getCustomProperties().put(key.substring(7), value);
+				}
+			});
 		}
 
 		if (!domainWhitelist.isEmpty()) {

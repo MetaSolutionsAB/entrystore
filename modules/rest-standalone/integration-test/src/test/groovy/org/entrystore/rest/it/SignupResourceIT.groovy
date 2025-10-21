@@ -707,10 +707,9 @@ class SignupResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
 		resourceRespJson != null
-		// TODO fix homecontext and customProperties
-		//resourceRespJson['homecontext'] != null
-		//resourceRespJson['customProperties']['foo'] == 'foo'
-		//resourceRespJson['customProperties']['boo'] == 'boo'
+		resourceRespJson['homecontext'] != null
+		resourceRespJson['customProperties']['foo'] == 'foo'
+		resourceRespJson['customProperties']['boo'] == 'boo'
 		resourceRespJson['name'] == username.toLowerCase()
 	}
 
@@ -737,9 +736,8 @@ class SignupResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
 		resourceRespJson != null
-		// TODO fix customProperties
-		//resourceRespJson['customProperties']['foo'] == 'foo'
-		//resourceRespJson['customProperties']['boo'] == 'boo'
+		resourceRespJson['customProperties']['foo'] == 'foo'
+		resourceRespJson['customProperties']['boo'] == 'boo'
 		resourceRespJson['name'] == username.toLowerCase()
 	}
 
