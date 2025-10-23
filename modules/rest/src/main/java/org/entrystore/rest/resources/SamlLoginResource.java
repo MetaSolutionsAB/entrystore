@@ -216,7 +216,11 @@ public class SamlLoginResource extends BaseResource {
 	private void loadMetadataAndInitSamlClient(SamlIdpInfo samlIdpInfo) throws SamlException {
 		try {
 			Reader idpMetadataReader = new BufferedReader(new InputStreamReader(URI.create(samlIdpInfo.getMetadataUrl()).toURL().openStream(), StandardCharsets.UTF_8));
-			samlIdpInfo.setSamlClient(SamlClient.fromMetadata(samlIdpInfo.getRelyingPartyId(), samlIdpInfo.getAssertionConsumerServiceUrl(), idpMetadataReader));
+			SamlClient.SamlIdpBinding binding = SamlClient.SamlIdpBinding.POST;
+			if ("get".equalsIgnoreCase(samlIdpInfo.getRedirectMethod())) {
+				binding = SamlClient.SamlIdpBinding.Redirect;
+			}
+			samlIdpInfo.setSamlClient(SamlClient.fromMetadata(samlIdpInfo.getRelyingPartyId(), samlIdpInfo.getAssertionConsumerServiceUrl(), idpMetadataReader, binding));
 			samlIdpInfo.setMetadataLoaded(Instant.now());
 			log.info("Loaded SAML metadata for IdP \"{}\" from {}", samlIdpInfo.getId(), samlIdpInfo.getMetadataUrl());
 		} catch (IOException e) {
