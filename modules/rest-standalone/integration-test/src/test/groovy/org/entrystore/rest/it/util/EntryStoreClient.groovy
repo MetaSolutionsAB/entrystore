@@ -1,11 +1,12 @@
 package org.entrystore.rest.it.util
 
 import groovy.json.JsonOutput
-import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.Strings
 import org.eclipse.jetty.http.HttpMethod
 
 import static java.net.HttpURLConnection.HTTP_MOVED_TEMP
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.nio.charset.StandardCharsets.UTF_8
 
 class EntryStoreClient {
 
@@ -14,13 +15,17 @@ class EntryStoreClient {
 	static String origin = 'http://' + host + ':' + port
 	static String baseUrl = origin + '/store'
 
-	def static emptyJsonBody = JsonOutput.toJson([:])
+	static def emptyJsonBody = JsonOutput.toJson([:])
 
-	def static creds = ['admin': 'adminpass']
-	def static cookies = [:].withDefault { userName ->
+	static def creds = ['admin': 'adminpass']
+	static def cookies = [:].withDefault { userName ->
 		{
 			authorize(userName.toString())
 		}
+	}
+
+	static def cleanCookies() {
+		cookies.clear()
 	}
 
 	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> extraHeaders = [:]) {
@@ -30,8 +35,9 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.GET, path, null, asUser, null, extraHeaders)
 	}
 
-	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
-		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes())
+	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin',
+						   String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
+		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes(UTF_8))
 		return sendRequestAsStream(HttpMethod.POST, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
@@ -73,7 +79,9 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.DELETE, path, null, asUser, null)
 	}
 
-	def static sendRequestAsStream(HttpMethod method, String path, InputStream inputStream, String asUser, String contentType, Map<String, String> extraHeaders = [:]) {
+	def static sendRequestAsStream(HttpMethod method, String path, InputStream inputStream, String asUser,
+								   String contentType, Map<String, String> extraHeaders = [:]) {
+
 		def connection = createConnection(path)
 		connection.setRequestMethod(method.name())
 		connection.setInstanceFollowRedirects(false)
@@ -111,7 +119,7 @@ class EntryStoreClient {
 		if (path.startsWith('/')) {
 			hostInfo = origin
 		} else {
-			path = StringUtils.replaceOnce(path, '/store', '')
+			path = Strings.CS.replaceOnce(path, '/store', '')
 		}
 		return (HttpURLConnection) new URI(hostInfo + path).toURL().openConnection()
 	}

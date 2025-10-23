@@ -24,8 +24,14 @@ abstract class BaseSpec extends Specification {
 
 	def setupSpec() {
 		if (!appStarted) {
-			def args = ['-c', 'file:src/test/resources/entrystore-it.properties', '-p', EntryStoreClient.port.toString(), '--log-level', 'debug'] as String[]
-			log.info('Starting EntryStoreApp')
+			def args = ['-c', 'file:src/test/resources/entrystore-it.properties',
+						'-p', EntryStoreClient.port.toString(),
+						'--log-level', 'debug',
+						'--config-properties', 'entrystore.auth.saml=off'
+			] as String[]
+			log.info('Starting EntryStoreApp without SAML')
+			// clean cookies, in case there are some from a previous instance
+			EntryStoreClient.cleanCookies()
 			appStarted = true
 			EntryStoreApplicationStandaloneJetty.main(args)
 		} else {
