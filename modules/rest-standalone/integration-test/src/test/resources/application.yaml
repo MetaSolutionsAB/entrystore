@@ -4,18 +4,18 @@ info.app.version: @project.version@
 
 
 spring:
-    mvc.problemdetails.enabled: false
-    servlet.multipart:
-        max-file-size: 12MB
-        max-request-size: 12MB
+  mvc.problemdetails.enabled: false
+  servlet.multipart:
+    max-file-size: 12MB
+    max-request-size: 12MB
 
 
 entrystore:
-    configuration.path: file:src/test/resources/entrystore-it.properties
-    solr.url: value-not-used-will-be-overridden-by-tests
+  configuration.path: file:src/test/resources/entrystore-it.properties
+  solr.url: value-will-be-overridden-by-tests
 
 
 logging:
-    level:
-        org.entrystore: DEBUG
-        org.springframework.security: DEBUG
+  level:
+    org.entrystore: DEBUG
+    org.springframework.security: DEBUG

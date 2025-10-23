@@ -55,18 +55,14 @@ public class BasicVerifier {
 		return false;
 	}
 
-	public static boolean isUserDisabled(PrincipalManager pm, String userName) {
+	public static boolean isUserDisabled(PrincipalManager pm, User user) {
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			Entry userEntry = pm.getPrincipalEntry(userName);
-			if (userEntry != null) {
-				return ((User) userEntry.getResource()).isDisabled();
-			}
+			return user.isDisabled();
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
 		}
-		return false;
 	}
 /*
 	public int verify(Request request, Response response) {

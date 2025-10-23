@@ -6,6 +6,8 @@ import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.standalone.springboot.EntryStoreApplicationStandaloneSpringBoot
 import org.slf4j.LoggerFactory
+import org.springframework.boot.SpringApplication
+import org.springframework.context.ConfigurableApplicationContext
 import org.testcontainers.containers.SolrContainer
 import org.testcontainers.containers.output.Slf4jLogConsumer
 import org.testcontainers.containers.wait.strategy.Wait
@@ -26,9 +28,11 @@ import static org.awaitility.Awaitility.await
 @Testcontainers
 abstract class BaseSpec extends Specification {
 
-	def static log = LoggerFactory.getLogger(this.class)
-	def static JSON_PARSER = new JsonSlurper()
-	def static appStarted = false
+	static def log = LoggerFactory.getLogger(this.class)
+	static def JSON_PARSER = new JsonSlurper()
+	static def appStarted = false
+
+	static ConfigurableApplicationContext appInstance
 
 	// make sure Solr version matches the version used in the parent pom - 'solr.version' property
 	@Shared
@@ -38,6 +42,8 @@ abstract class BaseSpec extends Specification {
 
 	def setupSpec() {
 		if (!appStarted) {
+			// clean cookies, in case there are some from a previous instance
+			EntryStoreClient.cleanCookies()
 			log.info('Starting Solr container')
 			solrContainer.start()
 			// below 2 lines allow to stream Solr container logs to the console
@@ -51,9 +57,9 @@ abstract class BaseSpec extends Specification {
 				'solr', 'create_core', '-c', 'entrystore-core', '-d', '/entrystore-core'
 			)
 
-			log.info('Starting EntryStoreApp')
+			log.info('Starting EntryStoreApp without SAML')
 			def args = ['--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core'] as String[]
-			EntryStoreApplicationStandaloneSpringBoot.main(args)
+			appInstance = SpringApplication.run(EntryStoreApplicationStandaloneSpringBoot.class, args)
 			appStarted = true
 		} else {
 			log.info('EntryStoreApp already started')

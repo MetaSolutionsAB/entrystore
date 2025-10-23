@@ -23,6 +23,7 @@
 					<include>**/*.txt</include>
 					<include>**/*.xml</include>
 					<include>**/*.properties</include>
+					<include>**/*.json</include>
 				</includes>
 				<filtering>true</filtering>
 			</testResource>
@@ -120,6 +121,14 @@
 		</dependency>
 
 		<dependency>
+			<groupId>com.github.dasniko</groupId>
+			<artifactId>testcontainers-keycloak</artifactId>
+			<!-- newer version is based on jakarta, hence need to use this old ver -->
+			<version>2.6.0</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
 			<groupId>org.awaitility</groupId>
 			<artifactId>awaitility</artifactId>
 			<version>4.2.2</version>
@@ -129,6 +138,7 @@
 		<dependency>
 			<groupId>com.icegreen</groupId>
 			<artifactId>greenmail</artifactId>
+			<!-- newer version is based on jakarta, hence need to use this old ver -->
 			<version>1.6.14</version>
 			<scope>test</scope>
 		</dependency>

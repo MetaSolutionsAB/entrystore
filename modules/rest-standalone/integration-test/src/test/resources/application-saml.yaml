@@ -1,0 +1,13 @@
+spring:
+  security:
+    saml2:
+      relyingparty:
+        registration:
+          keycloak:
+            entity-id: EntrystoreDev1
+            assertingparty:
+              # for Keycloak below value is typically http://localhost:xxx/realms/test/protocol/saml/descriptor
+              metadata-uri: value-will-be-overridden-by-tests
+              singlesignon:
+                binding: post
+                sign-request: false
