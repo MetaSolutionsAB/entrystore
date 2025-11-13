@@ -1,9 +1,9 @@
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
-import org.springframework.http.HttpMethod
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
+import org.springframework.http.HttpMethod
 import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -70,7 +70,8 @@ class ContextImportIT extends BaseSpec {
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
 
 		when:
-		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', '', username)
+		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', '[]',
+			username, 'application/zip')
 
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
@@ -87,8 +88,6 @@ class ContextImportIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	// TODO Fix
-	@Ignore
 	def "POST /{context-id}/import as member of admin group for non-existing context should return Not-Found 404"() {
 		given:
 		def username = 'userForImportAdminGroup@test.com'

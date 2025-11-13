@@ -6,7 +6,7 @@ import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.rest.standalone.springboot.model.UserAuthRole;
+import org.entrystore.rest.standalone.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.standalone.springboot.service.UserService;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;

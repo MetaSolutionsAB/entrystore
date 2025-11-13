@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.standalone.springboot.model.api.SignupRequestBody;
-import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.standalone.springboot.service.AuthService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
 import org.entrystore.rest.standalone.springboot.util.JsonUtil;
@@ -39,7 +38,7 @@ public class AuthController {
 			description = "It is recommended to use any of the other login-resources. Performs a cookie-based login and " +
 					"should only be used for testing purposes, does not really belong to the API.")
 	@GetMapping(path = "/auth/login")
-	public String getLogin() {
+	public String getLoginPage() {
 		// Uses Thymeleaf templating engine - returns login.html template from /resources/templates
 		return "login";
 	}
@@ -53,7 +52,7 @@ public class AuthController {
 			HttpServletRequest request,
 			Model model,
 			@RequestBody PwResetRequestBody pwResetRequestBody) {
-		checkRequestSize(request);
+		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 		String message = authService.pwReset(request, pwResetRequestBody, passwordResetTitle);
 		model.addAttribute("title", passwordResetTitle);
 		model.addAttribute("message", message);
@@ -69,7 +68,8 @@ public class AuthController {
 			HttpServletRequest request,
 			Model model,
 			@RequestParam MultiValueMap<String, String> paramMap) {
-		checkRequestSize(request);
+
+		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 
 		PwResetRequestBody pwResetRequestBody = new PwResetRequestBody(
 				paramMap.getFirst("email"),
@@ -108,10 +108,10 @@ public class AuthController {
 			HttpServletRequest request,
 			Model model,
 			@RequestBody String requestBody) {
-		checkRequestSize(request);
 
 		HashMap<String, String> parameters = JsonUtil.jsonToMap(requestBody);
 
+		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 		SignupRequestBody signupRequestBody = new SignupRequestBody(
 				parameters.get("email"),
 				parameters.get("password"),
@@ -142,27 +142,28 @@ public class AuthController {
 	public String signupViaForm(
 			HttpServletRequest request,
 			Model model,
-			@RequestParam Map<String,String> paramMap) {
-		checkRequestSize(request);
+			@RequestParam Map<String,String> parameters) {
+
+		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 
 		SignupRequestBody signupRequestBody = new SignupRequestBody(
-				paramMap.get("email"),
-				paramMap.get("password"),
-				paramMap.get("firstname"),
-				paramMap.get("lastname"),
-				paramMap.get("urlsuccess"),
-				paramMap.get("urlfailure"),
-				paramMap.get("g-recaptcha-response"));
+				parameters.get("email"),
+				parameters.get("password"),
+				parameters.get("firstname"),
+				parameters.get("lastname"),
+				parameters.get("urlsuccess"),
+				parameters.get("urlfailure"),
+				parameters.get("g-recaptcha-response"));
 
-		paramMap.remove("email");
-		paramMap.remove("password");
-		paramMap.remove("firstname");
-		paramMap.remove("lastname");
-		paramMap.remove("urlsuccess");
-		paramMap.remove("urlfailure");
-		paramMap.remove("g-recaptcha-response");
+		parameters.remove("email");
+		parameters.remove("password");
+		parameters.remove("firstname");
+		parameters.remove("lastname");
+		parameters.remove("urlsuccess");
+		parameters.remove("urlfailure");
+		parameters.remove("g-recaptcha-response");
 
-		String message = authService.signup(request, signupRequestBody, paramMap, signupTitle);
+		String message = authService.signup(request, signupRequestBody, parameters, signupTitle);
 		model.addAttribute("title", signupTitle);
 		model.addAttribute("message", message);
 		return "auth";
@@ -184,11 +185,5 @@ public class AuthController {
 		model.addAttribute("message", message);
 		response.setStatus(HttpStatus.CREATED.value());
 		return "auth";
-	}
-
-	private void checkRequestSize(HttpServletRequest request) {
-		if (HttpUtil.isLargerThan(request, MAX_REQUEST_SIZE)) {
-			throw new EntityTooLargeException("The size of the representation is larger than 32KB or unknown, request blocked.");
-		}
 	}
 }

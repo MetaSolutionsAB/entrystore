@@ -2,7 +2,7 @@ package org.entrystore.rest.standalone.springboot.security;
 
 import lombok.RequiredArgsConstructor;
 import org.entrystore.repository.security.Password;
-import org.entrystore.rest.standalone.springboot.model.UserAuthRole;
+import org.entrystore.rest.standalone.springboot.model.auth.UserAuthRole;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -27,9 +27,9 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers("/error").permitAll()
 						.requestMatchers("/echo").permitAll() // needs textarea response, otherwise default Spring-boot Unauthorized json response is returned
-						.requestMatchers("/management/status").permitAll()
-						.requestMatchers("/auth/login", "/auth/cookie", "/auth/signup", "/auth/logout", "/auth/pwreset").permitAll()
+						.requestMatchers("/auth/login", "/auth/signup", "/auth/pwreset").permitAll()
 						.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs*/**").permitAll()
+						.requestMatchers("/management/status").permitAll()
 						.requestMatchers("/management/status/extended").hasRole(UserAuthRole.ADMIN.name())
 						.anyRequest().authenticated()
 				)
@@ -37,6 +37,8 @@ public class SecurityConfig {
 						.loginPage("/auth/login")
 						.loginProcessingUrl("/auth/cookie")
 						.defaultSuccessUrl("/management/status")
+						// to return 200 OK instead of 302 REDIRECT
+						.successHandler((request, response, auth) -> {})
 						.usernameParameter("auth_username")
 						.passwordParameter("auth_password")
 						.permitAll()

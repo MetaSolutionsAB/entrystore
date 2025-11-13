@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
 import org.springframework.http.ResponseEntity;
 
 import java.util.Date;
@@ -85,5 +86,11 @@ public class HttpUtil {
 		}
 
 		return ip;
+	}
+
+	public static void checkRequestSize(HttpServletRequest request, int maxRequestSize) {
+		if (HttpUtil.isLargerThan(request, maxRequestSize)) {
+			throw new EntityTooLargeException("The size of the representation is larger than " + maxRequestSize + "bytes or unknown, request blocked.");
+		}
 	}
 }
