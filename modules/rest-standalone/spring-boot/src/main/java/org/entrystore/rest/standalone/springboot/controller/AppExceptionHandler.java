@@ -23,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -140,8 +141,8 @@ public class AppExceptionHandler {
 		return ResponseEntity.badRequest().body(responseBody);
 	}
 
-	@ExceptionHandler(ForbiddenException.class)
-	public ResponseEntity<ErrorResponse> handleForbiddenException(ForbiddenException ex,
+	@ExceptionHandler({ForbiddenException.class, AccessDeniedException.class})
+	public ResponseEntity<ErrorResponse> handleForbiddenException(RuntimeException ex,
 																  HttpServletRequest request) {
 		log.debug("ForbiddenException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()

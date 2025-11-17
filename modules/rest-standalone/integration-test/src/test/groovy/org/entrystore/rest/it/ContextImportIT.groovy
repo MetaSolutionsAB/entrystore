@@ -4,7 +4,6 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
 import org.springframework.http.HttpMethod
-import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
@@ -58,8 +57,6 @@ class ContextImportIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	// TODO Fix
-	@Ignore
 	def "POST /{context-id}/import as authorized but non-admin should return Forbidden 403"() {
 		given:
 		def username = 'userForImport@test.com'

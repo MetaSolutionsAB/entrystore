@@ -5,7 +5,6 @@ import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 import org.entrystore.rest.it.util.UserUtil
-import spock.lang.Ignore
 
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -56,8 +55,6 @@ class ContextExportIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	// TODO Fix
-	@Ignore
 	def "GET /{context-id}/export as authorized but non-admin should return Forbidden 403"() {
 		given:
 		def username = 'userForExport@test.com'
@@ -68,7 +65,7 @@ class ContextExportIT extends BaseSpec {
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
 
 		when:
-		def connection = EntryStoreClient.postRequest('/' + contextExportId + '/export', '[]', username)
+		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export', username)
 
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
