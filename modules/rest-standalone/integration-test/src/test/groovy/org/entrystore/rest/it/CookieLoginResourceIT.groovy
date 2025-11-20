@@ -13,8 +13,6 @@ import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
-// NOT MIGRATED YET
-@Ignore
 class CookieLoginResourceIT extends BaseSpec {
 
 	static def password = 'newPass12345'

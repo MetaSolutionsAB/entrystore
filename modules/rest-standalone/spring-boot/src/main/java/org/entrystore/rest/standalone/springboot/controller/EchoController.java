@@ -47,6 +47,8 @@ public class EchoController {
 		if (file == null) {
 			throw new TextareaHtmlResponseException("Missing required 'file' in the request part", HttpStatus.BAD_REQUEST);
 		}
+
+		// TODO this part should be taken out of here and implemented inside Spring Security
 		if (principalManager.getGuestUser().getURI().equals(principalManager.getAuthenticatedUserURI())) {
 			throw new TextareaHtmlResponseException("Guest account is not allowed to use /echo endpoint.", HttpStatus.FORBIDDEN);
 		}

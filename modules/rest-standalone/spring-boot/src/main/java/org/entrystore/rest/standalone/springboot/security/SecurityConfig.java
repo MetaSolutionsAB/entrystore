@@ -17,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 @Slf4j
@@ -25,9 +26,12 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+	private final BeforeAuthenticationFilter beforeAuthenticationFilter;
 	private final PostAuthenticationFilter postAuthenticationFilter;
 	private final SamlLoginSuccessHandler successHandler;
 	private final HandlerExceptionResolver handlerExceptionResolver;
+	private final ESAuthenticationFailureHandler authenticationFailureHandler;
+	private final ESAuthenticationSuccessHandler authenticationSuccessHandler;
 
 	private boolean basicAuthEnabled;
 	private boolean samlAuthEnabled;
@@ -58,8 +62,8 @@ public class SecurityConfig {
 						.loginPage("/auth/login")
 						.loginProcessingUrl("/auth/cookie")
 						.defaultSuccessUrl("/management/status")
-						// to return 200 OK instead of 302 REDIRECT
-						.successHandler((request, response, auth) -> {})
+						.successHandler(authenticationSuccessHandler)
+						.failureHandler(authenticationFailureHandler)
 						.usernameParameter("auth_username")
 						.passwordParameter("auth_password")
 						.permitAll()
@@ -67,6 +71,7 @@ public class SecurityConfig {
 				.logout(logout -> logout
 						.logoutUrl("/auth/logout")
 						.permitAll())
+				.addFilterBefore(beforeAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 				.addFilterAfter(postAuthenticationFilter, AnonymousAuthenticationFilter.class)
 				// below disables the auto redirect to login page when user is not authenticated, instead reply with 401
 				.exceptionHandling(e -> e
@@ -116,7 +121,14 @@ public class SecurityConfig {
 
 			@Override
 			public boolean matches(CharSequence rawPassword, String encodedPassword) {
-				return Password.check(rawPassword.toString(), encodedPassword);
+				boolean matches;
+				try {
+					matches = Password.check(rawPassword.toString(), encodedPassword);
+				} catch (IllegalArgumentException e) {
+					log.warn(e.getMessage());
+					matches = false;
+				}
+				return matches;
 			}
 		};
 	}

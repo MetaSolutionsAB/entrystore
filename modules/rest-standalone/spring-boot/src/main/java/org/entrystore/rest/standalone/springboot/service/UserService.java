@@ -6,9 +6,7 @@ import org.entrystore.Context;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.standalone.springboot.model.api.GetAuthUserResponse;
-import org.entrystore.rest.standalone.springboot.model.auth.UserInfo;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
-import org.entrystore.rest.standalone.springboot.service.auth.LoginTokenCache;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -22,14 +20,13 @@ import java.util.Map;
 public class UserService {
 
 	private final PrincipalManager principalManager;
-	private final LoginTokenCache loginTokenCache;
 
 	public boolean isAdmin(User user) {
 		return principalManager.getAdminUser().getURI().equals(user.getURI()) ||
 				principalManager.getAdminGroup().isMember(user);
 	}
 
-	public GetAuthUserResponse getUserInfo(String locales, String authToken) {
+	public GetAuthUserResponse getUserInfo(String locales) {
 
 		User user = principalManager.getUser(principalManager.getAuthenticatedUserURI());
 
@@ -45,14 +42,6 @@ public class UserService {
 			Context context = user.getHomeContext();
 			if (context != null) {
 				homeContext = context.getEntry().getId();
-			}
-
-			// TODO: migrate CookieLoginResource
-			if (authToken != null) {
-				UserInfo ui = loginTokenCache.getTokenValue(authToken);
-				if (ui != null && ui.getLoginExpiration() != null) {
-					authTokenExpires = ui.getLoginExpiration().toString();
-				}
 			}
 		}
 

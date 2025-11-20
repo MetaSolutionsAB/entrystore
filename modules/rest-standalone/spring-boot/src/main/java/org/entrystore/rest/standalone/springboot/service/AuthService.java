@@ -33,7 +33,6 @@ import org.entrystore.rest.standalone.springboot.model.exception.InternalServerE
 import org.entrystore.rest.standalone.springboot.model.exception.PwResetEntityNotFoundHtmlException;
 import org.entrystore.rest.standalone.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.standalone.springboot.service.auth.EmailValidator;
-import org.entrystore.rest.standalone.springboot.service.auth.LoginTokenCache;
 import org.entrystore.rest.standalone.springboot.service.auth.RecaptchaVerifier;
 import org.entrystore.rest.standalone.springboot.service.auth.SignupTokenCache;
 import org.entrystore.rest.standalone.springboot.util.Email;
@@ -88,7 +87,6 @@ public class AuthService {
 	private final PrincipalManager principalManager;
 	private final ContextManager contextManager;
 	private final RecaptchaVerifier rcVerifier;
-	private final LoginTokenCache loginTokenCache;
 	private final SignupTokenCache signupTokenCache;
 	private final Config config;
 
@@ -145,7 +143,6 @@ public class AuthService {
 			} else {
 				// Reset password
 				if (u.setSaltedHashedSecret(ci.getSaltedHashedPassword())) {
-					loginTokenCache.removeTokens(ci.getEmail());
 					signupTokenCache.removeAllTokens(ci.getEmail());
 					log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
 					Email.sendPasswordChangeConfirmation(config, u.getEntry());
@@ -284,7 +281,12 @@ public class AuthService {
 
 			if ((userEntry != null && GraphType.User.equals(userEntry.getGraphType())) ||
 					principalManager.getUserByExternalID(signupInfo.getEmail()) != null) {
-				throw new DataConflictHtmlException(userAlreadyExistsMessage, title);
+				if (signupInfo.getUrlFailure() != null) {
+					handleUrlRedirect(signupInfo.getUrlFailure());
+					return null;
+				} else {
+					throw new DataConflictHtmlException(userAlreadyExistsMessage, title);
+				}
 			}
 
 			// Create user
@@ -293,6 +295,7 @@ public class AuthService {
 				log.error("Error when creating new user during sign-up ");
 				if (signupInfo.getUrlFailure() != null) {
 					handleUrlRedirect(signupInfo.getUrlFailure());
+					return null;
 				} else {
 					throw new InternalServerErrorException(unableToCreateUserMessage);
 				}
