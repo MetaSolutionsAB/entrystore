@@ -7,9 +7,11 @@ import org.apache.commons.lang3.StringUtils;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.standalone.springboot.model.auth.SamlIdpInfo;
-import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
+import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +24,7 @@ public class SamlAuthService {
 	private static final Map<String, SamlIdpInfo> samlIDPsConfig = new HashMap<>();
 
 	private static String defaultIdp;
+	private static List<String> redirectDomainWhitelist;
 
 	private final Config config;
 
@@ -44,6 +47,18 @@ public class SamlAuthService {
 
 		defaultIdp = config.getString(Settings.AUTH_SAML_DEFAULT_IDP);
 		log.info("SAML Default IdP: {}", defaultIdp);
+
+		redirectDomainWhitelist = config.getStringList(Settings.AUTH_SAML_REDIRECT_DOMAIN_WHITELIST, new ArrayList<>());
+		for (String domain : redirectDomainWhitelist) {
+			log.info("Allowed domain for redirects: {}", domain);
+		}
+	}
+
+	public boolean isValidRedirectUrl(String url) {
+		if (StringUtils.isEmpty(url)) {
+			return false;
+		}
+		return redirectDomainWhitelist.contains(URI.create(url).getHost());
 	}
 
 	private String idpSetting(String configKey, String idp) {
@@ -70,7 +85,7 @@ public class SamlAuthService {
 
 		if (defaultIdp == null || defaultIdp.isEmpty()) {
 			log.warn("IdP parameter missing and no default IdP configured, unable to properly initialize IDP configuration.");
-			throw new InternalServerErrorException("Unable to initialize IDP configuration.");
+			throw new BadRequestException("Unable to initialize IDP configuration. IdP parameter missing and no default IdP configured.");
 		}
 		return defaultIdp;
 	}

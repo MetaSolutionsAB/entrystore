@@ -12,11 +12,14 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.standalone.springboot.model.auth.AuthState;
 import org.entrystore.rest.standalone.springboot.model.auth.SamlIdpInfo;
 import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.standalone.springboot.service.SamlAuthService;
 import org.entrystore.rest.standalone.springboot.service.auth.BasicVerifier;
+import org.entrystore.rest.standalone.springboot.service.auth.SamlAuthStateCache;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
@@ -26,6 +29,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.net.URI;
 
+// TODO make it optional bean - instantiated only when saml is enabled
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -36,6 +40,7 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 
 	private final ESUserDetailsService userService;
 	private final SamlAuthService samlAuthService;
+	private final SamlAuthStateCache samlAuthStateCache;
 	private final PrincipalManager principalManager;
 	private final Config config;
 
@@ -60,9 +65,21 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 
 			log.info("Successfully authenticated via SAML IdP '{}', username: '{}'", idpId, username);
 
+			// Extract relay state data from the cache, if present
+			AuthState cachedAuthState = null;
+			String relayStateId = request.getParameter("RelayState");
+			if (relayStateId != null) {
+				cachedAuthState = samlAuthStateCache.getAuthState(relayStateId);
+			}
+			String customRedirectFailureUrl = null;
+			if (cachedAuthState != null && cachedAuthState.failureUrl() != null) {
+				customRedirectFailureUrl = cachedAuthState.failureUrl();
+			}
+
+
 			if ("admin".equalsIgnoreCase(username)) {
 				log.warn("Ignoring received username 'admin' from SAML IdP '{}'", idpId);
-				redirectToLoginFailureUrl(response, "");
+				redirectToLoginFailureUrl(response, customRedirectFailureUrl);
 			}
 
 			User esUser = userService.loadUser(username);
@@ -72,25 +89,7 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 					log.warn("User '{}' not found in EntryStore. User auto-provisioning is deactivated for IdP '{}'", username, idpId);
 				} else {
 					log.info("User '{}' not found in EntryStore. Creating new user since User auto-provisioning is activated for IdP '{}'", username, idpId);
-					URI currentUser = principalManager.getAuthenticatedUserURI();
-					try {
-						principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
-						// Create user
-						Entry entry = principalManager.createResource(null, GraphType.User, null, null);
-						if (entry != null) {
-							User u = (User) entry.getResource();
-							log.info("Created user '{}'", u.getURI());
-							esUser = u;
-							principalManager.setPrincipalName(entry.getResourceURI(), username);
-							// TODO set some basic metadata, if we can get it from the SAML server
-							// Signup.setFoafMetadata(entry, new org.restlet.security.User(...));
-						} else {
-							throw new InternalServerErrorException("An error occurred when creating the new user");
-						}
-					} finally {
-						principalManager.setAuthenticatedUserURI(currentUser);
-					}
+					esUser = createEsUser(username);
 				}
 			} else {
 				log.info("Existing EntryStore user '{}' logged in via SAML", username);
@@ -101,15 +100,16 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 				// Don't think we need the below line. Auth-token is stored in the user session by Spring-boot
 				// new CookieVerifier(app, getRM()).createAuthToken(userName, null, getRequest(), getResponse());
 
-//				principalManager.setAuthenticatedUserURI(esUser.getURI());
+				if (cachedAuthState != null && cachedAuthState.successUrl() != null) {
+					log.debug("Redirecting to custom success URL: {}", cachedAuthState.successUrl());
+					response.sendRedirect(cachedAuthState.successUrl());
+					return;
+				}
 
-/*				if (redirectSuccessUrlFromRelayState != null) {
-					log.debug("Redirecting to custom success URL: {}", redirectSuccessUrlFromRelayState);
-					response.sendRedirect(redirectSuccessUrlFromRelayState);
-				} else*/
 				if (defaultRedirectSuccessUrl != null) {
 					log.debug("Redirecting to default success URL: {}", defaultRedirectSuccessUrl);
 					response.sendRedirect(defaultRedirectSuccessUrl);
+					return;
 				}
 
 				// proceed with standard success Spring behavior
@@ -119,15 +119,37 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 			}
 
 			log.info("Login failed with username '{}' via IdP '{}'", username, idpId);
-			redirectToLoginFailureUrl(response, "");
+			redirectToLoginFailureUrl(response, customRedirectFailureUrl);
+		}
+	}
+
+	private @NotNull User createEsUser(String username) {
+		URI currentUser = principalManager.getAuthenticatedUserURI();
+		try {
+			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
+
+			Entry entry = principalManager.createResource(null, GraphType.User, null, null);
+			if (entry != null) {
+				User u = (User) entry.getResource();
+				log.info("Created user '{}'", u.getURI());
+				principalManager.setPrincipalName(entry.getResourceURI(), username);
+				// TODO set some basic metadata, if we can get it from the SAML server
+				// Signup.setFoafMetadata(entry, new org.restlet.security.User(...));
+				return u;
+			} else {
+				throw new InternalServerErrorException("An error occurred when creating the new user");
+			}
+
+		} finally {
+			principalManager.setAuthenticatedUserURI(currentUser);
 		}
 	}
 
 	private void redirectToLoginFailureUrl(HttpServletResponse response,
-										   String redirectFailureUrlFromRelayState) throws IOException {
-		if (redirectFailureUrlFromRelayState != null) {
-			log.debug("Redirecting to custom failure URL: {}", redirectFailureUrlFromRelayState);
-			response.sendRedirect(redirectFailureUrlFromRelayState);
+										   String customRedirectFailureUrl) throws IOException {
+		if (customRedirectFailureUrl != null) {
+			log.debug("Redirecting to custom failure URL: {}", customRedirectFailureUrl);
+			response.sendRedirect(customRedirectFailureUrl);
 		} else if (defaultRedirectFailureUrl != null) {
 			log.debug("Redirecting to default failure URL: {}", defaultRedirectFailureUrl);
 			response.sendRedirect(defaultRedirectFailureUrl);
