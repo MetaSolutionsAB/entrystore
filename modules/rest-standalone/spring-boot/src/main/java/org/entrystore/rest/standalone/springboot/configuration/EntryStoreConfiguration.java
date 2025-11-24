@@ -18,6 +18,9 @@ import org.springframework.web.client.RestTemplate;
 import java.io.IOException;
 import java.net.URI;
 
+import static org.entrystore.repository.config.Settings.AUTH_SAML_ENABLED;
+import static org.entrystore.repository.config.Settings.SOLR_URL;
+
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
@@ -25,6 +28,9 @@ public class EntryStoreConfiguration {
 
 	@Value("${entrystore.solr.url}")
 	private String solrUrl;
+
+	@Value("${app.security.saml.enabled:false}")
+	private boolean samlAuthEnabled;
 
 	private final EntryStorePropertiesConfiguration propertiesConfiguration;
 
@@ -40,9 +46,12 @@ public class EntryStoreConfiguration {
 			config = new ConfigurationManager(ConfigurationManager.getConfigurationURI()).getConfiguration();
 		}
 
+		// Pass Spring properties to ES config
 		if (solrUrl != null) {
-			config.setProperty("entrystore.solr.url", solrUrl);
+			config.setProperty(SOLR_URL, solrUrl);
 		}
+		config.setProperty(AUTH_SAML_ENABLED, samlAuthEnabled);
+
 		return config;
 	}
 

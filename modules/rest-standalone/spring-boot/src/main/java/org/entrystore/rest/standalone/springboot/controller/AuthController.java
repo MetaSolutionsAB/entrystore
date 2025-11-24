@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.standalone.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.standalone.springboot.service.AuthService;
+import org.entrystore.rest.standalone.springboot.service.SamlAuthService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
 import org.entrystore.rest.standalone.springboot.util.JsonUtil;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,10 +33,23 @@ public class AuthController {
 	private final int MAX_REQUEST_SIZE = 32 * 1024;
 	private final String signupTitle = "Sign-up";
 	private final String passwordResetTitle = "Password reset";
+
 	private final AuthService authService;
+	private final SamlAuthService samlAuthService;
+
+	@GetMapping("/auth/saml")
+	public void startSamlLogin(@RequestParam(required = false) String username,
+							   @RequestParam(required = false) String idp,
+							   @RequestParam(name = "successurl", required = false) String successUrl,
+							   HttpServletRequest request,
+							   HttpServletResponse response) throws IOException {
+
+		String idpId = samlAuthService.findIdpIdForRequest(username, idp);
+		response.sendRedirect("/saml2/authenticate/" + idpId);
+	}
 
 	@Operation(
-			summary = "Returns a basic HTML-form for login",
+			summary = "Returns a basic HTML-form for basic login",
 			description = "It is recommended to use any of the other login-resources. Performs a cookie-based login and " +
 					"should only be used for testing purposes, does not really belong to the API.")
 	@GetMapping(path = "/auth/login")

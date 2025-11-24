@@ -232,6 +232,16 @@
 			<id>Maven Central</id>
 			<url>https://repo.maven.apache.org/maven2/</url>
 		</repository>
+		<repository>
+			<!-- Repo needed for Spring-boot SAML2, this link explains why a separate repository is needed:
+			     https://shibboleth.atlassian.net/wiki/spaces/DEV/pages/1123844333/Use+of+Maven+Central     -->
+			<id>shibboleth-releases</id>
+			<name>Shibboleth Releases Repository</name>
+			<url>https://build.shibboleth.net/maven/releases/</url>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</repository>
 	</repositories>
 	<pluginRepositories>
 		<pluginRepository>

@@ -23,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -93,14 +94,14 @@ public class AppExceptionHandler {
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
-	@ExceptionHandler({UnauthorizedException.class, AuthorizationException.class})
+	@ExceptionHandler({UnauthorizedException.class, AuthorizationException.class, AuthenticationException.class})
 	public ResponseEntity<ErrorResponse> handleUnauthorizedException(RuntimeException ex,
 																	 HttpServletRequest request) {
 		log.info("UnauthorizedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.UNAUTHORIZED.value())
 				.path(request.getRequestURI())
-				.error(ex.getMessage())
+				.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
 				.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}

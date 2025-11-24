@@ -32,7 +32,7 @@ public class Settings {
 	public static String AUTH_CAS_REDIRECT_SUCCESS_URL = "entrystore.auth.cas.redirect-success.url";
 	public static String AUTH_CAS_REDIRECT_FAILURE_URL = "entrystore.auth.cas.redirect-failure.url";
 
-	public static String AUTH_SAML = "entrystore.auth.saml";
+	public static String AUTH_SAML_ENABLED = "entrystore.auth.saml.enabled";
 	public static String AUTH_SAML_ASSERTION_CONSUMER_SERVICE_URL = "entrystore.auth.saml.assertion-consumer-service.url";
 	public static String AUTH_SAML_REDIRECT_SUCCESS_URL = "entrystore.auth.saml.redirect-success.url";
 	public static String AUTH_SAML_REDIRECT_FAILURE_URL = "entrystore.auth.saml.redirect-failure.url";
@@ -89,7 +89,7 @@ public class Settings {
 	public static String AUTH_TEMP_LOCKOUT_DURATION = "entrystore.auth.temp.lockout.duration";
 	public static String AUTH_TEMP_LOCKOUT_ADMIN = "entrystore.auth.temp.lockout.admin";
 
-	public static String AUTH_HTTP_BASIC = "entrystore.auth.http-basic";
+	public static String AUTH_HTTP_BASIC_ENABLED = "entrystore.auth.http-basic.enabled";
 
 	public static String AUTH_FROM_EMAIL_DEPRECATED = "entrystore.auth.email.from";
 	public static String AUTH_BCC_EMAIL_DEPRECATED = "entrystore.auth.email.bcc";
