@@ -16,7 +16,7 @@ stepdefinitions:
         - mvn -B -ntp clean install
         - rm -rf ~/.m2/repository/org/entrystore/
       services:
-        - docker
+        - docker-large
       artifacts:
         - modules/rest-standalone/*/target/**
         - modules/rest-standalone/integration-test/target/site/jacoco-aggregate/**
@@ -87,6 +87,7 @@ pipelines:
 
 definitions:
   services:
-    docker:
+    docker-large:
       # this seems to not be multiplied with the "size" value above
       memory: 8192
+      type: docker
