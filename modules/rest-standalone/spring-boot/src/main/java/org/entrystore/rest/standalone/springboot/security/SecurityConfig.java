@@ -121,14 +121,11 @@ public class SecurityConfig {
 
 			@Override
 			public boolean matches(CharSequence rawPassword, String encodedPassword) {
-				boolean matches;
 				try {
-					matches = Password.check(rawPassword.toString(), encodedPassword);
+					return Password.check(rawPassword.toString(), encodedPassword);
 				} catch (IllegalArgumentException e) {
-					log.warn(e.getMessage());
-					matches = false;
+					return false;
 				}
-				return matches;
 			}
 		};
 	}

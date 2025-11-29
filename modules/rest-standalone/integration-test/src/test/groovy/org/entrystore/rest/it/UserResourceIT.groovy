@@ -8,6 +8,8 @@ import org.entrystore.rest.it.util.UserUtil
 //import java.time.format.DateTimeFormatter
 //import java.time.format.DateTimeFormatterBuilder
 //import java.time.temporal.ChronoField
+//import java.time.temporal.ChronoUnit
+//import java.time.LocalDateTime
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -64,7 +66,6 @@ class UserResourceIT extends BaseSpec {
 		infoRespJson['clientAcceptLanguage'] != null
 		infoRespJson['clientAcceptLanguage']['en-US'] == 0.7
 		infoRespJson['clientAcceptLanguage']['fr-CH'] == 0.9
-		// TODO authTokenExpires
 		//infoRespJson['authTokenExpires'] != null
 		//def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
 		//def now = LocalDateTime.now()

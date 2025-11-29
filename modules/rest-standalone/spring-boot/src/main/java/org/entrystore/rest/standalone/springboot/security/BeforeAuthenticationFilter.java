@@ -55,7 +55,8 @@ public class BeforeAuthenticationFilter extends OncePerRequestFilter {
 		String password = request.getParameter("auth_password");
 
 		if (username != null || password != null) {
-
+			// means someone is trying to authenticate
+			
 			if (password == null || password.isEmpty()) {
 				// TODO throw new BadRequestException("Password is missing");
 				response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Password is missing");
@@ -64,7 +65,7 @@ public class BeforeAuthenticationFilter extends OncePerRequestFilter {
 
 			try {
 				Password.check(password, Password.getSaltedHash(password));
-			} catch(IllegalArgumentException ex){
+			} catch (IllegalArgumentException ex) {
 				// TODO throw new BadRequestException(ex.getMessage());
 				response.sendError(HttpServletResponse.SC_BAD_REQUEST, ex.getMessage());
 				return;

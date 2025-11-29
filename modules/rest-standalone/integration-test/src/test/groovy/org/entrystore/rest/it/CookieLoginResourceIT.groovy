@@ -39,6 +39,19 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getResponseCode() == HTTP_ENTITY_TOO_LARGE
 	}
 
+	def "POST /auth/cookie should fail when required parameters are missing - username and password"() {
+		given:
+		def bodyParams = ''
+
+		when:
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+
+		then:
+		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
+		// TODO fix for Bad Request
+		//loginConnection.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
 	def "POST /auth/cookie should fail when required parameters are missing - username"() {
 		given:
 		def bodyParams = 'auth_password=' + password

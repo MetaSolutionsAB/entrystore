@@ -159,11 +159,6 @@ public class AppExceptionHandler {
 	@ExceptionHandler({AuthenticationCredentialsNotFoundException.class})
 	public ResponseEntity<ErrorResponse> handleNoCredentialsException(RuntimeException ex,
 																	  HttpServletRequest request) {
-
-		if ("/echo".equals(request.getRequestURI())) {
-			throw new TextareaHtmlResponseException("Guest account is not allowed to use /echo endpoint.", HttpStatus.FORBIDDEN);
-		}
-
 		log.debug("AuthenticationCredentialsNotFoundException: {}", ex.getMessage());
 
 		ErrorResponse responseBody = ErrorResponse.builder()
