@@ -388,6 +388,7 @@ class SearchIT extends BaseSpec {
 		metadata['dcterms:title'] != null
 		def dcTitle = metadata['dcterms:title'].collect()
 		dcTitle.size() == 3
+		dcTitle.find { it['@value'] == 'local metadata title explicitly in EN' } != null
 	}
 
 	def "GET /search?type=sparql&query=dc:title&syndication=rss_2.0 should return rss feed with entries having 'dc:title' predicate, defaulting to explicit English text"() {
