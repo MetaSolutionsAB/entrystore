@@ -29,7 +29,7 @@
 	<properties>
 		<java.version>21</java.version>
 		<solr.version>9.8.1</solr.version>
-		<rdf4j.version>5.1.5</rdf4j.version>
+		<rdf4j.version>5.2.1</rdf4j.version>
 		<servlet.version>3.1.0</servlet.version>
 		<xerces.version>2.12.2</xerces.version>
 		<jaxb.version>2.3.1</jaxb.version>
