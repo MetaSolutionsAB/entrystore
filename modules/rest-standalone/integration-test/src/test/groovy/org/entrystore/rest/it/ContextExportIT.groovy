@@ -1,51 +1,111 @@
 package org.entrystore.rest.it
 
+import groovy.json.JsonOutput
 import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
+import org.entrystore.rest.it.util.UserUtil
 
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ContextExportIT extends BaseSpec {
 
-	def static contextId = 'context-export-test'
+	def static contextExportId = 'context-export-test'
 	def static contextName = 'context-export-name'
 	def static entryId = 'export-entry-id'
 	def static resourceUrl = 'https://bbc.co.uk'
+	static def password = 'newPass12345'
+	static def genericCredsClone = [:]
 
 	def setupSpec() {
-		getOrCreateContext([contextId: contextId, name: contextName])
+		getOrCreateContext([contextId: contextExportId, name: contextName])
 		def params = [entrytype: 'link', resource: resourceUrl, id: entryId]
-		getOrCreateEntry(contextId, params)
+		getOrCreateEntry(contextExportId, params)
+
+		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.creds.put('userForExport@test.com', password)
+		EntryStoreClient.creds.put('userForExportAdminGroup@test.com', password)
 	}
 
-	def "GET /{context-id}/export as non-admin and for non-existing context should return a Not-Found 404 response"() {
-		given:
-		def contextId = 'non-existing-context-id'
-
-		when:
-		def connection = EntryStoreClient.getRequest('/' + contextId + '/export', '')
-
-		then:
-		connection.getResponseCode() == HTTP_NOT_FOUND
+	def cleanupSpec() {
+		EntryStoreClient.creds = genericCredsClone
 	}
 
-	def "GET /{context-id}/export as non-admin on existing context should return Unauthorized 401 response"() {
+	def "GET /{context-id}/export as guest should return Unauthorized 401"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/' + contextId + '/export', '')
+		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export', '', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "GET /{context-id}/export should return context data in Trig format inside a zip-file"() {
+	def "GET /{context-id}/export as guest for non-existing context should return Unauthorized 401"() {
+		when:
+		def contextId = 'non-existing-context-id'
+		def connection = EntryStoreClient.getRequest('/' + contextId + '/export', '', '')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /{context-id}/export as authorized but non-admin should return Forbidden 403"() {
+		given:
+		def username = 'userForExport@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
+
+		when:
+		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export', username)
+
+		then:
+		connection.getResponseCode() == HTTP_FORBIDDEN
+	}
+
+	def "GET /{context-id}/export as admin for non-existing context should return Not-Found 404"() {
+		given:
+		def contextId = 'non-existing-context-id'
+
 		when:
 		def connection = EntryStoreClient.getRequest('/' + contextId + '/export')
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "GET /{context-id}/export as member of admin group for non-existing context should return Not-Found 404"() {
+		given:
+		def username = 'userForExportAdminGroup@test.com'
+		def user = UserUtil.createUser(username)
+		def entryId = user['entryId'].toString()
+		def resourceUri = user['resourceUri'].toString()
+		def requestBody = JsonOutput.toJson([entryId])
+		assert EntryStoreClient.putRequest('/_principals/resource/_admins', requestBody).getResponseCode() == HTTP_NO_CONTENT
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
+
+		def contextId = 'non-existing-context-id'
+
+		when:
+		def connection = EntryStoreClient.getRequest('/' + contextId + '/export')
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "GET /{context-id}/export should return context data in Trig format inside a zip-file"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -63,9 +123,9 @@ class ContextExportIT extends BaseSpec {
 
 		exportedZip['triples.rdf'].contains('@prefix es: <' + NameSpaceConst.ES_TERMS + '> .')
 		exportedZip['triples.rdf'].contains('@prefix store: <' + EntryStoreClient.baseUrl + '/> .')
-		exportedZip['triples.rdf'].contains('store:' + contextId + ' a es:Context;')
-		exportedZip['triples.rdf'].contains('<' + EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId + '> es:resource store:' + contextId + ';')
-		exportedZip['triples.rdf'].contains('<' + EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId + '> a es:Link;')
+		exportedZip['triples.rdf'].contains('store:' + contextExportId + ' a es:Context;')
+		exportedZip['triples.rdf'].contains('<' + EntryStoreClient.baseUrl + '/_contexts/entry/' + contextExportId + '> es:resource store:' + contextExportId + ';')
+		exportedZip['triples.rdf'].contains('<' + EntryStoreClient.baseUrl + '/' + contextExportId + '/entry/' + entryId + '> a es:Link;')
 		exportedZip['triples.rdf'].contains(' es:resource <' + resourceUrl + '>;')
 
 		// (?m) Multiline mode
@@ -79,7 +139,7 @@ class ContextExportIT extends BaseSpec {
 
 	def "GET /{context-id}/export?rdfFormat=text/turtle should return context data in Turtle format as zip-file"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/' + contextId + '/export?rdfFormat=text/turtle')
+		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export?rdfFormat=text/turtle')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -97,8 +157,8 @@ class ContextExportIT extends BaseSpec {
 
 		exportedZip['triples.rdf'].contains('@prefix es: <' + NameSpaceConst.ES_TERMS + '> .')
 		exportedZip['triples.rdf'].contains('@prefix store: <' + EntryStoreClient.baseUrl + '/> .')
-		exportedZip['triples.rdf'].contains('store:' + contextId + ' a es:Context;')
-		exportedZip['triples.rdf'].contains('<' + EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId + '> es:resource store:' + contextId + ';')
+		exportedZip['triples.rdf'].contains('store:' + contextExportId + ' a es:Context;')
+		exportedZip['triples.rdf'].contains('<' + EntryStoreClient.baseUrl + '/_contexts/entry/' + contextExportId + '> es:resource store:' + contextExportId + ';')
 
 		exportedZip['export.properties'] =~ /(?m)^containedUsers=(.*,)?_admin\\:admin(,.*)?$/
 		exportedZip['export.properties'].contains('contextEntryURI=http\\://localhost\\:8181/store/_contexts/entry/context-export-test')
@@ -108,7 +168,7 @@ class ContextExportIT extends BaseSpec {
 
 	def "GET /{context-id}/export?rdfFormat=application/rdf+xml should return context data in RDF+XML format as zip-file"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/' + contextId + '/export?rdfFormat=application/rdf+xml')
+		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export?rdfFormat=application/rdf+xml')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -132,12 +192,12 @@ class ContextExportIT extends BaseSpec {
 
 		entryRespXml['es:Context'].size() == 1
 		def contextNode = entryRespXml['es:Context'][0] as Node
-		contextNode.attributes() == ['rdf:about': EntryStoreClient.baseUrl + '/' + contextId]
+		contextNode.attributes() == ['rdf:about': EntryStoreClient.baseUrl + '/' + contextExportId]
 		contextNode.value().size() == 0
 
 		entryRespXml['rdf:Description'].size() >= 2
 		def descriptionNode = entryRespXml['rdf:Description'][0] as Node
-		descriptionNode.attributes() == ['rdf:about': EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId]
+		descriptionNode.attributes() == ['rdf:about': EntryStoreClient.baseUrl + '/_contexts/entry/' + contextExportId]
 		descriptionNode.value().size() >= 7
 		descriptionNode['es:resource'].size() == 1
 		def entryResource = descriptionNode['es:resource'][0] as Node
@@ -146,7 +206,7 @@ class ContextExportIT extends BaseSpec {
 
 		entryRespXml['es:Link'].size() == 1
 		def entryNode = entryRespXml['es:Link'][0] as Node
-		entryNode.attributes() == ['rdf:about': EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId]
+		entryNode.attributes() == ['rdf:about': EntryStoreClient.baseUrl + '/' + contextExportId + '/entry/' + entryId]
 		entryNode.value().size() > 5
 		entryNode['es:resource'].size() == 1
 		(entryNode['es:resource'][0] as Node).attributes() == ['rdf:resource': resourceUrl]

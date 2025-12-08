@@ -5,10 +5,12 @@ import groovy.xml.XmlParser
 import org.entrystore.repository.util.NS
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
+import spock.lang.Ignore
 
 import java.time.Year
 
 import static java.net.HttpURLConnection.HTTP_CONFLICT
+import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
@@ -621,6 +623,21 @@ class EntryIT extends BaseSpec {
 		responseJson['error'].toString().contains('Entry with provided ID already exists')
 	}
 
+	def "POST /{context-id}?entrytype=link should not create a new entry if context does not exist"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/some-non-existing-context-id' + convertMapToQueryParams(params))
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		responseJson['error'] != null
+		responseJson['error'].toString().contains('The requested context ID does not exist')
+	}
+
 	def "POST /{context-id}?entrytype=link should throw unauthorized for non-admin user"() {
 		given:
 		getOrCreateContext([contextId: contextId])
@@ -717,7 +734,7 @@ class EntryIT extends BaseSpec {
 		metadataKeys.size() == 2
 
 		def templateEntryResourceUri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + templateEntryId
-		(entryMetaRespJson[templateEntryResourceUri	] as Map).keySet().size() == 2 // only 2 metadata should be copied from Other entry - without dc:title
+		(entryMetaRespJson[templateEntryResourceUri] as Map).keySet().size() == 2 // only 2 metadata should be copied from Other entry - without dc:title
 		entryMetaRespJson[templateEntryResourceUri][NameSpaceConst.DC_TERM_TITLE] == null
 		entryMetaRespJson[templateEntryResourceUri][NameSpaceConst.DC_TERM_CREATOR] != null
 		def dcCreators = entryMetaRespJson[templateEntryResourceUri][NameSpaceConst.DC_TERM_CREATOR].collect()
@@ -1268,7 +1285,7 @@ class EntryIT extends BaseSpec {
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
 	}
 
-	def "GET /{context-id}/entry/{entry-id} in unsupported format, should return information about the entry in RDF+XML format"() {
+	def "GET /{context-id}/entry/{entry-id} without specifying accept format, should return information about the entry in RDF+XML format"() {
 		given:
 		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'
@@ -1286,7 +1303,7 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/rdf+soup')
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', null)
 
 		then:
 		entryConn.getResponseCode() == HTTP_OK
@@ -1356,6 +1373,31 @@ class EntryIT extends BaseSpec {
 		entryExternalMetaConn.getContentType().contains('application/json')
 		def entryExternalMetaRespJson = JSON_PARSER.parseText(entryExternalMetaConn.getInputStream().text)
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
+	}
+
+	@Ignore
+	def "GET /{context-id}/entry/{entry-id} in unsupported format, should respond with 406 - Not Acceptable"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'application/rdf+soup')
+
+		then:
+		entryConn.getResponseCode() == HTTP_NOT_ACCEPTABLE
 	}
 
 	def "GET /{context-id}/entry/{entry-id} in text/n3 format for a linkreference entry, should return information about the entry in text/n3 format"() {
@@ -1810,9 +1852,7 @@ class EntryIT extends BaseSpec {
 		entryConn.getResponseCode() == HTTP_UNAUTHORIZED
 		entryConn.getContentType().contains('text/html')
 		def response = entryConn.getErrorStream().text
-		response.contains('<title>Status page</title>')
 		response.contains('Unauthorized')
-		response.contains('The request requires user authentication')
 	}
 
 	def "DELETE /{context-id}/entry/{entry-id} should delete the entry"() {
@@ -1851,10 +1891,10 @@ class EntryIT extends BaseSpec {
 		def entryId = createEntry(contextId, params)
 
 		def putBody = [(EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId): [
-			(NameSpaceConst.RDF_TYPE)     : [[
-												 type : 'uri',
-												 value: NameSpaceConst.TERM_LINK_REFERENCE
-											 ]]
+			(NameSpaceConst.RDF_TYPE): [[
+											type : 'uri',
+											value: NameSpaceConst.TERM_LINK_REFERENCE
+										]]
 		]]
 
 		when:

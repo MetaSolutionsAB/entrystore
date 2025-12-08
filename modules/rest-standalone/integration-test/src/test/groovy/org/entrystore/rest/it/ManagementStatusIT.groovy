@@ -7,7 +7,7 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ManagementStatusIT extends BaseSpec {
 
-	def "GET /management/status should reply with status UP, when no Accept header defined"() {
+	def "GET /management/status should reply with text status UP, when no Accept header defined"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status', null, null)
 
@@ -17,9 +17,9 @@ class ManagementStatusIT extends BaseSpec {
 		connection.getInputStream().text == 'UP'
 	}
 
-	def "GET /management/status should reply with json status UP, when json Accept header is defined"() {
+	def "GET /management/status should reply with json status 'online', when json Accept header is defined"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status', null)
+		def connection = EntryStoreClient.getRequest('/management/status', null, 'application/json')
 
 		then:
 		connection.getResponseCode() == HTTP_OK

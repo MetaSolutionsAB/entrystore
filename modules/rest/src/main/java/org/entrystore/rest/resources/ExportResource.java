@@ -35,6 +35,7 @@ import org.restlet.data.Disposition;
 import org.restlet.data.MediaType;
 import org.restlet.data.Status;
 import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.EmptyRepresentation;
 import org.restlet.representation.FileRepresentation;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Get;
@@ -69,15 +70,26 @@ public class ExportResource extends BaseResource {
 
 	@Get
 	public Representation represent() {
+
+		User authenticatedUser = getPM().getUser(getPM().getAuthenticatedUserURI());
+
 		try {
+			// guests are prohibited from using this resource
+			if (authenticatedUser == null || getPM().getGuestUser().getURI().equals(authenticatedUser.getURI())) {
+				throw new AuthorizationException(authenticatedUser, context != null ? context.getEntry() : null, AccessProperty.Administer);
+			}
+
+			getPM().setAuthenticatedUserURI(getPM().getAdminUser().getURI());
+			if (!getPM().getAdminUser().getURI().equals(authenticatedUser.getURI()) &&
+					!getPM().getAdminGroup().isMember(authenticatedUser)) {
+				getResponse().setStatus(Status.CLIENT_ERROR_FORBIDDEN);
+				return new EmptyRepresentation();
+			}
+
 			if (context == null) {
 				log.error("Unable to find context with that ID");
 				getResponse().setStatus(Status.CLIENT_ERROR_NOT_FOUND);
 				return new JsonRepresentation(JSONErrorMessages.errorEntryNotFound);
-			}
-
-			if (!getPM().getAdminUser().getURI().equals(getPM().getAuthenticatedUserURI())) {
-				throw new AuthorizationException(getPM().getUser(getPM().getAuthenticatedUserURI()), context.getEntry(), AccessProperty.Administer);
 			}
 
 			boolean metadataOnly = parameters.containsKey("metadataOnly");
@@ -92,6 +104,8 @@ public class ExportResource extends BaseResource {
 		} catch (AuthorizationException e) {
 			log.error("unauthorizedGET");
 			return unauthorizedGET();
+		} finally {
+			getPM().setAuthenticatedUserURI(authenticatedUser.getURI());
 		}
 	}
 

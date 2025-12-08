@@ -19,6 +19,7 @@ package org.entrystore.rest.resources;
 import net.tanesha.recaptcha.ReCaptchaImpl;
 import net.tanesha.recaptcha.ReCaptchaResponse;
 import org.apache.commons.lang.RandomStringUtils;
+import org.apache.commons.lang.StringUtils;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
@@ -184,7 +185,9 @@ public class PasswordResetResource extends BaseResource {
 			}
 		} else {
 			Form form = new Form(getRequest().getEntity());
-			ci.setEmail(form.getFirstValue("email", true));
+			if (StringUtils.isNotEmpty(form.getFirstValue("email", true))) {
+				ci.setEmail(form.getFirstValue("email", true));
+			}
 			password = form.getFirstValue("password", true);
 			rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
 			rcResponse = form.getFirstValue("recaptcha_response_field", true);
@@ -199,7 +202,9 @@ public class PasswordResetResource extends BaseResource {
 			return;
 		}
 
-		if (password.trim().length() < 8) {
+		password = password.trim();
+
+		if (password.length() < 8) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 			getResponse().setEntity(html.representation("The password has to consist of at least 8 characters."));
 			return;
@@ -207,7 +212,7 @@ public class PasswordResetResource extends BaseResource {
 
 		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
 			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			getResponse().setEntity(html.representation("Invalid email address: " + ci.getEmail()));
+			getResponse().setEntity(html.representation("Invalid email address: " + ci.getEmail() + "."));
 			return;
 		}
 
@@ -219,7 +224,7 @@ public class PasswordResetResource extends BaseResource {
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
 			if ((rcChallenge == null || rcResponse == null) && rcResponseV2 == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				getResponse().setEntity(html.representation("reCaptcha information missing"));
+				getResponse().setEntity(html.representation("reCaptcha information missing."));
 				return;
 			}
 			log.info("Checking reCaptcha for {}", ci.getEmail());

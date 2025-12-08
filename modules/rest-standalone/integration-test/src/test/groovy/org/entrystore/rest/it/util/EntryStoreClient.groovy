@@ -1,9 +1,12 @@
 package org.entrystore.rest.it.util
 
 import groovy.json.JsonOutput
-import org.apache.commons.lang3.StringUtils
+import org.apache.commons.lang3.Strings
+import org.eclipse.jetty.http.HttpMethod
 
+import static java.net.HttpURLConnection.HTTP_MOVED_TEMP
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.nio.charset.StandardCharsets.UTF_8
 
 class EntryStoreClient {
 
@@ -12,62 +15,97 @@ class EntryStoreClient {
 	static String origin = 'http://' + host + ':' + port
 	static String baseUrl = origin + '/store'
 
-	def static emptyJsonBody = JsonOutput.toJson([:])
+	static def emptyJsonBody = JsonOutput.toJson([:])
 
-	def static creds = ['admin': 'adminpass']
-	def static cookies = [:].withDefault { userName ->
+	static def creds = ['admin': 'adminpass']
+	static def cookies = [:].withDefault { userName ->
 		{
 			authorize(userName.toString())
 		}
 	}
 
-	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json') {
-		def connection = createConnection(path)
-		if (requestAcceptType?.trim()) {
-			connection.setRequestProperty('Accept', requestAcceptType)
-		}
-		if (asUser?.trim()) {
-			connection.setRequestProperty('Cookie', cookies[asUser].toString())
-		}
-		connection.connect()
-		return connection
+	static def cleanCookies() {
+		cookies.clear()
 	}
 
-	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
-		def connection = createConnection(path)
-		if (asUser?.trim()) {
-			connection.setRequestProperty('Cookie', cookies[asUser].toString())
+	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> extraHeaders = [:]) {
+		if (requestAcceptType?.trim()) {
+			extraHeaders['Accept'] = requestAcceptType
 		}
-		connection.setRequestMethod('POST')
-		connection.setRequestProperty('Content-Type', contentType)
-		if (body != null) {
-			connection.setDoOutput(true)
-			connection.getOutputStream().write(body.getBytes())
-			connection.connect()
-		}
-		return connection
+		return sendRequestAsStream(HttpMethod.GET, path, null, asUser, null, extraHeaders)
+	}
+
+	def static postRequest(String path, String body = emptyJsonBody, String asUser = 'admin',
+						   String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
+		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes(UTF_8))
+		return sendRequestAsStream(HttpMethod.POST, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
 	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
-		def connection = createConnection(path)
-		if (asUser?.trim()) {
-			connection.setRequestProperty('Cookie', cookies[asUser].toString())
+		return sendRequestAsStream(HttpMethod.PUT, path, new ByteArrayInputStream(body.getBytes()), asUser, contentType)
+	}
+
+	def static putRequestFile(String path, File file, String asUser = 'admin', String contentType = 'application/octet-stream') {
+		file.withInputStream { inputStream ->
+			def extraHeaders = [
+				'Content-Length'     : file.length().toString(),
+				'Content-Disposition': 'form-data; name="file"; filename="' + file.getName() + '"'
+			]
+			return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, extraHeaders)
 		}
-		connection.setRequestMethod('PUT')
-		connection.setRequestProperty('Content-Type', contentType)
-		connection.setDoOutput(true)
-		connection.getOutputStream().write(body.getBytes())
-		connection.connect()
-		return connection
+	}
+
+	def static putRequestMultiPart(String path, File file, String asUser = 'admin', Map<String, String> formData = [:]) {
+		def boundary = '----FormBoundary' + System.currentTimeMillis()
+		def contentType = 'multipart/form-data; boundary=' + boundary
+
+		def content = buildMultipartContent(file, formData, boundary)
+		def inputStream = new ByteArrayInputStream(content)
+
+		return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
+	}
+
+	def static postRequestMultiPart(String path, File file, String asUser = 'admin', Map<String, String> formData = [:]) {
+		def boundary = '----FormBoundary' + System.currentTimeMillis()
+		def contentType = 'multipart/form-data; boundary=' + boundary
+
+		def content = buildMultipartContent(file, formData, boundary)
+		def inputStream = new ByteArrayInputStream(content)
+
+		return sendRequestAsStream(HttpMethod.POST, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
 	}
 
 	def static deleteRequest(String path, String asUser = 'admin') {
+		return sendRequestAsStream(HttpMethod.DELETE, path, null, asUser, null)
+	}
+
+	def static sendRequestAsStream(HttpMethod method, String path, InputStream inputStream, String asUser,
+								   String contentType, Map<String, String> extraHeaders = [:]) {
+
 		def connection = createConnection(path)
+		connection.setRequestMethod(method.name())
+		connection.setInstanceFollowRedirects(false)
 		if (asUser?.trim()) {
 			connection.setRequestProperty('Cookie', cookies[asUser].toString())
 		}
-		connection.setRequestMethod('DELETE')
+		if (contentType?.trim()) {
+			connection.setRequestProperty('Content-Type', contentType)
+		}
+		extraHeaders?.each { key, value ->
+			connection.setRequestProperty(key, value)
+		}
+
+		if (inputStream != null) {
+			connection.setDoOutput(true)
+			if (extraHeaders.getOrDefault('Content-Length', "0").toInteger() > 8000) {
+				connection.setChunkedStreamingMode(8192)
+			}
+			connection.outputStream.withStream { output ->
+				output << inputStream
+			}
+		}
 		connection.connect()
+
 		return connection
 	}
 
@@ -81,7 +119,7 @@ class EntryStoreClient {
 		if (path.startsWith('/')) {
 			hostInfo = origin
 		} else {
-			path = StringUtils.replaceOnce(path, '/store', '')
+			path = Strings.CS.replaceOnce(path, '/store', '')
 		}
 		return (HttpURLConnection) new URI(hostInfo + path).toURL().openConnection()
 	}
@@ -91,11 +129,31 @@ class EntryStoreClient {
 		def conn = postRequest('/auth/cookie', bodyParams, null,
 			'application/x-www-form-urlencoded')
 
-		assert conn.getResponseCode() == HTTP_OK
+		assert conn.getResponseCode() in [HTTP_OK, HTTP_MOVED_TEMP]
+		// 200 when POST /auth/cookie does not redirect to default page, 302 when it does
 		def cookies = conn.getHeaderField('Set-Cookie')
 		assert cookies != null
-		assert cookies.contains('auth_token=')
+		assert cookies.contains('auth_token=') || cookies.contains('JSESSIONID=')
+		// auth_token for restlet ES, JSESSIONID for Spring-boot ES
 		return cookies
+	}
+
+	def static buildMultipartContent(File file, Map<String, String> formData, String boundary) {
+		def os = new ByteArrayOutputStream()
+
+		formData.each { name, value ->
+			os.write("--${boundary}\r\n".bytes)
+			os.write("Content-Disposition: form-data; name=\"${name}\"\r\n\r\n".bytes)
+			os.write("${value}\r\n".bytes)
+		}
+
+		os.write("--${boundary}\r\n".bytes)
+		os.write("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"\r\n".bytes)
+		os.write("Content-Type: application/octet-stream\r\n\r\n".bytes)
+		os.write(file.bytes)
+		os.write("\r\n--${boundary}--\r\n".bytes)
+
+		return os.toByteArray()
 	}
 
 }

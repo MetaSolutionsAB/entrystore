@@ -20,13 +20,18 @@ abstract class BaseSpec extends Specification {
 
 	def static log = LoggerFactory.getLogger(this.class)
 	def static JSON_PARSER = new JsonSlurper()
-
 	def static appStarted = false
 
 	def setupSpec() {
 		if (!appStarted) {
-			def args = ['-c', 'file:src/test/resources/entrystore-it.properties', '-p', EntryStoreClient.port.toString(), '--log-level', 'debug'] as String[]
-			log.info('Starting EntryStoreApp')
+			def args = ['-c', 'file:src/test/resources/entrystore-it.properties',
+						'-p', EntryStoreClient.port.toString(),
+						'--log-level', 'debug',
+						'--config-properties', 'entrystore.auth.saml=off'
+			] as String[]
+			log.info('Starting EntryStoreApp without SAML')
+			// clean cookies, in case there are some from a previous instance
+			EntryStoreClient.cleanCookies()
 			appStarted = true
 			EntryStoreApplicationStandaloneJetty.main(args)
 		} else {
@@ -102,13 +107,14 @@ abstract class BaseSpec extends Specification {
 	 * @param body key-value map which will be send in the request body, e.g. [resource: 'someText']
 	 * @return created entry ID
 	 */
-	def createEntry(String contextId, Map params, Map body = [:]) {
+	def static createEntry(String contextId, Map params, Map body = [:]) {
 		def bodyJson = JsonOutput.toJson(body)
 		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), bodyJson)
 		assert connection.getResponseCode() == HTTP_CREATED
 		assert connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		assert responseJson['entryId'] != null
+		assert responseJson['entryId'].toString().length() > 0
 		return responseJson['entryId'].toString()
 	}
 
@@ -124,7 +130,7 @@ abstract class BaseSpec extends Specification {
 			.conditionEvaluationListener(new ConditionEvaluationLogger(log::info))
 			.pollInterval(10, TimeUnit.MILLISECONDS)
 			.atMost(30, TimeUnit.SECONDS)
-			// separate supplier and predicate for better await logging
+		// separate supplier and predicate for better await logging
 			.until({ getSolrQueueSize() }, { it == 0 })
 	}
 

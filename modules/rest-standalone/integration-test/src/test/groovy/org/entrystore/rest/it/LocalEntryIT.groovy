@@ -159,9 +159,6 @@ class LocalEntryIT extends BaseSpec {
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/_principals/entry/' + entryId
 		entryRespJson['info'][entryUri] != null
-
-		// Entry type not being under /entry/{entry-id}, but under /resource/{resource-id}
-
 		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
 		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
 		entryResources.size() == 1
@@ -184,7 +181,7 @@ class LocalEntryIT extends BaseSpec {
 		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
 		resourceRespJson != null
 		resourceRespJson['customProperties'] == [:]
-		resourceRespJson['name'] == requestResourceName['name'].toLowerCase() // Why the returned username is in lower case, different than in request?
+		resourceRespJson['name'] == requestResourceName['name'].toLowerCase()
 	}
 
 	def "POST /_principals?graphtype=group should create a local entry of type Group"() {
@@ -213,9 +210,6 @@ class LocalEntryIT extends BaseSpec {
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/_principals/entry/' + entryId
 		entryRespJson['info'][entryUri] != null
-
-		// Entry type not being under /entry/{entry-id}, but under /resource/{resource-id}
-
 		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
 		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
 		entryResources.size() == 1
@@ -238,7 +232,7 @@ class LocalEntryIT extends BaseSpec {
 		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
 		resourceRespJson != null
 		resourceRespJson['children'] == []
-		resourceRespJson['name'] == requestResourceName['name'].toLowerCase() // Why the returned group name is in lower case, different than in the request?
+		resourceRespJson['name'] == requestResourceName['name'].toLowerCase()
 	}
 
 	def "POST /_contexts?graphtype=context should create a local entry of type Context"() {
@@ -268,9 +262,6 @@ class LocalEntryIT extends BaseSpec {
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/_contexts/entry/' + entryId
 		entryRespJson['info'][entryUri] != null
-
-		// Entry type not being under /entry/{entry-id}, but under /resource/{resource-id}
-
 		entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA] != null
 		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
 		entryMetadata.size() == 1
@@ -300,7 +291,6 @@ class LocalEntryIT extends BaseSpec {
 		resourceConn.getContentType().contains('application/json')
 		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
 		resourceRespJson != null
-		// resourceRespJson is empty - GET (createdResourceUri) returns empty list
 
 		// fetch created metadata
 		def metadataConn = EntryStoreClient.getRequest(entryMetadataUrl)
@@ -309,6 +299,5 @@ class LocalEntryIT extends BaseSpec {
 		def metadataRespJson = JSON_PARSER.parseText(metadataConn.getInputStream().text)
 		metadataRespJson != null
 		(metadataRespJson as Map).keySet().size() == 0
-		// metadataRespJson is empty - GET (entryMetadataUrl) returns empty map
 	}
 }

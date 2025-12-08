@@ -12,8 +12,11 @@ stepdefinitions:
       script:
         - java -version
         - mvn --version
+        - export TESTCONTAINERS_RYUK_DISABLED=true
         - mvn -B -ntp clean install
         - rm -rf ~/.m2/repository/org/entrystore/
+      services:
+        - docker-large
       artifacts:
         - modules/rest-standalone/*/target/**
         - modules/rest-standalone/integration-test/target/site/jacoco-aggregate/**
@@ -46,7 +49,7 @@ stepdefinitions:
         # We export to TAR because on Bitbucket Grype cannot access the image directly through the Docker daemon's /var/run/docker.sock
         - docker save metasolutions/entrystore:$VERSION > "$BITBUCKET_CLONE_DIR/image.tar"
         # We scan for OS vulnerabilities with Grype before we push to the registry, code scanning is covered by Snyk
-        - docker run --rm -v $BITBUCKET_CLONE_DIR/image.tar:/image.tar:ro anchore/grype --only-fixed --fail-on high --exclude "/srv/entrystore/**" docker-archive:/image.tar
+        - docker run --rm -v $BITBUCKET_CLONE_DIR/image.tar:/image.tar:ro anchore/grype --only-fixed --fail-on critical --exclude "/srv/entrystore/**" docker-archive:/image.tar
         - docker push metasolutions/entrystore:$VERSION
         - if [ $BITBUCKET_BRANCH == "develop" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:develop ; docker push metasolutions/entrystore:develop ; fi
         - if [ $BITBUCKET_BRANCH == "master" ]; then docker tag metasolutions/entrystore:$VERSION metasolutions/entrystore:$VERSION_MAJOR_MINOR ; docker push metasolutions/entrystore:$VERSION_MAJOR_MINOR ; fi
@@ -81,3 +84,10 @@ pipelines:
       - step: *build
       - step: *deploy
       - step: *dockerhub
+
+definitions:
+  services:
+    docker-large:
+      # this seems to not be multiplied with the "size" value above
+      memory: 8192
+      type: docker

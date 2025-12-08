@@ -251,7 +251,9 @@ public class SignupResource extends BaseResource {
 			Form form = new Form(getRequest().getEntity());
 			ci.setFirstName(form.getFirstValue("firstname", true));
 			ci.setLastName(form.getFirstValue("lastname", true));
-			ci.setEmail(form.getFirstValue("email", true));
+			if (StringUtils.isNotEmpty(form.getFirstValue("email", true))) {
+				ci.setEmail(form.getFirstValue("email", true));
+			}
 			password = form.getFirstValue("password", true);
 			rcChallenge = form.getFirstValue("recaptcha_challenge_field", true);
 			rcResponse = form.getFirstValue("recaptcha_response_field", true);
@@ -310,7 +312,7 @@ public class SignupResource extends BaseResource {
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
 			if ((rcChallenge == null || rcResponse == null) && rcResponseV2 == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-				getResponse().setEntity(html.representation("reCaptcha information missing"));
+				getResponse().setEntity(html.representation("reCaptcha information missing."));
 				return;
 			}
 			log.info("Checking reCaptcha for {}", ci.getEmail());
@@ -340,15 +342,15 @@ public class SignupResource extends BaseResource {
 
 		String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 		String confirmationLink = getRM().getRepositoryURL().toExternalForm() + "auth/signup?confirm=" + token;
-		log.info("Generated sign-up token for " + ci.getEmail());
+		log.info("Generated sign-up token for {}", ci.getEmail());
 
 		boolean sendSuccessful = Email.sendSignupConfirmation(getRM().getConfiguration(), ci.getFirstName() + " " + ci.getLastName(), ci.getEmail(), confirmationLink);
 		if (sendSuccessful) {
 			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
 			SignupTokenCache.getInstance().putToken(token, ci);
-			log.info("Sent confirmation request to " + ci.getEmail());
+			log.info("Sent confirmation request to {}", ci.getEmail());
 		} else {
-			log.info("Failed to send confirmation request to " + ci.getEmail());
+			log.info("Failed to send confirmation request to {}", ci.getEmail());
 			getResponse().setStatus(Status.SERVER_ERROR_INTERNAL);
 			return;
 		}
