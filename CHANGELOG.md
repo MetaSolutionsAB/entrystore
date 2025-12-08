@@ -1,5 +1,15 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 5.8.0 (2025-12-08)
+
+### Improvement
+
+[ENTRYSTORE-897](https://metasolutions.atlassian.net/browse/ENTRYSTORE-897) Remove reCaptcha dependency
+
+### Bug
+
+[ENTRYSTORE-927](https://metasolutions.atlassian.net/browse/ENTRYSTORE-927) Language strings in JSON-LD serializer are broken due to bug in underlying library
+
 ## Version 5.7.1 (2025-06-17)
 
 ### Bug
