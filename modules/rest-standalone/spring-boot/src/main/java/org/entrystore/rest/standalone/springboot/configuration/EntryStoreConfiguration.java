@@ -9,7 +9,6 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
-import org.entrystore.rest.standalone.springboot.service.auth.LoginTokenCache;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -73,11 +72,6 @@ public class EntryStoreConfiguration {
 	@Bean
 	public ContextManager createContextManager(RepositoryManager repositoryManager) {
 		return repositoryManager.getContextManager();
-	}
-
-	@Bean
-	public LoginTokenCache createLoginTokenCache(Config config) {
-		return new LoginTokenCache(config);
 	}
 
 	@Bean

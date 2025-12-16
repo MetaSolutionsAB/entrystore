@@ -36,7 +36,6 @@ import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenExcept
 import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.standalone.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.standalone.springboot.service.auth.BasicVerifier;
-import org.entrystore.rest.standalone.springboot.service.auth.LoginTokenCache;
 import org.entrystore.rest.standalone.springboot.util.Email;
 import org.entrystore.rest.standalone.springboot.util.FileUtil;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
@@ -88,7 +87,6 @@ public class ResourceService {
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final ResourceJsonSerializer resourceSerializer;
-	private final LoginTokenCache loginTokenCache;
 
 	private final RestTemplate restTemplate;
 
@@ -337,13 +335,8 @@ public class ResourceService {
 
 				User resourceUser = (User) entry.getResource();
 				if (entityJSON.has("name")) {
-					String oldName = resourceUser.getName();
 					String newName = entityJSON.getString("name");
-					if (resourceUser.setName(newName)) {
-						// the username was successfully changed, so we need to update the UserInfo
-						// objects in the LoginTokenCache to not invalidate logged in user sessions
-						loginTokenCache.renameUser(oldName, newName);
-					} else {
+					if (!resourceUser.setName(newName)) {
 						throw new BadRequestException("Name is already in use: " + newName);
 					}
 				}
@@ -403,7 +396,6 @@ public class ResourceService {
 					resourceUser.setDisabled(disabled);
 					if (disabled) {
 						String userName = pm.getPrincipalName(entry.getResourceURI());
-						loginTokenCache.removeTokens(userName);
 					}
 				}
 				if (entityJSON.has("customProperties")) {

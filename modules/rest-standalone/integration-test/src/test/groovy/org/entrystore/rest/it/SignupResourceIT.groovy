@@ -5,7 +5,6 @@ import groovy.json.JsonOutput
 import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import spock.lang.Ignore
 
 import javax.mail.internet.InternetAddress
 
@@ -613,7 +612,7 @@ class SignupResourceIT extends BaseSpec {
 			urlsuccess        : urlSuccess,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -650,20 +649,21 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getURL().toString() == 'http://localhost:8181/auth/signup?confirm=' + token
 	}
 
-	// not sure how to invoke 500 server error
-	@Ignore
+	// TODO not sure how to invoke 500 server error, maybe blacklisted user?
 	def "GET /auth/signup should not confirm user signup and redirect to failure url"() {
 		given:
+		def username = 'userSignupFailureUrl@test.com'
+		UserUtil.createUser(username)
 		def urlfailure = "http://localhost:8181/123"
 		def requestBody = JsonOutput.toJson([
 			firstname         : firstName,
 			lastname          : lastName,
-			email             : 'userSignupFailureUrl@test.com',
+			email             : username,
 			password          : newPassword,
 			urlfailure        : urlfailure,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -672,8 +672,10 @@ class SignupResourceIT extends BaseSpec {
 		def confirmConn = EntryStoreClient.getRequest('/auth/signup?confirm=' + token)
 
 		then:
-		confirmConn.getHeaderField('Location') == null
-		confirmConn.getURL().toString() == urlfailure
+		confirmConn.getHeaderField('Location') == urlfailure
+		// TODO fix for bottom lines through ExceptionHandlers in the SignupService
+		//confirmConn.getHeaderField('Location') == null
+		//confirmConn.getURL().toString() == urlfailure
 	}
 
 	def "POST /auth/signup should confirm creating new user with custom properties and new homecontext after signing up with a valid token"() {

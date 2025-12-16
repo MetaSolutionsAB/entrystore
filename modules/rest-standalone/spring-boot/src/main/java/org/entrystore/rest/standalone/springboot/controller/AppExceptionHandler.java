@@ -23,8 +23,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -58,7 +60,7 @@ public class AppExceptionHandler {
 				.build();
 	}
 
-	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class, ValidationException.class})
+	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class, ValidationException.class, UsernameNotFoundException.class	})
 	public ResponseEntity<ErrorResponse> handleBadRequestException(RuntimeException ex,
 																   HttpServletRequest request) {
 		log.debug("BadRequestException: {}", ex.getMessage());
@@ -146,6 +148,19 @@ public class AppExceptionHandler {
 	public ResponseEntity<ErrorResponse> handleForbiddenException(RuntimeException ex,
 																  HttpServletRequest request) {
 		log.debug("ForbiddenException: {}", ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(HttpStatus.FORBIDDEN.value())
+				.path(request.getRequestURI())
+				.error(ex.getMessage())
+				.build();
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
+	}
+
+	@ExceptionHandler({AuthenticationCredentialsNotFoundException.class})
+	public ResponseEntity<ErrorResponse> handleNoCredentialsException(RuntimeException ex,
+																	  HttpServletRequest request) {
+		log.debug("AuthenticationCredentialsNotFoundException: {}", ex.getMessage());
+
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.FORBIDDEN.value())
 				.path(request.getRequestURI())

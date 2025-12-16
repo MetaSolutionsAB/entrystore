@@ -11,8 +11,7 @@ import java.nio.charset.StandardCharsets;
 @Service
 public class EchoService {
 
-	private final static long MAX_FILE_SIZE = 10 * 1024 * 1024;        // 10MB in bytes
-
+	private final static long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
 
 	public String readFileContentsAsString(MultipartFile file) {
 
