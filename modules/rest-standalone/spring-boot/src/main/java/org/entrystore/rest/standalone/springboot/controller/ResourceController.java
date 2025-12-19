@@ -39,6 +39,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 
+import static org.entrystore.rest.standalone.springboot.util.HttpUtil.normalizeMediaType;
+
 @Slf4j
 @RestController
 @RequiredArgsConstructor
@@ -124,14 +126,7 @@ public class ResourceController {
 					"JSON or RDF. See Knowledge Base for details.")
 	@PutMapping(
 			path = "/{context-id}/resource/{entry-id}",
-			consumes = {
-					MediaType.TEXT_PLAIN_VALUE,
-					MediaType.APPLICATION_JSON_VALUE,
-					MediaType.APPLICATION_OCTET_STREAM_VALUE,
-					"application/rdf+xml", "text/n3", "text/turtle",
-					"application/trix", "application/n-triples", "application/trig",
-					"application/ld+json", "application/rdf+json"
-			})
+			consumes = "!multipart/form-data")
 	public ResponseEntity<Void> setResource(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
@@ -139,8 +134,10 @@ public class ResourceController {
 			@RequestParam(required = false) String textarea,
 			@RequestHeader("Content-Type") String contentType,
 			@RequestHeader(value = HttpHeaders.CONTENT_DISPOSITION, required = false) String contentDisposition,
-			@RequestBody byte[] body
+			@RequestBody(required = false) byte[] body
 	) {
+
+		String mediaType = normalizeMediaType(contentType);
 
 		String filename = null;
 		if (contentDisposition != null) {
@@ -148,8 +145,12 @@ public class ResourceController {
 			filename = disposition.getFilename();
 		}
 
+		if (body == null) {
+			body = new byte[0];
+		}
+
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		CompletionState result = resourceService.setEntryResource(entry, body, contentType, mimeType, textarea != null, filename);
+		CompletionState result = resourceService.setEntryResource(entry, body, mediaType, mimeType, textarea != null, filename);
 
 		if (result != CompletionState.ERROR) {
 			entry.updateModificationDate();

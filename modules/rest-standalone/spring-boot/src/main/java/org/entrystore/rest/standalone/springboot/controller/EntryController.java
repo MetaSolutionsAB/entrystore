@@ -28,6 +28,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
+import static org.entrystore.rest.standalone.springboot.util.HttpUtil.determineMediaType;
+
 @Slf4j
 @RestController
 @RequiredArgsConstructor
@@ -89,15 +91,7 @@ public class EntryController {
 			@RequestBody String body
 	) {
 
-		String mediaType;
-		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to replace the space back to '+'
-		if (format != null) {
-			mediaType = format.trim().replace(' ', '+');
-		} else {
-			mediaType = contentType;
-		}
+		String mediaType = determineMediaType(format, contentType);
 
 		Entry modifiedEntry = entryService.modifyEntry(contextId, entryId, body, mediaType, applyACLtoChildren != null);
 

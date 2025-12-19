@@ -17,11 +17,11 @@ class LocalEntryIT extends BaseSpec {
 	def "POST /{context-id}?graphtype=string should create by default a local entry of type String"() {
 		given:
 		def someText = 'Some text'
-		def params = [graphtype: 'string']
+		def params = [id: 'test-string-entry-id', graphtype: 'string']
 		def body = [resource: someText]
 
 		when:
-		def entryId = createEntry(contextId, params, body)
+		def entryId = getOrCreateEntry(contextId, params, body)
 
 		then:
 		entryId.length() > 0
@@ -65,6 +65,44 @@ class LocalEntryIT extends BaseSpec {
 		// Response says content-type is JSON, but it returns a non-json String value, same string as was given in the request to create the entry
 		def resourceRespText = resourceConn.getInputStream().text
 		resourceRespText == someText
+	}
+
+	// This tests is for a bug found using js.test - entry's "resource" field is usually a json, but for String entry it is just a String,
+	// for which when we call @JsonRawValue (needed for json values) turns "resource" into invalid json, e.g. {"resource": Some text}, which should be {"resource": "Some text"}
+	def "GET /{context-id}/entry/{entry-id}?includeAll for a string entry should return correct entry resource string"() {
+		given:
+		def entryId = 'test-string-entry-id'
+		def someText = 'Some text'
+		def params = [id: entryId, graphtype: 'string']
+		def body = [resource: someText]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def conn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def entryRespJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		entryResources.size() == 1
+		entryResources[0]['type'] == 'uri'
+		entryResources[0]['value'] != null
+		def createdResourceUri = entryResources[0]['value'].toString()
+		createdResourceUri.startsWith(EntryStoreClient.baseUrl + '/' + contextId + '/resource/')
+
+		entryRespJson['info'][createdResourceUri] != null
+		entryRespJson['info'][createdResourceUri][NameSpaceConst.RDF_TYPE] != null
+		def resourceTypes = entryRespJson['info'][createdResourceUri][NameSpaceConst.RDF_TYPE].collect()
+		resourceTypes.size() == 1
+		resourceTypes[0]['type'] == 'uri'
+		resourceTypes[0]['value'] == NameSpaceConst.TERM_STRING
 	}
 
 	def "POST /{context-id}?graphtype=list should create by default a local entry of type List"() {
