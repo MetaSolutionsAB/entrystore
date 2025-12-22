@@ -220,7 +220,7 @@ class SamlLoginIT extends BaseSpec {
 		spCallbackConn.getResponseCode() in [302, 303, 307]
 		def successloginRedirUrl = spCallbackConn.getHeaderField('Location')
 		successloginRedirUrl != null
-		successloginRedirUrl == '/management/status'
+		successloginRedirUrl == 'http://localhost:8181/GREAT-SUCCESS/'
 		// Check if we got an auth cookie from EntryStore
 		def spCookies = spCallbackConn.getHeaderFields()['Set-Cookie']
 		spCookies != null

@@ -7,10 +7,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.standalone.springboot.model.api.SignupRequestBody;
+import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.service.AuthService;
 import org.entrystore.rest.standalone.springboot.service.SamlAuthService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
 import org.entrystore.rest.standalone.springboot.util.JsonUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
@@ -20,8 +22,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -34,18 +36,36 @@ public class AuthController {
 	private final String signupTitle = "Sign-up";
 	private final String passwordResetTitle = "Password reset";
 
+	@Value("${app.security.saml.enabled:false}")
+	private boolean isSamlAuthEnabled;
+
 	private final AuthService authService;
 	private final SamlAuthService samlAuthService;
 
+	// Endpoint initiates SAML authentication by redirecting to the IdP for authentication
 	@GetMapping("/auth/saml")
-	public void startSamlLogin(@RequestParam(required = false) String username,
-							   @RequestParam(required = false) String idp,
-							   @RequestParam(name = "successurl", required = false) String successUrl,
-							   HttpServletRequest request,
-							   HttpServletResponse response) throws IOException {
+	public String startSamlLogin(@RequestParam(required = false) String username,
+								 @RequestParam(required = false) String idp,
+								 @RequestParam(name = "successurl", required = false) String successUrl,
+								 @RequestParam(name = "failureurl", required = false) String failureUrl,
+								 RedirectAttributes redirectAttributes) {
+
+		if (!isSamlAuthEnabled) {
+			throw new EntityNotFoundException("Not Found");
+		}
+
+		if (successUrl != null && samlAuthService.isValidRedirectUrl(successUrl)) {
+			redirectAttributes.addAttribute("successurl", successUrl);
+		}
+
+		if (failureUrl != null && samlAuthService.isValidRedirectUrl(failureUrl)) {
+			redirectAttributes.addAttribute("failureurl", failureUrl);
+		}
 
 		String idpId = samlAuthService.findIdpIdForRequest(username, idp);
-		response.sendRedirect("/saml2/authenticate/" + idpId);
+		redirectAttributes.addAttribute("idpId", idpId);
+
+		return "redirect:/saml2/authenticate/{idpId}";
 	}
 
 	@Operation(
@@ -157,7 +177,7 @@ public class AuthController {
 	public String signupViaForm(
 			HttpServletRequest request,
 			Model model,
-			@RequestParam Map<String,String> parameters) {
+			@RequestParam Map<String, String> parameters) {
 
 		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 

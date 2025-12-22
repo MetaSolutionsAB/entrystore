@@ -3,10 +3,13 @@ package org.entrystore.rest.standalone.springboot.security;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.standalone.springboot.model.auth.AuthState;
 import org.entrystore.rest.standalone.springboot.model.auth.UserAuthRole;
+import org.entrystore.rest.standalone.springboot.service.auth.SamlAuthStateCache;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -14,11 +17,17 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
+import org.springframework.security.saml2.provider.service.web.DefaultRelyingPartyRegistrationResolver;
+import org.springframework.security.saml2.provider.service.web.authentication.OpenSaml4AuthenticationRequestResolver;
+import org.springframework.security.saml2.provider.service.web.authentication.Saml2AuthenticationRequestResolver;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
+
+import java.util.Optional;
 
 @Slf4j
 @EnableMethodSecurity
@@ -28,10 +37,14 @@ public class SecurityConfig {
 
 	private final BeforeAuthenticationFilter beforeAuthenticationFilter;
 	private final PostAuthenticationFilter postAuthenticationFilter;
-	private final SamlLoginSuccessHandler successHandler;
 	private final HandlerExceptionResolver handlerExceptionResolver;
 	private final ESAuthenticationFailureHandler authenticationFailureHandler;
 	private final ESAuthenticationSuccessHandler authenticationSuccessHandler;
+
+	// SAML-auth related beans
+	private final SamlLoginSuccessHandler successHandler;
+	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
+	private final SamlAuthStateCache samlAuthStateCache;
 
 	private boolean basicAuthEnabled;
 	private boolean samlAuthEnabled;
@@ -94,6 +107,7 @@ public class SecurityConfig {
 
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
+					.authenticationRequestResolver(createCustomResolver())
 					.successHandler(successHandler));
 		} else {
 			log.info("SAML Auth Disabled");
@@ -128,5 +142,32 @@ public class SecurityConfig {
 				}
 			}
 		};
+	}
+
+	private Saml2AuthenticationRequestResolver createCustomResolver() {
+
+		if (repo.isEmpty()) {
+			throw new RuntimeException("RelyingPartyRegistrationRepository was not injected - missing SAML2 autoconfiguration?");
+		}
+
+		var registrationResolver = new DefaultRelyingPartyRegistrationResolver(repo.get());
+		var resolver = new OpenSaml4AuthenticationRequestResolver(registrationResolver);
+
+		resolver.setRelayStateResolver(request -> {
+
+			String relayStateToken = RandomStringUtils.secure().nextAlphanumeric(16);
+
+			String successUrl = request.getParameter("successurl");
+			String failureUrl = request.getParameter("failureurl");
+
+			if (successUrl != null || failureUrl != null) {
+				AuthState authState = new AuthState(successUrl, failureUrl);
+				samlAuthStateCache.storeAuthState(relayStateToken, authState);
+			}
+
+			return relayStateToken;
+		});
+
+		return resolver;
 	}
 }
