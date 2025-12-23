@@ -8,11 +8,13 @@ import org.springframework.security.core.userdetails.UserDetails;
 public class ESUserDetails extends org.springframework.security.core.userdetails.User {
 
 	private final User esUser;
+	//private final LoginInfo userInfo;
 
 	public ESUserDetails(UserDetails userDt, User esUser) {
 
 		super(userDt.getUsername(), userDt.getPassword(), userDt.isEnabled(), userDt.isAccountNonExpired(),
 			userDt.isCredentialsNonExpired(), userDt.isAccountNonLocked(), userDt.getAuthorities());
 		this.esUser = esUser;
+		//this.userInfo = new LoginInfo(LocalDateTime.now(), );
 	}
 }

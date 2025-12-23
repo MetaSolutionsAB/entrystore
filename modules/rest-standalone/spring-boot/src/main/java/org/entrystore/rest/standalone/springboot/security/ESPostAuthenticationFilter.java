@@ -25,7 +25,7 @@ import java.io.IOException;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class PostAuthenticationFilter extends OncePerRequestFilter {
+public class ESPostAuthenticationFilter extends OncePerRequestFilter {
 
 	private final PrincipalManager pm;
 	private final ESUserDetailsService userDetailsService;
@@ -49,7 +49,6 @@ public class PostAuthenticationFilter extends OncePerRequestFilter {
 					throw new ForbiddenException("Authenticated SAML user '" + username + "' not found in EntryStore");
 				}
 			} else if (auth.getPrincipal() instanceof ESUserDetails esUser && esUser.getEsUser() != null) {
-				// Cookie has been verified and user is authenticated
 				pm.setAuthenticatedUserURI(esUser.getEsUser().getURI());
 			} else {
 				log.warn("User Authenticated in Spring-boot, but has invalid principal type: {}", auth.getPrincipal());

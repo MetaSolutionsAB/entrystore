@@ -222,13 +222,12 @@ class SamlLoginIT extends BaseSpec {
 		successloginRedirUrl != null
 		successloginRedirUrl == 'http://localhost:8181/GREAT-SUCCESS/'
 		// Check if we got an auth cookie from EntryStore
-		def spCookies = spCallbackConn.getHeaderFields()['Set-Cookie']
-		spCookies != null
-		spCookies.any { it.contains('auth_token=') || it.contains('JSESSIONID=') }
+		def spCookie = spCallbackConn.getHeaderField('Set-Cookie')
+		spCookie != null
+		spCookie.contains('auth_token=')
 
-		// Query Entrystore using the new cookie - should return info about the new testuser
-		def currentlyLoggedInUserConn = EntryStoreClient.getRequest('/auth/user',
-			null, null, [Cookie: spCookies.join('; ')])
+		// Query Entrystore using the new cookie - should return info about the new User 'testuserrr'
+		def currentlyLoggedInUserConn = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: spCookie])
 		currentlyLoggedInUserConn.getResponseCode() == HTTP_OK
 		currentlyLoggedInUserConn.getContentType().contains('application/json')
 		def userJson = JSON_PARSER.parseText(currentlyLoggedInUserConn.getInputStream().text)

@@ -5,13 +5,14 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
 
+import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
+
 //import java.time.format.DateTimeFormatter
 //import java.time.format.DateTimeFormatterBuilder
 //import java.time.temporal.ChronoField
 //import java.time.temporal.ChronoUnit
 //import java.time.LocalDateTime
 
-import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
@@ -59,6 +60,7 @@ class UserResourceIT extends BaseSpec {
 		def info = EntryStoreClient.getRequest('/auth/user', username, null, languages)
 
 		then:
+		info.getResponseCode() == HTTP_OK
 		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
 		infoRespJson['id'] == entryId
 		infoRespJson['user'] == username.toLowerCase()
@@ -92,6 +94,7 @@ class UserResourceIT extends BaseSpec {
 		def info = EntryStoreClient.getRequest('/auth/user', username)
 
 		then:
+		info.getResponseCode() == HTTP_OK
 		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
 		infoRespJson['homecontext'] != null
 	}

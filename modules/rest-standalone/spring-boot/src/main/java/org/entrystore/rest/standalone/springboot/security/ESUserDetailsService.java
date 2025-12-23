@@ -2,6 +2,7 @@ package org.entrystore.rest.standalone.springboot.security;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.text.RandomStringGenerator;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
@@ -14,6 +15,9 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+
+import static org.apache.commons.text.CharacterPredicates.DIGITS;
+import static org.apache.commons.text.CharacterPredicates.LETTERS;
 
 /**
  * ESUserDetailsService is a Spring Security {@link UserDetailsService} implementation
@@ -45,21 +49,20 @@ public class ESUserDetailsService implements UserDetailsService {
 
 	private final PrincipalManager pm;
 	private final UserService userService;
+	private final RandomStringGenerator generator = new RandomStringGenerator.Builder()
+			.withinRange('0', 'z')
+			.filteredBy(LETTERS, DIGITS)
+			.get();
 
 	@Override
-	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+	public ESUserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 
 		final URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			Entry userEntry = pm.getPrincipalEntry(username);
-			if (userEntry != null && GraphType.User.equals(userEntry.getGraphType())) {
-				User user = ((User) userEntry.getResource());
-				if (user.getSaltedHashedSecret() != null) {
-					return mapESUserToUserDetails(user);
-				} else {
-					log.error("No secret found for user: '{}'", username);
-				}
+			if (userEntry != null && userEntry.getResource() != null && GraphType.User.equals(userEntry.getGraphType())) {
+				return mapESUserToUserDetails(((User) userEntry.getResource()));
 			} else {
 				log.info("User Entry not found for username: '{}'", username);
 			}
@@ -94,11 +97,13 @@ public class ESUserDetailsService implements UserDetailsService {
 		return null;
 	}
 
-	private UserDetails mapESUserToUserDetails(User user) {
+	private ESUserDetails mapESUserToUserDetails(User user) {
+
+		String password = user.getSaltedHashedSecret() != null ? user.getSaltedHashedSecret() : generator.generate(16);
 
 		UserDetails userDetails = org.springframework.security.core.userdetails.User
 				.withUsername(user.getName())
-				.password(user.getSaltedHashedSecret())
+				.password(password)
 				.disabled(user.isDisabled())
 				.roles(userService.isAdmin(user) ? UserAuthRole.ADMIN.name() : UserAuthRole.USER.name())
 				.build();

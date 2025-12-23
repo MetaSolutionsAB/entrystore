@@ -26,7 +26,7 @@ import java.util.Objects;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class BeforeAuthenticationFilter extends OncePerRequestFilter {
+public class ESBeforeAuthenticationFilter extends OncePerRequestFilter {
 
 	private final Config config;
 	private static List<String> passwordLoginWhitelist;

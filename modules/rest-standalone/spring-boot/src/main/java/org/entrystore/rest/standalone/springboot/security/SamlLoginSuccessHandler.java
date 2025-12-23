@@ -97,8 +97,6 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 			}
 
 			if (esUser != null && !BasicVerifier.isUserDisabled(principalManager, esUser)) {
-				// Don't think we need the below line. Auth-token is stored in the user session by Spring-boot
-				// new CookieVerifier(app, getRM()).createAuthToken(userName, null, getRequest(), getResponse());
 
 				if (cachedAuthState != null && cachedAuthState.successUrl() != null) {
 					log.debug("Redirecting to custom success URL: {}", cachedAuthState.successUrl());

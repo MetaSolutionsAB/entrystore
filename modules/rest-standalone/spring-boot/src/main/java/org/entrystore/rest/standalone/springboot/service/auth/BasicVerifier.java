@@ -8,7 +8,6 @@ import org.entrystore.User;
 
 import java.net.URI;
 
-
 /**
  * Does a simple lookup for the secret of a principal.
  *
@@ -35,24 +34,6 @@ public class BasicVerifier {
 		}
 
 		return null;
-	}
-
-	public static boolean userExists(PrincipalManager pm, String userName) {
-		if (userName == null) {
-			return false;
-		}
-
-		URI currentUser = pm.getAuthenticatedUserURI();
-		try {
-			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			Entry userEntry = pm.getPrincipalEntry(userName);
-			if (userEntry != null) {
-				return true;
-			}
-		} finally {
-			pm.setAuthenticatedUserURI(currentUser);
-		}
-		return false;
 	}
 
 	public static boolean isUserDisabled(PrincipalManager pm, User user) {

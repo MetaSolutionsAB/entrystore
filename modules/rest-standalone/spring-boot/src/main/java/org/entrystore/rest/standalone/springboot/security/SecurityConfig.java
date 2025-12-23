@@ -1,6 +1,7 @@
 package org.entrystore.rest.standalone.springboot.security;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -12,10 +13,12 @@ import org.entrystore.rest.standalone.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.standalone.springboot.service.auth.SamlAuthStateCache;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.RequestCacheConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.web.DefaultRelyingPartyRegistrationResolver;
@@ -25,18 +28,21 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.util.Optional;
 
 @Slf4j
+@EnableWebSecurity
 @EnableMethodSecurity
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-	private final BeforeAuthenticationFilter beforeAuthenticationFilter;
-	private final PostAuthenticationFilter postAuthenticationFilter;
+	private final CookieSecurityContextRepository cookieSecurityContextRepository;
+	private final ESBeforeAuthenticationFilter beforeAuthenticationFilter;
+	private final ESPostAuthenticationFilter postAuthenticationFilter;
 	private final HandlerExceptionResolver handlerExceptionResolver;
 	private final ESAuthenticationFailureHandler authenticationFailureHandler;
 	private final ESAuthenticationSuccessHandler authenticationSuccessHandler;
@@ -46,14 +52,12 @@ public class SecurityConfig {
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlAuthStateCache samlAuthStateCache;
 
-	private boolean basicAuthEnabled;
 	private boolean samlAuthEnabled;
 
 	private final Config config;
 
 	@PostConstruct
 	public void init() {
-		basicAuthEnabled = config.getBoolean(Settings.AUTH_HTTP_BASIC_ENABLED, false);
 		samlAuthEnabled = config.getBoolean(Settings.AUTH_SAML_ENABLED, false);
 	}
 
@@ -62,9 +66,13 @@ public class SecurityConfig {
 
 		http
 				.csrf(AbstractHttpConfigurer::disable)
+				.requestCache(RequestCacheConfigurer::disable)
+				// disable JSESSIONID default session cookie
+				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+				.securityContext(context -> context.securityContextRepository(cookieSecurityContextRepository))
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers("/error").permitAll()
-						.requestMatchers("/echo").permitAll() // needs textarea response, otherwise default Spring-boot Unauthorized json response is returned
+						.requestMatchers("/echo").permitAll() // needs textarea response, otherwise default Spring-boot Unauthorized JSON response is returned
 						.requestMatchers("/auth/login", "/auth/signup", "/auth/pwreset", "/auth/saml").permitAll()
 						.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs*/**").permitAll()
 						.requestMatchers("/management/status").permitAll()
@@ -83,41 +91,44 @@ public class SecurityConfig {
 				)
 				.logout(logout -> logout
 						.logoutUrl("/auth/logout")
+						.invalidateHttpSession(true)
+						.clearAuthentication(true)
+						.deleteCookies("auth_token")
+						.logoutSuccessHandler(logoutSuccessHandler())
 						.permitAll())
 				.addFilterBefore(beforeAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 				.addFilterAfter(postAuthenticationFilter, AnonymousAuthenticationFilter.class)
 				// below disables the auto redirect to login page when user is not authenticated, instead reply with 401
 				.exceptionHandling(e -> e
-						.authenticationEntryPoint(customEntryPoint())
+						.authenticationEntryPoint(authenticationEntryPoint())
 				);
 
-		if (basicAuthEnabled) {
-			log.info("Basic Auth Enabled");
-			http.httpBasic(Customizer.withDefaults());
-		} else {
-			log.info("Basic Auth Disabled");
-		}
+		// below modifies the login success handler, to set the redirect URL param name
+		successHandler.setTargetUrlParameter("successurl");
+		successHandler.setDefaultTargetUrl("/management/status");
 
+		log.info("SAML Auth {}", samlAuthEnabled ? "Enabled" : "Disabled");
 		if (samlAuthEnabled) {
-			log.info("SAML Auth Enabled");
-
-			// below modifies the login success handler, to set the redirect URL param name
-			successHandler.setTargetUrlParameter("successurl");
-			successHandler.setDefaultTargetUrl("/management/status");
-
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
 					.authenticationRequestResolver(createCustomResolver())
 					.successHandler(successHandler));
-		} else {
-			log.info("SAML Auth Disabled");
 		}
 
 		return http.build();
 	}
 
 	@Bean
-	public AuthenticationEntryPoint customEntryPoint() {
+	public LogoutSuccessHandler logoutSuccessHandler() {
+		return (request, response, authentication) -> {
+			response.setStatus(HttpServletResponse.SC_OK);
+			response.setContentType("text/html;charset=utf-8");
+			response.getWriter().write("Logout successful");
+		};
+	}
+
+	@Bean
+	public AuthenticationEntryPoint authenticationEntryPoint() {
 		return (request, response, authException) -> {
 			// Delegate the exception to global Exception handler
 			handlerExceptionResolver.resolveException(request, response, null, authException);

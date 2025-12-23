@@ -56,6 +56,7 @@ public class Settings {
 	public static String AUTH_SAML_LEGACY_REDIRECT_SUCCESS_URL = "entrystore.auth.saml.redirect-success.url";
 	public static String AUTH_SAML_LEGACY_REDIRECT_FAILURE_URL = "entrystore.auth.saml.redirect-failure.url";
 
+	public static String AUTH_COOKIE_SECRET = "entrystore.auth.cookie.secret";
 	public static String AUTH_COOKIE_PATH = "entrystore.auth.cookie.path";
 	public static String AUTH_COOKIE_HTTPONLY = "entrystore.auth.cookie.httponly";
 	public static String AUTH_COOKIE_SECURE = "entrystore.auth.cookie.secure";
@@ -63,7 +64,6 @@ public class Settings {
 	public static String AUTH_COOKIE_MAX_AGE = "entrystore.auth.cookie.max-age";
 	public static String AUTH_COOKIE_REFRESH_EXPIRATION_ON_ACCESS = "entrystore.auth.cookie.refresh-expiration-on-access";
 	public static String AUTH_COOKIE_INVALID_TOKEN_ERROR = "entrystore.auth.cookie.invalid-token-error";
-	@Deprecated public static String AUTH_TOKEN_MAX_AGE = "entrystore.auth.cookie.max-age";
 
 	public static String AUTH_PASSWORD = "entrystore.auth.password";
 	public static String AUTH_PASSWORD_WHITELIST = "entrystore.auth.password.whitelist";
