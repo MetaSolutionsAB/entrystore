@@ -67,7 +67,8 @@ class ContextImportIT extends BaseSpec {
 		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
 
 		when:
-		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', '', username)
+		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', '[]',
+			username, 'application/zip')
 
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN

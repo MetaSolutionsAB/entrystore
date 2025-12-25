@@ -31,7 +31,7 @@ class UserUtil {
 
 	def static setUserPassword(String resourceUri, String password = 'newPass12345') {
 		def requestBody = JsonOutput.toJson([
-				password: password
+			password: password
 		])
 		def setPasswordConn = EntryStoreClient.putRequest(resourceUri, requestBody)
 		assert setPasswordConn.getResponseCode() == HTTP_NO_CONTENT

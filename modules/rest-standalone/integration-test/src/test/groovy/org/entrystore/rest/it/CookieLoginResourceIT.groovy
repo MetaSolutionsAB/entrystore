@@ -4,7 +4,6 @@ import groovy.json.JsonOutput
 import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import spock.lang.Ignore
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
@@ -21,6 +20,8 @@ class CookieLoginResourceIT extends BaseSpec {
 	def setupSpec() {
 		genericCredsClone = EntryStoreClient.creds.clone()
 		EntryStoreClient.creds.put('userForLogin@test.com', password)
+		EntryStoreClient.creds.put('userForLoginExpired@test.com', password)
+		EntryStoreClient.creds.put('userForLoginWithCookie@test.com', password)
 	}
 
 	def cleanupSpec() {
@@ -33,7 +34,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_ENTITY_TOO_LARGE
@@ -55,7 +56,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_password=' + password
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_BAD_REQUEST
@@ -67,7 +68,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_BAD_REQUEST
@@ -80,7 +81,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 
 		when:
-		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded')
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		loginConnection.getResponseCode() == HTTP_BAD_REQUEST
@@ -105,23 +106,47 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getInputStream().text.contains('Login successful.')
 	}
 
-	@Ignore
+	def "POST /auth/cookie should log in the user with cookie"() {
+		given:
+		def username = 'userForLoginWithCookie@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		assert cookie != null
+		assert cookie.contains('auth_token=')
+
+		when:
+		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then:
+		info.getResponseCode() == HTTP_OK
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		infoRespJson['user'] == username.toLowerCase()
+	}
+
 	def "POST /auth/cookie should not log in the user after cookie maxAge is set in request and expired"() {
 		given:
-		def username = 'userForLogin@test.com'
+		def username = 'userForLoginExpired@test.com'
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=1'
-		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, "", 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		assert cookie != null
+		assert cookie.contains('auth_token=')
 		Thread.sleep(2000)
 
 		when:
-		def detailsConn = EntryStoreClient.createConnection('/auth/user')
-		detailsConn.connect()
+		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
 
 		then:
-		detailsConn.getResponseCode() == HTTP_UNAUTHORIZED
+		info.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "POST /auth/cookie should not log in the blacklisted user"() {
