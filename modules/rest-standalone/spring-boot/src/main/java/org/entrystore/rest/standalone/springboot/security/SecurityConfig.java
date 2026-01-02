@@ -103,16 +103,17 @@ public class SecurityConfig {
 						.authenticationEntryPoint(authenticationEntryPoint())
 				);
 
-		// below modifies the login success handler, to set the redirect URL param name
-		successHandler.setTargetUrlParameter("successurl");
-		successHandler.setDefaultTargetUrl("/management/status");
-
-		log.info("SAML Auth {}", samlAuthEnabled ? "Enabled" : "Disabled");
 		if (samlAuthEnabled) {
+			log.info("SAML Auth Enabled");
+			// below modifies the login success handler, to set the redirect URL param name
+			successHandler.setTargetUrlParameter("successurl");
+			successHandler.setDefaultTargetUrl("/management/status");
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
 					.authenticationRequestResolver(createCustomResolver())
 					.successHandler(successHandler));
+		} else {
+			log.info("SAML Auth Disabled");
 		}
 
 		return http.build();
