@@ -613,7 +613,7 @@ class SignupResourceIT extends BaseSpec {
 			urlsuccess        : urlSuccess,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -654,16 +654,18 @@ class SignupResourceIT extends BaseSpec {
 	@Ignore
 	def "GET /auth/signup should not confirm user signup and redirect to failure url"() {
 		given:
+		def username = 'userSignupFailureUrl@test.com'
+		UserUtil.createUser(username)
 		def urlfailure = "http://localhost:8181/123"
 		def requestBody = JsonOutput.toJson([
 			firstname         : firstName,
 			lastname          : lastName,
-			email             : 'userSignupFailureUrl@test.com',
+			email             : username,
 			password          : newPassword,
 			urlfailure        : urlfailure,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)

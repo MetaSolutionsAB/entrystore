@@ -4,7 +4,6 @@ import groovy.json.JsonOutput
 import org.apache.commons.lang3.Strings
 import org.eclipse.jetty.http.HttpMethod
 
-import static java.net.HttpURLConnection.HTTP_MOVED_TEMP
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.nio.charset.StandardCharsets.UTF_8
 
@@ -129,12 +128,10 @@ class EntryStoreClient {
 		def conn = postRequest('/auth/cookie', bodyParams, null,
 			'application/x-www-form-urlencoded')
 
-		assert conn.getResponseCode() in [HTTP_OK, HTTP_MOVED_TEMP]
-		// 200 when POST /auth/cookie does not redirect to default page, 302 when it does
+		assert conn.getResponseCode() == HTTP_OK
 		def cookies = conn.getHeaderField('Set-Cookie')
 		assert cookies != null
-		assert cookies.contains('auth_token=') || cookies.contains('JSESSIONID=')
-		// auth_token for restlet ES, JSESSIONID for Spring-boot ES
+		assert cookies.contains('auth_token')
 		return cookies
 	}
 

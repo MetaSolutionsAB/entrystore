@@ -59,6 +59,7 @@ class UserResourceIT extends BaseSpec {
 		def info = EntryStoreClient.getRequest('/auth/user', username, null, languages)
 
 		then:
+		info.getResponseCode() == HTTP_OK
 		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
 		infoRespJson['id'] == entryId
 		infoRespJson['user'] == username.toLowerCase()
@@ -69,7 +70,7 @@ class UserResourceIT extends BaseSpec {
 		infoRespJson['authTokenExpires'] != null
 		def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
 		def now = LocalDateTime.now()
-		ChronoUnit.HOURS.between(now, authTokenExpires) == 23
+		ChronoUnit.HOURS.between(now, authTokenExpires) == 1
 	}
 
 	def "GET /auth/user should return info about currently logged-in user including homecontext"() {
@@ -92,6 +93,7 @@ class UserResourceIT extends BaseSpec {
 		def info = EntryStoreClient.getRequest('/auth/user', username)
 
 		then:
+		info.getResponseCode() == HTTP_OK
 		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
 		infoRespJson['homecontext'] != null
 	}

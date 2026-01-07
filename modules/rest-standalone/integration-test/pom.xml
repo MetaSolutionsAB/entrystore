@@ -25,6 +25,7 @@
 				</includes>
 			</testResource>
 		</testResources>
+
 		<plugins>
 			<plugin>
 				<groupId>org.codehaus.gmavenplus</groupId>
@@ -38,6 +39,7 @@
 					</execution>
 				</executions>
 			</plugin>
+
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-failsafe-plugin</artifactId>
@@ -51,6 +53,7 @@
 					</execution>
 				</executions>
 			</plugin>
+
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
@@ -71,6 +74,7 @@
 	</build>
 
 	<dependencies>
+
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-rest-standalone-jetty</artifactId>
@@ -89,41 +93,57 @@
 			<version>2.4-M4-groovy-4.0</version>
 			<scope>test</scope>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.groovy</groupId>
 			<artifactId>groovy-json</artifactId>
 			<version>4.0.20</version>
 			<scope>test</scope>
 		</dependency>
+
 		<dependency>
 			<groupId>org.apache.groovy</groupId>
 			<artifactId>groovy-xml</artifactId>
 			<version>4.0.20</version>
 			<scope>test</scope>
 		</dependency>
+
 		<dependency>
-			<groupId>org.awaitility</groupId>
-			<artifactId>awaitility</artifactId>
-			<version>4.2.2</version>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>solr</artifactId>
+			<version>1.18.3</version>
 			<scope>test</scope>
 		</dependency>
-		<dependency>
-			<groupId>com.icegreen</groupId>
-			<artifactId>greenmail-junit5</artifactId>
-			<version>1.6.14</version>
-			<scope>test</scope>
-		</dependency>
+
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>spock</artifactId>
 			<version>1.18.3</version>
 			<scope>test</scope>
 		</dependency>
+
 		<dependency>
 			<groupId>com.github.dasniko</groupId>
 			<artifactId>testcontainers-keycloak</artifactId>
+			<!-- newer version is based on jakarta, hence need to use this old ver -->
 			<version>2.6.0</version>
 			<scope>test</scope>
 		</dependency>
+
+		<dependency>
+			<groupId>org.awaitility</groupId>
+			<artifactId>awaitility</artifactId>
+			<version>4.2.2</version>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>com.icegreen</groupId>
+			<artifactId>greenmail</artifactId>
+			<!-- newer version is based on jakarta, hence need to use this old ver -->
+			<version>1.6.14</version>
+			<scope>test</scope>
+		</dependency>
+
 	</dependencies>
 </project>
