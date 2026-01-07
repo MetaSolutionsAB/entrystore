@@ -34,6 +34,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import static org.entrystore.rest.standalone.springboot.util.HttpUtil.determineMediaType;
+
 @Slf4j
 @RestController
 @RequiredArgsConstructor
@@ -94,15 +96,8 @@ public class MetadataController {
 			@RequestHeader("Content-Type") String contentType,
 			@RequestBody String body
 	) {
-		String mediaType;
-		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to replace the space back to '+'
-		if (format != null) {
-			mediaType = format.trim().replace(' ', '+');
-		} else {
-			mediaType = contentType;
-		}
+
+		String mediaType = determineMediaType(format, contentType);
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
@@ -123,8 +118,7 @@ public class MetadataController {
 			@PathVariable("context-id") String contextId,
 			@PathVariable("type") MetadataType metadataType,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(name = "rev", required = false) String revision
-	) {
+			@RequestParam(name = "rev", required = false) String revision) {
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		metadataService.setEntryMetadata(entry, metadataType, new LinkedHashModel(), revision);
