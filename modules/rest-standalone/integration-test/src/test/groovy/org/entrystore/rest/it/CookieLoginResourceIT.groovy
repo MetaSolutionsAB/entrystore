@@ -13,8 +13,6 @@ import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
-// NOT MIGRATED YET
-@Ignore
 class CookieLoginResourceIT extends BaseSpec {
 
 	static def password = 'newPass12345'
@@ -39,6 +37,19 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		loginConnection.getResponseCode() == HTTP_ENTITY_TOO_LARGE
+	}
+
+	def "POST /auth/cookie should fail when required parameters are missing - username and password"() {
+		given:
+		def bodyParams = ''
+
+		when:
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+
+		then:
+		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
+		// TODO fix for Bad Request
+		//loginConnection.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
 	def "POST /auth/cookie should fail when required parameters are missing - username"() {
