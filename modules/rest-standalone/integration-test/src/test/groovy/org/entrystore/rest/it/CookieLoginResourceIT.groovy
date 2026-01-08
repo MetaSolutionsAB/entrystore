@@ -120,6 +120,23 @@ class CookieLoginResourceIT extends BaseSpec {
 		def cookie = loginConnection.getHeaderField('Set-Cookie')
 		assert cookie != null
 		assert cookie.contains('auth_token=')
+		def tokenPart = cookie.substring(cookie.indexOf('auth_token=') + 11)
+		if (tokenPart.contains(';')) {
+			tokenPart = tokenPart.substring(0, tokenPart.indexOf(';'))
+		}
+		assert tokenPart.size() == 128
+		assert cookie.contains('Secure')
+		assert !cookie.contains('HttpOnly')
+		def sameSitePart = cookie.substring(cookie.indexOf('SameSite=') + 9)
+		if (sameSitePart.contains(';')) {
+			sameSitePart = sameSitePart.substring(0, sameSitePart.indexOf(';'))
+		}
+		assert sameSitePart == 'None'
+		def maxAgePart = cookie.substring(cookie.indexOf('Max-Age=') + 8)
+		if (maxAgePart.contains(';')) {
+			maxAgePart = maxAgePart.substring(0, maxAgePart.indexOf(';'))
+		}
+		assert maxAgePart == '31536000'
 
 		when:
 		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
