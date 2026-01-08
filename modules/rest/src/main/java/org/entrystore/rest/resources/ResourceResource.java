@@ -1031,7 +1031,13 @@ public class ResourceResource extends BaseResource {
 
 					if (resourceUser.setSecret(newPassword)) {
 						LoginTokenCache loginTokenCache = ((EntryStoreApplication) getApplication()).getLoginTokenCache();
-						loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
+						if (!getPM().currentUserIsAdminOrAdminGroup() ||
+								(getPM().currentUserIsAdminOrAdminGroup() && getPM().getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
+							loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
+						} else {
+							loginTokenCache.removeTokens(resourceUser.getName());
+						}
+
 						Email.sendPasswordChangeConfirmation(getRM().getConfiguration(), entry);
 					} else {
 						getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
