@@ -1,10 +1,10 @@
 package org.entrystore.rest.standalone.springboot.security;
 
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
@@ -18,7 +18,23 @@ import java.io.IOException;
 public class ESAuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
 	@Override
-	public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication auth) throws IOException, ServletException {
+	public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication auth) throws IOException {
+
+		// If auth_maxage parameter is set use it as the session max-age, instead of the default cookie config from properties
+		String maxAgeParam = request.getParameter("auth_maxage");
+		if (StringUtils.isNotEmpty(maxAgeParam)) {
+			try {
+				int customMaxAge = Integer.parseInt(maxAgeParam);
+				int defaultMaxAge = request.getServletContext().getSessionCookieConfig().getMaxAge();
+				if (customMaxAge < defaultMaxAge) {
+					// set the user input max-age only if it's lower than the default configured cookie max-age
+					request.getSession().setMaxInactiveInterval(customMaxAge);
+				}
+			} catch (NumberFormatException e) {
+				log.info("Unable to parse as Integer the 'auth_maxage' parameter value of: '{}'", maxAgeParam);
+			}
+		}
+
 		response.setStatus(HttpStatus.OK.value());
 		response.setHeader("Content-Type", "text/html");
 		response.getOutputStream().println("Login successful.");

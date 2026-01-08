@@ -1,4 +1,15 @@
-server.port: 8181
+
+server:
+  port: 8181
+  servlet:
+#    context-path: /store
+    session.cookie:
+      name: auth_token
+      http-only: true
+      secure: true
+      same-site: strict
+      max-age: 86400s
+
 
 info.app.version: @project.version@
 
