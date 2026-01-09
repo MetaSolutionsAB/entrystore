@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 import java.util.Date;
@@ -18,6 +19,45 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class HttpUtil {
 
 	private static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
+
+	/**
+	 * Determines the media type based on the provided format parameter or content type header.
+	 *
+	 * @param format The format parameter from the request, which might have '+' replaced with spaces by Spring Boot.
+	 * @param contentType The raw content-type header string from the request.
+	 * @return The determined and normalized media type string, or null if neither can be determined.
+	 */
+	public static String determineMediaType(String format, String contentType) {
+		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
+		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
+		// (+ is replaced with a space) we need to replace the space back to '+'
+		if (format != null) {
+			return format.trim().replace(' ', '+');
+		} else {
+			// content-type header often includes other data like character encoding, e.g.: 'application/json; charset=UTF-8'
+			return normalizeMediaType(contentType);
+		}
+	}
+
+	/**
+	 * Normalizes a content-type header string by parsing it and returning the type and subtype
+	 * in lowercase, e.g., "application/json". If the contentType is null or cannot be parsed,
+	 * null is returned.
+	 *
+	 * @param contentType The raw content-type header string as received in the request.
+	 * @return The normalized media type string, or null if parsing fails or input is null.
+	 */
+	public static String normalizeMediaType(String contentType) {
+		if (contentType != null) {
+			try {
+				MediaType mt = MediaType.parseMediaType(contentType);
+				return mt.getType() + "/" + mt.getSubtype();
+			} catch (IllegalArgumentException e) {
+				log.debug("Could not parse content-type header value of '{}'. Error: {}", contentType, e.getMessage());
+			}
+		}
+		return null;
+	}
 
 	/**
 	 * Creates a weak ETag string.

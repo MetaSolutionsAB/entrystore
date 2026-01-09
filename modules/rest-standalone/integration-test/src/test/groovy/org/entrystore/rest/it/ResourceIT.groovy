@@ -62,7 +62,9 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('text/plain')
-		// Response says content-type is JSON, but it returns a non-json String value, same string as was given in the request to create the entry
+		// Response says content-type is JSON, but it returns a non-json raw String value, same string as was given in the request to create the entry
+		// Shouldn't the String in the response body be in quotes with escaped chars? instead of a raw String?
+		// In Restlet it does return a raw String as well
 		def resourceRespText = resourceConn.getInputStream().text
 		resourceRespText == someText
 	}
@@ -253,6 +255,45 @@ class ResourceIT extends BaseSpec {
 		assert resourceConn.getInputStream().text == someText
 
 		def newBody = 'new String set'
+
+		when:
+		// edit created resource
+		def editResourceConn = EntryStoreClient.putRequest(resourceUri, newBody)
+
+		then:
+		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
+		def editResourceRespText = editResourceConn.getInputStream().text
+		editResourceRespText == ''
+		// fetch resource details again
+		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
+		resourceConn2.getResponseCode() == HTTP_OK
+		resourceConn2.getContentType().contains('text/plain')
+		resourceConn2.getInputStream().text == newBody
+	}
+
+	def "PUT /{context-id}/resource/{entry-id} should allow an empty String on a String-resource"() {
+		given:
+		// create local String entry
+		def someText = 'Some text 2'
+		def params = [graphtype: 'string']
+		def body = [resource: someText]
+		def entryId = createEntry(contextId, params, body)
+		assert entryId.length() > 0
+
+		// fetch URI of created resource for the String entry
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		assert entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		assert entryRespJson['info'] != null
+		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
+		// fetch resource details
+		def resourceConn = EntryStoreClient.getRequest(resourceUri)
+		assert resourceConn.getResponseCode() == HTTP_OK
+		assert resourceConn.getContentType().contains('text/plain')
+		assert resourceConn.getInputStream().text == someText
+
+		def newBody = ''
 
 		when:
 		// edit created resource
