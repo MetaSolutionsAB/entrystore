@@ -65,7 +65,7 @@ class SamlLoginIT extends BaseSpec {
 		log.info('Starting EntryStoreApp with SAML')
 		def args = [
 			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
-			'--app.security.saml.enabled=true',
+			'--entrystore.auth.saml.enabled=true',
 			'--spring.profiles.active=saml',
 			'--spring.security.saml2.relyingparty.registration.keycloak.assertingparty.metadata-uri=' + keycloakTestRealmUrl + '/descriptor'
 		] as String[]

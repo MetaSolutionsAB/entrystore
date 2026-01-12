@@ -5,53 +5,50 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.ContextManager;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
+import org.entrystore.config.Configurations;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.config.ConfigurationManager;
+import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
-import org.springframework.beans.factory.annotation.Value;
+import org.entrystore.repository.config.SortedProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.EnumerablePropertySource;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.PropertySource;
 import org.springframework.web.client.RestTemplate;
-
-import java.io.IOException;
-import java.net.URI;
-
-import static org.entrystore.repository.config.Settings.AUTH_SAML_ENABLED;
-import static org.entrystore.repository.config.Settings.SOLR_URL;
 
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class EntryStoreConfiguration {
 
-	@Value("${entrystore.solr.url}")
-	private String solrUrl;
+	private static final String ENTRYSTORE_CONFIG_PREFIX = "entrystore";
 
-	@Value("${app.security.saml.enabled:false}")
-	private boolean samlAuthEnabled;
-
-	private final EntryStorePropertiesConfiguration propertiesConfiguration;
+	private final Environment environment;
 
 	@Bean
-	public Config createEntryStoreConfiguration() throws IOException {
-		var configURI = propertiesConfiguration.configuration().path();
-		Config config;
-		if (configURI != null) {
-			log.info("Manually specified config location at {}", configURI);
-			config = new ConfigurationManager(URI.create(configURI)).getConfiguration();
-		} else {
-			log.info("No config location specified, looking within classpath");
-			config = new ConfigurationManager(ConfigurationManager.getConfigurationURI()).getConfiguration();
-		}
+	public Config createEntryStoreConfiguration() {
+		SortedProperties properties = fetchSpringPropertiesWithPrefix(ENTRYSTORE_CONFIG_PREFIX);
+		return Configurations.synchronizedConfig(new PropertiesConfiguration("EntryStore Configuration", properties));
+	}
 
-		// Pass Spring properties to ES config
-		if (solrUrl != null) {
-			config.setProperty(SOLR_URL, solrUrl);
-		}
-		config.setProperty(AUTH_SAML_ENABLED, samlAuthEnabled);
+	private SortedProperties fetchSpringPropertiesWithPrefix(String prefix) {
 
-		return config;
+		SortedProperties properties = new SortedProperties();
+		if (environment instanceof ConfigurableEnvironment configEnv) {
+			for (PropertySource<?> propertySource : configEnv.getPropertySources()) {
+				if (propertySource instanceof EnumerablePropertySource<?> enumerable) {
+					for (String key : enumerable.getPropertyNames()) {
+						if (key.startsWith(prefix)) {
+							properties.put(key, environment.getProperty(key));
+						}
+					}
+				}
+			}
+		}
+		return properties;
 	}
 
 	@Bean
