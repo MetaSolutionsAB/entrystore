@@ -132,7 +132,7 @@ public class ResourceController {
 			@PathVariable("entry-id") String entryId,
 			@RequestParam(required = false) String mimeType,
 			@RequestParam(required = false) String textarea,
-			@RequestHeader("Content-Type") String contentType,
+			@RequestHeader(value = "Content-Type", required = false) String contentType,
 			@RequestHeader(value = HttpHeaders.CONTENT_DISPOSITION, required = false) String contentDisposition,
 			@RequestBody(required = false) byte[] body
 	) {

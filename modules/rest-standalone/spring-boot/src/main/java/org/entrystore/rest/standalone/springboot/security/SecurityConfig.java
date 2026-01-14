@@ -1,6 +1,7 @@
 package org.entrystore.rest.standalone.springboot.security;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -16,6 +17,7 @@ import org.springframework.boot.web.servlet.ServletContextInitializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -65,22 +67,23 @@ public class SecurityConfig {
 	}
 
 	@Bean
-	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+	public SecurityFilterChain securityFilterChain(HttpSecurity http, SessionRegistry sessionRegistry) throws Exception {
 
 		http
 				.csrf(AbstractHttpConfigurer::disable)
 				.sessionManagement(session -> session
-						.maximumSessions(-1)
-						.sessionRegistry(sessionRegistry())
-						.expiredSessionStrategy(new ESExpiredSessionStrategy()))
+						.sessionConcurrency(concurrency -> concurrency
+								.maximumSessions(-1)
+								.sessionRegistry(sessionRegistry)
+								.expiredSessionStrategy(event ->
+										event.getResponse().sendError(HttpServletResponse.SC_UNAUTHORIZED, "Session expired")))
+						.invalidSessionStrategy((request, response) ->
+								response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Session expired or invalid"))
+				)
 				.authorizeHttpRequests(auth -> auth
-						.requestMatchers("/error").permitAll()
-						.requestMatchers("/echo").permitAll() // needs textarea response, otherwise default Spring-boot Unauthorized json response is returned
-						.requestMatchers("/auth/login", "/auth/signup", "/auth/pwreset", "/auth/saml").permitAll()
-						.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs*/**").permitAll()
-						.requestMatchers("/management/status").permitAll()
 						.requestMatchers("/management/status/extended").hasRole(UserAuthRole.ADMIN.name())
-						.anyRequest().authenticated()
+						.requestMatchers(HttpMethod.POST, "/*/import").hasRole(UserAuthRole.ADMIN.name())
+						.anyRequest().permitAll()
 				)
 				.formLogin(login -> login
 						.loginPage("/auth/login")

@@ -26,7 +26,7 @@ public class UserService {
 				principalManager.getAdminGroup().isMember(user);
 	}
 
-	public GetAuthUserResponse getUserInfo(String authToken, String locales) {
+	public GetAuthUserResponse getUserInfo(String locales) {
 
 		User user = principalManager.getUser(principalManager.getAuthenticatedUserURI());
 

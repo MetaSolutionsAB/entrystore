@@ -98,9 +98,9 @@ class ManagementStatusIT extends BaseSpec {
 		responseJson['countStats']['namedGraphCount'] != null
 	}
 
-	def "GET /management/status/extended&includeStats should reply with Unauthorized for non-admin user"() {
+	def "GET /management/status/extended?includeStats should reply with Unauthorized for non-admin user"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status/extended&includeStats', null)
+		def connection = EntryStoreClient.getRequest('/management/status/extended?includeStats', null)
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
