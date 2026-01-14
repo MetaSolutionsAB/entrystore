@@ -131,8 +131,7 @@ class EntryStoreClient {
 		assert conn.getResponseCode() == HTTP_OK
 		def cookies = conn.getHeaderField('Set-Cookie')
 		assert cookies != null
-		assert cookies.contains('JSESSIONID=')
-		// auth_token for restlet ES, JSESSIONID for Spring-boot ES
+		assert cookies.contains('auth_token')
 		return cookies
 	}
 

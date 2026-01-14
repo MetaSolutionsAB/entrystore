@@ -65,7 +65,7 @@ class SamlLoginIT extends BaseSpec {
 		log.info('Starting EntryStoreApp with SAML')
 		def args = [
 			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
-			'--app.security.saml.enabled=true',
+			'--entrystore.auth.saml.enabled=true',
 			'--spring.profiles.active=saml',
 			'--spring.security.saml2.relyingparty.registration.keycloak.assertingparty.metadata-uri=' + keycloakTestRealmUrl + '/descriptor'
 		] as String[]
@@ -92,7 +92,7 @@ class SamlLoginIT extends BaseSpec {
 		connection.getContentType().contains('text/html')
 		def backendCookies = connection.getHeaderFields()['Set-Cookie']
 		backendCookies != null
-		backendCookies.any { it.contains('JSESSIONID=') }
+		backendCookies.any { it.contains('auth_token=') }
 		// remove additional attributes of cookies
 		def backendCookieHeader = backendCookies.collect { it.split(';')[0] }.join('; ')
 		def response = connection.getInputStream().text
@@ -224,7 +224,7 @@ class SamlLoginIT extends BaseSpec {
 		// Check if we got an auth cookie from EntryStore
 		def spCookies = spCallbackConn.getHeaderFields()['Set-Cookie']
 		spCookies != null
-		spCookies.any { it.contains('auth_token=') || it.contains('JSESSIONID=') }
+		spCookies.any { it.contains('auth_token=') }
 
 		// Query Entrystore using the new cookie - should return info about the new testuser
 		def currentlyLoggedInUserConn = EntryStoreClient.getRequest('/auth/user',

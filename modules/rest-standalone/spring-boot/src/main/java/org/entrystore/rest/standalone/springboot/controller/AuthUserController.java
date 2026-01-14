@@ -22,8 +22,7 @@ public class AuthUserController {
 
 	@Operation(summary = "Provides basic information about the currently logged-in user.")
 	@GetMapping(path = "/auth/user", produces = MediaType.APPLICATION_JSON_VALUE)
-	public GetAuthUserResponse userInfo(HttpServletRequest request,
-										@CookieValue(value = "JSESSIONID") String authToken,
+	public GetAuthUserResponse userInfo(@CookieValue(value = "auth_token") String authToken,
 										@RequestHeader(defaultValue = HttpHeaders.ACCEPT_LANGUAGE, name = HttpHeaders.ACCEPT_LANGUAGE) String acceptLanguage) {
 		return userService.getUserInfo(authToken, acceptLanguage);
 	}

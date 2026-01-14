@@ -88,8 +88,18 @@ public class PropertiesConfiguration implements Config {
 	 *            configuration file).
 	 */
 	public PropertiesConfiguration(String configName) {
+		this(configName, new SortedProperties());
+	}
+
+	/**
+	 * Initializes the object with prepopulated configuration.
+	 *
+	 * @param configName Name of the configuration (appears as comment in the configuration file).
+	 * @param config Configuration with prepopulated values.
+	 */
+	public PropertiesConfiguration(String configName, SortedProperties config) {
 		this.configName = configName;
-		config = new SortedProperties();
+		this.config = config;
 		pcs = new PropertyChangeSupport(this);
 	}
 

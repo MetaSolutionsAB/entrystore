@@ -10,8 +10,12 @@ import org.entrystore.repository.security.Password;
 import org.entrystore.rest.standalone.springboot.model.auth.AuthState;
 import org.entrystore.rest.standalone.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.standalone.springboot.service.auth.SamlAuthStateCache;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.web.server.Cookie;
+import org.springframework.boot.web.servlet.ServletContextInitializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -74,7 +78,6 @@ public class SecurityConfig {
 				.formLogin(login -> login
 						.loginPage("/auth/login")
 						.loginProcessingUrl("/auth/cookie")
-						.defaultSuccessUrl("/management/status")
 						.successHandler(authenticationSuccessHandler)
 						.failureHandler(authenticationFailureHandler)
 						.usernameParameter("auth_username")
@@ -83,6 +86,7 @@ public class SecurityConfig {
 				)
 				.logout(logout -> logout
 						.logoutUrl("/auth/logout")
+						.deleteCookies("auth_token")
 						.permitAll())
 				.addFilterBefore(beforeAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 				.addFilterAfter(postAuthenticationFilter, AnonymousAuthenticationFilter.class)
@@ -169,5 +173,17 @@ public class SecurityConfig {
 		});
 
 		return resolver;
+	}
+
+	@Bean
+	public ServletContextInitializer servletContextInitializer(Environment env) {
+		return servletContext -> {
+			Cookie.SameSite sameSite = Binder.get(env)
+					.bind("server.servlet.session.cookie.same-site", Cookie.SameSite.class)
+					.orElse(Cookie.SameSite.STRICT);
+			if (sameSite == Cookie.SameSite.NONE) {
+				servletContext.getSessionCookieConfig().setSecure(true);
+			}
+		};
 	}
 }

@@ -1,18 +1,30 @@
-server.port: 8181
+
+server:
+  port: 8181
+  servlet:
+#    context-path: /store
+    session.cookie:
+      name: auth_token
+      http-only: ${entrystore.auth.cookie.httponly:true}
+      secure: ${entrystore.auth.cookie.secure:true}
+      same-site: ${entrystore.auth.cookie.samesite:strict}
+      max-age: ${entrystore.auth.cookie.max-age:86400s}
+
+
+app.security.saml.enabled: ${entrystore.auth.saml.enabled:false}
+
 
 info.app.version: @project.version@
 
 
+# imported properties from "entrystore-it.properties" take precedence over properties here (when same key exists in both property sources)
 spring:
+  config.import:
+    - classpath:entrystore-it.properties
   mvc.problemdetails.enabled: false
   servlet.multipart:
     max-file-size: 12MB
     max-request-size: 12MB
-
-
-entrystore:
-  configuration.path: file:src/test/resources/entrystore-it.properties
-  solr.url: value-will-be-overridden-by-tests
 
 
 logging:
