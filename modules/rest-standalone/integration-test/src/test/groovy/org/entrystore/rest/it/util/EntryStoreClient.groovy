@@ -40,8 +40,9 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.POST, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
-	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
-		return sendRequestAsStream(HttpMethod.PUT, path, new ByteArrayInputStream(body.getBytes()), asUser, contentType)
+	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin',
+						  String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
+		return sendRequestAsStream(HttpMethod.PUT, path, new ByteArrayInputStream(body.getBytes()), asUser, contentType, extraHeaders)
 	}
 
 	def static putRequestFile(String path, File file, String asUser = 'admin', String contentType = 'application/octet-stream') {

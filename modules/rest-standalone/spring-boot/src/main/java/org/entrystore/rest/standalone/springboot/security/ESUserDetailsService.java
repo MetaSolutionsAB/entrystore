@@ -52,7 +52,12 @@ public class ESUserDetailsService implements UserDetailsService {
 		final URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			Entry userEntry = pm.getPrincipalEntry(username);
+			Entry userEntry;
+			if (username.contains("/resource/")) {
+				userEntry = pm.getPrincipalEntry(pm.getPrincipalName(URI.create(username)));
+			} else {
+				userEntry = pm.getPrincipalEntry(username);
+			}
 			if (userEntry != null && GraphType.User.equals(userEntry.getGraphType())) {
 				User user = ((User) userEntry.getResource());
 				if (user.getSaltedHashedSecret() != null) {
@@ -97,7 +102,7 @@ public class ESUserDetailsService implements UserDetailsService {
 	private UserDetails mapESUserToUserDetails(User user) {
 
 		UserDetails userDetails = org.springframework.security.core.userdetails.User
-				.withUsername(user.getName())
+				.withUsername(user.getEntry().getResourceURI().toString())
 				.password(user.getSaltedHashedSecret())
 				.disabled(user.isDisabled())
 				.roles(userService.isAdmin(user) ? UserAuthRole.ADMIN.name() : UserAuthRole.USER.name())

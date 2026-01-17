@@ -47,6 +47,9 @@ import org.json.JSONObject;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.session.SessionInformation;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
@@ -89,6 +92,8 @@ public class ResourceService {
 	private final ResourceJsonSerializer resourceSerializer;
 
 	private final RestTemplate restTemplate;
+
+	private final SessionRegistry sessionRegistry;
 
 	@PostConstruct
 	public void init() {
@@ -347,7 +352,7 @@ public class ResourceService {
 					if (requireCurrentPassword) {
 						// we require the current password if:
 						// (1) the user is a non-admin user, or
-						// (2) the user is an admin user and wants to set her own password
+						// (2) the user is an admin user and wants to set his own password
 						if (!pm.currentUserIsAdminOrAdminGroup() ||
 								(pm.currentUserIsAdminOrAdminGroup() && pm.getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
 							if (!entityJSON.has("currentPassword")) {
@@ -362,8 +367,17 @@ public class ResourceService {
 					}
 
 					if (resourceUser.setSecret(newPassword)) {
-						// TODO: Fix this accordingly to ENTRYSTORE-914 result
-						//loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
+						if (pm.currentUserIsAdminOrAdminGroup() && !pm.getAuthenticatedUserURI().equals(resourceUser.getURI())) {
+							List<Object> allPrincipals = sessionRegistry.getAllPrincipals();
+							for (Object principal : allPrincipals) {
+								if (principal instanceof UserDetails user && user.getUsername().equals(resourceUser.getEntry().getResourceURI().toString())) {
+									for (SessionInformation session : sessionRegistry.getAllSessions(principal, false)) {
+										session.expireNow();
+									}
+								}
+							}
+						}
+
 						Email.sendPasswordChangeConfirmation(repositoryManager.getConfiguration(), entry);
 					} else {
 						throw new BadRequestException("Password must conform to configured rules.");
@@ -394,9 +408,6 @@ public class ResourceService {
 					}
 					boolean disabled = entityJSON.optBoolean("disabled", false);
 					resourceUser.setDisabled(disabled);
-					if (disabled) {
-						String userName = pm.getPrincipalName(entry.getResourceURI());
-					}
 				}
 				if (entityJSON.has("customProperties")) {
 					Map<String, String> customPropMap = new HashMap<>();

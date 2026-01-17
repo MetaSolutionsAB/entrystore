@@ -36,6 +36,9 @@ import org.entrystore.rest.standalone.springboot.service.auth.EmailValidator;
 import org.entrystore.rest.standalone.springboot.service.auth.RecaptchaVerifier;
 import org.entrystore.rest.standalone.springboot.service.auth.SignupTokenCache;
 import org.entrystore.rest.standalone.springboot.util.Email;
+import org.springframework.security.core.session.SessionInformation;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -89,6 +92,7 @@ public class AuthService {
 	private final RecaptchaVerifier rcVerifier;
 	private final SignupTokenCache signupTokenCache;
 	private final Config config;
+	private final SessionRegistry sessionRegistry;
 
 	private static final Object mutex = new Object();
 	private static Set<String> domainWhitelist = null;
@@ -145,6 +149,15 @@ public class AuthService {
 				if (u.setSaltedHashedSecret(ci.getSaltedHashedPassword())) {
 					signupTokenCache.removeAllTokens(ci.getEmail());
 					log.debug("Removed any authentication tokens belonging to user {}", u.getURI());
+
+					List<Object> allPrincipals = sessionRegistry.getAllPrincipals();
+					for (Object principal : allPrincipals) {
+						if (principal instanceof UserDetails user && user.getUsername().equals(u.getEntry().getResourceURI().toString())) {
+							for (SessionInformation session : sessionRegistry.getAllSessions(principal, false)) {
+								session.expireNow();
+							}
+						}
+					}
 					Email.sendPasswordChangeConfirmation(config, u.getEntry());
 					log.info("Reset password for user {}", u.getURI());
 				} else {

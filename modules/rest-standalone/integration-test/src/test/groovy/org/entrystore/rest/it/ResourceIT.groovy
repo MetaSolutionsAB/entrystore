@@ -714,7 +714,6 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
-
 		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
 		def loginConnection = EntryStoreClient.createConnection('/auth/cookie')
 		loginConnection.setRequestMethod('POST')
