@@ -53,6 +53,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.NotAcceptableStatusException;
 
@@ -367,14 +368,18 @@ public class ResourceService {
 					}
 
 					if (resourceUser.setSecret(newPassword)) {
-						if (pm.currentUserIsAdminOrAdminGroup() && !pm.getAuthenticatedUserURI().equals(resourceUser.getURI())) {
-							List<Object> allPrincipals = sessionRegistry.getAllPrincipals();
-							for (Object principal : allPrincipals) {
-								if (principal instanceof UserDetails user && user.getUsername().equals(resourceUser.getEntry().getResourceURI().toString())) {
-									for (SessionInformation session : sessionRegistry.getAllSessions(principal, false)) {
+						String currentSessionId = RequestContextHolder.currentRequestAttributes().getSessionId();
+						boolean expiredAllSessions = pm.currentUserIsAdminOrAdminGroup() || !pm.getAuthenticatedUserURI().equals(resourceUser.getURI());
+						List<Object> allPrincipals = sessionRegistry.getAllPrincipals();
+
+						for (Object principal : allPrincipals) {
+							if (principal instanceof UserDetails user && user.getUsername().equals(resourceUser.getEntry().getResourceURI().toString())) {
+								for (SessionInformation session : sessionRegistry.getAllSessions(user, false)) {
+									if (expiredAllSessions || !session.getSessionId().equals(currentSessionId)) {
 										session.expireNow();
 									}
 								}
+								break;
 							}
 						}
 
