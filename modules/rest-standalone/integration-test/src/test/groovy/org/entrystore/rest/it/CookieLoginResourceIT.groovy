@@ -45,6 +45,18 @@ class CookieLoginResourceIT extends BaseSpec {
 		EntryStoreClient.creds = genericCredsClone
 	}
 
+	def "GET /auth/user without login (no cookie), should return guest user"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user', '')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		def jsonResp = JSON_PARSER.parseText(connection.getInputStream().text)
+		jsonResp['id'] == '_guest'
+		jsonResp['user'] == 'guest'
+		jsonResp['uri'] != null
+	}
+
 	def "POST /auth/cookie should fail if the data sent to server is larger then 32KB or unknown"() {
 		given:
 		def username = RandomStringUtils.secure().nextAlphabetic(32769)
@@ -185,28 +197,34 @@ class CookieLoginResourceIT extends BaseSpec {
 		infoRespJson['user'] == username.toLowerCase()
 	}
 
-	def "POST /auth/cookie should not log in the user after cookie maxAge is set in request and expired"() {
+	def "POST /auth/cookie with maxAge set, should de-authenticate user after maxAge time"() {
 		given:
 		def username = 'userForLoginExpired@test.com'
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=2'
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=1'
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
 		def cookie = loginConnection.getHeaderField('Set-Cookie')
 		assert cookie != null
 		assert cookie.contains('auth_token=')
-		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
-		Thread.sleep(1000)
-		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
-		Thread.sleep(2100)
 
 		when:
-		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+		def firstReq = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
 
 		then:
-		info.getResponseCode() == HTTP_UNAUTHORIZED
+		firstReq.getResponseCode() == HTTP_OK
+		def firstJsonResp = JSON_PARSER.parseText(firstReq.getInputStream().text)
+		firstJsonResp['id'] != null
+		firstJsonResp['user'] == username.toLowerCase()
+
+		when:
+		Thread.sleep(1100)
+		def secondReq = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
+
+		then:
+		secondReq.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "POST /auth/cookie should log in the user after an admin has changed that user's username"() {
