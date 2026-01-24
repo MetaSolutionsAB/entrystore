@@ -53,7 +53,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.NotAcceptableStatusException;
 
@@ -207,7 +206,7 @@ public class ResourceService {
 		return resourceSerializer.serializeResourceString(entry.getResource());
 	}
 
-	public CompletionState setEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType, boolean textArea, String filename) {
+	public CompletionState setEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType, boolean textArea, String filename, String currentSessionId) {
 		GraphType gt = entry.getGraphType();
 		/*
 		 * List and Group
@@ -368,14 +367,24 @@ public class ResourceService {
 					}
 
 					if (resourceUser.setSecret(newPassword)) {
-						String currentSessionId = RequestContextHolder.currentRequestAttributes().getSessionId();
-						boolean expiredAllSessions = pm.currentUserIsAdminOrAdminGroup() || !pm.getAuthenticatedUserURI().equals(resourceUser.getURI());
+						// we need to expire sessions of the user, whose password is being changed
+
+						// if it is an admin/admingroup member, who is changing the password of another user, we expire all sessions of that user
+						// if it is an admin/admingroup member changing his own password, or user changing his own password,
+						// we expire all sessions of that admin/user except the session, through which it is being changed (currentSessionId)
+
+						// the test only asks if the authenticatedUser is the same as the user, whose password is to be changed
+						// because no user can change password of another user, only admin
+						boolean expireAllSessions = !pm.getAuthenticatedUserURI().equals(resourceUser.getURI());
 						List<Object> allPrincipals = sessionRegistry.getAllPrincipals();
 
+						// go through all principals
+						// if the principal matches the principal, whose password is being changed, expire his sessions
 						for (Object principal : allPrincipals) {
 							if (principal instanceof UserDetails user && user.getUsername().equals(resourceUser.getEntry().getResourceURI().toString())) {
 								for (SessionInformation session : sessionRegistry.getAllSessions(user, false)) {
-									if (expiredAllSessions || !session.getSessionId().equals(currentSessionId)) {
+									// do not expire the current session, in case an admin or user is changing his own password
+									if (expireAllSessions || !session.getSessionId().equals(currentSessionId)) {
 										session.expireNow();
 									}
 								}
