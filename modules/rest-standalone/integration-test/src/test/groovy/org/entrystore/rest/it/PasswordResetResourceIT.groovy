@@ -18,12 +18,13 @@ import static java.net.HttpURLConnection.HTTP_OK
 
 class PasswordResetResourceIT extends BaseSpec {
 
-	def newPassword = 'newPass12345'
-	def grecaptcharesponse = 'anything'
+	static def newPassword = 'newPass12345'
+	static def grecaptcharesponse = 'anything'
+	static def greenMail = new GreenMail(SMTP)
 
-	static GreenMail greenMail = new GreenMail(SMTP)
-
-	def setupSpec() { greenMail.start() }
+	def setupSpec() {
+		greenMail.start()
+	}
 
 	def cleanup() {
 		greenMail.purgeEmailFromAllMailboxes()

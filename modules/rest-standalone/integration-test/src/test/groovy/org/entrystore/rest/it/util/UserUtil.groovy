@@ -7,18 +7,14 @@ import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 
 class UserUtil {
-	def static createUser(String username) {
+
+	def static createUser(String username, String homecontext = null, boolean isAdmin = false) {
 		def user = [:]
 		user['username'] = username
-
-		// create a User entry
-		def params = [graphtype: 'user']
-		def body = [resource: [name: username]]
-		def entryId = BaseSpec.createEntry('_principals', params, body)
-		user['entryId'] = entryId
+		user['entryId'] = createUserEntry(username, homecontext, isAdmin ? EntryStoreClient.adminsGroupUri : null)
 
 		// fetch URI of created resource
-		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
+		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + user['entryId'])
 		assert entryConn.getResponseCode() == HTTP_OK
 		def entryRespJson = BaseSpec.JSON_PARSER.parseText(entryConn.getInputStream().text)
 		assert entryRespJson['info'] != null
@@ -29,7 +25,19 @@ class UserUtil {
 		return user
 	}
 
-	def static setUserPassword(String resourceUri, String password = 'newPass12345') {
+	static def createUserEntry(String username, String homecontext = null, String groupURI = null) {
+		def params = [graphtype: 'user']
+		def body = [resource: [name: username]]
+		if (homecontext) {
+			body.resource.homecontext = homecontext
+		}
+		if (groupURI) {
+			params.groupURI = groupURI
+		}
+		return BaseSpec.createEntry('_principals', params, body)
+	}
+
+	def static setUserPassword(String resourceUri, String password) {
 		def requestBody = JsonOutput.toJson([
 			password: password
 		])

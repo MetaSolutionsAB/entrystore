@@ -287,8 +287,8 @@ public class EntryResource extends BaseResource {
 				if (c != null) {
 					quotaObj.put("quota", c.getQuota());
 					quotaObj.put("fillLevel", c.getQuotaFillLevel());
+					quotaObj.put("hasDefaultQuota", c.hasDefaultQuota());
 				}
-				quotaObj.put("hasDefaultQuota", c.hasDefaultQuota());
 				mainJsonObject.put("quota", quotaObj);
 			}
 		}

@@ -15,6 +15,7 @@ import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class SignupResourceIT extends BaseSpec {
 
@@ -28,6 +29,7 @@ class SignupResourceIT extends BaseSpec {
 
 	def setupSpec() {
 		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.creds.put('userSignupNoConfirm@test.com', newPassword)
 		EntryStoreClient.creds.put('userSignupCustomPropsConfirm@test.com', newPassword)
 		EntryStoreClient.creds.put('userSignupCustomPropsFormConfirm@test.com', newPassword)
 		greenMail.start()
@@ -42,12 +44,15 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.stop()
 	}
 
+	// TODO: previously signup requests were called by admin, now by guest. However, it seems that did not have any impact on the process or the signup response regardless of who is requesting the signup
+	// TODO: should we not allow to signup if you are logged in, or if you are a non-admin user?
+
 	def "POST /auth/signup should fail if the data sent to server is said to be JSON but is not JSON"() {
 		given:
 		def requestBody = 'foo'
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -65,7 +70,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
@@ -83,7 +88,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_OK
@@ -107,7 +112,7 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		signupConn.getResponseCode() == HTTP_OK
@@ -137,7 +142,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -158,7 +163,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -179,7 +184,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -200,7 +205,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -219,7 +224,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -233,7 +238,7 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -253,7 +258,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -268,7 +273,7 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=' + username + '&g-recaptcha-response=' + grecaptcharesponse
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -288,7 +293,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -303,7 +308,7 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=' + username + '&password=' + newPassword
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -323,7 +328,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -338,7 +343,7 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'lastname=' + lastName + '&email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -358,7 +363,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -373,7 +378,7 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
@@ -395,7 +400,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == 417 // Status.CLIENT_ERROR_EXPECTATION_FAILED
@@ -417,7 +422,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_OK
@@ -426,9 +431,9 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 1
 	}
 
-	def "GET /auth/pwreset should not confirm password reset without providing a token"() {
+	def "GET /auth/signup should respond with a HTML login page"() {
 		when:
-		def confirmConn = EntryStoreClient.getRequest('/auth/signup')
+		def confirmConn = EntryStoreClient.getRequest('/auth/signup', '')
 
 		then:
 		confirmConn.getResponseCode() == HTTP_OK
@@ -446,7 +451,7 @@ class SignupResourceIT extends BaseSpec {
 			password          : newPassword,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody, '').getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -471,7 +476,7 @@ class SignupResourceIT extends BaseSpec {
 			password          : newPassword,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody, '').getResponseCode() == HTTP_OK
 		def token = 'something123'
 
 		when:
@@ -493,7 +498,7 @@ class SignupResourceIT extends BaseSpec {
 			password          : newPassword,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody, '').getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -520,7 +525,7 @@ class SignupResourceIT extends BaseSpec {
 			password          : newPassword,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody, '').getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -544,11 +549,11 @@ class SignupResourceIT extends BaseSpec {
 			password          : newPassword,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody, '').getResponseCode() == HTTP_OK
 		def oldMessageContent = greenMail.getReceivedMessages()[0].getContent()
 		def oldStartIndex = oldMessageContent.toString().indexOf('?confirm') + 9
 		def oldToken = oldMessageContent.toString().substring(oldStartIndex, oldStartIndex + 16)
-		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody, '').getResponseCode() == HTTP_OK
 		def newMessageContent = greenMail.getReceivedMessages()[1].getContent()
 		def newStartIndex = newMessageContent.toString().indexOf('?confirm') + 9
 		def newToken = newMessageContent.toString().substring(newStartIndex, newStartIndex + 16)
@@ -582,11 +587,11 @@ class SignupResourceIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 
-		assert EntryStoreClient.postRequest('/auth/signup', request1Body).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', request1Body, '').getResponseCode() == HTTP_OK
 		def user1MessageContent = greenMail.getReceivedMessages()[0].getContent()
 		def user1StartIndex = user1MessageContent.toString().indexOf('?confirm') + 9
 		def user1Token = user1MessageContent.toString().substring(user1StartIndex, user1StartIndex + 16)
-		assert EntryStoreClient.postRequest('/auth/signup', request2Body).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', request2Body, '').getResponseCode() == HTTP_OK
 		def user2MessageContent = greenMail.getReceivedMessages()[1].getContent()
 		def user2StartIndex = user2MessageContent.toString().indexOf('?confirm') + 9
 		def user2Token = user2MessageContent.toString().substring(user2StartIndex, user2StartIndex + 16)
@@ -613,7 +618,7 @@ class SignupResourceIT extends BaseSpec {
 			urlsuccess        : urlSuccess,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody, '').getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -637,7 +642,7 @@ class SignupResourceIT extends BaseSpec {
 			urlsuccess        : urlSuccess,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody, '').getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -665,7 +670,7 @@ class SignupResourceIT extends BaseSpec {
 			urlfailure        : urlfailure,
 			grecaptcharesponse: grecaptcharesponse
 		])
-		assert EntryStoreClient.postRequest('/auth/signup', requestBody).getResponseCode() == HTTP_OK
+		assert EntryStoreClient.postRequest('/auth/signup', requestBody, '').getResponseCode() == HTTP_OK
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -692,7 +697,7 @@ class SignupResourceIT extends BaseSpec {
 		])
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody, '')
 
 		then:
 		signupConn.getResponseCode() == HTTP_OK
@@ -721,7 +726,7 @@ class SignupResourceIT extends BaseSpec {
 		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse + '&custom_foo=foo&custom_boo=boo'
 
 		when:
-		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, null, 'application/x-www-form-urlencoded')
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		signupConn.getResponseCode() == HTTP_OK
@@ -743,4 +748,30 @@ class SignupResourceIT extends BaseSpec {
 		resourceRespJson['name'] == username.toLowerCase()
 	}
 
+	def "POST /auth/signup should not allow to login for the user before confirming the signup"() {
+		given:
+		def username = 'userSignupNoConfirm@test.com'
+		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
+
+		when: "User signs up"
+		EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
+
+		then: "User should not be able to login before signup is confirmed"
+		def loginBodyParams = 'auth_username=' + username + '&auth_password=' + newPassword
+		EntryStoreClient.postRequest('/auth/cookie', loginBodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+
+		when: "signup is confirmed"
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf('?confirm') + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		EntryStoreClient.getRequest('/auth/signup?confirm=' + token, '').getResponseCode() == HTTP_CREATED
+
+		then: "User should be able to login"
+		def info = EntryStoreClient.getRequest('/auth/user', username)
+		info.getResponseCode() == HTTP_OK
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		infoRespJson['id'] != null
+		infoRespJson['user'] == username.toLowerCase()
+		infoRespJson['authTokenExpires'] != null
+	}
 }

@@ -14,7 +14,33 @@ class LocalEntryIT extends BaseSpec {
 		getOrCreateContext([contextId: contextId])
 	}
 
-	def "POST /{context-id}?graphtype=string should create by default a local entry of type String"() {
+	def "POST /{context-id}?graphtype=string as guest should respond with Unauthorized 401"() {
+		given:
+		def someText = 'Some text'
+		def params = [graphtype: 'string']
+		def body = JsonOutput.toJson([resource: someText])
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), body, '')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /{context-id}?graphtype=string as non-admin user should respond with Unauthorized 401"() {
+		given:
+		def someText = 'Some text'
+		def params = [graphtype: 'string']
+		def body = JsonOutput.toJson([resource: someText])
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), body, 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /{context-id}?graphtype=string as admin should create by default a local entry of type String"() {
 		given:
 		def someText = 'Some text'
 		def params = [graphtype: 'string']

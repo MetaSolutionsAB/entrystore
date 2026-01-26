@@ -1,6 +1,7 @@
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
+import spock.lang.Unroll
 
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
@@ -8,42 +9,6 @@ import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNSUPPORTED_TYPE
 
 class EchoIT extends BaseSpec {
-
-	def 'POST /echo with multi-part file should return the file contents as string in html textarea'() {
-		given:
-		// create a test binary file with some data
-		def testBinFile = File.createTempFile('echoTest', '.bin')
-		testBinFile.deleteOnExit()
-		testBinFile.withOutputStream { out ->
-			out.write('Hello, its me! Mario!'.bytes)
-		}
-
-		when:
-		def echoConn = EntryStoreClient.postRequestMultiPart('/echo', testBinFile)
-
-		then:
-		echoConn.getResponseCode() == HTTP_OK
-		echoConn.getContentType().contains('text/html')
-		echoConn.getInputStream().text.contains('<textarea>status:200\nHello, its me! Mario!</textarea>')
-	}
-
-	def 'POST /echo with multi-part file should return the file contents as string with escaped html chars'() {
-		given:
-		// create a test binary file with some data
-		def testBinFile = File.createTempFile('echoTest', '.bin')
-		testBinFile.deleteOnExit()
-		testBinFile.withOutputStream { out ->
-			out.write('Hello, its me! <b>bold</b> Mario and a hash tag # & !'.bytes)
-		}
-
-		when:
-		def echoConn = EntryStoreClient.postRequestMultiPart('/echo', testBinFile)
-
-		then:
-		echoConn.getResponseCode() == HTTP_OK
-		echoConn.getContentType().contains('text/html')
-		echoConn.getInputStream().text.contains('<textarea>status:200\nHello, its me! &lt;b&gt;bold&lt;/b&gt; Mario and a hash tag # &amp; !</textarea>')
-	}
 
 	def 'POST /echo as guest should respond with FORBIDDEN 403'() {
 		given:
@@ -63,7 +28,47 @@ class EchoIT extends BaseSpec {
 		echoConn.getErrorStream().text.contains('<textarea>status:403\n</textarea>')
 	}
 
-	def 'POST /echo with content other than multi-part file should respond with UNSUPPORTED_TYPE 415'() {
+	@Unroll
+	def 'POST /echo as "#user" with multi-part file should respond with the file contents as string in html textarea'() {
+		given:
+		// create a test binary file with some data
+		def testBinFile = File.createTempFile('echoTest', '.bin')
+		testBinFile.deleteOnExit()
+		testBinFile.withOutputStream { out ->
+			out.write('Hello, its me! Mario!'.bytes)
+		}
+
+		when:
+		def echoConn = EntryStoreClient.postRequestMultiPart('/echo', testBinFile, user)
+
+		then:
+		echoConn.getResponseCode() == HTTP_OK
+		echoConn.getContentType().contains('text/html')
+		echoConn.getInputStream().text.contains('<textarea>status:200\nHello, its me! Mario!</textarea>')
+
+		where:
+		user << ['user', 'userInAdminGroup', 'admin']
+	}
+
+	def 'POST /echo as admin with multi-part file should return the file contents as string with escaped html chars'() {
+		given:
+		// create a test binary file with some data
+		def testBinFile = File.createTempFile('echoTest', '.bin')
+		testBinFile.deleteOnExit()
+		testBinFile.withOutputStream { out ->
+			out.write('Hello, its me! <b>bold</b> Mario and a hash tag # & !'.bytes)
+		}
+
+		when:
+		def echoConn = EntryStoreClient.postRequestMultiPart('/echo', testBinFile)
+
+		then:
+		echoConn.getResponseCode() == HTTP_OK
+		echoConn.getContentType().contains('text/html')
+		echoConn.getInputStream().text.contains('<textarea>status:200\nHello, its me! &lt;b&gt;bold&lt;/b&gt; Mario and a hash tag # &amp; !</textarea>')
+	}
+
+	def 'POST /echo as admin with content other than multi-part file should respond with UNSUPPORTED_TYPE 415'() {
 		when:
 		def echoConn = EntryStoreClient.postRequest('/echo')  // sends empty json body by default
 
@@ -73,7 +78,7 @@ class EchoIT extends BaseSpec {
 		echoConn.getErrorStream().text.contains('<textarea>status:415\n</textarea>')
 	}
 
-	def 'POST /echo with multi-part file larger than 10MB should respond with HTTP_ENTITY_TOO_LARGE 413'() {
+	def 'POST /echo as admin with multi-part file larger than 10MB should respond with HTTP_ENTITY_TOO_LARGE 413'() {
 		given:
 		// create a test binary file with 11MB of some data
 		def testBinFile = File.createTempFile('echoTest', '.bin')

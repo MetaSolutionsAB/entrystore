@@ -43,7 +43,7 @@ import java.io.IOException;
  * @author Hannes Ebner
  */
 public class NameResource extends BaseResource {
-	
+
 	static Logger log = LoggerFactory.getLogger(NameResource.class);
 
 	@Get
@@ -82,46 +82,49 @@ public class NameResource extends BaseResource {
 
 	@Put
 	public void storeRepresentation(Representation r) {
-		String name = null;
 		try {
-			JSONObject nameObj = new JSONObject(getRequestEntity().getText());
-			if (nameObj.has("name")) {
-				name = nameObj.getString("name").trim();
+			String name = null;
+			try {
+				JSONObject nameObj = new JSONObject(getRequestEntity().getText());
+				if (nameObj.has("name")) {
+					name = nameObj.getString("name").trim();
+				}
+			} catch (JSONException | IOException jsone) {
+				log.error(jsone.getMessage());
 			}
-		} catch (JSONException | IOException jsone) {
-			log.error(jsone.getMessage());
-		}
 
-		if (this.context == null || this.entry == null) {
-			getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
-			return;
-		}
-		if (name == null || name.isEmpty()) {
-			name = null;
-		}
-		GraphType bt = entry.getGraphType();
-		boolean success = false;
-		if (GraphType.Group.equals(bt)) {
-			success = ((Group) entry.getResource()).setName(name);
-		} else if (GraphType.User.equals(bt)) {
-			//Users must always have a name.
-			if (name == null) {
+			if (this.context == null || this.entry == null) {
 				getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
 				return;
 			}
-			success = ((User) entry.getResource()).setName(name);
-		} else if (GraphType.Context.equals(bt)) {
-			if (!getReservedNames().contains(StringUtils.trimToEmpty(name).toLowerCase())) {
-				Context c = getCM().getContext(entryId);
-				success = getCM().setName(c.getURI(), name);
+			if (name == null || name.isEmpty()) {
+				name = null;
 			}
-		}
+			GraphType bt = entry.getGraphType();
+			boolean success = false;
+			if (GraphType.Group.equals(bt)) {
+				success = ((Group) entry.getResource()).setName(name);
+			} else if (GraphType.User.equals(bt)) {
+				//Users must always have a name.
+				if (name == null) {
+					getResponse().setStatus(Status.CLIENT_ERROR_BAD_REQUEST);
+					return;
+				}
+				success = ((User) entry.getResource()).setName(name);
+			} else if (GraphType.Context.equals(bt)) {
+				if (!getReservedNames().contains(StringUtils.trimToEmpty(name).toLowerCase())) {
+					Context c = getCM().getContext(entryId);
+					success = getCM().setName(c.getURI(), name);
+				}
+			}
 
-		if (!success) {
-			getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
-		} else {
-			getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
+			if (!success) {
+				getResponse().setStatus(Status.CLIENT_ERROR_CONFLICT);
+			} else {
+				getResponse().setEntity(createEmptyRepresentationWithLastModified(entry.getModifiedDate()));
+			}
+		} catch (AuthorizationException e) {
+			unauthorizedPUT();
 		}
 	}
-	
 }

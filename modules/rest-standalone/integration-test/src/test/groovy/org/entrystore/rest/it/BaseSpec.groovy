@@ -4,6 +4,7 @@ import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.entrystore.rest.it.util.UserUtil
 import org.entrystore.rest.standalone.EntryStoreApplicationStandaloneJetty
 import org.slf4j.LoggerFactory
 import spock.lang.Specification
@@ -32,10 +33,26 @@ abstract class BaseSpec extends Specification {
 			log.info('Starting EntryStoreApp without SAML')
 			// clean cookies, in case there are some from a previous instance
 			EntryStoreClient.cleanCookies()
-			appStarted = true
 			EntryStoreApplicationStandaloneJetty.main(args)
+			createCommonUserAccounts()
+			appStarted = true
 		} else {
 			log.info('EntryStoreApp already started')
+		}
+	}
+
+	static void createCommonUserAccounts() {
+		// Create all users except 'admin' ('admin' is created by the app itself)
+		EntryStoreClient.creds.each {
+			username, password -> {
+				if (username != 'admin') {
+					def isAdmin = EntryStoreClient.isAnAdmin(username)
+					log.info('Creating ES user: {} (Admin: {})', username, isAdmin)
+					def user = UserUtil.createUser(username, null, isAdmin)
+					UserUtil.setUserPassword(user['resourceUri'].toString(), password)
+					EntryStoreClient.createdEsUsers[username] = user
+				}
+			}
 		}
 	}
 
