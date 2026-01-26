@@ -121,7 +121,6 @@ public class ContextController {
 				.body(fileStream);
 	}
 
-	@PreAuthorize("hasRole('ADMIN')")
 	@Operation(summary = "Import of a single context")
 	@PostMapping(
 			path = "/{context-id}/import",
@@ -136,7 +135,6 @@ public class ContextController {
 		return "<textarea></textarea>";
 	}
 
-	@PreAuthorize("hasRole('ADMIN')")
 	@Operation(summary = "Import of a single context")
 	@PostMapping(
 			path = "/{context-id}/import",

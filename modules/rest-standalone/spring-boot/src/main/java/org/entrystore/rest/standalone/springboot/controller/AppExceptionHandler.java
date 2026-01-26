@@ -24,7 +24,9 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.ui.Model;
@@ -60,7 +62,8 @@ public class AppExceptionHandler {
 				.build();
 	}
 
-	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class, ValidationException.class, UsernameNotFoundException.class	})
+	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class, ValidationException.class,
+			UsernameNotFoundException.class, HttpMessageNotReadableException.class})
 	public ResponseEntity<ErrorResponse> handleBadRequestException(RuntimeException ex,
 																   HttpServletRequest request) {
 		log.debug("BadRequestException: {}", ex.getMessage());
@@ -96,18 +99,6 @@ public class AppExceptionHandler {
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
-	@ExceptionHandler({UnauthorizedException.class, AuthorizationException.class, AuthenticationException.class})
-	public ResponseEntity<ErrorResponse> handleUnauthorizedException(RuntimeException ex,
-																	 HttpServletRequest request) {
-		log.info("UnauthorizedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
-		ErrorResponse responseBody = ErrorResponse.builder()
-				.status(HttpStatus.UNAUTHORIZED.value())
-				.path(request.getRequestURI())
-				.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
-				.build();
-		return ResponseEntity.status(responseBody.status()).body(responseBody);
-	}
-
 	@ExceptionHandler(DataConflictException.class)
 	public ResponseEntity<ErrorResponse> handleDataConflictException(DataConflictException ex,
 																	 HttpServletRequest request) {
@@ -132,39 +123,28 @@ public class AppExceptionHandler {
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
-	@ExceptionHandler(HttpMessageNotReadableException.class)
-	public ResponseEntity<ErrorResponse> handleHttpMessageNotReadableException(Exception ex,
-																			   HttpServletRequest request) {
-		log.debug("HttpMessageNotReadableException: {}", ex.getMessage());
+	@ExceptionHandler({UnauthorizedException.class, AuthorizationException.class, AuthenticationException.class})
+	public ResponseEntity<ErrorResponse> handleUnauthorizedException(RuntimeException ex,
+																	 HttpServletRequest request) {
+		log.info("UnauthorizedException at endpoint '{}'. Error: {}", request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
-				.status(HttpStatus.BAD_REQUEST.value())
+				.status(HttpStatus.UNAUTHORIZED.value())
 				.path(request.getRequestURI())
-				.error(ex.getMessage())
-				.build();
-		return ResponseEntity.badRequest().body(responseBody);
-	}
-
-	@ExceptionHandler({ForbiddenException.class, AccessDeniedException.class})
-	public ResponseEntity<ErrorResponse> handleForbiddenException(RuntimeException ex,
-																  HttpServletRequest request) {
-		log.debug("ForbiddenException: {}", ex.getMessage());
-		ErrorResponse responseBody = ErrorResponse.builder()
-				.status(HttpStatus.FORBIDDEN.value())
-				.path(request.getRequestURI())
-				.error(ex.getMessage())
+				.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
 				.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
-	@ExceptionHandler({AuthenticationCredentialsNotFoundException.class})
-	public ResponseEntity<ErrorResponse> handleNoCredentialsException(RuntimeException ex,
-																	  HttpServletRequest request) {
-		log.debug("AuthenticationCredentialsNotFoundException: {}", ex.getMessage());
-
+	@ExceptionHandler({ForbiddenException.class, AccessDeniedException.class, AuthenticationCredentialsNotFoundException.class})
+	public ResponseEntity<ErrorResponse> handleForbiddenException(RuntimeException ex,
+																  HttpServletRequest request,
+																  Authentication authentication) {
+		log.info("ForbiddenException of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+		HttpStatus status = (authentication == null || authentication instanceof AnonymousAuthenticationToken) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
 		ErrorResponse responseBody = ErrorResponse.builder()
-				.status(HttpStatus.FORBIDDEN.value())
+				.status(status.value())
 				.path(request.getRequestURI())
-				.error(ex.getMessage())
+				.error((status == HttpStatus.UNAUTHORIZED) ? status.getReasonPhrase() : ex.getMessage())
 				.build();
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
@@ -199,11 +179,11 @@ public class AppExceptionHandler {
 
 		if (ex instanceof org.springframework.web.ErrorResponse) {
 			// handled by Spring-boot so we don't need to here
-			log.debug("General ErrorResponse Exception of '{}' at endpoint '{}': {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+			log.debug("General ErrorResponse Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
 			throw ex;
 		}
 
-		log.error("Unhandled general Exception of '{}' at endpoint '{}': {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+		log.error("Unhandled general Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
 				.path(request.getRequestURI())

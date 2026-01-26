@@ -7,7 +7,6 @@ import org.entrystore.rest.standalone.springboot.model.api.GetAuthUserResponse;
 import org.entrystore.rest.standalone.springboot.service.UserService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,8 +20,9 @@ public class AuthUserController {
 
 	@Operation(summary = "Provides basic information about the currently logged-in user.")
 	@GetMapping(path = "/auth/user", produces = MediaType.APPLICATION_JSON_VALUE)
-	public GetAuthUserResponse userInfo(@CookieValue(value = "auth_token") String authToken,
-										@RequestHeader(defaultValue = HttpHeaders.ACCEPT_LANGUAGE, name = HttpHeaders.ACCEPT_LANGUAGE) String acceptLanguage) {
-		return userService.getUserInfo(authToken, acceptLanguage);
+	public GetAuthUserResponse userInfo(
+			@RequestHeader(name = HttpHeaders.ACCEPT_LANGUAGE, defaultValue = HttpHeaders.ACCEPT_LANGUAGE) String acceptLanguage
+	) {
+		return userService.getUserInfo(acceptLanguage);
 	}
 }
