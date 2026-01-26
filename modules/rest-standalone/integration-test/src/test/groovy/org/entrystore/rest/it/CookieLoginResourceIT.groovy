@@ -5,7 +5,6 @@ import groovy.json.JsonOutput
 import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import spock.lang.Ignore
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -310,7 +309,6 @@ class CookieLoginResourceIT extends BaseSpec {
 		info.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	@Ignore
 	def "POST /auth/cookie should log in the user only with 1 existing cookie after that user has changed the password through API with that specific cookie"() {
 		given:
 		def username = 'userForLoginWithCookieChangedOwnPasswordSameCookie@test.com'
@@ -338,7 +336,6 @@ class CookieLoginResourceIT extends BaseSpec {
 		info.getResponseCode() == HTTP_OK
 	}
 
-	@Ignore
 	def "POST /auth/cookie should not log in the user with existing cookie1 after that user has changed the password through API with existing cookie2"() {
 		given:
 		def username = 'userForLoginWithCookieChangedOwnPasswordOldCookie@test.com'

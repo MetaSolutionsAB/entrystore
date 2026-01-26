@@ -74,7 +74,7 @@ class ContextImportIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "POST /{context-id}/import as non-admin user should return Forbidden 403"() {
+	def "POST /{context-id}/import as authenticated non-admin user should return Forbidden 403"() {
 		given:
 		def username = 'userForImport@test.com'
 		def user = UserUtil.createUser(username)

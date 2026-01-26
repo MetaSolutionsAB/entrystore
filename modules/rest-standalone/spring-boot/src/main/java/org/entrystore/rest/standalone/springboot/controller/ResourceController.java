@@ -4,6 +4,7 @@ import com.rometools.rome.feed.synd.SyndFeed;
 import com.rometools.rome.io.FeedException;
 import com.rometools.rome.io.SyndFeedOutput;
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
@@ -134,7 +135,8 @@ public class ResourceController {
 			@RequestParam(required = false) String textarea,
 			@RequestHeader(value = "Content-Type", required = false) String contentType,
 			@RequestHeader(value = HttpHeaders.CONTENT_DISPOSITION, required = false) String contentDisposition,
-			@RequestBody(required = false) byte[] body
+			@RequestBody(required = false) byte[] body,
+			HttpSession session
 	) {
 
 		String mediaType = normalizeMediaType(contentType);
@@ -150,7 +152,7 @@ public class ResourceController {
 		}
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		CompletionState result = resourceService.setEntryResource(entry, body, mediaType, mimeType, textarea != null, filename);
+		CompletionState result = resourceService.setEntryResource(entry, body, mediaType, mimeType, textarea != null, filename, session.getId());
 
 		if (result != CompletionState.ERROR) {
 			entry.updateModificationDate();
