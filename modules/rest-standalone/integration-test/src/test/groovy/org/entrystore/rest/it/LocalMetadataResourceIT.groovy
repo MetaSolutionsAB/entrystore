@@ -317,7 +317,8 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryId = createEntry(contextId, params, body)
 
 		when:
-		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/' + entryId, '')
+		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/' + entryId, '[]', '')
+
 
 		then:
 		entryDeleteConn.getResponseCode() == HTTP_UNAUTHORIZED

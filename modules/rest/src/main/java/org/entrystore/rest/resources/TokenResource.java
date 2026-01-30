@@ -16,12 +16,6 @@
 
 package org.entrystore.rest.resources;
 
-import static org.entrystore.rest.util.HttpUtil.COOKIE_AUTH_TOKEN;
-import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
-import static org.restlet.data.Status.CLIENT_ERROR_NOT_FOUND;
-
-import java.io.IOException;
-import java.util.Map;
 import org.entrystore.rest.EntryStoreApplication;
 import org.entrystore.rest.auth.LoginTokenCache;
 import org.entrystore.rest.auth.UserInfo;
@@ -36,6 +30,13 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.util.Map;
+
+import static org.entrystore.rest.util.HttpUtil.COOKIE_AUTH_TOKEN;
+import static org.restlet.data.Status.CLIENT_ERROR_BAD_REQUEST;
+import static org.restlet.data.Status.CLIENT_ERROR_NOT_FOUND;
+
 
 /**
  * Returns the tokens this user have used in all active login sessions.
@@ -45,7 +46,7 @@ public class TokenResource extends BaseResource {
 
 	static Logger log = LoggerFactory.getLogger(TokenResource.class);
 
-	final LoginTokenCache loginTokenCache = ((EntryStoreApplication)getApplication()).getLoginTokenCache();
+	final LoginTokenCache loginTokenCache = ((EntryStoreApplication) getApplication()).getLoginTokenCache();
 
 	@Get
 	public Representation get() {
@@ -54,7 +55,7 @@ public class TokenResource extends BaseResource {
 		}
 
 		Cookie authTokenCookie = getRequest().getCookies().getFirst(COOKIE_AUTH_TOKEN);
-		if (authTokenCookie == null) { // Probably using Basic Authentication
+		if (authTokenCookie == null) {
 			getResponse().setStatus(CLIENT_ERROR_NOT_FOUND);
 			return new EmptyRepresentation();
 		}
@@ -69,19 +70,16 @@ public class TokenResource extends BaseResource {
 	public void delete(Representation representation) {
 		if (getPM().currentUserIsGuest()) {
 			unauthorizedDELETE();
-		}
-
-		try {
-			String json = representation.getText();
-			JSONObject jsonObject = new JSONObject(json);
-			String authToken = jsonObject.getString("token");
-			loginTokenCache.removeToken(authToken);
-		} catch (IOException e) {
-			log.debug(e.getMessage(), e);
-			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
-		} catch (JSONException e) {
-			log.debug(e.getMessage(), e);
-			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+		} else {
+			try {
+				String json = representation.getText();
+				JSONObject jsonObject = new JSONObject(json);
+				String authToken = jsonObject.getString("token");
+				loginTokenCache.removeToken(authToken);
+			} catch (IOException | JSONException e) {
+				log.debug(e.getMessage(), e);
+				getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
+			}
 		}
 	}
 }
