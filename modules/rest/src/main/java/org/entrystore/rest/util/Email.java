@@ -95,7 +95,7 @@ public class Email {
 			log.debug("SSL enabled");
 			props.put("mail.smtp.ssl.enable", "true");
 			props.put("mail.smtp.socketFactory.port", port);
-			props.put("mail.smtp.socketFactory.class", "jakarta.net.ssl.SSLSocketFactory");
+			props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
 			props.put("mail.smtp.socketFactory.fallback", "false");
 		}
 		if (starttls) {

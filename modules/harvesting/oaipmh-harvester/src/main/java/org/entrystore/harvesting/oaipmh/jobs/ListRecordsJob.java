@@ -41,12 +41,12 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-import jakarta.xml.namespace.NamespaceContext;
-import jakarta.xml.xpath.XPath;
-import jakarta.xml.xpath.XPathConstants;
-import jakarta.xml.xpath.XPathExpression;
-import jakarta.xml.xpath.XPathExpressionException;
-import jakarta.xml.xpath.XPathFactory;
+import javax.xml.namespace.NamespaceContext;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;

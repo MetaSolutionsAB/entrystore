@@ -46,12 +46,12 @@ import org.restlet.resource.Get;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import jakarta.net.ssl.HostnameVerifier;
-import jakarta.net.ssl.HttpsURLConnection;
-import jakarta.net.ssl.SSLContext;
-import jakarta.net.ssl.SSLSession;
-import jakarta.net.ssl.TrustManager;
-import jakarta.net.ssl.X509TrustManager;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;

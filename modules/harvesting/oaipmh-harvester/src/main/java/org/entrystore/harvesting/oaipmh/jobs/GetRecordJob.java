@@ -19,12 +19,12 @@ package org.entrystore.harvesting.oaipmh.jobs;
 import java.io.IOException;
 import java.util.Iterator;
 
-import jakarta.xml.namespace.NamespaceContext;
-import jakarta.xml.parsers.ParserConfigurationException;
-import jakarta.xml.transform.TransformerException;
-import jakarta.xml.xpath.XPath;
-import jakarta.xml.xpath.XPathExpressionException;
-import jakarta.xml.xpath.XPathFactory;
+import javax.xml.namespace.NamespaceContext;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
