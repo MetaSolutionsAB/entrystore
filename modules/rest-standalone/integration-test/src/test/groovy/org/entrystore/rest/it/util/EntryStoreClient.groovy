@@ -40,8 +40,9 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.POST, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
-	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin', String contentType = 'application/json') {
-		return sendRequestAsStream(HttpMethod.PUT, path, new ByteArrayInputStream(body.getBytes()), asUser, contentType)
+	def static putRequest(String path, String body = emptyJsonBody, String asUser = 'admin',
+						  String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
+		return sendRequestAsStream(HttpMethod.PUT, path, new ByteArrayInputStream(body.getBytes()), asUser, contentType, extraHeaders)
 	}
 
 	def static putRequestFile(String path, File file, String asUser = 'admin', String contentType = 'application/octet-stream') {
@@ -131,8 +132,7 @@ class EntryStoreClient {
 		assert conn.getResponseCode() == HTTP_OK
 		def cookies = conn.getHeaderField('Set-Cookie')
 		assert cookies != null
-		assert cookies.contains('JSESSIONID=')
-		// auth_token for restlet ES, JSESSIONID for Spring-boot ES
+		assert cookies.contains('auth_token')
 		return cookies
 	}
 

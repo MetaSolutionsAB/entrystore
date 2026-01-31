@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Class checks the request size and parameters before the authentication process starts
+ * Class checks the request size and parameters before the authentication via username and password process starts
  */
 @Slf4j
 @Component

@@ -42,7 +42,7 @@ class ContextImportIT extends BaseSpec {
 
 	def "POST /{context-id}/import as guest should return Unauthorized 401"() {
 		when:
-		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', '', '')
+		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', 'dummyBody', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
@@ -51,13 +51,30 @@ class ContextImportIT extends BaseSpec {
 	def "POST /{context-id}/import as guest for non-existing context should return Unauthorized 401"() {
 		when:
 		def contextId = 'non-existing-context-id'
+		def connection = EntryStoreClient.postRequest('/' + contextId + '/import', 'dummyBody', '')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /{context-id}/import with empty body as guest should return Unauthorized 401"() {
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextImportId + '/import', '', '')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /{context-id}/import with empty body as guest for non-existing context should return Unauthorized 401"() {
+		when:
+		def contextId = 'non-existing-context-id'
 		def connection = EntryStoreClient.postRequest('/' + contextId + '/import', '', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "POST /{context-id}/import as authorized but non-admin should return Forbidden 403"() {
+	def "POST /{context-id}/import as authenticated non-admin user should return Forbidden 403"() {
 		given:
 		def username = 'userForImport@test.com'
 		def user = UserUtil.createUser(username)

@@ -47,6 +47,9 @@ import org.json.JSONObject;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.session.SessionInformation;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
@@ -89,6 +92,8 @@ public class ResourceService {
 	private final ResourceJsonSerializer resourceSerializer;
 
 	private final RestTemplate restTemplate;
+
+	private final SessionRegistry sessionRegistry;
 
 	@PostConstruct
 	public void init() {
@@ -201,7 +206,7 @@ public class ResourceService {
 		return resourceSerializer.serializeResourceString(entry.getResource());
 	}
 
-	public CompletionState setEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType, boolean textArea, String filename) {
+	public CompletionState setEntryResource(Entry entry, byte[] requestBody, String mediaType, String mimeType, boolean textArea, String filename, String currentSessionId) {
 		GraphType gt = entry.getGraphType();
 		/*
 		 * List and Group
@@ -347,7 +352,7 @@ public class ResourceService {
 					if (requireCurrentPassword) {
 						// we require the current password if:
 						// (1) the user is a non-admin user, or
-						// (2) the user is an admin user and wants to set her own password
+						// (2) the user is an admin user and wants to set his own password
 						if (!pm.currentUserIsAdminOrAdminGroup() ||
 								(pm.currentUserIsAdminOrAdminGroup() && pm.getAuthenticatedUserURI().equals(resourceUser.getURI()))) {
 							if (!entityJSON.has("currentPassword")) {
@@ -362,8 +367,31 @@ public class ResourceService {
 					}
 
 					if (resourceUser.setSecret(newPassword)) {
-						// TODO: Fix this accordingly to ENTRYSTORE-914 result
-						//loginTokenCache.removeTokensButOne(CookieVerifier.getAuthToken(getRequest()));
+						// we need to expire sessions of the user, whose password is being changed
+
+						// if it is an admin/admingroup member, who is changing the password of another user, we expire all sessions of that user
+						// if it is an admin/admingroup member changing his own password, or user changing his own password,
+						// we expire all sessions of that admin/user except the session, through which it is being changed (currentSessionId)
+
+						// the test only asks if the authenticatedUser is the same as the user, whose password is to be changed
+						// because no user can change password of another user, only admin
+						boolean expireAllSessions = !pm.getAuthenticatedUserURI().equals(resourceUser.getURI());
+						List<Object> allPrincipals = sessionRegistry.getAllPrincipals();
+
+						// go through all principals
+						// if the principal matches the principal, whose password is being changed, expire his sessions
+						for (Object principal : allPrincipals) {
+							if (principal instanceof UserDetails user && user.getUsername().equals(resourceUser.getEntry().getResourceURI().toString())) {
+								for (SessionInformation session : sessionRegistry.getAllSessions(user, false)) {
+									// do not expire the current session, in case an admin or user is changing his own password
+									if (expireAllSessions || !session.getSessionId().equals(currentSessionId)) {
+										session.expireNow();
+									}
+								}
+								break;
+							}
+						}
+
 						Email.sendPasswordChangeConfirmation(repositoryManager.getConfiguration(), entry);
 					} else {
 						throw new BadRequestException("Password must conform to configured rules.");
@@ -394,9 +422,6 @@ public class ResourceService {
 					}
 					boolean disabled = entityJSON.optBoolean("disabled", false);
 					resourceUser.setDisabled(disabled);
-					if (disabled) {
-						String userName = pm.getPrincipalName(entry.getResourceURI());
-					}
 				}
 				if (entityJSON.has("customProperties")) {
 					Map<String, String> customPropMap = new HashMap<>();

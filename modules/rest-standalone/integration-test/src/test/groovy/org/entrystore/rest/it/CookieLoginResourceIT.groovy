@@ -1,11 +1,12 @@
 package org.entrystore.rest.it
 
+import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import spock.lang.Ignore
 
+import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
@@ -18,13 +19,42 @@ class CookieLoginResourceIT extends BaseSpec {
 	static def password = 'newPass12345'
 	static def genericCredsClone = [:]
 
+	static GreenMail greenMail = new GreenMail(SMTP)
+
 	def setupSpec() {
+		greenMail.start()
 		genericCredsClone = EntryStoreClient.creds.clone()
 		EntryStoreClient.creds.put('userForLogin@test.com', password)
+		EntryStoreClient.creds.put('userForLoginExpired@test.com', password)
+		EntryStoreClient.creds.put('userForLoginWithCookie@test.com', password)
+		EntryStoreClient.creds.put('userForLoginWithCookieRepeated@test.com', password)
+		EntryStoreClient.creds.put('userForLoginWithCookieChangedUsername@test.com', password)
+		EntryStoreClient.creds.put('userForLoginWithCookieChangedUsername2@test.com', password)
+		EntryStoreClient.creds.put('userForLoginWithCookieChangedPassword@test.com', password)
+		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPassword@test.com', password)
+		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPasswordSameCookie@test.com', password)
+		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPasswordOldCookie@test.com', password)
+	}
+
+	def cleanup() {
+		greenMail.purgeEmailFromAllMailboxes()
 	}
 
 	def cleanupSpec() {
+		greenMail.stop()
 		EntryStoreClient.creds = genericCredsClone
+	}
+
+	def "GET /auth/user without login (no cookie), should return guest user"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user', '')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		def jsonResp = JSON_PARSER.parseText(connection.getInputStream().text)
+		jsonResp['id'] == '_guest'
+		jsonResp['user'] == 'guest'
+		jsonResp['uri'] != null
 	}
 
 	def "POST /auth/cookie should fail if the data sent to server is larger then 32KB or unknown"() {
@@ -102,28 +132,242 @@ class CookieLoginResourceIT extends BaseSpec {
 		then:
 		loginConnection.getResponseCode() == HTTP_OK
 		loginConnection.getHeaderField('Set-Cookie') != null
-		loginConnection.getHeaderField('Set-Cookie').contains('JSESSIONID=')
+		loginConnection.getHeaderField('Set-Cookie').contains('auth_token=')
 		loginConnection.getContentType().contains('text/html')
 		loginConnection.getInputStream().text.contains('Login successful.')
 	}
 
-	@Ignore
-	def "POST /auth/cookie should not log in the user after cookie maxAge is set in request and expired"() {
+	def "POST /auth/cookie should log in the user with cookie and then do 2 requests with the same cookie"() {
 		given:
-		def username = 'userForLogin@test.com'
+		def username = 'userForLoginWithCookie@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		assert cookie != null
+		assert cookie.contains('auth_token=')
+		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
+
+		when:
+		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then:
+		info.getResponseCode() == HTTP_OK
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		infoRespJson['user'] == username.toLowerCase()
+	}
+
+	def "POST /auth/cookie should log in the user with cookie"() {
+		given:
+		def username = 'userForLoginWithCookieRepeated@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		assert cookie != null
+		assert cookie.contains('auth_token=')
+		assert cookie.contains('Secure')
+		assert !cookie.contains('HttpOnly')
+		def sameSitePart = cookie.substring(cookie.indexOf('SameSite=') + 9)
+		if (sameSitePart.contains(';')) {
+			sameSitePart = sameSitePart.substring(0, sameSitePart.indexOf(';'))
+		}
+		assert sameSitePart == 'None'
+		def maxAgePart = cookie.substring(cookie.indexOf('Max-Age=') + 8)
+		if (maxAgePart.contains(';')) {
+			maxAgePart = maxAgePart.substring(0, maxAgePart.indexOf(';'))
+		}
+		assert maxAgePart == '3700'
+
+		when:
+		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then:
+		info.getResponseCode() == HTTP_OK
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		infoRespJson['user'] == username.toLowerCase()
+	}
+
+	def "POST /auth/cookie with maxAge set, should de-authenticate user after maxAge time"() {
+		given:
+		def username = 'userForLoginExpired@test.com'
 		def user = UserUtil.createUser(username)
 		def resourceUri = user['resourceUri'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=1'
-		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
-		Thread.sleep(2000)
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		assert cookie != null
+		assert cookie.contains('auth_token=')
 
 		when:
-		def detailsConn = EntryStoreClient.createConnection('/auth/user')
-		detailsConn.connect()
+		def firstReq = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
 
 		then:
-		detailsConn.getResponseCode() == HTTP_UNAUTHORIZED
+		firstReq.getResponseCode() == HTTP_OK
+		def firstJsonResp = JSON_PARSER.parseText(firstReq.getInputStream().text)
+		firstJsonResp['id'] != null
+		firstJsonResp['user'] == username.toLowerCase()
+
+		when:
+		Thread.sleep(1100)
+		def secondReq = EntryStoreClient.getRequest('/auth/user', '', null, [Cookie: cookie])
+
+		then:
+		secondReq.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /auth/cookie should log in the user after an admin has changed that user's username"() {
+		given:
+		def username = 'userForLoginWithCookieChangedUsername@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=2'
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		assert cookie != null
+		assert cookie.contains('auth_token=')
+		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
+
+		def newUsername = 'userForLoginWithCookieChangedUsername2@test.com'
+		def requestBody = JsonOutput.toJson([
+			name: newUsername
+		])
+		assert EntryStoreClient.putRequest(resourceUri, requestBody).getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then:
+		info.getResponseCode() == HTTP_OK
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		infoRespJson['user'] == newUsername.toLowerCase()
+	}
+
+	def "POST /auth/cookie should not log in the user with existing cookie after an admin has changed that user's password"() {
+		given:
+		def username = 'userForLoginWithCookieChangedPassword@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		assert cookie != null
+		assert cookie.contains('auth_token=')
+		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
+		def newPassword = 'someNewPassword123'
+		UserUtil.setUserPassword(resourceUri, newPassword)
+
+		when:
+		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then:
+		info.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /auth/cookie should not log in the user with existing cookie after that user has changed the password through email token"() {
+		given:
+		def username = 'userForLoginWithCookieChangedOwnPassword@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		assert cookie != null
+		assert cookie.contains('auth_token=')
+		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
+		def newPassword = 'someNewPassword123'
+		def grecaptcharesponse = 'anything'
+		def requestBody = JsonOutput.toJson([
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
+		])
+		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		def messageContent = greenMail.getReceivedMessages()[1].getContent()
+		def startIndex = messageContent.toString().indexOf('?confirm') + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		assert EntryStoreClient.getRequest('/auth/pwreset?confirm=' + token).getResponseCode() == HTTP_OK
+
+		when:
+		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then:
+		info.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /auth/cookie should log in the user only with 1 existing cookie after that user has changed the password through API with that specific cookie"() {
+		given:
+		def username = 'userForLoginWithCookieChangedOwnPasswordSameCookie@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		assert cookie != null
+		assert cookie.contains('auth_token=')
+		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
+		def newPassword = 'someNewPassword123'
+		def passwordChangeRequestBody = JsonOutput.toJson([
+			password       : newPassword,
+			currentPassword: password
+		])
+		assert EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, null, null, [Cookie: cookie]).getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
+
+		then:
+		info.getResponseCode() == HTTP_OK
+	}
+
+	def "POST /auth/cookie should not log in the user with existing cookie1 after that user has changed the password through API with existing cookie2"() {
+		given:
+		def username = 'userForLoginWithCookieChangedOwnPasswordOldCookie@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, null, 'application/x-www-form-urlencoded')
+		assert loginConnection.getResponseCode() == HTTP_OK
+		def cookie1 = loginConnection.getHeaderField('Set-Cookie')
+		assert cookie1 != null
+		assert cookie1.contains('auth_token=')
+		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie1]).getResponseCode() == HTTP_OK
+
+		def loginConnection2 = EntryStoreClient.postRequest('/auth/cookie', bodyParams, null, 'application/x-www-form-urlencoded')
+		assert loginConnection2.getResponseCode() == HTTP_OK
+		def cookie2 = loginConnection2.getHeaderField('Set-Cookie')
+		assert cookie2 != null
+		assert cookie2.contains('auth_token=')
+		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie2]).getResponseCode() == HTTP_OK
+		def newPassword = 'someNewPassword123'
+		def passwordChangeRequestBody = JsonOutput.toJson([
+			password       : newPassword,
+			currentPassword: password
+		])
+		assert EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, null, null, [Cookie: cookie2]).getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie1])
+
+		then:
+		info.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "POST /auth/cookie should not log in the blacklisted user"() {

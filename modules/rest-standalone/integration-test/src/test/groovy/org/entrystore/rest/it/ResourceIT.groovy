@@ -26,6 +26,7 @@ class ResourceIT extends BaseSpec {
 		EntryStoreClient.creds.put('userChangePasswordBadCurrentPassword@test.com', password)
 		EntryStoreClient.creds.put('userChangePasswordNoCurrentPassword@test.com', password)
 		EntryStoreClient.creds.put('userChangePasswordBadNewPassword@test.com', password)
+		EntryStoreClient.creds.put('userAdminChangePassword@test.com', password)
 		EntryStoreClient.creds.put('resourceTestUserName@test.com', password)
 	}
 
@@ -257,7 +258,6 @@ class ResourceIT extends BaseSpec {
 		def newBody = 'new String set'
 
 		when:
-		// edit created resource
 		def editResourceConn = EntryStoreClient.putRequest(resourceUri, newBody)
 
 		then:
@@ -405,7 +405,6 @@ class ResourceIT extends BaseSpec {
 		])
 
 		when:
-		// edit user data
 		def editResourceConn = EntryStoreClient.putRequest(resourceUri, requestBody)
 
 		then:
@@ -446,7 +445,6 @@ class ResourceIT extends BaseSpec {
 		])
 
 		when:
-		// edit user data
 		def editResourceConn = EntryStoreClient.putRequest(resourceUri, requestBody)
 
 		then:
@@ -676,7 +674,6 @@ class ResourceIT extends BaseSpec {
 		])
 
 		when:
-		// edit user data
 		def editResourceConn = EntryStoreClient.putRequest(resourceUri, requestBody)
 
 		then:
@@ -709,12 +706,10 @@ class ResourceIT extends BaseSpec {
 		])
 
 		when:
-		// edit user data
 		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, username)
 
 		then:
 		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
-
 		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
 		def loginConnection = EntryStoreClient.createConnection('/auth/cookie')
 		loginConnection.setRequestMethod('POST')
@@ -729,6 +724,31 @@ class ResourceIT extends BaseSpec {
 		entryId == infoRespJson['id']
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} should not change own admin-group user password without providing current password"() {
+		given:
+		def username = 'userAdminChangePassword@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		def entryId = user['entryId'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def requestBody = JsonOutput.toJson([entryId])
+		assert EntryStoreClient.putRequest('/_principals/resource/_admins', requestBody).getResponseCode() == HTTP_NO_CONTENT
+		def newPassword = 'somePass1234'
+
+		def passwordChangeRequestBody = JsonOutput.toJson([
+			password       : newPassword
+		])
+
+		when:
+		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, username)
+
+		then:
+		editResourceConn.getResponseCode() == HTTP_FORBIDDEN
+		editResourceConn.getContentType().contains('application/json')
+		def editRespJson = JSON_PARSER.parseText(editResourceConn.getErrorStream().text)
+		editRespJson['error'] == 'Current password is required'
+	}
+
 	def "PUT /{context-id}/resource/{entry-id} should not change own password without providing current password"() {
 		given:
 		def username = 'userChangePasswordNoCurrentPassword@test.com'
@@ -741,7 +761,6 @@ class ResourceIT extends BaseSpec {
 		])
 
 		when:
-		// edit user data
 		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, username)
 
 		then:
@@ -764,7 +783,6 @@ class ResourceIT extends BaseSpec {
 		])
 
 		when:
-		// edit user data
 		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, username)
 
 		then:
@@ -787,7 +805,6 @@ class ResourceIT extends BaseSpec {
 		])
 
 		when:
-		// edit user data
 		def editResourceConn = EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, username)
 
 		then:
@@ -891,7 +908,6 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_NO_CONTENT
 		resourceConn.getInputStream().text == ''
 
-		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
 		resourceConn2.getResponseCode() == HTTP_NO_CONTENT
 		resourceConn2.getInputStream().text == ''

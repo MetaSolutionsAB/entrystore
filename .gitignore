@@ -4,7 +4,7 @@
 .classpath
 .project
 pom.xml.versionsBackup
-target
+target/
 .settings
 .idea
 build.log
