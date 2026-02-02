@@ -297,7 +297,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
-	def "GET /store/auth/pwreset should not confirm password reset without providing a token"() {
+	def "GET /auth/pwreset should not confirm password reset without providing a token"() {
 		given:
 
 		when:
