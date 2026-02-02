@@ -66,8 +66,9 @@ class SamlLoginIT extends BaseSpec {
 					'--config-properties', 'entrystore.auth.saml.idp.keycloak.metadata.url=' + keycloakTestRealmUrl + '/descriptor'
 		] as String[]
 		log.info('Starting EntryStoreApp with SAML')
-		appStarted = true
+		EntryStoreClient.cleanCookies()
 		EntryStoreApplicationStandaloneJetty.main(args)
+		appStarted = true
 	}
 
 	def cleanupSpec() {

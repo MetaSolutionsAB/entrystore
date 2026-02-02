@@ -7,7 +7,40 @@ import static java.net.HttpURLConnection.*
 
 class ContextIT extends BaseSpec {
 
-	def "POST /_principals/groups should create new group and context"() {
+	def "POST /_principals/groups as guest should respond with FORBIDDEN 403"() {
+		given:
+		def contextName = 'someName'
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_principals/groups?name=' + contextName, null, '')
+
+		then:
+		connection.getResponseCode() == HTTP_FORBIDDEN
+	}
+
+	def "POST /_principals/groups as non-admin user should respond with FORBIDDEN 403"() {
+		given:
+		def contextName = 'someName'
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_principals/groups?name=' + contextName, null, 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_FORBIDDEN
+	}
+
+	def "POST /_principals/groups as member of admin group should create new group and context"() {
+		given:
+		def contextName = 'someNamezzz'
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_principals/groups?name=' + contextName, null, 'userInAdminGroup')
+
+		then:
+		connection.getResponseCode() == HTTP_CREATED
+	}
+
+	def "POST /_principals/groups as admin should create new group and context"() {
 		given:
 		def contextName = 'someName'
 
@@ -53,7 +86,7 @@ class ContextIT extends BaseSpec {
 		contextTypes[0]['value'] == NameSpaceConst.TERM_CONTEXT
 	}
 
-	def "POST /_principals/groups should not create group and context with a duplicated name"() {
+	def "POST /_principals/groups as admin should not create group and context with a duplicated name"() {
 		given:
 		def contextName = 'someName'
 
@@ -67,7 +100,7 @@ class ContextIT extends BaseSpec {
 		responseBody.length() > 10
 	}
 
-	def "POST /_principals/groups should create new group and context with specified ID"() {
+	def "POST /_principals/groups as admin should create new group and context with specified ID"() {
 		given:
 		def contextId = '12345'
 		def params = [contextId: contextId, name: 'someName2']
@@ -87,7 +120,31 @@ class ContextIT extends BaseSpec {
 		responseJson['info'] != null
 	}
 
-	def "POST /_contexts?id={id} should create a new context with specified ID"() {
+	def "POST /_contexts?id={id} as guest should respond with Unauthorized 401"() {
+		given:
+		def contextId = 'new-context-2'
+		def params = [id: contextId, graphtype: 'context', name: 'someName3']
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_contexts' + convertMapToQueryParams(params), '', '')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /_contexts?id={id} as non-admin user should respond with Unauthorized 401"() {
+		given:
+		def contextId = 'new-context-2'
+		def params = [id: contextId, graphtype: 'context', name: 'someName3']
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_contexts' + convertMapToQueryParams(params), '', 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /_contexts?id={id} as admin should create a new context with specified ID"() {
 		given:
 		def contextId = 'new-context'
 		def params = [id: contextId, graphtype: 'context', name: 'someName3']
@@ -109,8 +166,38 @@ class ContextIT extends BaseSpec {
 		getResponseJson['info'] != null
 	}
 
-	def "GET /{context-id} should return context entries for admin user"() {
+	def "GET /{context-id} as guest should respond with UNAUTHORIZED 401"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts', '')
 
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		responseJson['error'] != null
+	}
+
+	def "GET /{context-id} as user should respond with UNAUTHORIZED 401"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts', 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /{context-id} as member of admin group should return context entries"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts', 'userInAdminGroup')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		responseJson.collect().contains('_contexts')
+		responseJson.collect().contains('_principals')
+	}
+
+	def "GET /{context-id} as admin should return context entries"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/_contexts')
 
@@ -122,9 +209,27 @@ class ContextIT extends BaseSpec {
 		responseJson.collect().contains('_principals')
 	}
 
-	def "GET /{context-id} should return NOT_FOUND for non-existing context"() {
+	// TODO: Fix the vuln of Information Disclosure via Error Messages - guest gets 404 on non-existing context-id and 401 on existing context-id
+	def "GET /{context-id} as guest for non-existing context should return UNAUTHORIZED 401"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/222-random-name-222')
+		def connection = EntryStoreClient.getRequest('/222-random-name-222', '')
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	// TODO: Verify below behaviour: for a non-admin user and a valid context-id we get 401, but for invalid context-id we get 404
+	def "GET /{context-id} as non-admin user for non-existing context should return UNAUTHORIZED 401"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/222-random-name-222', 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "GET /{context-id} as admin for non-existing context should return NOT_FOUND 404"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/222-random-name-234')
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
@@ -134,7 +239,7 @@ class ContextIT extends BaseSpec {
 		responseJson['error'].toString().contains('The requested context ID does not exist')
 	}
 
-	def "GET /{context-id}?deleted should return empty list of entries for admin user"() {
+	def "GET /{context-id}?deleted as admin should return empty list of entries"() {
 
 		when:
 		def connection = EntryStoreClient.getRequest('/_contexts?deleted')
@@ -144,18 +249,6 @@ class ContextIT extends BaseSpec {
 		connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
 		responseJson.collect().size() == 0
-	}
-
-	def "GET /{context-id} should respond with UNAUTHORIZED for non-admin user"() {
-
-		when:
-		def connection = EntryStoreClient.getRequest('/_contexts', null)
-
-		then:
-		connection.getResponseCode() == HTTP_UNAUTHORIZED
-		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
-		responseJson['error'] != null
 	}
 
 	def "GET /{context-id}?entryname=non-existing-entry-name as admin should return an empty list"() {
@@ -170,10 +263,20 @@ class ContextIT extends BaseSpec {
 		responseJson.collect() == []
 	}
 
-	def "GET /{context-id}?entryname=some-random-name should respond with UNAUTHORIZED for non-admin user"() {
-
+	def "GET /{context-id}?entryname=some-random-name as guest should respond with UNAUTHORIZED"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/_contexts?entryname=some-random-name', null)
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		responseJson['error'] != null
+	}
+
+	def "GET /{context-id}?entryname=some-random-name as non-admin user should respond with UNAUTHORIZED"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts?entryname=some-random-name', 'user')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED

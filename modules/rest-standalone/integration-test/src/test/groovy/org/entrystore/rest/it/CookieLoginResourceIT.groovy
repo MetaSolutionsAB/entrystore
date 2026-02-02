@@ -57,6 +57,14 @@ class CookieLoginResourceIT extends BaseSpec {
 		jsonResp['uri'] != null
 	}
 
+	def "GET /auth/user with invalid auth_token should respond with Unauthorized 401 "() {
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user', '', '', [Cookie: 'auth_token=invalidRandomString'])
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
 	def "POST /auth/cookie should fail if the data sent to server is larger then 32KB or unknown"() {
 		given:
 		def username = RandomStringUtils.secure().nextAlphabetic(32769)

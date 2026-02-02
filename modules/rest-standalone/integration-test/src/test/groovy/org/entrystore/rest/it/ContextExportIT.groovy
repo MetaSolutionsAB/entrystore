@@ -1,17 +1,14 @@
 package org.entrystore.rest.it
 
-import groovy.json.JsonOutput
 import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
-import org.entrystore.rest.it.util.UserUtil
 
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
-import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
@@ -21,26 +18,16 @@ class ContextExportIT extends BaseSpec {
 	def static contextName = 'context-export-name'
 	def static entryId = 'export-entry-id'
 	def static resourceUrl = 'https://bbc.co.uk'
-	static def password = 'newPass12345'
-	static def genericCredsClone = [:]
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextExportId, name: contextName])
 		def params = [entrytype: 'link', resource: resourceUrl, id: entryId]
 		getOrCreateEntry(contextExportId, params)
-
-		genericCredsClone = EntryStoreClient.creds.clone()
-		EntryStoreClient.creds.put('userForExport@test.com', password)
-		EntryStoreClient.creds.put('userForExportAdminGroup@test.com', password)
-	}
-
-	def cleanupSpec() {
-		EntryStoreClient.creds = genericCredsClone
 	}
 
 	def "GET /{context-id}/export as guest should return Unauthorized 401"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export', '', '')
+		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
@@ -49,23 +36,15 @@ class ContextExportIT extends BaseSpec {
 	def "GET /{context-id}/export as guest for non-existing context should return Unauthorized 401"() {
 		when:
 		def contextId = 'non-existing-context-id'
-		def connection = EntryStoreClient.getRequest('/' + contextId + '/export', '', '')
+		def connection = EntryStoreClient.getRequest('/' + contextId + '/export', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "GET /{context-id}/export as authorized but non-admin should return Forbidden 403"() {
-		given:
-		def username = 'userForExport@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
-		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
-
+	def "GET /{context-id}/export as non-admin user should return Forbidden 403"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export', username)
+		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export', 'user')
 
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
@@ -84,26 +63,35 @@ class ContextExportIT extends BaseSpec {
 
 	def "GET /{context-id}/export as member of admin group for non-existing context should return Not-Found 404"() {
 		given:
-		def username = 'userForExportAdminGroup@test.com'
-		def user = UserUtil.createUser(username)
-		def entryId = user['entryId'].toString()
-		def resourceUri = user['resourceUri'].toString()
-		def requestBody = JsonOutput.toJson([entryId])
-		assert EntryStoreClient.putRequest('/_principals/resource/_admins', requestBody).getResponseCode() == HTTP_NO_CONTENT
-		UserUtil.setUserPassword(resourceUri, password)
-		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
-		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
-
 		def contextId = 'non-existing-context-id'
 
 		when:
-		def connection = EntryStoreClient.getRequest('/' + contextId + '/export')
+		def connection = EntryStoreClient.getRequest('/' + contextId + '/export', 'userInAdminGroup')
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	def "GET /{context-id}/export should return context data in Trig format inside a zip-file"() {
+	def "GET /{context-id}/export as member of admin group should return context data in Trig format inside a zip-file"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export', 'userInAdminGroup')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('application/zip')
+		def zipFile = new ZipInputStream(connection.getInputStream())
+		def exportedZip = new HashMap<String, String>()
+		ZipEntry ze
+		while ((ze = zipFile.getNextEntry()) != null) {
+			exportedZip[ze.name] = new String(zipFile.readAllBytes())
+		}
+
+		exportedZip.keySet().size() == 2
+		exportedZip['triples.rdf'] != null
+		exportedZip['export.properties'] != null
+	}
+
+	def "GET /{context-id}/export as admin should return context data in Trig format inside a zip-file"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/' + contextExportId + '/export')
 
