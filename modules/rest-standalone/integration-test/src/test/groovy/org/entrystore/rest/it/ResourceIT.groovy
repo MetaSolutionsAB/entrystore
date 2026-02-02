@@ -1009,7 +1009,7 @@ class ResourceIT extends BaseSpec {
 		assert resourceRespJson == [minimalEntryId]
 
 		when:
-		def deleteResourceConn = EntryStoreClient.deleteRequest(resourceUri, '')
+		def deleteResourceConn = EntryStoreClient.deleteRequest(resourceUri, '[]', '')
 
 		then:
 		deleteResourceConn.getResponseCode() == HTTP_UNAUTHORIZED
