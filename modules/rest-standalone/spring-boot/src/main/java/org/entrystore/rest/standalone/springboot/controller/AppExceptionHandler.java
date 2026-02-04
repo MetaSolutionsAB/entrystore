@@ -123,7 +123,7 @@ public class AppExceptionHandler {
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
-	@ExceptionHandler({UnauthorizedException.class, AuthorizationException.class, AuthenticationException.class})
+	@ExceptionHandler({AuthenticationException.class})
 	public ResponseEntity<ErrorResponse> handleUnauthorizedException(RuntimeException ex,
 																	 HttpServletRequest request) {
 		log.info("UnauthorizedException at endpoint '{}'. Error: {}", request.getRequestURI(), ex.getMessage());
@@ -135,7 +135,7 @@ public class AppExceptionHandler {
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
-	@ExceptionHandler({ForbiddenException.class, AccessDeniedException.class, AuthenticationCredentialsNotFoundException.class})
+	@ExceptionHandler({AuthorizationException.class, UnauthorizedException.class, ForbiddenException.class, AccessDeniedException.class, AuthenticationCredentialsNotFoundException.class})
 	public ResponseEntity<ErrorResponse> handleForbiddenException(RuntimeException ex,
 																  HttpServletRequest request,
 																  Authentication authentication) {

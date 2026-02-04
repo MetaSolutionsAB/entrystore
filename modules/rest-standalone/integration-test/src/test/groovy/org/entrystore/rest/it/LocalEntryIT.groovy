@@ -14,7 +14,33 @@ class LocalEntryIT extends BaseSpec {
 		getOrCreateContext([contextId: contextId])
 	}
 
-	def "POST /{context-id}?graphtype=string should create by default a local entry of type String"() {
+	def "POST /{context-id}?graphtype=string as guest should respond with Unauthorized 401"() {
+		given:
+		def someText = 'Some text'
+		def params = [graphtype: 'string']
+		def body = JsonOutput.toJson([resource: someText])
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), body, '')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /{context-id}?graphtype=string as non-admin user should respond with Forbidden"() {
+		given:
+		def someText = 'Some text'
+		def params = [graphtype: 'string']
+		def body = JsonOutput.toJson([resource: someText])
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), body, 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_FORBIDDEN
+	}
+
+	def "POST /{context-id}?graphtype=string as admin should create by default a local entry of type String"() {
 		given:
 		def someText = 'Some text'
 		def params = [id: 'test-string-entry-id', graphtype: 'string']
@@ -69,7 +95,7 @@ class LocalEntryIT extends BaseSpec {
 
 	// This tests is for a bug found using js.test - entry's "resource" field is usually a json, but for String entry it is just a String,
 	// for which when we call @JsonRawValue (needed for json values) turns "resource" into invalid json, e.g. {"resource": Some text}, which should be {"resource": "Some text"}
-	def "GET /{context-id}/entry/{entry-id}?includeAll for a string entry should return correct entry resource string"() {
+	def "GET /{context-id}/entry/{entry-id}?includeAll as admin for a string entry should return correct entry resource string"() {
 		given:
 		def entryId = 'test-string-entry-id'
 		def someText = 'Some text'

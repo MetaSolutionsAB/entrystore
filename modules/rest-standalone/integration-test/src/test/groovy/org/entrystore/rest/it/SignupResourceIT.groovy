@@ -14,6 +14,7 @@ import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class SignupResourceIT extends BaseSpec {
 
@@ -27,6 +28,7 @@ class SignupResourceIT extends BaseSpec {
 
 	def setupSpec() {
 		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.creds.put('userSignupNoConfirm@test.com', newPassword)
 		EntryStoreClient.creds.put('userSignupCustomPropsConfirm@test.com', newPassword)
 		EntryStoreClient.creds.put('userSignupCustomPropsFormConfirm@test.com', newPassword)
 		greenMail.start()
@@ -40,6 +42,9 @@ class SignupResourceIT extends BaseSpec {
 		EntryStoreClient.creds = genericCredsClone
 		greenMail.stop()
 	}
+
+	// TODO: previously signup requests were called by admin, now by guest. However, it seems that did not have any impact on the process or the signup response regardless of who is requesting the signup
+	// TODO: should we not allow to signup if you are logged in, or if you are a non-admin user?
 
 	def "POST /auth/signup should fail if the data sent to server is said to be JSON but is not JSON"() {
 		given:
@@ -425,7 +430,7 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 1
 	}
 
-	def "GET /auth/pwreset should not confirm password reset without providing a token"() {
+	def "GET /auth/signup should respond with a HTML login page"() {
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/signup')
 
@@ -743,4 +748,29 @@ class SignupResourceIT extends BaseSpec {
 		resourceRespJson['name'] == username.toLowerCase()
 	}
 
+	def "POST /auth/signup should not allow to login for the user before confirming the signup"() {
+		given:
+		def username = 'userSignupNoConfirm@test.com'
+		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
+
+		when: "User signs up"
+		EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
+
+		then: "User should not be able to login before signup is confirmed"
+		def loginBodyParams = 'auth_username=' + username + '&auth_password=' + newPassword
+		EntryStoreClient.postRequest('/auth/cookie', loginBodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+
+		when: "signup is confirmed"
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf('?confirm') + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		EntryStoreClient.getRequest('/auth/signup?confirm=' + token, '').getResponseCode() == HTTP_CREATED
+
+		then: "User should be able to login"
+		def info = EntryStoreClient.getRequest('/auth/user', username)
+		info.getResponseCode() == HTTP_OK
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		infoRespJson['id'] != null
+		infoRespJson['user'] == username.toLowerCase()
+	}
 }

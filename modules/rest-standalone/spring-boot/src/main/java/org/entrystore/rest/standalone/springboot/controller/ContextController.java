@@ -64,7 +64,7 @@ public class ContextController {
 			@RequestParam(required = false, name = "graphtype", defaultValue = "none") GraphType graphType,
 			@RequestParam(required = false, name = "resource") URI resourceUri,
 			@RequestParam(required = false, name = "list") URI listUri,
-			@RequestParam(required = false) URI groupUri,
+			@RequestParam(required = false) URI groupURI,
 			@RequestParam(required = false, name = "cached-external-metadata") URI cachedExternalMetadataUri,
 			@RequestParam(required = false, name = "informationresource") String informationResource,
 			@RequestParam(required = false, name = "template") URI templateUri,
@@ -75,7 +75,7 @@ public class ContextController {
 		}
 
 		Entry entry = entryService.createEntry(contextId, entryId, entryType, graphType, resourceUri, listUri,
-				groupUri, cachedExternalMetadataUri, informationResource, templateUri, body);
+				groupURI, cachedExternalMetadataUri, informationResource, templateUri, body);
 
 
 		CreateEntryResponse responseBody = new CreateEntryResponse(entry.getId());

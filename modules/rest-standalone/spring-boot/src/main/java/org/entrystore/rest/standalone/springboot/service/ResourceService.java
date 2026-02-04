@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.model.Model;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -302,6 +303,8 @@ public class ResourceService {
 			try {
 				StringResource stringResource = (StringResource) entry.getResource();
 				stringResource.setString(new String(requestBody, StandardCharsets.UTF_8));
+			} catch (AuthorizationException e) {
+				throw e;
 			} catch (Exception e) {
 				throw new BadRequestException("Problem with input. Error: " + e.getMessage());
 			}
