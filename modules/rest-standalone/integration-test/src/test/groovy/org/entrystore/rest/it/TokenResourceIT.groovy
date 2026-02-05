@@ -14,6 +14,7 @@ class TokenResourceIT extends BaseSpec {
 	static def genericCredsClone = [:]
 
 	def setupSpec() {
+		genericCredsClone = EntryStoreClient.creds.clone()
 		EntryStoreClient.creds.put('userForTokenManagement@test.com', password)
 		EntryStoreClient.creds.put('userForTokenManagementDelete@test.com', password)
 		EntryStoreClient.creds.put('userForTokenManagementDeleteCurrent@test.com', password)
