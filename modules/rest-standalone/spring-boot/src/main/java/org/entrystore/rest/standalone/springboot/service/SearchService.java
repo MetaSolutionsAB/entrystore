@@ -64,6 +64,8 @@ public class SearchService {
 					"  ?x " + queryValue + " ?y }";
 			return repositoryManager.getContextManager().search(query, null, null);
 
+		} catch (AuthorizationException e) {
+			throw e;
 		} catch (Exception e) {
 			throw new BadRequestException("Exception processing SPARQL query: " + e.getMessage());
 		}

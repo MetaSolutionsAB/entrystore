@@ -63,7 +63,47 @@ class ResourceSyndicationIT extends BaseSpec {
 		Thread.sleep(1500)
 	}
 
-	def "GET /{context-id}/resource/{entry-id}?syndication=rss_2.0 should return created resource syndication"() {
+	def "GET /{context-id}/resource/{entry-id}?syndication=rss_2.0 as guest should return empty feed"() {
+		when:
+		// fetch syndication feed for the context
+		// TODO: context in the request needs to have a name (alias) for syndication to not return null values in the text, bug?
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId + '?syndication=rss_2.0', '')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/rss+xml')
+		def respXml = new XmlParser(false, false).parseText(resourceConn.getInputStream().text)
+		respXml.attributes()['xmlns:dc'] == null
+		respXml.attributes()['version'] != null
+		respXml.value().size() == 1
+		respXml['channel'].size() == 1
+
+		def channelNode = respXml['channel'][0] as Node
+		channelNode.attributes().size() == 0
+		channelNode.value().size() > 2
+
+		channelNode['title'].size() == 1
+		def channelTitleNode = channelNode['title'][0] as Node
+		channelTitleNode.attributes().size() == 0
+		channelTitleNode.value().size() == 1
+		channelTitleNode.value()[0] == 'Feed of "Syndication Test"'
+
+		channelNode['link'].size() == 1
+		def channelLinkNode = channelNode['link'][0] as Node
+		channelLinkNode.attributes().size() == 0
+		channelLinkNode.value().size() == 1
+		channelLinkNode.value()[0] == EntryStoreClient.baseUrl + '/' + contextId
+
+		channelNode['description'].size() == 1
+		def channelDescriptionNode = channelNode['description'][0] as Node
+		channelDescriptionNode.attributes().size() == 0
+		channelDescriptionNode.value().size() == 1
+		channelDescriptionNode.value()[0] == 'Syndication feed containing max 50 items'
+
+		channelNode['item'].size() == 0
+	}
+
+	def "GET /{context-id}/resource/{entry-id}?syndication=rss_2.0 as admin should return created resource syndication"() {
 		when:
 		// fetch syndication feed for the context
 		// TODO: context in the request needs to have a name (alias) for syndication to not return null values in the text, bug?
@@ -244,7 +284,42 @@ class ResourceSyndicationIT extends BaseSpec {
 		(itemDateNode.value()[0] as String).contains(Year.now().toString())
 	}
 
-	def "GET /{context-id}/resource/{entry-id}?syndication=atom_1.0 should return created resource syndication in atom format"() {
+	def "GET /{context-id}/resource/{entry-id}?syndication=atom_1.0 as guest should return empty syndication feed in atom format"() {
+		when: "we fetch syndication feed for the context"
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId + '?syndication=atom_1.0', '')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/atom+xml')
+		def respXml = new XmlParser(false, false).parseText(resourceConn.getInputStream().text)
+		respXml.attributes().size() > 0
+		respXml.attributes()['xmlns'] == 'http://www.w3.org/2005/Atom'
+		respXml.attributes()['xmlns:dc'] == null
+		respXml.value().size() > 2
+
+		respXml['title'].size() == 1
+		def titleNode = respXml['title'][0] as Node
+		titleNode.attributes().size() == 0
+		titleNode.value().size() == 1
+		titleNode.value()[0] == 'Feed of "Syndication Test"'
+
+		respXml['link'].size() == 1
+		def linkNode = respXml['link'][0] as Node
+		linkNode.attributes().size() == 2
+		linkNode.attributes()['rel'] == 'alternate'
+		linkNode.attributes()['href'] == EntryStoreClient.baseUrl + '/' + contextId
+		linkNode.value().size() == 0
+
+		respXml['subtitle'].size() == 1
+		def subtitleNode = respXml['subtitle'][0] as Node
+		subtitleNode.attributes().size() == 0
+		subtitleNode.value().size() == 1
+		subtitleNode.value()[0] == 'Syndication feed containing max 50 items'
+
+		respXml['entry'].size() == 0
+	}
+
+	def "GET /{context-id}/resource/{entry-id}?syndication=atom_1.0 as admin should return created resource syndication in atom format"() {
 		when:
 		// fetch syndication feed for the context
 		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId + '?syndication=atom_1.0')

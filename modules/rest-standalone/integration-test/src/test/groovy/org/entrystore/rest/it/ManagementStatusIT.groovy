@@ -2,14 +2,15 @@ package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
 
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ManagementStatusIT extends BaseSpec {
 
-	def "GET /management/status should reply with text status UP, when text Accept header is defined"() {
+	def "GET /management/status as guest should reply with text status, when text Accept header is defined"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status', null, 'text/plain')
+		def connection = EntryStoreClient.getRequest('/management/status', '', 'text/plain')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -17,9 +18,9 @@ class ManagementStatusIT extends BaseSpec {
 		connection.getInputStream().text == 'UP'
 	}
 
-	def "GET /management/status should reply with json status 'online', when json Accept header is defined"() {
+	def "GET /management/status as guest should reply with json status, when json Accept header is defined"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status', null, 'application/json')
+		def connection = EntryStoreClient.getRequest('/management/status', '', 'application/json')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -30,9 +31,7 @@ class ManagementStatusIT extends BaseSpec {
 		(responseJson['version'] as String).length() > 2
 	}
 
-	// Spring boot defaults to JSON when no content type is specified
-
-	def "GET /management/status should reply with json status 'online', when no Accept header is defined"() {
+	def "GET /management/status as admin should reply with json status 'online', when no Accept header is defined"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status', null, null)
 
@@ -45,9 +44,10 @@ class ManagementStatusIT extends BaseSpec {
 		(responseJson['version'] as String).length() > 2
 	}
 
-	def "GET /management/status?extended should reply with Unauthorized error for non-admin user"() {
+	// Spring boot defaults to JSON when no content type is specified
+	def "GET /management/status/extended as guest should reply with Unauthorized 401"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status/extended', null)
+		def connection = EntryStoreClient.getRequest('/management/status/extended', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
@@ -55,7 +55,17 @@ class ManagementStatusIT extends BaseSpec {
 		connection.getErrorStream().text.contains('"error":"Unauthorized"')
 	}
 
-	def "GET /management/status/extended should reply with detailed status for admin user"() {
+	def "GET /management/status/extended as non-admin user should reply with Forbidden"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/management/status/extended', 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_FORBIDDEN
+		connection.getContentType().contains('application/json')
+		connection.getErrorStream().text.contains('"error":"Forbidden"')
+	}
+
+	def "GET /management/status/extended as admin should reply with detailed status"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status/extended')
 
@@ -74,7 +84,7 @@ class ManagementStatusIT extends BaseSpec {
 		responseJson['stats'] == null
 	}
 
-	def "GET /management/status/extended?include=countStats should reply with detailed status and stats for admin user"() {
+	def "GET /management/status/extended?include=countStats as admin should reply with detailed status and stats for admin user"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status/extended?include=countStats')
 
@@ -98,9 +108,9 @@ class ManagementStatusIT extends BaseSpec {
 		responseJson['countStats']['namedGraphCount'] != null
 	}
 
-	def "GET /management/status/extended?includeStats should reply with Unauthorized for non-admin user"() {
+	def "GET /management/status/extended?includeStats as guest should reply with Unauthorized 401"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status/extended?includeStats', null)
+		def connection = EntryStoreClient.getRequest('/management/status/extended?includeStats', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED

@@ -4,6 +4,7 @@ import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.entrystore.rest.it.util.UserUtil
 import org.entrystore.rest.standalone.springboot.EntryStoreApplicationStandaloneSpringBoot
 import org.slf4j.LoggerFactory
 import org.springframework.boot.SpringApplication
@@ -60,9 +61,25 @@ abstract class BaseSpec extends Specification {
 			log.info('Starting EntryStoreApp without SAML')
 			def args = ['--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core'] as String[]
 			appInstance = SpringApplication.run(EntryStoreApplicationStandaloneSpringBoot.class, args)
+			createCommonUserAccounts()
 			appStarted = true
 		} else {
 			log.info('EntryStoreApp already started')
+		}
+	}
+
+	static void createCommonUserAccounts() {
+		// Create all users except 'admin' ('admin' is created by the app itself)
+		EntryStoreClient.creds.each {
+			username, password -> {
+				if (username != 'admin') {
+					def isAdmin = EntryStoreClient.isAnAdmin(username)
+					log.info('Creating ES user: {} (Admin: {})', username, isAdmin)
+					def user = UserUtil.createUser(username, null, isAdmin)
+					UserUtil.setUserPassword(user['resourceUri'].toString(), password)
+					EntryStoreClient.createdEsUsers[username] = user
+				}
+			}
 		}
 	}
 
