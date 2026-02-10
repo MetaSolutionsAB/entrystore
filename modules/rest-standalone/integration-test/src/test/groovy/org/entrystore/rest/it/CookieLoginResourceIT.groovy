@@ -34,6 +34,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPassword@test.com', password)
 		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPasswordSameCookie@test.com', password)
 		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPasswordOldCookie@test.com', password)
+		EntryStoreClient.creds.put('userForLoginTemporaryLockout@test.com', password)
 	}
 
 	def cleanup() {
@@ -435,6 +436,37 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getResponseCode() == HTTP_FORBIDDEN
 		loginConnection.getContentType().contains('text/html')
 		loginConnection.getErrorStream().text.contains('Login failed. The account is disabled.')
+	}
+
+	def "POST /auth/cookie should temporarily lockout user who entered wrong password too many times"() {
+		given:
+		def username = 'userForLoginTemporaryLockout@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
+		bodyParams = 'auth_username=' + username + '&auth_password=badPass123'
+		// 3 attempts with bad password
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+		bodyParams = 'auth_username=' + username + '&auth_password=' + password
+
+		when:
+		// 4th login attempt does the lockout
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+
+		then:
+		loginConnection.getResponseCode() == 429
+		// wait for the temporary lockout period to pass
+		Thread.sleep(500)
+
+		when:
+		def login2Connection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+
+		then:
+		login2Connection.getResponseCode() == HTTP_OK
 	}
 
 }

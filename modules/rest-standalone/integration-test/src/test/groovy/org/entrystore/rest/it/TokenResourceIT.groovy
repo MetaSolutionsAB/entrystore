@@ -4,12 +4,21 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
 
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.ChronoField
+import java.time.temporal.ChronoUnit
+
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class TokenResourceIT extends BaseSpec {
 
+	static def dtf = new DateTimeFormatterBuilder()
+		.appendPattern("yyyy-MM-dd'T'HH:mm:ss")
+		.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
+		.toFormatter()
 	static def password = 'newPass12345'
 	static def genericCredsClone = [:]
 
@@ -18,6 +27,7 @@ class TokenResourceIT extends BaseSpec {
 		EntryStoreClient.creds.put('userForTokenManagement@test.com', password)
 		EntryStoreClient.creds.put('userForTokenManagementDelete@test.com', password)
 		EntryStoreClient.creds.put('userForTokenManagementDeleteCurrent@test.com', password)
+		EntryStoreClient.creds.put('userForTokenManagementUpdate@test.com', password)
 	}
 
 	def cleanupSpec() {
@@ -73,6 +83,41 @@ class TokenResourceIT extends BaseSpec {
 		tokensRespJson[tokenPart2] != null
 		tokensRespJson[tokenPart2]['userName'] == 'userfortokenmanagement@test.com'
 		tokensRespJson[tokenPart2]['loginTokenMaxAge'] == 50
+	}
+
+	def "GET /auth/tokens should get a list of all currently active logins for of an authenticated user with updated timestamps"() {
+		given:
+		def username = 'userForTokenManagementUpdate@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password
+		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
+		assert loginConnection1.getResponseCode() == HTTP_OK
+		def cookie = loginConnection1.getHeaderField('Set-Cookie')
+		def tokenPart = cookie.substring(cookie.indexOf('auth_token=') + 11)
+		if (tokenPart.contains(';')) {
+			tokenPart = tokenPart.substring(0, tokenPart.indexOf(';'))
+		}
+		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie])
+		assert tokensConnection.getResponseCode() == HTTP_OK
+		def tokensRespJson = JSON_PARSER.parseText(tokensConnection.getInputStream().text)
+		def oldLastAccessTime = LocalDateTime.parse(tokensRespJson[tokenPart]['lastAccessTime'].toString(), dtf)
+		def oldLoginExpiration = LocalDateTime.parse(tokensRespJson[tokenPart]['loginExpiration'].toString(), dtf)
+		def oldLoginTime = tokensRespJson[tokenPart]['loginTime']
+		Thread.sleep(1000)
+
+		when:
+		def tokensNewConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie])
+
+		then:
+		tokensNewConnection.getResponseCode() == HTTP_OK
+		def tokensNewRespJson = JSON_PARSER.parseText(tokensNewConnection.getInputStream().text)
+		def newLastAccessTime = LocalDateTime.parse(tokensNewRespJson[tokenPart]['lastAccessTime'].toString(), dtf)
+		ChronoUnit.SECONDS.between(oldLastAccessTime, newLastAccessTime) == 1
+		def newLoginExpiration = LocalDateTime.parse(tokensNewRespJson[tokenPart]['loginExpiration'].toString(), dtf)
+		ChronoUnit.SECONDS.between(oldLoginExpiration, newLoginExpiration) == 1
+		oldLoginTime == tokensNewRespJson[tokenPart]['loginTime']
 	}
 
 	def "DELETE /auth/tokens should get unauthorized for a non-authenticated user"() {
