@@ -459,10 +459,12 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		loginConnection.getResponseCode() == 429
-		// wait for the temporary lockout period to pass
-		Thread.sleep(500)
+		loginConnection.getContentType().contains('text/html')
+		loginConnection.getErrorStream().text.contains('User account is temporarily disabled. Too many failed logins.')
 
 		when:
+		// wait for the temporary lockout period to pass
+		Thread.sleep(300)
 		def login2Connection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:

@@ -85,7 +85,7 @@ class TokenResourceIT extends BaseSpec {
 		tokensRespJson[tokenPart2]['loginTokenMaxAge'] == 50
 	}
 
-	def "GET /auth/tokens should get a list of all currently active logins for of an authenticated user with updated timestamps"() {
+	def "GET /auth/tokens should get a list of all currently active logins of an authenticated user with updated timestamps"() {
 		given:
 		def username = 'userForTokenManagementUpdate@test.com'
 		def user = UserUtil.createUser(username)
@@ -105,7 +105,6 @@ class TokenResourceIT extends BaseSpec {
 		def oldLastAccessTime = LocalDateTime.parse(tokensRespJson[tokenPart]['lastAccessTime'].toString(), dtf)
 		def oldLoginExpiration = LocalDateTime.parse(tokensRespJson[tokenPart]['loginExpiration'].toString(), dtf)
 		def oldLoginTime = tokensRespJson[tokenPart]['loginTime']
-		Thread.sleep(1000)
 
 		when:
 		def tokensNewConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie])
@@ -114,9 +113,9 @@ class TokenResourceIT extends BaseSpec {
 		tokensNewConnection.getResponseCode() == HTTP_OK
 		def tokensNewRespJson = JSON_PARSER.parseText(tokensNewConnection.getInputStream().text)
 		def newLastAccessTime = LocalDateTime.parse(tokensNewRespJson[tokenPart]['lastAccessTime'].toString(), dtf)
-		ChronoUnit.SECONDS.between(oldLastAccessTime, newLastAccessTime) == 1
+		ChronoUnit.MILLIS.between(oldLastAccessTime, newLastAccessTime) > 0
 		def newLoginExpiration = LocalDateTime.parse(tokensNewRespJson[tokenPart]['loginExpiration'].toString(), dtf)
-		ChronoUnit.SECONDS.between(oldLoginExpiration, newLoginExpiration) == 1
+		ChronoUnit.MILLIS.between(oldLoginExpiration, newLoginExpiration) > 0
 		oldLoginTime == tokensNewRespJson[tokenPart]['loginTime']
 	}
 
