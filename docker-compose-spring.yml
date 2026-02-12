@@ -1,0 +1,64 @@
+# Requires a built entryscape frontend to be present in "./config-localhost/dist/" folder.
+# Pre-built version can be downloaded from https://entryscape.org/download/
+
+name: metasolutions-stack
+
+
+services:
+
+  frontend:
+    image: metasolutions/apache2
+    ports:
+      - "80:80"
+    depends_on:
+      entrystore:
+        condition: service_healthy
+    volumes:
+      - ./config-localhost/apache.conf:/etc/apache2/sites-available/000-default.conf:ro
+      - ./config-localhost/theme/:/srv/entryscape-theme/:ro
+      - ./config-localhost/dist/:/srv/entryscape/:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  entrystore:
+    build:
+      context: .
+      dockerfile: ./modules/rest-standalone/spring-boot/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on: # Waits for the solr service to be healthy before starting
+      solr-db:
+        condition: service_healthy
+    labels:
+      se.metasolutions.domain: "localhost"
+    volumes:
+      - ./config-localhost/docker-spring/entrystore.properties:/srv/entrystore/entrystore.properties:ro
+    environment:
+      # override properties
+      ENTRYSTORE_SOLR_URL: http://solr-db:8983/solr/entrystore-core
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/management/status"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 5s # time before the first check.
+
+  solr-db:
+    image: solr:9.10.1
+    hostname: solr-db
+    ports:
+      - "8983:8983"
+    command: ["solr-precreate", "entrystore-core", "/entrystore-core"]
+    environment:
+      SOLR_MODULES: "analysis-extras"
+      SOLR_JETTY_CONFIG: "--module=http"  # no http2 module - to get rid of stream-cancelled errors
+    healthcheck:
+      # This check pings the specific core to ensure it's ready to accept requests.
+      # The backend service will wait for this to return a 200 OK.
+      test: ["CMD", "curl", "-f", "http://localhost:8983/solr/entrystore-core/admin/ping"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 5s # time before the first check.
+    volumes:
+      - ./modules/rest-standalone/integration-test/src/test/resources/solr:/entrystore-core/conf/:rw

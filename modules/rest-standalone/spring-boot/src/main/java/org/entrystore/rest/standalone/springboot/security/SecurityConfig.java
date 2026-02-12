@@ -80,6 +80,7 @@ public class SecurityConfig {
 
 		http
 				.csrf(AbstractHttpConfigurer::disable)
+//				.cors(cors -> cors.configurationSource(corsConfig))
 				.sessionManagement(session -> session
 						.sessionConcurrency(concurrency -> concurrency
 								.maximumSessions(-1)
@@ -140,7 +141,20 @@ public class SecurityConfig {
 
 		return http.build();
 	}
+/*
+	@Bean
+	public CorsConfigurationSource corsConfig() {
+		CorsConfiguration config = new CorsConfiguration();
+		config.setAllowedOrigins(List.of("http://localhost"));
+		config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+		config.setAllowedHeaders(List.of("*"));
+		config.setAllowCredentials(true);
 
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", config);
+		return source;
+	}
+*/
 	@Bean
 	public AuthenticationEntryPoint customEntryPoint() {
 		return (request, response, authException) -> {

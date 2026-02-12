@@ -137,10 +137,14 @@ public class AuthController {
 	)
 	public String signup(
 			HttpServletRequest request,
+			HttpServletResponse response,
 			Model model,
 			@RequestBody HashMap<String, String> parameters) {
 
 		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
+
+		response.setContentType(MediaType.TEXT_HTML_VALUE);
+
 		SignupRequestBody signupRequestBody = new SignupRequestBody(
 				parameters.get("email"),
 				parameters.get("password"),

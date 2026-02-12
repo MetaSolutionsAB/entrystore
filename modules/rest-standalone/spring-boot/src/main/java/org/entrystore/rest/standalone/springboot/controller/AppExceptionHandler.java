@@ -102,7 +102,7 @@ public class AppExceptionHandler {
 	@ExceptionHandler(DataConflictException.class)
 	public ResponseEntity<ErrorResponse> handleDataConflictException(DataConflictException ex,
 																	 HttpServletRequest request) {
-		log.warn("DataConflictException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		log.warn("DataConflictException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.CONFLICT.value())
 				.path(request.getRequestURI())
@@ -114,7 +114,7 @@ public class AppExceptionHandler {
 	@ExceptionHandler(NotImplementedException.class)
 	public ResponseEntity<ErrorResponse> handleNotImplementedException(NotImplementedException ex,
 																	   HttpServletRequest request) {
-		log.warn("NotImplementedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		log.warn("NotImplementedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.NOT_IMPLEMENTED.value())
 				.path(request.getRequestURI())
@@ -183,7 +183,7 @@ public class AppExceptionHandler {
 			throw ex;
 		}
 
-		log.error("Unhandled general Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+		log.error("Unhandled general Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
 				.path(request.getRequestURI())
