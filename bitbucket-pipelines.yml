@@ -59,7 +59,7 @@ stepdefinitions:
         # - if [ $BITBUCKET_BRANCH == "develop" ]; then docker buildx imagetools create -t metasolutions/entrystore:develop metasolutions/entrystore:$VERSION ; fi
         # - if [ $BITBUCKET_BRANCH == "master" ]; then docker buildx imagetools create -t metasolutions/entrystore:$VERSION_MAJOR_MINOR metasolutions/entrystore:$VERSION ; fi
       services:
-        - docker
+        - docker-3g
       caches:
         - docker
   # trivy was activated as a step before build, but it took a long time to run (~7 mins) and we also have Snyk
@@ -90,4 +90,7 @@ definitions:
     docker-large:
       # this seems to not be multiplied with the "size" value above
       memory: 8192
+      type: docker
+    docker-3g:
+      memory: 3072
       type: docker
