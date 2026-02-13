@@ -655,12 +655,12 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getURL().toString() == 'http://localhost:8181/auth/signup?confirm=' + token
 	}
 
-	// not sure how to invoke 500 server error
+	// SignUp with not whitelisted user should not be available.
+	// Fixed in Spring, decided not to fix in Restlet
 	@Ignore
 	def "GET /auth/signup should not confirm user signup and redirect to failure url"() {
 		given:
 		def username = 'userSignupFailureUrl@test.com'
-		UserUtil.createUser(username)
 		def urlfailure = "http://localhost:8181/123"
 		def requestBody = JsonOutput.toJson([
 			firstname         : firstName,
