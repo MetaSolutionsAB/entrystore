@@ -23,6 +23,8 @@ echo "Building EntryStore $ENTRYSTORE_VERSION with image tag $DOCKER_IMAGE_TAG"
 
 docker build \
   -f "$SCRIPT_DIR/Dockerfile" \
+  --no-cache \
+  --pull \
   --build-arg ENTRYSTORE_VERSION="$ENTRYSTORE_VERSION" \
   --tag "$DOCKER_IMAGE_TAG" \
   "$PROJECT_ROOT"
