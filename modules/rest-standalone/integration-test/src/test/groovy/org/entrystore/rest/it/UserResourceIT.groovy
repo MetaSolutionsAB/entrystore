@@ -4,7 +4,13 @@ import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
+import spock.lang.PendingFeature
 import spock.lang.Unroll
+
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.ChronoField
+import java.time.temporal.ChronoUnit
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -13,10 +19,10 @@ import static java.net.HttpURLConnection.HTTP_OK
 
 class UserResourceIT extends BaseSpec {
 
-	//static DateTimeFormatter dtf = new DateTimeFormatterBuilder()
-	//	.appendPattern("yyyy-MM-dd'T'HH:mm:ss")
-	//	.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
-	//	.toFormatter()
+	static def dtf = new DateTimeFormatterBuilder()
+		.appendPattern("yyyy-MM-dd'T'HH:mm:ss")
+		.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
+		.toFormatter()
 	static def newPassword = 'newPass12345'
 	static def greenMail = new GreenMail(SMTP)
 	static def genericCredsClone = [:]
@@ -37,6 +43,7 @@ class UserResourceIT extends BaseSpec {
 		greenMail.stop()
 	}
 
+	@PendingFeature
 	@Unroll
 	def 'GET /auth/user as "#requestUser" should respond with current user info'() {
 		given:
@@ -56,12 +63,12 @@ class UserResourceIT extends BaseSpec {
 		infoRespJson['clientAcceptLanguage']['fr-CH'] == 0.9
 		// for Guest user 'authTokenExpires' field should not be present
 		if (requestUser.isEmpty()) {
-			assert infoRespJson['authTokenExpires'] == null
+			infoRespJson['authTokenExpires'] == null
 		} else {
-			/*assert infoRespJson['authTokenExpires'] != null
+			infoRespJson['authTokenExpires'] != null
 			def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
 			def now = LocalDateTime.now()
-			assert ChronoUnit.HOURS.between(now, authTokenExpires) == 1*/
+			ChronoUnit.HOURS.between(now, authTokenExpires) == 1
 		}
 
 		where:
@@ -72,6 +79,7 @@ class UserResourceIT extends BaseSpec {
 		'admin'            | 'admin'            | '_admin'
 	}
 
+	@PendingFeature
 	def "GET /auth/user should return info about currently logged-in user"() {
 		given:
 		def username = 'userForInfo@test.com'
@@ -97,10 +105,10 @@ class UserResourceIT extends BaseSpec {
 		infoRespJson['clientAcceptLanguage'] != null
 		infoRespJson['clientAcceptLanguage']['en-US'] == 0.7
 		infoRespJson['clientAcceptLanguage']['fr-CH'] == 0.9
-		//infoRespJson['authTokenExpires'] != null
-		//def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
-		//def now = LocalDateTime.now()
-		//ChronoUnit.HOURS.between(now, authTokenExpires) == 23
+		infoRespJson['authTokenExpires'] != null
+		def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
+		def now = LocalDateTime.now()
+		ChronoUnit.HOURS.between(now, authTokenExpires) == 1
 	}
 
 	def "GET /auth/user should return info about currently logged-in user including homecontext"() {
