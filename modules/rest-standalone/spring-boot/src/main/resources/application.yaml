@@ -19,7 +19,7 @@ info.app.version: "@project.version@"
 # imported properties from "entrystore.properties" take precedence over properties here (when the same key exists in both property sources)
 spring:
   config.import:
-    - classpath:entrystore.properties
+    - optional:classpath:entrystore.properties
   mvc.problemdetails.enabled: false
   servlet.multipart:
     max-file-size: 12MB
