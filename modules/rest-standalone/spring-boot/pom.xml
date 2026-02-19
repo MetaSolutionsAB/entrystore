@@ -7,12 +7,12 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-rest-standalone</artifactId>
-		<version>5.6-SNAPSHOT</version>
+		<version>5.10-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>entrystore-rest-standalone-spring-boot</artifactId>
 	<packaging>jar</packaging>
-	<version>5.6-SNAPSHOT</version>
+	<version>5.10-SNAPSHOT</version>
 	<name>EntryStore REST Standalone Spring Boot App</name>
 
 	<dependencies>
@@ -116,5 +116,15 @@
 				<directory>src/test/resources</directory>
 			</testResource>
 		</testResources>
+
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<classifier>exec</classifier>
+				</configuration>
+			</plugin>
+		</plugins>
 	</build>
 </project>
