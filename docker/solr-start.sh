@@ -11,6 +11,7 @@ DOMAIN="$1"
 CONTAINER_NAME="solr-${DOMAIN}"
 SOLR_PORT="${SOLR_PORT:-8983}"
 SOLR_VERSION="${SOLR_VERSION:-9.8.1}"
+SOLR_DATA="${SOLR_DATA:-/srv/${DOMAIN}/data/solr}"
 CORE_NAME="entrystore-core"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONF_DIR="${SCRIPT_DIR}/../modules/rest-standalone/integration-test/src/test/resources/solr"
@@ -18,6 +19,17 @@ CONF_DIR="${SCRIPT_DIR}/../modules/rest-standalone/integration-test/src/test/res
 if [ ! -d "$CONF_DIR" ]; then
 	echo "Error: Solr config directory not found: ${CONF_DIR}" >&2
 	exit 1
+fi
+
+if [ ! -d "$SOLR_DATA" ]; then
+	echo "Creating Solr data directory ${SOLR_DATA}..."
+	mkdir -p "${SOLR_DATA}"
+	chown 8983:8983 "${SOLR_DATA}"
+else
+	OWNER_UID=$(stat -c '%u' "${SOLR_DATA}")
+	if [ "$OWNER_UID" != "8983" ]; then
+		echo "Warning: ${SOLR_DATA} is owned by UID ${OWNER_UID}, expected 8983 (solr). Solr may fail to write data." >&2
+	fi
 fi
 
 if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
@@ -35,6 +47,7 @@ echo "Starting Solr container '${CONTAINER_NAME}' on port ${SOLR_PORT}..."
 docker run -d \
 	--name "${CONTAINER_NAME}" \
 	-p "${SOLR_PORT}:8983" \
+	-v "${SOLR_DATA}:/var/solr/data" \
 	-v "${CONF_DIR}:/${CORE_NAME}/conf/:rw" \
 	-e SOLR_MODULES=analysis-extras \
 	--health-cmd "curl -f http://localhost:8983/solr/${CORE_NAME}/admin/ping || exit 1" \
