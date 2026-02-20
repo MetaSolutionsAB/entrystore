@@ -28,6 +28,12 @@ public class EntryStoreConfiguration {
 
 	private final Environment environment;
 
+	/**
+	 * Creates a bean with Entrystore configuration needed for core.
+	 * Properties (key and value pairs) are read from property files (*.yml and *.properties) that were loaded on init by Spring-boot
+	 *
+	 * @return a Config class (essentially a wrapper around java.util.Properties) needed for Entrystore core to work
+	 */
 	@Bean
 	public Config createEntryStoreConfiguration() {
 		SortedProperties properties = fetchSpringPropertiesWithPrefix(ENTRYSTORE_CONFIG_PREFIX);

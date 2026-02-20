@@ -8,6 +8,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.standalone.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.standalone.springboot.model.auth.AuthState;
 import org.entrystore.rest.standalone.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.standalone.springboot.service.auth.SamlAuthStateCache;
@@ -51,19 +52,18 @@ public class SecurityConfig {
 	private final ESAuthenticationSuccessHandler authenticationSuccessHandler;
 
 	// SAML-auth related beans
+	private final SamlCustomConfiguration samlConfiguration;
 	private final SamlLoginSuccessHandler successHandler;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlAuthStateCache samlAuthStateCache;
 
 	private boolean basicAuthEnabled;
-	private boolean samlAuthEnabled;
 
 	private final Config config;
 
 	@PostConstruct
 	public void init() {
 		basicAuthEnabled = config.getBoolean(Settings.AUTH_HTTP_BASIC_ENABLED, false);
-		samlAuthEnabled = config.getBoolean(Settings.AUTH_SAML_ENABLED, false);
 	}
 
 	@Bean
@@ -112,7 +112,7 @@ public class SecurityConfig {
 			log.info("Basic Auth Disabled");
 		}
 
-		if (samlAuthEnabled) {
+		if (samlConfiguration.enabled()) {
 			log.info("SAML Auth Enabled");
 
 			// below modifies the login success handler, to set the redirect URL param name
@@ -121,6 +121,8 @@ public class SecurityConfig {
 
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
+					.defaultSuccessUrl(samlConfiguration.redirectSuccess())
+					.failureUrl(samlConfiguration.redirectFailure())
 					.authenticationRequestResolver(createCustomResolver())
 					.successHandler(successHandler));
 		} else {
