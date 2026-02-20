@@ -16,3 +16,4 @@ templates/out/
 templates/node_modules/
 /testdata/
 /logs/
+/.claude/settings.local.json

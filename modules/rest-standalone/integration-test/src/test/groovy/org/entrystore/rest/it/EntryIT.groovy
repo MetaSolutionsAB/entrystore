@@ -2089,7 +2089,7 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		def entryConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId, '')
+		def entryConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId, '[]', '')
 
 		then:
 		entryConn.getResponseCode() == HTTP_UNAUTHORIZED
@@ -2116,7 +2116,7 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		def entryConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId, 'user')
+		def entryConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId, '[]', 'user')
 
 		then:
 		entryConn.getResponseCode() == HTTP_FORBIDDEN

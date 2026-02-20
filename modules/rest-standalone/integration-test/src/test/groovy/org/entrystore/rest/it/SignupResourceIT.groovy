@@ -654,7 +654,6 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getURL().toString() == 'http://localhost:8181/auth/signup?confirm=' + token
 	}
 
-	// TODO not sure how to invoke 500 server error, maybe blacklisted user?
 	def "GET /auth/signup should not confirm user signup and redirect to failure url"() {
 		given:
 		def username = 'userSignupFailureUrl@test.com'
