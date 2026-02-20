@@ -109,6 +109,7 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>solr</artifactId>
+			<!-- We should update the version to 2.x to use newer Docker CLI, but newer version is based on jakarta, hence need to use this old ver -->
 			<version>1.21.1</version>
 			<scope>test</scope>
 		</dependency>

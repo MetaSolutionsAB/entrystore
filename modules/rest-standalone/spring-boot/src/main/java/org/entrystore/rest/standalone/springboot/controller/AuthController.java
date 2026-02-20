@@ -11,7 +11,6 @@ import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundE
 import org.entrystore.rest.standalone.springboot.service.AuthService;
 import org.entrystore.rest.standalone.springboot.service.SamlAuthService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
-import org.entrystore.rest.standalone.springboot.util.JsonUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -36,7 +35,7 @@ public class AuthController {
 	private final String signupTitle = "Sign-up";
 	private final String passwordResetTitle = "Password reset";
 
-	@Value("${app.security.saml.enabled:false}")
+	@Value("${entrystore.auth.saml.enabled:false}")
 	private boolean isSamlAuthEnabled;
 
 	private final AuthService authService;
@@ -142,9 +141,7 @@ public class AuthController {
 	public String signup(
 			HttpServletRequest request,
 			Model model,
-			@RequestBody String requestBody) {
-
-		HashMap<String, String> parameters = JsonUtil.jsonToMap(requestBody);
+			@RequestBody HashMap<String, String> parameters) {
 
 		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
 		SignupRequestBody signupRequestBody = new SignupRequestBody(
