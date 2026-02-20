@@ -103,8 +103,10 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.POST, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
 	}
 
-	def static deleteRequest(String path, String asUser = 'admin') {
-		return sendRequestAsStream(HttpMethod.DELETE, path, null, asUser, null)
+	def static deleteRequest(String path, String body = emptyJsonBody, String asUser = 'admin',
+							 String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
+		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes(UTF_8))
+		return sendRequestAsStream(HttpMethod.DELETE, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
 	def static sendRequestAsStream(HttpMethod method, String path, InputStream inputStream, String asUser,
