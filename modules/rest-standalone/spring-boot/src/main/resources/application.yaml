@@ -1,5 +1,6 @@
 server:
   port: 8080
+  forward-headers-strategy: framework
   servlet:
 #    context-path: /store
     session.cookie:
@@ -16,7 +17,7 @@ info.app.version: "@project.version@"
 # imported properties from "entrystore.properties" take precedence over properties here (when the same key exists in both property sources)
 spring:
   config.import:
-    - file:entrystore.properties
+    - optional:file:entrystore.properties
   mvc.problemdetails.enabled: false
   servlet.multipart:
     max-file-size: 12MB

@@ -117,12 +117,11 @@ public class SecurityConfig {
 
 			// below modifies the login success handler, to set the redirect URL param name
 			successHandler.setTargetUrlParameter("successurl");
-			successHandler.setDefaultTargetUrl("/management/status");
+			successHandler.setDefaultTargetUrl(samlConfiguration.redirectSuccess().url());
 
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
-					.defaultSuccessUrl(samlConfiguration.redirectSuccess())
-					.failureUrl(samlConfiguration.redirectFailure())
+					.failureUrl(samlConfiguration.redirectFailure().url())
 					.authenticationRequestResolver(createCustomResolver())
 					.successHandler(successHandler));
 		} else {

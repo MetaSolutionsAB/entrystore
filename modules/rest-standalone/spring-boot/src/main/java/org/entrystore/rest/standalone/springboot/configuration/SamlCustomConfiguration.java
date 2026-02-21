@@ -7,7 +7,14 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record SamlCustomConfiguration(
 		@DefaultValue("false") boolean enabled,
 		String defaultIdp,
-		@DefaultValue("/start") String redirectSuccess,
-		@DefaultValue("/signin") String redirectFailure
+		RedirectSuccess redirectSuccess,
+		RedirectFailure redirectFailure
 ) {
+	public SamlCustomConfiguration {
+		if (redirectSuccess == null) redirectSuccess = new RedirectSuccess("/auth/user");
+		if (redirectFailure == null) redirectFailure = new RedirectFailure("/auth/user");
+	}
+
+	public record RedirectSuccess(String url) {}
+	public record RedirectFailure(String url) {}
 }
