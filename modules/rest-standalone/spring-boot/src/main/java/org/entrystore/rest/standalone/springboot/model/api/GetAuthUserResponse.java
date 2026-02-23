@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
 @Builder
@@ -16,6 +17,6 @@ public record GetAuthUserResponse(
 		String language,
 		Map<String, Double> clientAcceptLanguage,
 		@JsonProperty("external-id") String externalId,
-		String authTokenExpires
+		LocalDateTime authTokenExpires
 ) {
 }

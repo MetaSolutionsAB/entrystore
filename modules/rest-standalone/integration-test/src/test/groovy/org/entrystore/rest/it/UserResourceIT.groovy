@@ -4,7 +4,6 @@ import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import spock.lang.PendingFeature
 import spock.lang.Unroll
 
 import java.time.LocalDateTime
@@ -43,7 +42,6 @@ class UserResourceIT extends BaseSpec {
 		greenMail.stop()
 	}
 
-	@PendingFeature
 	@Unroll
 	def 'GET /auth/user as "#requestUser" should respond with current user info'() {
 		given:
@@ -63,12 +61,12 @@ class UserResourceIT extends BaseSpec {
 		infoRespJson['clientAcceptLanguage']['fr-CH'] == 0.9
 		// for Guest user 'authTokenExpires' field should not be present
 		if (requestUser.isEmpty()) {
-			infoRespJson['authTokenExpires'] == null
+			assert infoRespJson['authTokenExpires'] == null
 		} else {
-			infoRespJson['authTokenExpires'] != null
+			assert infoRespJson['authTokenExpires'] != null
 			def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
 			def now = LocalDateTime.now()
-			ChronoUnit.HOURS.between(now, authTokenExpires) == 1
+			assert ChronoUnit.HOURS.between(now, authTokenExpires) == 1
 		}
 
 		where:
@@ -79,7 +77,6 @@ class UserResourceIT extends BaseSpec {
 		'admin'            | 'admin'            | '_admin'
 	}
 
-	@PendingFeature
 	def "GET /auth/user should return info about currently logged-in user"() {
 		given:
 		def username = 'userForInfo@test.com'
