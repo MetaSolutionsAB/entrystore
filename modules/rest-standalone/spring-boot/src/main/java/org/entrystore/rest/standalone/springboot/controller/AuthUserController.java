@@ -2,15 +2,24 @@ package org.entrystore.rest.standalone.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpSession;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.standalone.springboot.model.api.DeleteAuthTokenRequestBody;
 import org.entrystore.rest.standalone.springboot.model.api.GetAuthUserResponse;
+import org.entrystore.rest.standalone.springboot.model.auth.SessionInfo;
+import org.entrystore.rest.standalone.springboot.service.TokenService;
 import org.entrystore.rest.standalone.springboot.service.UserService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -18,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthUserController {
 
 	private final UserService userService;
+	private final TokenService tokenService;
 
 	@Operation(summary = "Provides basic information about the currently logged-in user.")
 	@GetMapping(path = "/auth/user", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -26,5 +36,24 @@ public class AuthUserController {
 			HttpSession session
 	) {
 		return userService.getUserInfo(acceptLanguage, session.getMaxInactiveInterval());
+	}
+
+	@Operation(summary = "Provides list of active tokens of a currently logged-in user.")
+	@GetMapping(path = "/auth/tokens", produces = MediaType.APPLICATION_JSON_VALUE)
+	public Map<String, SessionInfo> tokensInfo() {
+		return tokenService.getTokens();
+	}
+
+	@Operation(summary = "Deletes the session of provided cookie token.")
+	@DeleteMapping(path = "/auth/tokens", produces = MediaType.APPLICATION_JSON_VALUE, consumes = MediaType.APPLICATION_JSON_VALUE)
+	public ResponseEntity<Void> deleteToken(
+			@Valid @RequestBody DeleteAuthTokenRequestBody body
+	) {
+
+		tokenService.deleteToken(body.token());
+
+		return ResponseEntity
+				.noContent()
+				.build();
 	}
 }

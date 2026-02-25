@@ -35,7 +35,6 @@ class TokenResourceIT extends BaseSpec {
 		EntryStoreClient.creds = genericCredsClone
 	}
 
-	@PendingFeature
 	def "GET /auth/tokens should get unauthorized for a non-authenticated user"() {
 		when:
 		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '')
@@ -44,7 +43,6 @@ class TokenResourceIT extends BaseSpec {
 		tokensConnection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	@PendingFeature
 	def "GET /auth/tokens should get a list of all currently active logins for of an authenticated user"() {
 		given:
 		def username = 'userForTokenManagement@test.com'
@@ -123,7 +121,6 @@ class TokenResourceIT extends BaseSpec {
 		oldLoginTime == tokensNewRespJson[tokenPart]['loginTime']
 	}
 
-	@PendingFeature
 	def "DELETE /auth/tokens should get unauthorized for a non-authenticated user"() {
 		when:
 		def tokensConnection = EntryStoreClient.deleteRequest('/auth/tokens', '[]', '')
@@ -132,7 +129,6 @@ class TokenResourceIT extends BaseSpec {
 		tokensConnection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	@PendingFeature
 	def "DELETE /auth/tokens should delete a specified token of the authenticated user"() {
 		given:
 		def username = 'userForTokenManagementDelete@test.com'
@@ -170,7 +166,6 @@ class TokenResourceIT extends BaseSpec {
 		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: cookie2]).getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	@PendingFeature
 	def "DELETE /auth/tokens should delete current login token of the authenticated user and log him out"() {
 		given:
 		def username = 'userForTokenManagementDeleteCurrent@test.com'

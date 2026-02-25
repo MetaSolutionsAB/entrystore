@@ -6,6 +6,7 @@ import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.rest.standalone.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.standalone.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.standalone.springboot.service.UserService;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -14,6 +15,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.time.LocalDateTime;
 
 /**
  * ESUserDetailsService is a Spring Security {@link UserDetailsService} implementation
@@ -61,7 +63,9 @@ public class ESUserDetailsService implements UserDetailsService {
 			if (userEntry != null && GraphType.User.equals(userEntry.getGraphType())) {
 				User user = ((User) userEntry.getResource());
 				if (user.getSaltedHashedSecret() != null) {
-					return mapESUserToUserDetails(user);
+					LocalDateTime now = LocalDateTime.now();
+					SessionInfo sessionInfo = new SessionInfo(username.toLowerCase(), now, now, now, null, null, -1);
+					return mapESUserToUserSessionDetails(user, sessionInfo);
 				} else {
 					log.error("No secret found for user: '{}'", username);
 				}
@@ -99,7 +103,7 @@ public class ESUserDetailsService implements UserDetailsService {
 		return null;
 	}
 
-	private UserDetails mapESUserToUserDetails(User user) {
+	private UserDetails mapESUserToUserSessionDetails(User user, SessionInfo sessionInfo) {
 
 		UserDetails userDetails = org.springframework.security.core.userdetails.User
 				.withUsername(user.getEntry().getResourceURI().toString())
@@ -108,6 +112,6 @@ public class ESUserDetailsService implements UserDetailsService {
 				.roles(userService.isAdmin(user) ? UserAuthRole.ADMIN.name() : UserAuthRole.USER.name())
 				.build();
 
-		return new ESUserDetails(userDetails, user);
+		return new ESUserSessionDetails(userDetails, user, sessionInfo);
 	}
 }

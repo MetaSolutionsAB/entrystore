@@ -92,6 +92,7 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers("/management/status/extended").hasRole(UserAuthRole.ADMIN.name())
 						.requestMatchers(HttpMethod.POST, "/*/import").hasRole(UserAuthRole.ADMIN.name())
+						.requestMatchers("/auth/tokens").hasAnyRole(UserAuthRole.USER.name(), UserAuthRole.ADMIN.name())
 						.anyRequest().permitAll()
 				)
 				.formLogin(login -> login

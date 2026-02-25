@@ -69,7 +69,7 @@ public class ResourceController {
 			@RequestHeader(value = "Accept", required = false, defaultValue = "application/rdf+xml") String acceptHeader
 	) {
 		String mediaType;
-		// for 'rdfFormat' param data should be sent properly - i.e. html encoded '+' as %2B
+		// for 'rdfFormat' param data should be sent properly - i.e. HTML encoded '+' as %2B
 		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
 		// (+ is replaced with a space) we need to replace the space back to '+'
 		if (rdfFormat != null) {

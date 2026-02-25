@@ -6,12 +6,16 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.standalone.springboot.service.auth.LoginAttemptService;
+import org.entrystore.rest.standalone.springboot.model.auth.SessionInfo;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Component
@@ -44,6 +48,25 @@ public class ESAuthenticationSuccessHandler extends SimpleUrlAuthenticationSucce
 		}
 
 		request.getSession().setMaxInactiveInterval(effectiveMaxAge);
+
+		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+		if (authentication != null && authentication.getPrincipal() instanceof ESUserSessionDetails userDetails) {
+			LocalDateTime now = LocalDateTime.now();
+			SessionInfo sessionInfo = new SessionInfo(userDetails.getSessionInfo().userName(),
+					now,
+					now.plusSeconds(request.getSession().getMaxInactiveInterval()),
+					now,
+					request.getRemoteAddr(),
+					request.getHeader("User-Agent"),
+					request.getSession().getMaxInactiveInterval());
+
+			userDetails.setSessionInfo(sessionInfo);
+
+			UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(userDetails, userDetails.getPassword(), userDetails.getAuthorities());
+			SecurityContextHolder.getContext().setAuthentication(newAuth);
+		}
+
 		response.setStatus(HttpStatus.OK.value());
 		response.setContentType("text/html");
 		response.getWriter().write("Login successful.");

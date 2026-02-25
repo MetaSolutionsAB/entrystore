@@ -5,15 +5,19 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.entrystore.rest.standalone.springboot.model.auth.SessionInfo;
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * Class reloads User properties on each HTTP request
@@ -22,26 +26,44 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class DynamicRoleFilter extends OncePerRequestFilter {
 
-	private final UserDetailsService userDetailsService;
+	private final ESUserDetailsService userDetailsService;
 
 	@Override
-	protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+	protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain)
 		throws ServletException, IOException {
 
 		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-		if (authentication != null && authentication.getPrincipal() instanceof UserDetails userDetails) {
-			// Get fresh User details
-			UserDetails updatedUser = userDetailsService.loadUserByUsername(userDetails.getUsername());
+		if (authentication != null && authentication.getPrincipal() instanceof ESUserSessionDetails esUserDetails) {
+			Instant now = Instant.now();
+			try {
+				// Get fresh User details
+				ESUserSessionDetails updatedUser = (ESUserSessionDetails) userDetailsService.loadUserByUsername(esUserDetails.getUsername());
 
-			if (!updatedUser.isEnabled()) {
+				SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
+						.userName(updatedUser.getSessionInfo().userName())
+						.loginTime(esUserDetails.getSessionInfo().loginTime())
+						.loginExpiration(LocalDateTime.ofInstant(now.plusSeconds(request.getSession().getMaxInactiveInterval()), ZoneId.systemDefault()))
+						.lastAccessTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
+						.lastUsedIpAddress(request.getRemoteAddr())
+						.lastUsedUserAgent(request.getHeader("User-Agent"))
+						.loginTokenMaxAge(request.getSession().getMaxInactiveInterval());
+
+				if (!updatedUser.isEnabled()) {
+					SecurityContextHolder.clearContext();
+					response.sendError(HttpServletResponse.SC_FORBIDDEN, "User account is disabled.");
+					return;
+				}
+
+				updatedUser.setSessionInfo(sessionInfo.build());
+
+				UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(updatedUser, updatedUser.getPassword(), updatedUser.getAuthorities());
+				SecurityContextHolder.getContext().setAuthentication(newAuth);
+			} catch (UsernameNotFoundException e) {
 				SecurityContextHolder.clearContext();
-				response.sendError(HttpServletResponse.SC_FORBIDDEN, "User account is disabled.");
+				response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "User account is not found.");
 				return;
 			}
-
-			UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(updatedUser, updatedUser.getPassword(), updatedUser.getAuthorities());
-			SecurityContextHolder.getContext().setAuthentication(newAuth);
 		}
 
 		filterChain.doFilter(request, response);

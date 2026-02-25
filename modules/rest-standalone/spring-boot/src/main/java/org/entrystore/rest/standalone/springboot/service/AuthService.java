@@ -118,6 +118,25 @@ public class AuthService {
 		}
 	}
 
+	public List<SessionInformation> getAllUserSessions(URI userURI, boolean includeExpiredSessions) {
+
+		List<SessionInformation> sessionsList = new ArrayList<>();
+
+		try {
+			String username = principalManager.getUser(userURI).getEntry().getResourceURI().toString();
+			for (Object principal : sessionRegistry.getAllPrincipals()) {
+				if (principal instanceof UserDetails user && user.getUsername().equals(username)) {
+					sessionsList = sessionRegistry.getAllSessions(user, includeExpiredSessions);
+					break;
+				}
+			}
+		} catch (NullPointerException e) {
+			log.error(e.getMessage(), e);
+		}
+
+		return sessionsList;
+	}
+
 	public String confirmPassword(String token, String title) {
 		SignupInfo ci = signupTokenCache.getTokenValue(token);
 		if (ci == null) {
