@@ -9,7 +9,9 @@ import org.entrystore.rest.standalone.springboot.model.api.GetAuthUserResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -38,25 +40,32 @@ public class UserService {
 		Map<String, Double> clientAcceptedLanguages = parseLocalesHeader(locales);
 
 		String homeContext = null;
-		LocalDateTime authTokenExpires = null;
+		Instant authTokenExpires = null;
 		if (!authenticatedUser.getURI().equals(principalManager.getGuestUser().getURI())) {
 			Context context = authenticatedUser.getHomeContext();
 			if (context != null) {
 				homeContext = context.getEntry().getId();
 			}
-			authTokenExpires = LocalDateTime.now().plusSeconds(maxAge);
+
+			if (maxAge > 0) {
+				authTokenExpires = Instant.now().plusSeconds(maxAge);
+			}
 		}
 
-		return GetAuthUserResponse.builder()
+		GetAuthUserResponse.GetAuthUserResponseBuilder response = GetAuthUserResponse.builder()
 				.id(authenticatedUser.getEntry().getId())
 				.homeContext(homeContext)
 				.user(authenticatedUser.getName())
 				.uri(authenticatedUser.getEntry().getEntryURI().toString())
 				.language(authenticatedUser.getLanguage())
 				.clientAcceptLanguage(clientAcceptedLanguages)
-				.externalId(authenticatedUser.getExternalID())
-				.authTokenExpires(authTokenExpires)
-				.build();
+				.externalId(authenticatedUser.getExternalID());
+
+		if (authTokenExpires != null) {
+			response.authTokenExpires(LocalDateTime.ofInstant(authTokenExpires, ZoneId.systemDefault()));
+		}
+
+		return response.build();
 	}
 
 	private static Map<String, Double> parseLocalesHeader(String value) {
