@@ -21,3 +21,8 @@ spring:
   servlet.multipart:
     max-file-size: 12MB
     max-request-size: 12MB
+
+
+logging:
+  http:
+    enabled: true   # Enabled is the default (i.e. when this property is not set), set it to "false" to disable request/response logging
