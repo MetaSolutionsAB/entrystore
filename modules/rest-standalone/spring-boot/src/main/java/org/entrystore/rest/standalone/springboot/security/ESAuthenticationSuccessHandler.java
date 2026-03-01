@@ -15,7 +15,9 @@ import org.springframework.security.web.authentication.SimpleUrlAuthenticationSu
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Slf4j
 @Component
@@ -51,19 +53,20 @@ public class ESAuthenticationSuccessHandler extends SimpleUrlAuthenticationSucce
 
 		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-		if (authentication != null && authentication.getPrincipal() instanceof ESUserSessionDetails userDetails) {
-			LocalDateTime now = LocalDateTime.now();
-			SessionInfo sessionInfo = new SessionInfo(userDetails.getSessionInfo().userName(),
-					now,
-					now.plusSeconds(request.getSession().getMaxInactiveInterval()),
-					now,
-					request.getRemoteAddr(),
-					request.getHeader("User-Agent"),
-					request.getSession().getMaxInactiveInterval());
+		if (authentication != null && authentication.getPrincipal() instanceof ESUserSessionDetails esUserDetails) {
+			Instant now = Instant.now();
+			SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
+					.userName(esUserDetails.getSessionInfo().userName())
+					.loginTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
+					.loginExpiration(LocalDateTime.ofInstant(now.plusSeconds(request.getSession().getMaxInactiveInterval()), ZoneId.systemDefault()))
+					.lastAccessTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
+					.lastUsedIpAddress(request.getRemoteAddr())
+					.lastUsedUserAgent(request.getHeader("User-Agent"))
+					.loginTokenMaxAge(request.getSession().getMaxInactiveInterval());
 
-			userDetails.setSessionInfo(sessionInfo);
+			esUserDetails.setSessionInfo(sessionInfo.build());
 
-			UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(userDetails, userDetails.getPassword(), userDetails.getAuthorities());
+			UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(esUserDetails, esUserDetails.getPassword(), esUserDetails.getAuthorities());
 			SecurityContextHolder.getContext().setAuthentication(newAuth);
 		}
 

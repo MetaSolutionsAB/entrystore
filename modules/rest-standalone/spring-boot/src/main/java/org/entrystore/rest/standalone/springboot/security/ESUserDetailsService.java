@@ -15,7 +15,6 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
-import java.time.LocalDateTime;
 
 /**
  * ESUserDetailsService is a Spring Security {@link UserDetailsService} implementation
@@ -63,9 +62,9 @@ public class ESUserDetailsService implements UserDetailsService {
 			if (userEntry != null && GraphType.User.equals(userEntry.getGraphType())) {
 				User user = ((User) userEntry.getResource());
 				if (user.getSaltedHashedSecret() != null) {
-					LocalDateTime now = LocalDateTime.now();
-					SessionInfo sessionInfo = new SessionInfo(username.toLowerCase(), now, now, now, null, null, -1);
-					return mapESUserToUserSessionDetails(user, sessionInfo);
+					SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
+							.userName(username.toLowerCase());
+					return mapESUserToUserSessionDetails(user, sessionInfo.build());
 				} else {
 					log.error("No secret found for user: '{}'", username);
 				}

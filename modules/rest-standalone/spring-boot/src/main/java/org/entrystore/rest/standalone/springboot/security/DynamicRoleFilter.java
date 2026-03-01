@@ -35,11 +35,10 @@ public class DynamicRoleFilter extends OncePerRequestFilter {
 		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
 		if (authentication != null && authentication.getPrincipal() instanceof ESUserSessionDetails esUserDetails) {
-			Instant now = Instant.now();
 			try {
 				// Get fresh User details
 				ESUserSessionDetails updatedUser = (ESUserSessionDetails) userDetailsService.loadUserByUsername(esUserDetails.getUsername());
-
+				Instant now = Instant.now();
 				SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
 						.userName(updatedUser.getSessionInfo().userName())
 						.loginTime(esUserDetails.getSessionInfo().loginTime())
