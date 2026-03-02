@@ -48,11 +48,11 @@ public class ProxyService {
 	private static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 	private static final List<Pattern> BLACKLIST_REGEX = Arrays.asList(
-			Pattern.compile("^localhost$"),
-			Pattern.compile("(.+)\\.local"),
-			Pattern.compile("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"),
-			Pattern.compile("^\\d$"),
-			Pattern.compile(":")
+			Pattern.compile("^localhost$"),                                   // localhost
+			Pattern.compile("(.+)\\.local"),                                 // any local domains
+			Pattern.compile("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"), // IPv4
+			Pattern.compile("^\\d$"),                                        // IPv4
+			Pattern.compile(":")                                             // IPv6
 	);
 
 	@PostConstruct
@@ -122,6 +122,8 @@ public class ProxyService {
 			}
 		}
 
+		// All hosts that do not resolve into a "regular" Unicast address are automatically
+		// blacklisted, among other reasons to avoid access to local networks
 		try {
 			InetAddress ia = InetAddress.getByName(host);
 			if (ia.isAnyLocalAddress() ||

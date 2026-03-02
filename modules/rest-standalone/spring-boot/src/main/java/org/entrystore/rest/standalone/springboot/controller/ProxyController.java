@@ -48,7 +48,7 @@ public class ProxyController {
 		ProxyResponse response = proxyService.fetchUrl(url, acceptHeader);
 
 		HttpHeaders headers = new HttpHeaders();
-		headers.set("Content-Security-Policy", "script-src 'none'; form-action 'none';");
+		headers.set("Content-Security-Policy", "script-src 'none'; form-action 'none';"); // XSS and SSRF protection
 		if (response.contentType() != null) {
 			headers.set(HttpHeaders.CONTENT_TYPE, response.contentType());
 		}
