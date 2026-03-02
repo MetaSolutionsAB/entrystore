@@ -10,8 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.standalone.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -29,6 +31,7 @@ import java.util.Objects;
 public class BeforeAuthenticationFilter extends OncePerRequestFilter {
 
 	private final Config config;
+	private final LoginAttemptService loginAttemptService;
 	private static List<String> passwordLoginWhitelist;
 	private static List<String> passwordLoginBlacklist;
 
@@ -56,7 +59,7 @@ public class BeforeAuthenticationFilter extends OncePerRequestFilter {
 
 		if (username != null || password != null) {
 			// means someone is trying to authenticate
-			
+
 			if (password == null || password.isEmpty()) {
 				// TODO throw new BadRequestException("Password is missing");
 				response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Password is missing");
@@ -90,6 +93,14 @@ public class BeforeAuthenticationFilter extends OncePerRequestFilter {
 				} else {
 					response.getWriter().write("The request requires user authentication");
 				}
+				return;
+			}
+
+			if (loginAttemptService.isLockedOut(username.toLowerCase())) {
+				log.warn("User {} is temporarily locked out due to too many failed login attempts", username);
+				response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+				response.setContentType("text/html");
+				response.getWriter().write("User account is temporarily disabled. Too many failed logins.");
 				return;
 			}
 		}

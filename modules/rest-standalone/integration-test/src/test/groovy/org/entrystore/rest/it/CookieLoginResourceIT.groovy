@@ -5,7 +5,7 @@ import groovy.json.JsonOutput
 import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import spock.lang.PendingFeature
+
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -436,7 +436,6 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getErrorStream().text.contains('Login failed. The account is disabled.')
 	}
 
-	@PendingFeature
 	def "POST /auth/cookie should temporarily lockout user who entered wrong password too many times"() {
 		given:
 		def username = 'userForLoginTemporaryLockout@test.com'

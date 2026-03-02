@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.entrystore.rest.standalone.springboot.service.auth.LoginAttemptService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
@@ -17,8 +18,15 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class ESAuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
+	private final LoginAttemptService loginAttemptService;
+
 	@Override
 	public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication auth) throws IOException {
+
+		String username = request.getParameter("auth_username");
+		if (username != null) {
+			loginAttemptService.recordSuccess(username.toLowerCase());
+		}
 
 		int effectiveMaxAge = request.getServletContext().getSessionCookieConfig().getMaxAge();
 		// If auth_maxage parameter is set use it as the session max-age, instead of the default cookie config from properties
@@ -37,7 +45,7 @@ public class ESAuthenticationSuccessHandler extends SimpleUrlAuthenticationSucce
 
 		request.getSession().setMaxInactiveInterval(effectiveMaxAge);
 		response.setStatus(HttpStatus.OK.value());
-		response.setHeader("Content-Type", "text/html");
-		response.getOutputStream().println("Login successful.");
+		response.setContentType("text/html");
+		response.getWriter().write("Login successful.");
 	}
 }
