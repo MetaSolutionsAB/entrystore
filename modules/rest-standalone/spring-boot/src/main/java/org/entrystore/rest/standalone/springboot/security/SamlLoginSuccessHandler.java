@@ -1,6 +1,5 @@
 package org.entrystore.rest.standalone.springboot.security;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -10,8 +9,7 @@ import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.standalone.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.standalone.springboot.model.auth.AuthState;
 import org.entrystore.rest.standalone.springboot.model.auth.SamlIdpInfo;
 import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
@@ -24,6 +22,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -35,21 +34,11 @@ import java.net.URI;
 @RequiredArgsConstructor
 public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSuccessHandler {
 
-	private static String defaultRedirectSuccessUrl;
-	private static String defaultRedirectFailureUrl;
-
 	private final ESUserDetailsService userService;
 	private final SamlAuthService samlAuthService;
 	private final SamlAuthStateCache samlAuthStateCache;
 	private final PrincipalManager principalManager;
-	private final Config config;
-
-
-	@PostConstruct
-	public void init() {
-		defaultRedirectSuccessUrl = config.getString(Settings.AUTH_SAML_REDIRECT_SUCCESS_URL);
-		defaultRedirectFailureUrl = config.getString(Settings.AUTH_SAML_REDIRECT_FAILURE_URL);
-	}
+	private final SamlCustomConfiguration samlConfiguration;
 
 	@Override
 	public void onAuthenticationSuccess(HttpServletRequest request,
@@ -80,6 +69,7 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 			if ("admin".equalsIgnoreCase(username)) {
 				log.warn("Ignoring received username 'admin' from SAML IdP '{}'", idpId);
 				redirectToLoginFailureUrl(response, customRedirectFailureUrl);
+				return;
 			}
 
 			User esUser = userService.loadUser(username);
@@ -97,23 +87,15 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 			}
 
 			if (esUser != null && !BasicVerifier.isUserDisabled(principalManager, esUser)) {
-				// Don't think we need the below line. Auth-token is stored in the user session by Spring-boot
-				// new CookieVerifier(app, getRM()).createAuthToken(userName, null, getRequest(), getResponse());
-
 				if (cachedAuthState != null && cachedAuthState.successUrl() != null) {
 					log.debug("Redirecting to custom success URL: {}", cachedAuthState.successUrl());
 					response.sendRedirect(cachedAuthState.successUrl());
 					return;
 				}
 
-				if (defaultRedirectSuccessUrl != null) {
-					log.debug("Redirecting to default success URL: {}", defaultRedirectSuccessUrl);
-					response.sendRedirect(defaultRedirectSuccessUrl);
-					return;
-				}
-
-				// proceed with standard success Spring behavior
-				// (Redirects to SavedRequest if it exists, otherwise to defaultSuccessUrl)
+				// Clear any saved request that might point back to SAML endpoints
+				new HttpSessionRequestCache().removeRequest(request, response);
+				// Proceeds with standard Spring behavior (redirects to defaultTargetUrl)
 				super.onAuthenticationSuccess(request, response, authentication);
 				return;
 			}
@@ -150,9 +132,9 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 		if (customRedirectFailureUrl != null) {
 			log.debug("Redirecting to custom failure URL: {}", customRedirectFailureUrl);
 			response.sendRedirect(customRedirectFailureUrl);
-		} else if (defaultRedirectFailureUrl != null) {
-			log.debug("Redirecting to default failure URL: {}", defaultRedirectFailureUrl);
-			response.sendRedirect(defaultRedirectFailureUrl);
+		} else if (samlConfiguration.redirectFailure().url() != null) {
+			log.debug("Redirecting to default failure URL: {}", samlConfiguration.redirectFailure().url());
+			response.sendRedirect(samlConfiguration.redirectFailure().url());
 		} else {
 			throw new UnauthorizedException("Login with SAML failed.");
 		}
