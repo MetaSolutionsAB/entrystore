@@ -10,7 +10,7 @@ fi
 DOMAIN="$1"
 CONTAINER_NAME="solr-${DOMAIN}"
 SOLR_PORT="${SOLR_PORT:-8983}"
-SOLR_VERSION="${SOLR_VERSION:-9.8.1}"
+SOLR_VERSION="${SOLR_VERSION:-9.10.1}"
 SOLR_DATA="${SOLR_DATA:-/srv/${DOMAIN}/data/solr}"
 CORE_NAME="entrystore-core"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
