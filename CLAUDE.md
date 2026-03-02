@@ -100,12 +100,29 @@ springboot/
 
 ## Code Style
 
+Formatting is IntelliJ-based, defined in `.editorconfig` (with `ij_*` properties) and `.idea/codeStyles/`. No Eclipse formatter is used.
+
 From `.editorconfig`:
 - Java/Groovy/XML: tabs for indentation
 - JSON/YAML: 2-space indent
 - Default: 4-space indent
 - Max line length: 120
-- Avoid wildcard imports (IntelliJ settings enforce single imports)
+- Continuation indent: 8 spaces (Java), 4 spaces (Groovy)
+- Avoid wildcard imports (import-on-demand threshold set to 99)
+
+**License header:** All Java and Groovy source files must include an Apache 2.0 license header. When editing a file, ensure the header is present and that the year range is current (ends with the current year). Use the current year from `date +%Y`. Format:
+```java
+/*
+ * Copyright (c) 2007-YYYY MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * ...
+ */
+```
+
+## Testing Guidelines
+
+- **No tautological tests:** Every test must validate real behavior, not merely assert values that were set up by mocks. A test that only verifies mocked return values proves nothing — ensure tests exercise actual logic, integration points, or side effects that could genuinely fail.
 
 ## Exception Conventions (Spring Boot REST Layer)
 
