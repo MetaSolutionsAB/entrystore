@@ -8,6 +8,7 @@ import org.entrystore.config.Config;
 import org.entrystore.config.Configurations;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.config.SortedProperties;
@@ -18,6 +19,8 @@ import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertySource;
 import org.springframework.web.client.RestTemplate;
+
+import java.net.URI;
 
 @Slf4j
 @Configuration
@@ -75,6 +78,28 @@ public class EntryStoreConfiguration {
 	@Bean
 	public ContextManager createContextManager(RepositoryManager repositoryManager) {
 		return repositoryManager.getContextManager();
+	}
+
+	@Bean
+	public BackupScheduler backupScheduler(RepositoryManagerImpl repositoryManager) {
+		if (!repositoryManager.getConfiguration().getBoolean(Settings.BACKUP_SCHEDULER, false)) {
+			log.warn("Backup is disabled in configuration");
+			return null;
+		}
+
+		log.info("Starting backup scheduler");
+		PrincipalManager pm = repositoryManager.getPrincipalManager();
+		URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+			BackupScheduler bs = BackupScheduler.getInstance(repositoryManager);
+			if (bs != null) {
+				bs.run();
+			}
+			return bs;
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
 	}
 
 	@Bean

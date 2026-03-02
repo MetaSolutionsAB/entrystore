@@ -22,15 +22,19 @@ import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.MetadataUtil;
+import org.quartz.CronScheduleBuilder;
 import org.quartz.CronTrigger;
+import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
+import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
+import org.quartz.TriggerBuilder;
 import org.quartz.impl.StdSchedulerFactory;
+import org.quartz.impl.matchers.GroupMatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.ParseException;
 import java.util.LinkedList;
 import java.util.OptionalInt;
 import java.util.concurrent.ThreadLocalRandom;
@@ -73,13 +77,13 @@ public class BackupScheduler {
 
 	RDFFormat format;
 
-	public static BackupScheduler instance;
+	private static BackupScheduler instance;
 
 	private BackupScheduler(RepositoryManager rm, String cronExp, boolean gzip, boolean deleteAfter, boolean includeFiles, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays, RDFFormat format) {
 		try {
 			scheduler = StdSchedulerFactory.getDefaultScheduler();
 		} catch (SchedulerException e) {
-			log.error(e.getMessage());
+			log.error("Failed to initialize Quartz scheduler", e);
 		}
 
 		this.rm = rm;
@@ -215,23 +219,17 @@ public class BackupScheduler {
 	}
 
 	public void run() {
-		if (!rm.getConfiguration().getBoolean(Settings.BACKUP_SCHEDULER, false)) {
-			log.warn("Backup is disabled in configuration");
-			return;
-		}
-
 		try {
-			String[] names = scheduler.getJobNames("backupGroup");
+			int nextIndex = scheduler.getJobKeys(GroupMatcher.jobGroupEquals("backupGroup"))
+					.stream()
+					.mapToInt(k -> Integer.parseInt(k.getName()))
+					.max()
+					.orElse(0) + 1;
+			String jobIndex = String.valueOf(nextIndex);
 
-			int index = 1;
-			if (names.length > 0) {
-				// this only works for up to 10 jobs in this group
-				index = Integer.parseInt(names[names.length - 1]);
-				index++;
-			}
-			String jobIndex = String.valueOf(index);
-
-			job = new JobDetail(jobIndex, "backupGroup", BackupJob.class);
+			job = JobBuilder.newJob(BackupJob.class)
+					.withIdentity(jobIndex, "backupGroup")
+					.build();
 			job.getJobDataMap().put("rm", this.rm);
 			job.getJobDataMap().put("gzip", this.gzip);
 			job.getJobDataMap().put("includeFiles", this.includeFiles);
@@ -243,41 +241,27 @@ public class BackupScheduler {
 			job.getJobDataMap().put("format", this.format);
 			job.getJobDataMap().put("simple", this.simple);
 
-			CronTrigger trigger = new CronTrigger("trigger" + jobIndex, "backupGroup", jobIndex, "backupGroup", this.cronExpression);
-			scheduler.addJob(job, true);
-			scheduler.scheduleJob(trigger);
+			CronTrigger trigger = TriggerBuilder.newTrigger()
+					.withIdentity("trigger" + jobIndex, "backupGroup")
+					.forJob(jobIndex, "backupGroup")
+					.withSchedule(CronScheduleBuilder.cronSchedule(this.cronExpression))
+					.build();
+			scheduler.scheduleJob(job, trigger);
 			scheduler.start();
-		} catch (ParseException | SchedulerException e) {
-			log.error(e.getMessage());
+		} catch (SchedulerException e) {
+			log.error("Failed to start backup scheduler", e);
 		}
 	}
-
-//	public void stop() {
-//		try {
-//			scheduler.standby();
-//		} catch (SchedulerException e) {
-//			log.error(e.getMessage());
-//			e.printStackTrace();
-//		}
-//	}
-//
-//	public void start() {
-//		try {
-//			scheduler.start();
-//		} catch (SchedulerException e) {
-//			log.error(e.getMessage());
-//		}
-//	}
 
 	public boolean delete() {
 		try {
 			if (job != null) {
 				log.info("Deleting backup job");
-				scheduler.deleteJob(job.getName(), job.getGroup());
+				scheduler.deleteJob(job.getKey());
 				job = null;
 			}
 		} catch (SchedulerException e) {
-			log.error(e.getMessage());
+			log.error("Failed to delete backup job", e);
 			return false;
 		}
 		return true;

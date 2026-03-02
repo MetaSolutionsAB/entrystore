@@ -19,31 +19,32 @@ package org.entrystore.repository.backup;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class BackupJobTest {
 
 	@Test
-	public void interrupt() {
+	public void interruptExecute() {
 		BackupJob job = new BackupJob();
 		job.interrupt();
-
-		try {
-			job.execute(null);
-		} catch(RuntimeException e) {
-			assertEquals("Backup job \"execute()\" was interrupted", e.getMessage());
-		}
-
-		try {
-			BackupJob.runBackup(null);
-		} catch(RuntimeException e) {
-			assertEquals("Backup job \"runBackup()\" was interrupted", e.getMessage());
-		}
-
-		try {
-			BackupJob.runBackupMaintenance(null);
-		} catch(RuntimeException e) {
-			assertEquals("Backup job \"runBackupMaintenance()\" was interrupted", e.getMessage());
-		}
-
+		RuntimeException ex = assertThrows(RuntimeException.class, () -> job.execute(null));
+		assertEquals("Backup job \"execute()\" was interrupted", ex.getMessage());
 	}
+
+	@Test
+	public void interruptRunBackup() {
+		BackupJob job = new BackupJob();
+		job.interrupt();
+		RuntimeException ex = assertThrows(RuntimeException.class, () -> BackupJob.runBackup(null));
+		assertEquals("Backup job \"runBackup()\" was interrupted", ex.getMessage());
+	}
+
+	@Test
+	public void interruptRunBackupMaintenance() {
+		BackupJob job = new BackupJob();
+		job.interrupt();
+		RuntimeException ex = assertThrows(RuntimeException.class, () -> BackupJob.runBackupMaintenance(null));
+		assertEquals("Backup job \"runBackupMaintenance()\" was interrupted", ex.getMessage());
+	}
+
 }

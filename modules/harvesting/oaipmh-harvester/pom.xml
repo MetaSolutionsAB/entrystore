@@ -46,9 +46,9 @@
             <version>2.7.3</version>
         </dependency>
         <dependency>
-            <groupId>quartz</groupId>
+            <groupId>org.quartz-scheduler</groupId>
             <artifactId>quartz</artifactId>
-            <version>1.5.2</version>
+            <version>2.5.2</version>
         </dependency>
         <dependency>
             <groupId>org.oclc.oai</groupId>
