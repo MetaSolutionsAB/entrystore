@@ -9,6 +9,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.standalone.springboot.configuration.AppStartedListener;
+import org.entrystore.rest.standalone.springboot.configuration.CorsConfig;
 import org.entrystore.rest.standalone.springboot.configuration.InfoAppPropertiesConfiguration;
 import org.entrystore.rest.standalone.springboot.model.api.StatusExtendedIncludeEnum;
 import org.entrystore.rest.standalone.springboot.model.api.StatusExtendedResponse;
@@ -35,6 +36,7 @@ public class StatusService {
 
 	private final InfoAppPropertiesConfiguration appConfig;
 	private final Config esConfig;
+	private final CorsConfig corsConfig;
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final AppStartedListener appStartedListener;
@@ -67,8 +69,7 @@ public class StatusService {
 			.quotaDefault(esConfig.getString(Settings.DATA_QUOTA_DEFAULT, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
 			// TODO: Fix below when migrating EchoResource
 			.echoMaxEntitySize(-1)
-			// TODO: Cors settings in ES Configuration are ignored currently, need to fix the setup/change the properties model
-			.cors(null)
+			.cors(buildCorsInfo())
 			.oaiHarvester(esConfig.getBoolean(Settings.HARVESTER_OAI, false))
 			.oaiHarvesterMultiThreaded(esConfig.getBoolean(Settings.HARVESTER_OAI_MULTITHREADED, false))
 			.provenance(esConfig.getBoolean(Settings.REPOSITORY_PROVENANCE, false))
@@ -89,6 +90,16 @@ public class StatusService {
 		}
 
 		return builder.build();
+	}
+
+	private Map<String, Object> buildCorsInfo() {
+		return Map.of(
+			"enabled", corsConfig.isCorsEnabled(),
+			"headers", esConfig.getString(Settings.CORS_HEADERS, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
+			"maxAge", esConfig.getString(Settings.CORS_MAX_AGE, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
+			"origins", esConfig.getString(Settings.CORS_ORIGINS, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
+			"originsAllowCredentials", esConfig.getString(Settings.CORS_ORIGINS_ALLOW_CREDENTIALS, DEFAULT_VALUE_FOR_NOT_CONFIGURED)
+		);
 	}
 
 	private Map<String, Object> buildAuthenticationInfo() {
