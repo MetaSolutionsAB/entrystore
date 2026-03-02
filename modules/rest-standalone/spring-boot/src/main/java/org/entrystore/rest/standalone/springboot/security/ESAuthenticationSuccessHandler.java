@@ -20,21 +20,22 @@ public class ESAuthenticationSuccessHandler extends SimpleUrlAuthenticationSucce
 	@Override
 	public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication auth) throws IOException {
 
+		int effectiveMaxAge = request.getServletContext().getSessionCookieConfig().getMaxAge();
 		// If auth_maxage parameter is set use it as the session max-age, instead of the default cookie config from properties
 		String maxAgeParam = request.getParameter("auth_maxage");
 		if (StringUtils.isNotEmpty(maxAgeParam)) {
 			try {
 				int customMaxAge = Integer.parseInt(maxAgeParam);
-				int defaultMaxAge = request.getServletContext().getSessionCookieConfig().getMaxAge();
-				if (customMaxAge < defaultMaxAge) {
+				if (customMaxAge > 0 && customMaxAge < effectiveMaxAge) {
 					// set the user input max-age only if it's lower than the default configured cookie max-age
-					request.getSession().setMaxInactiveInterval(customMaxAge);
+					effectiveMaxAge = customMaxAge;
 				}
 			} catch (NumberFormatException e) {
 				log.info("Unable to parse as Integer the 'auth_maxage' parameter value of: '{}'", maxAgeParam);
 			}
 		}
 
+		request.getSession().setMaxInactiveInterval(effectiveMaxAge);
 		response.setStatus(HttpStatus.OK.value());
 		response.setHeader("Content-Type", "text/html");
 		response.getOutputStream().println("Login successful.");

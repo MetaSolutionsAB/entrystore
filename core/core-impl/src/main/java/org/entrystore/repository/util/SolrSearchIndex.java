@@ -78,6 +78,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.TimeZone;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
@@ -136,86 +137,223 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public class SolrInputDocumentSubmitter extends Thread {
 
+		private static final int MAX_RETRIES = 3;
+		private static final long RETRY_DELAY_MS = 2000;
+		private static final long FAILURE_COOLDOWN_MS = 10000;
+
 		@Override
 		public void run() {
 			while (!interrupted()) {
-				postQueue.cleanUp();
-				int batchCount = 0;
+				try {
+					postQueue.cleanUp();
+					boolean batchFailed = false;
 
-				if (postQueue.estimatedSize() > 0 || !deleteQueue.isEmpty()) {
+					if (postQueue.estimatedSize() > 0 || !deleteQueue.isEmpty()) {
 
-					if (!deleteQueue.isEmpty()) {
-						StringBuilder deleteQuery = new StringBuilder("uri:(");
-						synchronized (deleteQueue) {
-							while (batchCount < BATCH_SIZE_DELETE) {
-								URI uri = deleteQueue.poll();
-								if (uri == null) {
-									break;
-								}
-								if (batchCount > 0) {
-									deleteQuery.append(" OR ");
-								}
-								deleteQuery.append(ClientUtils.escapeQueryChars(uri.toString()));
-								batchCount++;
-							}
+						if (!deleteQueue.isEmpty()) {
+							batchFailed = processDeleteBatch();
 						}
-						deleteQuery.append(")");
 
-						if (batchCount > 0) {
-							UpdateRequest delReq = new UpdateRequest();
-							String deleteQueryStr = deleteQuery.toString();
-							delReq.deleteByQuery(deleteQueryStr);
-							delReq.setCommitWithin(SOLR_COMMIT_WITHIN);
-							try {
-								log.info("Sending request to delete " + batchCount + " entries from Solr, " + deleteQueue.size() + " entries remaining in delete queue");
-								delReq.process(solrServer);
-							} catch (SolrServerException | IOException e) {
-								log.error(e.getMessage(), e);
-							}
+						if (postQueue.estimatedSize() > 0 && !Thread.currentThread().isInterrupted()) {
+							batchFailed = processAddBatch() || batchFailed;
 						}
+
+						if (batchFailed) {
+							sleepOrShutdown(FAILURE_COOLDOWN_MS, "cooldown");
+						}
+
+					} else {
+						sleepOrShutdown(500, "idle wait");
 					}
-
-					if (postQueue.estimatedSize() > 0) {
-						UpdateRequest addReq = new UpdateRequest();
-						synchronized (postQueue) {
-							ConcurrentMap<URI, SolrInputDocument> postQueueMap = postQueue.asMap();
-							Iterator<URI> it = postQueueMap.keySet().iterator();
-							while (batchCount < BATCH_SIZE_ADD && it.hasNext()) {
-								URI key = it.next();
-								SolrInputDocument doc = postQueueMap.get(key);
-								postQueueMap.remove(key, doc);
-								if (doc == null) {
-									log.warn("Value for key " + key + " is null in Solr submit queue");
-								}
-								addReq.add(doc);
-								batchCount++;
-							}
-						}
-
-						try {
-							postQueue.cleanUp();
-							log.info("Sending {} entries to Solr, {} entries remaining in post queue", addReq.getDocuments() != null ? addReq.getDocuments().size() : 0, postQueue.estimatedSize());
-							// when BATCH_SIZE_ADD * 5 we assume we are indexing large batches
-							if (postQueue.estimatedSize() > BATCH_SIZE_ADD * 5) {
-								addReq.setCommitWithin(SOLR_COMMIT_WITHIN_MAX);
-							} else {
-								addReq.setCommitWithin(SOLR_COMMIT_WITHIN);
-							}
-							addReq.process(solrServer);
-						} catch (BaseHttpSolrClient.RemoteSolrException | SolrServerException | IOException e) {
-							log.error(e.getMessage(), e);
-						}
-					}
-
-				} else {
+				} catch (ShutdownRequestedException e) {
+					return;
+				} catch (Exception e) {
+					log.error("Unexpected error in Solr document submitter, will retry on next iteration", e);
 					try {
-						Thread.sleep(500);
-					} catch (InterruptedException ie) {
-						log.info("Solr document submitter got interrupted, shutting down submitter thread");
+						sleepOrShutdown(FAILURE_COOLDOWN_MS, "post-error cooldown");
+					} catch (ShutdownRequestedException sre) {
 						return;
 					}
 				}
 			}
+		}
+
+		/**
+		 * Sleeps for the given duration; on interruption, logs and throws
+		 * {@link ShutdownRequestedException} to unwind the run loop cleanly.
+		 */
+		private void sleepOrShutdown(long millis, String phase) {
+			try {
+				Thread.sleep(millis);
+			} catch (InterruptedException ie) {
+				log.info("Solr document submitter got interrupted during {}, shutting down", phase);
+				throw new ShutdownRequestedException();
+			}
+		}
+
+		/**
+		 * @return true if the batch failed permanently and a cooldown is needed
+		 */
+		private boolean processDeleteBatch() {
+			List<URI> deleteBatch = drainDeleteQueue();
+			if (deleteBatch.isEmpty()) {
+				return false;
+			}
+
+			StringJoiner joiner = new StringJoiner(" OR ", "uri:(", ")");
+			deleteBatch.forEach(uri -> joiner.add(ClientUtils.escapeQueryChars(uri.toString())));
+
+			UpdateRequest delReq = new UpdateRequest();
+			delReq.deleteByQuery(joiner.toString());
+			delReq.setCommitWithin(SOLR_COMMIT_WITHIN);
+
+			for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+				try {
+					log.info("Sending request to delete {} entries from Solr (attempt {}/{}), {} entries remaining in delete queue",
+							deleteBatch.size(), attempt, MAX_RETRIES, deleteQueue.size());
+					delReq.process(solrServer);
+					return false;
+				} catch (RuntimeException e) {
+					requeueDeletes(deleteBatch);
+					if (e.getCause() instanceof InterruptedException) {
+						log.info("Solr document submitter got interrupted during delete, re-queuing and shutting down");
+						Thread.currentThread().interrupt();
+						return true;
+					}
+					throw e;
+				} catch (SolrServerException | IOException e) {
+					log.warn("Failed to delete {} entries from Solr (attempt {}/{}): {}",
+							deleteBatch.size(), attempt, MAX_RETRIES, e.getMessage());
+					if (attempt < MAX_RETRIES && sleepForRetry(attempt)) {
+						requeueDeletes(deleteBatch);
+						return true;
+					}
+				}
+			}
+
+			log.error("Permanently failed to delete {} entries from Solr after {} attempts, re-queuing", deleteBatch.size(), MAX_RETRIES);
+			requeueDeletes(deleteBatch);
+			return true;
+		}
+
+		/**
+		 * @return true if the batch failed permanently and a cooldown is needed
+		 */
+		private boolean processAddBatch() {
+			Map<URI, SolrInputDocument> addBatch = drainPostQueue();
+			if (addBatch.isEmpty()) {
+				return false;
+			}
+
+			UpdateRequest addReq = new UpdateRequest();
+			addBatch.values().forEach(addReq::add);
+
+			postQueue.cleanUp();
+			if (postQueue.estimatedSize() > BATCH_SIZE_ADD * 5) {
+				addReq.setCommitWithin(SOLR_COMMIT_WITHIN_MAX);
+			} else {
+				addReq.setCommitWithin(SOLR_COMMIT_WITHIN);
+			}
+
+			for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+				try {
+					log.info("Sending {} entries to Solr (attempt {}/{}), {} entries remaining in post queue",
+							addBatch.size(), attempt, MAX_RETRIES, postQueue.estimatedSize());
+					addReq.process(solrServer);
+					return false;
+				} catch (BaseHttpSolrClient.RemoteSolrException e) {
+					log.error("Solr rejected {} entries (not retryable, discarding batch): {}", addBatch.size(), e.getMessage());
+					return false;
+				} catch (RuntimeException e) {
+					requeueAdds(addBatch);
+					if (e.getCause() instanceof InterruptedException) {
+						log.info("Solr document submitter got interrupted during send, re-queuing and shutting down");
+						Thread.currentThread().interrupt();
+						return true;
+					}
+					throw e;
+				} catch (SolrServerException | IOException e) {
+					log.warn("Failed to send {} entries to Solr (attempt {}/{}): {}",
+							addBatch.size(), attempt, MAX_RETRIES, e.getMessage());
+					if (attempt < MAX_RETRIES && sleepForRetry(attempt)) {
+						requeueAdds(addBatch);
+						return true;
+					}
+				}
+			}
+
+			log.error("Permanently failed to send {} entries to Solr after {} attempts, re-queuing", addBatch.size(), MAX_RETRIES);
+			requeueAdds(addBatch);
+			return true;
+		}
+
+		/**
+		 * Drains up to {@link SolrSearchIndex#BATCH_SIZE_DELETE} entries from the delete queue.
+		 */
+		private List<URI> drainDeleteQueue() {
+			List<URI> batch = new ArrayList<>();
+			synchronized (deleteQueue) {
+				while (batch.size() < BATCH_SIZE_DELETE) {
+					URI uri = deleteQueue.poll();
+					if (uri == null) {
+						break;
+					}
+					batch.add(uri);
+				}
+			}
+			return batch;
+		}
+
+		/**
+		 * Drains up to {@link SolrSearchIndex#BATCH_SIZE_ADD} entries from the post queue.
+		 */
+		private Map<URI, SolrInputDocument> drainPostQueue() {
+			Map<URI, SolrInputDocument> batch = new HashMap<>();
+			synchronized (postQueue) {
+				ConcurrentMap<URI, SolrInputDocument> postQueueMap = postQueue.asMap();
+				Iterator<URI> it = postQueueMap.keySet().iterator();
+				while (batch.size() < BATCH_SIZE_ADD && it.hasNext()) {
+					URI key = it.next();
+					SolrInputDocument doc = postQueueMap.get(key);
+					postQueueMap.remove(key, doc);
+					if (doc == null) {
+						log.warn("Value for key {} is null in Solr submit queue", key);
+						continue;
+					}
+					batch.put(key, doc);
+				}
+			}
+			return batch;
+		}
+
+		private void requeueDeletes(List<URI> batch) {
+			deleteQueue.addAll(batch);
+		}
+
+		private void requeueAdds(Map<URI, SolrInputDocument> batch) {
+			batch.forEach((k, v) -> postQueue.asMap().putIfAbsent(k, v));
+		}
+
+		/**
+		 * Sleeps for a retry backoff delay.
+		 *
+		 * @return true if the sleep was interrupted (caller should re-queue and shut down)
+		 */
+		private boolean sleepForRetry(int attempt) {
+			try {
+				Thread.sleep(RETRY_DELAY_MS * attempt);
+				return false;
+			} catch (InterruptedException ie) {
+				log.info("Solr document submitter got interrupted during retry backoff, shutting down");
+				Thread.currentThread().interrupt();
+				return true;
+			}
+		}
+
+		/**
+		 * Signals that the submitter thread should shut down (used to exit the run loop on interrupt).
+		 */
+		private static class ShutdownRequestedException extends RuntimeException {
 		}
 
 	}

@@ -624,7 +624,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			log.info("Using HTTP Solr server at {}", solrURL);
 
 			HttpJdkSolrClient.Builder solrClientBuilder = new HttpJdkSolrClient.Builder(solrURL);
-			solrClientBuilder.withRequestTimeout(5, TimeUnit.SECONDS);
+			// Force HTTP/1.1 to avoid HTTP/2 RST_STREAM errors with some Solr/proxy configurations
+			solrClientBuilder.useHttp1_1(true);
+			solrClientBuilder.withRequestTimeout(30, TimeUnit.SECONDS);
 			solrClientBuilder.withConnectionTimeout(5, TimeUnit.SECONDS);
 			solrClientBuilder.withIdleTimeout(3, TimeUnit.MINUTES);
 
