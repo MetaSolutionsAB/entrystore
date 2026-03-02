@@ -157,7 +157,7 @@ public class ListRecordsJob implements Job, InterruptableJob {
 		} catch (UnknownHostException e) {
 			// TODO: handle exception write in the RDF tree
 			log.info("UnknownHostException since the target is unknown, the havester will be deleted");
-			jobContext.getScheduler().interrupt(jobContext.getJobDetail().getName(), jobContext.getJobDetail().getGroup());
+			jobContext.getScheduler().interrupt(jobContext.getJobDetail().getKey());
 			return ;
 		}
 

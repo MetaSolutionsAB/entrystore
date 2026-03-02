@@ -17,18 +17,22 @@
 package org.entrystore.harvesting.oaipmh.harvester;
 
 import java.net.URI;
-import java.text.ParseException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.entrystore.harvester.Harvester;
 import org.entrystore.harvesting.oaipmh.jobs.ListRecordsJob;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.quartz.CronScheduleBuilder;
 import org.quartz.CronTrigger;
+import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
+import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.Trigger;
+import org.quartz.TriggerBuilder;
+import org.quartz.TriggerKey;
 import org.quartz.impl.StdSchedulerFactory;
 
 
@@ -47,7 +51,9 @@ public class OAIHarvester extends Harvester {
 		jobName = ownerContextURI.toString();
 		try {
 			scheduler = StdSchedulerFactory.getDefaultScheduler();
-			job = new JobDetail(jobName, groupName, ListRecordsJob.class);
+			job = JobBuilder.newJob(ListRecordsJob.class)
+					.withIdentity(jobName, groupName)
+					.build();
 			job.getJobDataMap().put("metadataType", this.getMetadataType());
 			job.getJobDataMap().put("target", this.getTarget());
 			job.getJobDataMap().put("rm", this.getRM());
@@ -55,13 +61,15 @@ public class OAIHarvester extends Harvester {
 			job.getJobDataMap().put("from", this.getFrom());
 			job.getJobDataMap().put("until", this.getUntil());
 			job.getJobDataMap().put("set", this.getSet());
-			trigger = new CronTrigger("trigger_" + jobName, groupName, jobName, groupName, this.getTimeRegExp());
+			trigger = TriggerBuilder.newTrigger()
+					.withIdentity("trigger_" + jobName, groupName)
+					.forJob(jobName, groupName)
+					.withSchedule(CronScheduleBuilder.cronSchedule(this.getTimeRegExp()))
+					.build();
 		} catch (SchedulerException e) {
-			log.error(e.getMessage());
-		} catch (ParseException e) {
-			log.error(e.getMessage());
+			log.error("Failed to initialize OAI harvester for " + ownerContextURI, e);
 		}
-		
+
 		log.info("Created an OAIHarvester for " + ownerContextURI);
 	}
 
@@ -71,40 +79,35 @@ public class OAIHarvester extends Harvester {
 	 */
 	public void run(String identifier) {
 		log.warn("OAIHarvester.run(String identifier) is not implemented");
-//		ContextManager cm = getRM().getContextManager();	
-//		URI contextURI = getOwnerContextURI(); 
-//		String contextId = contextURI.toString().substring(contextURI.toString().lastIndexOf("/")+1); 
-//		Context context = cm.getContext(contextId);  	
-//		GetRecordJob.getRecord(getTarget(), indentifier.toString(), getMetadataType(), context); 
 	}
 
 	public void run() {
 		try {
-			scheduler.addJob(job, true);
-			scheduler.scheduleJob(trigger);
+			scheduler.scheduleJob(job, trigger);
 			if (scheduler.isInStandbyMode()) {
 				scheduler.start();
 			}
 		} catch (SchedulerException e) {
-			log.error(e.getMessage());
+			log.error("Failed to start OAI harvester", e);
 		}
 	}
 
 	@Override
 	public void setTimeRegExp(String timeRegExp) {
 		try {
-			JobDetail job = scheduler.getJobDetail(jobName, groupName);
+			JobDetail job = scheduler.getJobDetail(JobKey.jobKey(jobName, groupName));
 			if (job != null) {
-				CronTrigger trigger = (CronTrigger) scheduler.getTrigger("trigger_" + jobName, groupName);
 				log.info("Set new time: " + timeRegExp);
-				trigger.setCronExpression(timeRegExp);
-				scheduler.rescheduleJob("trigger_" + jobName, groupName, trigger);
-				log.info("trigger.getNextFireTime(): " + trigger.getNextFireTime());
+				CronTrigger newTrigger = TriggerBuilder.newTrigger()
+						.withIdentity("trigger_" + jobName, groupName)
+						.forJob(jobName, groupName)
+						.withSchedule(CronScheduleBuilder.cronSchedule(timeRegExp))
+						.build();
+				scheduler.rescheduleJob(TriggerKey.triggerKey("trigger_" + jobName, groupName), newTrigger);
+				log.info("trigger.getNextFireTime(): " + newTrigger.getNextFireTime());
 			}
 		} catch (SchedulerException e) {
-			log.error(e.getMessage());
-		} catch (ParseException e) {
-			log.error(e.getMessage());
+			log.error("Failed to reschedule OAI harvester", e);
 		}
 	}
 
@@ -112,20 +115,20 @@ public class OAIHarvester extends Harvester {
 	@Override
 	public void setSet(String set) {
 		super.setSet(set);
-		JobDetail job = getJob(); 
+		JobDetail job = getJob();
 
 		if(job != null) {
-			job.getJobDataMap().put("set", set); 
+			job.getJobDataMap().put("set", set);
 		}
 	}
 
 	@Override
 	public void setFrom(String from) {
 		super.setFrom(from);
-		JobDetail job = getJob(); 
+		JobDetail job = getJob();
 
 		if(job != null) {
-			job.getJobDataMap().put("from", from); 
+			job.getJobDataMap().put("from", from);
 		}
 	}
 
@@ -158,17 +161,17 @@ public class OAIHarvester extends Harvester {
 			job.getJobDataMap().put("target", target);
 		}
 	}
-	
+
 	@Override
 	public boolean delete() {
 		try {
 			if (job != null) {
 				log.info("Deleting OAI harvester job");
-				scheduler.deleteJob(job.getName(), job.getGroup());
+				scheduler.deleteJob(job.getKey());
 				job = null;
 			}
 		} catch (SchedulerException e) {
-			log.error(e.getMessage());
+			log.error("Failed to delete OAI harvester job", e);
 			return false;
 		}
 		return true;
@@ -176,12 +179,6 @@ public class OAIHarvester extends Harvester {
 
 	private JobDetail getJob() {
 		return job;
-//		try {
-//			return scheduler.getJobDetail(jobName, groupName);
-//		} catch (SchedulerException e) {
-//			log.error(e.getMessage());
-//		}
-//		return null;
 	}
-	
+
 }
