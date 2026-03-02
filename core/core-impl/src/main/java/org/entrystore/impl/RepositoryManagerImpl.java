@@ -21,8 +21,12 @@ import lombok.Setter;
 import net.sf.ehcache.CacheManager;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.impl.client.BasicCredentialsProvider;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.solr.client.solrj.SolrClient;
-import org.apache.solr.client.solrj.impl.HttpJdkSolrClient;
+import org.apache.solr.client.solrj.impl.HttpSolrClient;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -606,6 +610,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 	}
 
+	// HttpSolrClient (Apache HttpClient 4.x) is deprecated since SolrJ 9.0 but guarantees HTTP/1.1.
+	// HttpJdkSolrClient's useHttp1_1(true) does not reliably prevent HTTP/2 — the JDK HttpClient
+	// treats HTTP_1_1 as a preference, not a hard constraint, leading to RST_STREAM errors.
+	@SuppressWarnings("deprecation")
 	private void initSolr() {
 		log.info("Manually setting property \"javax.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");
 		System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
@@ -623,16 +631,21 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at {}", solrURL);
 
-			HttpJdkSolrClient.Builder solrClientBuilder = new HttpJdkSolrClient.Builder(solrURL);
-			solrClientBuilder.withRequestTimeout(5, TimeUnit.SECONDS);
+			HttpSolrClient.Builder solrClientBuilder = new HttpSolrClient.Builder(solrURL);
 			solrClientBuilder.withConnectionTimeout(5, TimeUnit.SECONDS);
-			solrClientBuilder.withIdleTimeout(3, TimeUnit.MINUTES);
+			solrClientBuilder.withSocketTimeout(30, TimeUnit.SECONDS);
 
 			String solrUsername = configuration.getString(Settings.SOLR_AUTH_USERNAME);
 			String solrPassword = configuration.getString(Settings.SOLR_AUTH_PASSWORD);
 
 			if (solrUsername != null && solrPassword != null) {
-				solrClientBuilder.withBasicAuthCredentials(solrUsername, solrPassword);
+				BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+				credentialsProvider.setCredentials(AuthScope.ANY,
+						new UsernamePasswordCredentials(solrUsername, solrPassword));
+				solrClientBuilder.withHttpClient(
+						HttpClientBuilder.create()
+								.setDefaultCredentialsProvider(credentialsProvider)
+								.build());
 			}
 
 			solrServer = solrClientBuilder.build();

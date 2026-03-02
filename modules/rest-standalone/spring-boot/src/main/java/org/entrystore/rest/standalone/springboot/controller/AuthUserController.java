@@ -1,6 +1,7 @@
 package org.entrystore.rest.standalone.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.GetAuthUserResponse;
@@ -21,8 +22,9 @@ public class AuthUserController {
 	@Operation(summary = "Provides basic information about the currently logged-in user.")
 	@GetMapping(path = "/auth/user", produces = MediaType.APPLICATION_JSON_VALUE)
 	public GetAuthUserResponse userInfo(
-			@RequestHeader(name = HttpHeaders.ACCEPT_LANGUAGE, defaultValue = HttpHeaders.ACCEPT_LANGUAGE) String acceptLanguage
+			@RequestHeader(name = HttpHeaders.ACCEPT_LANGUAGE, defaultValue = HttpHeaders.ACCEPT_LANGUAGE) String acceptLanguage,
+			HttpSession session
 	) {
-		return userService.getUserInfo(acceptLanguage);
+		return userService.getUserInfo(acceptLanguage, session.getMaxInactiveInterval());
 	}
 }
