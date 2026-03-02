@@ -79,8 +79,7 @@ public class AuthController {
 
 	@Operation(summary = "Generates new link for password change confirmation and sends an email to the User.")
 	@PostMapping(path = "/auth/pwreset",
-			consumes = {MediaType.APPLICATION_JSON_VALUE},
-			produces = {MediaType.TEXT_HTML_VALUE}
+			consumes = {MediaType.APPLICATION_JSON_VALUE}
 	)
 	public String resetPassword(
 			HttpServletRequest request,
@@ -95,8 +94,7 @@ public class AuthController {
 
 	@Operation(summary = "Generates new link for password change confirmation and sends an email to the User. Request is an html form.")
 	@PostMapping(path = "/auth/pwreset",
-			consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE},
-			produces = {MediaType.TEXT_HTML_VALUE}
+			consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE}
 	)
 	public String resetPasswordViaForm(
 			HttpServletRequest request,
@@ -135,8 +133,7 @@ public class AuthController {
 
 	@Operation(summary = "Generates new link for user sign-up confirmation and sends an email to provided email address.")
 	@PostMapping(path = "/auth/signup",
-			consumes = {MediaType.APPLICATION_JSON_VALUE},
-			produces = {MediaType.TEXT_HTML_VALUE}
+			consumes = {MediaType.APPLICATION_JSON_VALUE}
 	)
 	public String signup(
 			HttpServletRequest request,
@@ -168,8 +165,7 @@ public class AuthController {
 
 	@Operation(summary = "Generates new link for user sign-up confirmation and sends an email to provided email address. Request is an html form.")
 	@PostMapping(path = "/auth/signup",
-			consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE},
-			produces = {MediaType.TEXT_HTML_VALUE}
+			consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE}
 	)
 	public String signupViaForm(
 			HttpServletRequest request,
