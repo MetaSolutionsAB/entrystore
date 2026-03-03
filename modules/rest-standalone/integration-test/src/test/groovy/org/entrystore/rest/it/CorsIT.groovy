@@ -74,6 +74,45 @@ class CorsIT extends BaseSpec {
 		connection.getHeaderField('Access-Control-Expose-Headers').contains('X-Custom-Header')
 	}
 
+	def "Disallowed origin should not receive CORS headers"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/management/status', '', 'application/json',
+			[Origin: 'http://disallowed.example.org'])
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getHeaderField('Access-Control-Allow-Origin') == null
+	}
+
+	def "Suffix pattern should match origin ending with pattern"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/management/status', '', 'application/json',
+			[Origin: 'http://app.test.example.com'])
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getHeaderField('Access-Control-Allow-Origin') == 'http://app.test.example.com'
+	}
+
+	def "Prefix pattern should match origin starting with pattern"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/management/status', '', 'application/json',
+			[Origin: 'http://prefix.anything.com'])
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getHeaderField('Access-Control-Allow-Origin') == 'http://prefix.anything.com'
+	}
+
+	def "Request without Origin header should not receive CORS headers"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/management/status', '', 'application/json')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getHeaderField('Access-Control-Allow-Origin') == null
+	}
+
 	def "Status extended endpoint should include CORS info"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status/extended')
