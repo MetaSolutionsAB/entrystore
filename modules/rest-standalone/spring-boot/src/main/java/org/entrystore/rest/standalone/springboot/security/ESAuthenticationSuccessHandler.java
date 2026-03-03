@@ -54,20 +54,24 @@ public class ESAuthenticationSuccessHandler extends SimpleUrlAuthenticationSucce
 		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
 		if (authentication != null && authentication.getPrincipal() instanceof ESUserSessionDetails esUserDetails) {
-			Instant now = Instant.now();
-			SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
-					.userName(esUserDetails.getSessionInfo().userName())
-					.loginTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
-					.loginExpiration(LocalDateTime.ofInstant(now.plusSeconds(request.getSession().getMaxInactiveInterval()), ZoneId.systemDefault()))
-					.lastAccessTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
-					.lastUsedIpAddress(request.getRemoteAddr())
-					.lastUsedUserAgent(request.getHeader("User-Agent"))
-					.loginTokenMaxAge(request.getSession().getMaxInactiveInterval());
+			try {
+				Instant now = Instant.now();
+				SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
+						.userName(esUserDetails.getSessionInfo().userName())
+						.loginTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
+						.loginExpiration(LocalDateTime.ofInstant(now.plusSeconds(request.getSession().getMaxInactiveInterval()), ZoneId.systemDefault()))
+						.lastAccessTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
+						.lastUsedIpAddress(request.getRemoteAddr())
+						.lastUsedUserAgent(request.getHeader("User-Agent"))
+						.loginTokenMaxAge(request.getSession().getMaxInactiveInterval());
 
-			esUserDetails.setSessionInfo(sessionInfo.build());
+				esUserDetails.setSessionInfo(sessionInfo.build());
 
-			UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(esUserDetails, esUserDetails.getPassword(), esUserDetails.getAuthorities());
-			SecurityContextHolder.getContext().setAuthentication(newAuth);
+				UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(esUserDetails, esUserDetails.getPassword(), esUserDetails.getAuthorities());
+				SecurityContextHolder.getContext().setAuthentication(newAuth);
+			} catch (Exception e) {
+				log.error("Failed to build session metadata on login success, login will proceed without session info", e);
+			}
 		}
 
 		response.setStatus(HttpStatus.OK.value());

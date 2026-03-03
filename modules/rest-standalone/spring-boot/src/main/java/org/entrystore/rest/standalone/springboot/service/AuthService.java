@@ -122,16 +122,30 @@ public class AuthService {
 
 		List<SessionInformation> sessionsList = new ArrayList<>();
 
-		try {
-			String username = principalManager.getUser(userURI).getEntry().getResourceURI().toString();
-			for (Object principal : sessionRegistry.getAllPrincipals()) {
-				if (principal instanceof UserDetails user && user.getUsername().equals(username)) {
-					sessionsList = sessionRegistry.getAllSessions(user, includeExpiredSessions);
-					break;
-				}
+		User user = principalManager.getUser(userURI);
+		if (user == null) {
+			log.warn("No user found for URI: {}", userURI);
+			return sessionsList;
+		}
+
+		Entry entry = user.getEntry();
+		if (entry == null) {
+			log.warn("No entry found for user: {}", userURI);
+			return sessionsList;
+		}
+
+		URI resourceURI = entry.getResourceURI();
+		if (resourceURI == null) {
+			log.warn("No resource URI found for user entry: {}", userURI);
+			return sessionsList;
+		}
+
+		String username = resourceURI.toString();
+		for (Object principal : sessionRegistry.getAllPrincipals()) {
+			if (principal instanceof UserDetails userDetails && userDetails.getUsername().equals(username)) {
+				sessionsList = sessionRegistry.getAllSessions(userDetails, includeExpiredSessions);
+				break;
 			}
-		} catch (NullPointerException e) {
-			log.error(e.getMessage(), e);
 		}
 
 		return sessionsList;

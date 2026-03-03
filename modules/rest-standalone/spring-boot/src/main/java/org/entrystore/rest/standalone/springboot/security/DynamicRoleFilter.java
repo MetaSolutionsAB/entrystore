@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.auth.SessionInfo;
 import org.jspecify.annotations.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -22,6 +23,7 @@ import java.time.ZoneId;
 /**
  * Class reloads User properties on each HTTP request
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class DynamicRoleFilter extends OncePerRequestFilter {
@@ -61,6 +63,16 @@ public class DynamicRoleFilter extends OncePerRequestFilter {
 			} catch (UsernameNotFoundException e) {
 				SecurityContextHolder.clearContext();
 				response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "User account is not found.");
+				return;
+			} catch (ClassCastException e) {
+				log.error("Unexpected principal type during user details reload", e);
+				SecurityContextHolder.clearContext();
+				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Authentication error.");
+				return;
+			} catch (Exception e) {
+				log.error("Failed to reload user details", e);
+				SecurityContextHolder.clearContext();
+				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Authentication error.");
 				return;
 			}
 		}
