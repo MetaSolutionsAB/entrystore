@@ -145,6 +145,14 @@ class ProxyIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_FORBIDDEN
 	}
 
+	def 'GET /proxy to numeric IPv4 representation should return 403'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('http://2130706433/test', 'UTF-8'))
+
+		then:
+		conn.getResponseCode() == HTTP_FORBIDDEN
+	}
+
 	def 'GET /proxy to unresolvable host should return 403'() {
 		when:
 		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('http://definitely-not-a-real-host-xyz123.invalid/test', 'UTF-8'))

@@ -51,7 +51,7 @@ public class ProxyService {
 			Pattern.compile("^localhost$"),                                   // localhost
 			Pattern.compile("(.+)\\.local"),                                 // any local domains
 			Pattern.compile("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"), // IPv4
-			Pattern.compile("^\\d$"),                                        // IPv4
+			Pattern.compile("^\\d+$"),                                       // numeric IPv4 representation (e.g. 2130706433)
 			Pattern.compile(":")                                             // IPv6
 	);
 
