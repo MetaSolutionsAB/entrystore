@@ -9,7 +9,7 @@ import org.entrystore.config.Config;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -58,13 +58,13 @@ public class LoginAttemptService {
 
 		attemptMap.compute(username, (key, current) -> {
 			int previousFailures = 0;
-			if (current != null && (current.lockedUntil() == null || !LocalDateTime.now().isAfter(current.lockedUntil()))) {
+			if (current != null && (current.lockedUntil() == null || !Instant.now().isAfter(current.lockedUntil()))) {
 				previousFailures = current.failedAttempts();
 			}
 
 			int newCount = previousFailures + 1;
 			if (newCount >= maxAttempts) {
-				LocalDateTime lockedUntil = LocalDateTime.now().plus(lockoutDuration);
+				Instant lockedUntil = Instant.now().plus(lockoutDuration);
 				log.warn("User [{}] failed too many login attempts and will be locked out until {}", username, lockedUntil);
 				return new LoginAttemptInfo(newCount, lockedUntil);
 			}
@@ -80,18 +80,18 @@ public class LoginAttemptService {
 		return getLockedUntil(username) != null;
 	}
 
-	public LocalDateTime getLockedUntil(String username) {
+	public Instant getLockedUntil(String username) {
 		LoginAttemptInfo info = attemptMap.get(username);
 		if (info == null || info.lockedUntil() == null) {
 			return null;
 		}
-		if (LocalDateTime.now().isAfter(info.lockedUntil())) {
+		if (Instant.now().isAfter(info.lockedUntil())) {
 			log.info("User [{}] stopped being locked out", username);
-			attemptMap.remove(username);
+			attemptMap.remove(username, info);
 			return null;
 		}
 		return info.lockedUntil();
 	}
 
-	public record LoginAttemptInfo(int failedAttempts, LocalDateTime lockedUntil) {}
+	public record LoginAttemptInfo(int failedAttempts, Instant lockedUntil) {}
 }

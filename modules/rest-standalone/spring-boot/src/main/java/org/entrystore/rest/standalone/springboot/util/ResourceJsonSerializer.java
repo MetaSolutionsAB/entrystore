@@ -28,7 +28,7 @@ import org.json.JSONObject;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -130,7 +130,7 @@ public class ResourceJsonSerializer {
 					resourceObj.put("disabled", true);
 				}
 
-				LocalDateTime lockedUntil = loginAttemptService.getLockedUntil(user.getName().toLowerCase());
+				Instant lockedUntil = loginAttemptService.getLockedUntil(user.getName().toLowerCase());
 				if (lockedUntil != null) {
 					resourceObj.put("disabledUntil", lockedUntil);
 				}
