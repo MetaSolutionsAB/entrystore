@@ -8,9 +8,13 @@ EntryStore is the reference implementation of the Resource and Metadata Manageme
 
 ## Build Commands
 
+**Always use `mvn clean`** — stale artifacts from other branches cause subtle failures.
+
+**Java 21 required** — Lombok annotation processing is incompatible with Java 22+.
+
 ```bash
 # Quick build (skip tests)
-mvn install -Dmaven.test.skip=true
+mvn clean install -Dmaven.test.skip=true
 # or use the provided script:
 ./build.sh install
 
@@ -32,16 +36,16 @@ mvn clean install -pl modules/rest-standalone/spring-boot -am -DskipTests
 mvn clean install
 
 # Unit tests only
-mvn test
+mvn clean test
 
 # Integration tests only (runs all ITs)
-mvn verify -pl modules/rest-standalone/integration-test
+mvn clean verify -pl modules/rest-standalone/integration-test
 
 # Run a specific integration test class
-mvn verify -pl modules/rest-standalone/integration-test -Dtest=ProxyIT
+mvn clean verify -pl modules/rest-standalone/integration-test -Dtest=ProxyIT
 
 # Run specific unit test
-mvn test -Dtest=EntryImplTest
+mvn clean test -Dtest=EntryImplTest
 ```
 
 **Test structure:**
