@@ -57,7 +57,7 @@ public class ESAuthenticationSuccessHandler extends SimpleUrlAuthenticationSucce
 			try {
 				Instant now = Instant.now();
 				SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
-						.userName(esUserDetails.getSessionInfo().userName())
+						.userName(username != null ? username.toLowerCase() : null)
 						.loginTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
 						.loginExpiration(LocalDateTime.ofInstant(now.plusSeconds(request.getSession().getMaxInactiveInterval()), ZoneId.systemDefault()))
 						.lastAccessTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))

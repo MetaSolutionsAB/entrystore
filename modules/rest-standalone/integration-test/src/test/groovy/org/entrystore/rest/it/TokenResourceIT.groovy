@@ -3,7 +3,6 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
-import spock.lang.PendingFeature
 
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatterBuilder
@@ -86,7 +85,6 @@ class TokenResourceIT extends BaseSpec {
 		tokensRespJson[tokenPart2]['loginTokenMaxAge'] == 50
 	}
 
-	@PendingFeature
 	def "GET /auth/tokens should get a list of all currently active logins of an authenticated user with updated timestamps"() {
 		given:
 		def username = 'userForTokenManagementUpdate@test.com'

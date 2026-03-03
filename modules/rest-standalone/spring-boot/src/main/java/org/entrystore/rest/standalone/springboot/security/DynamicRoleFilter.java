@@ -11,6 +11,7 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -29,6 +30,7 @@ import java.time.ZoneId;
 public class DynamicRoleFilter extends OncePerRequestFilter {
 
 	private final ESUserDetailsService userDetailsService;
+	private final SessionRegistry sessionRegistry;
 
 	@Override
 	protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain)
@@ -42,7 +44,7 @@ public class DynamicRoleFilter extends OncePerRequestFilter {
 				ESUserSessionDetails updatedUser = (ESUserSessionDetails) userDetailsService.loadUserByUsername(esUserDetails.getUsername());
 				Instant now = Instant.now();
 				SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
-						.userName(updatedUser.getSessionInfo().userName())
+						.userName(esUserDetails.getSessionInfo().userName())
 						.loginTime(esUserDetails.getSessionInfo().loginTime())
 						.loginExpiration(LocalDateTime.ofInstant(now.plusSeconds(request.getSession().getMaxInactiveInterval()), ZoneId.systemDefault()))
 						.lastAccessTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
@@ -60,6 +62,7 @@ public class DynamicRoleFilter extends OncePerRequestFilter {
 
 				UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(updatedUser, updatedUser.getPassword(), updatedUser.getAuthorities());
 				SecurityContextHolder.getContext().setAuthentication(newAuth);
+				sessionRegistry.registerNewSession(request.getSession().getId(), updatedUser);
 			} catch (UsernameNotFoundException e) {
 				SecurityContextHolder.clearContext();
 				response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "User account is not found.");
