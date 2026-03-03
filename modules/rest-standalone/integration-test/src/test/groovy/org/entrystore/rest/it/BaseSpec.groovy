@@ -29,6 +29,13 @@ import static org.awaitility.Awaitility.await
 @Testcontainers
 abstract class BaseSpec extends Specification {
 
+	static {
+		// Allow setting restricted HTTP headers (e.g. Origin, Access-Control-Request-Method)
+		// on HttpURLConnection, needed for CORS integration tests.
+		// Must be set before HttpURLConnection class is loaded.
+		System.setProperty('sun.net.http.allowRestrictedHeaders', 'true')
+	}
+
 	static def log = LoggerFactory.getLogger(this.class)
 	static def JSON_PARSER = new JsonSlurper()
 	static def appStarted = false

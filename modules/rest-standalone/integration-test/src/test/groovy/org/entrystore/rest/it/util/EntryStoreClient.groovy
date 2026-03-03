@@ -122,7 +122,11 @@ class EntryStoreClient {
 			connection.setRequestProperty('Content-Type', contentType)
 		}
 		extraHeaders?.each { key, value ->
-			connection.setRequestProperty(key, value)
+			// Skip Content-Length — HttpURLConnection manages it internally
+			// (setting it manually conflicts with chunked streaming mode)
+			if (key != 'Content-Length') {
+				connection.setRequestProperty(key, value)
+			}
 		}
 
 		if (inputStream != null) {
