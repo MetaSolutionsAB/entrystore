@@ -214,10 +214,10 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /{context-id}/proxy as guest should return 401'() {
 		given:
-		getOrCreateContext([contextId: '80'])
+		getOrCreateContext([contextId: 'proxy-guest'])
 
 		when:
-		def conn = EntryStoreClient.getRequest('/80/proxy?url=' + mockUrl('/api/data'), '')
+		def conn = EntryStoreClient.getRequest('/proxy-guest/proxy?url=' + mockUrl('/api/data'), '')
 
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
@@ -225,10 +225,10 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /{context-id}/proxy as non-admin user without context access should return 403'() {
 		given:
-		getOrCreateContext([contextId: '81'])
+		getOrCreateContext([contextId: 'proxy-nonadmin'])
 
 		when:
-		def conn = EntryStoreClient.getRequest('/81/proxy?url=' + mockUrl('/api/data'), 'user')
+		def conn = EntryStoreClient.getRequest('/proxy-nonadmin/proxy?url=' + mockUrl('/api/data'), 'user')
 
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
@@ -236,10 +236,10 @@ class ProxyIT extends BaseSpec {
 
 	def 'GET /{context-id}/proxy as admin should return proxied content'() {
 		given:
-		getOrCreateContext([contextId: '82'])
+		getOrCreateContext([contextId: 'proxy-admin'])
 
 		when:
-		def conn = EntryStoreClient.getRequest('/82/proxy?url=' + mockUrl('/api/data'))
+		def conn = EntryStoreClient.getRequest('/proxy-admin/proxy?url=' + mockUrl('/api/data'))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
