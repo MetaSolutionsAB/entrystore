@@ -48,7 +48,7 @@ public class PostAuthenticationFilter extends OncePerRequestFilter {
 					log.warn("Authenticated SAML user '{}' not found in EntryStore, denying access", username);
 					throw new ForbiddenException("Authenticated SAML user '" + username + "' not found in EntryStore");
 				}
-			} else if (auth.getPrincipal() instanceof ESUserDetails esUser && esUser.getEsUser() != null) {
+			} else if (auth.getPrincipal() instanceof ESUserSessionDetails esUser && esUser.getEsUser() != null) {
 				// Cookie has been verified and user is authenticated
 				pm.setAuthenticatedUserURI(esUser.getEsUser().getURI());
 			} else {

@@ -6,12 +6,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.standalone.springboot.service.auth.LoginAttemptService;
+import org.entrystore.rest.standalone.springboot.model.auth.SessionInfo;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Slf4j
 @Component
@@ -44,6 +50,30 @@ public class ESAuthenticationSuccessHandler extends SimpleUrlAuthenticationSucce
 		}
 
 		request.getSession().setMaxInactiveInterval(effectiveMaxAge);
+
+		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+		if (authentication != null && authentication.getPrincipal() instanceof ESUserSessionDetails esUserDetails) {
+			try {
+				Instant now = Instant.now();
+				SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
+						.userName(username != null ? username.toLowerCase() : null)
+						.loginTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
+						.loginExpiration(LocalDateTime.ofInstant(now.plusSeconds(request.getSession().getMaxInactiveInterval()), ZoneId.systemDefault()))
+						.lastAccessTime(LocalDateTime.ofInstant(now, ZoneId.systemDefault()))
+						.lastUsedIpAddress(request.getRemoteAddr())
+						.lastUsedUserAgent(request.getHeader("User-Agent"))
+						.loginTokenMaxAge(request.getSession().getMaxInactiveInterval());
+
+				esUserDetails.setSessionInfo(sessionInfo.build());
+
+				UsernamePasswordAuthenticationToken newAuth = new UsernamePasswordAuthenticationToken(esUserDetails, esUserDetails.getPassword(), esUserDetails.getAuthorities());
+				SecurityContextHolder.getContext().setAuthentication(newAuth);
+			} catch (Exception e) {
+				log.error("Failed to build session metadata on login success, login will proceed without session info", e);
+			}
+		}
+
 		response.setStatus(HttpStatus.OK.value());
 		response.setContentType("text/html");
 		response.getWriter().write("Login successful.");
