@@ -8,6 +8,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.standalone.springboot.configuration.CorsConfig;
 import org.entrystore.rest.standalone.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.standalone.springboot.model.auth.AuthState;
 import org.entrystore.rest.standalone.springboot.model.auth.UserAuthRole;
@@ -51,6 +52,8 @@ public class SecurityConfig {
 	private final ESAuthenticationFailureHandler authenticationFailureHandler;
 	private final ESAuthenticationSuccessHandler authenticationSuccessHandler;
 
+	private final CorsConfig corsConfig;
+
 	// SAML-auth related beans
 	private final SamlCustomConfiguration samlConfiguration;
 	private final SamlLoginSuccessHandler successHandler;
@@ -68,6 +71,12 @@ public class SecurityConfig {
 
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http, SessionRegistry sessionRegistry) throws Exception {
+
+		if (corsConfig.isCorsEnabled()) {
+			http.cors(Customizer.withDefaults());
+		} else {
+			http.cors(AbstractHttpConfigurer::disable);
+		}
 
 		http
 				.csrf(AbstractHttpConfigurer::disable)

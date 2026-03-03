@@ -68,6 +68,7 @@ public class BackupJob implements Job, InterruptableJob {
 
 	public void execute(JobExecutionContext context) {
 		if (interrupted) {
+			interrupted = false;
 			throw new RuntimeException("Backup job \"execute()\" was interrupted");
 		}
 
@@ -100,12 +101,13 @@ public class BackupJob implements Job, InterruptableJob {
 				log.info("Backup maintenance not active");
 			}
 		} catch (Exception e) {
-			log.error(e.getMessage());
+			log.error("Backup execution failed", e);
 		}
 	}
 
 	synchronized public static void runBackup(JobExecutionContext jobContext) {
 		if (interrupted) {
+			interrupted = false;
 			throw new RuntimeException("Backup job \"runBackup()\" was interrupted");
 		}
 
@@ -260,6 +262,7 @@ public class BackupJob implements Job, InterruptableJob {
 
 	synchronized public static void runBackupMaintenance(JobExecutionContext jobContext) {
 		if (interrupted) {
+			interrupted = false;
 			throw new RuntimeException("Backup job \"runBackupMaintenance()\" was interrupted");
 		}
 
