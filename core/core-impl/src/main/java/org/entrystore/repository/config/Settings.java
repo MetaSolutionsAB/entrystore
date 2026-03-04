@@ -165,9 +165,6 @@ public class Settings {
 
 	public static String REPOSITORY_REWRITE_BASEREFERENCE = "entrystore.repository.rewrite-basereference";
 
-	public static String REPOSITORY_CACHE = "entrystore.repository.cache";
-	public static String REPOSITORY_CACHE_PATH = "entrystore.repository.cache.path";
-
 	public static String REPOSITORY_PUBLIC = "entrystore.repository.public";
 	public static String REPOSITORY_PUBLIC_PATH = "entrystore.repository.public.path";
 	public static String REPOSITORY_PUBLIC_INDEXES = "entrystore.repository.public.indexes";
