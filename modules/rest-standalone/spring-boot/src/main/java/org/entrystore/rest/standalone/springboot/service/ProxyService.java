@@ -74,7 +74,7 @@ public class ProxyService {
 
 	private static final List<Pattern> BLACKLIST_REGEX = List.of(
 			Pattern.compile("^localhost$"),                                   // localhost
-			Pattern.compile("(.+)\\.local"),                                 // any local domains
+			Pattern.compile("(.+)\\.local$"),                                // any local domains
 			Pattern.compile("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"), // IPv4
 			Pattern.compile("^\\d+$"),                                       // numeric IPv4 representation (e.g. 2130706433)
 			Pattern.compile(":")                                             // IPv6
@@ -150,6 +150,14 @@ public class ProxyService {
 				PrincipalManager.AccessProperty.ReadResource);
 	}
 
+	void setWhitelistLocal(Set<String> whitelistLocal) {
+		this.whitelistLocal = whitelistLocal;
+	}
+
+	void setWhitelistAnon(Set<String> whitelistAnon) {
+		this.whitelistAnon = whitelistAnon;
+	}
+
 	InetAddress resolveAndValidate(String host) {
 		host = host.toLowerCase();
 		boolean isWhitelistedLocal = whitelistLocal.contains(host);
@@ -196,6 +204,7 @@ public class ProxyService {
 	}
 
 	private ProxyResponse fetchUrl(String url, String acceptHeader, int redirectCount) {
+		// Re-validate: on redirects the URL may differ from the original request
 		validateUrl(url);
 
 		String host = extractHost(url);

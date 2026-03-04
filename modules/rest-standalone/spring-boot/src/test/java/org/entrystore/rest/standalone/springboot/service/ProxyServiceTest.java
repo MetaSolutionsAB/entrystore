@@ -26,7 +26,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.util.Set;
 
@@ -50,16 +49,10 @@ class ProxyServiceTest {
 	private ProxyService service;
 
 	@BeforeEach
-	void setUp() throws Exception {
+	void setUp() {
 		service = new ProxyService(principalManager, repositoryManager, contextService);
-		setField("whitelistLocal", Set.of());
-		setField("whitelistAnon", Set.of());
-	}
-
-	private void setField(String fieldName, Object value) throws Exception {
-		Field field = ProxyService.class.getDeclaredField(fieldName);
-		field.setAccessible(true);
-		field.set(service, value);
+		service.setWhitelistLocal(Set.of());
+		service.setWhitelistAnon(Set.of());
 	}
 
 	// --- validateUrl tests ---
@@ -120,8 +113,8 @@ class ProxyServiceTest {
 	}
 
 	@Test
-	void resolveAndValidate_localhost_whitelisted_returnsAddress() throws Exception {
-		setField("whitelistLocal", Set.of("localhost"));
+	void resolveAndValidate_localhost_whitelisted_returnsAddress() {
+		service.setWhitelistLocal(Set.of("localhost"));
 		InetAddress result = service.resolveAndValidate("localhost");
 		assertNotNull(result);
 		assertTrue(result.isLoopbackAddress());
