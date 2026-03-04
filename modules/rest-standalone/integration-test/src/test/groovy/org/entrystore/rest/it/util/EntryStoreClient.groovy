@@ -7,6 +7,15 @@ import org.eclipse.jetty.http.HttpMethod
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.nio.charset.StandardCharsets.UTF_8
 
+/**
+ * A utility client for interacting with the EntryStore REST API during integration tests.
+ * Handles authentication, request construction, and multipart form data.
+ *
+ * `creds` map contains User accounts that can be used by this client.
+ * On the first time use of a given User, the `authorize` method is called, to login the user.
+ * Then login cookie is stored in `cookies` map, to reuse it in the next requests for the given User.
+ *
+ */
 class EntryStoreClient {
 
 	static String host = 'localhost'
@@ -17,9 +26,10 @@ class EntryStoreClient {
 
 	static def emptyJsonBody = JsonOutput.toJson([:])
 
-	// Map of username -> user that were created during the tests initialization (createCommonUserAccounts)
+	// Map of Users (username->user) that were created during the tests initialization (createCommonUserAccounts)
 	static def createdEsUsers = [:]
 
+	// User accounts that can be used by this client
 	static def creds = [
 		'admin'            : 'adminpass',
 		'user'             : 'userPass123',
@@ -112,7 +122,11 @@ class EntryStoreClient {
 			connection.setRequestProperty('Content-Type', contentType)
 		}
 		extraHeaders?.each { key, value ->
-			connection.setRequestProperty(key, value)
+			// Skip Content-Length — HttpURLConnection manages it internally
+			// (setting it manually conflicts with chunked streaming mode)
+			if (key != 'Content-Length') {
+				connection.setRequestProperty(key, value)
+			}
 		}
 
 		if (inputStream != null) {

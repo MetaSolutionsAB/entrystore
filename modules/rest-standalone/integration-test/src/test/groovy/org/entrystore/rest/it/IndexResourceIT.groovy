@@ -87,6 +87,8 @@ class IndexResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//connection.getResponseCode() == HTTP_FORBIDDEN
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/index as admin on a String entry should return index info"() {

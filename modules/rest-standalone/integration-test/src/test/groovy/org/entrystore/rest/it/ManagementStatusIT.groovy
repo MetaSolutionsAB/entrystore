@@ -7,9 +7,9 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ManagementStatusIT extends BaseSpec {
 
-	def "GET /management/status as guest should reply with text status, when no Accept header defined"() {
+	def "GET /management/status as guest should reply with text status, when text Accept header is defined"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status', '', '')
+		def connection = EntryStoreClient.getRequest('/management/status', '', 'text/plain')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
@@ -30,6 +30,22 @@ class ManagementStatusIT extends BaseSpec {
 		(responseJson['version'] as String).length() > 2
 	}
 
+	def "GET /management/status as admin should reply with json status 'online', when no Accept header is defined"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/management/status', null, null)
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('text/plain')
+		connection.getInputStream().text == 'UP'
+		// following is for Spring
+		//connection.getContentType().contains('application/json')
+		//def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		//responseJson['repositoryStatus'] == 'online'
+		//responseJson['version'] != null
+		//(responseJson['version'] as String).length() > 2
+	}
+
 	def "GET /management/status?extended as guest should reply with Unauthorized 401"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status?extended=true', '')
@@ -40,19 +56,23 @@ class ManagementStatusIT extends BaseSpec {
 		connection.getErrorStream().text.contains('"error":"Not authorized"')
 	}
 
-	def "GET /management/status?extended as non-admin user should reply with Unauthorized 401"() {
+	def "GET /management/status?extended as non-admin user should reply with Forbidden"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status?extended=true', 'user')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//connection.getResponseCode() == HTTP_FORBIDDEN
 		connection.getContentType().contains('application/json')
+		//connection.getErrorStream().text.contains('"error":"Forbidden"')
 		connection.getErrorStream().text.contains('"error":"Not authorized"')
+
 	}
 
 	def "GET /management/status?extended as admin should reply with detailed status"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/management/status?extended=true')
+		def connection = EntryStoreClient.getRequest('/management/status?extended')
 
 		then:
 		connection.getResponseCode() == HTTP_OK

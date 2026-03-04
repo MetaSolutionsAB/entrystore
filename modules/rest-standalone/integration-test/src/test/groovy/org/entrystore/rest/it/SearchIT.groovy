@@ -409,7 +409,7 @@ class SearchIT extends BaseSpec {
 		def queryParams = [type: 'sparql', query: 'dc:title']
 
 		when:
-		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams), null)
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams), '')
 
 		then:
 		conn.getResponseCode() == HTTP_OK

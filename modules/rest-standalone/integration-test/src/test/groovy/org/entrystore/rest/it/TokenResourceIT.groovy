@@ -152,7 +152,7 @@ class TokenResourceIT extends BaseSpec {
 		def body = JsonOutput.toJson([token: tokenPart2])
 
 		when:
-		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', '', [Cookie: cookie1])
+		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json', [Cookie: cookie1])
 
 		then:
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT
@@ -182,7 +182,7 @@ class TokenResourceIT extends BaseSpec {
 		assert EntryStoreClient.getRequest('/auth/user', '', '', [Cookie: cookie]).getResponseCode() == HTTP_OK
 
 		when:
-		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', '', [Cookie: cookie])
+		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json', [Cookie: cookie])
 
 		then:
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT

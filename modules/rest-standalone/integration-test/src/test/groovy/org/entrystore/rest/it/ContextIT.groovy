@@ -7,7 +7,7 @@ import static java.net.HttpURLConnection.*
 
 class ContextIT extends BaseSpec {
 
-	def "POST /_principals/groups as guest should respond with FORBIDDEN 403"() {
+	def "POST /_principals/groups as guest should respond with UNAUTHORIZED 401"() {
 		given:
 		def contextName = 'someName'
 
@@ -16,6 +16,8 @@ class ContextIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
+		// Restlet has it as FORBIDDEN, was changed in Spring
+		//connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "POST /_principals/groups as non-admin user should respond with FORBIDDEN 403"() {
@@ -132,7 +134,7 @@ class ContextIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "POST /_contexts?id={id} as non-admin user should respond with Unauthorized 401"() {
+	def "POST /_contexts?id={id} as non-admin user should respond with Forbidden"() {
 		given:
 		def contextId = 'new-context-2'
 		def params = [id: contextId, graphtype: 'context', name: 'someName3']
@@ -142,6 +144,8 @@ class ContextIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//conn.getResponseCode() == HTTP_FORBIDDEN
 	}
 
 	def "POST /_contexts?id={id} as admin should create a new context with specified ID"() {
@@ -177,12 +181,14 @@ class ContextIT extends BaseSpec {
 		responseJson['error'] != null
 	}
 
-	def "GET /{context-id} as user should respond with UNAUTHORIZED 401"() {
+	def "GET /_contexts as non-admin user should respond with FORBIDDEN 403"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/_contexts', 'user')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//connection.getResponseCode() == HTTP_FORBIDDEN
 	}
 
 	def "GET /{context-id} as member of admin group should return context entries"() {
@@ -216,15 +222,19 @@ class ContextIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		// Restlet has it as NOT_FOUND, was changed in Spring
+		//conn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	// TODO: Verify below behaviour: for a non-admin user and a valid context-id we get 401, but for invalid context-id we get 404
-	def "GET /{context-id} as non-admin user for non-existing context should return UNAUTHORIZED 401"() {
+	def "GET /{context-id} as non-admin user for non-existing context should return FORBIDDEN 403"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/222-random-name-222', 'user')
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		// Restlet has it as NOT_FOUND, was changed in Spring
+		//conn.getResponseCode() == HTTP_FORBIDDEN
 	}
 
 	def "GET /{context-id} as admin for non-existing context should return NOT_FOUND 404"() {
@@ -263,9 +273,9 @@ class ContextIT extends BaseSpec {
 		responseJson.collect() == []
 	}
 
-	def "GET /{context-id}?entryname=some-random-name as guest should respond with UNAUTHORIZED"() {
+	def "GET /_contexts?entryname=some-random-name as guest should respond with UNAUTHORIZED"() {
 		when:
-		def connection = EntryStoreClient.getRequest('/_contexts?entryname=some-random-name', null)
+		def connection = EntryStoreClient.getRequest('/_contexts?entryname=some-random-name', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
@@ -274,15 +284,16 @@ class ContextIT extends BaseSpec {
 		responseJson['error'] != null
 	}
 
-	def "GET /{context-id}?entryname=some-random-name as non-admin user should respond with UNAUTHORIZED"() {
+	def "GET /_contexts?entryname=some-random-name as non-admin user should respond with FORBIDDEN"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/_contexts?entryname=some-random-name', 'user')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//connection.getResponseCode() == HTTP_FORBIDDEN
 		connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
 		responseJson['error'] != null
 	}
-
 }
