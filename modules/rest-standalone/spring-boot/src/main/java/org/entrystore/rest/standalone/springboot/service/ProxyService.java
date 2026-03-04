@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.standalone.springboot.service;
 
 import jakarta.annotation.PostConstruct;
@@ -14,17 +30,24 @@ import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenExcept
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SNIHostName;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
+import java.net.Inet6Address;
 import java.net.InetAddress;
+import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -47,7 +70,9 @@ public class ProxyService {
 	private static final int READ_TIMEOUT_MS = 60_000;
 	private static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024; // 10 MB
 
-	private static final List<Pattern> BLACKLIST_REGEX = Arrays.asList(
+	private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https");
+
+	private static final List<Pattern> BLACKLIST_REGEX = List.of(
 			Pattern.compile("^localhost$"),                                   // localhost
 			Pattern.compile("(.+)\\.local"),                                 // any local domains
 			Pattern.compile("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"), // IPv4
@@ -83,6 +108,22 @@ public class ProxyService {
 		return result;
 	}
 
+	public void validateUrl(String url) {
+		URI uri;
+		try {
+			uri = new URI(url);
+		} catch (URISyntaxException e) {
+			throw new BadRequestException("Malformed URL: " + url);
+		}
+		String scheme = uri.getScheme();
+		if (scheme == null || !ALLOWED_SCHEMES.contains(scheme.toLowerCase())) {
+			throw new BadRequestException("Only http and https URLs are supported");
+		}
+		if (uri.getUserInfo() != null) {
+			throw new BadRequestException("URLs with embedded credentials are not allowed");
+		}
+	}
+
 	public String extractHost(String url) {
 		try {
 			String host = new URI(url).getHost();
@@ -109,35 +150,44 @@ public class ProxyService {
 				PrincipalManager.AccessProperty.ReadResource);
 	}
 
-	boolean isBlacklisted(String host) {
+	InetAddress resolveAndValidate(String host) {
 		host = host.toLowerCase();
+		boolean isWhitelistedLocal = whitelistLocal.contains(host);
 
-		if (whitelistLocal.contains(host)) {
-			return false;
-		}
-
-		for (Pattern p : BLACKLIST_REGEX) {
-			if (p.matcher(host).find()) {
-				return true;
+		if (!isWhitelistedLocal) {
+			for (Pattern p : BLACKLIST_REGEX) {
+				if (p.matcher(host).find()) {
+					throw new ForbiddenException("Access denied: host is blacklisted");
+				}
 			}
 		}
 
-		// All hosts that do not resolve into a "regular" Unicast address are automatically
-		// blacklisted, among other reasons to avoid access to local networks
+		InetAddress[] allAddresses;
 		try {
-			InetAddress ia = InetAddress.getByName(host);
-			if (ia.isAnyLocalAddress() ||
-					ia.isSiteLocalAddress() ||
-					ia.isLoopbackAddress() ||
-					ia.isLinkLocalAddress() ||
-					ia.isMulticastAddress()) {
-				return true;
-			}
+			allAddresses = InetAddress.getAllByName(host);
 		} catch (UnknownHostException e) {
-			log.warn(e.getMessage());
+			log.warn("Failed to resolve host: {}", host);
+			throw new ForbiddenException("Access denied: host cannot be resolved");
+		}
+
+		for (InetAddress addr : allAddresses) {
+			if (isDisallowedAddress(addr, isWhitelistedLocal)) {
+				throw new ForbiddenException("Access denied: host resolves to a disallowed address");
+			}
+		}
+
+		return allAddresses[0];
+	}
+
+	private boolean isDisallowedAddress(InetAddress address, boolean whitelistedLocal) {
+		if (address.isAnyLocalAddress() || address.isMulticastAddress()) {
 			return true;
 		}
-
+		if (!whitelistedLocal) {
+			return address.isSiteLocalAddress() ||
+					address.isLoopbackAddress() ||
+					address.isLinkLocalAddress();
+		}
 		return false;
 	}
 
@@ -146,11 +196,10 @@ public class ProxyService {
 	}
 
 	private ProxyResponse fetchUrl(String url, String acceptHeader, int redirectCount) {
-		String host = extractHost(url);
+		validateUrl(url);
 
-		if (isBlacklisted(host)) {
-			throw new ForbiddenException("Access denied: host is blacklisted");
-		}
+		String host = extractHost(url);
+		InetAddress resolved = resolveAndValidate(host);
 
 		if (redirectCount > MAX_REDIRECTS) {
 			log.warn("More than {} redirect loops detected, aborting", MAX_REDIRECTS);
@@ -159,11 +208,22 @@ public class ProxyService {
 
 		HttpURLConnection conn = null;
 		try {
-			conn = (HttpURLConnection) new URI(url).toURL().openConnection();
+			URI originalUri = new URI(url);
+			URI pinnedUri = buildPinnedUri(originalUri, resolved);
+
+			conn = (HttpURLConnection) pinnedUri.toURL().openConnection();
 			conn.setRequestMethod("GET");
 			conn.setInstanceFollowRedirects(false);
 			conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
 			conn.setReadTimeout(READ_TIMEOUT_MS);
+
+			// Set Host header to original hostname for virtual hosting
+			conn.setRequestProperty("Host", buildHostHeader(originalUri));
+
+			if (conn instanceof HttpsURLConnection httpsConn) {
+				configureSsl(httpsConn, host);
+			}
+
 			if (acceptHeader != null) {
 				conn.setRequestProperty("Accept", acceptHeader);
 			}
@@ -173,8 +233,10 @@ public class ProxyService {
 			if (status >= 300 && status < 400) {
 				String location = conn.getHeaderField("Location");
 				if (location != null) {
-					log.debug("Request redirected to {}", location);
-					return fetchUrl(location, acceptHeader, redirectCount + 1);
+					// Resolve relative redirects against the original URL
+					URI resolvedLocation = originalUri.resolve(location);
+					log.debug("Request redirected to {}", resolvedLocation);
+					return fetchUrl(resolvedLocation.toString(), acceptHeader, redirectCount + 1);
 				}
 				log.warn("Upstream returned {} redirect without Location header for URL: {}", status, url);
 				throw new CustomResponseException("Upstream returned redirect without Location header", HttpStatus.BAD_GATEWAY);
@@ -201,6 +263,39 @@ public class ProxyService {
 		}
 	}
 
+	private URI buildPinnedUri(URI originalUri, InetAddress resolved) throws URISyntaxException {
+		String ipHost = (resolved instanceof Inet6Address)
+				? "[" + resolved.getHostAddress() + "]"
+				: resolved.getHostAddress();
+		return new URI(
+				originalUri.getScheme(),
+				null, // no userinfo
+				ipHost,
+				originalUri.getPort(),
+				originalUri.getRawPath(),
+				originalUri.getRawQuery(),
+				originalUri.getRawFragment()
+		);
+	}
+
+	private String buildHostHeader(URI uri) {
+		String host = uri.getHost();
+		int port = uri.getPort();
+		boolean isDefaultPort = port == -1
+				|| ("http".equalsIgnoreCase(uri.getScheme()) && port == 80)
+				|| ("https".equalsIgnoreCase(uri.getScheme()) && port == 443);
+		return isDefaultPort ? host : host + ":" + port;
+	}
+
+	private void configureSsl(HttpsURLConnection httpsConn, String originalHost) {
+		SSLSocketFactory defaultFactory = httpsConn.getSSLSocketFactory();
+		httpsConn.setSSLSocketFactory(new SniSSLSocketFactory(defaultFactory, originalHost));
+
+		HostnameVerifier defaultVerifier = httpsConn.getHostnameVerifier();
+		httpsConn.setHostnameVerifier((hostname, session) ->
+				defaultVerifier.verify(originalHost, session));
+	}
+
 	private byte[] readWithLimit(InputStream is) throws IOException {
 		byte[] buf = new byte[8192];
 		int totalRead = 0;
@@ -215,5 +310,76 @@ public class ProxyService {
 			out.write(buf, 0, bytesRead);
 		}
 		return out.toByteArray();
+	}
+
+	private static void setSniHostname(Socket socket, String hostname) {
+		if (socket instanceof SSLSocket sslSocket) {
+			SSLParameters params = sslSocket.getSSLParameters();
+			params.setServerNames(List.of(new SNIHostName(hostname)));
+			sslSocket.setSSLParameters(params);
+		}
+	}
+
+	private static class SniSSLSocketFactory extends SSLSocketFactory {
+
+		private final SSLSocketFactory delegate;
+		private final String hostname;
+
+		SniSSLSocketFactory(SSLSocketFactory delegate, String hostname) {
+			this.delegate = delegate;
+			this.hostname = hostname;
+		}
+
+		@Override
+		public String[] getDefaultCipherSuites() {
+			return delegate.getDefaultCipherSuites();
+		}
+
+		@Override
+		public String[] getSupportedCipherSuites() {
+			return delegate.getSupportedCipherSuites();
+		}
+
+		@Override
+		public Socket createSocket(Socket s, String host, int port, boolean autoClose) throws IOException {
+			// Pass original hostname (not the pinned IP in `host`) so the JDK sets
+			// SNI and uses the correct hostname for TLS session caching/verification.
+			return delegate.createSocket(s, hostname, port, autoClose);
+		}
+
+		@Override
+		public Socket createSocket(String host, int port) throws IOException {
+			Socket socket = delegate.createSocket(host, port);
+			setSniHostname(socket, hostname);
+			return socket;
+		}
+
+		@Override
+		public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException {
+			Socket socket = delegate.createSocket(host, port, localHost, localPort);
+			setSniHostname(socket, hostname);
+			return socket;
+		}
+
+		@Override
+		public Socket createSocket(InetAddress host, int port) throws IOException {
+			Socket socket = delegate.createSocket(host, port);
+			setSniHostname(socket, hostname);
+			return socket;
+		}
+
+		@Override
+		public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+			Socket socket = delegate.createSocket(address, port, localAddress, localPort);
+			setSniHostname(socket, hostname);
+			return socket;
+		}
+
+		@Override
+		public Socket createSocket() throws IOException {
+			Socket socket = delegate.createSocket();
+			setSniHostname(socket, hostname);
+			return socket;
+		}
 	}
 }

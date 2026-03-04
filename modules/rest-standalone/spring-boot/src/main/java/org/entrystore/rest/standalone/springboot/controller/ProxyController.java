@@ -27,6 +27,7 @@ public class ProxyController {
 			@RequestParam("url") String url,
 			@RequestHeader(value = "Accept", required = false, defaultValue = "*/*") String acceptHeader) {
 
+		proxyService.validateUrl(url);
 		String host = proxyService.extractHost(url);
 		proxyService.validateGlobalAccess(host);
 		return doProxy(url, acceptHeader);
@@ -39,6 +40,7 @@ public class ProxyController {
 			@RequestParam("url") String url,
 			@RequestHeader(value = "Accept", required = false, defaultValue = "*/*") String acceptHeader) {
 
+		proxyService.validateUrl(url);
 		proxyService.validateContextAccess(contextId);
 		return doProxy(url, acceptHeader);
 	}
