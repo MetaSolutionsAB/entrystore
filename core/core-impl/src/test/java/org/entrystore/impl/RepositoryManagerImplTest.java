@@ -119,12 +119,6 @@ public class RepositoryManagerImplTest {
 
 	@Disabled("To be implemented")
 	@Test
-	public void testGetCacheManager() throws Exception {
-		// TODO
-	}
-
-	@Disabled("To be implemented")
-	@Test
 	public void testGetDefaultQuota() throws Exception {
 		// TODO
 	}

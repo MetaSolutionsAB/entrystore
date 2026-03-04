@@ -79,9 +79,6 @@ entrystore.solr.extract-fulltext=off
 ## OAI-PMH harvester (not to confuse with the OAI-PMH target which is an own WebApp
 # entrystore.harvester.oai=on|off (default: off)
 # entrystore.harvester.oai.multithreaded=off
-## Cache for metadata instances produced by the harvesting target
-# entrystore.repository.cache=on|off (default: off)
-# entrystore.repository.cache.path=/srv/entrystore/files/cache/
 ## Tracking of deleted entries (needed for deleted records in OAI-PMH)
 # entrystore.repository.track-deleted-entries=false
 ## Cleanup of all triples that track deleted entries

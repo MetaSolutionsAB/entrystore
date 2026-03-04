@@ -64,7 +64,6 @@ public class StatusService {
 			.startupTime(appStartedListener.getStartupTime().atZone(ZoneId.systemDefault()).toString())
 			.repositoryType(esConfig.getString(Settings.STORE_TYPE, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
 			.repositoryIndices(esConfig.getString(Settings.STORE_INDEXES, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
-			.repositoryCache(esConfig.getBoolean(Settings.REPOSITORY_CACHE, false))
 			.quota(esConfig.getBoolean(Settings.DATA_QUOTA, false))
 			.quotaDefault(esConfig.getString(Settings.DATA_QUOTA_DEFAULT, DEFAULT_VALUE_FOR_NOT_CONFIGURED))
 			// TODO: Fix below when migrating EchoResource
