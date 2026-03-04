@@ -36,7 +36,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "GET /{context-id}/metadata/{entryId} as non-admin user should respond with Unauthorized 401"() {
+	def "GET /{context-id}/metadata/{entryId} as non-admin user should respond with Forbidden"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -50,6 +50,8 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 		then:
 		entryMetaConn.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//entryMetaConn.getResponseCode() == HTTP_FORBIDDEN
 	}
 
 	def "GET /{context-id}/metadata/{entryId} as admin should fetch local metadata of the entry"() {
@@ -318,7 +320,6 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 		when:
 		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/' + entryId, '[]', '')
-
 
 		then:
 		entryDeleteConn.getResponseCode() == HTTP_UNAUTHORIZED

@@ -61,12 +61,12 @@ class UserResourceIT extends BaseSpec {
 		infoRespJson['clientAcceptLanguage']['fr-CH'] == 0.89
 		// for Guest user 'authTokenExpires' field should not be present
 		if (requestUser.isEmpty()) {
-			infoRespJson['authTokenExpires'] == null
+			assert infoRespJson['authTokenExpires'] == null
 		} else {
-			infoRespJson['authTokenExpires'] != null
+			assert infoRespJson['authTokenExpires'] != null
 			def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
 			def now = LocalDateTime.now()
-			ChronoUnit.HOURS.between(now, authTokenExpires) == 1
+			assert ChronoUnit.HOURS.between(now, authTokenExpires) == 1
 		}
 
 		where:

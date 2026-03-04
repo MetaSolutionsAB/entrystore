@@ -650,7 +650,7 @@ class EntryIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "POST /{context-id}?entrytype=link as non-admin user should respond with Unauthorized 401"() {
+	def "POST /{context-id}?entrytype=link as non-admin user should respond with Forbidden"() {
 		given:
 		getOrCreateContext([contextId: contextId])
 		def params = [entrytype: 'link', resource: resourceUrl]
@@ -660,6 +660,8 @@ class EntryIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//conn.getResponseCode() == HTTP_FORBIDDEN
 	}
 
 	def "POST /{context-id}?entrytype=link&template=templateEntry with metadata in the body, should create a new link entry with local metadata combined with MD from template entry"() {
@@ -1461,6 +1463,7 @@ class EntryIT extends BaseSpec {
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
 	}
 
+	// Verified with Hannes - if accept contains something that we don't understand we respond with 406
 	@Ignore
 	def "GET /{context-id}/entry/{entry-id} in unsupported format, should respond with 406 - Not Acceptable"() {
 		given:
@@ -1991,7 +1994,7 @@ class EntryIT extends BaseSpec {
 		entryRespJson['relations'] as Map == [:]
 	}
 
-	def "PUT /{context-id}/entry/{entry-id} as non-admin user, should not edit the entry"() {
+	def "PUT /{context-id}/entry/{entry-id} as non-admin user should respond with Forbidden and not edit the entry"() {
 		given:
 		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'
@@ -2020,6 +2023,8 @@ class EntryIT extends BaseSpec {
 
 		then:
 		editEntryConn.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//editEntryConn.getResponseCode() == HTTP_FORBIDDEN
 
 		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
 		getEntryConn.getResponseCode() == HTTP_OK
@@ -2094,7 +2099,7 @@ class EntryIT extends BaseSpec {
 		response.contains('Unauthorized')
 	}
 
-	def "DELETE /{context-id}/entry/{entry-id} as non-admin user should not delete the entry"() {
+	def "DELETE /{context-id}/entry/{entry-id} as non-admin user should respond with Forbidden and not delete the entry"() {
 		given:
 		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'
@@ -2116,6 +2121,8 @@ class EntryIT extends BaseSpec {
 
 		then:
 		entryConn.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//entryConn.getResponseCode() == HTTP_FORBIDDEN
 		entryConn.getContentType().contains('text/html')
 		def response = entryConn.getErrorStream().text
 		response.contains('Unauthorized')

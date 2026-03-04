@@ -1,14 +1,11 @@
 package org.entrystore.rest.it
 
-import groovy.json.JsonOutput
 import org.eclipse.jetty.http.HttpMethod
 import org.entrystore.rest.it.util.EntryStoreClient
-import org.entrystore.rest.it.util.UserUtil
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
-import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 

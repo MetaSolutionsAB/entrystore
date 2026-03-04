@@ -102,7 +102,7 @@ class NameResourceIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "PUT /{context-id}/entry/{entry-id}/name as non-admin user on a Context entry should not edit the context name, respond with 401"() {
+	def "PUT /_contexts/entry/{entry-id}/name as non-admin user on a Context entry should respond with Forbidden and not edit the context name"() {
 		given:
 		def newName = 'new Name / with slash symbol, and {, and }, and [ or ], plus < and >, ouh yeah'
 		def body = JsonOutput.toJson([name: newName])
@@ -112,6 +112,8 @@ class NameResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//connection.getResponseCode() == HTTP_FORBIDDEN
 	}
 
 	def "PUT /{context-id}/entry/{entry-id}/name as admin on a Context entry should edit the context name"() {
@@ -197,7 +199,7 @@ class NameResourceIT extends BaseSpec {
 		json['name'] == oldUsername.toLowerCase()
 	}
 
-	def "PUT /{context-id}/entry/{entry-id}/name as non-admin user on another User-entry should not edit the username"() {
+	def "PUT /{context-id}/entry/{entry-id}/name as non-admin user on another User-entry should respond with Forbidden and not edit the username"() {
 		given:
 		def entryId = testUser['entryId'].toString()
 		def newUsername = 'new username 123'
@@ -208,6 +210,8 @@ class NameResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// Restlet has it as UNAUTHORIZED, was changed in Spring
+		//connection.getResponseCode() == HTTP_FORBIDDEN
 
 		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK
