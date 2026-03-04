@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3) - a Linked Data framework for managing resources and their metadata using "entries". Built with Java 21, RDF4J, and Solr. The REST layer is being migrated from Restlet to Spring Boot (Jetty 12).
+EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3) - a Linked Data framework for managing resources and their metadata using "entries". Built with Java 25, RDF4J, and Solr. The REST layer is being migrated from Restlet to Spring Boot (Jetty 12).
 
 ## Build Commands
 
 **Always use `mvn clean`** — stale artifacts from other branches cause subtle failures.
 
-**Java 21 required** — Lombok annotation processing is incompatible with Java 22+.
+**Java 25 required** — Lombok annotation processing is configured explicitly via `annotationProcessorPaths` (required since JDK 23+).
 
 ```bash
 # Quick build (skip tests)

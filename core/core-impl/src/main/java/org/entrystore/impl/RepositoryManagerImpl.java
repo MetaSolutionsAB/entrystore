@@ -587,9 +587,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	// treats HTTP_1_1 as a preference, not a hard constraint, leading to RST_STREAM errors.
 	@SuppressWarnings("deprecation")
 	private void initSolr() {
-		log.info("Manually setting property \"javax.xml.parsers.DocumentBuilderFactory\" to \"com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl\"");
-		System.setProperty("javax.xml.parsers.DocumentBuilderFactory", "com.sun.org.apache.xerces.internal.jaxp.DocumentBuilderFactoryImpl");
-
 		boolean reindex = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false);
 		boolean reindexWait = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, false);
 
