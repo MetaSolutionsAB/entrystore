@@ -105,7 +105,6 @@ public class StatusResource extends BaseResource  {
 					result.put("provenance", config.getBoolean(Settings.REPOSITORY_PROVENANCE, false));
 					result.put("quota", config.getBoolean(Settings.DATA_QUOTA, false));
 					result.put("quotaDefault", config.getString(Settings.DATA_QUOTA_DEFAULT, "unconfigured"));
-					result.put("repositoryCache", config.getBoolean(Settings.REPOSITORY_CACHE, false));
 					result.put("repositoryIndices", config.getString(Settings.STORE_INDEXES, "unconfigured"));
 					result.put("repositoryStatus", getRM() != null ? "online" : "offline");
 					result.put("repositoryType", config.getString(Settings.STORE_TYPE, "unconfigured"));

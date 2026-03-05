@@ -18,7 +18,6 @@ package org.entrystore.impl;
 
 import lombok.Getter;
 import lombok.Setter;
-import net.sf.ehcache.CacheManager;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.auth.AuthScope;
@@ -129,9 +128,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	@Getter
 	private final Config configuration;
-
-	@Getter
-	private CacheManager cacheManager;
 
 	private final boolean quotaEnabled;
 
@@ -248,26 +244,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		// create soft cache
 		softCache = new SoftCache();
-
-		if (configuration.getString(Settings.REPOSITORY_CACHE, "off").equalsIgnoreCase("on")) {
-			String cachePath = configuration.getString(Settings.REPOSITORY_CACHE_PATH);
-			if (cachePath != null) {
-				System.setProperty("ehcache.disk.store.dir", cachePath);
-			} else {
-				log.warn("No disk cache directory configured, creating temp directory");
-				try {
-					File tmpFolder = FileOperations.createTempDirectory("ehcache", null);
-					tmpFolder.deleteOnExit();
-					System.setProperty("ehcache.disk.store.dir", tmpFolder.getAbsolutePath());
-				} catch (IOException e) {
-					log.error(e.getMessage());
-				}
-			}
-			cacheManager = new CacheManager();
-			log.info("Disk cache activated, using {}", cacheManager.getDiskStorePath());
-		} else {
-			log.info("Disk cache not activated");
-		}
 
 		quotaEnabled = configuration.getString(Settings.DATA_QUOTA, "off").equalsIgnoreCase("on");
 		if (quotaEnabled) {
@@ -482,10 +458,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				repositoryListeners.clear();
 				if (softCache != null) {
 					softCache.shutdown();
-				}
-				if (cacheManager != null) {
-					log.info("Shutting down EHCache manager");
-					cacheManager.shutdown();
 				}
 				if (solrIndex != null) {
 					log.info("Shutting down Solr support");

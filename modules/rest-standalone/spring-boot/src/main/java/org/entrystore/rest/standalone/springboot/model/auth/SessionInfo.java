@@ -16,8 +16,11 @@
 
 package org.entrystore.rest.standalone.springboot.model.auth;
 
+import lombok.Builder;
+
 import java.time.LocalDateTime;
 
+@Builder
 public record SessionInfo(String userName, LocalDateTime loginTime, LocalDateTime loginExpiration,
 						  LocalDateTime lastAccessTime, String lastUsedIpAddress, String lastUsedUserAgent,
 						  int loginTokenMaxAge) {
