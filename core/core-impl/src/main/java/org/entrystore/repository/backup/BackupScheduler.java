@@ -26,7 +26,6 @@ import org.quartz.CronScheduleBuilder;
 import org.quartz.CronTrigger;
 import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
-import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
@@ -77,8 +76,6 @@ public class BackupScheduler {
 
 	RDFFormat format;
 
-	private static BackupScheduler instance;
-
 	private BackupScheduler(RepositoryManager rm, String cronExp, boolean gzip, boolean deleteAfter, boolean includeFiles, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays, RDFFormat format) {
 		try {
 			scheduler = StdSchedulerFactory.getDefaultScheduler();
@@ -106,45 +103,41 @@ public class BackupScheduler {
 		log.info("Created backup scheduler");
 	}
 
-	public static synchronized BackupScheduler getInstance(RepositoryManager rm) {
-		if (instance == null) {
-			log.info("Loading backup configuration");
-			Config config = rm.getConfiguration();
-			String cronExp = config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED));
-			if (cronExp == null) {
-				return null;
-			}
-			boolean gzip = config.getBoolean(Settings.BACKUP_GZIP, false);
-			boolean maintenance = config.getBoolean(Settings.BACKUP_MAINTENANCE, false);
-			boolean deleteAfter = config.getBoolean(Settings.BACKUP_DELETE_AFTER, false);
-			boolean includeFiles = config.getBoolean(Settings.BACKUP_INCLUDE_FILES, true);
-			int upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
-			int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
-			int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
+	public static synchronized BackupScheduler createInstance(RepositoryManager rm) {
+		log.info("Loading backup configuration");
+		Config config = rm.getConfiguration();
+		String cronExp = config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED));
+		if (cronExp == null) {
+			return null;
+		}
+		boolean gzip = config.getBoolean(Settings.BACKUP_GZIP, false);
+		boolean maintenance = config.getBoolean(Settings.BACKUP_MAINTENANCE, false);
+		boolean deleteAfter = config.getBoolean(Settings.BACKUP_DELETE_AFTER, false);
+		boolean includeFiles = config.getBoolean(Settings.BACKUP_INCLUDE_FILES, true);
+		int upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
+		int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
+		int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
 
-			RDFFormat format = MetadataUtil.getRDFFormat(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
-			if (format == null) {
-				log.warn("Invalid backup format {}, falling back to TriX", config.getString(Settings.BACKUP_FORMAT));
-				format = RDFFormat.TRIX;
-			}
-
-			if (cronExp.toLowerCase().contains("rnd")) {
-				cronExp = randomizeCronString(cronExp);
-			}
-
-			log.info("Cron expression: {}", cronExp);
-			log.info("GZIP: {}", gzip);
-			log.info("Include files: {}", includeFiles);
-			log.info("Delete previous backup after new backup: {}", deleteAfter);
-			log.info("Maintenance: {}", maintenance);
-			log.info("Maintenance upper limit: {}", upperLimit);
-			log.info("Maintenance lower limit: {}", lowerLimit);
-			log.info("Maintenance expires after days: {}", expiresAfterDays);
-
-			instance = new BackupScheduler(rm, cronExp, gzip, deleteAfter, includeFiles, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
+		RDFFormat format = MetadataUtil.getRDFFormat(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
+		if (format == null) {
+			log.warn("Invalid backup format {}, falling back to TriX", config.getString(Settings.BACKUP_FORMAT));
+			format = RDFFormat.TRIX;
 		}
 
-		return instance;
+		if (cronExp.toLowerCase().contains("rnd")) {
+			cronExp = randomizeCronString(cronExp);
+		}
+
+		log.info("Cron expression: {}", cronExp);
+		log.info("GZIP: {}", gzip);
+		log.info("Include files: {}", includeFiles);
+		log.info("Delete previous backup after new backup: {}", deleteAfter);
+		log.info("Maintenance: {}", maintenance);
+		log.info("Maintenance upper limit: {}", upperLimit);
+		log.info("Maintenance lower limit: {}", lowerLimit);
+		log.info("Maintenance expires after days: {}", expiresAfterDays);
+
+		return new BackupScheduler(rm, cronExp, gzip, deleteAfter, includeFiles, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
 	}
 
 	private static String randomizeCronString(String cronExp) {

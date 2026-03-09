@@ -41,6 +41,7 @@ public class StatusService {
 	private final RepositoryManagerImpl repositoryManager;
 	private final AppStartedListener appStartedListener;
 	private final RelationService relationService;
+	private final Optional<BackupScheduler> backupScheduler;
 
 
 	public boolean isUp() {
@@ -133,7 +134,7 @@ public class StatusService {
 			"format", esConfig.getString(Settings.BACKUP_FORMAT, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
 			"maintenance", esConfig.getBoolean(Settings.BACKUP_MAINTENANCE, false),
 			"cronExpression", esConfig.getString(Settings.BACKUP_CRONEXP, esConfig.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED, DEFAULT_VALUE_FOR_NOT_CONFIGURED)),
-			"cronExpressionResolved", Optional.ofNullable(BackupScheduler.getInstance(repositoryManager)).map(BackupScheduler::getCronExpression).orElse(""),
+			"cronExpressionResolved", backupScheduler.map(BackupScheduler::getCronExpression).orElse(""),
 			"maintenanceExpiresAfterDays", esConfig.getString(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
 			"maintenanceLowerLimit", esConfig.getString(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
 			"maintenanceUpperLimit", esConfig.getString(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, DEFAULT_VALUE_FOR_NOT_CONFIGURED)

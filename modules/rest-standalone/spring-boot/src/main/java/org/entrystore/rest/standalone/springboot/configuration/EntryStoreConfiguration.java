@@ -1,5 +1,6 @@
 package org.entrystore.rest.standalone.springboot.configuration;
 
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.ContextManager;
@@ -12,6 +13,7 @@ import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.config.SortedProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -21,6 +23,7 @@ import org.springframework.core.env.PropertySource;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
+import java.util.Optional;
 
 @Slf4j
 @Configuration
@@ -30,6 +33,14 @@ public class EntryStoreConfiguration {
 	private static final String ENTRYSTORE_CONFIG_PREFIX = "entrystore";
 
 	private final Environment environment;
+	private final Optional<BackupScheduler> backupScheduler;
+
+	@PostConstruct
+	public void logBeanStatus() {
+		if (backupScheduler.isEmpty()) {
+			log.warn("Backup is disabled in configuration");
+		}
+	}
 
 	/**
 	 * Creates a bean with Entrystore configuration needed for core.
@@ -81,18 +92,14 @@ public class EntryStoreConfiguration {
 	}
 
 	@Bean
+	@ConditionalOnProperty(name = Settings.BACKUP_SCHEDULER, havingValue = "on")
 	public BackupScheduler backupScheduler(RepositoryManagerImpl repositoryManager) {
-		if (!repositoryManager.getConfiguration().getBoolean(Settings.BACKUP_SCHEDULER, false)) {
-			log.warn("Backup is disabled in configuration");
-			return null;
-		}
-
 		log.info("Starting backup scheduler");
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
-			BackupScheduler bs = BackupScheduler.getInstance(repositoryManager);
+			BackupScheduler bs = BackupScheduler.createInstance(repositoryManager);
 			if (bs != null) {
 				bs.run();
 			}
