@@ -54,7 +54,7 @@ class SamlLoginIT extends BaseSpec {
 		log.info('Starting Keycloak container')
 		keycloakContainer.start()
 		log.info('Started Keycloak container at: {}:{}', keycloakContainer.getHost(), keycloakContainer.getMappedPort(8080))
-		keycloakTestRealmUrl = keycloakContainer.getAuthServerUrl() + 'realms/test/protocol/saml'
+		keycloakTestRealmUrl = keycloakContainer.getAuthServerUrl() + '/realms/test/protocol/saml'
 
 		// below 2 lines allow to stream Keycloak logs to this Spec execution console
 		def logConsumer = new Slf4jLogConsumer(log)

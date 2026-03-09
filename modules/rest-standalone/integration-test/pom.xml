@@ -108,24 +108,22 @@
 
 		<dependency>
 			<groupId>org.testcontainers</groupId>
-			<artifactId>solr</artifactId>
-			<!-- We should update the version to 2.x to use newer Docker CLI, but newer version is based on jakarta, hence need to use this old ver -->
-			<version>1.21.1</version>
+			<artifactId>testcontainers-solr</artifactId>
+			<version>2.0.3</version>
 			<scope>test</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>org.testcontainers</groupId>
-			<artifactId>spock</artifactId>
-			<version>1.21.1</version>
+			<artifactId>testcontainers-spock</artifactId>
+			<version>2.0.3</version>
 			<scope>test</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>com.github.dasniko</groupId>
 			<artifactId>testcontainers-keycloak</artifactId>
-			<!-- newer version is based on jakarta, hence need to use this old ver -->
-			<version>2.6.0</version>
+			<version>4.1.1</version>
 			<scope>test</scope>
 		</dependency>
 

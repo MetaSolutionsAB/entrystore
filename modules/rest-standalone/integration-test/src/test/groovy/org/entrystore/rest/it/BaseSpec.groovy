@@ -9,7 +9,7 @@ import org.entrystore.rest.standalone.springboot.EntryStoreApplicationStandalone
 import org.slf4j.LoggerFactory
 import org.springframework.boot.SpringApplication
 import org.springframework.context.ConfigurableApplicationContext
-import org.testcontainers.containers.SolrContainer
+import org.testcontainers.solr.SolrContainer
 import org.testcontainers.containers.output.Slf4jLogConsumer
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.spock.Testcontainers
