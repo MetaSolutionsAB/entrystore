@@ -46,6 +46,7 @@ import java.util.Optional;
 public class SecurityConfig {
 
 	private final CheckUsernamePasswordFilter checkUsernamePasswordFilter;
+	private final IgnoreAuthFilter ignoreAuthFilter;
 	private final SetUserURIAfterAuthenticationFilter setUserURIAfterAuthenticationFilter;
 	private final ReloadUserPropertiesFilter reloadUserPropertiesFilter;
 	private final HandlerExceptionResolver handlerExceptionResolver;
@@ -110,6 +111,7 @@ public class SecurityConfig {
 						.permitAll())
 				.addFilterBefore(checkUsernamePasswordFilter, UsernamePasswordAuthenticationFilter.class)
 				.addFilterAfter(setUserURIAfterAuthenticationFilter, AnonymousAuthenticationFilter.class)
+				.addFilterBefore(ignoreAuthFilter, SetUserURIAfterAuthenticationFilter.class)
 				.addFilterAfter(reloadUserPropertiesFilter, SetUserURIAfterAuthenticationFilter.class)
 				// below disables the auto redirect to login page when user is not authenticated, instead reply with 401
 				.exceptionHandling(e -> e
@@ -214,6 +216,13 @@ public class SecurityConfig {
 	@Bean
 	public FilterRegistrationBean<ReloadUserPropertiesFilter> disableReloadUserPropertiesFilterAutoRegistration(ReloadUserPropertiesFilter f) {
 		FilterRegistrationBean<ReloadUserPropertiesFilter> reg = new FilterRegistrationBean<>(f);
+		reg.setEnabled(false);
+		return reg;
+	}
+
+	@Bean
+	public FilterRegistrationBean<IgnoreAuthFilter> disableReloadIgnoreAuthFilerAutoRegistration(IgnoreAuthFilter f) {
+		FilterRegistrationBean<IgnoreAuthFilter> reg = new FilterRegistrationBean<>(f);
 		reg.setEnabled(false);
 		return reg;
 	}
