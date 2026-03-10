@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -103,11 +103,12 @@ public class BackupScheduler {
 		log.info("Created backup scheduler");
 	}
 
-	public static synchronized BackupScheduler createInstance(RepositoryManager rm) {
+	public static BackupScheduler createInstance(RepositoryManager rm) {
 		log.info("Loading backup configuration");
 		Config config = rm.getConfiguration();
 		String cronExp = config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED));
 		if (cronExp == null) {
+			log.warn("Backup scheduler will not be enabled as the cron expression is not configured");
 			return null;
 		}
 		boolean gzip = config.getBoolean(Settings.BACKUP_GZIP, false);

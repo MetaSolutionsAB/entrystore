@@ -130,7 +130,7 @@ public class StatusService {
 
 	private Map<String, Object> buildBackupInfo() {
 		return Map.of(
-			"active", esConfig.getBoolean(Settings.BACKUP_SCHEDULER, false),
+			"active", backupScheduler.isPresent(),
 			"format", esConfig.getString(Settings.BACKUP_FORMAT, DEFAULT_VALUE_FOR_NOT_CONFIGURED),
 			"maintenance", esConfig.getBoolean(Settings.BACKUP_MAINTENANCE, false),
 			"cronExpression", esConfig.getString(Settings.BACKUP_CRONEXP, esConfig.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED, DEFAULT_VALUE_FOR_NOT_CONFIGURED)),
