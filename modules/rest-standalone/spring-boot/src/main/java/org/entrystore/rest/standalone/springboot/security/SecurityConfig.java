@@ -25,7 +25,6 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.core.session.SessionRegistry;
-import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.web.DefaultRelyingPartyRegistrationResolver;
@@ -35,7 +34,6 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.util.Optional;
@@ -46,17 +44,18 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-	private final BeforeAuthenticationFilter beforeAuthenticationFilter;
-	private final PostAuthenticationFilter postAuthenticationFilter;
+	private final CheckUsernamePasswordFilter checkUsernamePasswordFilter;
+	private final SetUserURIAfterAuthenticationFilter setUserURIAfterAuthenticationFilter;
+	private final ReloadUserPropertiesFilter reloadUserPropertiesFilter;
 	private final HandlerExceptionResolver handlerExceptionResolver;
-	private final ESAuthenticationFailureHandler authenticationFailureHandler;
-	private final ESAuthenticationSuccessHandler authenticationSuccessHandler;
+	private final FormLoginAuthenticationFailureHandler formLoginAuthenticationFailureHandler;
+	private final FormLoginAuthenticationSuccessHandler formLoginAuthenticationSuccessHandler;
 
 	private final CorsConfig corsConfig;
 
 	// SAML-auth related beans
 	private final SamlCustomConfiguration samlConfiguration;
-	private final SamlLoginSuccessHandler successHandler;
+	private final SamlLoginSuccessHandler samlLoginSuccessHandler;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlAuthStateCache samlAuthStateCache;
 
@@ -98,8 +97,8 @@ public class SecurityConfig {
 				.formLogin(login -> login
 						.loginPage("/auth/login")
 						.loginProcessingUrl("/auth/cookie")
-						.successHandler(authenticationSuccessHandler)
-						.failureHandler(authenticationFailureHandler)
+						.successHandler(formLoginAuthenticationSuccessHandler)
+						.failureHandler(formLoginAuthenticationFailureHandler)
 						.usernameParameter("auth_username")
 						.passwordParameter("auth_password")
 						.permitAll()
@@ -108,8 +107,9 @@ public class SecurityConfig {
 						.logoutUrl("/auth/logout")
 						.deleteCookies("auth_token")
 						.permitAll())
-				.addFilterBefore(beforeAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-				.addFilterAfter(postAuthenticationFilter, AnonymousAuthenticationFilter.class)
+				.addFilterBefore(checkUsernamePasswordFilter, UsernamePasswordAuthenticationFilter.class)
+				.addFilterAfter(setUserURIAfterAuthenticationFilter, AnonymousAuthenticationFilter.class)
+				.addFilterAfter(reloadUserPropertiesFilter, SetUserURIAfterAuthenticationFilter.class)
 				// below disables the auto redirect to login page when user is not authenticated, instead reply with 401
 				.exceptionHandling(e -> e
 						.authenticationEntryPoint(customEntryPoint())
@@ -126,14 +126,14 @@ public class SecurityConfig {
 			log.info("SAML Auth Enabled");
 
 			// below modifies the login success handler, to set the redirect URL param name
-			successHandler.setTargetUrlParameter("successurl");
-			successHandler.setDefaultTargetUrl(samlConfiguration.redirectSuccess().url());
+			samlLoginSuccessHandler.setTargetUrlParameter("successurl");
+			samlLoginSuccessHandler.setDefaultTargetUrl(samlConfiguration.redirectSuccess().url());
 
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
 					.failureUrl(samlConfiguration.redirectFailure().url())
 					.authenticationRequestResolver(createCustomResolver())
-					.successHandler(successHandler));
+					.successHandler(samlLoginSuccessHandler));
 		} else {
 			log.info("SAML Auth Disabled");
 		}
@@ -208,13 +208,4 @@ public class SecurityConfig {
 		};
 	}
 
-	@Bean
-	public SessionRegistry sessionRegistry() {
-		return new SessionRegistryImpl();
-	}
-
-	@Bean
-	public HttpSessionEventPublisher httpSessionEventPublisher() {
-		return new HttpSessionEventPublisher();
-	}
 }
