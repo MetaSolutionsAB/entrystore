@@ -17,7 +17,7 @@ import java.io.IOException;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class ESAuthenticationFailureHandler extends SimpleUrlAuthenticationFailureHandler {
+public class FormLoginAuthenticationFailureHandler extends SimpleUrlAuthenticationFailureHandler {
 
 	private final LoginAttemptService loginAttemptService;
 
