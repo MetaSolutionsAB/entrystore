@@ -15,6 +15,7 @@ import org.entrystore.rest.standalone.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.standalone.springboot.service.auth.SamlAuthStateCache;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.web.server.Cookie;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.web.servlet.ServletContextInitializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -197,6 +198,27 @@ public class SecurityConfig {
 	}
 
 	@Bean
+	public FilterRegistrationBean<CheckUsernamePasswordFilter> disableCheckUsernamePasswordFilterAutoRegistration(CheckUsernamePasswordFilter f) {
+		FilterRegistrationBean<CheckUsernamePasswordFilter> reg = new FilterRegistrationBean<>(f);
+		reg.setEnabled(false);
+		return reg;
+	}
+
+	@Bean
+	public FilterRegistrationBean<SetUserURIAfterAuthenticationFilter> disableSetUserURIAfterAuthenticationFilterAutoRegistration(SetUserURIAfterAuthenticationFilter f) {
+		FilterRegistrationBean<SetUserURIAfterAuthenticationFilter> reg = new FilterRegistrationBean<>(f);
+		reg.setEnabled(false);
+		return reg;
+	}
+
+	@Bean
+	public FilterRegistrationBean<ReloadUserPropertiesFilter> disableReloadUserPropertiesFilterAutoRegistration(ReloadUserPropertiesFilter f) {
+		FilterRegistrationBean<ReloadUserPropertiesFilter> reg = new FilterRegistrationBean<>(f);
+		reg.setEnabled(false);
+		return reg;
+	}
+
+	@Bean
 	public ServletContextInitializer servletContextInitializer(Environment env) {
 		return servletContext -> {
 			Cookie.SameSite sameSite = Binder.get(env)
@@ -207,5 +229,4 @@ public class SecurityConfig {
 			}
 		};
 	}
-
 }
