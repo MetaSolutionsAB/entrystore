@@ -12,6 +12,7 @@ CONTAINER_NAME="solr-${DOMAIN}"
 SOLR_PORT="${SOLR_PORT:-8983}"
 SOLR_VERSION="${SOLR_VERSION:-9.10.1}"
 SOLR_DATA="${SOLR_DATA:-/srv/${DOMAIN}/data/solr}"
+SOLR_MEMORY="${SOLR_MEMORY:-512m}"
 CORE_NAME="entrystore-core"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONF_DIR="${SCRIPT_DIR}/../modules/rest-standalone/integration-test/src/test/resources/solr"
@@ -43,12 +44,15 @@ if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
 	exit 0
 fi
 
-echo "Starting Solr container '${CONTAINER_NAME}' on port ${SOLR_PORT}..."
+echo "Starting Solr container '${CONTAINER_NAME}' on port ${SOLR_PORT} (memory: ${SOLR_MEMORY})..."
 docker run -d \
 	--name "${CONTAINER_NAME}" \
+	--restart unless-stopped \
+	--memory "${SOLR_MEMORY}" \
 	-p "${SOLR_PORT}:8983" \
 	-v "${SOLR_DATA}:/var/solr/data" \
 	-v "${CONF_DIR}:/${CORE_NAME}/conf/:rw" \
+	-e SOLR_JAVA_MEM="-XX:+UseContainerSupport -XX:InitialRAMPercentage=50.0 -XX:MaxRAMPercentage=80.0" \
 	-e SOLR_MODULES=analysis-extras \
 	--health-cmd "curl -f http://localhost:8983/solr/${CORE_NAME}/admin/ping || exit 1" \
 	--health-interval 5s \
