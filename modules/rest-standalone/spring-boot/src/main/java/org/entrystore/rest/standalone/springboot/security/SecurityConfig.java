@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -107,6 +108,9 @@ public class SecurityConfig {
 				.logout(logout -> logout
 						.logoutUrl("/auth/logout")
 						.deleteCookies("auth_token")
+						.logoutSuccessHandler((request, response, authentication) ->
+								response.setStatus(HttpStatus.NO_CONTENT.value())
+						)
 						.permitAll())
 				.addFilterBefore(checkUsernamePasswordFilter, UsernamePasswordAuthenticationFilter.class)
 				.addFilterAfter(setUserURIAfterAuthenticationFilter, AnonymousAuthenticationFilter.class)
