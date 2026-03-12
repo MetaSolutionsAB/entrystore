@@ -27,7 +27,7 @@ import java.time.ZoneId;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class DynamicRoleFilter extends OncePerRequestFilter {
+public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 
 	private final ESUserDetailsService userDetailsService;
 	private final SessionRegistry sessionRegistry;

@@ -25,7 +25,7 @@ import java.io.IOException;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class PostAuthenticationFilter extends OncePerRequestFilter {
+public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 
 	private final PrincipalManager pm;
 	private final ESUserDetailsService userDetailsService;

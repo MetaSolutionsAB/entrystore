@@ -28,7 +28,7 @@ import java.util.Objects;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class BeforeAuthenticationFilter extends OncePerRequestFilter {
+public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 
 	private final Config config;
 	private final LoginAttemptService loginAttemptService;
