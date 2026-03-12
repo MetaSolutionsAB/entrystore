@@ -221,7 +221,7 @@ public class SecurityConfig {
 	}
 
 	@Bean
-	public FilterRegistrationBean<IgnoreAuthFilter> disableReloadIgnoreAuthFilerAutoRegistration(IgnoreAuthFilter f) {
+	public FilterRegistrationBean<IgnoreAuthFilter> disableIgnoreAuthFilterAutoRegistration(IgnoreAuthFilter f) {
 		FilterRegistrationBean<IgnoreAuthFilter> reg = new FilterRegistrationBean<>(f);
 		reg.setEnabled(false);
 		return reg;
