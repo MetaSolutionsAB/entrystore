@@ -383,11 +383,50 @@ class SearchIT extends BaseSpec {
 		itemLinkNode.value()[0] == 'http://localhost?cid=searchContextId&eid=searchEntryId&euri=http%3A%2F%2Flocalhost%3A8181%2Fstore%2FsearchContextId%2Fentry%2FsearchEntryId&ruri=http%3A%2F%2Flocalhost%3A8181%2Fstore%2FsearchContextId%2Fresource%2FsearchEntryId'
 	}
 
-	// TODO: Secure the query param for SPARQL search - currently query uses raw user input, which is vulnerable to SPARQL injection, e.g.: "?p . ?p ?q ?r . #"
-	// e.g. strip whitespace chars from both sizes of query param, and require a colon sign? + existing min 3 chars length (after stripping)
-	def "GET /search?type=sparql&query=?p reveals all entries, including admin and users..."() {
+	def "GET /search?type=sparql&query=?p should be rejected as invalid SPARQL predicate"() {
 		given:
 		def queryParams = [type: 'sparql', query: ' ?p ']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.getErrorStream().text)
+		respJson['error'] != null
+		respJson['error'].toString().contains('Invalid SPARQL predicate')
+	}
+
+	def "GET /search?type=sparql with SPARQL injection attempt using triple pattern break should be rejected"() {
+		given:
+		def queryParams = [type: 'sparql', query: '?p . ?p ?q ?r . #']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.getErrorStream().text)
+		respJson['error'] != null
+		respJson['error'].toString().contains('Invalid SPARQL predicate')
+	}
+
+	def "GET /search?type=sparql with SPARQL injection attempt using curly braces should be rejected"() {
+		given:
+		def queryParams = [type: 'sparql', query: '?p } UNION { ?x ?y']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def "GET /search?type=sparql with valid full IRI predicate should return results"() {
+		given:
+		def queryParams = [type: 'sparql', query: '<http://purl.org/dc/terms/title>']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -396,12 +435,11 @@ class SearchIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
 		def respJson = JSON_PARSER.parseText(conn.getInputStream().text)
-		respJson['offset'] == 0
-		respJson['results'] > 8
+		respJson['results'] > 0
 		respJson['resource'] != null
 		respJson['resource']['children'] != null
 		def results = respJson['resource']['children'].collect()
-		results.size() > 8
+		results.size() > 0
 		results[0]['metadata'] != null
 	}
 

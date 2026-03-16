@@ -52,7 +52,8 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 				// Cookie has been verified and user is authenticated
 				pm.setAuthenticatedUserURI(esUser.getEsUser().getURI());
 			} else {
-				log.warn("User Authenticated in Spring-boot, but has invalid principal type: {}", auth.getPrincipal());
+				log.warn("Authenticated user has unrecognized principal type: {}. Falling back to guest.", auth.getPrincipal());
+				pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
 			}
 		}
 
