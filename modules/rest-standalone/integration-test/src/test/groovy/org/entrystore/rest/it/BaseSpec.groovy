@@ -44,7 +44,7 @@ abstract class BaseSpec extends Specification {
 
 	// make sure Solr version matches the version used in the parent pom - 'solr.version' property
 	@Shared
-	def static solrContainer = new SolrContainer(DockerImageName.parse('solr:9.8.1'))
+	def static solrContainer = new SolrContainer(DockerImageName.parse('solr:9.10.1'))
 		.withEnv('SOLR_MODULES', 'analysis-extras')
 		.withCopyFileToContainer(MountableFile.forClasspathResource('solr/'), '/entrystore-core/conf')
 
