@@ -4,11 +4,16 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 import org.entrystore.rest.it.util.UserUtil
+import org.springframework.http.HttpMethod
+
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_NOT_IMPLEMENTED
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -1250,5 +1255,36 @@ class ResourceIT extends BaseSpec {
 		sourceResourceConn2.getResponseCode() == HTTP_OK
 		def sourceResourceRespJson2 = JSON_PARSER.parseText(sourceResourceConn2.getInputStream().text)
 		sourceResourceRespJson2 == []
+	}
+
+	def "POST /{context-id}/resource/{entry-id}?import with ZIP containing RDF file should return 501 Not Implemented"() {
+		given:
+		def importContextId = 'rdf-import-ctx'
+		getOrCreateContext([contextId: importContextId])
+		def listEntryId = getOrCreateEntry(importContextId, [id: 'rdf-import-list', graphtype: 'list'])
+
+		// create a ZIP file containing a .rdf file
+		def baos = new ByteArrayOutputStream()
+		def zos = new ZipOutputStream(baos)
+		zos.putNextEntry(new ZipEntry('test-data.rdf'))
+		zos.write('<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"></rdf:RDF>'.bytes)
+		zos.closeEntry()
+		zos.close()
+		def zipBytes = baos.toByteArray()
+
+		when:
+		def conn = EntryStoreClient.sendRequestAsStream(
+				HttpMethod.POST,
+				'/' + importContextId + '/resource/' + listEntryId + '?import=true',
+				new ByteArrayInputStream(zipBytes),
+				'admin',
+				'application/zip')
+
+		then:
+		conn.getResponseCode() == HTTP_NOT_IMPLEMENTED
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.getErrorStream().text)
+		respJson['error'] != null
+		respJson['error'].toString().contains('RDF resource import is not yet implemented')
 	}
 }
