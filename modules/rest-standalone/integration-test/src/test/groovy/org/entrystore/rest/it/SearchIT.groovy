@@ -3,6 +3,7 @@ package org.entrystore.rest.it
 import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
+import spock.lang.Unroll
 
 import java.time.Year
 
@@ -383,9 +384,10 @@ class SearchIT extends BaseSpec {
 		itemLinkNode.value()[0] == 'http://localhost?cid=searchContextId&eid=searchEntryId&euri=http%3A%2F%2Flocalhost%3A8181%2Fstore%2FsearchContextId%2Fentry%2FsearchEntryId&ruri=http%3A%2F%2Flocalhost%3A8181%2Fstore%2FsearchContextId%2Fresource%2FsearchEntryId'
 	}
 
-	def "GET /search?type=sparql&query=?p should be rejected as invalid SPARQL predicate"() {
+	@Unroll
+	def "GET /search?type=sparql with invalid query '#invalidQuery' should be rejected as invalid SPARQL predicate"() {
 		given:
-		def queryParams = [type: 'sparql', query: ' ?p ']
+		def queryParams = [type: 'sparql', query: invalidQuery]
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -396,32 +398,17 @@ class SearchIT extends BaseSpec {
 		def respJson = JSON_PARSER.parseText(conn.getErrorStream().text)
 		respJson['error'] != null
 		respJson['error'].toString().contains('Invalid SPARQL predicate')
-	}
 
-	def "GET /search?type=sparql with SPARQL injection attempt using triple pattern break should be rejected"() {
-		given:
-		def queryParams = [type: 'sparql', query: '?p . ?p ?q ?r . #']
-
-		when:
-		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
-
-		then:
-		conn.getResponseCode() == HTTP_BAD_REQUEST
-		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(conn.getErrorStream().text)
-		respJson['error'] != null
-		respJson['error'].toString().contains('Invalid SPARQL predicate')
-	}
-
-	def "GET /search?type=sparql with SPARQL injection attempt using curly braces should be rejected"() {
-		given:
-		def queryParams = [type: 'sparql', query: '?p } UNION { ?x ?y']
-
-		when:
-		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
-
-		then:
-		conn.getResponseCode() == HTTP_BAD_REQUEST
+		where:
+		invalidQuery            | _
+		' ?p '                  | _ // SPARQL variable — matches all triples
+		'?p . ?p ?q ?r . #'     | _ // triple pattern break injection
+		'?p } UNION { ?x ?y'    | _ // UNION injection via curly braces
+		'_:blankNode'           | _ // blank node syntax
+		'dc:title.'             | _ // trailing dot — SPARQL statement terminator
+		'dc:title-'             | _ // trailing hyphen
+		'<http://a> ?y . ?x ?q' | _ // IRI followed by injection
+		'; DROP'                | _ // semicolon injection
 	}
 
 	def "GET /search?type=sparql with valid full IRI predicate should return results"() {

@@ -60,12 +60,13 @@ public class SearchService {
 	 * or the keyword {@code a} (shorthand for rdf:type).
 	 */
 	private static final Pattern VALID_SPARQL_PREDICATE = Pattern.compile(
-			"^(<[^<>\"\\s{}|^`\\\\]+>|[a-zA-Z_][\\w.-]*:[a-zA-Z_][\\w.-]*|a)$"
+			"^(<[^<>\"\\s{}|^`\\\\]+>|[a-zA-Z][\\w.-]*:[a-zA-Z_][\\w.-]*[\\w]|a)$"
 	);
 
 	public List<Entry> findEntriesSparql(String queryValue) {
 
 		if (queryValue == null || !VALID_SPARQL_PREDICATE.matcher(queryValue).matches()) {
+			log.info("Rejected invalid SPARQL predicate input: '{}'", queryValue);
 			throw new BadRequestException("Invalid SPARQL predicate. Expected a full IRI (<http://...>) or prefixed name (prefix:name).");
 		}
 

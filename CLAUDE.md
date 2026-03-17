@@ -137,6 +137,7 @@ From `.editorconfig`:
   - `EntityNotFoundException` — for missing resources (404)
   - `CustomResponseException` — for any other HTTP status (e.g., 504 Gateway Timeout)
 - `AuthorizationException` thrown by core code (e.g., from `PrincipalManager`) is handled by `AppExceptionHandler` and does not need to be caught/re-thrown in the REST layer.
+- **Never throw application exceptions from servlet filters.** `AppExceptionHandler` (`@ControllerAdvice`) only catches exceptions from controllers — filters run before the DispatcherServlet. Instead, write the error response directly: `response.setStatus(...)`, `response.setContentType(...)`, `response.getWriter().write(...)`, then `return` (do not call `filterChain.doFilter`).
 
 ## CI/CD
 
@@ -189,3 +190,5 @@ Example config: `modules/rest/src/main/resources/entrystore.properties_example`
 - Commit messages reference JIRA issues: `ENTRYSTORE-####: Description`
 - Do not include AI/agent attribution in commit messages (no Co-Authored-By or similar)
 - Issue tracker: https://metasolutions.atlassian.net/browse/ENTRYSTORE-*
+- **JIRA priorities:** Blocker, Critical, Major, Minor, Trivial
+- **Spring Boot migration epic:** ENTRYSTORE-857 — create JIRA issues related to the Spring Boot REST layer (`modules/rest-standalone/spring-boot/`) under this epic
