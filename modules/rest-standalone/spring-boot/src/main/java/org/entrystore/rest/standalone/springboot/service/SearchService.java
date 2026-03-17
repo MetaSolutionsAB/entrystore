@@ -37,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import org.springframework.web.util.UriComponents;
 
+import java.util.regex.Pattern;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedList;
@@ -54,9 +55,21 @@ public class SearchService {
 	private final Config esConfig;
 
 
+	/**
+	 * Valid SPARQL predicate: a full IRI ({@code <http://...>}), a prefixed name ({@code dc:title}),
+	 * or the keyword {@code a} (shorthand for rdf:type).
+	 */
+	private static final Pattern VALID_SPARQL_PREDICATE = Pattern.compile(
+			"^(<[^<>\"\\s{}|^`\\\\]+>|[a-zA-Z][\\w.-]*:[a-zA-Z_][\\w.-]*[\\w]|a)$"
+	);
+
 	public List<Entry> findEntriesSparql(String queryValue) {
 
-		// TODO: Fix querying using raw user input - vulnerable to SPARQL injection, e.g.: "?p . ?p ?q ?r . #"
+		if (queryValue == null || !VALID_SPARQL_PREDICATE.matcher(queryValue).matches()) {
+			log.info("Rejected invalid SPARQL predicate input: '{}'", queryValue);
+			throw new BadRequestException("Invalid SPARQL predicate. Expected a full IRI (<http://...>) or prefixed name (prefix:name).");
+		}
+
 		try {
 			String query = "PREFIX dc:<http://purl.org/dc/terms/> " +
 					"SELECT ?x " +
