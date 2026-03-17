@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.standalone.springboot.util;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +36,25 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class HttpUtil {
 
 	private static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
+
+	/**
+	 * Resolves the media type for the response based on the format parameter or the Accept header.
+	 * Format parameter has precedence, then the acceptHeader if it's not '*\/*', then the defaultMediaType.
+	 *
+	 * @param format           The format parameter from the request.
+	 * @param acceptHeader     The Accept header from the request.
+	 * @param defaultMediaType The default media type to use if the Accept header is set to '*\/*'.
+	 * @return The resolved media type string.
+	 */
+	public static String resolveResponseMediaType(String format, String acceptHeader, String defaultMediaType) {
+		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
+		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
+		// (+ is replaced with a space) we need to manually replace the space back to '+' here
+		if (format != null) {
+			return format.trim().replace(' ', '+');
+		}
+		return MediaType.ALL_VALUE.equals(acceptHeader) ? defaultMediaType : acceptHeader;
+	}
 
 	/**
 	 * Determines the media type based on the provided format parameter or content type header.
