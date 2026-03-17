@@ -1,6 +1,7 @@
 package org.entrystore.rest.resources;
 
 import org.entrystore.rest.util.Email;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.restlet.representation.Representation;
 import org.restlet.resource.Post;
@@ -46,7 +47,7 @@ public class MessageResource extends BaseResource {
 			if (replyTo != null && !replyTo.contains("@")) {
 				replyTo = null; // in case the sender does not have a proper e-mail address set
 			}
-		} catch (IOException e) {
+		} catch (IOException | JSONException e) {
 			log.debug("Error when parsing request", e);
 			getResponse().setStatus(CLIENT_ERROR_BAD_REQUEST);
 			return;
