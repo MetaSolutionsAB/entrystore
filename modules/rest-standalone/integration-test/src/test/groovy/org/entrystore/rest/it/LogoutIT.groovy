@@ -29,6 +29,8 @@ class LogoutIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NO_CONTENT
+		connection.getHeaderField('Set-Cookie') != null
+		connection.getHeaderField('Set-Cookie').contains('Max-Age=0')
 
 		when: 'we query backend with the same cookie'
 		def userConn2 = EntryStoreClient.getRequest('/auth/user', '', 'application/json', userCookies)
@@ -37,7 +39,7 @@ class LogoutIT extends BaseSpec {
 		userConn2.getResponseCode() == HTTP_UNAUTHORIZED
 		// for some reason error body is an HTML page (even tho JSON was asked)
 		userConn2.getContentType().contains('text/html')
-		def responseBody = userConn2.getErrorStream().text
+		def responseBody = userConn2.getErrorStream()?.text
 		responseBody.contains('<title>Status page</title>')
 		responseBody.contains('Unauthorized')
 		responseBody.contains('Please continue your visit at our <a href="/">home page</a>.')
@@ -63,6 +65,8 @@ class LogoutIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('text/html')
+		connection.getHeaderField('Set-Cookie') != null
+		connection.getHeaderField('Set-Cookie').contains('Max-Age=0')
 		def responseBody = connection.getInputStream().text
 		responseBody.contains('<title>Logout</title>')
 		responseBody.contains('<div>Logout successful.</div>')
@@ -74,7 +78,7 @@ class LogoutIT extends BaseSpec {
 		userConn2.getResponseCode() == HTTP_UNAUTHORIZED
 		// for some reason error body is an HTML page (even tho JSON was asked)
 		userConn2.getContentType().contains('text/html')
-		def responseBody2 = userConn2.getErrorStream().text
+		def responseBody2 = userConn2.getErrorStream()?.text
 		responseBody2.contains('<title>Status page</title>')
 		responseBody2.contains('Unauthorized')
 		responseBody2.contains('Please continue your visit at our <a href="/">home page</a>.')
@@ -125,6 +129,8 @@ class LogoutIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NO_CONTENT
+		connection.getHeaderField('Set-Cookie') != null
+		connection.getHeaderField('Set-Cookie').contains('Max-Age=0')
 
 		when: 'we query backend with the same cookie'
 		def userConn2 = EntryStoreClient.getRequest('/auth/user', '', 'application/json', userCookies)
@@ -133,7 +139,7 @@ class LogoutIT extends BaseSpec {
 		userConn2.getResponseCode() == HTTP_UNAUTHORIZED
 		// for some reason error body is an HTML page (even tho JSON was asked)
 		userConn2.getContentType().contains('text/html')
-		def responseBody = userConn2.getErrorStream().text
+		def responseBody = userConn2.getErrorStream()?.text
 		responseBody.contains('<title>Status page</title>')
 		responseBody.contains('Unauthorized')
 		responseBody.contains('Please continue your visit at our <a href="/">home page</a>.')
