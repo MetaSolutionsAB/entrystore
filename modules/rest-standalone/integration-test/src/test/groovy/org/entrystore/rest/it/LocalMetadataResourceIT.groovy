@@ -7,6 +7,7 @@ import org.entrystore.rest.it.util.NameSpaceConst
 import static java.net.HttpURLConnection.HTTP_BAD_METHOD
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
+import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
@@ -761,5 +762,55 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getContentType().contains('application/json')
 		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 4
+	}
+
+	def "GET /{context-id}/metadata/{entryId} with format=text/html should return 406 Not Acceptable"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + '?format=text/html')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_NOT_ACCEPTABLE
+	}
+
+	def "GET /{context-id}/metadata/{entryId} with format=application/rdf+xml should return 200"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + '?format=application/rdf%2Bxml')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/rdf+xml')
+	}
+
+	def "GET /{context-id}/metadata/{entryId} with Accept header containing supported type among unsupported ones should return 200"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, 'admin', 'text/html, application/rdf+xml')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/rdf+xml')
 	}
 }

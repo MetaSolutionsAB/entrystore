@@ -41,6 +41,8 @@ import static org.entrystore.rest.standalone.springboot.util.HttpUtil.determineM
 @RequiredArgsConstructor
 public class MetadataController {
 
+	private static final String DEFAULT_MEDIA_TYPE = "application/rdf+xml";
+
 	private static final RDFFormat RDFJSON_WITH_APPLICATION_JSON
 			= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("json"),
 			SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
@@ -70,9 +72,9 @@ public class MetadataController {
 		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
 		// (+ is replaced with a space) we need to replace the space back to '+'
 		if (format != null) {
-			mediaType = format.trim().replace(' ', '+');
+			mediaType = GraphUtil.validateRdfMediaType(format.trim().replace(' ', '+'));
 		} else {
-			mediaType = acceptHeader;
+			mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, DEFAULT_MEDIA_TYPE);
 		}
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
@@ -97,7 +99,7 @@ public class MetadataController {
 			@RequestBody String body
 	) {
 
-		String mediaType = determineMediaType(format, contentType);
+		String mediaType = GraphUtil.validateRdfMediaType(determineMediaType(format, contentType));
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);

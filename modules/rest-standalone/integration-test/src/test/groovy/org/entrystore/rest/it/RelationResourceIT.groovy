@@ -4,6 +4,7 @@ import groovy.xml.XmlParser
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
+import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
 
@@ -132,5 +133,31 @@ class RelationResourceIT extends BaseSpec {
 		childNode.attributes().size() == 1
 		childNode.attributes()['rdf:resource'] == EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId
 		childNode.value().size() == 0
+	}
+
+	def "GET /{context-id}/relations/{entry-id} with format=text/html should return 406 Not Acceptable"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts/relations/' + contextId + '?format=text/html')
+
+		then:
+		connection.getResponseCode() == HTTP_NOT_ACCEPTABLE
+	}
+
+	def "GET /{context-id}/relations/{entry-id} with format=text/turtle should return 200"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts/relations/' + contextId + '?format=text/turtle')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('text/turtle')
+	}
+
+	def "GET /{context-id}/relations/{entry-id} with Accept header containing supported type among unsupported ones should return 200"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/_contexts/relations/' + contextId, 'admin', 'text/html, text/turtle')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('text/turtle')
 	}
 }
