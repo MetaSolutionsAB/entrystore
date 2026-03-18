@@ -62,15 +62,37 @@ public class AppExceptionHandler {
 				.build();
 	}
 
-	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class, ValidationException.class,
-			UsernameNotFoundException.class, HttpMessageNotReadableException.class})
-	public ResponseEntity<ErrorResponse> handleBadRequestException(RuntimeException ex,
+	@ExceptionHandler(BadRequestException.class)
+	public ResponseEntity<ErrorResponse> handleBadRequestException(BadRequestException ex,
 																   HttpServletRequest request) {
 		log.debug("BadRequestException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.BAD_REQUEST.value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
+				.build();
+		return ResponseEntity.badRequest().body(responseBody);
+	}
+
+	/**
+	 * Separate bad-request handler for Spring's exceptions.
+	 * Our BadRequestException is controlled, but Spring's HttpMessageNotReadableException and MethodArgumentTypeMismatchException
+	 * leak class names and parsing details (e.g., "JSON parse error: Cannot deserialize value of type org.entrystore...").
+	 * So return a fixed message for Spring exceptions.
+	 *
+	 * @param ex RuntimeException
+	 * @param request Request
+	 * @return ResponseEntity
+	 */
+	@ExceptionHandler({MethodArgumentTypeMismatchException.class, ValidationException.class,
+			UsernameNotFoundException.class, HttpMessageNotReadableException.class})
+	public ResponseEntity<ErrorResponse> handleSpringBadRequestException(RuntimeException ex,
+																		 HttpServletRequest request) {
+		log.debug("BadRequestException of type '{}': {}", ex.getClass().getName(), ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(HttpStatus.BAD_REQUEST.value())
+				.path(request.getRequestURI())
+				.error(HttpStatus.BAD_REQUEST.getReasonPhrase())
 				.build();
 		return ResponseEntity.badRequest().body(responseBody);
 	}
@@ -187,7 +209,7 @@ public class AppExceptionHandler {
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
 				.path(request.getRequestURI())
-				.error(ex.getMessage())
+				.error(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase())
 				.build();
 		return ResponseEntity.internalServerError().body(responseBody);
 	}
