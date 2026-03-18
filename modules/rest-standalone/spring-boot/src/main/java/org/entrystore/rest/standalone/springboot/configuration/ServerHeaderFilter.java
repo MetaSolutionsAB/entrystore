@@ -23,10 +23,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.repository.config.Settings;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -37,15 +36,24 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class ServerHeaderFilter extends OncePerRequestFilter {
 
-	private final Config config;
-
+	@Value("${entrystore.http.header.server:}")
+	private String configuredServerHeader;
 	private String serverHeaderValue;
 
 	@PostConstruct
 	public void init() {
-		serverHeaderValue = config.getString(
-				Settings.HTTP_HEADER_SERVER,
-				"EntryStore/" + RepositoryManagerImpl.getVersion());
+		try {
+			if (configuredServerHeader == null || configuredServerHeader.isBlank()) {
+				serverHeaderValue = "EntryStore/" + RepositoryManagerImpl.getVersion();
+			} else {
+				serverHeaderValue = configuredServerHeader;
+			}
+		} catch (Exception e) {
+			serverHeaderValue = "EntryStore";
+			log.error("Failed to initialize Server header, falling back to '{}': {}",
+					serverHeaderValue, e.getMessage(), e);
+		}
+
 		log.info("Server response header set to: {}", serverHeaderValue);
 	}
 
