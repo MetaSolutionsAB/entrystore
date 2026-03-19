@@ -62,8 +62,8 @@ public class AppExceptionHandler {
 				.build();
 	}
 
-	@ExceptionHandler(BadRequestException.class)
-	public ResponseEntity<ErrorResponse> handleBadRequestException(BadRequestException ex,
+	@ExceptionHandler({BadRequestException.class, ValidationException.class, UsernameNotFoundException.class})
+	public ResponseEntity<ErrorResponse> handleBadRequestException(RuntimeException ex,
 																   HttpServletRequest request) {
 		log.debug("BadRequestException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
@@ -74,18 +74,9 @@ public class AppExceptionHandler {
 		return ResponseEntity.badRequest().body(responseBody);
 	}
 
-	/**
-	 * Separate bad-request handler for Spring's exceptions.
-	 * Our BadRequestException is controlled, but Spring's HttpMessageNotReadableException and MethodArgumentTypeMismatchException
-	 * leak class names and parsing details (e.g., "JSON parse error: Cannot deserialize value of type org.entrystore...").
-	 * So return a fixed message for Spring exceptions.
-	 *
-	 * @param ex RuntimeException
-	 * @param request Request
-	 * @return ResponseEntity
-	 */
-	@ExceptionHandler({MethodArgumentTypeMismatchException.class, ValidationException.class,
-			UsernameNotFoundException.class, HttpMessageNotReadableException.class})
+	// Separate BadRequest handler for HttpMessageNotReadableException and MethodArgumentTypeMismatchException since those leak Spring/Jackson internals
+	// Those now respond with a generic "Bad Request" error
+	@ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class})
 	public ResponseEntity<ErrorResponse> handleSpringBadRequestException(RuntimeException ex,
 																		 HttpServletRequest request) {
 		log.debug("BadRequestException of type '{}': {}", ex.getClass().getName(), ex.getMessage());

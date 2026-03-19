@@ -102,7 +102,8 @@ public class MetadataController {
 				? metadataResult.lastModified()
 				: getModificationDate(entry, metadataType);
 
-		HttpHeaders headers = buildResponseHeaders(entry, mediaType, download != null, modificationDate);
+		HttpHeaders headers = buildResponseHeaders(entry, mediaType, download != null);
+		HttpUtil.setLastModifiedAndETag(headers, modificationDate);
 		return new ResponseEntity<>(metadataResult.serializedGraph(), headers, HttpStatus.OK);
 	}
 
@@ -150,7 +151,7 @@ public class MetadataController {
 		return ResponseEntity.noContent().build();
 	}
 
-	private HttpHeaders buildResponseHeaders(Entry entry, String mediaType, boolean isDownload, Date modificationDate) {
+	private static HttpHeaders buildResponseHeaders(Entry entry, String mediaType, boolean isDownload) {
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.parseMediaType(mediaType));
 
@@ -168,14 +169,6 @@ public class MetadataController {
 			contentDisposition = ContentDisposition.inline().filename(fileName).build();
 		}
 		headers.setContentDisposition(contentDisposition);
-
-		if (modificationDate != null) {
-			headers.setLastModified(modificationDate.getTime());
-			headers.setETag(HttpUtil.createStrongETag(Long.toString(modificationDate.getTime())));
-		} else {
-			log.warn("Last-Modified header could not be set for entry {} because the modification date is null",
-					entry.getEntryURI());
-		}
 
 		return headers;
 	}

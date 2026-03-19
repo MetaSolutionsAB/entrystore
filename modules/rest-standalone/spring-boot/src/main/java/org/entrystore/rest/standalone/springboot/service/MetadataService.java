@@ -271,7 +271,7 @@ public class MetadataService {
 		} catch (RepositoryException | QueryEvaluationException e) {
 			throw new InternalServerErrorException("Graph query evaluation failed", e);
 		} catch (MalformedQueryException mfqe) {
-			log.warn("Malformed SPARQL graph query: {}", mfqe.getMessage());
+			log.warn("Malformed SPARQL graph query: {}", mfqe.getMessage(), mfqe);
 			throw new BadRequestException("Malformed SPARQL query");
 		} finally {
 			if (rc != null) {
