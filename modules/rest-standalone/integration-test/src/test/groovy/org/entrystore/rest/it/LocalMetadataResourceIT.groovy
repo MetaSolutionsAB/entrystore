@@ -4,6 +4,8 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
+import java.text.SimpleDateFormat
+
 import static java.net.HttpURLConnection.HTTP_BAD_METHOD
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
@@ -762,6 +764,74 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getContentType().contains('application/json')
 		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 4
+	}
+
+	def "GET /{context-id}/metadata/{entryId} should include Last-Modified and ETag headers"() {
+		given:
+		def beforeRequest = new Date()
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Header test entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri)
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+
+		def lastModified = entryMetaConn.getHeaderField('Last-Modified')
+		lastModified != null
+		def httpDateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
+		httpDateFormat.parse(lastModified).time >= beforeRequest.time - 1000
+
+		def etag = entryMetaConn.getHeaderField('ETag')
+		etag != null
+		etag ==~ /"\d+"/
+	}
+
+	def "GET /{context-id}/metadata/{entryId} with recursive should include Last-Modified and ETag headers"() {
+		given:
+		def beforeRequest = new Date()
+		def entryD1params = [entrytype: 'link', resource: resourceUrl + '/rec1']
+		def entryD1ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD1body = [metadata: [(entryD1ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Recursive depth 1']
+			]
+		]]]
+		def entryD1Id = createEntry(contextId, entryD1params, entryD1body)
+
+		def entryD0params = [entrytype: 'link', resource: resourceUrl + '/rec0']
+		def entryD0ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD0body = [metadata: [(entryD0ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
+				[type: 'literal', value: 'Recursive depth 0']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id]
+			]
+		]]]
+		def entryD0Id = createEntry(contextId, entryD0params, entryD0body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD0Id
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct")
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+
+		def lastModified = entryMetaConn.getHeaderField('Last-Modified')
+		lastModified != null
+		def httpDateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
+		httpDateFormat.parse(lastModified).time >= beforeRequest.time - 1000
+
+		def etag = entryMetaConn.getHeaderField('ETag')
+		etag != null
+		etag ==~ /"\d+"/
 	}
 
 	def "GET /{context-id}/metadata/{entryId} with format=text/html should return 406 Not Acceptable"() {

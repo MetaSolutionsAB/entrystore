@@ -62,8 +62,7 @@ public class AppExceptionHandler {
 				.build();
 	}
 
-	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class, ValidationException.class,
-			UsernameNotFoundException.class, HttpMessageNotReadableException.class})
+	@ExceptionHandler({BadRequestException.class, ValidationException.class, UsernameNotFoundException.class})
 	public ResponseEntity<ErrorResponse> handleBadRequestException(RuntimeException ex,
 																   HttpServletRequest request) {
 		log.debug("BadRequestException: {}", ex.getMessage());
@@ -71,6 +70,20 @@ public class AppExceptionHandler {
 				.status(HttpStatus.BAD_REQUEST.value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
+				.build();
+		return ResponseEntity.badRequest().body(responseBody);
+	}
+
+	// Separate BadRequest handler for HttpMessageNotReadableException and MethodArgumentTypeMismatchException since those leak Spring/Jackson internals
+	// Those now respond with a generic "Bad Request" error
+	@ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class})
+	public ResponseEntity<ErrorResponse> handleSpringBadRequestException(RuntimeException ex,
+																		 HttpServletRequest request) {
+		log.debug("BadRequestException of type '{}': {}", ex.getClass().getName(), ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(HttpStatus.BAD_REQUEST.value())
+				.path(request.getRequestURI())
+				.error(HttpStatus.BAD_REQUEST.getReasonPhrase())
 				.build();
 		return ResponseEntity.badRequest().body(responseBody);
 	}
@@ -187,7 +200,7 @@ public class AppExceptionHandler {
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
 				.path(request.getRequestURI())
-				.error(ex.getMessage())
+				.error(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase())
 				.build();
 		return ResponseEntity.internalServerError().body(responseBody);
 	}
