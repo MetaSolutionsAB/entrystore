@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,7 +49,10 @@ import org.eclipse.rdf4j.rio.trix.TriXWriter;
 import org.eclipse.rdf4j.rio.turtle.TurtleParser;
 import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.standalone.springboot.model.exception.CustomResponseException;
 import org.json.JSONObject;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
@@ -60,7 +63,11 @@ import java.io.StringWriter;
 import java.io.Writer;
 import java.lang.reflect.Constructor;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Utility methods to serialize and deserialize graphs.
@@ -79,6 +86,15 @@ public class GraphUtil {
 			RDFFormat.TRIG.getDefaultMIMEType(), TriGWriter.class,
 			RDFFormat.JSONLD.getDefaultMIMEType(), JSONLDWriter.class
 	);
+
+	private static final Set<String> ALLOWED_RDF_MEDIA_TYPES;
+
+	static {
+		Set<String> types = new HashSet<>(MEDIATYPE_TO_RDFWRITER_MAP.keySet());
+		types.add(MediaType.APPLICATION_JSON_VALUE);
+		types.add(RDFFormat.RDFJSON.getDefaultMIMEType());
+		ALLOWED_RDF_MEDIA_TYPES = Set.copyOf(types);
+	}
 
 /*
 	private final static List<MediaType> supportedMediaTypes = new ArrayList<>();
@@ -261,6 +277,47 @@ public class GraphUtil {
 		return MEDIATYPE_TO_RDFWRITER_MAP.get(mediaType);
 	}
 
+	public static String validateRdfMediaType(String mediaType) {
+		return validateRdfMediaType(mediaType, HttpStatus.NOT_ACCEPTABLE);
+	}
+
+	public static String validateRdfMediaType(String mediaType, HttpStatus rejectStatus) {
+		if (mediaType == null) {
+			throw new CustomResponseException("Unsupported media type", rejectStatus);
+		}
+		String normalized = mediaType.toLowerCase(Locale.ROOT);
+		if (!ALLOWED_RDF_MEDIA_TYPES.contains(normalized)) {
+			throw new CustomResponseException("Unsupported media type", rejectStatus);
+		}
+		return normalized;
+	}
+
+	public static String resolveAcceptedMediaType(String acceptHeader, String defaultMediaType) {
+		if (acceptHeader == null || acceptHeader.isBlank()) {
+			return defaultMediaType;
+		}
+
+		try {
+			List<MediaType> acceptTypes = MediaType.parseMediaTypes(acceptHeader);
+			MediaType.sortBySpecificityAndQuality(acceptTypes);
+			for (MediaType type : acceptTypes) {
+				if (type.isWildcardType() || type.isWildcardSubtype()) {
+					return defaultMediaType;
+				}
+				String typeStr = (type.getType() + "/" + type.getSubtype()).toLowerCase(Locale.ROOT);
+				if (ALLOWED_RDF_MEDIA_TYPES.contains(typeStr)) {
+					return typeStr;
+				}
+			}
+		} catch (InvalidMediaTypeException e) {
+			log.warn("Failed to parse Accept header '{}': {}", acceptHeader, e.getMessage());
+			throw new CustomResponseException(
+					"Malformed Accept header: " + e.getMessage(), HttpStatus.NOT_ACCEPTABLE);
+		}
+
+		throw new CustomResponseException("Unsupported media type", HttpStatus.NOT_ACCEPTABLE);
+	}
+
 	public static String serializeGraph(Model graph, String mediaType) {
 		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {
 			return RDFJSON.graphToRdfJson(graph);
@@ -268,9 +325,7 @@ public class GraphUtil {
 
 		Class<? extends RDFWriter> writerClass = getRDFWriterClassForMediaType(mediaType);
 		if (writerClass == null) {
-			// fallback - aligns with Restlet logic, but shouldn't we throw an IllegalArgumentException here?
-			writerClass = TurtleWriter.class;
-//			throw new IllegalArgumentException("No known RDFWriter for mediaType of '" + mediaType + "'. Allowed values: " + MEDIATYPE_TO_RDFWRITER_MAP.keySet());
+			throw new IllegalArgumentException("No known RDFWriter for mediaType of '" + mediaType + "'. Allowed values: " + MEDIATYPE_TO_RDFWRITER_MAP.keySet());
 		}
 
 		return serializeGraph(graph, writerClass);
