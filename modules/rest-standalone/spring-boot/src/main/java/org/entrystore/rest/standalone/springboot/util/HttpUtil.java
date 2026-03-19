@@ -38,25 +38,6 @@ public class HttpUtil {
 	private static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
 
 	/**
-	 * Resolves the media type for the response based on the format parameter or the Accept header.
-	 * Format parameter has precedence, then the acceptHeader if it's not '*\/*', then the defaultMediaType.
-	 *
-	 * @param format           The format parameter from the request.
-	 * @param acceptHeader     The Accept header from the request.
-	 * @param defaultMediaType The default media type to use if the Accept header is set to '*\/*'.
-	 * @return The resolved media type string.
-	 */
-	public static String resolveResponseMediaType(String format, String acceptHeader, String defaultMediaType) {
-		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to manually replace the space back to '+' here
-		if (format != null) {
-			return format.trim().replace(' ', '+');
-		}
-		return MediaType.ALL_VALUE.equals(acceptHeader) ? defaultMediaType : acceptHeader;
-	}
-
-	/**
 	 * Determines the media type based on the provided format parameter or content type header.
 	 *
 	 * @param format The format parameter from the request, which might have '+' replaced with spaces by Spring Boot.

@@ -32,15 +32,24 @@ class LookupIT extends BaseSpec {
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
 
-		def params = [entrytype: 'link', resource: resourceUrl]
+		def guestUri = EntryStoreClient.baseUrl + '/_principals/resource/_guest'
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
-		def body = [metadata: [(newResourceIri): [
-				(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: 'Lookup Test Entry']],
-		]]]
+		def newMetadataIri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/_newId'
+
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def body = [
+				metadata: [(newResourceIri): [
+						(NameSpaceConst.DC_TERM_TITLE): [[type: 'literal', value: 'Lookup Test Entry']],
+				]],
+				// Grant guest ReadMetadata so entry is indexed with public:true in Solr
+				info: [(newMetadataIri): [
+						(NameSpaceConst.TERM_READ): [[type: 'uri', value: guestUri]]
+				]]
+		]
 		entryId = createEntry(contextId, params, body)
 		waitForSolrProcessing()
-		// Solr needs even more time to finish processing
-		Thread.sleep(500)
+		// Solr needs even more time to finish processing (commitWithin=1000ms)
+		Thread.sleep(1100)
 	}
 
 	// --- Context-scoped lookup: happy path ---
@@ -175,7 +184,42 @@ class LookupIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
-	// --- Global lookup ---
+	// --- Global lookup: happy path ---
+
+	def "GET /lookup with valid public URI should return metadata"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: resourceUrl])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/lookup' + queryParams, 'admin', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		(responseJson as Map).keySet().size() == 1
+		def resourceKey = (responseJson as Map).keySet()[0].toString()
+		responseJson[resourceKey][NameSpaceConst.DC_TERM_TITLE] != null
+		def dcTitles = responseJson[resourceKey][NameSpaceConst.DC_TERM_TITLE].collect()
+		dcTitles.size() == 1
+		dcTitles[0]['value'] == 'Lookup Test Entry'
+	}
+
+	def "GET /lookup as guest with valid public URI should return metadata"() {
+		given:
+		def queryParams = convertMapToQueryParams([uri: resourceUrl])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/lookup' + queryParams, '', 'application/json')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		(responseJson as Map).keySet().size() == 1
+	}
+
+	// --- Global lookup: error cases ---
 
 	def "GET /lookup with non-existing URI should return 404"() {
 		given:

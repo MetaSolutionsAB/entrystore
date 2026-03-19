@@ -75,6 +75,12 @@ entrystore/
 
 **Domain model:** Entry = Resource + Metadata (RDF graphs), organized into Contexts. EntryType: Local, Link, Reference, LinkReference. GraphType: None, Context, List, User, Group, etc. Key managers: RepositoryManager, PrincipalManager (users/groups/auth), ContextManager.
 
+**URI conventions:**
+- Each Entry has three distinct URIs: entry URI (`{base}/{ctx}/entry/{id}`), resource URI (`{base}/{ctx}/resource/{id}`), and metadata URI (`{base}/{ctx}/metadata/{id}`)
+- A **principal's URI** (used in ACLs) is the **resource** URI of their entry, not the entry URI. Example: guest user URI = `{baseUrl}/_principals/resource/_guest` (not `_principals/entry/_guest`)
+- A **context's resource URI** is `{baseUrl}/{contextId}` (the context itself), not `{baseUrl}/_contexts/resource/{contextId}`
+- ACL triples use `es:read`/`es:write` predicates with the principal's resource URI as the object, and the entry's metadata/resource URI as the subject (e.g., `<metadataURI> es:read <principalResourceURI>` grants ReadMetadata)
+
 ### Spring Boot Module (`modules/rest-standalone/spring-boot/`)
 
 ```

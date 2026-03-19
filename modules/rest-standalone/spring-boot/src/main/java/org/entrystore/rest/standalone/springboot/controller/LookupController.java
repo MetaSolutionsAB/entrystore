@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
 import org.entrystore.rest.standalone.springboot.model.api.LookupScope;
 import org.entrystore.rest.standalone.springboot.service.LookupService;
+import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -58,7 +59,7 @@ public class LookupController {
 			@RequestParam(required = false) String format,
 			@RequestHeader(value = "Accept", defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
 	) {
-		String mediaType = HttpUtil.resolveResponseMediaType(format, acceptHeader, DEFAULT_MEDIA_TYPE);
+		String mediaType = resolveMediaType(format, acceptHeader);
 		Entry entry = lookupService.lookupGlobal(uri);
 		return buildResponse(entry, scope, mediaType);
 	}
@@ -80,9 +81,19 @@ public class LookupController {
 			@RequestParam(required = false) String format,
 			@RequestHeader(value = "Accept", defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
 	) {
-		String mediaType = HttpUtil.resolveResponseMediaType(format, acceptHeader, DEFAULT_MEDIA_TYPE);
+		String mediaType = resolveMediaType(format, acceptHeader);
 		Entry entry = lookupService.lookupInContext(contextId, uri);
 		return buildResponse(entry, scope, mediaType);
+	}
+
+	private String resolveMediaType(String format, String acceptHeader) {
+		if (format != null) {
+			// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
+			// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
+			// (+ is replaced with a space) we need to manually replace the space back to '+' here
+			return GraphUtil.validateRdfMediaType(format.trim().replace(' ', '+'));
+		}
+		return GraphUtil.resolveAcceptedMediaType(acceptHeader, DEFAULT_MEDIA_TYPE);
 	}
 
 	private ResponseEntity<String> buildResponse(Entry entry, LookupScope scope, String mediaType) {
@@ -92,13 +103,7 @@ public class LookupController {
 				.ok()
 				.contentType(MediaType.parseMediaType(mediaType));
 
-		if (entry.getModifiedDate() != null) {
-			bodyBuilder
-					.lastModified(entry.getModifiedDate().getTime())
-					.eTag(HttpUtil.createStrongETag(Long.toString(entry.getModifiedDate().getTime())));
-		} else {
-			log.warn("Last-Modified/ETag headers not set: modification date is null for entry '{}'", entry.getEntryURI());
-		}
+		HttpUtil.updateResponseWithModificationDateAndETag(bodyBuilder, entry.getModifiedDate());
 
 		return bodyBuilder.body(serializedMetadata);
 	}

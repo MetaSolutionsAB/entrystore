@@ -40,6 +40,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.util.Objects;
 import java.util.Set;
 
 @Slf4j
@@ -74,6 +75,9 @@ public class LookupService {
 				throw new CustomResponseException("Search service error during lookup", HttpStatus.SERVICE_UNAVAILABLE);
 			}
 			throw new BadRequestException("Lookup failed: " + se.getMessage());
+		} catch (Exception e) {
+			log.error("Unexpected error during lookup for URI '{}': {}", resourceURI, e.getMessage(), e);
+			throw new CustomResponseException("Search service encountered an unexpected error", HttpStatus.SERVICE_UNAVAILABLE);
 		}
 
 		// sendQueryForEntryURIs sets hits = -1 when SolrServerException/IOException occurs
@@ -126,6 +130,11 @@ public class LookupService {
 
 	private Entry extractSingleEntry(Set<Entry> entries, URI resourceURI) {
 		if (entries == null || entries.isEmpty()) {
+			throw new EntityNotFoundException("No entry found for resource URI: " + resourceURI);
+		}
+		entries.removeIf(Objects::isNull);
+		if (entries.isEmpty()) {
+			log.warn("All entries resolved to null for resource URI: {}", resourceURI);
 			throw new EntityNotFoundException("No entry found for resource URI: " + resourceURI);
 		}
 		if (entries.size() > 1) {
