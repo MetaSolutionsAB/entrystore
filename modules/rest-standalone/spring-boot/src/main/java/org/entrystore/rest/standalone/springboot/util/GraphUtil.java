@@ -278,12 +278,16 @@ public class GraphUtil {
 	}
 
 	public static String validateRdfMediaType(String mediaType) {
+		return validateRdfMediaType(mediaType, HttpStatus.NOT_ACCEPTABLE);
+	}
+
+	public static String validateRdfMediaType(String mediaType, HttpStatus rejectStatus) {
 		if (mediaType == null) {
-			throw new CustomResponseException("Unsupported media type", HttpStatus.NOT_ACCEPTABLE);
+			throw new CustomResponseException("Unsupported media type", rejectStatus);
 		}
 		String normalized = mediaType.toLowerCase(Locale.ROOT);
 		if (!ALLOWED_RDF_MEDIA_TYPES.contains(normalized)) {
-			throw new CustomResponseException("Unsupported media type", HttpStatus.NOT_ACCEPTABLE);
+			throw new CustomResponseException("Unsupported media type", rejectStatus);
 		}
 		return normalized;
 	}
@@ -307,6 +311,8 @@ public class GraphUtil {
 			}
 		} catch (InvalidMediaTypeException e) {
 			log.warn("Failed to parse Accept header '{}': {}", acceptHeader, e.getMessage());
+			throw new CustomResponseException(
+					"Malformed Accept header: " + e.getMessage(), HttpStatus.NOT_ACCEPTABLE);
 		}
 
 		throw new CustomResponseException("Unsupported media type", HttpStatus.NOT_ACCEPTABLE);
@@ -319,9 +325,7 @@ public class GraphUtil {
 
 		Class<? extends RDFWriter> writerClass = getRDFWriterClassForMediaType(mediaType);
 		if (writerClass == null) {
-			// fallback - aligns with Restlet logic, but shouldn't we throw an IllegalArgumentException here?
-			writerClass = TurtleWriter.class;
-//			throw new IllegalArgumentException("No known RDFWriter for mediaType of '" + mediaType + "'. Allowed values: " + MEDIATYPE_TO_RDFWRITER_MAP.keySet());
+			throw new IllegalArgumentException("No known RDFWriter for mediaType of '" + mediaType + "'. Allowed values: " + MEDIATYPE_TO_RDFWRITER_MAP.keySet());
 		}
 
 		return serializeGraph(graph, writerClass);

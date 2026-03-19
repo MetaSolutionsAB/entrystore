@@ -99,7 +99,8 @@ public class MetadataController {
 			@RequestBody String body
 	) {
 
-		String mediaType = GraphUtil.validateRdfMediaType(determineMediaType(format, contentType));
+		String mediaType = GraphUtil.validateRdfMediaType(
+				determineMediaType(format, contentType), HttpStatus.UNSUPPORTED_MEDIA_TYPE);
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);

@@ -74,6 +74,28 @@ class GraphUtilTest {
 	}
 
 	@Test
+	void validateRdfMediaType_shouldUseCustomRejectStatus() {
+		CustomResponseException exception = assertThrows(
+				CustomResponseException.class,
+				() -> GraphUtil.validateRdfMediaType("text/html", HttpStatus.UNSUPPORTED_MEDIA_TYPE));
+		assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE, exception.getStatus());
+	}
+
+	@Test
+	void validateRdfMediaType_shouldUseCustomRejectStatusForNull() {
+		CustomResponseException exception = assertThrows(
+				CustomResponseException.class,
+				() -> GraphUtil.validateRdfMediaType(null, HttpStatus.UNSUPPORTED_MEDIA_TYPE));
+		assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE, exception.getStatus());
+	}
+
+	@Test
+	void validateRdfMediaType_shouldAcceptAllowedTypesWithCustomStatus() {
+		assertEquals("text/turtle",
+				GraphUtil.validateRdfMediaType("text/turtle", HttpStatus.UNSUPPORTED_MEDIA_TYPE));
+	}
+
+	@Test
 	void resolveAcceptedMediaType_shouldReturnDefaultForWildcard() {
 		assertEquals("application/rdf+xml",
 				GraphUtil.resolveAcceptedMediaType("*/*", "application/rdf+xml"));

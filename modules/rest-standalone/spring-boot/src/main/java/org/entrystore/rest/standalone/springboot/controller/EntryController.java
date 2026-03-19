@@ -14,6 +14,7 @@ import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundE
 import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -89,7 +90,8 @@ public class EntryController {
 			@RequestBody String body
 	) {
 
-		String mediaType = GraphUtil.validateRdfMediaType(determineMediaType(format, contentType));
+		String mediaType = GraphUtil.validateRdfMediaType(
+				determineMediaType(format, contentType), HttpStatus.UNSUPPORTED_MEDIA_TYPE);
 
 		Entry modifiedEntry = entryService.modifyEntry(contextId, entryId, body, mediaType, applyACLtoChildren != null);
 
