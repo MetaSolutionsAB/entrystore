@@ -48,7 +48,7 @@ class MessageIT extends BaseSpec {
 		def conn = EntryStoreClient.postRequest('/message', requestBody)
 
 		then:
-		// Restlet responds with HTTP_NO_CONTENT
+		// Spring Boot returns HTTP_OK; legacy Restlet returned HTTP_NO_CONTENT
 		conn.getResponseCode() == HTTP_OK
 		def messages = greenMail.getReceivedMessages()
 		messages.length == 1
@@ -149,11 +149,22 @@ class MessageIT extends BaseSpec {
 		def conn = EntryStoreClient.postRequest('/message', requestBody, senderUsername)
 
 		then:
-		// Restlet responds with HTTP_NO_CONTENT
+		// Spring Boot returns HTTP_OK; legacy Restlet returned HTTP_NO_CONTENT
 		conn.getResponseCode() == HTTP_OK
 		def messages = greenMail.getReceivedMessages()
 		messages.length == 1
 		def message = messages[0]
 		message.getReplyTo()*.toString().contains(senderUsername.toLowerCase())
+		message.getAllRecipients()*.toString().contains(recipientUsername)
+	}
+
+	def "POST /message should return 400 for malformed JSON body"() {
+		given:
+		def requestBody = 'this is not json'
+		when:
+		def conn = EntryStoreClient.postRequest('/message', requestBody)
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		greenMail.getReceivedMessages().length == 0
 	}
 }

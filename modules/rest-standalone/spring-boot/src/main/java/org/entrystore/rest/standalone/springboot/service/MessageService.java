@@ -20,9 +20,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.rest.standalone.springboot.model.api.SendMessageRequestBody;
-import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.standalone.springboot.model.api.TransportType;
 import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenException;
+import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
+import org.entrystore.rest.standalone.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.standalone.springboot.util.Email;
 import org.springframework.stereotype.Service;
 
@@ -35,28 +38,38 @@ public class MessageService {
 	private final RepositoryManagerImpl repositoryManager;
 
 	public void sendMessage(SendMessageRequestBody request) {
-		if (principalManager.getGuestUser().getURI().equals(principalManager.getAuthenticatedUserURI())) {
-			throw new ForbiddenException("Guest account is not allowed to send messages");
+		if (principalManager.currentUserIsGuest()) {
+			throw new UnauthorizedException("Not allowed for not-logged in or a guest user to send messages");
 		}
 
-		if (request.transport() == null || request.subject() == null || request.to() == null || request.body() == null) {
-			throw new BadRequestException("Missing required fields: transport, subject, to, body");
-		}
-
-		if (principalManager.getPrincipalEntry(request.to()) == null) {
-			log.info("User tried to send message to unknown recipient [{}]", request.to());
+		try {
+			if (principalManager.getPrincipalEntry(request.recipient()) == null) {
+				log.info("User tried to send message to unknown recipient [{}]", request.recipient());
+				throw new ForbiddenException("Unknown recipient");
+			}
+		} catch (RepositoryException e) {
+			log.warn("Recipient lookup failed for [{}]: {}", request.recipient(), e.getMessage());
 			throw new ForbiddenException("Unknown recipient");
 		}
 
-		String replyTo = principalManager.getPrincipalName(principalManager.getAuthenticatedUserURI());
-		if (replyTo != null && !replyTo.contains("@")) {
-			replyTo = null;
+		String replyTo = null;
+		try {
+			String principalName = principalManager.getPrincipalName(principalManager.getAuthenticatedUserURI());
+			if (principalName != null && principalName.contains("@")) {
+				replyTo = principalName;
+			}
+		} catch (Exception e) {
+			log.warn("Could not resolve principal name for Reply-To header: {}", e.getMessage());
 		}
 
-		if ("email".equalsIgnoreCase(request.transport())) {
-			Email.sendMessage(repositoryManager.getConfiguration(), request.to(), request.subject(), request.body(), null, replyTo);
-		} else {
-			throw new BadRequestException("Unsupported transport type: " + request.transport());
+		if (request.transport() == TransportType.EMAIL) {
+			boolean sent = Email.sendMessage(
+					repositoryManager.getConfiguration(),
+					request.recipient(), request.subject(), request.body(), null, replyTo);
+			if (!sent) {
+				log.error("Failed to send email to [{}] with subject [{}]", request.recipient(), request.subject());
+				throw new InternalServerErrorException("Failed to send email message");
+			}
 		}
 	}
 }

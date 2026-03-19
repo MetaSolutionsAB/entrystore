@@ -16,13 +16,20 @@
 
 package org.entrystore.rest.standalone.springboot.model.api;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import com.fasterxml.jackson.annotation.JsonValue;
 
-public record SendMessageRequestBody(
-		@NotNull TransportType transport,
-		@NotBlank String subject,
-		@NotBlank @JsonProperty("to") String recipient,
-		@NotBlank String body) {
+public enum TransportType {
+
+	EMAIL("email");
+
+	private final String value;
+
+	TransportType(String value) {
+		this.value = value;
+	}
+
+	@JsonValue
+	public String getValue() {
+		return value;
+	}
 }

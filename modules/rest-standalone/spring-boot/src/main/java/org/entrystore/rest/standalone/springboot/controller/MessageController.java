@@ -17,6 +17,7 @@
 package org.entrystore.rest.standalone.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.standalone.springboot.model.api.SendMessageRequestBody;
@@ -36,7 +37,7 @@ public class MessageController {
 
 	@Operation(summary = "Sends a message to another user")
 	@PostMapping(path = "/message", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public ResponseEntity<Void> sendMessage(@RequestBody SendMessageRequestBody request) {
+	public ResponseEntity<Void> sendMessage(@Valid @RequestBody SendMessageRequestBody request) {
 		messageService.sendMessage(request);
 		return ResponseEntity.ok().build();
 	}
