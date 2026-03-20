@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.standalone.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -9,6 +25,7 @@ import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
 import org.eclipse.rdf4j.rio.RDFFormat;
 import org.entrystore.Entry;
 import org.entrystore.rest.standalone.springboot.model.api.MetadataType;
+import org.entrystore.rest.standalone.springboot.model.dto.MetadataResult;
 import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.service.MetadataService;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
@@ -41,6 +58,8 @@ import static org.entrystore.rest.standalone.springboot.util.HttpUtil.determineM
 @RequiredArgsConstructor
 public class MetadataController {
 
+	private static final String DEFAULT_MEDIA_TYPE = "application/rdf+xml";
+
 	private static final RDFFormat RDFJSON_WITH_APPLICATION_JSON
 			= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("json"),
 			SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
@@ -70,17 +89,22 @@ public class MetadataController {
 		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
 		// (+ is replaced with a space) we need to replace the space back to '+'
 		if (format != null) {
-			mediaType = format.trim().replace(' ', '+');
+			mediaType = GraphUtil.validateRdfMediaType(format.trim().replace(' ', '+'));
 		} else {
-			mediaType = acceptHeader;
+			mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, DEFAULT_MEDIA_TYPE);
 		}
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 
-		String responseBody = metadataService.getMetadata(entry, metadataType, mediaType, graphQuery, depth, recursive, scope, revision);
+		MetadataResult metadataResult = metadataService.getMetadata(entry, metadataType, mediaType, graphQuery, depth, recursive, scope, revision);
+
+		Date modificationDate = metadataResult.lastModified() != null
+				? metadataResult.lastModified()
+				: getModificationDate(entry, metadataType);
 
 		HttpHeaders headers = buildResponseHeaders(entry, mediaType, download != null);
-		return new ResponseEntity<>(responseBody, headers, HttpStatus.OK);
+		HttpUtil.setLastModifiedAndETag(headers, modificationDate);
+		return new ResponseEntity<>(metadataResult.serializedGraph(), headers, HttpStatus.OK);
 	}
 
 	@Operation(
@@ -97,7 +121,8 @@ public class MetadataController {
 			@RequestBody String body
 	) {
 
-		String mediaType = determineMediaType(format, contentType);
+		String mediaType = GraphUtil.validateRdfMediaType(
+				determineMediaType(format, contentType), HttpStatus.UNSUPPORTED_MEDIA_TYPE);
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
@@ -144,8 +169,7 @@ public class MetadataController {
 			contentDisposition = ContentDisposition.inline().filename(fileName).build();
 		}
 		headers.setContentDisposition(contentDisposition);
-		// TODO: set last modified based on travResult.getLatestModified()
-		// headers.setLastModified(1);
+
 		return headers;
 	}
 

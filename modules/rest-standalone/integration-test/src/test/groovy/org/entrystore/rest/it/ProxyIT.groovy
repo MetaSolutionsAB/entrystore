@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import com.sun.net.httpserver.HttpServer
@@ -47,6 +63,24 @@ class ProxyIT extends BaseSpec {
 			exchange.sendResponseHeaders(200, acceptHeader.bytes.length)
 			exchange.responseBody.write(acceptHeader.bytes)
 			exchange.responseBody.close()
+		}
+
+		mockServer.createContext('/redirect-relative') { exchange ->
+			exchange.responseHeaders.set('Location', '/api/data')
+			exchange.sendResponseHeaders(302, -1)
+			exchange.close()
+		}
+
+		mockServer.createContext('/redirect-blacklisted') { exchange ->
+			exchange.responseHeaders.set('Location', 'http://192.168.1.1/')
+			exchange.sendResponseHeaders(302, -1)
+			exchange.close()
+		}
+
+		mockServer.createContext('/redirect-ftp') { exchange ->
+			exchange.responseHeaders.set('Location', 'ftp://files.example.com/data')
+			exchange.sendResponseHeaders(302, -1)
+			exchange.close()
 		}
 
 		mockServer.start()
@@ -163,17 +197,6 @@ class ProxyIT extends BaseSpec {
 
 	// --- Global /proxy - successful proxy behavior ---
 
-	def 'GET /proxy as admin should return JSON from mock server'() {
-		when:
-		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/api/data'))
-
-		then:
-		conn.getResponseCode() == HTTP_OK
-		conn.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(conn.getInputStream().text)
-		responseJson['key'] == 'value'
-	}
-
 	def 'GET /proxy should include Content-Security-Policy header'() {
 		when:
 		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/api/data'))
@@ -240,6 +263,70 @@ class ProxyIT extends BaseSpec {
 
 		when:
 		def conn = EntryStoreClient.getRequest('/proxy-admin/proxy?url=' + mockUrl('/api/data'))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		conn.getInputStream().text == '{"key":"value"}'
+	}
+
+	// --- URL scheme validation ---
+
+	def 'GET /proxy with ftp:// URL should return 400'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('ftp://files.example.com/data', 'UTF-8'))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def 'GET /proxy with gopher:// URL should return 400'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('gopher://example.com/1', 'UTF-8'))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def 'GET /proxy with data: URL should return 400'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('data:text/html,<h1>test</h1>', 'UTF-8'))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	// --- Userinfo rejection ---
+
+	def 'GET /proxy with URL containing userinfo should return 400'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy?url=' + URLEncoder.encode('http://user:pass@example.com/', 'UTF-8'))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	// --- Redirect security ---
+
+	def 'GET /proxy with redirect to blacklisted host should return 403'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/redirect-blacklisted'))
+
+		then:
+		conn.getResponseCode() == HTTP_FORBIDDEN
+	}
+
+	def 'GET /proxy with redirect to disallowed scheme should return 400'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/redirect-ftp'))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def 'GET /proxy should follow relative redirects'() {
+		when:
+		def conn = EntryStoreClient.getRequest('/proxy?url=' + mockUrl('/redirect-relative'))
 
 		then:
 		conn.getResponseCode() == HTTP_OK
