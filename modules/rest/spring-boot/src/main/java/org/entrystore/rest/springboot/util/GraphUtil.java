@@ -314,7 +314,7 @@ public class GraphUtil {
 
 		try {
 			List<MediaType> acceptTypes = MediaType.parseMediaTypes(acceptHeader);
-			MediaType.sortBySpecificityAndQuality(acceptTypes);
+			MediaType.sortByQualityValue(acceptTypes);
 			for (MediaType type : acceptTypes) {
 				if (type.isWildcardType() || type.isWildcardSubtype()) {
 					return defaultMediaType;
