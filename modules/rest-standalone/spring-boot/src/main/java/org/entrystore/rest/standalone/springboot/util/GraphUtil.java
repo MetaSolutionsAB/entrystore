@@ -99,8 +99,8 @@ public class GraphUtil {
 	}
 
 	/**
-	 * Normalizes legacy MIME types to their standard equivalents.
-	 * Maps text/rdf+n3 (legacy Restlet type) to text/n3 (the de facto standard N3 MIME type used by RDF4J).
+	 * Normalizes the legacy text/rdf+n3 MIME type to its standard equivalent
+	 * (text/n3, as returned by RDF4J's {@link RDFFormat#N3}).
 	 */
 	static String normalizeLegacyMediaType(String mediaType) {
 		if (LEGACY_N3_MEDIA_TYPE.equalsIgnoreCase(mediaType)) {
@@ -300,7 +300,7 @@ public class GraphUtil {
 		if (mediaType == null) {
 			throw new CustomResponseException("Unsupported media type", rejectStatus);
 		}
-		String normalized = normalizeLegacyMediaType(mediaType.toLowerCase(Locale.ROOT));
+		String normalized = normalizeLegacyMediaType(mediaType).toLowerCase(Locale.ROOT);
 		if (!ALLOWED_RDF_MEDIA_TYPES.contains(normalized)) {
 			throw new CustomResponseException("Unsupported media type", rejectStatus);
 		}
@@ -319,8 +319,8 @@ public class GraphUtil {
 				if (type.isWildcardType() || type.isWildcardSubtype()) {
 					return defaultMediaType;
 				}
-				String typeStr = normalizeLegacyMediaType(
-						(type.getType() + "/" + type.getSubtype()).toLowerCase(Locale.ROOT));
+				String typeStr = normalizeLegacyMediaType(type.getType() + "/" + type.getSubtype())
+						.toLowerCase(Locale.ROOT);
 				if (ALLOWED_RDF_MEDIA_TYPES.contains(typeStr)) {
 					return typeStr;
 				}
@@ -349,12 +349,13 @@ public class GraphUtil {
 	}
 
 	public static JSONObject serializeGraphToJson(Model graph, String rdfFormat) {
-		rdfFormat = normalizeLegacyMediaType(rdfFormat);
 		if (rdfFormat == null || MediaType.APPLICATION_JSON_VALUE.equals(rdfFormat)) {
 			// We don't use GraphUtil.serializeGraph() because we need a JSONObject here and
 			// converting back and forth between String and JSONObject would not be very efficient
 			return RDFJSON.graphToRdfJsonObject(graph);
-		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(rdfFormat)) {
+		}
+		rdfFormat = normalizeLegacyMediaType(rdfFormat);
+		if (RDFFormat.JSONLD.getDefaultMIMEType().equals(rdfFormat)) {
 			return new JSONObject(GraphUtil.serializeGraph(graph, rdfFormat));
 		}
 		log.warn("Model could not be serialized, returning empty JSON object");

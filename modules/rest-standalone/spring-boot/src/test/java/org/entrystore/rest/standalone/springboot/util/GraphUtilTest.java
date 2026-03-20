@@ -23,6 +23,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class GraphUtilTest {
@@ -188,5 +189,10 @@ class GraphUtilTest {
 	@Test
 	void normalizeLegacyMediaType_shouldNotChangeOtherTypes() {
 		assertEquals("text/turtle", GraphUtil.normalizeLegacyMediaType("text/turtle"));
+	}
+
+	@Test
+	void normalizeLegacyMediaType_shouldReturnNullForNullInput() {
+		assertNull(GraphUtil.normalizeLegacyMediaType(null));
 	}
 }

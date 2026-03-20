@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.standalone.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -75,7 +91,7 @@ public class EntryController {
 	) {
 		// Return ResponseEntity instead of String to control the response Content-Type. Spring MVC would otherwise
 		// echo back the client's Accept type (text/rdf+n3) as the response Content-Type, but we respond with
-		// the normalized form (text/n3) since text/rdf+n3 is a legacy Restlet type, not a standard MIME type.
+		// the normalized form (text/n3) since text/rdf+n3 is a non-standard legacy N3 MIME type.
 		String mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, DEFAULT_MEDIA_TYPE);
 		String body = entryService.getEntryInRdfFormat(contextId, entryId, mediaType);
 		return ResponseEntity.ok()

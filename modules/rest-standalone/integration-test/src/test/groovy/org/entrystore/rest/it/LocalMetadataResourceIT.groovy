@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
@@ -882,6 +898,25 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/rdf+xml')
+	}
+
+	def "GET /{context-id}/metadata/{entry-id} with Accept text/rdf+n3 should return N3 with Content-Type text/n3"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def getConn = EntryStoreClient.getRequest(metadataUri, 'admin', 'text/rdf+n3')
+
+		then:
+		getConn.getResponseCode() == HTTP_OK
+		getConn.getContentType().contains('text/n3')
+		def response = getConn.getInputStream().text
+		response.contains('Cool entry')
 	}
 
 	def "PUT /{context-id}/metadata/{entry-id} with Content-Type text/rdf+n3 should accept legacy N3 MIME type"() {
