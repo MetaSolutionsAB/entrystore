@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3) - a Linked Data framework for managing resources and their metadata using "entries". Built with Java 21, RDF4J, and Solr. The REST layer is being migrated from Restlet to Spring Boot (Jetty 12).
+EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3) - a Linked Data framework for managing resources and their metadata using "entries". Built with Java 25, RDF4J, and Solr. The REST layer is being migrated from Restlet to Spring Boot (Jetty 12).
 
 ## Build Commands
 
 **Always use `mvn clean`** — stale artifacts from other branches cause subtle failures.
 
-**Java 21 required** — Lombok annotation processing is incompatible with Java 22+.
+**Java 25 required** — Lombok annotation processing is configured explicitly via `annotationProcessorPaths` (required since JDK 23+).
 
 ```bash
 # Quick build (skip tests)
@@ -101,6 +101,9 @@ springboot/
 
 **REST routes** (Spring Boot controllers):
 `/{context-id}/entry/{entry-id}`, `/{context-id}/resource/{entry-id}`, `/{context-id}/metadata/{entry-id}`, `/{context-id}/relation/{entry-id}`, `/search`, `/proxy`, `/{context-id}/proxy`, `/echo`, `/auth/*`, `/management/*`
+
+**Spring bean dependency rules:**
+- **Never inject beans produced by the same `@Configuration` class** — especially via constructor injection (`@RequiredArgsConstructor`). This creates a self-referencing circular dependency that prevents application startup. If a `@Configuration` class needs to check whether one of its conditional beans is active, read the property from `Environment` instead.
 
 ## Code Style
 

@@ -9,7 +9,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.5.7</version>
+		<version>3.5.11</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 
@@ -27,7 +27,7 @@
 
 	<!-- ================= Default Properties ================= -->
 	<properties>
-		<java.version>21</java.version>
+		<java.version>25</java.version>
 		<solr.version>9.10.1</solr.version>
 		<rdf4j.version>5.2.2</rdf4j.version>
 		<servlet.version>3.1.0</servlet.version>
@@ -41,6 +41,7 @@
 		<commonscli.version>1.10.0</commonscli.version>
 		<snappy.version>1.1.10.8</snappy.version>
 		<jetbrains-annotations.version>26.1.0</jetbrains-annotations.version>
+		<greenmail.version>2.1.2</greenmail.version>
 
 		<!-- Override Spring-boot versions -->
 		<caffeine.version>3.2.0</caffeine.version>
@@ -173,6 +174,19 @@
 				</plugin>
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
+					<artifactId>maven-compiler-plugin</artifactId>
+					<configuration>
+						<annotationProcessorPaths>
+							<path>
+								<groupId>org.projectlombok</groupId>
+								<artifactId>lombok</artifactId>
+								<version>${lombok.version}</version>
+							</path>
+						</annotationProcessorPaths>
+					</configuration>
+				</plugin>
+				<plugin>
+					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-surefire-plugin</artifactId>
 					<version>3.5.3</version>
 				</plugin>
@@ -203,7 +217,7 @@
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.13</version>
+                <version>0.8.14</version>
 				<executions>
 					<execution>
 						<id>default-prepare-agent</id>
@@ -389,16 +403,6 @@
 				<groupId>org.jetbrains</groupId>
 				<artifactId>annotations</artifactId>
 				<version>${jetbrains-annotations.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.ow2.asm</groupId>
-				<artifactId>asm</artifactId>
-				<version>9.7.1</version>
-			</dependency>
-			<dependency>
-				<groupId>org.ow2.asm</groupId>
-				<artifactId>asm-commons</artifactId>
-				<version>9.7.1</version>
 			</dependency>
 			<dependency>
 				<groupId>org.glassfish.hk2</groupId>

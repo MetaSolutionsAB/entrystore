@@ -1,4 +1,4 @@
-image: maven:3-eclipse-temurin-21-jammy
+image: maven:3-eclipse-temurin-25-noble
 
 options:
   max-time: 12
