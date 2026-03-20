@@ -54,6 +54,7 @@ import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
+import org.springframework.util.MimeTypeUtils;
 import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
 
@@ -299,7 +300,7 @@ public class GraphUtil {
 
 		try {
 			List<MediaType> acceptTypes = MediaType.parseMediaTypes(acceptHeader);
-			MediaType.sortBySpecificityAndQuality(acceptTypes);
+			MimeTypeUtils.sortBySpecificity(acceptTypes);
 			for (MediaType type : acceptTypes) {
 				if (type.isWildcardType() || type.isWildcardSubtype()) {
 					return defaultMediaType;
