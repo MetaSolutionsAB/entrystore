@@ -32,7 +32,7 @@ public class RelationController {
 			produces = {
 					MediaType.APPLICATION_JSON_VALUE,
 					MediaType.APPLICATION_OCTET_STREAM_VALUE,
-					"application/rdf+xml", "text/n3", "text/turtle",
+					"application/rdf+xml", "text/n3", "text/rdf+n3", "text/turtle",
 					"application/trix", "application/n-triples", "application/trig",
 					"application/ld+json", "application/rdf+json"
 			}

@@ -883,4 +883,35 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/rdf+xml')
 	}
+
+	def "PUT /{context-id}/metadata/{entry-id} with Content-Type text/rdf+n3 should accept legacy N3 MIME type"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = '/' + contextId + '/metadata/' + entryId
+
+		def n3Body = """
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+<${EntryStoreClient.baseUrl}/${contextId}/resource/${entryId}> dcterms:title "Updated via legacy N3 type" .
+"""
+
+		when:
+		def putConn = EntryStoreClient.putRequest(metadataUri, n3Body, 'admin', 'text/rdf+n3')
+
+		then:
+		putConn.getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def getConn = EntryStoreClient.getRequest(EntryStoreClient.baseUrl + metadataUri, 'admin', 'text/n3')
+
+		then:
+		getConn.getResponseCode() == HTTP_OK
+		getConn.getContentType().contains('text/n3')
+		def response = getConn.getInputStream().text
+		response.contains('Updated via legacy N3 type')
+	}
 }

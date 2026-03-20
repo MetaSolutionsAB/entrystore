@@ -65,16 +65,22 @@ public class EntryController {
 			summary = "Returns the entry information.",
 			description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
 					"as specified in the response body is used.")
-	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = {"application/rdf+xml", "text/n3", "text/turtle",
-			"application/trix", "application/n-triples", "application/trig", "application/ld+json", "application/rdf+json"})
-	public String getEntryInRdfFormat(
+	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = {"application/rdf+xml", "text/n3", "text/rdf+n3",
+			"text/turtle", "application/trix", "application/n-triples", "application/trig", "application/ld+json",
+			"application/rdf+json"})
+	public ResponseEntity<String> getEntryInRdfFormat(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
 			@RequestHeader(value = "Accept", required = false, defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
 	) {
-
+		// Return ResponseEntity instead of String to control the response Content-Type. Spring MVC would otherwise
+		// echo back the client's Accept type (text/rdf+n3) as the response Content-Type, but we respond with
+		// the normalized form (text/n3) since text/rdf+n3 is a legacy Restlet type, not a standard MIME type.
 		String mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, DEFAULT_MEDIA_TYPE);
-		return entryService.getEntryInRdfFormat(contextId, entryId, mediaType);
+		String body = entryService.getEntryInRdfFormat(contextId, entryId, mediaType);
+		return ResponseEntity.ok()
+				.contentType(MediaType.parseMediaType(mediaType))
+				.body(body);
 	}
 
 	@Operation(

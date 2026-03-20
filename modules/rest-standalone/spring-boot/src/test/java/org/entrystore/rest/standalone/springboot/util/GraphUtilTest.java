@@ -158,4 +158,35 @@ class GraphUtilTest {
 		assertEquals("text/turtle",
 				GraphUtil.resolveAcceptedMediaType("application/json;q=0.5, text/turtle;q=1.0", "application/rdf+xml"));
 	}
+
+	@Test
+	void validateRdfMediaType_shouldNormalizeLegacyN3Type() {
+		assertEquals("text/n3", GraphUtil.validateRdfMediaType("text/rdf+n3"));
+	}
+
+	@Test
+	void validateRdfMediaType_shouldNormalizeLegacyN3TypeCaseInsensitive() {
+		assertEquals("text/n3", GraphUtil.validateRdfMediaType("TEXT/RDF+N3"));
+	}
+
+	@Test
+	void resolveAcceptedMediaType_shouldNormalizeLegacyN3Type() {
+		assertEquals("text/n3",
+				GraphUtil.resolveAcceptedMediaType("text/rdf+n3", "application/rdf+xml"));
+	}
+
+	@Test
+	void normalizeLegacyMediaType_shouldMapLegacyN3() {
+		assertEquals("text/n3", GraphUtil.normalizeLegacyMediaType("text/rdf+n3"));
+	}
+
+	@Test
+	void normalizeLegacyMediaType_shouldNotChangeStandardN3() {
+		assertEquals("text/n3", GraphUtil.normalizeLegacyMediaType("text/n3"));
+	}
+
+	@Test
+	void normalizeLegacyMediaType_shouldNotChangeOtherTypes() {
+		assertEquals("text/turtle", GraphUtil.normalizeLegacyMediaType("text/turtle"));
+	}
 }
