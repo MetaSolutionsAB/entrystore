@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
@@ -76,6 +77,22 @@ public class HttpUtil {
 	}
 
 	/**
+	 * Sets Last-Modified and ETag headers on the provided {@link HttpHeaders} instance.
+	 * If the modification date is null, a warning is logged and the headers are not updated.
+	 *
+	 * @param headers      the headers to update
+	 * @param modifiedDate the modification date used for generating the headers
+	 */
+	public static void setLastModifiedAndETag(HttpHeaders headers, Date modifiedDate) {
+		if (modifiedDate == null) {
+			log.warn("Last-Modified header could not be set because the modification date is null");
+		} else {
+			headers.setLastModified(modifiedDate.getTime());
+			headers.setETag(createStrongETag(Long.toString(modifiedDate.getTime())));
+		}
+	}
+
+	/**
 	 * Updates the response headers with the last modification date and a strong ETag
 	 * based on the provided modification date.
 	 * If the modification date is null a warning is logged, and
@@ -88,14 +105,8 @@ public class HttpUtil {
 			ResponseEntity.HeadersBuilder<?> responseBuilder,
 			Date modifiedDate) {
 
-		if (modifiedDate == null) {
-			log.warn("Last-Modified header could not be set because the modification date is null");
-			return responseBuilder;
-		} else {
-			return responseBuilder
-					.lastModified(modifiedDate.getTime())
-					.eTag(HttpUtil.createStrongETag(Long.toString(modifiedDate.getTime())));
-		}
+		responseBuilder.headers(headers -> setLastModifiedAndETag(headers, modifiedDate));
+		return responseBuilder;
 	}
 
 	public static boolean isLargerThan(HttpServletRequest request, long maxSize) {

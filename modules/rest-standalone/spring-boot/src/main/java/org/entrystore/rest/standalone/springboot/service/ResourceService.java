@@ -35,6 +35,7 @@ import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundE
 import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
+import org.entrystore.rest.standalone.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.standalone.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.standalone.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.standalone.springboot.util.Email;
@@ -742,7 +743,7 @@ public class ResourceService {
 	}
 
 	private void importRDFResource(String rdfString) {
-		// TODO
+		throw new NotImplementedException("RDF resource import is not yet implemented");
 	}
 
 }

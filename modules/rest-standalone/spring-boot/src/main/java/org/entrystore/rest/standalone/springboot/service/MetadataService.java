@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.standalone.springboot.service;
 
 import com.google.common.collect.HashMultimap;
@@ -17,7 +33,6 @@ import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
 import org.eclipse.rdf4j.sail.memory.MemoryStore;
-import org.entrystore.AuthorizationException;
 import org.entrystore.Entity;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
@@ -31,8 +46,10 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.standalone.springboot.model.api.MetadataType;
+import org.entrystore.rest.standalone.springboot.model.dto.MetadataResult;
 import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.standalone.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.springframework.stereotype.Service;
@@ -54,7 +71,7 @@ public class MetadataService {
 	private final RepositoryManagerImpl repositoryManager;
 	private final Config esConfig;
 
-	public String getMetadata(Entry entry, MetadataType metadataType, String format, String graphQuery, Integer depth, String recursive, String scope, String revision) {
+	public MetadataResult getMetadata(Entry entry, MetadataType metadataType, String format, String graphQuery, Integer depth, String recursive, String scope, String revision) {
 
 		if (recursive != null) {
 			Set<URI> predicatesToFollow = resolvePredicates(recursive);
@@ -92,13 +109,9 @@ public class MetadataService {
 
 		if (graphQuery != null) {
 			Model graphQueryResult = applyGraphQuery(graphQuery, metadataGraph);
-			if (graphQueryResult != null) {
-				return serializeGraph(graphQueryResult, format);
-			} else {
-				throw new BadRequestException("GraphQueryResult is null");
-			}
+			return new MetadataResult(serializeGraph(graphQueryResult, format), null);
 		} else {
-			return serializeGraph(metadataGraph, format);
+			return new MetadataResult(serializeGraph(metadataGraph, format), null);
 		}
 	}
 
@@ -151,7 +164,7 @@ public class MetadataService {
 		return null;
 	}
 
-	private String getRecursiveMetadata(Entry entry, String format, String graphQuery, Integer depth, String recursive,
+	private MetadataResult getRecursiveMetadata(Entry entry, String format, String graphQuery, Integer depth, String recursive,
 										String scope, Set<URI> predicatesToFollow) {
 
 		String firstDetectedProfile = getFirstProfile(recursive);
@@ -179,20 +192,13 @@ public class MetadataService {
 		}
 
 		EntryUtil.TraversalResult travResult = traverse(entry, predicatesToFollow, blacklist, repositoryScope, depth, limit);
+		Date latestModified = travResult.getLatestModified();
 		if (graphQuery != null) {
 			Model graphQueryResult = applyGraphQuery(graphQuery, travResult.getGraph());
-			if (graphQueryResult != null) {
-				return serializeGraph(graphQueryResult, format);
-			} else {
-				throw new BadRequestException("Exception when generating response");
-			}
+			return new MetadataResult(serializeGraph(graphQueryResult, format), latestModified);
 		} else {
-			return serializeGraph(travResult.getGraph(), format);
+			return new MetadataResult(serializeGraph(travResult.getGraph(), format), latestModified);
 		}
-
-		/*if (travResult.getLatestModified() != null) {
-			result.setModificationDate(travResult.getLatestModified());
-		}*/
 	}
 
 	private String getFirstProfile(String predCSV) {
@@ -207,7 +213,7 @@ public class MetadataService {
 	/**
 	 * @return Metadata in the requested format.
 	 */
-	private String serializeGraph(Model graph, String mediaType) throws AuthorizationException {
+	private String serializeGraph(Model graph, String mediaType) {
 		if (graph != null) {
 			String serializedGraph = GraphUtil.serializeGraph(graph, mediaType);
 			if (serializedGraph != null) {
@@ -252,7 +258,6 @@ public class MetadataService {
 		Date before = new Date();
 		MemoryStore ms = new MemoryStore();
 		Repository sr = new SailRepository(ms);
-		Model result = null;
 		RepositoryConnection rc = null;
 		try {
 			sr.init();
@@ -260,27 +265,28 @@ public class MetadataService {
 			rc.add(graph);
 			GraphQuery gq = rc.prepareGraphQuery(QueryLanguage.SPARQL, query);
 			gq.setMaxExecutionTime(10); // 10 seconds, TODO: make this configurable
-			result = Iterations.addAll(gq.evaluate(), new LinkedHashModel());
+			Model result = Iterations.addAll(gq.evaluate(), new LinkedHashModel());
 			log.info("Graph query took {} ms", new Date().getTime() - before.getTime());
+			return result;
 		} catch (RepositoryException | QueryEvaluationException e) {
-			log.error(e.getMessage());
+			throw new InternalServerErrorException("Graph query evaluation failed", e);
 		} catch (MalformedQueryException mfqe) {
-			log.debug(mfqe.getMessage());
+			log.warn("Malformed SPARQL graph query: {}", mfqe.getMessage(), mfqe);
+			throw new BadRequestException("Malformed SPARQL query");
 		} finally {
 			if (rc != null) {
 				try {
 					rc.close();
 				} catch (RepositoryException e) {
-					log.error(e.getMessage());
+					log.error("Failed to close repository connection: {}", e.getMessage(), e);
 				}
 			}
 			try {
 				sr.shutDown();
 			} catch (RepositoryException e) {
-				log.error(e.getMessage());
+				log.error("Failed to shut down repository: {}", e.getMessage(), e);
 			}
 		}
-		return result;
 	}
 
 	/**
@@ -300,7 +306,7 @@ public class MetadataService {
 					URI expanded = NS.expand(s);
 					// we add it to the result if it could be expanded
 					if (!s.equals(expanded.toString())) {
-						result.add(URI.create(NS.expand(s).toString()));
+						result.add(URI.create(expanded.toString()));
 					}
 				} catch (IllegalArgumentException iae) {
 					log.warn("Unable to expand namespace: {}", iae.getMessage());

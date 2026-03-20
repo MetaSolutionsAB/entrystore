@@ -117,6 +117,8 @@
 			</testResource>
 		</testResources>
 
+		<!-- With the below plugin Maven creates also a fat JAR (uber JAR) that bundles entire application with all dependencies
+		into a single executable JAR. Resulting fat jar file size is ~170MB vs ~300KB of non-fat jar (only compiled classes of this module) -->
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>

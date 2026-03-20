@@ -47,18 +47,21 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 	protected void doFilterInternal(@NotNull HttpServletRequest request, @NotNull HttpServletResponse response, @NotNull FilterChain filterChain)
 			throws ServletException, IOException {
 
-		if (request.getContentLength() > 0 && HttpUtil.isLargerThan(request, 32768)) {
-			//TODO throw new EntityTooLargeException("The size of the request is larger than 32KB");
-			log.warn("The size of the request is larger than 32KB, request blocked");
-			response.sendError(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE, "The size of the request is larger than 32KB");
-			return;
-		}
-
 		String username = request.getParameter("auth_username");
 		String password = request.getParameter("auth_password");
 
 		if (username != null || password != null) {
 			// means someone is trying to authenticate
+
+			if (request.getContentLength() > 0 && HttpUtil.isLargerThan(request, 32768)) {
+				//TODO throw new EntityTooLargeException("The size of the request is larger than 32KB");
+				log.warn("The size of the request is larger than 32KB, request blocked");
+				response.setStatus(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+				response.setContentType("application/json");
+				response.getWriter().write("{\"error\":\"The size of the request is larger than 32KB\"}");
+				response.getWriter().flush();
+				return;
+			}
 
 			if (password == null || password.isEmpty()) {
 				// TODO throw new BadRequestException("Password is missing");

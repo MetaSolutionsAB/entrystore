@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -46,6 +47,7 @@ import java.util.Optional;
 public class SecurityConfig {
 
 	private final CheckUsernamePasswordFilter checkUsernamePasswordFilter;
+	private final IgnoreAuthFilter ignoreAuthFilter;
 	private final SetUserURIAfterAuthenticationFilter setUserURIAfterAuthenticationFilter;
 	private final ReloadUserPropertiesFilter reloadUserPropertiesFilter;
 	private final HandlerExceptionResolver handlerExceptionResolver;
@@ -107,9 +109,13 @@ public class SecurityConfig {
 				.logout(logout -> logout
 						.logoutUrl("/auth/logout")
 						.deleteCookies("auth_token")
+						.logoutSuccessHandler((request, response, authentication) ->
+								response.setStatus(HttpStatus.NO_CONTENT.value())
+						)
 						.permitAll())
 				.addFilterBefore(checkUsernamePasswordFilter, UsernamePasswordAuthenticationFilter.class)
 				.addFilterAfter(setUserURIAfterAuthenticationFilter, AnonymousAuthenticationFilter.class)
+				.addFilterBefore(ignoreAuthFilter, SetUserURIAfterAuthenticationFilter.class)
 				.addFilterAfter(reloadUserPropertiesFilter, SetUserURIAfterAuthenticationFilter.class)
 				// below disables the auto redirect to login page when user is not authenticated, instead reply with 401
 				.exceptionHandling(e -> e
@@ -214,6 +220,13 @@ public class SecurityConfig {
 	@Bean
 	public FilterRegistrationBean<ReloadUserPropertiesFilter> disableReloadUserPropertiesFilterAutoRegistration(ReloadUserPropertiesFilter f) {
 		FilterRegistrationBean<ReloadUserPropertiesFilter> reg = new FilterRegistrationBean<>(f);
+		reg.setEnabled(false);
+		return reg;
+	}
+
+	@Bean
+	public FilterRegistrationBean<IgnoreAuthFilter> disableIgnoreAuthFilterAutoRegistration(IgnoreAuthFilter f) {
+		FilterRegistrationBean<IgnoreAuthFilter> reg = new FilterRegistrationBean<>(f);
 		reg.setEnabled(false);
 		return reg;
 	}
