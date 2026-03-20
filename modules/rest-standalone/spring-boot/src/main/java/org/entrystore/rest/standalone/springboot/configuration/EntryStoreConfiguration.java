@@ -23,7 +23,6 @@ import org.springframework.core.env.PropertySource;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
-import java.util.Optional;
 
 @Slf4j
 @Configuration
@@ -33,11 +32,10 @@ public class EntryStoreConfiguration {
 	private static final String ENTRYSTORE_CONFIG_PREFIX = "entrystore";
 
 	private final Environment environment;
-	private final Optional<BackupScheduler> backupScheduler;
 
 	@PostConstruct
 	public void logBeanStatus() {
-		if (backupScheduler.isEmpty()) {
+		if (!"on".equalsIgnoreCase(environment.getProperty(Settings.BACKUP_SCHEDULER))) {
 			log.warn("Backup is disabled in configuration");
 		}
 	}
