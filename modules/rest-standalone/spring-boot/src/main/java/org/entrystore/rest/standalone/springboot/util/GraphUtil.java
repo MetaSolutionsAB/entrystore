@@ -54,7 +54,6 @@ import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
-import org.springframework.util.MimeTypeUtils;
 import org.xml.sax.SAXException;
 import org.xml.sax.XMLReader;
 
@@ -300,7 +299,7 @@ public class GraphUtil {
 
 		try {
 			List<MediaType> acceptTypes = MediaType.parseMediaTypes(acceptHeader);
-			MimeTypeUtils.sortBySpecificity(acceptTypes);
+			MediaType.sortByQualityValue(acceptTypes);
 			for (MediaType type : acceptTypes) {
 				if (type.isWildcardType() || type.isWildcardSubtype()) {
 					return defaultMediaType;
@@ -312,8 +311,7 @@ public class GraphUtil {
 			}
 		} catch (InvalidMediaTypeException e) {
 			log.warn("Failed to parse Accept header '{}': {}", acceptHeader, e.getMessage());
-			throw new CustomResponseException(
-					"Malformed Accept header: " + e.getMessage(), HttpStatus.NOT_ACCEPTABLE);
+			throw new CustomResponseException("Malformed Accept header", HttpStatus.NOT_ACCEPTABLE);
 		}
 
 		throw new CustomResponseException("Unsupported media type", HttpStatus.NOT_ACCEPTABLE);

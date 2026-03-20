@@ -1,10 +1,8 @@
 package org.entrystore.rest.standalone.springboot.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ValidationException;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.AuthorizationException;
 import org.entrystore.rest.standalone.springboot.model.api.ErrorResponse;
@@ -36,8 +34,6 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-import java.io.IOException;
-
 /**
  * Generic Exception handler to handle application specific exceptions.
  * If an exception is thrown that implements org.springframework.web.ErrorResponse, then it will fall into generic method
@@ -46,10 +42,7 @@ import java.io.IOException;
  */
 @Slf4j
 @ControllerAdvice
-@RequiredArgsConstructor
 public class AppExceptionHandler {
-
-	private final ObjectMapper objectMapper;
 
 	@ExceptionHandler(RedirectTemporaryException.class)
 	public ResponseEntity<Void> handleUrlRedirectException(RedirectTemporaryException ex) {
@@ -182,18 +175,17 @@ public class AppExceptionHandler {
 	}
 
 	@ExceptionHandler(CustomResponseException.class)
-	public void handleCustomResponseException(CustomResponseException ex,
-											  HttpServletRequest request,
-											  HttpServletResponse response) throws IOException {
+	public ResponseEntity<ErrorResponse> handleCustomResponseException(CustomResponseException ex,
+																	   HttpServletRequest request) {
 		log.info("CustomResponseException ({}): {}", ex.getStatus().value(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(ex.getStatus().value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
-		response.setStatus(ex.getStatus().value());
-		response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-		objectMapper.writeValue(response.getWriter(), responseBody);
+		return ResponseEntity.status(responseBody.status())
+				.contentType(MediaType.APPLICATION_JSON)
+				.body(responseBody);
 	}
 
 	@ExceptionHandler(Exception.class)
