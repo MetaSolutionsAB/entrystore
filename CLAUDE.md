@@ -102,6 +102,9 @@ springboot/
 **REST routes** (Spring Boot controllers):
 `/{context-id}/entry/{entry-id}`, `/{context-id}/resource/{entry-id}`, `/{context-id}/metadata/{entry-id}`, `/{context-id}/relation/{entry-id}`, `/search`, `/proxy`, `/{context-id}/proxy`, `/echo`, `/auth/*`, `/management/*`
 
+**Spring bean dependency rules:**
+- **Never inject beans produced by the same `@Configuration` class** — especially via constructor injection (`@RequiredArgsConstructor`). This creates a self-referencing circular dependency that prevents application startup. If a `@Configuration` class needs to check whether one of its conditional beans is active, read the property from `Environment` instead.
+
 ## Code Style
 
 Formatting is IntelliJ-based, defined in `.editorconfig` (with `ij_*` properties) and `.idea/codeStyles/`. No Eclipse formatter is used.
