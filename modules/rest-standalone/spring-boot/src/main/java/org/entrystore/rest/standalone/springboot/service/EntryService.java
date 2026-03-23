@@ -234,22 +234,38 @@ public class EntryService {
 		 */
 		if (entryType == Local) {
 			Resource resource = entry.getResource();
-
-			String resourceString = null;
-			if (graphType == GraphType.String) {
-				resourceString = resourceSerializer.serializeResourceString(resource);
+			if (resource == null) {
+				log.error("Resource is null for EntryId '{}', GraphType '{}', skipping resource serialization",
+						entry.getId(), graphType);
 			} else {
-				JSONObject resourceObject = serializeResourceToJson(resource, graphType, rdfFormat, listFilter);
-				if (resourceObject != null) {
-					resourceString = resourceObject.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE);
+				try {
+					String resourceString = serializeResourceToRawJsonString(resource, graphType, rdfFormat, listFilter);
+					if (resourceString != null) {
+						responseBuilder.resource(resourceString);
+					}
+				} catch (RuntimeException e) {
+					// serialization path can throw IllegalArgumentException, RepositoryException (from context.getEntries() → RDF4J) or JSONException
+					log.error("Failed to serialize resource for EntryId '{}', GraphType '{}', skipping resource serialization. Error: {}",
+							entry.getId(), graphType, e.getMessage(), e);
 				}
-			}
-
-			if (resourceString != null) {
-				responseBuilder.resource(resourceString);
 			}
 		}
 		return responseBuilder.build();
+	}
+
+	private String serializeResourceToRawJsonString(Resource resource, GraphType graphType, String rdfFormat, ListFilter listFilter) {
+		if (graphType == GraphType.String) {
+			return resourceSerializer.serializeResourceString(resource);
+		}
+		if (graphType == GraphType.Context || graphType == GraphType.SystemContext) {
+			return resourceSerializer.serializeResourceContext(resource)
+					.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE);
+		}
+		JSONObject jsonObject = serializeResourceToJson(resource, graphType, rdfFormat, listFilter);
+
+		return jsonObject != null ?
+				jsonObject.toString(JSON_OBJECT_TO_STRING_INDENT_SIZE)
+				: null;
 	}
 
 	// TODO: move this method to ResourceSerializer class?
@@ -265,9 +281,9 @@ public class EntryService {
 			case None -> resourceSerializer.serializeResourceNone(resource);
 			case Graph -> resourceSerializer.serializeResourceGraph(resource, rdfFormat);
 			case Pipeline -> resourceSerializer.serializeResourcePipeline(resource, rdfFormat);
-			case String -> null;
-			// TODO: other types, for example Context, SystemContext, PrincipalManager, etc
-			case ResultList, PipelineResult, Context, SystemContext -> IMMUTABLE_EMPTY_JSONOBJECT;
+			case String, Context, SystemContext -> null;
+			// TODO: other types, for example PrincipalManager, etc
+			case ResultList, PipelineResult -> IMMUTABLE_EMPTY_JSONOBJECT;
 		};
 	}
 
