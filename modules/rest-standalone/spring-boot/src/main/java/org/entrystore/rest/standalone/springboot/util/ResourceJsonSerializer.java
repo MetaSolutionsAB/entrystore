@@ -343,8 +343,8 @@ public class ResourceJsonSerializer {
 		if (resource instanceof Context context) {
 			Set<URI> uris = context.getEntries();
 			for (URI u : uris) {
-				String entryId = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/') + 1);
-				array.put(entryId);
+				String uriString = u.toASCIIString();
+				array.put(uriString.substring(uriString.lastIndexOf('/') + 1));
 			}
 		} else {
 			throw new IllegalArgumentException("Resource not instance of Context");

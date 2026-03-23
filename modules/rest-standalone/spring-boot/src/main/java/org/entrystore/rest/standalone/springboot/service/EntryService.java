@@ -32,6 +32,7 @@ import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RDFResource;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.impl.StringResource;
+import org.entrystore.repository.RepositoryException;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.standalone.springboot.model.api.CreateEntryRequestBody;
@@ -235,18 +236,17 @@ public class EntryService {
 		if (entryType == Local) {
 			Resource resource = entry.getResource();
 			if (resource == null) {
-				log.error("Resource is null for EntryId '{}', GraphType '{}', skipping resource serialization",
-						entry.getId(), graphType);
+				log.error("Resource is null for Context '{}', EntryId '{}', GraphType '{}', skipping resource serialization",
+						entry.getContext().getURI(), entry.getId(), graphType);
 			} else {
 				try {
 					String resourceString = serializeResourceToRawJsonString(resource, graphType, rdfFormat, listFilter);
 					if (resourceString != null) {
 						responseBuilder.resource(resourceString);
 					}
-				} catch (RuntimeException e) {
-					// serialization path can throw IllegalArgumentException, RepositoryException (from context.getEntries() → RDF4J) or JSONException
-					log.error("Failed to serialize resource for EntryId '{}', GraphType '{}', skipping resource serialization. Error: {}",
-							entry.getId(), graphType, e.getMessage(), e);
+				} catch (IllegalArgumentException | RepositoryException | JSONException e) {
+					log.error("Failed to serialize resource for Context '{}', EntryId '{}', GraphType '{}'. Error: {}",
+							entry.getContext().getURI(), entry.getId(), graphType, e.getMessage(), e);
 				}
 			}
 		}
