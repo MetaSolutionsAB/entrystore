@@ -6,6 +6,7 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
 
+
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
@@ -34,6 +35,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPassword@test.com', password)
 		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPasswordSameCookie@test.com', password)
 		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPasswordOldCookie@test.com', password)
+		EntryStoreClient.creds.put('userForLoginTemporaryLockout@test.com', password)
 	}
 
 	def cleanup() {
@@ -57,6 +59,14 @@ class CookieLoginResourceIT extends BaseSpec {
 		jsonResp['uri'] != null
 	}
 
+	def "GET /auth/user with invalid auth_token should respond with Unauthorized 401 "() {
+		when:
+		def connection = EntryStoreClient.getRequest('/auth/user', '', '', [Cookie: 'auth_token=invalidRandomString'])
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
 	def "POST /auth/cookie should fail if the data sent to server is larger then 32KB or unknown"() {
 		given:
 		def username = RandomStringUtils.secure().nextAlphabetic(32769)
@@ -78,7 +88,7 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
-		// TODO fix for Bad Request
+		// TODO: fix should be Bad Request
 		//loginConnection.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
@@ -424,6 +434,39 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getResponseCode() == HTTP_FORBIDDEN
 		loginConnection.getContentType().contains('text/html')
 		loginConnection.getErrorStream().text.contains('Login failed. The account is disabled.')
+	}
+
+	def "POST /auth/cookie should temporarily lockout user who entered wrong password too many times"() {
+		given:
+		def username = 'userForLoginTemporaryLockout@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
+		bodyParams = 'auth_username=' + username + '&auth_password=badPass123'
+		// 3 attempts with bad password
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+		bodyParams = 'auth_username=' + username + '&auth_password=' + password
+
+		when:
+		// 4th login attempt does the lockout
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+
+		then:
+		loginConnection.getResponseCode() == 429
+		loginConnection.getContentType().contains('text/html')
+		loginConnection.getErrorStream().text.contains('User account is temporarily disabled. Too many failed logins.')
+
+		when:
+		// wait for the temporary lockout period to pass
+		Thread.sleep(300)
+		def login2Connection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+
+		then:
+		login2Connection.getResponseCode() == HTTP_OK
 	}
 
 }

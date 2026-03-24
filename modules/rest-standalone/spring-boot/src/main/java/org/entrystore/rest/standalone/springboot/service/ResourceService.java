@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.model.Model;
+import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -34,6 +35,7 @@ import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundE
 import org.entrystore.rest.standalone.springboot.model.exception.EntityTooLargeException;
 import org.entrystore.rest.standalone.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.standalone.springboot.model.exception.InternalServerErrorException;
+import org.entrystore.rest.standalone.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.standalone.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.standalone.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.standalone.springboot.util.Email;
@@ -302,6 +304,8 @@ public class ResourceService {
 			try {
 				StringResource stringResource = (StringResource) entry.getResource();
 				stringResource.setString(new String(requestBody, StandardCharsets.UTF_8));
+			} catch (AuthorizationException e) {
+				throw e;
 			} catch (Exception e) {
 				throw new BadRequestException("Problem with input. Error: " + e.getMessage());
 			}
@@ -739,7 +743,7 @@ public class ResourceService {
 	}
 
 	private void importRDFResource(String rdfString) {
-		// TODO
+		throw new NotImplementedException("RDF resource import is not yet implemented");
 	}
 
 }

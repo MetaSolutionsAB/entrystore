@@ -11,9 +11,6 @@ server:
       max-age: ${entrystore.auth.cookie.max-age:86400s}
 
 
-app.security.saml.enabled: ${entrystore.auth.saml.enabled:false}
-
-
 info.app.version: @project.version@
 
 

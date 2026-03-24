@@ -16,7 +16,6 @@ public record StatusExtendedResponse(
 	String quotaDefault,
 	long echoMaxEntitySize,
 	boolean provenance,
-	boolean repositoryCache,
 	boolean oaiHarvesterMultiThreaded,
 	boolean quota,
 	boolean oaiHarvester,

@@ -21,19 +21,18 @@ import org.apache.commons.io.IOUtils;
 import org.entrystore.Entry;
 import org.entrystore.User;
 import org.entrystore.config.Config;
-import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.mail.Message;
-import javax.mail.MessagingException;
-import javax.mail.PasswordAuthentication;
-import javax.mail.Session;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMessage;
-import javax.mail.internet.MimeUtility;
+import jakarta.mail.Message;
+import jakarta.mail.MessagingException;
+import jakarta.mail.PasswordAuthentication;
+import jakarta.mail.Session;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeUtility;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -117,7 +116,7 @@ public class Email {
 		// Authentication
 		if (username != null && password != null) {
 			props.put("mail.smtp.auth", "true");
-			session = Session.getInstance(props, new javax.mail.Authenticator() {
+			session = Session.getInstance(props, new jakarta.mail.Authenticator() {
 				protected PasswordAuthentication getPasswordAuthentication() {
 					return new PasswordAuthentication(username, password);
 				}
@@ -164,13 +163,12 @@ public class Email {
 	public static boolean sendSignupConfirmation(Config config, String recipientName, String recipientEmail, String confirmationLink) {
 		String subject = config.getString(Settings.SIGNUP_SUBJECT, "User sign-up request");
 
-		String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
 		if (messageBodySignup == null) {
-			if (templatePath == null) {
-				templatePath = new File(ConfigurationManager.getConfigurationURI("email_signup.html")).getAbsolutePath();
-			}
+			String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
 			if (templatePath != null) {
 				messageBodySignup = loadTemplate(templatePath);
+			} else {
+				messageBodySignup = loadClasspathTemplate("email_signup.html");
 			}
 		}
 
@@ -201,11 +199,10 @@ public class Email {
 
 		if (messageBodyPasswordReset == null) {
 			String templatePath = config.getString(Settings.AUTH_PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
-			if (templatePath == null) {
-				templatePath = new File(ConfigurationManager.getConfigurationURI("email_pwreset.html")).getAbsolutePath();
-			}
 			if (templatePath != null) {
 				messageBodyPasswordReset = loadTemplate(templatePath);
+			} else {
+				messageBodyPasswordReset = loadClasspathTemplate("email_pwreset.html");
 			}
 		}
 
@@ -239,10 +236,11 @@ public class Email {
 
 		if (messageBodyPasswordChanged == null) {
 			String templatePath = config.getString(Settings.AUTH_PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
-			if (templatePath == null) {
-				templatePath = new File(ConfigurationManager.getConfigurationURI("email_pwchange.html")).getAbsolutePath();
+			if (templatePath != null) {
+				messageBodyPasswordChanged = loadTemplate(templatePath);
+			} else {
+				messageBodyPasswordChanged = loadClasspathTemplate("email_pwchange.html");
 			}
-			messageBodyPasswordChanged = loadTemplate(templatePath);
 		}
 
 		if (messageBodyPasswordChanged == null) {
@@ -260,6 +258,17 @@ public class Email {
 		messageText = messageText.replaceAll("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
 
 		sendMessage(config, msgTo, msgSubject, messageText);
+	}
+
+	private static String loadClasspathTemplate(String resourceName) {
+		try (InputStream is = Thread.currentThread().getContextClassLoader().getResourceAsStream(resourceName)) {
+			if (is != null) {
+				return IOUtils.toString(is, StandardCharsets.UTF_8);
+			}
+		} catch (IOException e) {
+			log.error("Failed to load classpath template {}: {}", resourceName, e.getMessage());
+		}
+		return null;
 	}
 
 	private static String loadTemplate(String url) {

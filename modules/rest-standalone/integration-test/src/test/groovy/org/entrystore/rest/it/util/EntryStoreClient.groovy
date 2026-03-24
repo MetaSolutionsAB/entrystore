@@ -7,16 +7,40 @@ import org.springframework.http.HttpMethod
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.nio.charset.StandardCharsets.UTF_8
 
+/**
+ * A utility client for interacting with the EntryStore REST API during integration tests.
+ * Handles authentication, request construction, and multipart form data.
+ *
+ * `creds` map contains User accounts that can be used by this client.
+ * On the first time use of a given User, the `authorize` method is called, to login the user.
+ * Then login cookie is stored in `cookies` map, to reuse it in the next requests for the given User.
+ *
+ */
 class EntryStoreClient {
 
 	static String host = 'localhost'
 	static int port = 8181 // Math.abs(new Random().nextInt() % 50000) + 10000
 	static String origin = 'http://' + host + ':' + port
 	static String baseUrl = origin + '/store'
+	static String adminsGroupUri = baseUrl + '/_principals/resource/_admins'
 
 	static def emptyJsonBody = JsonOutput.toJson([:])
 
-	static def creds = ['admin': 'adminpass']
+	// Map of Users (username->user) that were created during the tests initialization (createCommonUserAccounts)
+	static def createdEsUsers = [:]
+
+	// User accounts that can be used by this client
+	static def creds = [
+		'admin'            : 'adminpass',
+		'user'             : 'userPass123',
+		'userInAdminGroup' : 'userPass123',
+		'userForNameChange': 'userPass123'
+	]
+
+	static def accountsInAdminGroup = [
+		'userInAdminGroup'
+	]
+
 	static def cookies = [:].withDefault { userName ->
 		{
 			authorize(userName.toString())
@@ -25,6 +49,10 @@ class EntryStoreClient {
 
 	static def cleanCookies() {
 		cookies.clear()
+	}
+
+	static def isAnAdmin(String username) {
+		return accountsInAdminGroup.contains(username)
 	}
 
 	def static getRequest(String path, String asUser = 'admin', String requestAcceptType = 'application/json', Map<String, String> extraHeaders = [:]) {
@@ -75,8 +103,10 @@ class EntryStoreClient {
 		return sendRequestAsStream(HttpMethod.POST, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
 	}
 
-	def static deleteRequest(String path, String asUser = 'admin') {
-		return sendRequestAsStream(HttpMethod.DELETE, path, null, asUser, null)
+	def static deleteRequest(String path, String body = emptyJsonBody, String asUser = 'admin',
+							 String contentType = 'application/json', Map<String, String> extraHeaders = [:]) {
+		def contentStream = (body == null) ? null : new ByteArrayInputStream(body.getBytes(UTF_8))
+		return sendRequestAsStream(HttpMethod.DELETE, path, contentStream, asUser, contentType, extraHeaders)
 	}
 
 	def static sendRequestAsStream(HttpMethod method, String path, InputStream inputStream, String asUser,
@@ -92,7 +122,11 @@ class EntryStoreClient {
 			connection.setRequestProperty('Content-Type', contentType)
 		}
 		extraHeaders?.each { key, value ->
-			connection.setRequestProperty(key, value)
+			// Skip Content-Length — HttpURLConnection manages it internally
+			// (setting it manually conflicts with chunked streaming mode)
+			if (key != 'Content-Length') {
+				connection.setRequestProperty(key, value)
+			}
 		}
 
 		if (inputStream != null) {
@@ -126,8 +160,7 @@ class EntryStoreClient {
 
 	def static authorize(String asUser) {
 		def bodyParams = 'auth_username=' + asUser + '&auth_password=' + creds[asUser]
-		def conn = postRequest('/auth/cookie', bodyParams, null,
-			'application/x-www-form-urlencoded')
+		def conn = postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		assert conn.getResponseCode() == HTTP_OK
 		def cookies = conn.getHeaderField('Set-Cookie')

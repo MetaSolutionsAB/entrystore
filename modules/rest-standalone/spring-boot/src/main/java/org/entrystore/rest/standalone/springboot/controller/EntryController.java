@@ -1,9 +1,24 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.standalone.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.rest.standalone.springboot.model.api.GetEntryNameResponse;
@@ -13,7 +28,9 @@ import org.entrystore.rest.standalone.springboot.model.api.SetEntryNameRequestBo
 import org.entrystore.rest.standalone.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.standalone.springboot.service.EntryService;
+import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -55,7 +72,7 @@ public class EntryController {
 		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
 		// (+ is replaced with a space) we need to replace the space back to '+'
 		if (rdfFormat != null) {
-			rdfFormat = rdfFormat.trim().replace(' ', '+');
+			rdfFormat = GraphUtil.validateRdfMediaType(rdfFormat.trim().replace(' ', '+'));
 		}
 		return entryService.getEntryInJsonFormat(contextId, entryId, rdfFormat, includeAll != null, listFilter);
 	}
@@ -64,18 +81,22 @@ public class EntryController {
 			summary = "Returns the entry information.",
 			description = "Returns an RDF graph unless application/json is requested in which case the JSON-structure " +
 					"as specified in the response body is used.")
-	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = {"application/rdf+xml", "text/n3", "text/turtle",
-			"application/trix", "application/n-triples", "application/trig", "application/ld+json", "application/rdf+json"})
-	public String getEntryInRdfFormat(
+	@GetMapping(path = "/{context-id}/entry/{entry-id}", produces = {"application/rdf+xml", "text/n3", "text/rdf+n3",
+			"text/turtle", "application/trix", "application/n-triples", "application/trig", "application/ld+json",
+			"application/rdf+json"})
+	public ResponseEntity<String> getEntryInRdfFormat(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
 			@RequestHeader(value = "Accept", required = false, defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
 	) {
-
-		if (StringUtils.isEmpty(acceptHeader) || MediaType.ALL_VALUE.equals(acceptHeader)) {
-			acceptHeader = DEFAULT_MEDIA_TYPE;
-		}
-		return entryService.getEntryInRdfFormat(contextId, entryId, acceptHeader);
+		// Return ResponseEntity instead of String to control the response Content-Type. Spring MVC would otherwise
+		// echo back the client's Accept type (text/rdf+n3) as the response Content-Type, but we respond with
+		// the normalized form (text/n3) since text/rdf+n3 is a non-standard legacy N3 MIME type.
+		String mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, DEFAULT_MEDIA_TYPE);
+		String body = entryService.getEntryInRdfFormat(contextId, entryId, mediaType);
+		return ResponseEntity.ok()
+				.contentType(MediaType.parseMediaType(mediaType))
+				.body(body);
 	}
 
 	@Operation(
@@ -91,7 +112,8 @@ public class EntryController {
 			@RequestBody String body
 	) {
 
-		String mediaType = determineMediaType(format, contentType);
+		String mediaType = GraphUtil.validateRdfMediaType(
+				determineMediaType(format, contentType), HttpStatus.UNSUPPORTED_MEDIA_TYPE);
 
 		Entry modifiedEntry = entryService.modifyEntry(contextId, entryId, body, mediaType, applyACLtoChildren != null);
 

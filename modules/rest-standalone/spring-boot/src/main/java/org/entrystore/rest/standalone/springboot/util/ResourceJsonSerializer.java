@@ -21,12 +21,14 @@ import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.impl.StringResource;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.rest.standalone.springboot.model.api.ListFilter;
+import org.entrystore.rest.standalone.springboot.service.auth.LoginAttemptService;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -56,6 +58,7 @@ public class ResourceJsonSerializer {
 
 	private final PrincipalManager pm;
 	private final RepositoryManagerImpl repositoryManager;
+	private final LoginAttemptService loginAttemptService;
 
 	public JSONObject serializeResourceGroup(Resource resource, String rdfFormat) {
 		JSONObject resourceObj = new JSONObject();
@@ -127,13 +130,10 @@ public class ResourceJsonSerializer {
 					resourceObj.put("disabled", true);
 				}
 
-				/*
-				// TODO: find a way to get this info in Spring-boot
-				UserTemporaryLockout lockedOutUser = userTempLockoutCache.getLockedOutUser(user.getName());
-				if (lockedOutUser != null) {
-					resourceObj.put("disabledUntil", lockedOutUser.disableUntil());
+				Instant lockedUntil = loginAttemptService.getLockedUntil(user.getName().toLowerCase());
+				if (lockedUntil != null) {
+					resourceObj.put("disabledUntil", lockedUntil);
 				}
-				 */
 
 				JSONObject customProperties = new JSONObject();
 				for (Map.Entry<String, String> propEntry : user.getCustomProperties().entrySet()) {
@@ -343,8 +343,8 @@ public class ResourceJsonSerializer {
 		if (resource instanceof Context context) {
 			Set<URI> uris = context.getEntries();
 			for (URI u : uris) {
-				String entryId = (u.toASCIIString()).substring((u.toASCIIString()).lastIndexOf('/') + 1);
-				array.put(entryId);
+				String uriString = u.toASCIIString();
+				array.put(uriString.substring(uriString.lastIndexOf('/') + 1));
 			}
 		} else {
 			throw new IllegalArgumentException("Resource not instance of Context");

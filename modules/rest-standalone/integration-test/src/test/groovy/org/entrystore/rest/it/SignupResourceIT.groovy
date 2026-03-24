@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import com.icegreen.greenmail.util.GreenMail
@@ -6,7 +22,7 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
 
-import javax.mail.internet.InternetAddress
+import jakarta.mail.internet.InternetAddress
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -14,6 +30,7 @@ import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class SignupResourceIT extends BaseSpec {
 
@@ -27,6 +44,7 @@ class SignupResourceIT extends BaseSpec {
 
 	def setupSpec() {
 		genericCredsClone = EntryStoreClient.creds.clone()
+		EntryStoreClient.creds.put('userSignupNoConfirm@test.com', newPassword)
 		EntryStoreClient.creds.put('userSignupCustomPropsConfirm@test.com', newPassword)
 		EntryStoreClient.creds.put('userSignupCustomPropsFormConfirm@test.com', newPassword)
 		greenMail.start()
@@ -40,6 +58,9 @@ class SignupResourceIT extends BaseSpec {
 		EntryStoreClient.creds = genericCredsClone
 		greenMail.stop()
 	}
+
+	// TODO: previously signup requests were called by admin, now by guest. However, it seems that did not have any impact on the process or the signup response regardless of who is requesting the signup
+	// TODO: should we not allow to signup if you are logged in, or if you are a non-admin user?
 
 	def "POST /auth/signup should fail if the data sent to server is said to be JSON but is not JSON"() {
 		given:
@@ -425,7 +446,7 @@ class SignupResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 1
 	}
 
-	def "GET /auth/pwreset should not confirm password reset without providing a token"() {
+	def "GET /auth/signup should respond with a HTML login page"() {
 		when:
 		def confirmConn = EntryStoreClient.getRequest('/auth/signup')
 
@@ -649,7 +670,6 @@ class SignupResourceIT extends BaseSpec {
 		confirmConn.getURL().toString() == 'http://localhost:8181/auth/signup?confirm=' + token
 	}
 
-	// TODO not sure how to invoke 500 server error, maybe blacklisted user?
 	def "GET /auth/signup should not confirm user signup and redirect to failure url"() {
 		given:
 		def username = 'userSignupFailureUrl@test.com'
@@ -743,4 +763,29 @@ class SignupResourceIT extends BaseSpec {
 		resourceRespJson['name'] == username.toLowerCase()
 	}
 
+	def "POST /auth/signup should not allow to login for the user before confirming the signup"() {
+		given:
+		def username = 'userSignupNoConfirm@test.com'
+		def bodyParams = 'firstname=' + firstName + '&lastname=' + lastName + '&email=' + username + '&password=' + newPassword + '&g-recaptcha-response=' + grecaptcharesponse
+
+		when: "User signs up"
+		EntryStoreClient.postRequest('/auth/signup', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_OK
+
+		then: "User should not be able to login before signup is confirmed"
+		def loginBodyParams = 'auth_username=' + username + '&auth_password=' + newPassword
+		EntryStoreClient.postRequest('/auth/cookie', loginBodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+
+		when: "signup is confirmed"
+		def messageContent = greenMail.getReceivedMessages()[0].getContent()
+		def startIndex = messageContent.toString().indexOf('?confirm') + 9
+		def token = messageContent.toString().substring(startIndex, startIndex + 16)
+		EntryStoreClient.getRequest('/auth/signup?confirm=' + token, '').getResponseCode() == HTTP_CREATED
+
+		then: "User should be able to login"
+		def info = EntryStoreClient.getRequest('/auth/user', username)
+		info.getResponseCode() == HTTP_OK
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		infoRespJson['id'] != null
+		infoRespJson['user'] == username.toLowerCase()
+	}
 }

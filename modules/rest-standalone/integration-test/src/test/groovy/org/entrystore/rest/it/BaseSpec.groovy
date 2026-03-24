@@ -4,11 +4,12 @@ import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.entrystore.rest.it.util.UserUtil
 import org.entrystore.rest.standalone.springboot.EntryStoreApplicationStandaloneSpringBoot
 import org.slf4j.LoggerFactory
 import org.springframework.boot.SpringApplication
 import org.springframework.context.ConfigurableApplicationContext
-import org.testcontainers.containers.SolrContainer
+import org.testcontainers.solr.SolrContainer
 import org.testcontainers.containers.output.Slf4jLogConsumer
 import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.spock.Testcontainers
@@ -28,6 +29,13 @@ import static org.awaitility.Awaitility.await
 @Testcontainers
 abstract class BaseSpec extends Specification {
 
+	static {
+		// Allow setting restricted HTTP headers (e.g. Origin, Access-Control-Request-Method)
+		// on HttpURLConnection, needed for CORS integration tests.
+		// Must be set before HttpURLConnection class is loaded.
+		System.setProperty('sun.net.http.allowRestrictedHeaders', 'true')
+	}
+
 	static def log = LoggerFactory.getLogger(this.class)
 	static def JSON_PARSER = new JsonSlurper()
 	static def appStarted = false
@@ -36,7 +44,7 @@ abstract class BaseSpec extends Specification {
 
 	// make sure Solr version matches the version used in the parent pom - 'solr.version' property
 	@Shared
-	def static solrContainer = new SolrContainer(DockerImageName.parse('solr:9.8.1'))
+	def static solrContainer = new SolrContainer(DockerImageName.parse('solr:9.10.1'))
 		.withEnv('SOLR_MODULES', 'analysis-extras')
 		.withCopyFileToContainer(MountableFile.forClasspathResource('solr/'), '/entrystore-core/conf')
 
@@ -60,9 +68,25 @@ abstract class BaseSpec extends Specification {
 			log.info('Starting EntryStoreApp without SAML')
 			def args = ['--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core'] as String[]
 			appInstance = SpringApplication.run(EntryStoreApplicationStandaloneSpringBoot.class, args)
+			createCommonUserAccounts()
 			appStarted = true
 		} else {
 			log.info('EntryStoreApp already started')
+		}
+	}
+
+	static void createCommonUserAccounts() {
+		// Create all users except 'admin' ('admin' is created by the app itself)
+		EntryStoreClient.creds.each {
+			username, password -> {
+				if (username != 'admin') {
+					def isAdmin = EntryStoreClient.isAnAdmin(username)
+					log.info('Creating ES user: {} (Admin: {})', username, isAdmin)
+					def user = UserUtil.createUser(username, null, isAdmin)
+					UserUtil.setUserPassword(user['resourceUri'].toString(), password)
+					EntryStoreClient.createdEsUsers[username] = user
+				}
+			}
 		}
 	}
 

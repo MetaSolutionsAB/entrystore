@@ -11,7 +11,6 @@ import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundE
 import org.entrystore.rest.standalone.springboot.service.AuthService;
 import org.entrystore.rest.standalone.springboot.service.SamlAuthService;
 import org.entrystore.rest.standalone.springboot.util.HttpUtil;
-import org.entrystore.rest.standalone.springboot.util.JsonUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -36,7 +35,7 @@ public class AuthController {
 	private final String signupTitle = "Sign-up";
 	private final String passwordResetTitle = "Password reset";
 
-	@Value("${app.security.saml.enabled:false}")
+	@Value("${entrystore.auth.saml.enabled:false}")
 	private boolean isSamlAuthEnabled;
 
 	private final AuthService authService;
@@ -80,8 +79,7 @@ public class AuthController {
 
 	@Operation(summary = "Generates new link for password change confirmation and sends an email to the User.")
 	@PostMapping(path = "/auth/pwreset",
-			consumes = {MediaType.APPLICATION_JSON_VALUE},
-			produces = {MediaType.TEXT_HTML_VALUE}
+			consumes = {MediaType.APPLICATION_JSON_VALUE}
 	)
 	public String resetPassword(
 			HttpServletRequest request,
@@ -96,8 +94,7 @@ public class AuthController {
 
 	@Operation(summary = "Generates new link for password change confirmation and sends an email to the User. Request is an html form.")
 	@PostMapping(path = "/auth/pwreset",
-			consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE},
-			produces = {MediaType.TEXT_HTML_VALUE}
+			consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE}
 	)
 	public String resetPasswordViaForm(
 			HttpServletRequest request,
@@ -136,17 +133,18 @@ public class AuthController {
 
 	@Operation(summary = "Generates new link for user sign-up confirmation and sends an email to provided email address.")
 	@PostMapping(path = "/auth/signup",
-			consumes = {MediaType.APPLICATION_JSON_VALUE},
-			produces = {MediaType.TEXT_HTML_VALUE}
+			consumes = {MediaType.APPLICATION_JSON_VALUE}
 	)
 	public String signup(
 			HttpServletRequest request,
+			HttpServletResponse response,
 			Model model,
-			@RequestBody String requestBody) {
-
-		HashMap<String, String> parameters = JsonUtil.jsonToMap(requestBody);
+			@RequestBody HashMap<String, String> parameters) {
 
 		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
+
+		response.setContentType(MediaType.TEXT_HTML_VALUE);
+
 		SignupRequestBody signupRequestBody = new SignupRequestBody(
 				parameters.get("email"),
 				parameters.get("password"),
@@ -171,8 +169,7 @@ public class AuthController {
 
 	@Operation(summary = "Generates new link for user sign-up confirmation and sends an email to provided email address. Request is an html form.")
 	@PostMapping(path = "/auth/signup",
-			consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE},
-			produces = {MediaType.TEXT_HTML_VALUE}
+			consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE}
 	)
 	public String signupViaForm(
 			HttpServletRequest request,

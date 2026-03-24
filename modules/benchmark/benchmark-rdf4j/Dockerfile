@@ -1,4 +1,4 @@
-FROM openjdk:23-jdk-bullseye
+FROM eclipse-temurin:25-jdk
 MAINTAINER entryscape.com
 COPY benchmark-rdf4j-0.1.0-SNAPSHOT.jar app.jar
 COPY libs libs

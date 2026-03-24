@@ -6,6 +6,7 @@ import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.rest.standalone.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.standalone.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.standalone.springboot.service.UserService;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -61,7 +62,9 @@ public class ESUserDetailsService implements UserDetailsService {
 			if (userEntry != null && GraphType.User.equals(userEntry.getGraphType())) {
 				User user = ((User) userEntry.getResource());
 				if (user.getSaltedHashedSecret() != null) {
-					return mapESUserToUserDetails(user);
+					SessionInfo.SessionInfoBuilder sessionInfo = SessionInfo.builder()
+							.userName(username.toLowerCase());
+					return mapESUserToUserSessionDetails(user, sessionInfo.build());
 				} else {
 					log.error("No secret found for user: '{}'", username);
 				}
@@ -99,7 +102,7 @@ public class ESUserDetailsService implements UserDetailsService {
 		return null;
 	}
 
-	private UserDetails mapESUserToUserDetails(User user) {
+	private UserDetails mapESUserToUserSessionDetails(User user, SessionInfo sessionInfo) {
 
 		UserDetails userDetails = org.springframework.security.core.userdetails.User
 				.withUsername(user.getEntry().getResourceURI().toString())
@@ -108,6 +111,6 @@ public class ESUserDetailsService implements UserDetailsService {
 				.roles(userService.isAdmin(user) ? UserAuthRole.ADMIN.name() : UserAuthRole.USER.name())
 				.build();
 
-		return new ESUserDetails(userDetails, user);
+		return new ESUserSessionDetails(userDetails, user, sessionInfo);
 	}
 }

@@ -9,6 +9,9 @@ import org.entrystore.rest.standalone.springboot.model.api.GetAuthUserResponse;
 import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -26,28 +29,43 @@ public class UserService {
 				principalManager.getAdminGroup().isMember(user);
 	}
 
-	public GetAuthUserResponse getUserInfo(String locales) {
+	public GetAuthUserResponse getUserInfo(String locales, int maxAge) {
 
-		User user = principalManager.getUser(principalManager.getAuthenticatedUserURI());
+		User authenticatedUser = principalManager.getUser(principalManager.getAuthenticatedUserURI());
 
-		if (user == null) {
+		if (authenticatedUser == null) {
 			throw new EntityNotFoundException("The logged-in user " + principalManager.getAuthenticatedUserURI() + " does not exist anymore");
 		}
 
 		Map<String, Double> clientAcceptedLanguages = parseLocalesHeader(locales);
 
 		String homeContext = null;
-		String authTokenExpires = null;
-		if (!user.getURI().equals(principalManager.getGuestUser().getURI())) {
-			Context context = user.getHomeContext();
+		Instant authTokenExpires = null;
+		if (!authenticatedUser.getURI().equals(principalManager.getGuestUser().getURI())) {
+			Context context = authenticatedUser.getHomeContext();
 			if (context != null) {
 				homeContext = context.getEntry().getId();
 			}
+
+			if (maxAge > 0) {
+				authTokenExpires = Instant.now().plusSeconds(maxAge);
+			}
 		}
 
-		return new GetAuthUserResponse(user.getEntry().getId(), homeContext, user.getName(),
-				user.getEntry().getEntryURI().toString(), user.getLanguage(), clientAcceptedLanguages,
-				user.getExternalID(), authTokenExpires);
+		GetAuthUserResponse.GetAuthUserResponseBuilder response = GetAuthUserResponse.builder()
+				.id(authenticatedUser.getEntry().getId())
+				.homeContext(homeContext)
+				.user(authenticatedUser.getName())
+				.uri(authenticatedUser.getEntry().getEntryURI().toString())
+				.language(authenticatedUser.getLanguage())
+				.clientAcceptLanguage(clientAcceptedLanguages)
+				.externalId(authenticatedUser.getExternalID());
+
+		if (authTokenExpires != null) {
+			response.authTokenExpires(LocalDateTime.ofInstant(authTokenExpires, ZoneId.systemDefault()));
+		}
+
+		return response.build();
 	}
 
 	private static Map<String, Double> parseLocalesHeader(String value) {

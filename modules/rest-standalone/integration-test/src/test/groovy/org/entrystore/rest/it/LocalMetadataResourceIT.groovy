@@ -1,11 +1,31 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 
+import java.text.SimpleDateFormat
+
 import static java.net.HttpURLConnection.HTTP_BAD_METHOD
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN
+import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
@@ -20,7 +40,39 @@ class LocalMetadataResourceIT extends BaseSpec {
 		getOrCreateContext([contextId: contextId])
 	}
 
-	def "GET /{context-id}/metadata/{entryId} should fetch local metadata of the entry"() {
+	def "GET /{context-id}/metadata/{entryId} as guest should respond with Unauthorized 401"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, '')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /{context-id}/metadata/{entryId} as non-admin user should respond with Forbidden"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, 'user')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_FORBIDDEN
+	}
+
+	def "GET /{context-id}/metadata/{entryId} as admin should fetch local metadata of the entry"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -45,7 +97,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcTitles[0]['value'] == 'Cool entry'
 	}
 
-	def "GET /{context-id}/metadata/{entryId} should not fetch local metadata of non-existing entry"() {
+	def "GET /{context-id}/metadata/{entryId} as admin should not fetch local metadata of deleted entry"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -54,7 +106,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryId = createEntry(contextId, params, body)
 		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
 		def deleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId)
-		deleteConn.getResponseCode() == HTTP_NO_CONTENT
+		assert deleteConn.getResponseCode() == HTTP_NO_CONTENT
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri)
@@ -63,7 +115,26 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	def "GET /{context-id}/metadata/{entryId} should not fetch metadata of the entry without metadata"() {
+	// TODO: Warning - GET as guest returns 401 when metadata exists, and 404 when metadata does not exist
+	def "GET /{context-id}/metadata/{entryId} as guest should not fetch local metadata of deleted entry"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+		def deleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId)
+		assert deleteConn.getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, '')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "GET /{context-id}/metadata/{entryId} as admin should not fetch metadata of the entry without metadata"() {
 		given:
 		def metadataUrl = 'https://bbc.co.uk/metadata'
 		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
@@ -75,6 +146,23 @@ class LocalMetadataResourceIT extends BaseSpec {
 
 		when:
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri)
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "GET /{context-id}/metadata/{entryId} as guest should not fetch metadata of the entry without metadata"() {
+		given:
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, '')
 
 		then:
 		entryMetaConn.getResponseCode() == HTTP_NOT_FOUND
@@ -153,6 +241,29 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcTitles[0]['value'] == 'Not cool entry'
 	}
 
+	def "PUT /{context-id}/metadata/{entry-id} as guest should not update the metadata of the entry"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
+		def storedMetadataUrl = entryMetadata[0]['value'].toString()
+		def newBody = [(storedMetadataUrl): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																			   value: 'Not cool entry']],]]
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/metadata/' + entryId,
+			JsonOutput.toJson(newBody), '', 'application/json')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
 	def "PUT /{context-id}/metadata/{entry-id} should not update the metadata of the non-existing entry"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
@@ -178,7 +289,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		editEntryConn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	def "DELETE /{context-id}/metadata/{entryId} should delete local metadata of the entry"() {
+	def "DELETE /{context-id}/metadata/{entryId} as admin should delete local metadata of the entry"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -204,7 +315,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		(entryMetaRespJson as Map).keySet().size() == 0
 	}
 
-	def "DELETE /{context-id}/metadata/{entryId} should not delete metadata of the entry without metadata"() {
+	def "DELETE /{context-id}/metadata/{entryId} as admin should not delete metadata of the entry without metadata"() {
 		given:
 		def metadataUrl = 'https://bbc.co.uk/metadata'
 		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
@@ -217,7 +328,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryDeleteConn.getResponseCode() == HTTP_BAD_METHOD
 	}
 
-	def "DELETE /{context-id}/metadata/{entryId} should not delete local metadata of the entry as un-authorized user"() {
+	def "DELETE /{context-id}/metadata/{entryId} as guest should not delete local metadata of the entry"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -226,11 +337,33 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryId = createEntry(contextId, params, body)
 
 		when:
-		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/' + entryId, null)
-
+		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/' + entryId, '[]', '')
 
 		then:
 		entryDeleteConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	// TODO: Warning - DELETE as guest returns 401 when metadata exists, and 405 when metadata does not exist
+	def "DELETE /{context-id}/metadata/{entryId} as guest should not delete metadata of the entry without metadata"() {
+		given:
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
+		def entryId = createEntry(contextId, params)
+
+		when:
+		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/' + entryId, '')
+
+		then:
+		entryDeleteConn.getResponseCode() == HTTP_BAD_METHOD
+	}
+
+	// TODO: Warning - DELETE as guest returns 401 when metadata exists, and 404 when entry does not exist
+	def "DELETE /{context-id}/metadata/{entryId} as guest should not delete non existing metadata"() {
+		when:
+		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/asdasdasd312123', '')
+
+		then:
+		entryDeleteConn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
 	def "GET /{context-id}/metadata/{entryId} should not fetch local metadata with a valid recursive parameter, when that is not part of the metadata"() {
@@ -647,5 +780,173 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getContentType().contains('application/json')
 		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.getInputStream().text)
 		(entryMetaRespJson as Map).keySet().size() == 4
+	}
+
+	def "GET /{context-id}/metadata/{entryId} should include Last-Modified and ETag headers"() {
+		given:
+		def beforeRequest = new Date()
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Header test entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri)
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+
+		def lastModified = entryMetaConn.getHeaderField('Last-Modified')
+		lastModified != null
+		def httpDateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
+		httpDateFormat.parse(lastModified).time >= beforeRequest.time - 1000
+
+		def etag = entryMetaConn.getHeaderField('ETag')
+		etag != null
+		etag ==~ /"\d+"/
+	}
+
+	def "GET /{context-id}/metadata/{entryId} with recursive should include Last-Modified and ETag headers"() {
+		given:
+		def beforeRequest = new Date()
+		def entryD1params = [entrytype: 'link', resource: resourceUrl + '/rec1']
+		def entryD1ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD1body = [metadata: [(entryD1ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [
+				[type: 'literal', value: 'Recursive depth 1']
+			]
+		]]]
+		def entryD1Id = createEntry(contextId, entryD1params, entryD1body)
+
+		def entryD0params = [entrytype: 'link', resource: resourceUrl + '/rec0']
+		def entryD0ResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def entryD0body = [metadata: [(entryD0ResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE)  : [
+				[type: 'literal', value: 'Recursive depth 0']
+			],
+			(NameSpaceConst.DC_TERM_CREATOR): [
+				[type : 'uri',
+				 value: EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id]
+			]
+		]]]
+		def entryD0Id = createEntry(contextId, entryD0params, entryD0body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryD0Id
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + "?recursive=dct")
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+
+		def lastModified = entryMetaConn.getHeaderField('Last-Modified')
+		lastModified != null
+		def httpDateFormat = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US)
+		httpDateFormat.parse(lastModified).time >= beforeRequest.time - 1000
+
+		def etag = entryMetaConn.getHeaderField('ETag')
+		etag != null
+		etag ==~ /"\d+"/
+	}
+
+	def "GET /{context-id}/metadata/{entryId} with format=text/html should return 406 Not Acceptable"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + '?format=text/html')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_NOT_ACCEPTABLE
+	}
+
+	def "GET /{context-id}/metadata/{entryId} with format=application/rdf+xml should return 200"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri + '?format=application/rdf%2Bxml')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/rdf+xml')
+	}
+
+	def "GET /{context-id}/metadata/{entryId} with Accept header containing supported type among unsupported ones should return 200"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, 'admin', 'text/html, application/rdf+xml')
+
+		then:
+		entryMetaConn.getResponseCode() == HTTP_OK
+		entryMetaConn.getContentType().contains('application/rdf+xml')
+	}
+
+	def "GET /{context-id}/metadata/{entry-id} with Accept text/rdf+n3 should return N3 with Content-Type text/n3"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId
+
+		when:
+		def getConn = EntryStoreClient.getRequest(metadataUri, 'admin', 'text/rdf+n3')
+
+		then:
+		getConn.getResponseCode() == HTTP_OK
+		getConn.getContentType().contains('text/n3')
+		def response = getConn.getInputStream().text
+		response.contains('Cool entry')
+	}
+
+	def "PUT /{context-id}/metadata/{entry-id} with Content-Type text/rdf+n3 should accept legacy N3 MIME type"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [(NameSpaceConst.DC_TERM_TITLE): [[type : 'literal',
+																					value: 'Cool entry']],]]]
+		def entryId = createEntry(contextId, params, body)
+		def metadataUri = '/' + contextId + '/metadata/' + entryId
+
+		def n3Body = """
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+<${EntryStoreClient.baseUrl}/${contextId}/resource/${entryId}> dcterms:title "Updated via legacy N3 type" .
+"""
+
+		when:
+		def putConn = EntryStoreClient.putRequest(metadataUri, n3Body, 'admin', 'text/rdf+n3')
+
+		then:
+		putConn.getResponseCode() == HTTP_NO_CONTENT
+
+		when:
+		def getConn = EntryStoreClient.getRequest(EntryStoreClient.baseUrl + metadataUri, 'admin', 'text/n3')
+
+		then:
+		getConn.getResponseCode() == HTTP_OK
+		getConn.getContentType().contains('text/n3')
+		def response = getConn.getInputStream().text
+		response.contains('Updated via legacy N3 type')
 	}
 }

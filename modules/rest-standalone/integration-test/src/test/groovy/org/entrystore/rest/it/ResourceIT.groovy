@@ -4,13 +4,19 @@ import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 import org.entrystore.rest.it.util.UserUtil
+import org.springframework.http.HttpMethod
+
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
+import static java.net.HttpURLConnection.HTTP_NOT_IMPLEMENTED
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ResourceIT extends BaseSpec {
 
@@ -34,7 +40,37 @@ class ResourceIT extends BaseSpec {
 		EntryStoreClient.creds = genericCredsClone
 	}
 
-	def "GET /{context-id}/resource/{entry-id} on String graph should return the text data"() {
+	def "GET /{context-id}/resource/{entry-id} as guest on String graph should respond with Unauthorized 401"() {
+		given:
+		// create local String entry
+		def someText = 'Some text'
+		def params = [graphtype: 'string']
+		def body = [resource: someText]
+		def entryId = createEntry(contextId, params, body)
+		assert entryId.length() > 0
+		// fetch URI of created resource for the local entry
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		assert entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		assert entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		assert entryRespJson['info'][entryUri] != null
+		assert entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		assert entryResources.size() == 1
+		assert entryResources[0]['value'] != null
+		def createdResourceUri = entryResources[0]['value'].toString()
+		assert createdResourceUri.startsWith(EntryStoreClient.baseUrl + '/' + contextId + '/resource/')
+
+		when:
+		// fetch created resource
+		def resourceConn = EntryStoreClient.getRequest(createdResourceUri, '')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /{context-id}/resource/{entry-id} as admin on String graph should return the text data"() {
 		given:
 		// create local String entry
 		def someText = 'Some text'
@@ -70,7 +106,7 @@ class ResourceIT extends BaseSpec {
 		resourceRespText == someText
 	}
 
-	def "GET /{context-id}/resource/{entry-id} on List graph should return the entries list"() {
+	def "GET /{context-id}/resource/{entry-id} as guest on List graph should return the entries list"() {
 		given:
 		// create minimal entry to be used in the list
 		def givenEntryId = createEntry(contextId, [:])
@@ -94,8 +130,38 @@ class ResourceIT extends BaseSpec {
 		def createdResourceUri = entryResources[0]['value'].toString()
 		assert createdResourceUri.startsWith(EntryStoreClient.baseUrl + '/' + contextId + '/resource/')
 
-		when:
-		// fetch created resource
+		when: "we fetch created resource"
+		def resourceConn = EntryStoreClient.getRequest(createdResourceUri, '')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /{context-id}/resource/{entry-id} as admin on List graph should return the entries list"() {
+		given:
+		// create minimal entry to be used in the list
+		def givenEntryId = createEntry(contextId, [:])
+		// create list entry
+		def resourceVal = [givenEntryId, 'non-existing-id']
+		def params = [graphtype: 'list']
+		def body = [resource: resourceVal]
+		def entryId = createEntry(contextId, params, body)
+		assert entryId.length() > 0
+		// fetch URI of created resource for the local entry
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		assert entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		assert entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		assert entryRespJson['info'][entryUri] != null
+		assert entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		assert entryResources.size() == 1
+		assert entryResources[0]['value'] != null
+		def createdResourceUri = entryResources[0]['value'].toString()
+		assert createdResourceUri.startsWith(EntryStoreClient.baseUrl + '/' + contextId + '/resource/')
+
+		when: "we fetch created resource"
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
 
 		then:
@@ -106,7 +172,23 @@ class ResourceIT extends BaseSpec {
 		resourceResp == [givenEntryId]
 	}
 
-	def "GET /{context-id}/resource/{entry-id} on Context graph should return the entries list that are in the context"() {
+	// TODO: Verify behaviour - Guest can access entries list for any context
+	def "GET /_contexts/resource/{entry-id} as guest on Context graph should return the entries list that are in the context"() {
+		given:
+		// create minimal entry in the context
+		def givenEntryId = createEntry(contextId, [:])
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_contexts/resource/' + contextId, '')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceResp.collect().contains(givenEntryId)
+	}
+
+	def "GET /_contexts/resource/{entry-id} as admin on Context graph should return the entries list that are in the context"() {
 		given:
 		// create minimal entry in the context
 		def givenEntryId = createEntry(contextId, [:])
@@ -121,10 +203,27 @@ class ResourceIT extends BaseSpec {
 		resourceResp.collect().contains(givenEntryId)
 	}
 
-	def "GET /{context-id}/resource/{entry-id} on User graph should return data about the user"() {
+	def "GET /{context-id}/resource/{entry-id} as guest on a User graph should return empty response"() {
 		given:
-		def username = 'Resource Test User name'
-		def user = UserUtil.createUser(username)
+		def user = EntryStoreClient.createdEsUsers['user']
+		def entryId = user['entryId'].toString()
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId, '')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceResp['name'] == null
+		resourceResp['language'] == null
+		resourceResp['customProperties'] == null
+		(resourceResp as Map).keySet().size() == 0
+	}
+
+	def "GET /{context-id}/resource/{entry-id} as admin on a User graph should return data about the user"() {
+		given:
+		def user = EntryStoreClient.createdEsUsers['user']
 		def entryId = user['entryId'].toString()
 
 		when:
@@ -134,14 +233,39 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
 		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
-		resourceResp['name'] == username.toLowerCase()
+		resourceResp['name'] == user['username'].toString().toLowerCase()
 		resourceResp['language'] == null
 		resourceResp['customProperties'] == [:]
 	}
 
-	def "GET /{context-id}/resource/{entry-id} on Group graph should return data about the group"() {
+	def "GET /{context-id}/resource/{entry-id} as guest on Group graph should return data about the group"() {
 		given:
 		def requestResourceName = [name: 'Test Grouppppen']
+		def params = [graphtype: 'group']
+		def body = JsonOutput.toJson([resource: requestResourceName])
+		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
+		assert connection.getResponseCode() == HTTP_CREATED
+		assert connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
+		assert responseJson['entryId'] != null
+		def entryId = responseJson['entryId'].toString()
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId, '')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/json')
+		def resourceResp = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		resourceResp['name'] == null
+		resourceResp['children'] == null
+		(resourceResp as Map).keySet().size() == 0
+	}
+
+	def "GET /{context-id}/resource/{entry-id} as admin on Group graph should return data about the group"() {
+		given:
+		def requestResourceName = [name: 'Test Grouppppen2']
 		def params = [graphtype: 'group']
 		def body = JsonOutput.toJson([resource: requestResourceName])
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
@@ -163,11 +287,25 @@ class ResourceIT extends BaseSpec {
 		resourceResp['children'] == []
 	}
 
-	def "GET /{context-id}/resource/{entry-id} on None graph should return 204 (No Content) when file was not sent with the entry"() {
+	def "GET /{context-id}/resource/{entry-id} as guest on None graph should respond with Unauthorized 401"() {
 		given:
 		def requestResourceName = [name: 'None graph entryyyy']
 		def body = [resource: requestResourceName]
 		def entryId = createEntry(contextId, [id: 'None-graph'], body)
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId, '')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /{context-id}/resource/{entry-id} as admin on None graph should return 204 (No Content) when file was not sent with the entry"() {
+		given:
+		def requestResourceName = [name: 'None graph entryyyy2']
+		def body = [resource: requestResourceName]
+		def entryId = createEntry(contextId, [id: 'None-graph2'], body)
 		assert entryId.length() > 0
 
 		when:
@@ -178,7 +316,35 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getInputStream().text == ''
 	}
 
-	def "GET /{context-id}/resource/{entry-id} on None graph entry with octet-stream file should return the entry's file"() {
+	def "GET /{context-id}/resource/{entry-id} as guest on None graph entry with octet-stream file should respond with Unauthorized 401"() {
+		given:
+		def requestResourceName = [name: 'None graph entry']
+		def body = [resource: requestResourceName]
+		def entryId = getOrCreateEntry(contextId, [id: 'noneId'], body)
+		assert entryId.length() > 0
+
+		// create a test binary file with some data
+		def testBinFile = File.createTempFile('test', '.bin')
+		testBinFile.withOutputStream { out ->
+			out.write([0xDE, 0xAD, 0xBE, 0xEF] as byte[])
+			out.write("Hello".bytes)
+		}
+		def sendFileConn = EntryStoreClient.putRequestFile('/' + contextId + '/resource/' + entryId, testBinFile,
+			'admin', 'application/octet-stream')
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+		// ResourceResource class defines a json response with 'success' field, but later in the code it is replaced with Empty response
+//		def sendFileJsonResponse = JSON_PARSER.parseText(sendFileConn.getInputStream().text)
+//		assert sendFileJsonResponse['success'] == 'The file was uploaded'
+//		assert sendFileJsonResponse['format'] == 'application/octet-stream'
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId, '')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "GET /{context-id}/resource/{entry-id} as admin on None graph entry with octet-stream file should return the entry's file"() {
 		given:
 		def requestResourceName = [name: 'None graph entry']
 		def body = [resource: requestResourceName]
@@ -233,13 +399,13 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getInputStream().readAllBytes() == testBinFile.getBytes()
 	}
 
-	def "PUT /{context-id}/resource/{entry-id} should edit String-resource"() {
+	def "PUT /{context-id}/resource/{entry-id} as guest should respond with Unauthorized 401"() {
 		given:
 		// create local String entry
 		def someText = 'Some text'
-		def params = [graphtype: 'string']
+		def params = [id: 'editResourceEntryId', graphtype: 'string']
 		def body = [resource: someText]
-		def entryId = createEntry(contextId, params, body)
+		def entryId = getOrCreateEntry(contextId, params, body)
 		assert entryId.length() > 0
 
 		// fetch URI of created resource for the String entry
@@ -258,26 +424,19 @@ class ResourceIT extends BaseSpec {
 		def newBody = 'new String set'
 
 		when:
-		def editResourceConn = EntryStoreClient.putRequest(resourceUri, newBody)
+		def editResourceConn = EntryStoreClient.putRequest(resourceUri, newBody, '')
 
 		then:
-		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
-		def editResourceRespText = editResourceConn.getInputStream().text
-		editResourceRespText == ''
-		// fetch resource details again
-		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
-		resourceConn2.getResponseCode() == HTTP_OK
-		resourceConn2.getContentType().contains('text/plain')
-		resourceConn2.getInputStream().text == newBody
+		editResourceConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "PUT /{context-id}/resource/{entry-id} should allow an empty String on a String-resource"() {
+	def "PUT /{context-id}/resource/{entry-id} as admin should edit String-resource"() {
 		given:
 		// create local String entry
-		def someText = 'Some text 2'
-		def params = [graphtype: 'string']
+		def someText = 'Some text'
+		def params = [id: 'editResourceEntryId', graphtype: 'string']
 		def body = [resource: someText]
-		def entryId = createEntry(contextId, params, body)
+		def entryId = getOrCreateEntry(contextId, params, body)
 		assert entryId.length() > 0
 
 		// fetch URI of created resource for the String entry
@@ -293,10 +452,9 @@ class ResourceIT extends BaseSpec {
 		assert resourceConn.getContentType().contains('text/plain')
 		assert resourceConn.getInputStream().text == someText
 
-		def newBody = ''
+		def newBody = 'new String set'
 
 		when:
-		// edit created resource
 		def editResourceConn = EntryStoreClient.putRequest(resourceUri, newBody)
 
 		then:
@@ -710,6 +868,7 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
+
 		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
 		def loginConnection = EntryStoreClient.createConnection('/auth/cookie')
 		loginConnection.setRequestMethod('POST')
@@ -727,16 +886,12 @@ class ResourceIT extends BaseSpec {
 	def "PUT /{context-id}/resource/{entry-id} should not change own admin-group user password without providing current password"() {
 		given:
 		def username = 'userAdminChangePassword@test.com'
-		def user = UserUtil.createUser(username)
+		def user = UserUtil.createUser(username, null, true)
 		def resourceUri = user['resourceUri'].toString()
-		def entryId = user['entryId'].toString()
 		UserUtil.setUserPassword(resourceUri, password)
-		def requestBody = JsonOutput.toJson([entryId])
-		assert EntryStoreClient.putRequest('/_principals/resource/_admins', requestBody).getResponseCode() == HTTP_NO_CONTENT
-		def newPassword = 'somePass1234'
 
 		def passwordChangeRequestBody = JsonOutput.toJson([
-			password       : newPassword
+				password: 'somePass1234'
 		])
 
 		when:
@@ -839,7 +994,37 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	def "DELETE /{context-id}/resource/{entry-id} should remove resource"() {
+	def "DELETE /{context-id}/resource/{entry-id} as guest should respond with Unauthorized 401"() {
+		given:
+		// create minimal entry to be used in the list
+		def minimalEntryId = createEntry(contextId, [:])
+		// create a list with the minimal entry
+		def params = [graphtype: 'list']
+		def body = [resource: [minimalEntryId]]
+		def entryId = createEntry(contextId, params, body)
+
+		// fetch URI of the created resource
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		assert entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		assert entryRespJson['info'] != null
+		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect { it.toString() }
+		def resourceUri = entryRespJsonKeys.find { it.contains('resource') }
+		// fetch resource details
+		def resourceConn = EntryStoreClient.getRequest(resourceUri)
+		assert resourceConn.getResponseCode() == HTTP_OK
+		assert resourceConn.getContentType().contains('application/json')
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.getInputStream().text)
+		assert resourceRespJson == [minimalEntryId]
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest(resourceUri, '[]', '')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id} as admin should remove resource"() {
 		given:
 		// create minimal entry to be used in the list
 		def minimalEntryId = createEntry(contextId, [:])
@@ -876,7 +1061,16 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == '[]'
 	}
 
-	def "DELETE /{context-id}/resource/{entry-id} attempting to delete non-existing entry should return 404 Not-Found"() {
+	// TODO: Fix the vuln of Information Disclosure via Error Messages - guest gets 404 on non-existing entry and 401 on existing entry
+	def "DELETE /{context-id}/resource/{entry-id} as guest on non-existing entry should return 404 Not-Found"() {
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/_principals/entry/somethingNonExisting', '')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_NOT_FOUND
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id} as admin on non-existing entry should return 404 Not-Found"() {
 		when:
 		def deleteResourceConn = EntryStoreClient.deleteRequest('/_principals/entry/somethingNonExisting')
 
@@ -951,7 +1145,55 @@ class ResourceIT extends BaseSpec {
 		resourceConn2.getInputStream().text == someText
 	}
 
-	def "POST /{context-id}/resource/{entry-id} should move entry between lists"() {
+	def "POST /{context-id}/resource/{entry-id} as guest should respond with unauthorized 401"() {
+		given:
+		// create minimal entry to be used in the list
+		def givenEntryId = createEntry(contextId, [:])
+		// create source list with the minimal entry
+		def params = [graphtype: 'list']
+		def sourceEntryId = createEntry(contextId, params, [resource: [givenEntryId]])
+		// create target list with no entries
+		def targetEntryId = createEntry(contextId, params, [resource: []])
+
+		// fetch URI of created resource for the SOURCE entry
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + sourceEntryId)
+		assert entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		assert entryRespJson['info'] != null
+		def sourceEntryKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def sourceResourceUri = sourceEntryKeys.find { it -> it.contains('resource') }
+		// fetch source resource, should contain above created entry
+		def sourceResourceConn = EntryStoreClient.getRequest(sourceResourceUri)
+		assert sourceResourceConn.getResponseCode() == HTTP_OK
+		assert sourceResourceConn.getContentType().contains('application/json')
+		def sourceResourceRespJson = JSON_PARSER.parseText(sourceResourceConn.getInputStream().text)
+		assert sourceResourceRespJson == [givenEntryId]
+
+		// fetch URI of created resource for the TARGET entry
+		def targetEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + targetEntryId)
+		assert targetEntryConn.getResponseCode() == HTTP_OK
+		def targetEntryRespJson = JSON_PARSER.parseText(targetEntryConn.getInputStream().text)
+		assert targetEntryRespJson['info'] != null
+		def targetEntryKeys = (targetEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def targetResourceUri = targetEntryKeys.find { it -> it.contains('resource') }
+		// fetch target resource, should be empty
+		def targetResourceConn = EntryStoreClient.getRequest(targetResourceUri)
+		assert targetResourceConn.getResponseCode() == HTTP_OK
+		def targetResourceRespJson = JSON_PARSER.parseText(targetResourceConn.getInputStream().text)
+		assert targetResourceRespJson == []
+
+		def postParams = [moveEntry: contextId + '/entry/' + givenEntryId,
+						  fromList : sourceResourceUri]
+
+		when:
+		// move entry from source to target list
+		def editResourceConn = EntryStoreClient.postRequest(targetResourceUri + convertMapToQueryParams(postParams), '', '')
+
+		then:
+		editResourceConn.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /{context-id}/resource/{entry-id} as admin should move entry between lists"() {
 		given:
 		// create minimal entry to be used in the list
 		def givenEntryId = createEntry(contextId, [:])
@@ -1004,14 +1246,45 @@ class ResourceIT extends BaseSpec {
 
 		// fetch target resource again, should contain moved entry
 		def targetResourceConn2 = EntryStoreClient.getRequest(targetResourceUri)
-		assert targetResourceConn2.getResponseCode() == HTTP_OK
+		targetResourceConn2.getResponseCode() == HTTP_OK
 		def targetResourceRespJson2 = JSON_PARSER.parseText(targetResourceConn2.getInputStream().text)
-		assert targetResourceRespJson2 == [givenEntryId]
+		targetResourceRespJson2 == [givenEntryId]
 
 		// fetch source resource again, should be empty now
 		def sourceResourceConn2 = EntryStoreClient.getRequest(sourceResourceUri)
-		assert sourceResourceConn2.getResponseCode() == HTTP_OK
+		sourceResourceConn2.getResponseCode() == HTTP_OK
 		def sourceResourceRespJson2 = JSON_PARSER.parseText(sourceResourceConn2.getInputStream().text)
-		assert sourceResourceRespJson2 == []
+		sourceResourceRespJson2 == []
+	}
+
+	def "POST /{context-id}/resource/{entry-id}?import with ZIP containing RDF file should return 501 Not Implemented"() {
+		given:
+		def importContextId = 'rdf-import-ctx'
+		getOrCreateContext([contextId: importContextId])
+		def listEntryId = getOrCreateEntry(importContextId, [id: 'rdf-import-list', graphtype: 'list'])
+
+		// create a ZIP file containing a .rdf file
+		def baos = new ByteArrayOutputStream()
+		def zos = new ZipOutputStream(baos)
+		zos.putNextEntry(new ZipEntry('test-data.rdf'))
+		zos.write('<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"></rdf:RDF>'.bytes)
+		zos.closeEntry()
+		zos.close()
+		def zipBytes = baos.toByteArray()
+
+		when:
+		def conn = EntryStoreClient.sendRequestAsStream(
+				HttpMethod.POST,
+				'/' + importContextId + '/resource/' + listEntryId + '?import=true',
+				new ByteArrayInputStream(zipBytes),
+				'admin',
+				'application/zip')
+
+		then:
+		conn.getResponseCode() == HTTP_NOT_IMPLEMENTED
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.getErrorStream().text)
+		respJson['error'] != null
+		respJson['error'].toString().contains('RDF resource import is not yet implemented')
 	}
 }

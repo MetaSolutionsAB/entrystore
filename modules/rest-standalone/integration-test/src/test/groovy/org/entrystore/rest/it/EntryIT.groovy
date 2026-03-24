@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
@@ -9,6 +25,7 @@ import org.entrystore.rest.it.util.NameSpaceConst
 import java.time.Year
 
 import static java.net.HttpURLConnection.HTTP_CONFLICT
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
@@ -641,16 +658,28 @@ class EntryIT extends BaseSpec {
 		responseJson['timestamp'] != null
 	}
 
-	def "POST /{context-id}?entrytype=link should throw unauthorized for non-admin user"() {
+	def "POST /{context-id}?entrytype=link as guest should respond with Unauthorized 401"() {
 		given:
 		getOrCreateContext([contextId: contextId])
 		def params = [entrytype: 'link', resource: resourceUrl]
 
 		when:
-		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), '', null)
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), '', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
+	}
+
+	def "POST /{context-id}?entrytype=link as non-admin user should respond with Forbidden"() {
+		given:
+		getOrCreateContext([contextId: contextId])
+		def params = [entrytype: 'link', resource: resourceUrl]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), '', 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_FORBIDDEN
 	}
 
 	def "POST /{context-id}?entrytype=link&template=templateEntry with metadata in the body, should create a new link entry with local metadata combined with MD from template entry"() {
@@ -770,7 +799,79 @@ class EntryIT extends BaseSpec {
 		rdf2Types[0]['value'] == NameSpaceConst.TERM_NAMED_RESOURCE
 	}
 
-	def "GET /{context-id}/entry/{entry-id}?includeAll for a link entry, should return extra information about the entry"() {
+	def "GET /{context-id}/entry/{entry-id} as guest in application/json format, should return information about the entry in json format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, '', 'application/json')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/json')
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+
+		// verify includeAll extra keys are not present
+		entryRespJson['metadata'] == null
+		entryRespJson['rights'] == null
+		entryRespJson['relations'] == null
+	}
+
+	def "GET /{context-id}/entry/{entry-id}?includeAll as guest in application/json format, should not return extra information about the entry in json format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll', '', 'application/json')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/json')
+		def entryRespJson = JSON_PARSER.parseText(entryConn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+
+		// verify the extra keys does not contain any data
+		entryRespJson['metadata'] == null
+		entryRespJson['rights'] != null
+		entryRespJson['rights'].collect().size() == 0
+		entryRespJson['relations'] != null
+		entryRespJson['relations'].collect().size() == 0
+	}
+
+	def "GET /{context-id}/entry/{entry-id}?includeAll as admin for a link entry, should return extra information about the entry"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -825,7 +926,9 @@ class EntryIT extends BaseSpec {
 		entryMDdcTitles[0]['value'] == 'Cool entry 20'
 
 		entryRespJson['rights'] != null
+		entryRespJson['rights'].collect().contains('administer')
 		entryRespJson['relations'] != null
+		entryRespJson['relations'].collect().size() == 0
 
 		// fetch entry metadata
 		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
@@ -1434,6 +1537,34 @@ class EntryIT extends BaseSpec {
 		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
 	}
 
+	def "GET /{context-id}/entry/{entry-id} with Accept text/rdf+n3 should return N3 with Content-Type text/n3"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'text/rdf+n3')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('text/n3')
+		def response = entryConn.getInputStream().text
+		response.contains('/' + contextId + '/entry/' + entryId + '> a es:LinkReference;')
+		response.contains('es:resource <' + resourceUrl + '>;')
+	}
+
 	def "GET /{context-id}/entry/{entry-id} in text/turtle format for a linkreference entry, should return information about the entry in text/turtle format"() {
 		given:
 		def entryId = 'entryForGetTests'
@@ -1602,6 +1733,83 @@ class EntryIT extends BaseSpec {
 		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
 	}
 
+	// TODO: verify below test - should a guest be able to access (read) an Entry created by Admin - by default
+	def "GET /{context-id}/entry/{entry-id} as guest in application/trig format, should return information about the entry in application/trig format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, '', 'application/trig')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/trig')
+		def response = entryConn.getInputStream().text
+		response.contains('/' + contextId + '/entry/' + entryId + '> a es:LinkReference;')
+		response.contains('es:resource <' + resourceUrl + '>;')
+		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId + '>;')
+		response.contains('es:externalMetadata <' + metadataUrl + '>;')
+		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
+	}
+
+	// TODO: verify below test - should a non-admin user be able to access (read) an Entry created by Admin - by default
+	def "GET /{context-id}/entry/{entry-id} as non-admin user in application/trig format, should return information about the entry in application/trig format"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'user', 'application/trig')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/trig')
+		def response = entryConn.getInputStream().text
+		response.contains('/' + contextId + '/entry/' + entryId + '> a es:LinkReference;')
+		response.contains('es:resource <' + resourceUrl + '>;')
+		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId + '>;')
+		response.contains('es:externalMetadata <' + metadataUrl + '>;')
+		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
+	}
+
+	def "GET /_contexts/entry/{entry-id} as guest in application/trig format, should return information about the entry in application/trig format"() {
+		when:
+		def entryConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId, '', 'application/trig')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('application/trig')
+		def response = entryConn.getInputStream().text
+		response.contains('/_contexts/entry/' + contextId + '>')
+		response.contains('store:' + contextId + ' a es:Context')
+		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/_contexts/metadata/' + contextId + '>;')
+	}
+
 	def "PUT /{context-id}/entry/{entry-id} with body in rdf/json format, should edit the information about the entry"() {
 		given:
 		def entryId = 'entryForGetTests'
@@ -1755,7 +1963,7 @@ class EntryIT extends BaseSpec {
 		entryRespJson['relations'] as Map == [:]
 	}
 
-	def "PUT /{context-id}/entry/{entry-id} as non-admin, should not edit the entry"() {
+	def "PUT /{context-id}/entry/{entry-id} as guest, should not edit the entry"() {
 		given:
 		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'
@@ -1831,7 +2039,83 @@ class EntryIT extends BaseSpec {
 		entryRespJson['relations'] as Map == [:]
 	}
 
-	def "DELETE /{context-id}/entry/{entry-id} as not-authorized user should not delete the entry"() {
+	def "PUT /{context-id}/entry/{entry-id} as non-admin user should respond with Forbidden and not edit the entry"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl + '/v2',
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		def putBody = """
+@prefix es: <http://entrystore.org/terms/> .
+
+<http://localhost:8181/store/10/entry/entryForGetTests> a es:LinkReference;
+  es:resource <https://bbc.co.uk/v3> .
+"""
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId, putBody, 'user', 'text/turtle')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_FORBIDDEN
+
+		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		getEntryConn.getResponseCode() == HTTP_OK
+		getEntryConn.getContentType().contains('application/json')
+		def entryRespJson = JSON_PARSER.parseText(getEntryConn.getInputStream().text)
+		entryRespJson['entryId'] == entryId
+		entryRespJson['info'] != null
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+
+		entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE] != null
+		def entryTypes = entryRespJson['info'][entryUri][NameSpaceConst.RDF_TYPE].collect()
+		entryTypes.size() == 1
+		entryTypes[0]['type'] == 'uri'
+		entryTypes[0]['value'] == NameSpaceConst.TERM_LINK_REFERENCE
+
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+		def entryResources = entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		entryResources.size() == 1
+		entryResources[0]['type'] == 'uri'
+		entryResources[0]['value'] == resourceUrl + '/v2'
+
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA] != null
+		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
+		entryMetadata.size() == 1
+		entryMetadata[0]['type'] == 'uri'
+		entryMetadata[0]['value'] != null
+		entryMetadata[0]['value'].toString().contains('/store/' + contextId + '/metadata/')
+
+		entryRespJson['metadata'] != null
+		(entryRespJson['metadata'] as Map).keySet().size() == 1
+		def entryMDResourceUrl = (entryRespJson['metadata'] as Map).keySet()[0].toString()
+		entryRespJson['metadata'][entryMDResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
+		def entryMDdcTitles = entryRespJson['metadata'][entryMDResourceUrl][NameSpaceConst.DC_TERM_TITLE].collect()
+		entryMDdcTitles.size() == 1
+		entryMDdcTitles[0]['type'] == 'literal'
+		entryMDdcTitles[0]['value'] == 'local metadata title'
+
+		entryRespJson['cached-external-metadata'] != null
+		entryRespJson['cached-external-metadata'] as Map == [:]
+
+		entryRespJson['rights'] != null
+		entryRespJson['rights'].collect() == ['administer']
+		entryRespJson['relations'] != null
+		entryRespJson['relations'] as Map == [:]
+	}
+
+	def "DELETE /{context-id}/entry/{entry-id} as guest should not delete the entry"() {
 		given:
 		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'
@@ -1849,7 +2133,7 @@ class EntryIT extends BaseSpec {
 		getOrCreateEntry(contextId, params, body)
 
 		when:
-		def entryConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId, null)
+		def entryConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId, '[]', '')
 
 		then:
 		entryConn.getResponseCode() == HTTP_UNAUTHORIZED
@@ -1858,7 +2142,34 @@ class EntryIT extends BaseSpec {
 		response.contains('Unauthorized')
 	}
 
-	def "DELETE /{context-id}/entry/{entry-id} should delete the entry"() {
+	def "DELETE /{context-id}/entry/{entry-id} as non-admin user should respond with Forbidden and not delete the entry"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId, '[]', 'user')
+
+		then:
+		entryConn.getResponseCode() == HTTP_FORBIDDEN
+		entryConn.getContentType().contains('application/json')
+		def response = entryConn.getErrorStream().text
+		response.contains('Not authorized')
+	}
+
+	def "DELETE /{context-id}/entry/{entry-id} as admin should delete the entry"() {
 		given:
 		def entryId = 'entryForGetTests'
 		def metadataUrl = 'https://bbc.co.uk/metadata'

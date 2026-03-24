@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,15 +22,18 @@ import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.MetadataUtil;
+import org.quartz.CronScheduleBuilder;
 import org.quartz.CronTrigger;
+import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
+import org.quartz.TriggerBuilder;
 import org.quartz.impl.StdSchedulerFactory;
+import org.quartz.impl.matchers.GroupMatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.text.ParseException;
 import java.util.LinkedList;
 import java.util.OptionalInt;
 import java.util.concurrent.ThreadLocalRandom;
@@ -73,13 +76,11 @@ public class BackupScheduler {
 
 	RDFFormat format;
 
-	public static BackupScheduler instance;
-
 	private BackupScheduler(RepositoryManager rm, String cronExp, boolean gzip, boolean deleteAfter, boolean includeFiles, boolean maintenance, int upperLimit, int lowerLimit, int expiresAfterDays, RDFFormat format) {
 		try {
 			scheduler = StdSchedulerFactory.getDefaultScheduler();
 		} catch (SchedulerException e) {
-			log.error(e.getMessage());
+			log.error("Failed to initialize Quartz scheduler", e);
 		}
 
 		this.rm = rm;
@@ -102,45 +103,42 @@ public class BackupScheduler {
 		log.info("Created backup scheduler");
 	}
 
-	public static synchronized BackupScheduler getInstance(RepositoryManager rm) {
-		if (instance == null) {
-			log.info("Loading backup configuration");
-			Config config = rm.getConfiguration();
-			String cronExp = config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED));
-			if (cronExp == null) {
-				return null;
-			}
-			boolean gzip = config.getBoolean(Settings.BACKUP_GZIP, false);
-			boolean maintenance = config.getBoolean(Settings.BACKUP_MAINTENANCE, false);
-			boolean deleteAfter = config.getBoolean(Settings.BACKUP_DELETE_AFTER, false);
-			boolean includeFiles = config.getBoolean(Settings.BACKUP_INCLUDE_FILES, true);
-			int upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
-			int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
-			int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
+	public static BackupScheduler createInstance(RepositoryManager rm) {
+		log.info("Loading backup configuration");
+		Config config = rm.getConfiguration();
+		String cronExp = config.getString(Settings.BACKUP_CRONEXP, config.getString(Settings.BACKUP_TIMEREGEXP_DEPRECATED));
+		if (cronExp == null) {
+			log.warn("Backup scheduler will not be enabled as the cron expression is not configured");
+			return null;
+		}
+		boolean gzip = config.getBoolean(Settings.BACKUP_GZIP, false);
+		boolean maintenance = config.getBoolean(Settings.BACKUP_MAINTENANCE, false);
+		boolean deleteAfter = config.getBoolean(Settings.BACKUP_DELETE_AFTER, false);
+		boolean includeFiles = config.getBoolean(Settings.BACKUP_INCLUDE_FILES, true);
+		int upperLimit = config.getInt(Settings.BACKUP_MAINTENANCE_UPPER_LIMIT, -1);
+		int lowerLimit = config.getInt(Settings.BACKUP_MAINTENANCE_LOWER_LIMIT, -1);
+		int expiresAfterDays = config.getInt(Settings.BACKUP_MAINTENANCE_EXPIRES_AFTER_DAYS, -1);
 
-			RDFFormat format = MetadataUtil.getRDFFormat(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
-			if (format == null) {
-				log.warn("Invalid backup format {}, falling back to TriX", config.getString(Settings.BACKUP_FORMAT));
-				format = RDFFormat.TRIX;
-			}
-
-			if (cronExp.toLowerCase().contains("rnd")) {
-				cronExp = randomizeCronString(cronExp);
-			}
-
-			log.info("Cron expression: {}", cronExp);
-			log.info("GZIP: {}", gzip);
-			log.info("Include files: {}", includeFiles);
-			log.info("Delete previous backup after new backup: {}", deleteAfter);
-			log.info("Maintenance: {}", maintenance);
-			log.info("Maintenance upper limit: {}", upperLimit);
-			log.info("Maintenance lower limit: {}", lowerLimit);
-			log.info("Maintenance expires after days: {}", expiresAfterDays);
-
-			instance = new BackupScheduler(rm, cronExp, gzip, deleteAfter, includeFiles, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
+		RDFFormat format = MetadataUtil.getRDFFormat(config.getString(Settings.BACKUP_FORMAT, RDFFormat.TRIX.getName()));
+		if (format == null) {
+			log.warn("Invalid backup format {}, falling back to TriX", config.getString(Settings.BACKUP_FORMAT));
+			format = RDFFormat.TRIX;
 		}
 
-		return instance;
+		if (cronExp.toLowerCase().contains("rnd")) {
+			cronExp = randomizeCronString(cronExp);
+		}
+
+		log.info("Cron expression: {}", cronExp);
+		log.info("GZIP: {}", gzip);
+		log.info("Include files: {}", includeFiles);
+		log.info("Delete previous backup after new backup: {}", deleteAfter);
+		log.info("Maintenance: {}", maintenance);
+		log.info("Maintenance upper limit: {}", upperLimit);
+		log.info("Maintenance lower limit: {}", lowerLimit);
+		log.info("Maintenance expires after days: {}", expiresAfterDays);
+
+		return new BackupScheduler(rm, cronExp, gzip, deleteAfter, includeFiles, maintenance, upperLimit, lowerLimit, expiresAfterDays, format);
 	}
 
 	private static String randomizeCronString(String cronExp) {
@@ -215,23 +213,17 @@ public class BackupScheduler {
 	}
 
 	public void run() {
-		if (!rm.getConfiguration().getBoolean(Settings.BACKUP_SCHEDULER, false)) {
-			log.warn("Backup is disabled in configuration");
-			return;
-		}
-
 		try {
-			String[] names = scheduler.getJobNames("backupGroup");
+			int nextIndex = scheduler.getJobKeys(GroupMatcher.jobGroupEquals("backupGroup"))
+					.stream()
+					.mapToInt(k -> Integer.parseInt(k.getName()))
+					.max()
+					.orElse(0) + 1;
+			String jobIndex = String.valueOf(nextIndex);
 
-			int index = 1;
-			if (names.length > 0) {
-				// this only works for up to 10 jobs in this group
-				index = Integer.parseInt(names[names.length - 1]);
-				index++;
-			}
-			String jobIndex = String.valueOf(index);
-
-			job = new JobDetail(jobIndex, "backupGroup", BackupJob.class);
+			job = JobBuilder.newJob(BackupJob.class)
+					.withIdentity(jobIndex, "backupGroup")
+					.build();
 			job.getJobDataMap().put("rm", this.rm);
 			job.getJobDataMap().put("gzip", this.gzip);
 			job.getJobDataMap().put("includeFiles", this.includeFiles);
@@ -243,41 +235,27 @@ public class BackupScheduler {
 			job.getJobDataMap().put("format", this.format);
 			job.getJobDataMap().put("simple", this.simple);
 
-			CronTrigger trigger = new CronTrigger("trigger" + jobIndex, "backupGroup", jobIndex, "backupGroup", this.cronExpression);
-			scheduler.addJob(job, true);
-			scheduler.scheduleJob(trigger);
+			CronTrigger trigger = TriggerBuilder.newTrigger()
+					.withIdentity("trigger" + jobIndex, "backupGroup")
+					.forJob(jobIndex, "backupGroup")
+					.withSchedule(CronScheduleBuilder.cronSchedule(this.cronExpression))
+					.build();
+			scheduler.scheduleJob(job, trigger);
 			scheduler.start();
-		} catch (ParseException | SchedulerException e) {
-			log.error(e.getMessage());
+		} catch (SchedulerException e) {
+			log.error("Failed to start backup scheduler", e);
 		}
 	}
-
-//	public void stop() {
-//		try {
-//			scheduler.standby();
-//		} catch (SchedulerException e) {
-//			log.error(e.getMessage());
-//			e.printStackTrace();
-//		}
-//	}
-//
-//	public void start() {
-//		try {
-//			scheduler.start();
-//		} catch (SchedulerException e) {
-//			log.error(e.getMessage());
-//		}
-//	}
 
 	public boolean delete() {
 		try {
 			if (job != null) {
 				log.info("Deleting backup job");
-				scheduler.deleteJob(job.getName(), job.getGroup());
+				scheduler.deleteJob(job.getKey());
 				job = null;
 			}
 		} catch (SchedulerException e) {
-			log.error(e.getMessage());
+			log.error("Failed to delete backup job", e);
 			return false;
 		}
 		return true;

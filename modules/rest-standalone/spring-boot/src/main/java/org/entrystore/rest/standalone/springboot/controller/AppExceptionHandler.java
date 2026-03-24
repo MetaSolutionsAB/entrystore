@@ -62,8 +62,7 @@ public class AppExceptionHandler {
 				.build();
 	}
 
-	@ExceptionHandler({BadRequestException.class, MethodArgumentTypeMismatchException.class, ValidationException.class,
-			UsernameNotFoundException.class, HttpMessageNotReadableException.class})
+	@ExceptionHandler({BadRequestException.class, ValidationException.class, UsernameNotFoundException.class})
 	public ResponseEntity<ErrorResponse> handleBadRequestException(RuntimeException ex,
 																   HttpServletRequest request) {
 		log.debug("BadRequestException: {}", ex.getMessage());
@@ -71,6 +70,20 @@ public class AppExceptionHandler {
 				.status(HttpStatus.BAD_REQUEST.value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
+				.build();
+		return ResponseEntity.badRequest().body(responseBody);
+	}
+
+	// Separate BadRequest handler for HttpMessageNotReadableException and MethodArgumentTypeMismatchException since those leak Spring/Jackson internals
+	// Those now respond with a generic "Bad Request" error
+	@ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class})
+	public ResponseEntity<ErrorResponse> handleSpringBadRequestException(RuntimeException ex,
+																		 HttpServletRequest request) {
+		log.debug("BadRequestException of type '{}': {}", ex.getClass().getName(), ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(HttpStatus.BAD_REQUEST.value())
+				.path(request.getRequestURI())
+				.error(HttpStatus.BAD_REQUEST.getReasonPhrase())
 				.build();
 		return ResponseEntity.badRequest().body(responseBody);
 	}
@@ -102,7 +115,7 @@ public class AppExceptionHandler {
 	@ExceptionHandler(DataConflictException.class)
 	public ResponseEntity<ErrorResponse> handleDataConflictException(DataConflictException ex,
 																	 HttpServletRequest request) {
-		log.warn("DataConflictException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		log.warn("DataConflictException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.CONFLICT.value())
 				.path(request.getRequestURI())
@@ -114,7 +127,7 @@ public class AppExceptionHandler {
 	@ExceptionHandler(NotImplementedException.class)
 	public ResponseEntity<ErrorResponse> handleNotImplementedException(NotImplementedException ex,
 																	   HttpServletRequest request) {
-		log.warn("NotImplementedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		log.warn("NotImplementedException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.NOT_IMPLEMENTED.value())
 				.path(request.getRequestURI())
@@ -123,7 +136,7 @@ public class AppExceptionHandler {
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
-	@ExceptionHandler({UnauthorizedException.class, AuthorizationException.class, AuthenticationException.class})
+	@ExceptionHandler({AuthenticationException.class})
 	public ResponseEntity<ErrorResponse> handleUnauthorizedException(RuntimeException ex,
 																	 HttpServletRequest request) {
 		log.info("UnauthorizedException at endpoint '{}'. Error: {}", request.getRequestURI(), ex.getMessage());
@@ -135,7 +148,7 @@ public class AppExceptionHandler {
 		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
-	@ExceptionHandler({ForbiddenException.class, AccessDeniedException.class, AuthenticationCredentialsNotFoundException.class})
+	@ExceptionHandler({AuthorizationException.class, UnauthorizedException.class, ForbiddenException.class, AccessDeniedException.class, AuthenticationCredentialsNotFoundException.class})
 	public ResponseEntity<ErrorResponse> handleForbiddenException(RuntimeException ex,
 																  HttpServletRequest request,
 																  Authentication authentication) {
@@ -183,11 +196,11 @@ public class AppExceptionHandler {
 			throw ex;
 		}
 
-		log.error("Unhandled general Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+		log.error("Unhandled general Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
 				.path(request.getRequestURI())
-				.error(ex.getMessage())
+				.error(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase())
 				.build();
 		return ResponseEntity.internalServerError().body(responseBody);
 	}

@@ -118,6 +118,39 @@ public class AuthService {
 		}
 	}
 
+	public List<SessionInformation> getAllUserSessions(URI userURI, boolean includeExpiredSessions) {
+
+		List<SessionInformation> sessionsList = new ArrayList<>();
+
+		User user = principalManager.getUser(userURI);
+		if (user == null) {
+			log.warn("No user found for URI: {}", userURI);
+			return sessionsList;
+		}
+
+		Entry entry = user.getEntry();
+		if (entry == null) {
+			log.warn("No entry found for user: {}", userURI);
+			return sessionsList;
+		}
+
+		URI resourceURI = entry.getResourceURI();
+		if (resourceURI == null) {
+			log.warn("No resource URI found for user entry: {}", userURI);
+			return sessionsList;
+		}
+
+		String username = resourceURI.toString();
+		for (Object principal : sessionRegistry.getAllPrincipals()) {
+			if (principal instanceof UserDetails userDetails && userDetails.getUsername().equals(username)) {
+				sessionsList = sessionRegistry.getAllSessions(userDetails, includeExpiredSessions);
+				break;
+			}
+		}
+
+		return sessionsList;
+	}
+
 	public String confirmPassword(String token, String title) {
 		SignupInfo ci = signupTokenCache.getTokenValue(token);
 		if (ci == null) {

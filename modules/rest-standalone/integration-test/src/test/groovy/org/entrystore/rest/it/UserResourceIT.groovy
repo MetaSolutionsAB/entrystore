@@ -4,12 +4,12 @@ import com.icegreen.greenmail.util.GreenMail
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
+import spock.lang.Unroll
 
-//import java.time.format.DateTimeFormatter
-//import java.time.format.DateTimeFormatterBuilder
-//import java.time.temporal.ChronoField
-//import java.time.temporal.ChronoUnit
-//import java.time.LocalDateTime
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatterBuilder
+import java.time.temporal.ChronoField
+import java.time.temporal.ChronoUnit
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -18,12 +18,12 @@ import static java.net.HttpURLConnection.HTTP_OK
 
 class UserResourceIT extends BaseSpec {
 
-	//static DateTimeFormatter dtf = new DateTimeFormatterBuilder()
-	//	.appendPattern("yyyy-MM-dd'T'HH:mm:ss")
-	//	.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
-	//	.toFormatter()
+	static def dtf = new DateTimeFormatterBuilder()
+		.appendPattern("yyyy-MM-dd'T'HH:mm:ss")
+		.appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
+		.toFormatter()
 	static def newPassword = 'newPass12345'
-	static GreenMail greenMail = new GreenMail(SMTP)
+	static def greenMail = new GreenMail(SMTP)
 	static def genericCredsClone = [:]
 
 	def setupSpec() {
@@ -40,6 +40,41 @@ class UserResourceIT extends BaseSpec {
 	def cleanupSpec() {
 		EntryStoreClient.creds = genericCredsClone
 		greenMail.stop()
+	}
+
+	@Unroll
+	def 'GET /auth/user as "#requestUser" should respond with current user info'() {
+		given:
+		def languages = ['Accept-Language': 'fr-CH;q=0.9,en-US;q=0.7']
+
+		when:
+		def info = EntryStoreClient.getRequest('/auth/user', requestUser, null, languages)
+
+		then:
+		info.getResponseCode() == HTTP_OK
+		def infoRespJson = JSON_PARSER.parseText(info.getInputStream().text)
+		infoRespJson['id'] == expectedEntryId
+		infoRespJson['user'] == expectedUsername.toLowerCase()
+		infoRespJson['uri'] != null
+		infoRespJson['clientAcceptLanguage'] != null
+		infoRespJson['clientAcceptLanguage']['en-US'] == 0.7
+		infoRespJson['clientAcceptLanguage']['fr-CH'] == 0.9
+		// for Guest user 'authTokenExpires' field should not be present
+		if (requestUser.isEmpty()) {
+			assert infoRespJson['authTokenExpires'] == null
+		} else {
+			assert infoRespJson['authTokenExpires'] != null
+			def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
+			def now = LocalDateTime.now()
+			assert ChronoUnit.HOURS.between(now, authTokenExpires) == 1
+		}
+
+		where:
+		requestUser        | expectedUsername   | expectedEntryId
+		''                 | 'guest'            | '_guest'
+		'user'             | 'user'             | EntryStoreClient.createdEsUsers['user']['entryId']
+		'userInAdminGroup' | 'userInAdminGroup' | EntryStoreClient.createdEsUsers['userInAdminGroup']['entryId']
+		'admin'            | 'admin'            | '_admin'
 	}
 
 	def "GET /auth/user should return info about currently logged-in user"() {
@@ -67,10 +102,10 @@ class UserResourceIT extends BaseSpec {
 		infoRespJson['clientAcceptLanguage'] != null
 		infoRespJson['clientAcceptLanguage']['en-US'] == 0.7
 		infoRespJson['clientAcceptLanguage']['fr-CH'] == 0.9
-		//infoRespJson['authTokenExpires'] != null
-		//def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
-		//def now = LocalDateTime.now()
-		//ChronoUnit.HOURS.between(now, authTokenExpires) == 23
+		infoRespJson['authTokenExpires'] != null
+		def authTokenExpires = LocalDateTime.parse(infoRespJson['authTokenExpires'].toString(), dtf)
+		def now = LocalDateTime.now()
+		ChronoUnit.HOURS.between(now, authTokenExpires) == 1
 	}
 
 	def "GET /auth/user should return info about currently logged-in user including homecontext"() {

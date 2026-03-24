@@ -24,8 +24,6 @@ class SamlLoginIT extends BaseSpec {
 	static def keycloakTestRealmUrl = ''
 
 	@Shared
-	def backendCookieHeaderSaved = ''
-	@Shared
 	def samlRequestSaved = ''
 	@Shared
 	def relayStateSaved = ''
@@ -56,7 +54,7 @@ class SamlLoginIT extends BaseSpec {
 		log.info('Starting Keycloak container')
 		keycloakContainer.start()
 		log.info('Started Keycloak container at: {}:{}', keycloakContainer.getHost(), keycloakContainer.getMappedPort(8080))
-		keycloakTestRealmUrl = keycloakContainer.getAuthServerUrl() + 'realms/test/protocol/saml'
+		keycloakTestRealmUrl = keycloakContainer.getAuthServerUrl() + '/realms/test/protocol/saml'
 
 		// below 2 lines allow to stream Keycloak logs to this Spec execution console
 		def logConsumer = new Slf4jLogConsumer(log)
@@ -90,11 +88,6 @@ class SamlLoginIT extends BaseSpec {
 		then: 'SP should redirect to IDP: 302 response code and location header set'
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('text/html')
-		def backendCookies = connection.getHeaderFields()['Set-Cookie']
-		backendCookies != null
-		backendCookies.any { it.contains('auth_token=') }
-		// remove additional attributes of cookies
-		def backendCookieHeader = backendCookies.collect { it.split(';')[0] }.join('; ')
 		def response = connection.getInputStream().text
 		response.contains('action="' + keycloakTestRealmUrl + '"')
 		response.contains('<input type="hidden" name="SAMLRequest" value="')
@@ -112,7 +105,6 @@ class SamlLoginIT extends BaseSpec {
 		cleanup: 'store the URL to IDP for next step'
 		this.samlRequestSaved = StringEscapeUtils.unescapeHtml4(samlRequestValue)
 		this.relayStateSaved = relayStateValue ? StringEscapeUtils.unescapeHtml4(relayStateValue) : ''
-		this.backendCookieHeaderSaved = backendCookieHeader
 	}
 
 	def '2. Send SAMLRequest to IDP and get login page'() {
@@ -214,7 +206,7 @@ class SamlLoginIT extends BaseSpec {
 		}
 
 		def spCallbackConn = EntryStoreClient.postRequest(spCallbackUrl, spPostData, null,
-			'application/x-www-form-urlencoded', [Cookie: this.backendCookieHeaderSaved])
+			'application/x-www-form-urlencoded')
 
 		then: 'Service Provider should authenticate the user, redirecting to success URL'
 		spCallbackConn.getResponseCode() in [302, 303, 307]

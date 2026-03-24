@@ -7,11 +7,11 @@
 	<parent>
 		<groupId>org.entrystore</groupId>
 		<artifactId>entrystore-rest-standalone</artifactId>
-		<version>5.6-SNAPSHOT</version>
+		<version>6.0-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>entrystore-rest-standalone-integration-test</artifactId>
-	<version>5.6-SNAPSHOT</version>
+	<version>6.0-SNAPSHOT</version>
 	<name>EntryStore REST Integration Tests</name>
 
 	<build>
@@ -81,7 +81,7 @@
 		<dependency>
 			<groupId>org.entrystore</groupId>
 			<artifactId>entrystore-rest-standalone-spring-boot</artifactId>
-			<version>5.6-SNAPSHOT</version>
+			<version>6.0-SNAPSHOT</version>
 			<scope>test</scope>
 		</dependency>
 
@@ -108,23 +108,22 @@
 
 		<dependency>
 			<groupId>org.testcontainers</groupId>
-			<artifactId>solr</artifactId>
-			<version>1.21.1</version>
+			<artifactId>testcontainers-solr</artifactId>
+			<version>2.0.3</version>
 			<scope>test</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>org.testcontainers</groupId>
-			<artifactId>spock</artifactId>
-			<version>1.21.1</version>
+			<artifactId>testcontainers-spock</artifactId>
+			<version>2.0.3</version>
 			<scope>test</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>com.github.dasniko</groupId>
 			<artifactId>testcontainers-keycloak</artifactId>
-			<!-- newer version is based on jakarta, hence need to use this old ver -->
-			<version>2.6.0</version>
+			<version>4.1.1</version>
 			<scope>test</scope>
 		</dependency>
 
@@ -138,8 +137,7 @@
 		<dependency>
 			<groupId>com.icegreen</groupId>
 			<artifactId>greenmail</artifactId>
-			<!-- newer version is based on jakarta, hence need to use this old ver -->
-			<version>1.6.14</version>
+			<version>${greenmail.version}</version>
 			<scope>test</scope>
 		</dependency>
 
