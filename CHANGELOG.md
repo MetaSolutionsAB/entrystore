@@ -1040,7 +1040,7 @@
 
 [ENTRYSTORE-350](https://metasolutions.atlassian.net/browse/ENTRYSTORE-350) Add support for additional content types to JSONP support
 
-[ENTRYSTORE-347](https://metasolutions.atlassian.net/browse/ENTRYSTORE-347) Create new package entrystore-rest-standalone
+[ENTRYSTORE-347](https://metasolutions.atlassian.net/browse/ENTRYSTORE-347) Create new package entrystore-rest
 
 [ENTRYSTORE-345](https://metasolutions.atlassian.net/browse/ENTRYSTORE-345) Simplify JSON on PUT
 

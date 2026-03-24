@@ -16,7 +16,7 @@
     
 	<modules>
 		<module>harvesting</module>
-		<module>rest-standalone</module>
+		<module>rest</module>
 		<module>transforms</module>
 		<module>benchmark</module>
 		<!-- SQI not functional at the moment, needs refactoring -->
