@@ -77,6 +77,8 @@ import java.util.Set;
 @Slf4j
 public class GraphUtil {
 
+	private static final String LEGACY_N3_MEDIA_TYPE = "text/rdf+n3";
+
 	private static final Map<String, Class<? extends RDFWriter>> MEDIATYPE_TO_RDFWRITER_MAP = Map.of(
 			RDFFormat.RDFXML.getDefaultMIMEType(), RDFXMLPrettyWriter.class,
 			RDFFormat.N3.getDefaultMIMEType(), N3Writer.class,
@@ -94,6 +96,17 @@ public class GraphUtil {
 		types.add(MediaType.APPLICATION_JSON_VALUE);
 		types.add(RDFFormat.RDFJSON.getDefaultMIMEType());
 		ALLOWED_RDF_MEDIA_TYPES = Set.copyOf(types);
+	}
+
+	/**
+	 * Normalizes the legacy text/rdf+n3 MIME type to its standard equivalent
+	 * (text/n3, as returned by RDF4J's {@link RDFFormat#N3}).
+	 */
+	static String normalizeLegacyMediaType(String mediaType) {
+		if (LEGACY_N3_MEDIA_TYPE.equalsIgnoreCase(mediaType)) {
+			return RDFFormat.N3.getDefaultMIMEType();
+		}
+		return mediaType;
 	}
 
 /*
@@ -235,6 +248,7 @@ public class GraphUtil {
 
 	public static Model deserializeGraphUnsafe(String graphString, String mediaType)
 			throws RDFHandlerException, IOException, RDFParseException {
+		mediaType = normalizeLegacyMediaType(mediaType);
 
 		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {
 			return RDFJSON.rdfJsonToGraph(graphString);
@@ -249,6 +263,7 @@ public class GraphUtil {
 	}
 
 	private static RDFParser createRdfParserForMediaType(String mediaType) {
+		mediaType = normalizeLegacyMediaType(mediaType);
 		RDFParser parser = null;
 		if (RDFFormat.RDFXML.getDefaultMIMEType().equals(mediaType)) {
 			parser = new RDFXMLParser();
@@ -274,7 +289,7 @@ public class GraphUtil {
 		if (mediaType == null) {
 			return null;
 		}
-		return MEDIATYPE_TO_RDFWRITER_MAP.get(mediaType);
+		return MEDIATYPE_TO_RDFWRITER_MAP.get(normalizeLegacyMediaType(mediaType));
 	}
 
 	public static String validateRdfMediaType(String mediaType) {
@@ -285,7 +300,7 @@ public class GraphUtil {
 		if (mediaType == null) {
 			throw new CustomResponseException("Unsupported media type", rejectStatus);
 		}
-		String normalized = mediaType.toLowerCase(Locale.ROOT);
+		String normalized = normalizeLegacyMediaType(mediaType).toLowerCase(Locale.ROOT);
 		if (!ALLOWED_RDF_MEDIA_TYPES.contains(normalized)) {
 			throw new CustomResponseException("Unsupported media type", rejectStatus);
 		}
@@ -304,7 +319,8 @@ public class GraphUtil {
 				if (type.isWildcardType() || type.isWildcardSubtype()) {
 					return defaultMediaType;
 				}
-				String typeStr = (type.getType() + "/" + type.getSubtype()).toLowerCase(Locale.ROOT);
+				String typeStr = normalizeLegacyMediaType(type.getType() + "/" + type.getSubtype())
+						.toLowerCase(Locale.ROOT);
 				if (ALLOWED_RDF_MEDIA_TYPES.contains(typeStr)) {
 					return typeStr;
 				}
@@ -318,6 +334,7 @@ public class GraphUtil {
 	}
 
 	public static String serializeGraph(Model graph, String mediaType) {
+		mediaType = normalizeLegacyMediaType(mediaType);
 		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {
 			return RDFJSON.graphToRdfJson(graph);
 		}
@@ -335,7 +352,9 @@ public class GraphUtil {
 			// We don't use GraphUtil.serializeGraph() because we need a JSONObject here and
 			// converting back and forth between String and JSONObject would not be very efficient
 			return RDFJSON.graphToRdfJsonObject(graph);
-		} else if (RDFFormat.JSONLD.getDefaultMIMEType().equals(rdfFormat)) {
+		}
+		rdfFormat = normalizeLegacyMediaType(rdfFormat);
+		if (RDFFormat.JSONLD.getDefaultMIMEType().equals(rdfFormat)) {
 			return new JSONObject(GraphUtil.serializeGraph(graph, rdfFormat));
 		}
 		log.warn("Model could not be serialized, returning empty JSON object");
