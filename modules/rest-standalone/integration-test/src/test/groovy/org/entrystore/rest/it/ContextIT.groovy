@@ -288,4 +288,66 @@ class ContextIT extends BaseSpec {
 		responseJson['status'] != null
 		responseJson['timestamp'] != null
 	}
+
+	def "GET /_contexts/entry/{entry-id}?includeAll as admin should return non-empty resource with entry IDs"() {
+		given:
+		def contextId = 'ctx-resource-test'
+		def contextName = 'contextResourceTest'
+		getOrCreateContext([contextId: contextId, name: contextName])
+		def childEntryId = createEntry(contextId, [entrytype: 'link', resource: 'https://example.com'])
+		assert childEntryId.length() > 0
+
+		when:
+		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId + '?includeAll')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		respJson['entryId'] == contextId
+		respJson['name'] == contextName
+		respJson['info'] != null
+		respJson['metadata'] != null
+		respJson['rights'] != null
+		respJson['resource'] != null
+		respJson['resource'] instanceof List
+		(respJson['resource'] as List).size() > 0
+		(respJson['resource'] as List).contains(childEntryId)
+	}
+
+	def "GET /_contexts/entry/{entry-id}?includeAll as admin should return empty resource array for context with no entries"() {
+		given:
+		def contextId = 'ctx-empty-resource-test'
+		def contextName = 'contextEmptyResourceTest'
+		getOrCreateContext([contextId: contextId, name: contextName])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId + '?includeAll')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		respJson['entryId'] == contextId
+		respJson['name'] == contextName
+		respJson['resource'] != null
+		respJson['resource'] instanceof List
+		(respJson['resource'] as List).size() == 0
+	}
+
+	def "GET /_contexts/entry/_contexts?includeAll as admin should return resource with entry IDs for system context"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/_contexts/entry/_contexts?includeAll')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		respJson['entryId'] == '_contexts'
+		respJson['info'] != null
+		respJson['rights'] != null
+		respJson['resource'] != null
+		respJson['resource'] instanceof List
+		(respJson['resource'] as List).size() > 0
+	}
 }

@@ -107,6 +107,8 @@ springboot/
 
 ## Code Style
 
+**Use Java 25 features** when writing new code or refactoring: records, sealed classes, pattern matching (`instanceof`, `switch`), text blocks, enhanced `switch` expressions, etc. Prefer modern idioms over legacy patterns.
+
 Formatting is IntelliJ-based, defined in `.editorconfig` (with `ij_*` properties) and `.idea/codeStyles/`. No Eclipse formatter is used.
 
 From `.editorconfig`:
