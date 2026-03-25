@@ -23,10 +23,18 @@ stepdefinitions:
   - deploy: &deploy
       name: Deploy
       script:
-        - apt update && apt install -y openssh-client
+        - apt update && apt install -y gnupg openssh-client
+        - gpg --version
+        - echo $GPG_SIGN_KEY | base64 -d | gpg --import
+        - gpg --list-secret-keys
         - export VERSION=`cat VERSION.txt` && echo $VERSION
         # We allow semantic versioning plus x.y-z (e.g. 4.10-SNAPSHOT which does not exactly conform to semver)
         - echo $VERSION | grep -P -q '^(0|[1-9]\d*)\.(0|[1-9]\d*)(\.*)(0*|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$'
+        - export DOWNLOAD_NAME="entrystore-${VERSION}.jar"
+        - cp modules/rest/spring-boot/target/entrystore-rest-spring-boot-${VERSION}-exec.jar ${DOWNLOAD_NAME}
+        - sha256sum ${DOWNLOAD_NAME} > ${DOWNLOAD_NAME}.sha256
+        - gpg --clearsign --default-key 4C12C06EE69EBA383C1A47C61010232068FF1D01 ${DOWNLOAD_NAME}.sha256
+        - scp -v ${DOWNLOAD_NAME} ${DOWNLOAD_NAME}.sha256.asc deploy@meta1.metasolutions.se:/var/www/entrystore.org/download/
         - scp -rv modules/rest/integration-test/target/site/jacoco-aggregate/* deploy@meta1.metasolutions.se:/var/www/entrystore.org/test-coverage/
         - if [ $BITBUCKET_BRANCH == "develop" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/develop.version" ; elif [ $BITBUCKET_BRANCH == "master" ]; then ssh deploy@meta1.metasolutions.se "echo $VERSION > /var/www/entrystore.org/download/latest.version" ; fi
   - dockerhub: &dockerhub
