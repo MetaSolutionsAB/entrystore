@@ -103,9 +103,11 @@ springboot/
 `/{context-id}/entry/{entry-id}`, `/{context-id}/resource/{entry-id}`, `/{context-id}/metadata/{entry-id}`, `/{context-id}/relation/{entry-id}`, `/search`, `/proxy`, `/{context-id}/proxy`, `/echo`, `/auth/*`, `/management/*`
 
 **Spring bean dependency rules:**
-- **Never inject beans produced by the same `@Configuration` class** — especially via constructor injection (`@RequiredArgsConstructor`). This creates a self-referencing circular dependency that prevents application startup. If a `@Configuration` class needs to check whether one of its conditional beans is active, read the property from `Environment` instead.
+- **Avoid and verify that no circular bean dependencies are introduced.** A `@Configuration` class is a wiring spec, not an actor — if it needs to do something beyond constructing objects, that logic belongs in a separate `@Service` or `@Component`. A common violation: a `@Configuration` class injecting a bean it itself produces (via constructor / `@RequiredArgsConstructor`), creating a self-referencing cycle that prevents startup.
 
 ## Code Style
+
+**Use Java 25 features** when writing new code or refactoring: records, sealed classes, pattern matching (`instanceof`, `switch`), text blocks, enhanced `switch` expressions, etc. Prefer modern idioms over legacy patterns.
 
 Formatting is IntelliJ-based, defined in `.editorconfig` (with `ij_*` properties) and `.idea/codeStyles/`. No Eclipse formatter is used.
 

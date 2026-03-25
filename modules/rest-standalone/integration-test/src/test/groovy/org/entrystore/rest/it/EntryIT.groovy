@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
@@ -1519,6 +1535,34 @@ class EntryIT extends BaseSpec {
 		response.contains('es:metadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/metadata/' + entryId + '>;')
 		response.contains('es:externalMetadata <' + metadataUrl + '>;')
 		response.contains('es:cachedExternalMetadata <' + EntryStoreClient.baseUrl + '/' + contextId + '/cached-external-metadata/' + entryId + '>;')
+	}
+
+	def "GET /{context-id}/entry/{entry-id} with Accept text/rdf+n3 should return N3 with Content-Type text/n3"() {
+		given:
+		def entryId = 'entryForGetTests'
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [id                        : entryId,
+					  entrytype                 : 'linkreference',
+					  resource                  : resourceUrl,
+					  'cached-external-metadata': metadataUrl]
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+		def body = [metadata: [(newResourceIri): [
+			(NameSpaceConst.DC_TERM_TITLE): [[
+												 type : 'literal',
+												 value: 'local metadata title'
+											 ]]
+		]]]
+		getOrCreateEntry(contextId, params, body)
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId, 'admin', 'text/rdf+n3')
+
+		then:
+		entryConn.getResponseCode() == HTTP_OK
+		entryConn.getContentType().contains('text/n3')
+		def response = entryConn.getInputStream().text
+		response.contains('/' + contextId + '/entry/' + entryId + '> a es:LinkReference;')
+		response.contains('es:resource <' + resourceUrl + '>;')
 	}
 
 	def "GET /{context-id}/entry/{entry-id} in text/turtle format for a linkreference entry, should return information about the entry in text/turtle format"() {
