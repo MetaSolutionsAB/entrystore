@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3) - a Linked Data framework for managing resources and their metadata using "entries". Built with Java 25, RDF4J, and Solr. The REST layer is being migrated from Restlet to Spring Boot (Jetty 12).
+EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3) - a Linked Data framework for managing resources and their metadata using "entries". Built with Java 25, RDF4J, and Solr. The REST layer uses Spring Boot (Jetty 12).
 
 ## Build Commands
 
@@ -23,10 +23,10 @@ mvn clean install
 
 # Build specific module
 mvn clean install -pl core/core-impl
-mvn clean install -pl modules/rest-standalone/spring-boot
+mvn clean install -pl modules/rest/spring-boot
 
 # Build Spring Boot module and all its dependencies
-mvn clean install -pl modules/rest-standalone/spring-boot -am -DskipTests
+mvn clean install -pl modules/rest/spring-boot -am -DskipTests
 ```
 
 ## Testing
@@ -39,10 +39,10 @@ mvn clean install
 mvn clean test
 
 # Integration tests only (runs all ITs)
-mvn clean verify -pl modules/rest-standalone/integration-test
+mvn clean verify -pl modules/rest/integration-test
 
 # Run a specific integration test class
-mvn clean verify -pl modules/rest-standalone/integration-test -Dtest=ProxyIT
+mvn clean verify -pl modules/rest/integration-test -Dtest=ProxyIT
 
 # Run specific unit test
 mvn clean test -Dtest=EntryImplTest
@@ -50,10 +50,10 @@ mvn clean test -Dtest=EntryImplTest
 
 **Test structure:**
 - Unit tests: `src/test/java/` with `*Test.java` pattern (JUnit 5)
-- Integration tests: `modules/rest-standalone/integration-test/src/test/groovy/` with `*IT.groovy` pattern (Groovy/Spock)
+- Integration tests: `modules/rest/integration-test/src/test/groovy/` with `*IT.groovy` pattern (Groovy/Spock)
 - ITs extend `BaseSpec` which starts a Solr Testcontainer and the Spring Boot app on port 8181 (shared across all test classes)
-- IT config: `modules/rest-standalone/integration-test/src/test/resources/entrystore-it.properties`
-- IT Spring config: `modules/rest-standalone/integration-test/src/test/resources/application.yaml` (imports entrystore-it.properties)
+- IT config: `modules/rest/integration-test/src/test/resources/entrystore-it.properties`
+- IT Spring config: `modules/rest/integration-test/src/test/resources/application.yaml` (imports entrystore-it.properties)
 - Test HTTP client: `EntryStoreClient.groovy` — uses raw `HttpURLConnection`, cookie-based auth, `asUser=''` for guest
 
 ## Architecture
@@ -64,8 +64,7 @@ entrystore/
 │   ├── core-api/              # Interface definitions (Entry, Context, PrincipalManager, etc.)
 │   └── core-impl/             # Implementations using RDF4J for storage
 ├── modules/
-│   ├── rest/                  # Legacy REST API (Restlet) — being migrated to Spring Boot
-│   ├── rest-standalone/
+│   ├── rest/
 │   │   ├── spring-boot/       # Spring Boot REST layer (active development)
 │   │   └── integration-test/  # Groovy/Spock integration tests (Testcontainers)
 │   ├── harvesting/            # OAI-PMH harvesting
@@ -81,7 +80,7 @@ entrystore/
 - A **context's resource URI** is `{baseUrl}/{contextId}` (the context itself), not `{baseUrl}/_contexts/resource/{contextId}`
 - ACL triples use `es:read`/`es:write` predicates with the principal's resource URI as the object, and the entry's metadata/resource URI as the subject (e.g., `<metadataURI> es:read <principalResourceURI>` grants ReadMetadata)
 
-### Spring Boot Module (`modules/rest-standalone/spring-boot/`)
+### Spring Boot Module (`modules/rest/spring-boot/`)
 
 ```
 springboot/
@@ -141,8 +140,8 @@ From `.editorconfig`:
 
 ## Exception Conventions (Spring Boot REST Layer)
 
-- **Never throw `org.entrystore.AuthorizationException` directly from the Spring Boot REST layer** (controllers or services in `modules/rest-standalone/spring-boot/`). `AuthorizationException` belongs to the core layer and should only be thrown by core code (e.g., `PrincipalManager.checkAuthenticatedUserAuthorized()`).
-- In the REST layer, use the application-specific exceptions from `org.entrystore.rest.standalone.springboot.model.exception.*`:
+- **Never throw `org.entrystore.AuthorizationException` directly from the Spring Boot REST layer** (controllers or services in `modules/rest/spring-boot/`). `AuthorizationException` belongs to the core layer and should only be thrown by core code (e.g., `PrincipalManager.checkAuthenticatedUserAuthorized()`).
+- In the REST layer, use the application-specific exceptions from `org.entrystore.rest.springboot.model.exception.*`:
   - `ForbiddenException` — for authorization failures (returns 401 for anonymous users, 403 for authenticated users via `AppExceptionHandler`)
   - `BadRequestException` — for invalid input (400)
   - `EntityNotFoundException` — for missing resources (404)
@@ -154,7 +153,7 @@ From `.editorconfig`:
 
 ## CI/CD
 
-Bitbucket Pipelines with Maven 3 + Eclipse Temurin 21. Integration tests use Docker (TestContainers with `TESTCONTAINERS_RYUK_DISABLED=true`).
+Bitbucket Pipelines with Maven 3 + Eclipse Temurin 25. Integration tests use Docker (TestContainers with `TESTCONTAINERS_RYUK_DISABLED=true`).
 
 **Build optimization flags:**
 ```bash
@@ -172,7 +171,7 @@ mvn clean install -X
 mvn clean package -DskipTests
 
 # Run (-exec classifier is the executable fat jar)
-java -jar modules/rest-standalone/spring-boot/target/entrystore-rest-standalone-spring-boot-*-exec.jar
+java -jar modules/rest/spring-boot/target/entrystore-rest-spring-boot-*-exec.jar
 ```
 
 **Configuration:** The app imports `entrystore.properties` from the working directory via `spring.config.import` in `application.yaml`. Three ways to provide config:
@@ -181,7 +180,7 @@ java -jar modules/rest-standalone/spring-boot/target/entrystore-rest-standalone-
 2. **Remote URL** — set `ENTRYSTORE_CONFIG_URI` env var (`http://`, `https://`, `file://`, or local path)
 3. **CLI args** — override individual properties: `--entrystore.solr.url=http://... --server.port=8080`
 
-Example config: `modules/rest/src/main/resources/entrystore.properties_example`
+Example config: `modules/rest/spring-boot/src/main/resources/entrystore.properties_example`
 
 **Default port:** 8080 (production), 8181 (integration tests)
 
@@ -204,4 +203,4 @@ Example config: `modules/rest/src/main/resources/entrystore.properties_example`
 - Do not include AI/agent attribution in commit messages (no Co-Authored-By or similar)
 - Issue tracker: https://metasolutions.atlassian.net/browse/ENTRYSTORE-*
 - **JIRA priorities:** Blocker, Critical, Major, Minor, Trivial
-- **Spring Boot migration epic:** ENTRYSTORE-857 — create JIRA issues related to the Spring Boot REST layer (`modules/rest-standalone/spring-boot/`) under this epic
+- **Spring Boot migration epic:** ENTRYSTORE-857 — create JIRA issues related to the Spring Boot REST layer (`modules/rest/spring-boot/`) under this epic
