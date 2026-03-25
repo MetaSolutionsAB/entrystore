@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.standalone.springboot.model.api;
+package org.entrystore.rest.springboot.model.api;
 
 import java.util.Arrays;
 

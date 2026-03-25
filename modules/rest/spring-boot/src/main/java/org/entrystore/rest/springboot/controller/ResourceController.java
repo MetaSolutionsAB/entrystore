@@ -19,7 +19,7 @@ import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.service.EntryService;
 import org.entrystore.rest.springboot.service.ResourceService;
 import org.entrystore.rest.springboot.service.SyndicationService;
-import org.entrystore.rest.standalone.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.GraphUtil;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;

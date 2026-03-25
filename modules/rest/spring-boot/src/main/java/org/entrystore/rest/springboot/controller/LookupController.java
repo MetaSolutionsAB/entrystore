@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.standalone.springboot.controller;
+package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
-import org.entrystore.rest.standalone.springboot.model.api.LookupScope;
-import org.entrystore.rest.standalone.springboot.service.LookupService;
-import org.entrystore.rest.standalone.springboot.util.GraphUtil;
-import org.entrystore.rest.standalone.springboot.util.HttpUtil;
+import org.entrystore.rest.springboot.model.api.LookupScope;
+import org.entrystore.rest.springboot.service.LookupService;
+import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

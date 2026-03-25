@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.standalone.springboot.model.api;
+package org.entrystore.rest.springboot.model.api;
 
-import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.jspecify.annotations.NonNull;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.stereotype.Component;
 
@@ -24,7 +25,7 @@ import org.springframework.stereotype.Component;
 public class LookupScopeConverter implements Converter<String, LookupScope> {
 
 	@Override
-	public LookupScope convert(String input) {
+	public LookupScope convert(@NonNull String input) {
 		try {
 			return LookupScope.fromString(input);
 		} catch (IllegalArgumentException ex) {

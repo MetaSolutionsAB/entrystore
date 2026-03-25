@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.standalone.util;
+package org.entrystore.rest.springboot.util;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.AccessLevel;

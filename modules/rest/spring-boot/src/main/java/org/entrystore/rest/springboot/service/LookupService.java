@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.standalone.springboot.service;
+package org.entrystore.rest.springboot.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,11 +31,11 @@ import org.entrystore.SearchIndex;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.QueryResult;
 import org.entrystore.repository.util.SolrSearchIndex;
-import org.entrystore.rest.standalone.springboot.model.api.LookupScope;
-import org.entrystore.rest.standalone.springboot.model.exception.BadRequestException;
-import org.entrystore.rest.standalone.springboot.model.exception.CustomResponseException;
-import org.entrystore.rest.standalone.springboot.model.exception.EntityNotFoundException;
-import org.entrystore.rest.standalone.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.model.api.LookupScope;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
+import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.springboot.util.GraphUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
