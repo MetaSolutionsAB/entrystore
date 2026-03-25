@@ -61,7 +61,7 @@ class SearchIT extends BaseSpec {
 		entryId = getOrCreateEntry(contextId, params, body)
 		assert entryId.length() > 0
 		Thread.sleep(100)
-		//waitForSolrProcessing()
+		waitForSolrProcessing()
 		// Solr needs even more time to finish processing
 		Thread.sleep(1500)
 	}
