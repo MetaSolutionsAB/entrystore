@@ -10,6 +10,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
+import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
@@ -718,12 +719,12 @@ class ResourceIT extends BaseSpec {
 		def group1Members = group1ResourceJson['children'].collect()
 		group1Members.size() == 1
 		group1Members[0]['name'] == username.toLowerCase()
-		def group2ResourceConn = EntryStoreClient.getRequest(group1ResourceUri)
+		def group2ResourceConn = EntryStoreClient.getRequest(group2ResourceUri)
 		assert group2ResourceConn.getResponseCode() == HTTP_OK
 		assert group2ResourceConn.getContentType().contains('application/json')
 		def group2ResourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(group2ResourceConn))
 		assert group2ResourceJson['children'] instanceof List
-		def group2Members = group1ResourceJson['children'].collect()
+		def group2Members = group2ResourceJson['children'].collect()
 		group2Members.size() == 1
 		group2Members[0]['name'] == username.toLowerCase()
 
@@ -773,32 +774,230 @@ class ResourceIT extends BaseSpec {
 
 		// fetch Group details
 		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
-		assert groupResourceConn.getResponseCode() == HTTP_OK
-		assert groupResourceConn.getContentType().contains('application/json')
-		def groupResourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(groupResourceConn))
-		assert groupResourceJson['children'] instanceof List
+		groupResourceConn.getResponseCode() == HTTP_OK
+		groupResourceConn.getContentType().contains('application/json')
+		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.getInputStream().text)
+		groupResourceJson['children'] instanceof List
 		def groupMembers = groupResourceJson['children'].collect()
 		groupMembers.size() == 2
 		groupMembers[0]['name'] == username1.toLowerCase()
 		groupMembers[1]['name'] == username2.toLowerCase()
-		// fetch User details
+
+		// fetch User1 details
 		def user1ResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + user1EntryId + "?includeAll")
-		assert user1ResourceConn.getResponseCode() == HTTP_OK
-		assert user1ResourceConn.getContentType().contains('application/json')
-		def user1ResourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(user1ResourceConn))
-		assert user1ResourceJson['relations'] instanceof Map
-		def relations1 = user1ResourceJson['relations']
-		def user1GroupRelation = relations1[groupResourceUri]
-		assert user1GroupRelation != null
-		// fetch User details
+		user1ResourceConn.getResponseCode() == HTTP_OK
+		user1ResourceConn.getContentType().contains('application/json')
+		def user1ResourceJson = JSON_PARSER.parseText(user1ResourceConn.getInputStream().text)
+		user1ResourceJson['relations'] instanceof Map
+		user1ResourceJson['relations'][groupResourceUri] != null
+
+		// fetch User2 details
 		def user2ResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + user2EntryId + "?includeAll")
-		assert user2ResourceConn.getResponseCode() == HTTP_OK
-		assert user2ResourceConn.getContentType().contains('application/json')
-		def user2ResourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(user2ResourceConn))
-		assert user2ResourceJson['relations'] instanceof Map
-		def relations2 = user1ResourceJson['relations']
-		def user2GroupRelation = relations2[groupResourceUri]
-		assert user2GroupRelation != null
+		user2ResourceConn.getResponseCode() == HTTP_OK
+		user2ResourceConn.getContentType().contains('application/json')
+		def user2ResourceJson = JSON_PARSER.parseText(user2ResourceConn.getInputStream().text)
+		user2ResourceJson['relations'] instanceof Map
+		user2ResourceJson['relations'][groupResourceUri] != null
+	}
+
+	def "PUT /_principals/resource/{entry-id} should return 400 for malformed JSON on Group resource"() {
+		given:
+		def groupParams = [graphtype: 'group']
+		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTMalformed']])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+
+		def malformedBody = '{ this is not a valid json, mate }'
+
+		when:
+		def conn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, malformedBody)
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def "PUT /_principals/resource/{entry-id} should remove members from a group when given a subset"() {
+		given:
+		def user1 = UserUtil.createUser('UserPUTRemove1')
+		def user1EntryId = user1['entryId'].toString()
+		def user2 = UserUtil.createUser('UserPUTRemove2')
+		def user2EntryId = user2['entryId'].toString()
+
+		def groupParams = [graphtype: 'group']
+		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTRemove']])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.getInputStream().text)
+		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		// Add both users
+		def addBothBody = JsonOutput.toJson([user1EntryId, user2EntryId])
+		def addBothConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, addBothBody)
+		assert addBothConn.getResponseCode() == HTTP_NO_CONTENT
+
+		// Verify both are members
+		def groupResourceConn1 = EntryStoreClient.getRequest(groupResourceUri)
+		def groupResourceJson1 = JSON_PARSER.parseText(groupResourceConn1.getInputStream().text)
+		assert groupResourceJson1['children'].size() == 2
+
+		when:
+		// Set only user1 as member (removes user2)
+		def removeBody = JsonOutput.toJson([user1EntryId])
+		def removeConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, removeBody)
+
+		then:
+		removeConn.getResponseCode() == HTTP_NO_CONTENT
+		def groupResourceConn2 = EntryStoreClient.getRequest(groupResourceUri)
+		def groupResourceJson2 = JSON_PARSER.parseText(groupResourceConn2.getInputStream().text)
+		groupResourceJson2['children'] instanceof List
+		groupResourceJson2['children'].size() == 1
+		groupResourceJson2['children'][0]['name'] == 'userputremove1'
+	}
+
+	def "PUT /_principals/resource/{entry-id} should clear all members from a group when given empty array"() {
+		given:
+		def user1 = UserUtil.createUser('UserPUTClear1')
+		def user1EntryId = user1['entryId'].toString()
+
+		def groupParams = [graphtype: 'group']
+		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTClear']])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.getInputStream().text)
+		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		// Add user
+		def addBody = JsonOutput.toJson([user1EntryId])
+		def addConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, addBody)
+		assert addConn.getResponseCode() == HTTP_NO_CONTENT
+
+		// Verify member was added
+		def groupResourceConn1 = EntryStoreClient.getRequest(groupResourceUri)
+		def groupResourceJson1 = JSON_PARSER.parseText(groupResourceConn1.getInputStream().text)
+		assert groupResourceJson1['children'].size() == 1
+
+		when:
+		// Set empty array (removes all members)
+		def clearConn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, '[]')
+
+		then:
+		clearConn.getResponseCode() == HTTP_NO_CONTENT
+		def groupResourceConn2 = EntryStoreClient.getRequest(groupResourceUri)
+		def groupResourceJson2 = JSON_PARSER.parseText(groupResourceConn2.getInputStream().text)
+		groupResourceJson2['children'] instanceof List
+		groupResourceJson2['children'].size() == 0
+	}
+
+	def "PUT /_principals/resource/{entry-id} should return 400 for non-existent child entry on Group resource"() {
+		given:
+		def groupParams = [graphtype: 'group']
+		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTBadChild']])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+
+		when:
+		def conn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, JsonOutput.toJson(['non-existent-entry-id']))
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def "PUT /_principals/resource/{entry-id} should return 409 for non-User entry added to Group"() {
+		given:
+		def group1Params = [graphtype: 'group']
+		def group1Body = JsonOutput.toJson([resource: [name: 'GroupPUTTarget']])
+		def group1Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(group1Params), group1Body)
+		def group1EntryId = JSON_PARSER.parseText(group1Connection.getInputStream().text)['entryId'].toString()
+
+		// Create another group (non-User entry) to try adding as member
+		def group2Params = [graphtype: 'group']
+		def group2Body = JsonOutput.toJson([resource: [name: 'GroupPUTNonUser']])
+		def group2Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(group2Params), group2Body)
+		def group2EntryId = JSON_PARSER.parseText(group2Connection.getInputStream().text)['entryId'].toString()
+
+		when:
+		def conn = EntryStoreClient.putRequest('/_principals/resource/' + group1EntryId, JsonOutput.toJson([group2EntryId]))
+
+		then:
+		conn.getResponseCode() == HTTP_CONFLICT
+	}
+
+	def "PUT /_principals/resource/{entry-id} should update Group members via Turtle RDF"() {
+		given:
+		def user1 = UserUtil.createUser('UserPUTTurtle1')
+		def user1EntryId = user1['entryId'].toString()
+		def user2 = UserUtil.createUser('UserPUTTurtle2')
+		def user2EntryId = user2['entryId'].toString()
+
+		def groupParams = [graphtype: 'group']
+		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTTurtle']])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.getInputStream().text)
+		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
+		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
+
+		// Get user entry URIs (needed for the RDF triples)
+		def user1EntryUri = EntryStoreClient.baseUrl + '/_principals/entry/' + user1EntryId
+		def user2EntryUri = EntryStoreClient.baseUrl + '/_principals/entry/' + user2EntryId
+
+		def turtleBody = """\
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+<${groupResourceUri}> rdf:type rdf:Seq ;
+    rdf:_1 <${user1EntryUri}> ;
+    rdf:_2 <${user2EntryUri}> .
+"""
+
+		when:
+		def conn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, turtleBody, 'admin', 'text/turtle')
+
+		then:
+		conn.getResponseCode() == HTTP_NO_CONTENT
+		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
+		groupResourceConn.getResponseCode() == HTTP_OK
+		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.getInputStream().text)
+		groupResourceJson['children'] instanceof List
+		groupResourceJson['children'].size() == 2
+		groupResourceJson['children'][0]['name'] == 'userputturtle1'
+		groupResourceJson['children'][1]['name'] == 'userputturtle2'
+	}
+
+	def "PUT /_principals/resource/{entry-id} should return 409 for duplicate user entries in Group"() {
+		given:
+		def user1 = UserUtil.createUser('UserPUTDup1')
+		def user1EntryId = user1['entryId'].toString()
+
+		def groupParams = [graphtype: 'group']
+		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTDuplicate']])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+
+		when:
+		def conn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, JsonOutput.toJson([user1EntryId, user1EntryId]))
+
+		then:
+		conn.getResponseCode() == HTTP_CONFLICT
+	}
+
+	def "PUT /_principals/resource/{entry-id} should return 400 for malformed Turtle RDF on Group resource"() {
+		given:
+		def groupParams = [graphtype: 'group']
+		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTMalformedTurtle']])
+		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+
+		def malformedTurtle = '@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n<urn:test> rdf:type rdf:Seq ;\n    rdf:_1 INVALID_URI_HERE'
+
+		when:
+		def conn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, malformedTurtle, 'admin', 'text/turtle')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} should edit other User-resource properties"() {

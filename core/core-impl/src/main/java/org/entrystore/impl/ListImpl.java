@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -92,8 +92,7 @@ public class ListImpl extends RDFResource implements List {
 		if (graph == null) {
 			throw new IllegalArgumentException("Graph must not be null");
 		}
-		children = loadChildren(graph);
-		saveChildren();
+		setChildren(loadChildren(graph));
 	}
 
 	private Vector<URI> loadChildren(Model graph) {
@@ -144,12 +143,12 @@ public class ListImpl extends RDFResource implements List {
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 			} catch (Exception e) {
 				rc.rollback();
-				log.error(e.getMessage());
+				throw new org.entrystore.repository.RepositoryException("Failed to save children for entry " + entry.getId(), e);
 			} finally {
 				rc.close();
 			}
 		} catch (RepositoryException e) {
-			log.error(e.getMessage());
+			throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
 		}
 	}
 
@@ -560,7 +559,7 @@ public class ListImpl extends RDFResource implements List {
 				}
 			}
 		} catch (RepositoryException e) {
-			log.error(e.getMessage(), e);
+			throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
 		}
 		return true;
 	}

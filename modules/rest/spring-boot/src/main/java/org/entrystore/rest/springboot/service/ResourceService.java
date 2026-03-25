@@ -225,7 +225,7 @@ public class ResourceService {
 						String childId = childrenJSONArray.get(i).toString();
 						Entry childEntry = entry.getContext().get(childId);
 						if (childEntry == null) {
-							throw new BadRequestException("Cannot update list, since one of the children does not exist. ChildId: " + childId);
+							throw new BadRequestException("Cannot update resource, since one of the children does not exist. ChildId: " + childId);
 						} else {
 							newResource.add(childEntry.getEntryURI());
 						}
@@ -242,16 +242,31 @@ public class ResourceService {
 				} catch (JSONException e) {
 					throw new BadRequestException("Cannot parse given body resource as JSONArray.");
 				} catch (RepositoryException re) {
-					throw new DataConflictException("An entry cannot be added multiple times. Exception: " + re.getMessage());
+					log.error("Failed to set children for entry {}: {}", entry.getId(), re.getMessage());
+					throw new DataConflictException("An entry cannot be added multiple times", re);
 				}
 			} else {
-				Model graph = GraphUtil.deserializeGraph(new String(requestBody, StandardCharsets.UTF_8), mediaType);
-				if (graph != null && GraphType.List.equals(entry.getGraphType())) {
-					((org.entrystore.List) entry.getResource()).setGraph(graph);
-				} else {
-					throw new BadRequestException("Bad request, just in general...");
+				try {
+					Model graph = GraphUtil.deserializeGraphUnsafe(new String(requestBody, StandardCharsets.UTF_8), mediaType);
+					if (graph == null) {
+						throw new BadRequestException("Unable to deserialize request body as RDF graph");
+					}
+					if (entry.getGraphType() == GraphType.List) {
+						((org.entrystore.List) entry.getResource()).setGraph(graph);
+					} else if (entry.getGraphType() == GraphType.Group) {
+						((Group) entry.getResource()).setGraph(graph);
+					} else {
+						throw new BadRequestException("Unsupported graph type for RDF graph update: " + entry.getGraphType());
+					}
+				} catch (org.eclipse.rdf4j.rio.RDFParseException e) {
+					throw new BadRequestException("Malformed RDF in request body");
+				} catch (org.eclipse.rdf4j.rio.RDFHandlerException | java.io.IOException e) {
+					log.error("Failed to deserialize RDF graph for entry {}", entry.getId());
+					throw new InternalServerErrorException("Failed to process RDF graph", e);
+				} catch (RepositoryException e) {
+					log.error("Failed to update resource graph for entry {}: {}", entry.getId(), e.getMessage());
+					throw new DataConflictException("An entry cannot be added multiple times", e);
 				}
-				// TODO: add support for groups here
 			}
 			return CompletionState.UPDATED;
 		}
@@ -713,9 +728,7 @@ public class ResourceService {
 								continue;
 							}
 						} finally {
-							if (fileIS != null) {
-								fileIS.close();
-							}
+							fileIS.close();
 						}
 						if (nameLC.endsWith(".rdf")) {
 							importRDFResource(fileString);
