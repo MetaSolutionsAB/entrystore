@@ -12,6 +12,7 @@ import java.util.zip.ZipOutputStream
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
+import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NOT_IMPLEMENTED
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
@@ -1286,5 +1287,110 @@ class ResourceIT extends BaseSpec {
 		def respJson = JSON_PARSER.parseText(conn.getErrorStream().text)
 		respJson['error'] != null
 		respJson['error'].toString().contains('RDF resource import is not yet implemented')
+	}
+
+	def "GET /{context-id}/resource/{entry-id} with unsupported rdfFormat on Graph resource should return 406 Not Acceptable"() {
+		given:
+		def params = [graphtype: 'graph']
+		def entryId = createEntry(contextId, params)
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId + '?rdfFormat=text/html')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_NOT_ACCEPTABLE
+	}
+
+	def "GET /{context-id}/resource/{entry-id} with rdfFormat=text/turtle on Graph resource should return 200 with Turtle content"() {
+		given:
+		def params = [graphtype: 'graph']
+		def entryId = createEntry(contextId, params)
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId + '?rdfFormat=text/turtle')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('text/turtle')
+		def responseBody = resourceConn.getInputStream().text
+		responseBody.length() > 0
+	}
+
+	def "GET /{context-id}/resource/{entry-id} with unsupported rdfFormat on None (binary) resource should return normally"() {
+		given:
+		def body = [resource: [name: 'None graph entry for format test']]
+		def entryId = createEntry(contextId, [:], body)
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId + '?rdfFormat=text/html')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_NO_CONTENT
+	}
+
+	def "GET /{context-id}/resource/{entry-id} with unsupported rdfFormat on List resource should return 406 Not Acceptable"() {
+		given:
+		def givenEntryId = createEntry(contextId, [:])
+		def params = [graphtype: 'list']
+		def body = [resource: [givenEntryId]]
+		def entryId = createEntry(contextId, params, body)
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId + '?rdfFormat=text/html')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_NOT_ACCEPTABLE
+	}
+
+	def "GET /{context-id}/resource/{entry-id} with rdfFormat=application/rdf+xml on Graph resource should return 200 with RDF/XML content"() {
+		given:
+		def params = [graphtype: 'graph']
+		def entryId = createEntry(contextId, params)
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId + '?rdfFormat=application/rdf%2Bxml')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/rdf+xml')
+		def responseBody = resourceConn.getInputStream().text
+		responseBody.length() > 0
+	}
+
+	def "GET /{context-id}/resource/{entry-id} with rdfFormat=text/turtle on List resource should return 200 with Turtle content"() {
+		given:
+		def givenEntryId = createEntry(contextId, [:])
+		def params = [graphtype: 'list']
+		def body = [resource: [givenEntryId]]
+		def entryId = createEntry(contextId, params, body)
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId + '?rdfFormat=text/turtle')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('text/turtle')
+		def responseBody = resourceConn.getInputStream().text
+		responseBody.length() > 0
+	}
+
+	def "GET /{context-id}/resource/{entry-id} with Accept header containing supported type among unsupported ones on Graph resource should return 200"() {
+		given:
+		def params = [graphtype: 'graph']
+		def entryId = createEntry(contextId, params)
+		assert entryId.length() > 0
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId, 'admin', 'text/html, text/turtle')
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('text/turtle')
 	}
 }

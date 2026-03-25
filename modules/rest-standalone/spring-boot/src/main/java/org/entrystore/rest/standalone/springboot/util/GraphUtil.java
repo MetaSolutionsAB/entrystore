@@ -327,8 +327,7 @@ public class GraphUtil {
 			}
 		} catch (InvalidMediaTypeException e) {
 			log.warn("Failed to parse Accept header '{}': {}", acceptHeader, e.getMessage());
-			throw new CustomResponseException(
-					"Malformed Accept header: " + e.getMessage(), HttpStatus.NOT_ACCEPTABLE);
+			throw new CustomResponseException("Malformed Accept header", HttpStatus.NOT_ACCEPTABLE);
 		}
 
 		throw new CustomResponseException("Unsupported media type", HttpStatus.NOT_ACCEPTABLE);

@@ -19,6 +19,7 @@ import org.entrystore.rest.standalone.springboot.model.dto.CompletionState;
 import org.entrystore.rest.standalone.springboot.service.EntryService;
 import org.entrystore.rest.standalone.springboot.service.ResourceService;
 import org.entrystore.rest.standalone.springboot.service.SyndicationService;
+import org.entrystore.rest.standalone.springboot.util.GraphUtil;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -111,8 +112,18 @@ public class ResourceController {
 			responseMediaType = MediaType.TEXT_PLAIN;
 
 		} else {
+			GraphType graphType = entry.getGraphType();
+			if (graphType == GraphType.Graph || graphType == GraphType.List) {
+				if (rdfFormat != null) {
+					mediaType = GraphUtil.validateRdfMediaType(mediaType);
+				} else {
+					mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, "application/rdf+xml");
+				}
+				responseMediaType = MediaType.parseMediaType(mediaType);
+			} else {
+				responseMediaType = MediaType.APPLICATION_JSON;
+			}
 			responseBody = resourceService.serializeResourceAsJson(entry, mediaType, listFilter);
-			responseMediaType = MediaType.APPLICATION_JSON;
 		}
 
 		return ResponseEntity
