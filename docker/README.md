@@ -59,6 +59,8 @@ Copy it and adjust the settings for your environment:
 cp modules/rest/spring-boot/src/main/resources/entrystore.properties_example entrystore.properties
 ```
 
+**Note:** The example file uses bare-metal paths (e.g., `/srv/entrystore/store/`). For Docker, update the paths to use the data volume directory (e.g., `/srv/entrystore/data/store/`) as shown in the table below.
+
 Key settings to configure:
 
 | Property | Description | Docker default path |
@@ -74,7 +76,7 @@ The configuration can be provided in three ways (in order of preference):
 
 ### Via `ENTRYSTORE_CONFIG_URI` environment variable
 
-Supports `http://`, `https://`, `file://` URLs and local file paths. This is compatible with the Restlet-based version of EntryStore.
+Supports `http://`, `https://`, `file://` URLs and local file paths.
 
 ```bash
 docker run -p 8080:8080 \

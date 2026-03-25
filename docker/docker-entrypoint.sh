@@ -8,7 +8,7 @@ if [ -n "$ENTRYSTORE_CONFIG_URI" ]; then
   case "$ENTRYSTORE_CONFIG_URI" in
     http://*|https://*)
       echo "Downloading configuration from $ENTRYSTORE_CONFIG_URI"
-      wget -q -O "$CONFIG_FILE" "$ENTRYSTORE_CONFIG_URI"
+      wget -q -O "$CONFIG_FILE" --timeout=10 --tries=3 "$ENTRYSTORE_CONFIG_URI"
       ;;
     file://*)
       CONFIG_PATH="${ENTRYSTORE_CONFIG_URI#file://}"

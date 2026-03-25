@@ -25,7 +25,11 @@ fi
 if [ ! -d "$SOLR_DATA" ]; then
 	echo "Creating Solr data directory ${SOLR_DATA}..."
 	mkdir -p "${SOLR_DATA}"
-	chown 8983:8983 "${SOLR_DATA}"
+	if [ "$(id -u)" = "0" ]; then
+		chown 8983:8983 "${SOLR_DATA}"
+	else
+		echo "Warning: Not running as root, cannot chown ${SOLR_DATA} to UID 8983. Solr may fail to write data." >&2
+	fi
 else
 	OWNER_UID=$(stat -c '%u' "${SOLR_DATA}")
 	if [ "$OWNER_UID" != "8983" ]; then
