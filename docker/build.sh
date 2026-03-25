@@ -6,14 +6,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 ENTRYSTORE_VERSION=$(cat "$PROJECT_ROOT/VERSION.txt")
-JAR_FILE="$PROJECT_ROOT/modules/rest-standalone/spring-boot/target/entrystore-rest-standalone-spring-boot-${ENTRYSTORE_VERSION}-exec.jar"
+JAR_FILE="$PROJECT_ROOT/modules/rest/spring-boot/target/entrystore-rest-spring-boot-${ENTRYSTORE_VERSION}-exec.jar"
+
+echo "Building EntryStore project..."
+mvn -f "$PROJECT_ROOT/pom.xml" clean package -DskipTests
 
 if [ ! -f "$JAR_FILE" ]; then
-  echo "Error: EntryStore has not been built yet. Expected jar not found:"
+  echo "Error: Build did not produce expected jar:"
   echo "  $JAR_FILE"
-  echo ""
-  echo "Build the project first by running:"
-  echo "  mvn clean package -DskipTests"
   exit 1
 fi
 

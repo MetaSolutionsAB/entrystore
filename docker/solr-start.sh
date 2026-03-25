@@ -15,7 +15,7 @@ SOLR_DATA="${SOLR_DATA:-/srv/${DOMAIN}/data/solr}"
 SOLR_MEMORY="${SOLR_MEMORY:-512m}"
 CORE_NAME="entrystore-core"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONF_DIR="${SCRIPT_DIR}/../modules/rest-standalone/integration-test/src/test/resources/solr"
+CONF_DIR="${SCRIPT_DIR}/../modules/rest/integration-test/src/test/resources/solr"
 
 if [ ! -d "$CONF_DIR" ]; then
 	echo "Error: Solr config directory not found: ${CONF_DIR}" >&2

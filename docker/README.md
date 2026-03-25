@@ -3,30 +3,23 @@
 ## Prerequisites
 
 - Docker
-- Java 21
+- Java 25
 - Maven 3.6+
 
 ## Building
 
 All commands below should be run from the **project root** directory.
 
-### 1. Build the project
-
-```bash
-mvn clean package -DskipTests
-```
-
-### 2. Build the Docker image
-
-The version is read from `VERSION.txt`. Either use the build script:
+The build script builds the project and the Docker image in one step. The version is read from `VERSION.txt`.
 
 ```bash
 ./docker/build.sh
 ```
 
-Or run the Docker build command directly:
+Or build manually:
 
 ```bash
+mvn clean package -DskipTests
 docker build \
   -f docker/Dockerfile \
   --build-arg ENTRYSTORE_VERSION=$(cat VERSION.txt) \
@@ -58,12 +51,12 @@ See the sections below for details on configuration and data volumes.
 
 ## Configuration
 
-EntryStore is configured via an `entrystore.properties` file. A documented example is available at `modules/rest/src/main/resources/entrystore.properties_example`.
+EntryStore is configured via an `entrystore.properties` file. A documented example is available at `modules/rest/spring-boot/src/main/resources/entrystore.properties_example`.
 
 Copy it and adjust the settings for your environment:
 
 ```bash
-cp modules/rest/src/main/resources/entrystore.properties_example entrystore.properties
+cp modules/rest/spring-boot/src/main/resources/entrystore.properties_example entrystore.properties
 ```
 
 Key settings to configure:

@@ -13,7 +13,7 @@ RUN mkdir -p \
       /srv/entrystore/data/backup
 
 ARG ENTRYSTORE_VERSION
-COPY modules/rest-standalone/spring-boot/target/entrystore-rest-standalone-spring-boot-${ENTRYSTORE_VERSION}-exec.jar /srv/entrystore/entrystore.jar
+COPY modules/rest/spring-boot/target/entrystore-rest-spring-boot-${ENTRYSTORE_VERSION}-exec.jar /srv/entrystore/entrystore.jar
 COPY docker/docker-entrypoint.sh /srv/entrystore/docker-entrypoint.sh
 
 RUN addgroup -g 2000 entrystore &&\
