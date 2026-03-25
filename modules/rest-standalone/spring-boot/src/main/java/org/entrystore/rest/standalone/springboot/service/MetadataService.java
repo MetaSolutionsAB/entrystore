@@ -305,8 +305,8 @@ public class MetadataService {
 				try {
 					URI expanded = NS.expand(s);
 					// we add it to the result if it could be expanded
-					if (!s.equals(expanded.toString())) {
-						result.add(URI.create(expanded.toString()));
+					if (expanded != null && !s.equals(expanded.toString())) {
+						result.add(expanded);
 					}
 				} catch (IllegalArgumentException iae) {
 					log.warn("Unable to expand namespace: {}", iae.getMessage());

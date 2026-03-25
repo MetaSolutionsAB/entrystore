@@ -177,7 +177,7 @@ public class AppExceptionHandler {
 	@ExceptionHandler(CustomResponseException.class)
 	public ResponseEntity<ErrorResponse> handleCustomResponseException(CustomResponseException ex,
 																	   HttpServletRequest request) {
-		log.info("CustomResponseException ({}): {}", ex.getStatus().value(), ex.getMessage());
+		log.info("CustomResponseException ({}): {}", ex.getStatus().value(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(ex.getStatus().value())
 				.path(request.getRequestURI())
