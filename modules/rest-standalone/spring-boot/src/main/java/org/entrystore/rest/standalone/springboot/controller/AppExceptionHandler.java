@@ -183,9 +183,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
-		return ResponseEntity.status(responseBody.status())
-				.contentType(MediaType.APPLICATION_JSON)
-				.body(responseBody);
+		return ResponseEntity.status(responseBody.status()).body(responseBody);
 	}
 
 	@ExceptionHandler(Exception.class)

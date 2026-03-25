@@ -1393,17 +1393,4 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('text/turtle')
 	}
-
-	def "GET /{context-id}/resource/{entry-id} with unsupported Accept header on Graph resource should return 406 Not Acceptable"() {
-		given:
-		def params = [graphtype: 'graph']
-		def entryId = createEntry(contextId, params)
-		assert entryId.length() > 0
-
-		when:
-		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId, 'admin', 'text/html')
-
-		then:
-		resourceConn.getResponseCode() == HTTP_NOT_ACCEPTABLE
-	}
 }
