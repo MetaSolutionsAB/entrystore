@@ -24,6 +24,13 @@ spring:
     max-request-size: 12MB
 
 
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: true
+
+
 logging:
   http:
     enabled: true   # Enabled is the default (i.e. when this property is not set), set it to "false" to disable request/response logging
