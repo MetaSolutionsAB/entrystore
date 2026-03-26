@@ -241,8 +241,9 @@ public class ResourceService {
 					return CompletionState.UPDATED;
 				} catch (JSONException e) {
 					throw new BadRequestException("Cannot parse given body resource as JSONArray.");
+				} catch (IllegalArgumentException iae) {
+					throw new BadRequestException(iae.getMessage());
 				} catch (RepositoryException re) {
-					log.error("Failed to set children for entry {}: {}", entry.getId(), re.getMessage());
 					throw new DataConflictException("An entry cannot be added multiple times", re);
 				}
 			} else {
@@ -259,12 +260,12 @@ public class ResourceService {
 						throw new BadRequestException("Unsupported graph type for RDF graph update: " + entry.getGraphType());
 					}
 				} catch (org.eclipse.rdf4j.rio.RDFParseException e) {
-					throw new BadRequestException("Malformed RDF in request body");
+					throw new BadRequestException("Malformed RDF in request body: " + e.getMessage());
 				} catch (org.eclipse.rdf4j.rio.RDFHandlerException | java.io.IOException e) {
-					log.error("Failed to deserialize RDF graph for entry {}", entry.getId());
-					throw new InternalServerErrorException("Failed to process RDF graph", e);
+					throw new InternalServerErrorException("Failed to process RDF graph for entry " + entry.getId(), e);
+				} catch (IllegalArgumentException iae) {
+					throw new BadRequestException(iae.getMessage());
 				} catch (RepositoryException e) {
-					log.error("Failed to update resource graph for entry {}: {}", entry.getId(), e.getMessage());
 					throw new DataConflictException("An entry cannot be added multiple times", e);
 				}
 			}

@@ -906,7 +906,7 @@ class ResourceIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
-	def "PUT /_principals/resource/{entry-id} should return 409 for non-User entry added to Group"() {
+	def "PUT /_principals/resource/{entry-id} should return 400 for non-User entry added to Group"() {
 		given:
 		def group1Params = [graphtype: 'group']
 		def group1Body = JsonOutput.toJson([resource: [name: 'GroupPUTTarget']])
@@ -923,7 +923,7 @@ class ResourceIT extends BaseSpec {
 		def conn = EntryStoreClient.putRequest('/_principals/resource/' + group1EntryId, JsonOutput.toJson([group2EntryId]))
 
 		then:
-		conn.getResponseCode() == HTTP_CONFLICT
+		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
 	def "PUT /_principals/resource/{entry-id} should update Group members via Turtle RDF"() {

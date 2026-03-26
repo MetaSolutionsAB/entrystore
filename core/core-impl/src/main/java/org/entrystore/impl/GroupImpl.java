@@ -238,8 +238,11 @@ public class GroupImpl extends ListImpl implements Group {
 	public boolean setChildren(List<URI> newChildren, boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
 		for (URI uri : newChildren) {
 			Entry childEntry = this.entry.getContext().getByEntryURI(uri);
-			if (childEntry != null && childEntry.getGraphType() != GraphType.User) {
-				throw new RepositoryException("Cannot add non-User entry " + uri + " to group. Only User entries are allowed as group members.");
+			if (childEntry == null) {
+				throw new IllegalArgumentException("Entry " + uri + " does not exist in the group's context");
+			}
+			if (childEntry.getGraphType() != GraphType.User) {
+				throw new IllegalArgumentException("Cannot add non-User entry " + uri + " to group. Only User entries are allowed as group members.");
 			}
 		}
 		return super.setChildren(newChildren, singleParentForListsRequirement, orderedSetRequirement);

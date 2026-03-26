@@ -105,6 +105,38 @@ public class GroupImplTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void testSetChildrenRejectsNonUserEntry() {
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+
+		Entry groupEntry = pm.createResource(null, GraphType.Group, null, null);
+		pm.setPrincipalName(groupEntry.getResourceURI(), "RejectNonUserGroup");
+		Group group = (Group) groupEntry.getResource();
+
+		// Create another group (non-User entry) and try to add it as a member
+		Entry otherGroupEntry = pm.createResource(null, GraphType.Group, null, null);
+		pm.setPrincipalName(otherGroupEntry.getResourceURI(), "NotAUser");
+
+		List<URI> children = new ArrayList<>();
+		children.add(otherGroupEntry.getEntryURI());
+
+		assertThrows(IllegalArgumentException.class, () -> group.setChildren(children));
+	}
+
+	@Test
+	public void testSetChildrenRejectsNonExistentEntry() {
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+
+		Entry groupEntry = pm.createResource(null, GraphType.Group, null, null);
+		pm.setPrincipalName(groupEntry.getResourceURI(), "RejectMissingGroup");
+		Group group = (Group) groupEntry.getResource();
+
+		List<URI> children = new ArrayList<>();
+		children.add(URI.create("http://example.com/_principals/entry/nonexistent"));
+
+		assertThrows(IllegalArgumentException.class, () -> group.setChildren(children));
+	}
+
+	@Test
 	public void testSetGraphNullThrowsIllegalArgumentException() {
 		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
