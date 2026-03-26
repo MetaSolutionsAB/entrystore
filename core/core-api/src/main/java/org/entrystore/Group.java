@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,30 @@
 
 package org.entrystore;
 
+import org.eclipse.rdf4j.model.Model;
+
 import java.net.URI;
 
 public interface Group extends Resource {
 
 	boolean setChildren(java.util.List<URI> children);
+
+	/**
+	 * Returns the raw RDF-graph of the group's member list.
+	 *
+	 * @return An RDF-graph.
+	 */
+	Model getGraph();
+
+	/**
+	 * Sets group members using a raw RDF-graph. The graph should use {@code rdf:Seq}
+	 * with {@code rdf:_N} predicates pointing to User entry URIs. All referenced entries
+	 * must exist in the same context. Duplicates are rejected.
+	 *
+	 * @param graph RDF-graph containing statements with group members.
+	 * @throws IllegalArgumentException if graph is null.
+	 */
+	void setGraph(Model graph);
 
 	public String getName();
 

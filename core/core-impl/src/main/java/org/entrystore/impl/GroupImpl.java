@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -232,6 +232,20 @@ public class GroupImpl extends ListImpl implements Group {
 		}
 
 		return userList;
+	}
+
+	@Override
+	public boolean setChildren(List<URI> newChildren, boolean singleParentForListsRequirement, boolean orderedSetRequirement) {
+		for (URI uri : newChildren) {
+			Entry childEntry = this.entry.getContext().getByEntryURI(uri);
+			if (childEntry == null) {
+				throw new IllegalArgumentException("Entry " + uri + " does not exist in the group's context");
+			}
+			if (childEntry.getGraphType() != GraphType.User) {
+				throw new IllegalArgumentException("Cannot add non-User entry " + uri + " to group. Only User entries are allowed as group members.");
+			}
+		}
+		return super.setChildren(newChildren, singleParentForListsRequirement, orderedSetRequirement);
 	}
 
 	public Vector<URI> setChildren(Vector<URI> children) {
