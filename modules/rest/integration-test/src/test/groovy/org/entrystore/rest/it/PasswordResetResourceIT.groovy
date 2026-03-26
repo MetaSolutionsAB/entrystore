@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import com.icegreen.greenmail.util.GreenMail
@@ -547,5 +563,25 @@ class PasswordResetResourceIT extends BaseSpec {
 
 		then:
 		confirmConn.getHeaderField('Location') == urlfailure
+	}
+
+	def "POST /auth/pwreset should escape HTML in error messages to prevent injection"() {
+		given:
+		def maliciousEmail = '<script>alert(1)</script>'
+		def requestBody = JsonOutput.toJson([
+			email             : maliciousEmail,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
+		])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('text/html')
+		def body = conn.getErrorStream().text
+		!body.contains('<script>alert(1)</script>')
+		body.contains('&lt;script&gt;alert(1)&lt;/script&gt;')
 	}
 }

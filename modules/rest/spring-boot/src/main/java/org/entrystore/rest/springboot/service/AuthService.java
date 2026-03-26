@@ -77,13 +77,10 @@ public class AuthService {
 	private final String userAlreadyExistsMessage = "User with submitted email address exists already.";
 	private final String internalErrorMessage = "Unable to reset password due to internal error.";
 	private final String domainNotWhitelistedMessage = "The email domain is not allowed for sign-up: {}";
-	private final String invalidSignupTokenMessage = "<h4>Invalid confirmation link.</h4>" +
-			"This may be due to one of the following reasons:<br/>" +
-			"<ul><li>You have clicked the link twice and you already have an account.</li>" +
-			"<li>The confirmation link has expired.</li>" +
-			"<li>The link's confirmation token has never existed.</li></ul>" +
-			"Click here to sign up again and to receive a new confirmation link:<br/>" +
-			"<a href=\"{1}\"><pre>{2}</pre></a>";
+	private final String invalidSignupTokenMessage = "Invalid confirmation link. " +
+			"This may be because you already clicked the link and have an account, " +
+			"the confirmation link has expired, or the token never existed. " +
+			"Visit {} to sign up again and receive a new confirmation link.";
 	private final String unableToCreateUserMessage = "Unable to create user.";
 
 	private final RepositoryManagerImpl repositoryManager;
@@ -315,7 +312,7 @@ public class AuthService {
 		if (signupInfo == null) {
 			URL bURL = repositoryManager.getRepositoryURL();
 			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + (Arrays.asList(-1, 80, 443).contains(bURL.getPort()) ? "" : ":" + bURL.getPort());
-			throw new BadRequestHtmlException(invalidSignupTokenMessage.replace("{1}", bURL.toString()).replace("{2}", appURL), title);
+			throw new BadRequestHtmlException(invalidSignupTokenMessage.replace("{}", appURL), title);
 		}
 		signupTokenCache.removeToken(token);
 
@@ -480,7 +477,7 @@ public class AuthService {
 		try {
 			throw new RedirectTemporaryException(new URI(url));
 		} catch (URISyntaxException ex) {
-			throw new InternalServerErrorException(ex.getMessage());
+			throw new InternalServerErrorException("Invalid redirect URL", ex);
 		}
 	}
 

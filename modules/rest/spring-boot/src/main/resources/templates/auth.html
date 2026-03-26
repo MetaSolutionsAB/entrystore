@@ -1,6 +1,6 @@
 <html xmlns:th="https://www.thymeleaf.org">
 <head>
-    <title>[(${title})]</title>
+    <title th:text="${title}">EntryStore</title>
 </head>
 <body style="width:500px;margin-left:auto;margin-right:auto;font-family:verdana;font-size:10pt;">
 <div th:fragment="content">
@@ -13,9 +13,9 @@
         </a>
     </p>
     <br/>
-    <h3>[(${title})]</h3>
+    <h3 th:text="${title}">Title</h3>
     <br/>
-    <div>[(${message})]</div>
+    <div th:text="${message}">Message</div>
 </div>
 </body>
 </html>
