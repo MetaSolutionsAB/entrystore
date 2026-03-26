@@ -36,7 +36,6 @@ class ResourceIT extends BaseSpec {
 		EntryStoreClient.creds.put('userChangePasswordBadNewPassword@test.com', password)
 		EntryStoreClient.creds.put('userAdminChangePassword@test.com', password)
 		EntryStoreClient.creds.put('resourceTestUserName@test.com', password)
-		EntryStoreClient.creds.put('userForHtmlErrorTest@test.com', password)
 	}
 
 	def cleanupSpec() {
@@ -1594,87 +1593,4 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getContentType().contains('text/turtle')
 	}
 
-	def "GET /{context-id}/resource/{entry-id} with unsupported Accept header on Graph resource should return 406 Not Acceptable"() {
-		given:
-		def params = [graphtype: 'graph']
-		def entryId = createEntry(contextId, params)
-		assert entryId.length() > 0
-
-		when:
-		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId, 'admin', 'text/html')
-
-		then:
-		resourceConn.getResponseCode() == HTTP_NOT_ACCEPTABLE
-		resourceConn.getContentType().contains('application/json')
-	}
-
-	// --- Error responses with Accept: text/html should still return JSON ---
-
-	def "Error response for 406 with Accept text/html should return application/json content type"() {
-		given:
-		def params = [graphtype: 'graph']
-		def entryId = createEntry(contextId, params)
-		assert entryId.length() > 0
-
-		when:
-		def conn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId, 'admin', 'text/html')
-
-		then:
-		conn.getResponseCode() == HTTP_NOT_ACCEPTABLE
-		conn.getContentType().contains('application/json')
-	}
-
-	def "Error response for 403 with Accept text/html should return application/json content type"() {
-		given:
-		def username = 'userForHtmlErrorTest@test.com'
-		def user = UserUtil.createUser(username)
-		def resourceUri = user['resourceUri'].toString()
-		UserUtil.setUserPassword(resourceUri, password)
-
-		def passwordChangeBody = JsonOutput.toJson([password: 'somePass1234'])
-
-		when:
-		def conn = EntryStoreClient.putRequest(resourceUri, passwordChangeBody, username, 'application/json', ['Accept': 'text/html'])
-
-		then:
-		conn.getResponseCode() == HTTP_FORBIDDEN
-		conn.getContentType().contains('application/json')
-	}
-
-	def "Error response for 404 with Accept text/html should return application/json content type"() {
-		when:
-		def conn = EntryStoreClient.getRequest('/' + contextId + '/resource/non-existing-entry', 'admin', 'text/html')
-
-		then:
-		conn.getResponseCode() == HTTP_NOT_FOUND
-		conn.getContentType().contains('application/json')
-	}
-
-	def "Error response for 501 with Accept text/html should return application/json content type"() {
-		given:
-		def params = [graphtype: 'list']
-		def entryId = createEntry(contextId, params)
-		assert entryId.length() > 0
-
-		def baos = new ByteArrayOutputStream()
-		def zos = new ZipOutputStream(baos)
-		zos.putNextEntry(new ZipEntry('test-data.rdf'))
-		zos.write('<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"></rdf:RDF>'.bytes)
-		zos.closeEntry()
-		zos.close()
-		def zipBytes = baos.toByteArray()
-
-		when:
-		def conn = EntryStoreClient.sendRequestAsStream(
-				HttpMethod.POST,
-				'/' + contextId + '/resource/' + entryId + '?import=true',
-				new ByteArrayInputStream(zipBytes),
-				'admin',
-				'application/zip',
-				['Accept': 'text/html'])
-
-		then:
-		conn.getResponseCode() == HTTP_NOT_IMPLEMENTED
-		conn.getContentType().contains('application/json')
-	}
 }

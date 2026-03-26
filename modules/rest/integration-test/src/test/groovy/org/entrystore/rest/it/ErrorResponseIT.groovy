@@ -19,6 +19,10 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
+import org.springframework.http.HttpMethod
+
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CONFLICT
@@ -32,7 +36,7 @@ class ErrorResponseIT extends BaseSpec {
 	// 400 Bad Request
 	// ========================
 
-	def "GET /search?type=sparql&query=dc:title&syndication=random-string as admin should return BAD-REQUEST 400 due to invalid syndication format"() {
+	def "GET /search with invalid syndication format should return 400 with JSON error response"() {
 		given:
 		def queryParams = [type: 'sparql', query: 'dc:title', syndication: 'random-string']
 
@@ -43,7 +47,10 @@ class ErrorResponseIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
 		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		resp['status'] == 400
 		resp['error'] == 'Invalid syndication feed type: \'random-string\''
+		resp['timestamp'] != null
+		resp['path'] != null
 	}
 
 	def "GET /search without required query param should return 400 with JSON error response"() {
@@ -78,7 +85,12 @@ class ErrorResponseIT extends BaseSpec {
 		resp['status'] == 400
 		resp['error'] != null
 		resp['timestamp'] != null
+		resp['path'] != null
 	}
+
+	// ========================
+	// 401 Unauthorized (anonymous/guest)
+	// ========================
 
 	def "POST /_principals as guest should return 401 with JSON error response"() {
 		when:
@@ -91,6 +103,8 @@ class ErrorResponseIT extends BaseSpec {
 		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
 		resp['status'] == 401
 		resp['error'] == 'Unauthorized'
+		resp['timestamp'] != null
+		resp['path'] != null
 	}
 
 	// ========================
@@ -126,6 +140,28 @@ class ErrorResponseIT extends BaseSpec {
 		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
 		resp['status'] == 403
 		resp['error'] != null
+		resp['timestamp'] != null
+		resp['path'] != null
+	}
+
+	def "403 error response with Accept text/html should return application/json content type"() {
+		given:
+		// Changing own password without providing oldPassword triggers ForbiddenException
+		def resourceUri = EntryStoreClient.createdEsUsers['user']['resourceUri'].toString()
+		def passwordChangeBody = JsonOutput.toJson([password: 'someNewPass1234'])
+
+		when:
+		def conn = EntryStoreClient.putRequest(resourceUri, passwordChangeBody, 'user', 'application/json',
+				['Accept': 'text/html'])
+
+		then:
+		conn.getResponseCode() == HTTP_FORBIDDEN
+		conn.getContentType().contains('application/json')
+		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		resp['status'] == 403
+		resp['error'] != null
+		resp['timestamp'] != null
+		resp['path'] != null
 	}
 
 	// ========================
@@ -163,6 +199,8 @@ class ErrorResponseIT extends BaseSpec {
 		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
 		resp['status'] == 404
 		resp['error'] != null
+		resp['timestamp'] != null
+		resp['path'] != null
 	}
 
 	def "GET /{context-id}/resource/{entry-id} for non-existent entry should return 404 with JSON error response"() {
@@ -178,6 +216,8 @@ class ErrorResponseIT extends BaseSpec {
 		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
 		resp['status'] == 404
 		resp['error'] != null
+		resp['timestamp'] != null
+		resp['path'] != null
 	}
 
 	def "POST /non-existent-context should return 404 with JSON error response"() {
@@ -194,6 +234,25 @@ class ErrorResponseIT extends BaseSpec {
 		resp['status'] == 404
 		resp['error'] != null
 		resp['error'].toString().contains('non-existent-context-xyz')
+		resp['timestamp'] != null
+		resp['path'] != null
+	}
+
+	def "404 error response with Accept text/html should return application/json content type"() {
+		given:
+		getOrCreateContext([contextId: 'err404ctx'])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/err404ctx/resource/non-existing-entry', 'admin', 'text/html')
+
+		then:
+		conn.getResponseCode() == HTTP_NOT_FOUND
+		conn.getContentType().contains('application/json')
+		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		resp['status'] == 404
+		resp['error'] != null
+		resp['timestamp'] != null
+		resp['path'] != null
 	}
 
 	// ========================
@@ -215,6 +274,46 @@ class ErrorResponseIT extends BaseSpec {
 		resp['status'] == 405
 		resp['error'] != null
 		resp['error'].toString().contains('not a context or a list')
+		resp['timestamp'] != null
+		resp['path'] != null
+	}
+
+	// ========================
+	// 406 Not Acceptable (CustomResponseException)
+	// ========================
+
+	def "GET /{context-id}/metadata/{entry-id}?format=application/invalid-rdf should return 406 with JSON error response"() {
+		given:
+		getOrCreateContext([contextId: 'err406ctx'])
+		def entryId = createEntry('err406ctx', [entrytype: 'link', resource: 'http://example.org/err406'])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/err406ctx/metadata/' + entryId + '?format=application/invalid-rdf-format')
+
+		then:
+		conn.getResponseCode() == 406
+		conn.getContentType().contains('application/json')
+		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		resp['status'] == 406
+		resp['error'] != null
+		resp['timestamp'] != null
+		resp['path'] != null
+	}
+
+	def "406 error response with Accept text/html on Graph resource should return application/json content type"() {
+		given:
+		getOrCreateContext([contextId: 'err406ctx'])
+		def entryId = createEntry('err406ctx', [graphtype: 'graph'])
+
+		when:
+		def conn = EntryStoreClient.getRequest('/err406ctx/resource/' + entryId, 'admin', 'text/html')
+
+		then:
+		conn.getResponseCode() == 406
+		conn.getContentType().contains('application/json')
+		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		resp['status'] == 406
+		resp['error'] != null
 		resp['timestamp'] != null
 		resp['path'] != null
 	}
@@ -244,22 +343,36 @@ class ErrorResponseIT extends BaseSpec {
 	}
 
 	// ========================
-	// 406 Not Acceptable (CustomResponseException)
+	// 501 Not Implemented
 	// ========================
 
-	def "GET /{context-id}/metadata/{entry-id}?format=application/invalid-rdf should return 406 with JSON error response"() {
+	def "501 error response with Accept text/html should return application/json content type"() {
 		given:
-		getOrCreateContext([contextId: 'err406ctx'])
-		def entryId = createEntry('err406ctx', [entrytype: 'link', resource: 'http://example.org/err406'])
+		getOrCreateContext([contextId: 'err501ctx'])
+		def entryId = createEntry('err501ctx', [graphtype: 'list'])
+
+		def baos = new ByteArrayOutputStream()
+		def zos = new ZipOutputStream(baos)
+		zos.putNextEntry(new ZipEntry('test-data.rdf'))
+		zos.write('<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"></rdf:RDF>'.bytes)
+		zos.closeEntry()
+		zos.close()
+		def zipBytes = baos.toByteArray()
 
 		when:
-		def conn = EntryStoreClient.getRequest('/err406ctx/metadata/' + entryId + '?format=application/invalid-rdf-format')
+		def conn = EntryStoreClient.sendRequestAsStream(
+				HttpMethod.POST,
+				'/err501ctx/resource/' + entryId + '?import=true',
+				new ByteArrayInputStream(zipBytes),
+				'admin',
+				'application/zip',
+				['Accept': 'text/html'])
 
 		then:
-		conn.getResponseCode() == 406
+		conn.getResponseCode() == 501
 		conn.getContentType().contains('application/json')
 		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
-		resp['status'] == 406
+		resp['status'] == 501
 		resp['error'] != null
 		resp['timestamp'] != null
 		resp['path'] != null
