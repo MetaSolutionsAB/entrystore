@@ -5,7 +5,15 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-ENTRYSTORE_VERSION=$(cat "$PROJECT_ROOT/VERSION.txt")
+if [ ! -f "$PROJECT_ROOT/VERSION.txt" ]; then
+  echo "Error: VERSION.txt not found at $PROJECT_ROOT/VERSION.txt" >&2
+  exit 1
+fi
+ENTRYSTORE_VERSION=$(cat "$PROJECT_ROOT/VERSION.txt" | tr -d '[:space:]')
+if [ -z "$ENTRYSTORE_VERSION" ]; then
+  echo "Error: VERSION.txt is empty" >&2
+  exit 1
+fi
 JAR_FILE="$PROJECT_ROOT/modules/rest/spring-boot/target/entrystore-rest-spring-boot-${ENTRYSTORE_VERSION}-exec.jar"
 
 echo "Building EntryStore project..."

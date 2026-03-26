@@ -17,8 +17,8 @@ RUN mkdir -p \
     chown -R entrystore:entrystore /srv/entrystore
 
 ARG ENTRYSTORE_VERSION
-COPY --chown=entrystore:entrystore modules/rest/spring-boot/target/entrystore-rest-spring-boot-${ENTRYSTORE_VERSION}-exec.jar /srv/entrystore/entrystore.jar
 COPY --chown=entrystore:entrystore docker/docker-entrypoint.sh /srv/entrystore/docker-entrypoint.sh
+COPY --chown=entrystore:entrystore modules/rest/spring-boot/target/entrystore-rest-spring-boot-${ENTRYSTORE_VERSION}-exec.jar /srv/entrystore/entrystore.jar
 
 EXPOSE 8080
 WORKDIR /srv/entrystore

@@ -31,8 +31,8 @@ if [ ! -d "$SOLR_DATA" ]; then
 		echo "Warning: Not running as root, cannot chown ${SOLR_DATA} to UID 8983. Solr may fail to write data." >&2
 	fi
 else
-	OWNER_UID=$(stat -c '%u' "${SOLR_DATA}")
-	if [ "$OWNER_UID" != "8983" ]; then
+	OWNER_UID=$(stat -c '%u' "${SOLR_DATA}" 2>/dev/null || stat -f '%u' "${SOLR_DATA}" 2>/dev/null || echo "unknown")
+	if [ "$OWNER_UID" != "8983" ] && [ "$OWNER_UID" != "unknown" ]; then
 		echo "Warning: ${SOLR_DATA} is owned by UID ${OWNER_UID}, expected 8983 (solr). Solr may fail to write data." >&2
 	fi
 fi
@@ -53,7 +53,7 @@ docker run -d \
 	--name "${CONTAINER_NAME}" \
 	--restart unless-stopped \
 	--memory "${SOLR_MEMORY}" \
-	-p "${SOLR_PORT}:8983" \
+	-p "127.0.0.1:${SOLR_PORT}:8983" \
 	-v "${SOLR_DATA}:/var/solr/data" \
 	-v "${CONF_DIR}:/${CORE_NAME}/conf/:rw" \
 	-e SOLR_JAVA_MEM="-XX:+UseContainerSupport -XX:InitialRAMPercentage=50.0 -XX:MaxRAMPercentage=80.0" \
@@ -68,10 +68,21 @@ docker run -d \
 
 echo "Waiting for Solr to become healthy..."
 for i in $(seq 1 30); do
-	STATUS=$(docker inspect --format='{{.State.Health.Status}}' "${CONTAINER_NAME}" 2>/dev/null || echo "starting")
+	if ! docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+		echo "Error: Container '${CONTAINER_NAME}' no longer exists. It may have crashed." >&2
+		exit 1
+	fi
+	STATUS=$(docker inspect --format='{{.State.Health.Status}}' "${CONTAINER_NAME}" 2>&1) || {
+		echo "Error: Failed to inspect container: $STATUS" >&2
+		exit 1
+	}
 	if [ "$STATUS" = "healthy" ]; then
 		echo "Solr is ready at http://localhost:${SOLR_PORT}/solr/${CORE_NAME}"
 		exit 0
+	fi
+	if [ "$STATUS" = "unhealthy" ]; then
+		echo "Error: Solr container is unhealthy. Check: docker logs ${CONTAINER_NAME}" >&2
+		exit 1
 	fi
 	sleep 1
 done

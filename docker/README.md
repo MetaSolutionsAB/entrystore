@@ -76,7 +76,7 @@ The configuration can be provided in three ways (in order of preference):
 
 ### Via `ENTRYSTORE_CONFIG_URI` environment variable
 
-Supports `http://`, `https://`, `file://` URLs and local file paths.
+Supports `https://` and `file://` URLs. Plain `http://` is rejected for security reasons.
 
 ```bash
 docker run -p 8080:8080 \
@@ -108,6 +108,39 @@ docker run -p 8080:8080 \
 ```
 
 These can also be combined with a properties file to override specific values.
+
+## Solr helper scripts
+
+Two helper scripts are provided for running a local Solr instance in Docker for development:
+
+### `solr-start.sh`
+
+Starts a Solr container with a pre-created core using the project's Solr configuration:
+
+```bash
+./docker/solr-start.sh example.org
+```
+
+This creates a container named `solr-example.org` with data stored at `/srv/example.org/data/solr` (configurable via `SOLR_DATA`). Available environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `SOLR_PORT` | `8983` | Host port for Solr |
+| `SOLR_VERSION` | `9.10.1` | Solr Docker image version |
+| `SOLR_DATA` | `/srv/<domain>/data/solr` | Solr data directory |
+| `SOLR_MEMORY` | `512m` | Container memory limit |
+
+### `solr-url.sh`
+
+Outputs the Solr URL for use in `entrystore.properties`:
+
+```bash
+# Get the Solr URL (uses container IP for Docker networking)
+./docker/solr-url.sh example.org
+
+# Get the URL and verify Solr is reachable
+./docker/solr-url.sh --with-check example.org
+```
 
 ## Data volumes
 
