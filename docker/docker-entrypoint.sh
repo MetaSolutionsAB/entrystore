@@ -38,6 +38,6 @@ if [ -z "$ENTRYSTORE_CONFIG_URI" ] && [ ! -f "$CONFIG_FILE" ]; then
   echo "EntryStore will start with default settings, which may not be suitable for production." >&2
 fi
 
-exec java -jar /srv/entrystore/entrystore.jar \
+exec java -jar entrystore.jar \
   --spring.config.import=optional:file://"$CONFIG_FILE" \
   "$@"
