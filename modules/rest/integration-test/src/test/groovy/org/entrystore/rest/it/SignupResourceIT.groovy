@@ -500,7 +500,9 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_BAD_REQUEST
 		confirmConn.getContentType().contains('text/html')
-		confirmConn.getErrorStream().text.contains('Invalid confirmation link.')
+		def body = confirmConn.getErrorStream().text
+		body.contains('Invalid confirmation link.')
+		body.contains('<a href="http://localhost:8181"')
 	}
 
 	def "GET /auth/signup should not confirm creating new user after signing up with already used token"() {

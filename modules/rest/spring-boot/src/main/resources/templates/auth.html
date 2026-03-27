@@ -16,6 +16,9 @@
     <h3 th:text="${title}">Title</h3>
     <br/>
     <div th:text="${message}">Message</div>
+    <p th:if="${linkUrl}">
+        <a th:href="${linkUrl}" th:text="${linkUrl}">link</a>
+    </p>
 </div>
 </body>
 </html>
