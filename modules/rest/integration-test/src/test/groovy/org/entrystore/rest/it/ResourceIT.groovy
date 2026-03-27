@@ -1592,4 +1592,5 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('text/turtle')
 	}
+
 }

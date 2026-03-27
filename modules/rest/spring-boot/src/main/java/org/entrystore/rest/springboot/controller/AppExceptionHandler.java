@@ -71,7 +71,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
-		return ResponseEntity.badRequest().body(responseBody);
+		return jsonResponse(responseBody);
 	}
 
 	// Separate BadRequest handler for HttpMessageNotReadableException and MethodArgumentTypeMismatchException since those leak Spring/Jackson internals
@@ -85,7 +85,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(HttpStatus.BAD_REQUEST.getReasonPhrase())
 				.build();
-		return ResponseEntity.badRequest().body(responseBody);
+		return jsonResponse(responseBody);
 	}
 
 	@ExceptionHandler(EntityNotFoundException.class)
@@ -97,7 +97,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
-		return ResponseEntity.status(responseBody.status()).body(responseBody);
+		return jsonResponse(responseBody);
 	}
 
 	@ExceptionHandler(MethodNotAllowedException.class)
@@ -109,7 +109,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
-		return ResponseEntity.status(responseBody.status()).body(responseBody);
+		return jsonResponse(responseBody);
 	}
 
 	@ExceptionHandler(DataConflictException.class)
@@ -121,7 +121,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
-		return ResponseEntity.status(responseBody.status()).body(responseBody);
+		return jsonResponse(responseBody);
 	}
 
 	@ExceptionHandler(NotImplementedException.class)
@@ -133,7 +133,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
-		return ResponseEntity.status(responseBody.status()).body(responseBody);
+		return jsonResponse(responseBody);
 	}
 
 	@ExceptionHandler({AuthenticationException.class})
@@ -145,7 +145,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
 				.build();
-		return ResponseEntity.status(responseBody.status()).body(responseBody);
+		return jsonResponse(responseBody);
 	}
 
 	@ExceptionHandler({AuthorizationException.class, UnauthorizedException.class, ForbiddenException.class, AccessDeniedException.class, AuthenticationCredentialsNotFoundException.class})
@@ -159,7 +159,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error((status == HttpStatus.UNAUTHORIZED) ? status.getReasonPhrase() : ex.getMessage())
 				.build();
-		return ResponseEntity.status(responseBody.status()).body(responseBody);
+		return jsonResponse(responseBody);
 	}
 
 	@ExceptionHandler(EntityTooLargeException.class)
@@ -171,7 +171,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
-		return ResponseEntity.status(responseBody.status()).body(responseBody);
+		return jsonResponse(responseBody);
 	}
 
 	@ExceptionHandler(CustomResponseException.class)
@@ -183,7 +183,7 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
 				.build();
-		return ResponseEntity.status(responseBody.status()).body(responseBody);
+		return jsonResponse(responseBody);
 	}
 
 	@ExceptionHandler(Exception.class)
@@ -202,7 +202,11 @@ public class AppExceptionHandler {
 				.path(request.getRequestURI())
 				.error(HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase())
 				.build();
-		return ResponseEntity.internalServerError().body(responseBody);
+		return jsonResponse(responseBody);
+	}
+
+	private static ResponseEntity<ErrorResponse> jsonResponse(ErrorResponse body) {
+		return ResponseEntity.status(body.status()).contentType(MediaType.APPLICATION_JSON).body(body);
 	}
 
 	@ExceptionHandler(HtmlResponseException.class)
