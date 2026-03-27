@@ -11,4 +11,8 @@ public class EntityTooLargeException extends RuntimeException {
 	public EntityTooLargeException(String message) {
 		super(message);
 	}
+
+	public EntityTooLargeException(String message, Throwable cause) {
+		super(message, cause);
+	}
 }

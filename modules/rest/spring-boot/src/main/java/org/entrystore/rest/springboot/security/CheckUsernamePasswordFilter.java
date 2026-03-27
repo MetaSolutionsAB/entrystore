@@ -10,17 +10,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * Class checks the request size and parameters before the authentication via username and password process starts
@@ -54,32 +53,42 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			// means someone is trying to authenticate
 
 			if (request.getContentLength() > 0 && HttpUtil.isLargerThan(request, 32768)) {
-				//TODO throw new EntityTooLargeException("The size of the request is larger than 32KB");
 				log.warn("The size of the request is larger than 32KB, request blocked");
-				response.setStatus(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
-				response.setContentType("application/json");
-				response.getWriter().write("{\"error\":\"The size of the request is larger than 32KB\"}");
-				response.getWriter().flush();
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
+						.path(request.getRequestURI())
+						.error("The size of the request is larger than 32KB")
+						.build());
 				return;
 			}
 
 			if (password == null || password.isEmpty()) {
-				// TODO throw new BadRequestException("Password is missing");
-				response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Password is missing");
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.BAD_REQUEST.value())
+						.path(request.getRequestURI())
+						.error("Password is missing")
+						.build());
 				return;
 			}
 
 			try {
 				Password.check(password, Password.getSaltedHash(password));
 			} catch (IllegalArgumentException ex) {
-				// TODO throw new BadRequestException(ex.getMessage());
-				response.sendError(HttpServletResponse.SC_BAD_REQUEST, ex.getMessage());
+				log.warn("Password validation failed: {}", ex.getMessage(), ex);
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.BAD_REQUEST.value())
+						.path(request.getRequestURI())
+						.error("Invalid credentials format")
+						.build());
 				return;
 			}
 
 			if (username == null || username.isEmpty()) {
-				// TODO throw new BadRequestException("Username is missing");
-				response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Username is missing");
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.BAD_REQUEST.value())
+						.path(request.getRequestURI())
+						.error("Username is missing")
+						.build());
 				return;
 			}
 
@@ -88,22 +97,21 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			if ((passwordLoginBlacklist != null && passwordLoginBlacklist.stream().anyMatch(s -> s.equalsIgnoreCase(username.toLowerCase()))) ||
 					(passwordLoginWhitelist != null && passwordLoginWhitelist.stream().noneMatch(s -> s.equalsIgnoreCase(username.toLowerCase())))) {
 				log.warn("User {} is blacklisted", username);
-				// TODO throw new UnauthorizedException("Login failed.");
-				response.setContentType("text/html");
-				response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-				if (request.getHeader("Accept") != null && !Objects.equals(request.getHeader("Accept"), MediaType.APPLICATION_JSON_VALUE)) {
-					response.getWriter().write("Login failed.");
-				} else {
-					response.getWriter().write("The request requires user authentication");
-				}
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.UNAUTHORIZED.value())
+						.path(request.getRequestURI())
+						.error("Login failed")
+						.build());
 				return;
 			}
 
 			if (loginAttemptService.isLockedOut(username.toLowerCase())) {
 				log.warn("User {} is temporarily locked out due to too many failed login attempts", username);
-				response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-				response.setContentType("text/html");
-				response.getWriter().write("User account is temporarily disabled. Too many failed logins.");
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.TOO_MANY_REQUESTS.value())
+						.path(request.getRequestURI())
+						.error("User account is temporarily disabled. Too many failed logins.")
+						.build());
 				return;
 			}
 		}

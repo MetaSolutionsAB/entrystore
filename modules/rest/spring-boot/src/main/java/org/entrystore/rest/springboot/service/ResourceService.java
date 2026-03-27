@@ -242,7 +242,7 @@ public class ResourceService {
 				} catch (JSONException e) {
 					throw new BadRequestException("Cannot parse given body resource as JSONArray.");
 				} catch (IllegalArgumentException iae) {
-					throw new BadRequestException(iae.getMessage());
+					throw new BadRequestException(iae.getMessage(), iae); // Core exception — message is safe to return
 				} catch (RepositoryException re) {
 					throw new DataConflictException("An entry cannot be added multiple times", re);
 				}
@@ -260,11 +260,11 @@ public class ResourceService {
 						throw new BadRequestException("Unsupported graph type for RDF graph update: " + entry.getGraphType());
 					}
 				} catch (org.eclipse.rdf4j.rio.RDFParseException e) {
-					throw new BadRequestException("Malformed RDF in request body: " + e.getMessage());
+					throw new BadRequestException("Malformed RDF in request body", e);
 				} catch (org.eclipse.rdf4j.rio.RDFHandlerException | java.io.IOException e) {
 					throw new InternalServerErrorException("Failed to process RDF graph for entry " + entry.getId(), e);
 				} catch (IllegalArgumentException iae) {
-					throw new BadRequestException(iae.getMessage());
+					throw new BadRequestException(iae.getMessage(), iae); // Core exception — message is safe to return
 				} catch (RepositoryException e) {
 					throw new DataConflictException("An entry cannot be added multiple times", e);
 				}
@@ -291,12 +291,12 @@ public class ResourceService {
 						entry.setFilename(FileUtil.sanitizeFilename(filename.trim()));
 					}
 				} catch (QuotaException qe) {
-					throw new EntityTooLargeException(qe.getMessage());
+					throw new EntityTooLargeException(qe.getMessage(), qe);
 				} catch (IOException ioe) {
 					if (ioe.getCause() instanceof NullPointerException) {
-						throw new BadRequestException(ioe.getCause().getMessage());
+						throw new BadRequestException("Invalid request data", ioe);
 					} else {
-						throw new InternalServerErrorException(ioe.getMessage());
+						throw new InternalServerErrorException("Failed to process resource data", ioe);
 					}
 				}
 			}
@@ -323,7 +323,7 @@ public class ResourceService {
 			} catch (AuthorizationException e) {
 				throw e;
 			} catch (Exception e) {
-				throw new BadRequestException("Problem with input. Error: " + e.getMessage());
+				throw new BadRequestException("Problem with input", e);
 			}
 
 			return CompletionState.UPDATED;
@@ -337,7 +337,7 @@ public class ResourceService {
 				try {
 					graph = GraphUtil.deserializeGraph(new String(requestBody, StandardCharsets.UTF_8), mediaType);
 				} catch (Exception e) {
-					throw new BadRequestException("Unable to read request entity. Error: " + e.getMessage());
+					throw new BadRequestException("Unable to read request entity", e);
 				}
 				if (graph != null) {
 					graphResource.setGraph(graph);
@@ -489,9 +489,9 @@ public class ResourceService {
 
 			return CompletionState.CREATED;
 		} catch (IOException ioe) {
-			throw new InternalServerErrorException(ioe.getMessage());
+			throw new InternalServerErrorException("Failed to process multipart resource data", ioe);
 		} catch (QuotaException qe) {
-			throw new EntityTooLargeException(qe.getMessage());
+			throw new EntityTooLargeException(qe.getMessage(), qe);
 		}
 	}
 
@@ -535,7 +535,7 @@ public class ResourceService {
 			try {
 				movedEntry = dest.moveEntryHere(movableEntry, movableEntrySource, removeAll);
 			} catch (QuotaException qe) {
-				throw new EntityTooLargeException(qe.getMessage());
+				throw new EntityTooLargeException(qe.getMessage(), qe);
 			}
 
 			return movedEntry;
@@ -740,7 +740,7 @@ public class ResourceService {
 				throw new InternalServerErrorException("Unable to create temporary file for ZIP import");
 			}
 		} catch (IOException ioe) {
-			throw new InternalServerErrorException(ioe.getMessage());
+			throw new InternalServerErrorException("Failed to process ZIP import", ioe);
 		} finally {
 			if (tmpFile != null) {
 				tmpFile.delete();

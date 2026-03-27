@@ -380,7 +380,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		info.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "POST /auth/cookie should not log in the blacklisted user"() {
+	def "POST /auth/cookie without Accept header should not log in the blacklisted user and respond with json"() {
 		given:
 		def username = 'userForLoginBlacklist@test.com'
 		def user = UserUtil.createUser(username)
@@ -393,11 +393,11 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
-		loginConnection.getContentType().contains('text/html')
-		loginConnection.getErrorStream().text.contains('Login failed.')
+		loginConnection.getContentType().contains('application/json')
+		loginConnection.getErrorStream().text.contains('Login failed')
 	}
 
-	def "POST /auth/cookie should not log in the blacklisted user and not respond with 'Login failed.' html"() {
+	def "POST /auth/cookie with Accept json header should not log in the blacklisted user and respond with json"() {
 		given:
 		def username = 'userForLoginBlacklistNoHtml@test.com'
 		def user = UserUtil.createUser(username)
@@ -411,8 +411,26 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
-		loginConnection.getContentType().contains('text/html')
-		!loginConnection.getErrorStream().text.contains('Login failed.')
+		loginConnection.getContentType().contains('application/json')
+		loginConnection.getErrorStream().text.contains('Login failed')
+	}
+
+	def "POST /auth/cookie with Accept html header should not log in the blacklisted user and respond with json"() {
+		given:
+		def username = 'userForLoginBlacklistHtml@test.com'
+		def user = UserUtil.createUser(username)
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
+		def extraHeaders = [Accept: 'text/html']
+
+		when:
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded', extraHeaders)
+
+		then:
+		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
+		loginConnection.getContentType().contains('application/json')
+		loginConnection.getErrorStream().text.contains('Login failed')
 	}
 
 	def "POST /auth/cookie should not log in the disabled user"() {
@@ -457,7 +475,7 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		loginConnection.getResponseCode() == 429
-		loginConnection.getContentType().contains('text/html')
+		loginConnection.getContentType().contains('application/json')
 		loginConnection.getErrorStream().text.contains('User account is temporarily disabled. Too many failed logins.')
 
 		when:

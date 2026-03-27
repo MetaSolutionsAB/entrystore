@@ -80,7 +80,7 @@ public class SearchService {
 		} catch (AuthorizationException e) {
 			throw e;
 		} catch (Exception e) {
-			throw new BadRequestException("Exception processing SPARQL query: " + e.getMessage());
+			throw new BadRequestException("Exception processing SPARQL query", e);
 		}
 	}
 

@@ -330,7 +330,7 @@ public class EntryService {
 				}
 			}
 		} catch (IllegalArgumentException iae) {
-			throw new BadRequestException(iae.getMessage());
+			throw new BadRequestException(iae.getMessage(), iae); // Core exception — message is safe to return
 		}
 
 		if (entry != null) {
@@ -520,8 +520,7 @@ public class EntryService {
 				JSONObject rdfJSON = new JSONObject(body);
 				deserializedGraph = RDFJSON.rdfJsonToGraph(rdfJSON);
 			} catch (JSONException e) {
-				log.info(e.getMessage());
-				throw new BadRequestException("Exception processing request body: " + e.getMessage());
+				throw new BadRequestException("Exception processing request body", e);
 			}
 		} else {
 			deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
@@ -558,7 +557,7 @@ public class EntryService {
 		} catch (AuthorizationException e) {
 			throw new UnauthorizedException("Not authorized");
 		} catch (EntryMissingException e) {
-			throw new EntityNotFoundException("Entry requested for deletion was not found. Error: " + e.getMessage());
+			throw new EntityNotFoundException("Entry requested for deletion was not found", e);
 		}
 	}
 
@@ -717,12 +716,14 @@ public class EntryService {
 				}
 				if (contResource.containsKey("quota")) {
 					String quotaString = contResource.get("quota").toString();
+					long quota;
 					try {
-						cont.setQuota(Long.parseLong(quotaString));
-					} catch (Exception e) {
-						log.warn("Unable to parse new quota value '{}'. Error: {}", quotaString, e.getMessage());
-						throw new IllegalArgumentException("Unable to parse new quota value as Long: " + quotaString + ". Error: " + e.getMessage());
+						quota = Long.parseLong(quotaString);
+					} catch (NumberFormatException e) {
+						log.warn("Unable to parse new quota value '{}': {}", quotaString, e.getMessage());
+						throw new IllegalArgumentException("Unable to parse new quota value as Long: " + quotaString, e);
 					}
+					cont.setQuota(quota);
 				}
 				break;
 

@@ -74,7 +74,7 @@ public class LookupService {
 			if (se.code() >= 500) {
 				throw new CustomResponseException("Search service error during lookup", HttpStatus.SERVICE_UNAVAILABLE);
 			}
-			throw new BadRequestException("Lookup failed: " + se.getMessage());
+			throw new BadRequestException("Lookup failed due to invalid parameters", se);
 		} catch (Exception e) {
 			log.error("Unexpected error during lookup for URI '{}': {}", resourceURI, e.getMessage(), e);
 			throw new CustomResponseException("Search service encountered an unexpected error", HttpStatus.SERVICE_UNAVAILABLE);

@@ -20,4 +20,9 @@ public class TextareaHtmlResponseException extends RuntimeException {
 		super(message);
 		this.status = status;
 	}
+
+	public TextareaHtmlResponseException(String message, HttpStatus status, Throwable cause) {
+		super(message, cause);
+		this.status = status;
+	}
 }

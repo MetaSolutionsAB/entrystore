@@ -154,7 +154,7 @@ public class ContextService {
 				try {
 					FileOperations.copyFile(input, Files.newOutputStream(tmpFile.toPath()));
 				} catch (IOException e) {
-					throw new InternalServerErrorException("Exception copying the data to a temporary file for context import. Message: " + e.getMessage(), e);
+					throw new InternalServerErrorException("Exception copying the data to a temporary file for context import", e);
 				}
 
 				repositoryManager.getContextManager().importContext(context.getEntry(), tmpFile);
@@ -163,7 +163,7 @@ public class ContextService {
 				throw new BadRequestException("Unable to import file, received null data");
 			}
 		} catch (IOException e) {
-			throw new BadRequestHtmlException("Failed to import data", "Error importing data");
+			throw new BadRequestException("Failed to import data", e);
 		} finally {
 			if (tmpFile != null) {
 				tmpFile.delete();
@@ -292,8 +292,7 @@ public class ContextService {
 			return tmpExport;
 
 		} catch (IOException | RepositoryException ex) {
-			throw new InternalServerErrorException("Exception generating Context export for contextId '" + contextId
-					+ "'. Message: " + ex.getMessage(), ex);
+			throw new InternalServerErrorException("Exception generating context export for contextId '" + contextId + "'", ex);
 		}
 	}
 
