@@ -118,10 +118,10 @@ class ContextMergeIT extends BaseSpec {
 		def entryJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
 		entryJson['entryId'] == resourceId
 
-		def metadataConn = EntryStoreClient.getRequest('/' + contextMergeId + '/metadata/' + resourceId)
-		metadataConn.getResponseCode() == HTTP_OK
-		def metadataBody = EntryStoreClient.getResponseBody(metadataConn)
-		metadataBody.contains('Merged Entry Title')
+		def resourceConn = EntryStoreClient.getRequest('/' + contextMergeId + '/resource/' + resourceId)
+		resourceConn.getResponseCode() == HTTP_OK
+		def resourceBody = EntryStoreClient.getResponseBody(resourceConn)
+		resourceBody.contains('Merged Entry Title')
 	}
 
 	def "POST /{context-id}/merge as admin with mergeResourceId markers should return 200 and create multiple entries"() {
