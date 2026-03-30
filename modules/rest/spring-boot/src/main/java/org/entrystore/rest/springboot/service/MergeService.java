@@ -59,8 +59,19 @@ public class MergeService {
 			throw new BadRequestException("Unable to process the RDF graph from the request body", e);
 		}
 
+		if (graph == null) {
+			throw new BadRequestException(
+					"Unable to parse the RDF graph from the request body; "
+					+ "check that the content matches the specified media type");
+		}
+
 		Graph2Entries g2e = new Graph2Entries(context);
-		Set<Entry> mergedEntries = g2e.merge(graph, destinationEntryId, null);
+		Set<Entry> mergedEntries;
+		try {
+			mergedEntries = g2e.merge(graph, destinationEntryId, null);
+		} catch (ClassCastException e) {
+			throw new BadRequestException("The target entry is not an RDF graph resource; merge requires a Graph-type entry", e);
+		}
 
 		if (mergedEntries == null || mergedEntries.isEmpty()) {
 			throw new BadRequestException(

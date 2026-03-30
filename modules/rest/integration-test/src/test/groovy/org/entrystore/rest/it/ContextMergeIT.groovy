@@ -151,6 +151,14 @@ class ContextMergeIT extends BaseSpec {
 		entry2Conn.getResponseCode() == HTTP_OK
 		def entry2Json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entry2Conn))
 		entry2Json['entryId'] == 'multi-merge-2'
+
+		def resource1Conn = EntryStoreClient.getRequest('/' + contextMergeId + '/resource/multi-merge-1')
+		resource1Conn.getResponseCode() == HTTP_OK
+		EntryStoreClient.getResponseBody(resource1Conn).contains('First Merged Entry')
+
+		def resource2Conn = EntryStoreClient.getRequest('/' + contextMergeId + '/resource/multi-merge-2')
+		resource2Conn.getResponseCode() == HTTP_OK
+		EntryStoreClient.getResponseBody(resource2Conn).contains('Second Merged Entry')
 	}
 
 	def "POST /{context-id}/merge as member of admin group should return 200"() {
@@ -193,5 +201,20 @@ class ContextMergeIT extends BaseSpec {
 
 		def entryConn = EntryStoreClient.getRequest('/' + contextMergeId + '/entry/' + resourceId)
 		entryConn.getResponseCode() == HTTP_OK
+	}
+
+	def "POST /{context-id}/merge as admin with valid RDF but no markers or resourceId should return Bad-Request 400"() {
+		given:
+		def turtleBody = '''\
+			@prefix dc: <http://purl.org/dc/terms/> .
+			<http://example.org/s> dc:title "Orphan" .
+			'''.stripIndent()
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextMergeId + '/merge',
+			turtleBody, 'admin', 'text/turtle')
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
 	}
 }
