@@ -152,13 +152,13 @@ class ContextMergeIT extends BaseSpec {
 		def entry2Json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entry2Conn))
 		entry2Json['entryId'] == 'multi-merge-2'
 
-		def resource1Conn = EntryStoreClient.getRequest('/' + contextMergeId + '/resource/multi-merge-1')
-		resource1Conn.getResponseCode() == HTTP_OK
-		EntryStoreClient.getResponseBody(resource1Conn).contains('First Merged Entry')
+		def metadata1Conn = EntryStoreClient.getRequest('/' + contextMergeId + '/metadata/multi-merge-1')
+		metadata1Conn.getResponseCode() == HTTP_OK
+		EntryStoreClient.getResponseBody(metadata1Conn).contains('First Merged Entry')
 
-		def resource2Conn = EntryStoreClient.getRequest('/' + contextMergeId + '/resource/multi-merge-2')
-		resource2Conn.getResponseCode() == HTTP_OK
-		EntryStoreClient.getResponseBody(resource2Conn).contains('Second Merged Entry')
+		def metadata2Conn = EntryStoreClient.getRequest('/' + contextMergeId + '/metadata/multi-merge-2')
+		metadata2Conn.getResponseCode() == HTTP_OK
+		EntryStoreClient.getResponseBody(metadata2Conn).contains('Second Merged Entry')
 	}
 
 	def "POST /{context-id}/merge as member of admin group should return 200"() {
