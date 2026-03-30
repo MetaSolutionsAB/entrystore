@@ -71,6 +71,7 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 				SecurityContextHolder.getContext().setAuthentication(newAuth);
 				sessionRegistry.registerNewSession(request.getSession().getId(), updatedUser);
 			} catch (UsernameNotFoundException e) {
+				log.warn("User no longer found during session reload: {}", e.getMessage());
 				SecurityContextHolder.clearContext();
 				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.UNAUTHORIZED.value())

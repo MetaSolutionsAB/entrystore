@@ -39,10 +39,4 @@ public class HtmlResponseException extends RuntimeException {
 		this.status = status;
 		this.linkUrl = linkUrl;
 	}
-
-	public HtmlResponseException(String message, String title, HttpStatus status, Throwable cause) {
-		super(message, cause);
-		this.title = title;
-		this.status = status;
-	}
 }

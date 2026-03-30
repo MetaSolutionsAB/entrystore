@@ -97,7 +97,7 @@ public class SecurityConfig {
 								HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
 										.status(HttpStatus.UNAUTHORIZED.value())
 										.path(request.getRequestURI())
-										.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
+										.error("Session expired or invalid")
 										.build()))
 				)
 				.authorizeHttpRequests(auth -> auth

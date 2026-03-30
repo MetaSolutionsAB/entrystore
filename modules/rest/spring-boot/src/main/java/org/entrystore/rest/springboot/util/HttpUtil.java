@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -42,7 +43,8 @@ public class HttpUtil {
 
 	private static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
 	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
-			.registerModule(new JavaTimeModule());
+			.registerModule(new JavaTimeModule())
+			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
 	/**
 	 * Determines the media type based on the provided format parameter or content type header.
@@ -168,6 +170,10 @@ public class HttpUtil {
 	 * is not available.
 	 */
 	public static void writeErrorResponseAsJson(HttpServletResponse response, ErrorResponse errorResponse) throws IOException {
+		if (response.isCommitted()) {
+			log.warn("Cannot write error response — response already committed (status={})", errorResponse.status());
+			return;
+		}
 		response.setStatus(errorResponse.status());
 		response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 		var writer = response.getWriter();

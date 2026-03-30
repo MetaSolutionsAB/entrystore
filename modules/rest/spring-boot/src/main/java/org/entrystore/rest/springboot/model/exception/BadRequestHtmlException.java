@@ -33,8 +33,4 @@ public class BadRequestHtmlException extends HtmlResponseException {
 	public BadRequestHtmlException(String message, String title, String linkUrl) {
 		super(message, title, HttpStatus.BAD_REQUEST, linkUrl);
 	}
-
-	public BadRequestHtmlException(String message, String title, String linkUrl, Throwable cause) {
-		super(message, title, HttpStatus.BAD_REQUEST, linkUrl, cause);
-	}
 }
