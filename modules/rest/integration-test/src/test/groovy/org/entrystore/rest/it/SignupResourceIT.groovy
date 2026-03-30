@@ -500,7 +500,9 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_BAD_REQUEST
 		confirmConn.getContentType().contains('text/html')
-		confirmConn.getErrorStream().text.contains('Invalid confirmation link.')
+		def body = confirmConn.getErrorStream().text
+		body.contains('Invalid confirmation link.')
+		body.contains('<a href="http://localhost:8181"')
 	}
 
 	def "GET /auth/signup should not confirm creating new user after signing up with already used token"() {
@@ -787,5 +789,27 @@ class SignupResourceIT extends BaseSpec {
 		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
 		infoRespJson['id'] != null
 		infoRespJson['user'] == username.toLowerCase()
+	}
+
+	def "POST /auth/signup should escape HTML in error messages to prevent injection"() {
+		given:
+		def maliciousEmail = '<script>alert(1)</script>'
+		def requestBody = JsonOutput.toJson([
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : maliciousEmail,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
+		])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('text/html')
+		def body = conn.getErrorStream().text
+		!body.contains('<script>alert(1)</script>')
+		body.contains('&lt;script&gt;alert(1)&lt;/script&gt;')
 	}
 }

@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.service;
 
 import com.google.common.base.Joiner;
@@ -77,13 +93,10 @@ public class AuthService {
 	private final String userAlreadyExistsMessage = "User with submitted email address exists already.";
 	private final String internalErrorMessage = "Unable to reset password due to internal error.";
 	private final String domainNotWhitelistedMessage = "The email domain is not allowed for sign-up: {}";
-	private final String invalidSignupTokenMessage = "<h4>Invalid confirmation link.</h4>" +
-			"This may be due to one of the following reasons:<br/>" +
-			"<ul><li>You have clicked the link twice and you already have an account.</li>" +
-			"<li>The confirmation link has expired.</li>" +
-			"<li>The link's confirmation token has never existed.</li></ul>" +
-			"Click here to sign up again and to receive a new confirmation link:<br/>" +
-			"<a href=\"{1}\"><pre>{2}</pre></a>";
+	private final String invalidSignupTokenMessage = "Invalid confirmation link. " +
+			"This may be because you already clicked the link and have an account, " +
+			"the confirmation link has expired, or the token never existed. " +
+			"Visit the link below to sign up again and receive a new confirmation link.";
 	private final String unableToCreateUserMessage = "Unable to create user.";
 
 	private final RepositoryManagerImpl repositoryManager;
@@ -315,7 +328,7 @@ public class AuthService {
 		if (signupInfo == null) {
 			URL bURL = repositoryManager.getRepositoryURL();
 			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + (Arrays.asList(-1, 80, 443).contains(bURL.getPort()) ? "" : ":" + bURL.getPort());
-			throw new BadRequestHtmlException(invalidSignupTokenMessage.replace("{1}", bURL.toString()).replace("{2}", appURL), title);
+			throw new BadRequestHtmlException(invalidSignupTokenMessage, title, appURL);
 		}
 		signupTokenCache.removeToken(token);
 
@@ -480,7 +493,7 @@ public class AuthService {
 		try {
 			throw new RedirectTemporaryException(new URI(url));
 		} catch (URISyntaxException ex) {
-			throw new InternalServerErrorException(ex.getMessage());
+			throw new InternalServerErrorException("Invalid redirect URL", ex);
 		}
 	}
 
