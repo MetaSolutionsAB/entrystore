@@ -129,12 +129,12 @@ public class SecurityConfig {
 				.addFilterAfter(reloadUserPropertiesFilter, SetUserURIAfterAuthenticationFilter.class)
 				// below disables the auto redirect to login page when user is not authenticated, instead reply with 401
 				.exceptionHandling(e -> e
-						.authenticationEntryPoint(customEntryPoint())
+						.authenticationEntryPoint(basicAuthEnabled ? authChallengeAwareEntryPoint() : customEntryPoint())
 				);
 
 		if (basicAuthEnabled) {
 			log.info("Basic Auth Enabled");
-			http.httpBasic(basic -> basic.authenticationEntryPoint(authChallengeAwareEntryPoint()));
+			http.httpBasic(Customizer.withDefaults());
 		} else {
 			log.info("Basic Auth Disabled");
 		}
