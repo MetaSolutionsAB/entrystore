@@ -87,7 +87,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryMetaConn))
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.inputStream.text)
 		(entryMetaRespJson as Map).keySet().size() == 1
 		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
 		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
@@ -192,7 +192,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 																					value: 'Cool entry']],]]]
 		def entryId = createEntry(contextId, params, body)
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
 		def storedMetadataUrl = entryMetadata[0]['value'].toString()
@@ -212,7 +212,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 																					value: 'Cool entry']],]]]
 		def entryId = createEntry(contextId, params, body)
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
 		def storedMetadataUrl = entryMetadata[0]['value'].toString()
@@ -231,7 +231,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryMetaConn))
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.inputStream.text)
 		(entryMetaRespJson as Map).keySet().size() == 1
 		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
 		entryMetaRespJson[metaResourceUrl][NameSpaceConst.DC_TERM_TITLE] != null
@@ -249,7 +249,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 																					value: 'Cool entry']],]]]
 		def entryId = createEntry(contextId, params, body)
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
 		def storedMetadataUrl = entryMetadata[0]['value'].toString()
@@ -272,7 +272,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 																					value: 'Cool entry']],]]]
 		def entryId = createEntry(contextId, params, body)
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
 		def storedMetadataUrl = entryMetadata[0]['value'].toString()
@@ -297,7 +297,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 																					value: 'Cool entry']],]]]
 		def entryId = createEntry(contextId, params, body)
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 		def entryMetadata = entryRespJson['info'][entryUri][NameSpaceConst.TERM_METADATA].collect()
 		def storedMetadataUrl = entryMetadata[0]['value'].toString()
@@ -311,7 +311,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryMetaConn = EntryStoreClient.getRequest(storedMetadataUrl)
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryMetaConn))
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.inputStream.text)
 		(entryMetaRespJson as Map).keySet().size() == 0
 	}
 
@@ -381,7 +381,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryMetaConn))
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.inputStream.text)
 		(entryMetaRespJson as Map).keySet().size() == 1
 		def metaResourceUrl = (entryMetaRespJson as Map).keySet()[0].toString()
 		entryMetaRespJson[metaResourceUrl][NameSpaceConst.TERM_EXTERNAL_METADATA] != null
@@ -435,7 +435,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryMetaConn))
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.inputStream.text)
 		(entryMetaRespJson as Map).keySet().size() == 3
 		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE] != null
 		def dcDepth0Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE].collect()
@@ -508,7 +508,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryMetaConn))
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.inputStream.text)
 		(entryMetaRespJson as Map).keySet().size() == 2
 		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE] != null
 		def dcDepth0Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE].collect()
@@ -590,7 +590,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryMetaConn))
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.inputStream.text)
 		(entryMetaRespJson as Map).keySet().size() == 3
 		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE] != null
 		def dcDepth0Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD0Id][NameSpaceConst.DC_TERM_TITLE].collect()
@@ -658,7 +658,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryMetaConn))
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.inputStream.text)
 		(entryMetaRespJson as Map).keySet().size() == 2
 		entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE] != null
 		def dcDepth0Titles = entryMetaRespJson[EntryStoreClient.baseUrl + '/' + contextId + '/resource/' + entryD1Id][NameSpaceConst.DC_TERM_TITLE].collect()
@@ -778,7 +778,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		entryMetaConn.getResponseCode() == HTTP_OK
 		entryMetaConn.getContentType().contains('application/json')
-		def entryMetaRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryMetaConn))
+		def entryMetaRespJson = JSON_PARSER.parseText(entryMetaConn.inputStream.text)
 		(entryMetaRespJson as Map).keySet().size() == 4
 	}
 
@@ -915,7 +915,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('text/n3')
-		def response = getConn.getInputStream().text
+		def response = getConn.inputStream.text
 		response.contains('Cool entry')
 	}
 
@@ -946,7 +946,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		then:
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('text/n3')
-		def response = getConn.getInputStream().text
+		def response = getConn.inputStream.text
 		response.contains('Updated via legacy N3 type')
 	}
 }

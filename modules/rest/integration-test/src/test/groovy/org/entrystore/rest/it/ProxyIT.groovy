@@ -93,7 +93,7 @@ class ProxyIT extends BaseSpec {
 		}
 	}
 
-	private String mockUrl(String path) {
+	private static String mockUrl(String path) {
 		return URLEncoder.encode("http://localhost:${mockPort}${path}", 'UTF-8')
 	}
 
@@ -140,7 +140,7 @@ class ProxyIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		EntryStoreClient.getResponseBody(conn) == '{"key":"value"}'
+		conn.inputStream.text == '{"key":"value"}'
 	}
 
 	def 'GET /proxy as admin should return proxied content'() {
@@ -150,7 +150,7 @@ class ProxyIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		EntryStoreClient.getResponseBody(conn) == '{"key":"value"}'
+		conn.inputStream.text == '{"key":"value"}'
 	}
 
 	// --- Global /proxy - blacklist (SSRF protection) ---
@@ -212,7 +212,7 @@ class ProxyIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
-		EntryStoreClient.getResponseBody(conn) == 'text/html'
+		conn.inputStream.text == 'text/html'
 	}
 
 	def 'GET /proxy should follow redirects'() {
@@ -222,7 +222,7 @@ class ProxyIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		EntryStoreClient.getResponseBody(conn) == '{"key":"value"}'
+		conn.inputStream.text == '{"key":"value"}'
 	}
 
 	// --- Context-scoped /{context-id}/proxy ---
@@ -267,7 +267,7 @@ class ProxyIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		EntryStoreClient.getResponseBody(conn) == '{"key":"value"}'
+		conn.inputStream.text == '{"key":"value"}'
 	}
 
 	// --- URL scheme validation ---
@@ -331,6 +331,6 @@ class ProxyIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		EntryStoreClient.getResponseBody(conn) == '{"key":"value"}'
+		conn.inputStream.text == '{"key":"value"}'
 	}
 }

@@ -88,7 +88,7 @@ class SamlLoginIT extends BaseSpec {
 		then: 'SP should redirect to IDP: 302 response code and location header set'
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('text/html')
-		def response = EntryStoreClient.getResponseBody(connection)
+		def response = connection.inputStream.text
 		response.contains('action="' + keycloakTestRealmUrl + '"')
 		response.contains('<input type="hidden" name="SAMLRequest" value="')
 
@@ -137,7 +137,7 @@ class SamlLoginIT extends BaseSpec {
 		then: 'Should get the login page'
 		loginPageConn.getResponseCode() == HTTP_OK
 		loginPageConn.getContentType().contains('text/html')
-		def loginPageHtml = EntryStoreClient.getResponseBody(loginPageConn)
+		def loginPageHtml = loginPageConn.inputStream.text
 		loginPageHtml != null
 		loginPageHtml.contains('<form id="kc-form-login" ')
 		loginPageHtml.contains(' id="username" ')
@@ -169,7 +169,7 @@ class SamlLoginIT extends BaseSpec {
 		then: 'IDP (Keycloak) should return a form with SAMLResponse'
 		submitLoginConn.getResponseCode() == HTTP_OK
 		submitLoginConn.getContentType().contains('text/html')
-		def samlResponsePage = EntryStoreClient.getResponseBody(submitLoginConn)
+		def samlResponsePage = submitLoginConn.inputStream.text
 		samlResponsePage != null
 		samlResponsePage.contains('name="SAMLResponse" value="')
 
@@ -223,7 +223,7 @@ class SamlLoginIT extends BaseSpec {
 			null, null, [Cookie: spCookies.join('; ')])
 		currentlyLoggedInUserConn.getResponseCode() == HTTP_OK
 		currentlyLoggedInUserConn.getContentType().contains('application/json')
-		def userJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(currentlyLoggedInUserConn))
+		def userJson = JSON_PARSER.parseText(currentlyLoggedInUserConn.inputStream.text)
 		userJson['id'] != null
 		userJson['user'] == testUsername
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')

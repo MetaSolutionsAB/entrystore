@@ -72,7 +72,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/rss+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == null
 		respXml.attributes()['version'] != null
 		respXml.value().size() == 1
@@ -112,7 +112,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/rss+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
 		respXml.attributes()['version'] != null
 		respXml.value().size() == 1
@@ -172,7 +172,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/rss+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
 		respXml.attributes()['version'] != null
 		respXml.value().size() == 1
@@ -232,7 +232,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/rss+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
 		respXml.attributes()['version'] != null
 		respXml.value().size() == 1
@@ -291,7 +291,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/atom+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes().size() > 0
 		respXml.attributes()['xmlns'] == 'http://www.w3.org/2005/Atom'
 		respXml.attributes()['xmlns:dc'] == null
@@ -327,7 +327,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/atom+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes().size() > 0
 		respXml.attributes()['xmlns'] == 'http://www.w3.org/2005/Atom'
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
@@ -393,7 +393,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/atom+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes().size() > 0
 		respXml.attributes()['xmlns'] == 'http://www.w3.org/2005/Atom'
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
@@ -459,7 +459,7 @@ class ResourceSyndicationIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/atom+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes().size() > 0
 		respXml.attributes()['xmlns'] == 'http://www.w3.org/2005/Atom'
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS

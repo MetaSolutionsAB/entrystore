@@ -53,7 +53,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the local entry
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 		assert entryRespJson['info'][entryUri] != null
@@ -83,7 +83,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the local entry
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 		assert entryRespJson['info'][entryUri] != null
@@ -104,7 +104,7 @@ class ResourceIT extends BaseSpec {
 		// Response says content-type is JSON, but it returns a non-json raw String value, same string as was given in the request to create the entry
 		// Shouldn't the String in the response body be in quotes with escaped chars? instead of a raw String?
 		// In Restlet it does return a raw String as well
-		def resourceRespText = EntryStoreClient.getResponseBody(resourceConn)
+		def resourceRespText = resourceConn.inputStream.text
 		resourceRespText == someText
 	}
 
@@ -121,7 +121,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the local entry
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 		assert entryRespJson['info'][entryUri] != null
@@ -152,7 +152,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the local entry
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
 		assert entryRespJson['info'][entryUri] != null
@@ -169,7 +169,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceResp = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		// entries list should not contain the 'non-existing-id'
 		resourceResp == [givenEntryId]
 	}
@@ -186,7 +186,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceResp = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceResp.collect().contains(givenEntryId)
 	}
 
@@ -201,7 +201,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceResp = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceResp.collect().contains(givenEntryId)
 	}
 
@@ -216,7 +216,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceResp = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceResp['name'] == null
 		resourceResp['language'] == null
 		resourceResp['customProperties'] == null
@@ -234,7 +234,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceResp = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceResp['name'] == user['username'].toString().toLowerCase()
 		resourceResp['language'] == null
 		resourceResp['customProperties'] == [:]
@@ -248,7 +248,7 @@ class ResourceIT extends BaseSpec {
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
 		assert connection.getResponseCode() == HTTP_CREATED
 		assert connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		assert responseJson['entryId'] != null
 		def entryId = responseJson['entryId'].toString()
 		assert entryId.length() > 0
@@ -259,7 +259,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceResp = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceResp['name'] == null
 		resourceResp['children'] == null
 		(resourceResp as Map).keySet().size() == 0
@@ -273,7 +273,7 @@ class ResourceIT extends BaseSpec {
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
 		assert connection.getResponseCode() == HTTP_CREATED
 		assert connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		assert responseJson['entryId'] != null
 		def entryId = responseJson['entryId'].toString()
 		assert entryId.length() > 0
@@ -284,7 +284,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceResp = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceResp['name'] == requestResourceName['name'].toLowerCase()
 		resourceResp['children'] == []
 	}
@@ -315,7 +315,7 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		resourceConn.getResponseCode() == HTTP_NO_CONTENT
-		EntryStoreClient.getResponseBody(resourceConn) == ''
+		resourceConn.inputStream.text == ''
 	}
 
 	def "GET /{context-id}/resource/{entry-id} as guest on None graph entry with octet-stream file should respond with Unauthorized 401"() {
@@ -335,7 +335,7 @@ class ResourceIT extends BaseSpec {
 			'admin', 'application/octet-stream')
 		assert sendFileConn.getResponseCode() == HTTP_CREATED
 		// ResourceResource class defines a json response with 'success' field, but later in the code it is replaced with Empty response
-//		def sendFileJsonResponse = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(sendFileConn))
+//		def sendFileJsonResponse = JSON_PARSER.parseText(sendFileConn.inputStream.text)
 //		assert sendFileJsonResponse['success'] == 'The file was uploaded'
 //		assert sendFileJsonResponse['format'] == 'application/octet-stream'
 
@@ -363,7 +363,7 @@ class ResourceIT extends BaseSpec {
 			'admin', 'application/octet-stream')
 		assert sendFileConn.getResponseCode() == HTTP_CREATED
 		// ResourceResource class defines a json response with 'success' field, but later in the code it is replaced with Empty response
-//		def sendFileJsonResponse = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(sendFileConn))
+//		def sendFileJsonResponse = JSON_PARSER.parseText(sendFileConn.inputStream.text)
 //		assert sendFileJsonResponse['success'] == 'The file was uploaded'
 //		assert sendFileJsonResponse['format'] == 'application/octet-stream'
 
@@ -413,7 +413,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the String entry
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
@@ -421,7 +421,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('text/plain')
-		assert EntryStoreClient.getResponseBody(resourceConn) == someText
+		assert resourceConn.inputStream.text == someText
 
 		def newBody = 'new String set'
 
@@ -444,7 +444,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the String entry
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
@@ -452,7 +452,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('text/plain')
-		assert EntryStoreClient.getResponseBody(resourceConn) == someText
+		assert resourceConn.inputStream.text == someText
 
 		def newBody = 'new String set'
 
@@ -461,13 +461,13 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
-		def editResourceRespText = EntryStoreClient.getResponseBody(editResourceConn)
+		def editResourceRespText = editResourceConn.inputStream.text
 		editResourceRespText == ''
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('text/plain')
-		EntryStoreClient.getResponseBody(resourceConn2) == newBody
+		resourceConn2.inputStream.text == newBody
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} should edit List-resource"() {
@@ -483,7 +483,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the list
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
@@ -491,7 +491,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
-		assert JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn)) == []
+		assert JSON_PARSER.parseText(resourceConn.inputStream.text) == []
 
 		when:
 		// add minimal entry to the list
@@ -499,13 +499,13 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
-		def editResourceRespText = EntryStoreClient.getResponseBody(editResourceConn)
+		def editResourceRespText = editResourceConn.inputStream.text
 		editResourceRespText == ''
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('application/json')
-		JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn2)) == [minimalEntryId]
+		JSON_PARSER.parseText(resourceConn2.inputStream.text) == [minimalEntryId]
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} should not edit List-resource if requested entry does not exist"() {
@@ -518,7 +518,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the list
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
@@ -526,7 +526,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
-		assert JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn)) == []
+		assert JSON_PARSER.parseText(resourceConn.inputStream.text) == []
 
 		when:
 		// add non-existing entry to the list
@@ -538,7 +538,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('application/json')
-		JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn2)) == []
+		JSON_PARSER.parseText(resourceConn2.inputStream.text) == []
 	}
 
 	def "PUT /{context-id}/resource/{entry-id} should edit name and password of User-resource"() {
@@ -552,7 +552,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
-		def resourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		assert resourceJson['name'] == username.toLowerCase()
 		assert resourceJson['language'] == null
 		assert resourceJson['customProperties'] == [:]
@@ -569,18 +569,18 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
-		def editResourceRespText = EntryStoreClient.getResponseBody(editResourceConn)
+		def editResourceRespText = editResourceConn.inputStream.text
 		editResourceRespText == ''
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('application/json')
-		def resourceJson2 = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn2))
+		def resourceJson2 = JSON_PARSER.parseText(resourceConn2.inputStream.text)
 		resourceJson2['name'] == newUsername.toLowerCase()
 		resourceJson2['language'] == 'PL'
 		resourceJson2['customProperties'] == [:]
 		def info = EntryStoreClient.getRequest('/auth/user', newUsername)
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		entryId == infoRespJson['id']
 	}
 
@@ -595,7 +595,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
-		def resourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		assert resourceJson['name'] == username.toLowerCase()
 		assert resourceJson['language'] == null
 		assert resourceJson['customProperties'] == [:]
@@ -614,7 +614,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('application/json')
-		def resourceJson2 = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn2))
+		def resourceJson2 = JSON_PARSER.parseText(resourceConn2.inputStream.text)
 		resourceJson2['name'] == username.toLowerCase()
 		resourceJson2['language'] == null
 		resourceJson2['customProperties'] == [:]
@@ -630,10 +630,10 @@ class ResourceIT extends BaseSpec {
 		def groupParams = [graphtype: 'group']
 		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUT']])
 		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
-		def groupEntryId = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(groupConnection))['entryId'].toString()
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.inputStream.text)['entryId'].toString()
 		// fetch URI of created Group
 		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
-		def groupEntryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(groupEntryConn))
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.inputStream.text)
 		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
 
@@ -645,13 +645,13 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		addUserToGroupConn.getResponseCode() == HTTP_NO_CONTENT
-		def addResourceRespText = EntryStoreClient.getResponseBody(addUserToGroupConn)
+		def addResourceRespText = addUserToGroupConn.inputStream.text
 		addResourceRespText == ''
 		// fetch Group details
 		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
 		assert groupResourceConn.getResponseCode() == HTTP_OK
 		assert groupResourceConn.getContentType().contains('application/json')
-		def groupResourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(groupResourceConn))
+		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.inputStream.text)
 		assert groupResourceJson['children'] instanceof List
 		def groupMembers = groupResourceJson['children'].collect()
 		groupMembers.size() == 1
@@ -660,7 +660,7 @@ class ResourceIT extends BaseSpec {
 		def userResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + "?includeAll")
 		assert userResourceConn.getResponseCode() == HTTP_OK
 		assert userResourceConn.getContentType().contains('application/json')
-		def userResourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(userResourceConn))
+		def userResourceJson = JSON_PARSER.parseText(userResourceConn.inputStream.text)
 		assert userResourceJson['relations'] instanceof Map
 		def relations = userResourceJson['relations']
 		def userGroupRelation = relations[groupResourceUri] // Normally, a LazyMap should be populated now
@@ -678,10 +678,10 @@ class ResourceIT extends BaseSpec {
 		def group1RequestResourceName = [name: 'GroupPUT1']
 		def group1Body = JsonOutput.toJson([resource: group1RequestResourceName])
 		def group1Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), group1Body)
-		def group1EntryId = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(group1Connection))['entryId'].toString()
+		def group1EntryId = JSON_PARSER.parseText(group1Connection.inputStream.text)['entryId'].toString()
 		// fetch URI of created Group
 		def group1EntryConn = EntryStoreClient.getRequest('/_principals/entry/' + group1EntryId)
-		def group1EntryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(group1EntryConn))
+		def group1EntryRespJson = JSON_PARSER.parseText(group1EntryConn.inputStream.text)
 		def group1EntryRespJsonKeys = (group1EntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def group1ResourceUri = group1EntryRespJsonKeys.find { it -> it.contains('resource') }
 
@@ -689,10 +689,10 @@ class ResourceIT extends BaseSpec {
 		def group2RequestResourceName = [name: 'GroupPUT1']
 		def group2Body = JsonOutput.toJson([resource: group2RequestResourceName])
 		def group2Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), group2Body)
-		def group2EntryId = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(group2Connection))['entryId'].toString()
+		def group2EntryId = JSON_PARSER.parseText(group2Connection.inputStream.text)['entryId'].toString()
 		// fetch URI of created Group
 		def group2EntryConn = EntryStoreClient.getRequest('/_principals/entry/' + group2EntryId)
-		def group2EntryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(group2EntryConn))
+		def group2EntryRespJson = JSON_PARSER.parseText(group2EntryConn.inputStream.text)
 		def group2EntryRespJsonKeys = (group2EntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def group2ResourceUri = group2EntryRespJsonKeys.find { it -> it.contains('resource') }
 
@@ -705,16 +705,16 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		addUserToGroup1Conn.getResponseCode() == HTTP_NO_CONTENT
-		def addResourceResp1Text = EntryStoreClient.getResponseBody(addUserToGroup1Conn)
+		def addResourceResp1Text = addUserToGroup1Conn.inputStream.text
 		addResourceResp1Text == ''
 		addUserToGroup2Conn.getResponseCode() == HTTP_NO_CONTENT
-		def addResourceResp2Text = EntryStoreClient.getResponseBody(addUserToGroup2Conn)
+		def addResourceResp2Text = addUserToGroup2Conn.inputStream.text
 		addResourceResp2Text == ''
 		// fetch Group details
 		def group1ResourceConn = EntryStoreClient.getRequest(group1ResourceUri)
 		assert group1ResourceConn.getResponseCode() == HTTP_OK
 		assert group1ResourceConn.getContentType().contains('application/json')
-		def group1ResourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(group1ResourceConn))
+		def group1ResourceJson = JSON_PARSER.parseText(group1ResourceConn.inputStream.text)
 		assert group1ResourceJson['children'] instanceof List
 		def group1Members = group1ResourceJson['children'].collect()
 		group1Members.size() == 1
@@ -722,7 +722,7 @@ class ResourceIT extends BaseSpec {
 		def group2ResourceConn = EntryStoreClient.getRequest(group2ResourceUri)
 		assert group2ResourceConn.getResponseCode() == HTTP_OK
 		assert group2ResourceConn.getContentType().contains('application/json')
-		def group2ResourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(group2ResourceConn))
+		def group2ResourceJson = JSON_PARSER.parseText(group2ResourceConn.inputStream.text)
 		assert group2ResourceJson['children'] instanceof List
 		def group2Members = group2ResourceJson['children'].collect()
 		group2Members.size() == 1
@@ -732,7 +732,7 @@ class ResourceIT extends BaseSpec {
 		def userResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + userEntryId + "?includeAll")
 		assert userResourceConn.getResponseCode() == HTTP_OK
 		assert userResourceConn.getContentType().contains('application/json')
-		def userResourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(userResourceConn))
+		def userResourceJson = JSON_PARSER.parseText(userResourceConn.inputStream.text)
 		assert userResourceJson['relations'] instanceof Map
 		def relations = userResourceJson['relations']
 		def userGroup1Relation = relations[group1ResourceUri]
@@ -755,10 +755,10 @@ class ResourceIT extends BaseSpec {
 		def groupRequestResourceName = [name: 'GroupPUTboth']
 		def groupBody = JsonOutput.toJson([resource: groupRequestResourceName])
 		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
-		def groupEntryId = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(groupConnection))['entryId'].toString()
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.inputStream.text)['entryId'].toString()
 		// fetch URI of created Group
 		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
-		def groupEntryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(groupEntryConn))
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.inputStream.text)
 		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
 
@@ -770,13 +770,13 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		addUsersToGroupConn.getResponseCode() == HTTP_NO_CONTENT
-		EntryStoreClient.getResponseBody(addUsersToGroupConn) == ''
+		addUsersToGroupConn.inputStream.text == ''
 
 		// fetch Group details
 		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
 		groupResourceConn.getResponseCode() == HTTP_OK
 		groupResourceConn.getContentType().contains('application/json')
-		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.getInputStream().text)
+		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.inputStream.text)
 		groupResourceJson['children'] instanceof List
 		def groupMembers = groupResourceJson['children'].collect()
 		groupMembers.size() == 2
@@ -787,7 +787,7 @@ class ResourceIT extends BaseSpec {
 		def user1ResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + user1EntryId + "?includeAll")
 		user1ResourceConn.getResponseCode() == HTTP_OK
 		user1ResourceConn.getContentType().contains('application/json')
-		def user1ResourceJson = JSON_PARSER.parseText(user1ResourceConn.getInputStream().text)
+		def user1ResourceJson = JSON_PARSER.parseText(user1ResourceConn.inputStream.text)
 		user1ResourceJson['relations'] instanceof Map
 		user1ResourceJson['relations'][groupResourceUri] != null
 
@@ -795,7 +795,7 @@ class ResourceIT extends BaseSpec {
 		def user2ResourceConn = EntryStoreClient.getRequest('/_principals/entry/' + user2EntryId + "?includeAll")
 		user2ResourceConn.getResponseCode() == HTTP_OK
 		user2ResourceConn.getContentType().contains('application/json')
-		def user2ResourceJson = JSON_PARSER.parseText(user2ResourceConn.getInputStream().text)
+		def user2ResourceJson = JSON_PARSER.parseText(user2ResourceConn.inputStream.text)
 		user2ResourceJson['relations'] instanceof Map
 		user2ResourceJson['relations'][groupResourceUri] != null
 	}
@@ -805,7 +805,7 @@ class ResourceIT extends BaseSpec {
 		def groupParams = [graphtype: 'group']
 		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTMalformed']])
 		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
-		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.inputStream.text)['entryId'].toString()
 
 		def malformedBody = '{ this is not a valid json, mate }'
 
@@ -826,9 +826,9 @@ class ResourceIT extends BaseSpec {
 		def groupParams = [graphtype: 'group']
 		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTRemove']])
 		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
-		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.inputStream.text)['entryId'].toString()
 		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
-		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.getInputStream().text)
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.inputStream.text)
 		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
 
@@ -839,7 +839,7 @@ class ResourceIT extends BaseSpec {
 
 		// Verify both are members
 		def groupResourceConn1 = EntryStoreClient.getRequest(groupResourceUri)
-		def groupResourceJson1 = JSON_PARSER.parseText(groupResourceConn1.getInputStream().text)
+		def groupResourceJson1 = JSON_PARSER.parseText(groupResourceConn1.inputStream.text)
 		assert groupResourceJson1['children'].size() == 2
 
 		when:
@@ -850,7 +850,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		removeConn.getResponseCode() == HTTP_NO_CONTENT
 		def groupResourceConn2 = EntryStoreClient.getRequest(groupResourceUri)
-		def groupResourceJson2 = JSON_PARSER.parseText(groupResourceConn2.getInputStream().text)
+		def groupResourceJson2 = JSON_PARSER.parseText(groupResourceConn2.inputStream.text)
 		groupResourceJson2['children'] instanceof List
 		groupResourceJson2['children'].size() == 1
 		groupResourceJson2['children'][0]['name'] == 'userputremove1'
@@ -864,9 +864,9 @@ class ResourceIT extends BaseSpec {
 		def groupParams = [graphtype: 'group']
 		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTClear']])
 		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
-		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.inputStream.text)['entryId'].toString()
 		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
-		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.getInputStream().text)
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.inputStream.text)
 		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
 
@@ -877,7 +877,7 @@ class ResourceIT extends BaseSpec {
 
 		// Verify member was added
 		def groupResourceConn1 = EntryStoreClient.getRequest(groupResourceUri)
-		def groupResourceJson1 = JSON_PARSER.parseText(groupResourceConn1.getInputStream().text)
+		def groupResourceJson1 = JSON_PARSER.parseText(groupResourceConn1.inputStream.text)
 		assert groupResourceJson1['children'].size() == 1
 
 		when:
@@ -887,7 +887,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		clearConn.getResponseCode() == HTTP_NO_CONTENT
 		def groupResourceConn2 = EntryStoreClient.getRequest(groupResourceUri)
-		def groupResourceJson2 = JSON_PARSER.parseText(groupResourceConn2.getInputStream().text)
+		def groupResourceJson2 = JSON_PARSER.parseText(groupResourceConn2.inputStream.text)
 		groupResourceJson2['children'] instanceof List
 		groupResourceJson2['children'].size() == 0
 	}
@@ -897,7 +897,7 @@ class ResourceIT extends BaseSpec {
 		def groupParams = [graphtype: 'group']
 		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTBadChild']])
 		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
-		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.inputStream.text)['entryId'].toString()
 
 		when:
 		def conn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, JsonOutput.toJson(['non-existent-entry-id']))
@@ -911,13 +911,13 @@ class ResourceIT extends BaseSpec {
 		def group1Params = [graphtype: 'group']
 		def group1Body = JsonOutput.toJson([resource: [name: 'GroupPUTTarget']])
 		def group1Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(group1Params), group1Body)
-		def group1EntryId = JSON_PARSER.parseText(group1Connection.getInputStream().text)['entryId'].toString()
+		def group1EntryId = JSON_PARSER.parseText(group1Connection.inputStream.text)['entryId'].toString()
 
 		// Create another group (non-User entry) to try adding as member
 		def group2Params = [graphtype: 'group']
 		def group2Body = JsonOutput.toJson([resource: [name: 'GroupPUTNonUser']])
 		def group2Connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(group2Params), group2Body)
-		def group2EntryId = JSON_PARSER.parseText(group2Connection.getInputStream().text)['entryId'].toString()
+		def group2EntryId = JSON_PARSER.parseText(group2Connection.inputStream.text)['entryId'].toString()
 
 		when:
 		def conn = EntryStoreClient.putRequest('/_principals/resource/' + group1EntryId, JsonOutput.toJson([group2EntryId]))
@@ -936,9 +936,9 @@ class ResourceIT extends BaseSpec {
 		def groupParams = [graphtype: 'group']
 		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTTurtle']])
 		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
-		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.inputStream.text)['entryId'].toString()
 		def groupEntryConn = EntryStoreClient.getRequest('/_principals/entry/' + groupEntryId)
-		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.getInputStream().text)
+		def groupEntryRespJson = JSON_PARSER.parseText(groupEntryConn.inputStream.text)
 		def groupEntryRespJsonKeys = (groupEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def groupResourceUri = groupEntryRespJsonKeys.find { it -> it.contains('resource') }
 
@@ -960,7 +960,7 @@ class ResourceIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_NO_CONTENT
 		def groupResourceConn = EntryStoreClient.getRequest(groupResourceUri)
 		groupResourceConn.getResponseCode() == HTTP_OK
-		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.getInputStream().text)
+		def groupResourceJson = JSON_PARSER.parseText(groupResourceConn.inputStream.text)
 		groupResourceJson['children'] instanceof List
 		groupResourceJson['children'].size() == 2
 		groupResourceJson['children'][0]['name'] == 'userputturtle1'
@@ -975,7 +975,7 @@ class ResourceIT extends BaseSpec {
 		def groupParams = [graphtype: 'group']
 		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTDuplicate']])
 		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
-		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.inputStream.text)['entryId'].toString()
 
 		when:
 		def conn = EntryStoreClient.putRequest('/_principals/resource/' + groupEntryId, JsonOutput.toJson([user1EntryId, user1EntryId]))
@@ -989,7 +989,7 @@ class ResourceIT extends BaseSpec {
 		def groupParams = [graphtype: 'group']
 		def groupBody = JsonOutput.toJson([resource: [name: 'GroupPUTMalformedTurtle']])
 		def groupConnection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(groupParams), groupBody)
-		def groupEntryId = JSON_PARSER.parseText(groupConnection.getInputStream().text)['entryId'].toString()
+		def groupEntryId = JSON_PARSER.parseText(groupConnection.inputStream.text)['entryId'].toString()
 
 		def malformedTurtle = '@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n<urn:test> rdf:type rdf:Seq ;\n    rdf:_1 INVALID_URI_HERE'
 
@@ -1009,7 +1009,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
@@ -1017,7 +1017,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
-		def resourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		assert resourceJson['name'] == username.toLowerCase()
 		assert resourceJson['language'] == null
 		assert resourceJson['disabled'] == null
@@ -1036,13 +1036,13 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		editResourceConn.getResponseCode() == HTTP_NO_CONTENT
-		def editResourceRespText = EntryStoreClient.getResponseBody(editResourceConn)
+		def editResourceRespText = editResourceConn.inputStream.text
 		editResourceRespText == ''
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('application/json')
-		def resourceJson2 = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn2))
+		def resourceJson2 = JSON_PARSER.parseText(resourceConn2.inputStream.text)
 		resourceJson2['name'] == newUsername.toLowerCase()
 		resourceJson2['language'] == 'PL'
 		resourceJson2['disabled'] == true
@@ -1079,7 +1079,7 @@ class ResourceIT extends BaseSpec {
 		loginConnection.getResponseCode() == HTTP_OK
 		def info = EntryStoreClient.getRequest('/auth/user', username)
 		info.getResponseCode() == HTTP_OK
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		entryId == infoRespJson['id']
 	}
 
@@ -1100,7 +1100,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		editResourceConn.getResponseCode() == HTTP_FORBIDDEN
 		editResourceConn.getContentType().contains('application/json')
-		def editRespJson = JSON_PARSER.parseText(editResourceConn.getErrorStream().text)
+		def editRespJson = JSON_PARSER.parseText(editResourceConn.errorStream.text)
 		editRespJson['error'] == 'Current password is required'
 	}
 
@@ -1121,7 +1121,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		editResourceConn.getResponseCode() == HTTP_FORBIDDEN
 		editResourceConn.getContentType().contains('application/json')
-		def editRespJson = JSON_PARSER.parseText(editResourceConn.getErrorStream().text)
+		def editRespJson = JSON_PARSER.parseText(editResourceConn.errorStream.text)
 		editRespJson['error'] == 'Current password is required'
 	}
 
@@ -1143,7 +1143,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		editResourceConn.getResponseCode() == HTTP_FORBIDDEN
 		editResourceConn.getContentType().contains('application/json')
-		def editRespJson = JSON_PARSER.parseText(editResourceConn.getErrorStream().text)
+		def editRespJson = JSON_PARSER.parseText(editResourceConn.errorStream.text)
 		editRespJson['error'] == 'No password set or incorrect current password provided'
 	}
 
@@ -1165,7 +1165,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		editResourceConn.getResponseCode() == HTTP_BAD_REQUEST
 		editResourceConn.getContentType().contains('application/json')
-		def editRespJson = JSON_PARSER.parseText(editResourceConn.getErrorStream().text)
+		def editRespJson = JSON_PARSER.parseText(editResourceConn.errorStream.text)
 		editRespJson['error'] == 'Password must conform to configured rules.'
 	}
 
@@ -1179,7 +1179,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		assert resourceRespJson['name'] == username.toLowerCase()
 
 		when:
@@ -1187,7 +1187,7 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		deleteResourceConn.getResponseCode() == HTTP_NO_CONTENT
-		def editResourceRespText = EntryStoreClient.getResponseBody(deleteResourceConn)
+		def editResourceRespText = deleteResourceConn.inputStream.text
 		editResourceRespText == ''
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
@@ -1206,7 +1206,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of the created resource
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect { it.toString() }
 		def resourceUri = entryRespJsonKeys.find { it.contains('resource') }
@@ -1214,7 +1214,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		assert resourceRespJson == [minimalEntryId]
 
 		when:
@@ -1236,7 +1236,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of the created resource
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect { it.toString() }
 		def resourceUri = entryRespJsonKeys.find { it.contains('resource') }
@@ -1244,7 +1244,7 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		assert resourceRespJson == [minimalEntryId]
 
 		when:
@@ -1252,13 +1252,13 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		deleteResourceConn.getResponseCode() == HTTP_NO_CONTENT
-		def editResourceRespText = EntryStoreClient.getResponseBody(deleteResourceConn)
+		def editResourceRespText = deleteResourceConn.inputStream.text
 		editResourceRespText == ''
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('application/json')
-		EntryStoreClient.getResponseBody(resourceConn2) == '[]'
+		resourceConn2.inputStream.text == '[]'
 	}
 
 	// TODO: Fix the vuln of Information Disclosure via Error Messages - guest gets 404 on non-existing entry and 401 on existing entry
@@ -1300,11 +1300,11 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		resourceConn.getResponseCode() == HTTP_NO_CONTENT
-		EntryStoreClient.getResponseBody(resourceConn) == ''
+		resourceConn.inputStream.text == ''
 
 		def resourceConn2 = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
 		resourceConn2.getResponseCode() == HTTP_NO_CONTENT
-		EntryStoreClient.getResponseBody(resourceConn2) == ''
+		resourceConn2.inputStream.text == ''
 	}
 
 	def "DELETE /{context-id}/resource/{entry-id} does not delete resource if it has type String"() {
@@ -1319,7 +1319,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the String entry
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }
@@ -1327,14 +1327,14 @@ class ResourceIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn.getResponseCode() == HTTP_OK
 		assert resourceConn.getContentType().contains('text/plain')
-		assert EntryStoreClient.getResponseBody(resourceConn) == someText
+		assert resourceConn.inputStream.text == someText
 
 		when:
 		def deleteResourceConn = EntryStoreClient.deleteRequest(resourceUri)
 
 		then:
 		deleteResourceConn.getResponseCode() == HTTP_NO_CONTENT
-		def editResourceRespText = EntryStoreClient.getResponseBody(deleteResourceConn)
+		def editResourceRespText = deleteResourceConn.inputStream.text
 		editResourceRespText == ''
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
@@ -1342,7 +1342,7 @@ class ResourceIT extends BaseSpec {
 		// hence calling delete in this test, did not modify anything, even tho the delete call response is a non-error
 		resourceConn2.getResponseCode() == HTTP_OK
 		resourceConn2.getContentType().contains('text/plain')
-		EntryStoreClient.getResponseBody(resourceConn2) == someText
+		resourceConn2.inputStream.text == someText
 	}
 
 	def "POST /{context-id}/resource/{entry-id} as guest should respond with unauthorized 401"() {
@@ -1358,7 +1358,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the SOURCE entry
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + sourceEntryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def sourceEntryKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def sourceResourceUri = sourceEntryKeys.find { it -> it.contains('resource') }
@@ -1366,20 +1366,20 @@ class ResourceIT extends BaseSpec {
 		def sourceResourceConn = EntryStoreClient.getRequest(sourceResourceUri)
 		assert sourceResourceConn.getResponseCode() == HTTP_OK
 		assert sourceResourceConn.getContentType().contains('application/json')
-		def sourceResourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(sourceResourceConn))
+		def sourceResourceRespJson = JSON_PARSER.parseText(sourceResourceConn.inputStream.text)
 		assert sourceResourceRespJson == [givenEntryId]
 
 		// fetch URI of created resource for the TARGET entry
 		def targetEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + targetEntryId)
 		assert targetEntryConn.getResponseCode() == HTTP_OK
-		def targetEntryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(targetEntryConn))
+		def targetEntryRespJson = JSON_PARSER.parseText(targetEntryConn.inputStream.text)
 		assert targetEntryRespJson['info'] != null
 		def targetEntryKeys = (targetEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def targetResourceUri = targetEntryKeys.find { it -> it.contains('resource') }
 		// fetch target resource, should be empty
 		def targetResourceConn = EntryStoreClient.getRequest(targetResourceUri)
 		assert targetResourceConn.getResponseCode() == HTTP_OK
-		def targetResourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(targetResourceConn))
+		def targetResourceRespJson = JSON_PARSER.parseText(targetResourceConn.inputStream.text)
 		assert targetResourceRespJson == []
 
 		def postParams = [moveEntry: contextId + '/entry/' + givenEntryId,
@@ -1406,7 +1406,7 @@ class ResourceIT extends BaseSpec {
 		// fetch URI of created resource for the SOURCE entry
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + sourceEntryId)
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def sourceEntryKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def sourceResourceUri = sourceEntryKeys.find { it -> it.contains('resource') }
@@ -1414,20 +1414,20 @@ class ResourceIT extends BaseSpec {
 		def sourceResourceConn = EntryStoreClient.getRequest(sourceResourceUri)
 		assert sourceResourceConn.getResponseCode() == HTTP_OK
 		assert sourceResourceConn.getContentType().contains('application/json')
-		def sourceResourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(sourceResourceConn))
+		def sourceResourceRespJson = JSON_PARSER.parseText(sourceResourceConn.inputStream.text)
 		assert sourceResourceRespJson == [givenEntryId]
 
 		// fetch URI of created resource for the TARGET entry
 		def targetEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + targetEntryId)
 		assert targetEntryConn.getResponseCode() == HTTP_OK
-		def targetEntryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(targetEntryConn))
+		def targetEntryRespJson = JSON_PARSER.parseText(targetEntryConn.inputStream.text)
 		assert targetEntryRespJson['info'] != null
 		def targetEntryKeys = (targetEntryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def targetResourceUri = targetEntryKeys.find { it -> it.contains('resource') }
 		// fetch target resource, should be empty
 		def targetResourceConn = EntryStoreClient.getRequest(targetResourceUri)
 		assert targetResourceConn.getResponseCode() == HTTP_OK
-		def targetResourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(targetResourceConn))
+		def targetResourceRespJson = JSON_PARSER.parseText(targetResourceConn.inputStream.text)
 		assert targetResourceRespJson == []
 
 		def postParams = [moveEntry: contextId + '/entry/' + givenEntryId,
@@ -1440,20 +1440,20 @@ class ResourceIT extends BaseSpec {
 		then:
 		editResourceConn.getResponseCode() == HTTP_OK
 		editResourceConn.getContentType().contains('application/json')
-		def editResourceJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(editResourceConn))
+		def editResourceJson = JSON_PARSER.parseText(editResourceConn.inputStream.text)
 		// POST on target list to move an entry from source list, returns moved entryUri for some reason, instead of the new state of POST item (target list)
 		editResourceJson['entryURI'] == EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + givenEntryId
 
 		// fetch target resource again, should contain moved entry
 		def targetResourceConn2 = EntryStoreClient.getRequest(targetResourceUri)
 		targetResourceConn2.getResponseCode() == HTTP_OK
-		def targetResourceRespJson2 = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(targetResourceConn2))
+		def targetResourceRespJson2 = JSON_PARSER.parseText(targetResourceConn2.inputStream.text)
 		targetResourceRespJson2 == [givenEntryId]
 
 		// fetch source resource again, should be empty now
 		def sourceResourceConn2 = EntryStoreClient.getRequest(sourceResourceUri)
 		sourceResourceConn2.getResponseCode() == HTTP_OK
-		def sourceResourceRespJson2 = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(sourceResourceConn2))
+		def sourceResourceRespJson2 = JSON_PARSER.parseText(sourceResourceConn2.inputStream.text)
 		sourceResourceRespJson2 == []
 	}
 
@@ -1483,7 +1483,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_NOT_IMPLEMENTED
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def respJson = JSON_PARSER.parseText(conn.errorStream.text)
 		respJson['error'] != null
 		respJson['error'].toString().contains('RDF resource import is not yet implemented')
 	}
@@ -1513,7 +1513,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('text/turtle')
-		def responseBody = resourceConn.getInputStream().text
+		def responseBody = resourceConn.inputStream.text
 		responseBody.length() > 0
 	}
 
@@ -1557,7 +1557,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/rdf+xml')
-		def responseBody = resourceConn.getInputStream().text
+		def responseBody = resourceConn.inputStream.text
 		responseBody.length() > 0
 	}
 
@@ -1575,7 +1575,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('text/turtle')
-		def responseBody = resourceConn.getInputStream().text
+		def responseBody = resourceConn.inputStream.text
 		responseBody.length() > 0
 	}
 

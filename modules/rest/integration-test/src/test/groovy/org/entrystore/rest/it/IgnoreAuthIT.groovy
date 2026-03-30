@@ -38,7 +38,7 @@ class IgnoreAuthIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_OK
-		def jsonResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def jsonResp = JSON_PARSER.parseText(connection.inputStream.text)
 		jsonResp['user'] == 'guest'
 		jsonResp['id'] == '_guest'
 	}
@@ -49,7 +49,7 @@ class IgnoreAuthIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_OK
-		def jsonResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def jsonResp = JSON_PARSER.parseText(connection.inputStream.text)
 		jsonResp['user'] == 'guest'
 		jsonResp['id'] == '_guest'
 	}
@@ -63,7 +63,7 @@ class IgnoreAuthIT extends BaseSpec {
 
 		then:
 		ignoreAuthConn.getResponseCode() == HTTP_OK
-		def guestResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(ignoreAuthConn))
+		def guestResp = JSON_PARSER.parseText(ignoreAuthConn.inputStream.text)
 		guestResp['user'] == 'guest'
 
 		when: "subsequent request without ignoreAuth returns authenticated user"
@@ -71,7 +71,7 @@ class IgnoreAuthIT extends BaseSpec {
 
 		then:
 		normalConn.getResponseCode() == HTTP_OK
-		def authResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(normalConn))
+		def authResp = JSON_PARSER.parseText(normalConn.inputStream.text)
 		authResp['user'] == 'admin'
 	}
 

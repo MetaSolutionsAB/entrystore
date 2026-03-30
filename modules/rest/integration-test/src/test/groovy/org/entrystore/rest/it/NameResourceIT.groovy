@@ -34,7 +34,7 @@ class NameResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
-		def jsonResponse = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def jsonResponse = JSON_PARSER.parseText(connection.errorStream.text)
 		jsonResponse['error'] == 'No entry with id \'randomEntryId\' found in context \'70\''
 	}
 
@@ -46,7 +46,7 @@ class NameResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def json = JSON_PARSER.parseText(connection.inputStream.text)
 		json['name'] == 'The Context Name'
 	}
 
@@ -57,7 +57,7 @@ class NameResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
-		def jsonResponse = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def jsonResponse = JSON_PARSER.parseText(connection.errorStream.text)
 		jsonResponse['error'] == 'No entry with id \'randomEntryId\' found in context \'70\''
 	}
 
@@ -76,7 +76,7 @@ class NameResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
-		def jsonResponse = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def jsonResponse = JSON_PARSER.parseText(connection.errorStream.text)
 		jsonResponse['error'] == 'Entry with id \'' + entryId + '\' has no name set'
 	}
 
@@ -87,7 +87,7 @@ class NameResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def json = JSON_PARSER.parseText(connection.inputStream.text)
 		json['name'] == 'The Context Name'
 	}
 
@@ -129,7 +129,7 @@ class NameResourceIT extends BaseSpec {
 		def getConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextIdWithName + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(getConn))
+		def json = JSON_PARSER.parseText(getConn.inputStream.text)
 		json['name'] == newName
 	}
 
@@ -146,7 +146,7 @@ class NameResourceIT extends BaseSpec {
 		def getConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextIdWithName + '/name')
 		getConn.getResponseCode() == HTTP_NOT_FOUND
 		getConn.getContentType().contains('application/json')
-		def jsonResponse = JSON_PARSER.parseText(getConn.getErrorStream().text)
+		def jsonResponse = JSON_PARSER.parseText(getConn.errorStream.text)
 		jsonResponse['error'].toString().contains('Entry with id \'' + contextIdWithName + '\' has no name set')
 	}
 
@@ -157,7 +157,7 @@ class NameResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
-		def jsonResponse = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def jsonResponse = JSON_PARSER.parseText(connection.errorStream.text)
 		jsonResponse['error'].toString().contains('Entry with id \'' + contextIdWithoutName + '\' has no name set')
 	}
 
@@ -175,7 +175,7 @@ class NameResourceIT extends BaseSpec {
 		def getConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextIdWithoutName + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(getConn))
+		def json = JSON_PARSER.parseText(getConn.inputStream.text)
 		json['name'] == newName
 	}
 
@@ -194,7 +194,7 @@ class NameResourceIT extends BaseSpec {
 		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(getConn))
+		def json = JSON_PARSER.parseText(getConn.inputStream.text)
 		json['name'] == oldUsername.toLowerCase()
 	}
 
@@ -213,7 +213,7 @@ class NameResourceIT extends BaseSpec {
 		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(getConn))
+		def json = JSON_PARSER.parseText(getConn.inputStream.text)
 		json['name'] == oldUsername.toLowerCase()
 	}
 
@@ -226,7 +226,7 @@ class NameResourceIT extends BaseSpec {
 		def conn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		assert conn.getResponseCode() == HTTP_OK
 		assert conn.getContentType().contains('application/json')
-		assert JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))['name'] == oldUsername.toLowerCase()
+		assert JSON_PARSER.parseText(conn.inputStream.text)['name'] == oldUsername.toLowerCase()
 
 		def body = JsonOutput.toJson([name: newUsername])
 
@@ -239,7 +239,7 @@ class NameResourceIT extends BaseSpec {
 		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(getConn))
+		def json = JSON_PARSER.parseText(getConn.inputStream.text)
 		json['name'] == oldUsername.toLowerCase()
 	}
 
@@ -259,7 +259,7 @@ class NameResourceIT extends BaseSpec {
 		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(getConn))
+		def json = JSON_PARSER.parseText(getConn.inputStream.text)
 		json['name'] == oldUsername.toLowerCase()
 	}
 
@@ -278,7 +278,7 @@ class NameResourceIT extends BaseSpec {
 		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(getConn))
+		def json = JSON_PARSER.parseText(getConn.inputStream.text)
 		json['name'] == newUsername.toLowerCase()
 		json['name'] != 'userForNameChange'
 	}
@@ -299,7 +299,7 @@ class NameResourceIT extends BaseSpec {
 		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(getConn))
+		def json = JSON_PARSER.parseText(getConn.inputStream.text)
 		json['name'] == newUsername.toLowerCase()
 	}
 }

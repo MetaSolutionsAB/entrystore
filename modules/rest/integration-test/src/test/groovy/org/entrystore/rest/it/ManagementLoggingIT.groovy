@@ -64,7 +64,7 @@ class ManagementLoggingIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
-		conn.getErrorStream().text.contains('"error":"Unauthorized"')
+		conn.errorStream.text.contains('"error":"Unauthorized"')
 	}
 
 	def "PUT /management/logging should update logging configuration"() {

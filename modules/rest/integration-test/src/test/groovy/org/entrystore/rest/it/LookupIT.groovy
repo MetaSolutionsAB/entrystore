@@ -64,7 +64,7 @@ class LookupIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(conn.inputStream.text)
 		(responseJson as Map).keySet().size() == 1
 		def resourceKey = (responseJson as Map).keySet()[0].toString()
 		responseJson[resourceKey][NameSpaceConst.DC_TERM_TITLE] != null
@@ -122,7 +122,7 @@ class LookupIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(conn.inputStream.text)
 		(responseJson as Map).keySet().size() == 1
 		def resourceKey = (responseJson as Map).keySet()[0].toString()
 		responseJson[resourceKey][NameSpaceConst.DC_TERM_TITLE] != null
@@ -137,7 +137,7 @@ class LookupIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
-		def responseJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(conn.inputStream.text)
 		(responseJson as Map).keySet().size() == 0
 	}
 
@@ -196,7 +196,7 @@ class LookupIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(conn.inputStream.text)
 		(responseJson as Map).keySet().size() == 1
 		def resourceKey = (responseJson as Map).keySet()[0].toString()
 		responseJson[resourceKey][NameSpaceConst.DC_TERM_TITLE] != null
@@ -215,7 +215,7 @@ class LookupIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		def responseJson = JSON_PARSER.parseText(conn.inputStream.text)
 		(responseJson as Map).keySet().size() == 1
 	}
 

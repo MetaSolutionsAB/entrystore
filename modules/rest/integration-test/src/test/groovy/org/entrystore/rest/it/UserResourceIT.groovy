@@ -52,7 +52,7 @@ class UserResourceIT extends BaseSpec {
 
 		then:
 		info.getResponseCode() == HTTP_OK
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		infoRespJson['id'] == expectedEntryId
 		infoRespJson['user'] == expectedUsername.toLowerCase()
 		infoRespJson['uri'] != null
@@ -95,7 +95,7 @@ class UserResourceIT extends BaseSpec {
 
 		then:
 		info.getResponseCode() == HTTP_OK
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		infoRespJson['id'] == entryId
 		infoRespJson['user'] == username.toLowerCase()
 		infoRespJson['language'] == 'SE'
@@ -129,7 +129,7 @@ class UserResourceIT extends BaseSpec {
 
 		then:
 		info.getResponseCode() == HTTP_OK
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		infoRespJson['homecontext'] != null
 	}
 

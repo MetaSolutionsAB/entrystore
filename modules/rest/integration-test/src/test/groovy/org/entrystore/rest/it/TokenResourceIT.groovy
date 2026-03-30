@@ -70,7 +70,7 @@ class TokenResourceIT extends BaseSpec {
 
 		then:
 		tokensConnection.getResponseCode() == HTTP_OK
-		def tokensRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(tokensConnection))
+		def tokensRespJson = JSON_PARSER.parseText(tokensConnection.inputStream.text)
 		(tokensRespJson as Map).keySet().size() == 2
 		tokensRespJson[tokenPart1] != null
 		tokensRespJson[tokenPart1]['userName'] == 'userfortokenmanagement@test.com'
@@ -101,7 +101,7 @@ class TokenResourceIT extends BaseSpec {
 		}
 		def tokensConnection = EntryStoreClient.getRequest('/auth/tokens', '', null, [Cookie: cookie])
 		assert tokensConnection.getResponseCode() == HTTP_OK
-		def tokensRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(tokensConnection))
+		def tokensRespJson = JSON_PARSER.parseText(tokensConnection.inputStream.text)
 		def oldLastAccessTime = LocalDateTime.parse(tokensRespJson[tokenPart]['lastAccessTime'].toString(), dtf)
 		def oldLoginExpiration = LocalDateTime.parse(tokensRespJson[tokenPart]['loginExpiration'].toString(), dtf)
 		def oldLoginTime = tokensRespJson[tokenPart]['loginTime']
@@ -111,7 +111,7 @@ class TokenResourceIT extends BaseSpec {
 
 		then:
 		tokensNewConnection.getResponseCode() == HTTP_OK
-		def tokensNewRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(tokensNewConnection))
+		def tokensNewRespJson = JSON_PARSER.parseText(tokensNewConnection.inputStream.text)
 		def newLastAccessTime = LocalDateTime.parse(tokensNewRespJson[tokenPart]['lastAccessTime'].toString(), dtf)
 		ChronoUnit.MILLIS.between(oldLastAccessTime, newLastAccessTime) > 0
 		def newLoginExpiration = LocalDateTime.parse(tokensNewRespJson[tokenPart]['loginExpiration'].toString(), dtf)
@@ -158,7 +158,7 @@ class TokenResourceIT extends BaseSpec {
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT
 		def token1Connection = EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: cookie1])
 		token1Connection.getResponseCode() == HTTP_OK
-		def tokensRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(token1Connection))
+		def tokensRespJson = JSON_PARSER.parseText(token1Connection.inputStream.text)
 		(tokensRespJson as Map).keySet().size() == 1
 		tokensRespJson[tokenPart1] != null
 		EntryStoreClient.getRequest('/auth/tokens', '', '', [Cookie: cookie2]).getResponseCode() == HTTP_UNAUTHORIZED

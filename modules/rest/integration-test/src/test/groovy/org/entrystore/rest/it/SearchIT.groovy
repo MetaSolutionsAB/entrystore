@@ -75,7 +75,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['offset'] == 0
 		respJson['results'] == 0
 		respJson['resource'] != null
@@ -91,7 +91,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['offset'] == 0
 		respJson['results'] == 0
 		respJson['resource'] != null
@@ -106,7 +106,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['offset'] == 0
 		respJson['results'] == 1
 		respJson['resource'] != null
@@ -131,7 +131,7 @@ class SearchIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/rss+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == null
 		respXml.attributes()['version'] != null
 		respXml.value().size() == 1
@@ -170,7 +170,7 @@ class SearchIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/rss+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
 		respXml.attributes()['version'] != null
 		respXml.value().size() == 1
@@ -238,7 +238,7 @@ class SearchIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/rss+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
 		respXml.attributes()['version'] != null
 		respXml.value().size() == 1
@@ -304,7 +304,7 @@ class SearchIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/rss+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
 		respXml.attributes()['version'] != null
 		respXml.value().size() == 1
@@ -370,7 +370,7 @@ class SearchIT extends BaseSpec {
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/rss+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
 		respXml.attributes()['version'] != null
 		respXml.value().size() == 1
@@ -395,7 +395,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def respJson = JSON_PARSER.parseText(conn.errorStream.text)
 		respJson['error'] != null
 		respJson['error'].toString().contains('Invalid SPARQL predicate')
 
@@ -421,7 +421,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['results'] > 0
 		respJson['resource'] != null
 		respJson['resource']['children'] != null
@@ -440,7 +440,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def respJson = JSON_PARSER.parseText(conn.errorStream.text)
 		respJson['error'] != null
 		respJson['error'].toString().contains('Unauthorized')
 	}
@@ -455,7 +455,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['offset'] == 0
 		respJson['results'] > 1
 		respJson['resource'] != null
@@ -483,7 +483,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['offset'] == 0
 		respJson['results'] > 1
 		respJson['resource'] != null
@@ -512,7 +512,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/rss+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(conn))
+		def respXml = new XmlParser(false, false).parseText(conn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
 		respXml.attributes()['version'] != null
 		respXml.value().size() == 1
@@ -561,7 +561,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/atom+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(conn))
+		def respXml = new XmlParser(false, false).parseText(conn.inputStream.text)
 		respXml.attributes()['xmlns'].toString().contains('Atom')
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
 		respXml.value().size() > 3
@@ -605,7 +605,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/atom+xml')
-		def respXml = new XmlParser(false, false).parseText(EntryStoreClient.getResponseBody(conn))
+		def respXml = new XmlParser(false, false).parseText(conn.inputStream.text)
 		respXml.attributes()['xmlns'].toString().contains('Atom')
 		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
 		respXml.value().size() > 3
@@ -660,7 +660,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['error'] == 'Invalid syndication feed type: \'random-string\''
 	}
 
@@ -674,7 +674,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['error'] == 'findEntriesSparql.query: \'query\' param length must be minimum 3'
 	}
 
@@ -688,7 +688,7 @@ class SearchIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['error'] == 'findEntriesSparql.query: \'query\' param length must be minimum 3'
 	}
 }

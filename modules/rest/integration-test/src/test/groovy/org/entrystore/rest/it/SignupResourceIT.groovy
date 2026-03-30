@@ -108,7 +108,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_OK
 		signupConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(signupConn).contains('A confirmation message was sent to ' + username.toLowerCase())
+		signupConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase())
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -132,7 +132,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_OK
 		signupConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(signupConn).contains('A confirmation message was sent to ' + username.toLowerCase())
+		signupConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase())
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -162,7 +162,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('The password must conform to the configured rules.')
+		signupConn.errorStream.text.contains('The password must conform to the configured rules.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -183,7 +183,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('Invalid name.')
+		signupConn.errorStream.text.contains('Invalid name.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -204,7 +204,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('Invalid name.')
+		signupConn.errorStream.text.contains('Invalid name.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -225,7 +225,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('Invalid email address: ' + username.toLowerCase())
+		signupConn.errorStream.text.contains('Invalid email address: ' + username.toLowerCase())
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -244,7 +244,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('One or more parameters are missing.')
+		signupConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -258,7 +258,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('One or more parameters are missing.')
+		signupConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -278,7 +278,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('One or more parameters are missing.')
+		signupConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -293,7 +293,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('One or more parameters are missing.')
+		signupConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -313,7 +313,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('reCaptcha information missing.')
+		signupConn.errorStream.text.contains('reCaptcha information missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -328,7 +328,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('reCaptcha information missing.')
+		signupConn.errorStream.text.contains('reCaptcha information missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -348,7 +348,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('One or more parameters are missing.')
+		signupConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -363,7 +363,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('One or more parameters are missing.')
+		signupConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -383,7 +383,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('One or more parameters are missing.')
+		signupConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -398,7 +398,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_BAD_REQUEST
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('One or more parameters are missing.')
+		signupConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -420,7 +420,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == 417 // Status.CLIENT_ERROR_EXPECTATION_FAILED
 		signupConn.getContentType().contains('text/html')
-		signupConn.getErrorStream().text.contains('The email domain is not allowed for sign-up: ' + domain)
+		signupConn.errorStream.text.contains('The email domain is not allowed for sign-up: ' + domain)
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -442,7 +442,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		signupConn.getResponseCode() == HTTP_OK
 		signupConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(signupConn).contains('A confirmation message was sent to ' + username.toLowerCase())
+		signupConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase())
 		greenMail.getReceivedMessages().size() == 1
 	}
 
@@ -453,7 +453,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_OK
 		confirmConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(confirmConn).contains('<input type=\"submit\" value=\"Sign-up\" />')
+		confirmConn.inputStream.text.contains('<input type=\"submit\" value=\"Sign-up\" />')
 	}
 
 	def "GET /auth/signup should confirm creating new user after signing up with a valid token"() {
@@ -477,7 +477,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_CREATED
 		confirmConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(confirmConn).contains('Sign-up successful.')
+		confirmConn.inputStream.text.contains('Sign-up successful.')
 		greenMail.getReceivedMessages().size() == 1
 	}
 
@@ -500,7 +500,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_BAD_REQUEST
 		confirmConn.getContentType().contains('text/html')
-		def body = confirmConn.getErrorStream().text
+		def body = confirmConn.errorStream.text
 		body.contains('Invalid confirmation link.')
 		body.contains('<a href="http://localhost:8181"')
 	}
@@ -527,7 +527,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_BAD_REQUEST
 		confirmConn.getContentType().contains('text/html')
-		confirmConn.getErrorStream().text.contains('Invalid confirmation link.')
+		confirmConn.errorStream.text.contains('Invalid confirmation link.')
 	}
 
 	def "GET /auth/signup should not confirm if the user already exists"() {
@@ -553,7 +553,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_CONFLICT
 		confirmConn.getContentType().contains('text/html')
-		confirmConn.getErrorStream().text.contains('User with submitted email address exists already.')
+		confirmConn.errorStream.text.contains('User with submitted email address exists already.')
 	}
 
 	def "GET /auth/signup should not confirm user signup for another token that was generated before another user signup was successful"() {
@@ -582,7 +582,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		oldConfirmConn.getResponseCode() == HTTP_CONFLICT
 		oldConfirmConn.getContentType().contains('text/html')
-		oldConfirmConn.getErrorStream().text.contains('User with submitted email address exists already.')
+		oldConfirmConn.errorStream.text.contains('User with submitted email address exists already.')
 	}
 
 	def "GET /auth/signup should not remove tokens of another user"() {
@@ -620,7 +620,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		user2ConfirmConn.getResponseCode() == HTTP_CREATED
 		user2ConfirmConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(user2ConfirmConn).contains('Sign-up successful.')
+		user2ConfirmConn.inputStream.text.contains('Sign-up successful.')
 	}
 
 	def "GET /auth/signup should confirm user signup and redirect to provided permitted url"() {
@@ -724,12 +724,12 @@ class SignupResourceIT extends BaseSpec {
 		EntryStoreClient.getRequest('/auth/signup?confirm=' + token).getResponseCode() == HTTP_CREATED
 
 		def info = EntryStoreClient.getRequest('/auth/user', username)
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		def entryId = infoRespJson['id']
 
 		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId)
 		resourceConn.getResponseCode() == HTTP_OK
-		def resourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceRespJson != null
 		resourceRespJson['homecontext'] != null
 		resourceRespJson['customProperties']['foo'] == 'foo'
@@ -753,12 +753,12 @@ class SignupResourceIT extends BaseSpec {
 		EntryStoreClient.getRequest('/auth/signup?confirm=' + token).getResponseCode() == HTTP_CREATED
 
 		def info = EntryStoreClient.getRequest('/auth/user', username)
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		def entryId = infoRespJson['id']
 
 		def resourceConn = EntryStoreClient.getRequest('/_principals/resource/' + entryId)
 		resourceConn.getResponseCode() == HTTP_OK
-		def resourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceRespJson != null
 		resourceRespJson['customProperties']['foo'] == 'foo'
 		resourceRespJson['customProperties']['boo'] == 'boo'
@@ -786,7 +786,7 @@ class SignupResourceIT extends BaseSpec {
 		then: "User should be able to login"
 		def info = EntryStoreClient.getRequest('/auth/user', username)
 		info.getResponseCode() == HTTP_OK
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		infoRespJson['id'] != null
 		infoRespJson['user'] == username.toLowerCase()
 	}
@@ -808,7 +808,7 @@ class SignupResourceIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('text/html')
-		def body = conn.getErrorStream().text
+		def body = conn.errorStream.text
 		!body.contains('<script>alert(1)</script>')
 		body.contains('&lt;script&gt;alert(1)&lt;/script&gt;')
 	}

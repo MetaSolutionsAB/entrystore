@@ -53,14 +53,14 @@ class ContextIT extends BaseSpec {
 		connection.getHeaderField('Location').contains('/_principals/entry/')
 		// shouldn't it return the created instance data?
 		//connection.getContentType().contains('application/json')
-		EntryStoreClient.getResponseBody(connection) == ''
+		connection.inputStream.text == ''
 		def groupId = connection.getHeaderField('Location').find(/\/_principals\/entry\/([0-9A-Za-z]+)$/) { match, id -> id }
 		groupId.length() > 0
 
 		def principalConn = EntryStoreClient.getRequest('/_principals/entry/' + groupId)
 		principalConn.getResponseCode() == HTTP_OK
 		principalConn.getContentType().contains('application/json')
-		def principalJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(principalConn))
+		def principalJson = JSON_PARSER.parseText(principalConn.inputStream.text)
 		principalJson['info'] != null
 		principalJson['info'][EntryStoreClient.baseUrl + '/_principals/resource/' + groupId] != null
 		principalJson['info'][EntryStoreClient.baseUrl + '/_principals/resource/' + groupId][NameSpaceConst.TERM_HOME_CONTEXT] != null
@@ -74,7 +74,7 @@ class ContextIT extends BaseSpec {
 
 		def contextConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId)
 		contextConn.getResponseCode() == HTTP_OK
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(contextConn))
+		def responseJson = JSON_PARSER.parseText(contextConn.inputStream.text)
 		responseJson['entryId'] == contextId.toString()
 		responseJson['name'] == contextName
 		responseJson['info'] != null
@@ -95,7 +95,7 @@ class ContextIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_CONFLICT
-		def responseBody = connection.getErrorStream().text
+		def responseBody = connection.errorStream.text
 		responseBody != null
 		responseBody.length() > 10
 	}
@@ -114,7 +114,7 @@ class ContextIT extends BaseSpec {
 		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId)
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))
+		def responseJson = JSON_PARSER.parseText(conn.inputStream.text)
 		responseJson['entryId'] == contextId
 		responseJson['name'] == 'someName2'
 		responseJson['info'] != null
@@ -155,13 +155,13 @@ class ContextIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_CREATED
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		responseJson['entryId'] == contextId
 
 		def getConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId + '?includeAll')
 		getConn.getResponseCode() == HTTP_OK
 		getConn.getContentType().contains('application/json')
-		def getResponseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(getConn))
+		def getResponseJson = JSON_PARSER.parseText(getConn.inputStream.text)
 		getResponseJson['entryId'] == contextId
 		getResponseJson['info'] != null
 	}
@@ -173,7 +173,7 @@ class ContextIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.errorStream.text)
 		responseJson['error'] != null
 	}
 
@@ -192,7 +192,7 @@ class ContextIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		responseJson.collect().contains('_contexts')
 		responseJson.collect().contains('_principals')
 	}
@@ -204,7 +204,7 @@ class ContextIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		responseJson.collect().contains('_contexts')
 		responseJson.collect().contains('_principals')
 	}
@@ -232,7 +232,7 @@ class ContextIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.errorStream.text)
 		responseJson['error'] != null
 		responseJson['error'] == 'Context with id \'222-random-name-234\' does not exist'
 		responseJson['status'] != null
@@ -247,7 +247,7 @@ class ContextIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		responseJson.collect().size() == 0
 	}
 
@@ -259,7 +259,7 @@ class ContextIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		responseJson.collect() == []
 	}
 
@@ -270,7 +270,7 @@ class ContextIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.errorStream.text)
 		responseJson['error'] != null
 		responseJson['status'] != null
 		responseJson['timestamp'] != null
@@ -283,7 +283,7 @@ class ContextIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.errorStream.text)
 		responseJson['error'] != null
 		responseJson['status'] != null
 		responseJson['timestamp'] != null
@@ -303,7 +303,7 @@ class ContextIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['entryId'] == contextId
 		respJson['name'] == contextName
 		respJson['info'] != null
@@ -327,7 +327,7 @@ class ContextIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['entryId'] == contextId
 		respJson['name'] == contextName
 		respJson['resource'] != null
@@ -342,7 +342,7 @@ class ContextIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def respJson = JSON_PARSER.parseText(conn.getInputStream().text)
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
 		respJson['entryId'] == '_contexts'
 		respJson['info'] != null
 		respJson['rights'] != null

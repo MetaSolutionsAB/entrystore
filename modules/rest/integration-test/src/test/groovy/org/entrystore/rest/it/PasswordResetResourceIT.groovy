@@ -93,7 +93,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(resetPasswordConn).contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
+		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -118,7 +118,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(resetPasswordConn).contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
+		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -146,7 +146,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(resetPasswordConn).contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
+		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -165,7 +165,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains('The password has to consist of at least 8 characters.')
+		resetPasswordConn.errorStream.text.contains('The password has to consist of at least 8 characters.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -184,7 +184,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains('Invalid email address: ' + username.toLowerCase())
+		resetPasswordConn.errorStream.text.contains('Invalid email address: ' + username.toLowerCase())
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -201,7 +201,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains('One or more parameters are missing.')
+		resetPasswordConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -215,7 +215,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains('One or more parameters are missing.')
+		resetPasswordConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -233,7 +233,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains('One or more parameters are missing.')
+		resetPasswordConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -248,7 +248,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains('One or more parameters are missing.')
+		resetPasswordConn.errorStream.text.contains('One or more parameters are missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -266,7 +266,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains('reCaptcha information missing.')
+		resetPasswordConn.errorStream.text.contains('reCaptcha information missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -281,7 +281,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_BAD_REQUEST
 		resetPasswordConn.getContentType().contains('text/html')
-		resetPasswordConn.getErrorStream().text.contains('reCaptcha information missing.')
+		resetPasswordConn.errorStream.text.contains('reCaptcha information missing.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -297,7 +297,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		// fetch resource details again
 		def resourceConn2 = EntryStoreClient.getRequest(resourceUri)
 		assert resourceConn2.getResponseCode() == HTTP_OK
-		JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn2))['disabled'] == true
+		JSON_PARSER.parseText(resourceConn2.inputStream.text)['disabled'] == true
 
 		def requestBody = JsonOutput.toJson([
 			email             : username,
@@ -322,7 +322,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_OK
 		confirmConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(confirmConn).contains('<input type=\"submit\" value=\"Reset password\" />')
+		confirmConn.inputStream.text.contains('<input type=\"submit\" value=\"Reset password\" />')
 	}
 
 	def "GET /auth/pwreset should confirm password reset for a valid token"() {
@@ -345,7 +345,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_OK
 		confirmConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(confirmConn).contains('Password reset was successful.')
+		confirmConn.inputStream.text.contains('Password reset was successful.')
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 2
 		def message = messages[1]
@@ -372,7 +372,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_BAD_REQUEST
 		confirmConn.getContentType().contains('text/html')
-		confirmConn.getErrorStream().text.contains('The confirmation token is invalid or has been used already.')
+		confirmConn.errorStream.text.contains('The confirmation token is invalid or has been used already.')
 	}
 
 	def "GET /auth/pwreset should not confirm password reset for a non-existing user"() {
@@ -399,7 +399,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		confirmConn.getResponseCode() == HTTP_NOT_FOUND
 		confirmConn.getContentType().contains('text/html')
-		confirmConn.getErrorStream().text.contains('User with provided email address does not exist.')
+		confirmConn.errorStream.text.contains('User with provided email address does not exist.')
 	}
 
 	def "GET /auth/pwreset should not confirm password reset for already used token"() {
@@ -423,7 +423,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		confirmAgainConn.getResponseCode() == HTTP_BAD_REQUEST
 		confirmAgainConn.getContentType().contains('text/html')
-		confirmAgainConn.getErrorStream().text.contains('The confirmation token is invalid or has been used already.')
+		confirmAgainConn.errorStream.text.contains('The confirmation token is invalid or has been used already.')
 	}
 
 	def "GET /auth/pwreset should not confirm password reset for another token that was generated before a password change was successful"() {
@@ -451,7 +451,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		oldConfirmConn.getResponseCode() == HTTP_BAD_REQUEST
 		oldConfirmConn.getContentType().contains('text/html')
-		oldConfirmConn.getErrorStream().text.contains('The confirmation token is invalid or has been used already.')
+		oldConfirmConn.errorStream.text.contains('The confirmation token is invalid or has been used already.')
 	}
 
 	def "GET /auth/pwreset should not remove tokens of another user"() {
@@ -488,7 +488,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		user2ConfirmConn.getResponseCode() == HTTP_OK
 		user2ConfirmConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(user2ConfirmConn).contains('Password reset was successful.')
+		user2ConfirmConn.inputStream.text.contains('Password reset was successful.')
 	}
 
 	def "GET /auth/pwreset should confirm password reset and redirect to provided permitted url"() {
@@ -580,7 +580,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('text/html')
-		def body = conn.getErrorStream().text
+		def body = conn.errorStream.text
 		!body.contains('<script>alert(1)</script>')
 		body.contains('&lt;script&gt;alert(1)&lt;/script&gt;')
 	}
