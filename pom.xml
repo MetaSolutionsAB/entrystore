@@ -9,7 +9,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.5.11</version>
+		<version>3.5.13</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 
@@ -36,21 +36,30 @@
 		<guava.version>33.5.0-jre</guava.version>
 		<jsonorg.version>20250517</jsonorg.version>
 		<zookeeper.version>3.9.5</zookeeper.version>
+		<swagger.version>2.2.29</swagger.version>
 		<xmlsec.version>3.0.6</xmlsec.version>
 		<httpmime.version>4.5.14</httpmime.version>
 		<commonscli.version>1.10.0</commonscli.version>
 		<snappy.version>1.1.10.8</snappy.version>
 		<jetbrains-annotations.version>26.1.0</jetbrains-annotations.version>
 		<greenmail.version>2.1.2</greenmail.version>
+		<bouncycastle.version>1.80</bouncycastle.version>
 
 		<!-- Override Spring-boot versions -->
-		<caffeine.version>3.2.0</caffeine.version>
+		<log4j2.version>2.25.4</log4j2.version>
+		<kotlin.version>2.3.20</kotlin.version>
+		<commons-lang3.version>3.18.0</commons-lang3.version>
 
 		<site.url>https://entrystore.org</site.url>
 		<distribution.snapshot.url>https://entrystore.org</distribution.snapshot.url>
 		<distribution.url>https://entrystore.org</distribution.url>
 		<license.licenseName>apache_v2</license.licenseName>
 		<maven.compiler.release>${java.version}</maven.compiler.release>
+		<maven.compiler.encoding>UTF-8</maven.compiler.encoding>
+
+		<!-- Core encoding property — used by many plugins automatically -->
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 	</properties>
 
 	<!-- ================= Developers ================= -->
@@ -203,17 +212,13 @@
 				<plugin>
 					<groupId>org.owasp</groupId>
 					<artifactId>dependency-check-maven</artifactId>
-                    <version>12.1.3</version>
+					<version>12.2.0</version>
 					<configuration>
+						<suppressionFile>dependency-check-suppressions.xml</suppressionFile>
 						<skipProvidedScope>true</skipProvidedScope>
 						<skipTestScope>true</skipTestScope>
 						<assemblyAnalyzerEnabled>false</assemblyAnalyzerEnabled>
 						<failBuildOnCVSS>7</failBuildOnCVSS>
-						<excludes>
-							<exclude>xalan:serializer</exclude>
-							<exclude>xalan:xalan</exclude>
-							<exclude>org.json:json</exclude>
-						</excludes>
 					</configuration>
 				</plugin>
 			</plugins>
@@ -338,6 +343,12 @@
 				<version>${jsonorg.version}</version>
 			</dependency>
 			<dependency>
+				<!-- upgrading from the transitive 1.9.4, included by old opencsv -->
+				<groupId>commons-beanutils</groupId>
+				<artifactId>commons-beanutils</artifactId>
+				<version>1.11.0</version>
+			</dependency>
+			<dependency>
 				<groupId>commons-collections</groupId>
 				<artifactId>commons-collections</artifactId>
 				<version>3.2.2</version>
@@ -385,6 +396,16 @@
 				<version>${zookeeper.version}</version>
 			</dependency>
 			<dependency>
+				<groupId>org.apache.zookeeper</groupId>
+				<artifactId>zookeeper-jute</artifactId>
+				<version>${zookeeper.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.swagger.core.v3</groupId>
+				<artifactId>swagger-annotations-jakarta</artifactId>
+				<version>${swagger.version}</version>
+			</dependency>
+			<dependency>
 				<groupId>org.apache.santuario</groupId>
 				<artifactId>xmlsec</artifactId>
 				<version>${xmlsec.version}</version>
@@ -413,6 +434,21 @@
 				<groupId>org.jetbrains</groupId>
 				<artifactId>annotations</artifactId>
 				<version>${jetbrains-annotations.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.bouncycastle</groupId>
+				<artifactId>bcprov-jdk18on</artifactId>
+				<version>${bouncycastle.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.bouncycastle</groupId>
+				<artifactId>bcpkix-jdk18on</artifactId>
+				<version>${bouncycastle.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>org.bouncycastle</groupId>
+				<artifactId>bcutil-jdk18on</artifactId>
+				<version>${bouncycastle.version}</version>
 			</dependency>
 			<dependency>
 				<groupId>org.glassfish.hk2</groupId>

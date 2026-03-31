@@ -1,9 +1,9 @@
 package org.entrystore.generator;
 
-import com.github.javafaker.Address;
-import com.github.javafaker.Company;
-import com.github.javafaker.Faker;
-import com.github.javafaker.Name;
+import net.datafaker.Faker;
+import net.datafaker.providers.base.Address;
+import net.datafaker.providers.base.Company;
+import net.datafaker.providers.base.Name;
 import org.entrystore.mapper.ObjectMapper;
 import org.entrystore.model.FakeAddress;
 import org.entrystore.model.FakeCompany;

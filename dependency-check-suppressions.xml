@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+
+	<!--
+		velocity-engine-core shades (embeds) an older commons-io inside its JAR.
+		CVE-2024-47554 is a DoS vulnerability in commons-io's XmlStreamReader, which
+		Velocity does not use. We cannot override the shaded dependency without
+		upgrading Velocity itself, which is a transitive dependency of OpenSAML
+		(via spring-security-saml2-service-provider). Upgrading OpenSAML to v5
+		requires Spring Security 7 / Spring Boot 4.
+	-->
+	<!-- Added 2026-04-01. Review when upgrading to Spring Boot 4 / OpenSAML 5.x. -->
+	<suppress>
+		<notes><![CDATA[
+			CVE-2024-47554: DoS in commons-io XmlStreamReader, shaded inside velocity-engine-core
+			(transitive from OpenSAML). Velocity does not exercise the vulnerable code path.
+			Cannot fix without upgrading to OpenSAML 5.x (requires Spring Boot 4).
+		]]></notes>
+		<filePath regex="true">.*velocity-engine-core.*</filePath>
+		<cve>CVE-2024-47554</cve>
+	</suppress>
+
+</suppressions>
