@@ -38,11 +38,15 @@ public class MessageService {
 
 	private final PrincipalManager principalManager;
 	private final RepositoryManagerImpl repositoryManager;
+	private final MessageRateLimiter messageRateLimiter;
 
 	public void sendMessage(SendMessageRequestBody request) {
 		if (principalManager.currentUserIsGuest()) {
 			throw new UnauthorizedException("Not allowed for not-logged in or a guest user to send messages");
 		}
+
+		String userUri = principalManager.getAuthenticatedUserURI().toString();
+		messageRateLimiter.checkRateLimit(userUri);
 
 		try {
 			if (principalManager.getPrincipalEntry(request.recipient()) == null) {
@@ -83,6 +87,7 @@ public class MessageService {
 				log.error("Failed to send email to [{}] with subject [{}]", request.recipient(), sanitizedSubject);
 				throw new InternalServerErrorException("Failed to send email message");
 			}
+			messageRateLimiter.recordMessageSent(userUri);
 		}
 	}
 }

@@ -44,6 +44,10 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.smtp.username=smtp-user
 # entrystore.smtp.password=smtp-password
 
+## Rate limiting for POST /message (0 to disable)
+# entrystore.message.rate.limit.max=10
+# entrystore.message.rate.limit.window=1h
+
 ## Generic settings for user-initiated sign-up and password reset
 # entrystore.auth.email.from=signup@yourdomain.tld
 # entrystore.auth.email.bcc=info+signup@yourdomain.tld

@@ -89,6 +89,9 @@ public interface Settings {
 	String AUTH_TEMP_LOCKOUT_DURATION = "entrystore.auth.temp.lockout.duration";
 	String AUTH_TEMP_LOCKOUT_ADMIN = "entrystore.auth.temp.lockout.admin";
 
+	String MESSAGE_RATE_LIMIT_MAX = "entrystore.message.rate.limit.max";
+	String MESSAGE_RATE_LIMIT_WINDOW = "entrystore.message.rate.limit.window";
+
 	String AUTH_HTTP_BASIC_ENABLED = "entrystore.auth.http-basic.enabled";
 
 	String AUTH_FROM_EMAIL_DEPRECATED = "entrystore.auth.email.from";
