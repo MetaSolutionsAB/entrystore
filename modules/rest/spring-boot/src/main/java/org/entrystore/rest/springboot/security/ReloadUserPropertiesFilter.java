@@ -6,8 +6,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jspecify.annotations.NonNull;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -54,7 +57,11 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 
 				if (!updatedUser.isEnabled()) {
 					SecurityContextHolder.clearContext();
-					response.sendError(HttpServletResponse.SC_FORBIDDEN, "User account is disabled.");
+					HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+							.status(HttpStatus.FORBIDDEN.value())
+							.path(request.getRequestURI())
+							.error("User account is disabled.")
+							.build());
 					return;
 				}
 
@@ -64,18 +71,31 @@ public class ReloadUserPropertiesFilter extends OncePerRequestFilter {
 				SecurityContextHolder.getContext().setAuthentication(newAuth);
 				sessionRegistry.registerNewSession(request.getSession().getId(), updatedUser);
 			} catch (UsernameNotFoundException e) {
+				log.warn("User no longer found during session reload: {}", e.getMessage());
 				SecurityContextHolder.clearContext();
-				response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "User account is not found.");
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.UNAUTHORIZED.value())
+						.path(request.getRequestURI())
+						.error("User account is not found.")
+						.build());
 				return;
 			} catch (ClassCastException e) {
 				log.error("Unexpected principal type during user details reload", e);
 				SecurityContextHolder.clearContext();
-				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Authentication error.");
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+						.path(request.getRequestURI())
+						.error("Authentication error.")
+						.build());
 				return;
 			} catch (Exception e) {
 				log.error("Failed to reload user details", e);
 				SecurityContextHolder.clearContext();
-				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Authentication error.");
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+						.path(request.getRequestURI())
+						.error("Authentication error.")
+						.build());
 				return;
 			}
 		}

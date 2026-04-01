@@ -81,7 +81,11 @@ public class AppExceptionHandler {
 	@ExceptionHandler({BadRequestException.class, ValidationException.class, UsernameNotFoundException.class})
 	public ResponseEntity<ErrorResponse> handleBadRequestException(RuntimeException ex,
 																   HttpServletRequest request) {
-		log.debug("BadRequestException: {}", ex.getMessage());
+		if (ex.getCause() != null) {
+			log.info("BadRequestException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
+		} else {
+			log.debug("BadRequestException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		}
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.BAD_REQUEST.value())
 				.path(request.getRequestURI())
@@ -107,7 +111,11 @@ public class AppExceptionHandler {
 	@ExceptionHandler(EntityNotFoundException.class)
 	public ResponseEntity<ErrorResponse> handleEntityNotFoundException(EntityNotFoundException ex,
 																	   HttpServletRequest request) {
-		log.debug("EntityNotFoundException: {}", ex.getMessage());
+		if (ex.getCause() != null) {
+			log.debug("EntityNotFoundException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
+		} else {
+			log.debug("EntityNotFoundException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		}
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.NOT_FOUND.value())
 				.path(request.getRequestURI())
@@ -181,7 +189,11 @@ public class AppExceptionHandler {
 	@ExceptionHandler(EntityTooLargeException.class)
 	public ResponseEntity<ErrorResponse> handleEntityTooLargeException(EntityTooLargeException ex,
 																	   HttpServletRequest request) {
-		log.debug("EntityTooLargeException: {}", ex.getMessage());
+		if (ex.getCause() != null) {
+			log.debug("EntityTooLargeException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
+		} else {
+			log.debug("EntityTooLargeException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		}
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.PAYLOAD_TOO_LARGE.value())
 				.path(request.getRequestURI())
@@ -228,9 +240,14 @@ public class AppExceptionHandler {
 	@ExceptionHandler(HtmlResponseException.class)
 	public String handleHtmlException(HtmlResponseException ex,
 									  Model model,
+									  HttpServletRequest request,
 									  HttpServletResponse response) {
 
-		log.debug("HtmlResponseException: {}", ex.getMessage());
+		if (ex.getCause() != null) {
+			log.info("HtmlResponseException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
+		} else {
+			log.debug("HtmlResponseException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		}
 		model.addAttribute("title", ex.getTitle());
 		model.addAttribute("message", ex.getMessage());
 		String linkUrl = ex.getLinkUrl();
@@ -244,9 +261,14 @@ public class AppExceptionHandler {
 	@ExceptionHandler(TextareaHtmlResponseException.class)
 	public String handleTextareaHtmlResponseException(TextareaHtmlResponseException ex,
 													  Model model,
+													  HttpServletRequest request,
 													  HttpServletResponse response) {
 
-		log.debug("TextareaHtmlResponseException: {}", ex.getMessage());
+		if (ex.getCause() != null) {
+			log.info("TextareaHtmlResponseException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
+		} else {
+			log.debug("TextareaHtmlResponseException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		}
 
 		String textAreaVal = "status:" + ex.getStatus().value() + "\n" + ex.getMessage();
 		model.addAttribute("textareaValue", textAreaVal);

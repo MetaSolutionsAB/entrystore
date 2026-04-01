@@ -8,9 +8,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.rest.springboot.model.api.ErrorResponse;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -47,7 +48,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 					pm.setAuthenticatedUserURI(user.getURI());
 				} else {
 					log.warn("Authenticated SAML user '{}' not found in EntryStore, denying access", username);
-					setForbiddenResponse(response, "Authenticated SAML user not found in EntryStore");
+					setForbiddenResponse(request, response, "Authenticated SAML user not found in EntryStore");
 					return;
 				}
 			} else if (auth.getPrincipal() instanceof ESUserSessionDetails esUser && esUser.getEsUser() != null) {
@@ -55,7 +56,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 				pm.setAuthenticatedUserURI(esUser.getEsUser().getURI());
 			} else {
 				log.warn("Authenticated user has unrecognized principal type: '{}'. Denying access.", auth.getPrincipal().getClass().getName());
-				setForbiddenResponse(response, "Unrecognized principal type");
+				setForbiddenResponse(request, response, "Unrecognized principal type");
 				return;
 			}
 		}
@@ -63,9 +64,11 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 		filterChain.doFilter(request, response);
 	}
 
-	private void setForbiddenResponse(HttpServletResponse response, String message) throws IOException {
-		response.setStatus(HttpStatus.FORBIDDEN.value());
-		response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-		response.getWriter().write("{\"error\":\"" + message + "\"}");
+	private void setForbiddenResponse(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {
+		HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+				.status(HttpStatus.FORBIDDEN.value())
+				.path(request.getRequestURI())
+				.error(message)
+				.build());
 	}
 }

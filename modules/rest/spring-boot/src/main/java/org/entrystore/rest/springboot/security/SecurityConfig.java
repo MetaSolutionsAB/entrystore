@@ -1,7 +1,6 @@
 package org.entrystore.rest.springboot.security;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -10,9 +9,11 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.configuration.CorsConfig;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
+import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.web.server.Cookie;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -87,9 +88,17 @@ public class SecurityConfig {
 								.maximumSessions(-1)
 								.sessionRegistry(sessionRegistry)
 								.expiredSessionStrategy(event ->
-										event.getResponse().sendError(HttpServletResponse.SC_UNAUTHORIZED, "Session expired")))
+										HttpUtil.writeErrorResponseAsJson(event.getResponse(), ErrorResponse.builder()
+											.status(HttpStatus.UNAUTHORIZED.value())
+											.path(event.getRequest().getRequestURI())
+											.error("Session expired")
+											.build())))
 						.invalidSessionStrategy((request, response) ->
-								response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Session expired or invalid"))
+								HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+										.status(HttpStatus.UNAUTHORIZED.value())
+										.path(request.getRequestURI())
+										.error("Session expired or invalid")
+										.build()))
 				)
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers("/management/status/extended").hasRole(UserAuthRole.ADMIN.name())

@@ -16,17 +16,23 @@
 
 package org.entrystore.rest.springboot.util;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
+import java.io.IOException;
 import java.util.Date;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -36,6 +42,9 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class HttpUtil {
 
 	private static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
+	private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
+			.registerModule(new JavaTimeModule())
+			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
 	/**
 	 * Determines the media type based on the provided format parameter or content type header.
@@ -153,6 +162,23 @@ public class HttpUtil {
 		}
 
 		return ip;
+	}
+
+	/**
+	 * Writes a JSON error response directly to the servlet response.
+	 * Use this in servlet filters where {@code AppExceptionHandler} ({@code @ControllerAdvice})
+	 * is not available.
+	 */
+	public static void writeErrorResponseAsJson(HttpServletResponse response, ErrorResponse errorResponse) throws IOException {
+		if (response.isCommitted()) {
+			log.warn("Cannot write error response — response already committed (status={})", errorResponse.status());
+			return;
+		}
+		response.setStatus(errorResponse.status());
+		response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+		var writer = response.getWriter();
+		writer.write(OBJECT_MAPPER.writeValueAsString(errorResponse));
+		writer.flush();
 	}
 
 	public static void checkRequestSize(HttpServletRequest request, int maxRequestSize) {

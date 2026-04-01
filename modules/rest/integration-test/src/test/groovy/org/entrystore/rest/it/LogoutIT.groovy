@@ -55,7 +55,7 @@ class LogoutIT extends BaseSpec {
 		userConn2.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(userConn2.getErrorStream().text)
 		responseJson['error'] != null
-		responseJson['error'] == 'Unauthorized'
+		responseJson['error'] == 'Session expired or invalid'
 		responseJson['status'] != null
 		responseJson['timestamp'] != null
 	}
@@ -89,7 +89,7 @@ class LogoutIT extends BaseSpec {
 		userConn2.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(userConn2.getErrorStream().text)
 		responseJson['error'] != null
-		responseJson['error'] == 'Unauthorized'
+		responseJson['error'] == 'Session expired or invalid'
 		responseJson['status'] != null
 		responseJson['timestamp'] != null
 	}
@@ -147,7 +147,7 @@ class LogoutIT extends BaseSpec {
 		userConn2.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(userConn2.getErrorStream().text)
 		responseJson['error'] != null
-		responseJson['error'] == 'Unauthorized'
+		responseJson['error'] == 'Session expired or invalid'
 		responseJson['status'] != null
 		responseJson['timestamp'] != null
 	}
@@ -179,7 +179,7 @@ class LogoutIT extends BaseSpec {
 		userConn2.getContentType().contains('application/json')
 		def jsonUserConn2 = JSON_PARSER.parseText(userConn2.getErrorStream().text)
 		jsonUserConn2['error'] != null
-		jsonUserConn2['error'] == 'Unauthorized'
+		jsonUserConn2['error'] == 'Session expired or invalid'
 		jsonUserConn2['status'] != null
 		jsonUserConn2['timestamp'] != null
 	}

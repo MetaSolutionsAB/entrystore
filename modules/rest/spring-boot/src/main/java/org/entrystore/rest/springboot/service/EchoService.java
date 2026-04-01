@@ -24,8 +24,7 @@ public class EchoService {
 		try {
 			return file.getResource().getContentAsString(StandardCharsets.UTF_8);
 		} catch (IOException e) {
-			throw new TextareaHtmlResponseException("Unable to read file content. Error: " + e.getMessage(),
-					HttpStatus.BAD_REQUEST);
+			throw new TextareaHtmlResponseException("Unable to read file content", HttpStatus.BAD_REQUEST, e);
 		}
 	}
 }
