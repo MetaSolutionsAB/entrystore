@@ -46,7 +46,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 400
 		resp['error'] == 'Invalid syndication feed type: \'random-string\''
 		resp['timestamp'] != null
@@ -63,7 +63,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 400
 		resp['error'] != null
 		resp['timestamp'] != null
@@ -81,7 +81,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 400
 		resp['error'] != null
 		resp['timestamp'] != null
@@ -100,7 +100,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 401
 		resp['error'] == 'Unauthorized'
 		resp['timestamp'] != null
@@ -119,7 +119,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 403
 		resp['error'] != null
 		resp['timestamp'] != null
@@ -137,7 +137,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 403
 		resp['error'] != null
 		resp['timestamp'] != null
@@ -157,7 +157,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_FORBIDDEN
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 403
 		resp['error'] != null
 		resp['timestamp'] != null
@@ -178,7 +178,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_NOT_FOUND
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 404
 		resp['error'] != null
 		resp['error'].toString().contains('non-existent-id')
@@ -196,7 +196,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_NOT_FOUND
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 404
 		resp['error'] != null
 		resp['timestamp'] != null
@@ -213,7 +213,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_NOT_FOUND
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 404
 		resp['error'] != null
 		resp['timestamp'] != null
@@ -230,7 +230,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_NOT_FOUND
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 404
 		resp['error'] != null
 		resp['error'].toString().contains('non-existent-context-xyz')
@@ -248,7 +248,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_NOT_FOUND
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 404
 		resp['error'] != null
 		resp['timestamp'] != null
@@ -270,7 +270,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == 405
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 405
 		resp['error'] != null
 		resp['error'].toString().contains('not a context or a list')
@@ -293,7 +293,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == 406
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 406
 		resp['error'] != null
 		resp['timestamp'] != null
@@ -311,7 +311,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == 406
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 406
 		resp['error'] != null
 		resp['timestamp'] != null
@@ -334,7 +334,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_CONFLICT
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 409
 		resp['error'] != null
 		resp['error'].toString().contains('already exists')
@@ -371,7 +371,7 @@ class ErrorResponseIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == 501
 		conn.getContentType().contains('application/json')
-		def resp = JSON_PARSER.parseText(conn.getErrorStream().text)
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 501
 		resp['error'] != null
 		resp['timestamp'] != null

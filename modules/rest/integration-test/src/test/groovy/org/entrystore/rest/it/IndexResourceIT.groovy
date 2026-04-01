@@ -27,7 +27,7 @@ class IndexResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def json = JSON_PARSER.parseText(connection.errorStream.text)
 		json['error'] == 'No entry with id \'randomEntryId\' found in context \'60\''
 	}
 
@@ -38,7 +38,7 @@ class IndexResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def json = JSON_PARSER.parseText(connection.errorStream.text)
 		json['error'] == 'No entry with id \'randomEntryId\' found in context \'60\''
 	}
 
@@ -113,7 +113,7 @@ class IndexResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def json = JSON_PARSER.parseText(connection.inputStream.text)
 		json['entryType'] == 'Local'
 		json['graphType'] == 'String'
 		json['rdfType'] == NameSpaceConst.TERM_STRING
@@ -135,7 +135,7 @@ class IndexResourceIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
-		def json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def json = JSON_PARSER.parseText(connection.inputStream.text)
 		json['entryType'] == 'Local'
 		json['graphType'] == 'Context'
 		json['rdfType'] == NameSpaceConst.TERM_CONTEXT

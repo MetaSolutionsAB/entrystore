@@ -117,12 +117,12 @@ class ContextImportIT extends BaseSpec {
 		def contextConn = EntryStoreClient.getRequest('/' + contextImportId)
 		assert contextConn.getResponseCode() == HTTP_OK
 		assert contextConn.getContentType().contains('application/json')
-		assert JSON_PARSER.parseText(EntryStoreClient.getResponseBody(contextConn)) == [entryId2InImportOriginally]
+		assert JSON_PARSER.parseText(contextConn.inputStream.text) == [entryId2InImportOriginally]
 
 		// check context name for context that will be overridden
 		def contextNameConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId + '/name')
 		assert contextNameConn.getResponseCode() == HTTP_OK
-		assert JSON_PARSER.parseText(EntryStoreClient.getResponseBody(contextNameConn)) == [name: 'context for Import']
+		assert JSON_PARSER.parseText(contextNameConn.inputStream.text) == [name: 'context for Import']
 
 		// get the ZIP file by exporting context with ID `contextExportId`
 		def exportConn = EntryStoreClient.getRequest('/' + contextExportId + '/export')
@@ -135,12 +135,12 @@ class ContextImportIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(connection) == '<textarea></textarea>'
+		connection.inputStream.text == '<textarea></textarea>'
 
 		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId)
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def getResponseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))
+		def getResponseJson = JSON_PARSER.parseText(conn.inputStream.text)
 		getResponseJson['entryId'] == contextImportId
 		getResponseJson['info'] != null
 
@@ -148,12 +148,12 @@ class ContextImportIT extends BaseSpec {
 		def contextConn2 = EntryStoreClient.getRequest('/' + contextImportId)
 		contextConn2.getResponseCode() == HTTP_OK
 		contextConn2.getContentType().contains('application/json')
-		JSON_PARSER.parseText(EntryStoreClient.getResponseBody(contextConn2)) == [entryIdInExportOriginally]
+		JSON_PARSER.parseText(contextConn2.inputStream.text) == [entryIdInExportOriginally]
 
 		// check if overridden context changed it's name
 		def contextNameConn2 = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId + '/name')
 		contextNameConn2.getResponseCode() == HTTP_OK
-		JSON_PARSER.parseText(EntryStoreClient.getResponseBody(contextNameConn2)) == [name: 'context for Import']
+		JSON_PARSER.parseText(contextNameConn2.inputStream.text) == [name: 'context for Import']
 	}
 
 	def "POST /{context-id}/import with multi-part file as body should import context from the file, overriding existing entries"() {
@@ -165,12 +165,12 @@ class ContextImportIT extends BaseSpec {
 		def contextConn = EntryStoreClient.getRequest('/' + contextImportId)
 		assert contextConn.getResponseCode() == HTTP_OK
 		assert contextConn.getContentType().contains('application/json')
-		assert JSON_PARSER.parseText(EntryStoreClient.getResponseBody(contextConn)) == []
+		assert JSON_PARSER.parseText(contextConn.inputStream.text) == []
 
 		// check context name for context that will be overridden
 		def contextNameConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId + '/name')
 		assert contextNameConn.getResponseCode() == HTTP_OK
-		assert JSON_PARSER.parseText(EntryStoreClient.getResponseBody(contextNameConn)) == [name: 'context for Import 2']
+		assert JSON_PARSER.parseText(contextNameConn.inputStream.text) == [name: 'context for Import 2']
 
 		// get the ZIP file by exporting context with ID `contextExportId`
 		def exportConn = EntryStoreClient.getRequest('/' + contextExportId + '/export')
@@ -187,12 +187,12 @@ class ContextImportIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(connection) == '<textarea></textarea>'
+		connection.inputStream.text == '<textarea></textarea>'
 
 		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId)
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def getResponseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))
+		def getResponseJson = JSON_PARSER.parseText(conn.inputStream.text)
 		getResponseJson['entryId'] == contextImportId
 		getResponseJson['info'] != null
 
@@ -200,11 +200,11 @@ class ContextImportIT extends BaseSpec {
 		def contextConn2 = EntryStoreClient.getRequest('/' + contextImportId)
 		contextConn2.getResponseCode() == HTTP_OK
 		contextConn2.getContentType().contains('application/json')
-		JSON_PARSER.parseText(EntryStoreClient.getResponseBody(contextConn2)) == [entryIdInExportOriginally]
+		JSON_PARSER.parseText(contextConn2.inputStream.text) == [entryIdInExportOriginally]
 
 		// check if overridden context changed it's name
 		def contextNameConn2 = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId + '/name')
 		contextNameConn2.getResponseCode() == HTTP_OK
-		JSON_PARSER.parseText(EntryStoreClient.getResponseBody(contextNameConn2)) == [name: 'context for Import 2']
+		JSON_PARSER.parseText(contextNameConn2.inputStream.text) == [name: 'context for Import 2']
 	}
 }

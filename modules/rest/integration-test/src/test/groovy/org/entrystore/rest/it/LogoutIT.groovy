@@ -38,7 +38,7 @@ class LogoutIT extends BaseSpec {
 		then: 'verify cookie works - we\'re the user'
 		userConn.getResponseCode() == HTTP_OK
 		userConn.getContentType().contains('application/json')
-		def jsonUserConn = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(userConn))
+		def jsonUserConn = JSON_PARSER.parseText(userConn.inputStream.text)
 		jsonUserConn['user'] == 'user'
 
 		when: 'we logout'
@@ -53,7 +53,7 @@ class LogoutIT extends BaseSpec {
 		then: 'we should get unauthorized as session/cookie got invalidated during logout'
 		userConn2.getResponseCode() == HTTP_UNAUTHORIZED
 		userConn2.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(userConn2.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(userConn2.errorStream.text)
 		responseJson['error'] != null
 		responseJson['error'] == 'Session expired or invalid'
 		responseJson['status'] != null
@@ -72,7 +72,7 @@ class LogoutIT extends BaseSpec {
 		then: 'verify cookie works - we\'re the user'
 		userConn.getResponseCode() == HTTP_OK
 		userConn.getContentType().contains('application/json')
-		def jsonUserConn = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(userConn))
+		def jsonUserConn = JSON_PARSER.parseText(userConn.inputStream.text)
 		jsonUserConn['user'] == 'user'
 
 		when: 'we logout'
@@ -87,7 +87,7 @@ class LogoutIT extends BaseSpec {
 		then: 'we should get unauthorized as session/cookie got invalidated during logout'
 		userConn2.getResponseCode() == HTTP_UNAUTHORIZED
 		userConn2.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(userConn2.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(userConn2.errorStream.text)
 		responseJson['error'] != null
 		responseJson['error'] == 'Session expired or invalid'
 		responseJson['status'] != null
@@ -101,7 +101,7 @@ class LogoutIT extends BaseSpec {
 		then: 'we\'re a guest'
 		userConn.getResponseCode() == HTTP_OK
 		userConn.getContentType().contains('application/json')
-		def jsonUserConn = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(userConn))
+		def jsonUserConn = JSON_PARSER.parseText(userConn.inputStream.text)
 		jsonUserConn['user'] == 'guest'
 
 		when: 'we logout'
@@ -116,7 +116,7 @@ class LogoutIT extends BaseSpec {
 		then: 'we should get a OK with a guest user'
 		userConn2.getResponseCode() == HTTP_OK
 		userConn2.getContentType().contains('application/json')
-		def jsonUserConn2 = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(userConn2))
+		def jsonUserConn2 = JSON_PARSER.parseText(userConn2.inputStream.text)
 		jsonUserConn2['user'] == 'guest'
 	}
 
@@ -130,7 +130,7 @@ class LogoutIT extends BaseSpec {
 		then: 'verify cookie works - we\'re the admin'
 		userConn.getResponseCode() == HTTP_OK
 		userConn.getContentType().contains('application/json')
-		def jsonUserConn = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(userConn))
+		def jsonUserConn = JSON_PARSER.parseText(userConn.inputStream.text)
 		jsonUserConn['user'] == 'admin'
 
 		when: 'we logout'
@@ -145,7 +145,7 @@ class LogoutIT extends BaseSpec {
 		then: 'we should get unauthorized as session/cookie got invalidated during logout'
 		userConn2.getResponseCode() == HTTP_UNAUTHORIZED
 		userConn2.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(userConn2.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(userConn2.errorStream.text)
 		responseJson['error'] != null
 		responseJson['error'] == 'Session expired or invalid'
 		responseJson['status'] != null
@@ -162,7 +162,7 @@ class LogoutIT extends BaseSpec {
 		then: 'verify cookie works - we\'re the user'
 		userConn.getResponseCode() == HTTP_OK
 		userConn.getContentType().contains('application/json')
-		def jsonUserConn = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(userConn))
+		def jsonUserConn = JSON_PARSER.parseText(userConn.inputStream.text)
 		jsonUserConn['user'] == 'user'
 
 		when: 'we logout'
@@ -177,7 +177,7 @@ class LogoutIT extends BaseSpec {
 		then: 'user should be logged out'
 		userConn2.getResponseCode() == HTTP_UNAUTHORIZED
 		userConn2.getContentType().contains('application/json')
-		def jsonUserConn2 = JSON_PARSER.parseText(userConn2.getErrorStream().text)
+		def jsonUserConn2 = JSON_PARSER.parseText(userConn2.errorStream.text)
 		jsonUserConn2['error'] != null
 		jsonUserConn2['error'] == 'Session expired or invalid'
 		jsonUserConn2['status'] != null

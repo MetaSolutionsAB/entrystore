@@ -16,7 +16,7 @@ class UserUtil {
 		// fetch URI of created resource
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + user['entryId'])
 		assert entryConn.getResponseCode() == HTTP_OK
-		def entryRespJson = BaseSpec.JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = BaseSpec.JSON_PARSER.parseText(entryConn.inputStream.text)
 		assert entryRespJson['info'] != null
 		def entryRespJsonKeys = (entryRespJson['info'] as Map).keySet().collect(it -> it.toString())
 		def resourceUri = entryRespJsonKeys.find { it -> it.contains('resource') }

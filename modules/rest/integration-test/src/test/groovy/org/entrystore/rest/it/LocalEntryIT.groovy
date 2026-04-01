@@ -56,7 +56,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -89,7 +89,7 @@ class LocalEntryIT extends BaseSpec {
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('text/plain')
 		// Response says content-type is JSON, but it returns a non-json String value, same string as was given in the request to create the entry
-		def resourceRespText = EntryStoreClient.getResponseBody(resourceConn)
+		def resourceRespText = resourceConn.inputStream.text
 		resourceRespText == someText
 	}
 
@@ -109,7 +109,7 @@ class LocalEntryIT extends BaseSpec {
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.getContentType().contains('application/json')
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(conn))
+		def entryRespJson = JSON_PARSER.parseText(conn.inputStream.text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -149,7 +149,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
@@ -175,7 +175,7 @@ class LocalEntryIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceRespJson == [givenEntryId]
 	}
 
@@ -191,7 +191,7 @@ class LocalEntryIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_BAD_REQUEST
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(connection.getErrorStream().text)
+		def responseJson = JSON_PARSER.parseText(connection.errorStream.text)
 		responseJson['entryId'] == null
 		responseJson['error'] != null
 		responseJson['error'].toString().contains('Regular context only support Lists, ResultLists and None as BuiltinTypes')
@@ -209,7 +209,7 @@ class LocalEntryIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_CREATED
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		responseJson['entryId'] != null
 		responseJson['entryId'].toString().length() > 0
 		def entryId = responseJson['entryId'].toString()
@@ -218,7 +218,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/_principals/entry/' + entryId
@@ -242,7 +242,7 @@ class LocalEntryIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceRespJson != null
 		resourceRespJson['customProperties'] == [:]
 		resourceRespJson['name'] == requestResourceName['name'].toLowerCase()
@@ -260,7 +260,7 @@ class LocalEntryIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_CREATED
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		responseJson['entryId'] != null
 		responseJson['entryId'].toString().length() > 0
 		def entryId = responseJson['entryId'].toString()
@@ -269,7 +269,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['info'] != null
 		def entryUri = EntryStoreClient.baseUrl + '/_principals/entry/' + entryId
@@ -293,7 +293,7 @@ class LocalEntryIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceRespJson != null
 		resourceRespJson['children'] == []
 		resourceRespJson['name'] == requestResourceName['name'].toLowerCase()
@@ -311,7 +311,7 @@ class LocalEntryIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_CREATED
 		connection.getContentType().contains('application/json')
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		responseJson['entryId'] != null
 		responseJson['entryId'].toString().length() > 0
 		def entryId = responseJson['entryId'].toString()
@@ -320,7 +320,7 @@ class LocalEntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/_contexts/entry/' + entryId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		entryRespJson['entryId'] == entryId
 		entryRespJson['name'] == requestResourceName['name']
 		entryRespJson['info'] != null
@@ -353,14 +353,14 @@ class LocalEntryIT extends BaseSpec {
 		def resourceConn = EntryStoreClient.getRequest(createdResourceUri)
 		resourceConn.getResponseCode() == HTTP_OK
 		resourceConn.getContentType().contains('application/json')
-		def resourceRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(resourceConn))
+		def resourceRespJson = JSON_PARSER.parseText(resourceConn.inputStream.text)
 		resourceRespJson != null
 
 		// fetch created metadata
 		def metadataConn = EntryStoreClient.getRequest(entryMetadataUrl)
 		metadataConn.getResponseCode() == HTTP_OK
 		metadataConn.getContentType().contains('application/json')
-		def metadataRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(metadataConn))
+		def metadataRespJson = JSON_PARSER.parseText(metadataConn.inputStream.text)
 		metadataRespJson != null
 		(metadataRespJson as Map).keySet().size() == 0
 	}

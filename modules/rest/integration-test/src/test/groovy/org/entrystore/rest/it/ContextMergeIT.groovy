@@ -115,12 +115,12 @@ class ContextMergeIT extends BaseSpec {
 		def entryConn = EntryStoreClient.getRequest('/' + contextMergeId + '/entry/' + resourceId)
 		entryConn.getResponseCode() == HTTP_OK
 		entryConn.getContentType().contains('application/json')
-		def entryJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entryConn))
+		def entryJson = JSON_PARSER.parseText(entryConn.inputStream.text)
 		entryJson['entryId'] == resourceId
 
 		def resourceConn = EntryStoreClient.getRequest('/' + contextMergeId + '/resource/' + resourceId)
 		resourceConn.getResponseCode() == HTTP_OK
-		def resourceBody = EntryStoreClient.getResponseBody(resourceConn)
+		def resourceBody = resourceConn.inputStream.text
 		resourceBody.contains('Merged Entry Title')
 	}
 
@@ -144,21 +144,21 @@ class ContextMergeIT extends BaseSpec {
 
 		def entry1Conn = EntryStoreClient.getRequest('/' + contextMergeId + '/entry/multi-merge-1')
 		entry1Conn.getResponseCode() == HTTP_OK
-		def entry1Json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entry1Conn))
+		def entry1Json = JSON_PARSER.parseText(entry1Conn.inputStream.text)
 		entry1Json['entryId'] == 'multi-merge-1'
 
 		def entry2Conn = EntryStoreClient.getRequest('/' + contextMergeId + '/entry/multi-merge-2')
 		entry2Conn.getResponseCode() == HTTP_OK
-		def entry2Json = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(entry2Conn))
+		def entry2Json = JSON_PARSER.parseText(entry2Conn.inputStream.text)
 		entry2Json['entryId'] == 'multi-merge-2'
 
 		def metadata1Conn = EntryStoreClient.getRequest('/' + contextMergeId + '/metadata/multi-merge-1')
 		metadata1Conn.getResponseCode() == HTTP_OK
-		EntryStoreClient.getResponseBody(metadata1Conn).contains('First Merged Entry')
+		metadata1Conn.inputStream.text.contains('First Merged Entry')
 
 		def metadata2Conn = EntryStoreClient.getRequest('/' + contextMergeId + '/metadata/multi-merge-2')
 		metadata2Conn.getResponseCode() == HTTP_OK
-		EntryStoreClient.getResponseBody(metadata2Conn).contains('Second Merged Entry')
+		metadata2Conn.inputStream.text.contains('Second Merged Entry')
 	}
 
 	def "POST /{context-id}/merge as member of admin group should return 200"() {

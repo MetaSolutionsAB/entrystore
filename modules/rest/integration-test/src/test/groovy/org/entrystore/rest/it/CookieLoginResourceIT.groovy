@@ -53,7 +53,7 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_OK
-		def jsonResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def jsonResp = JSON_PARSER.parseText(connection.inputStream.getText())
 		jsonResp['id'] == '_guest'
 		jsonResp['user'] == 'guest'
 		jsonResp['uri'] != null
@@ -144,7 +144,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getHeaderField('Set-Cookie') != null
 		loginConnection.getHeaderField('Set-Cookie').contains('auth_token=')
 		loginConnection.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(loginConnection).contains('Login successful.')
+		loginConnection.inputStream.text.contains('Login successful.')
 	}
 
 	def "POST /auth/cookie should log in the user with cookie and then do 2 requests with the same cookie"() {
@@ -166,7 +166,7 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		info.getResponseCode() == HTTP_OK
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		infoRespJson['user'] == username.toLowerCase()
 	}
 
@@ -200,7 +200,7 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		info.getResponseCode() == HTTP_OK
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		infoRespJson['user'] == username.toLowerCase()
 	}
 
@@ -222,7 +222,7 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		firstReq.getResponseCode() == HTTP_OK
-		def firstJsonResp = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(firstReq))
+		def firstJsonResp = JSON_PARSER.parseText(firstReq.inputStream.text)
 		firstJsonResp['id'] != null
 		firstJsonResp['user'] == username.toLowerCase()
 
@@ -259,7 +259,7 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		info.getResponseCode() == HTTP_OK
-		def infoRespJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(info))
+		def infoRespJson = JSON_PARSER.parseText(info.inputStream.text)
 		infoRespJson['user'] == newUsername.toLowerCase()
 	}
 

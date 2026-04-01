@@ -25,7 +25,7 @@ class EchoIT extends BaseSpec {
 		then:
 		echoConn.getResponseCode() == HTTP_FORBIDDEN
 		echoConn.getContentType().contains('text/html')
-		echoConn.getErrorStream().text.contains('<textarea>status:403\nGuest account is not allowed to use /echo endpoint.</textarea>')
+		echoConn.errorStream.text.contains('<textarea>status:403\nGuest account is not allowed to use /echo endpoint.</textarea>')
 	}
 
 	@Unroll
@@ -44,7 +44,7 @@ class EchoIT extends BaseSpec {
 		then:
 		echoConn.getResponseCode() == HTTP_OK
 		echoConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(echoConn).contains('<textarea>status:200\nHello, its me! Mario!</textarea>')
+		echoConn.inputStream.text.contains('<textarea>status:200\nHello, its me! Mario!</textarea>')
 
 		where:
 		user << ['user', 'userInAdminGroup', 'admin']
@@ -65,7 +65,7 @@ class EchoIT extends BaseSpec {
 		then:
 		echoConn.getResponseCode() == HTTP_OK
 		echoConn.getContentType().contains('text/html')
-		EntryStoreClient.getResponseBody(echoConn).contains('<textarea>status:200\nHello, its me! &lt;b&gt;bold&lt;/b&gt; Mario and a hash tag # &amp; !</textarea>')
+		echoConn.inputStream.text.contains('<textarea>status:200\nHello, its me! &lt;b&gt;bold&lt;/b&gt; Mario and a hash tag # &amp; !</textarea>')
 	}
 
 	def 'POST /echo as admin with content other than multi-part file should respond with UNSUPPORTED_TYPE 415'() {
@@ -75,7 +75,7 @@ class EchoIT extends BaseSpec {
 		then:
 		echoConn.getResponseCode() == HTTP_UNSUPPORTED_TYPE
 		echoConn.getContentType().contains('text/html')
-		echoConn.getErrorStream().text.contains('<textarea>status:415\n/echo endpoint accepts only &#39;multipart/form-data&#39; requests</textarea>')
+		echoConn.errorStream.text.contains('<textarea>status:415\n/echo endpoint accepts only &#39;multipart/form-data&#39; requests</textarea>')
 	}
 
 	def 'POST /echo as admin with multi-part file larger than 10MB should respond with HTTP_ENTITY_TOO_LARGE 413'() {
@@ -96,6 +96,6 @@ class EchoIT extends BaseSpec {
 		then:
 		echoConn.getResponseCode() == HTTP_ENTITY_TOO_LARGE
 		echoConn.getContentType().contains('text/html')
-		echoConn.getErrorStream().text.contains('<textarea>status:413\nReceived file size (of 11534336B) exceeds maximum allowed size of: 10485760B</textarea>')
+		echoConn.errorStream.text.contains('<textarea>status:413\nReceived file size (of 11534336B) exceeds maximum allowed size of: 10485760B</textarea>')
 	}
 }

@@ -119,7 +119,7 @@ class CorsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_OK
-		def responseJson = JSON_PARSER.parseText(EntryStoreClient.getResponseBody(connection))
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
 		responseJson['cors'] != null
 		responseJson['cors']['enabled'] == true
 	}

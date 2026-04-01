@@ -169,18 +169,6 @@ class EntryStoreClient {
 		return cookies
 	}
 
-	/**
-	 * Reads the response body from a connection using UTF-8 encoding.
-	 * Use this instead of {@code connection.getInputStream().text} which uses the platform default charset.
-	 */
-	static String getResponseBodyUTF8(HttpURLConnection connection) {
-		return connection.getInputStream().getText(UTF_8.name())
-	}
-
-	static String getResponseBody(HttpURLConnection connection) {
-		return connection.getInputStream().getText()
-	}
-
 	def static buildMultipartContent(File file, Map<String, String> formData, String boundary) {
 		def os = new ByteArrayOutputStream()
 
