@@ -62,6 +62,7 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.lang.reflect.Constructor;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -97,6 +98,18 @@ public class GraphUtil {
 		types.add(RDFFormat.RDFJSON.getDefaultMIMEType());
 		ALLOWED_RDF_MEDIA_TYPES = Set.copyOf(types);
 	}
+
+	/**
+	 * RFC 7231 Section 5.3.2 content negotiation ordering:
+	 * quality value (q) descending as primary key, specificity as tiebreaker.
+	 */
+	private static final Comparator<MediaType> QUALITY_THEN_SPECIFICITY =
+			Comparator.comparingDouble(MediaType::getQualityValue).reversed()
+					.thenComparing((a, b) -> {
+						if (a.isMoreSpecific(b)) return -1;
+						if (b.isMoreSpecific(a)) return 1;
+						return 0;
+					});
 
 	/**
 	 * Normalizes the legacy text/rdf+n3 MIME type to its standard equivalent
@@ -314,7 +327,7 @@ public class GraphUtil {
 
 		try {
 			List<MediaType> acceptTypes = MediaType.parseMediaTypes(acceptHeader);
-			MediaType.sortBySpecificityAndQuality(acceptTypes);
+			acceptTypes.sort(QUALITY_THEN_SPECIFICITY);
 			for (MediaType type : acceptTypes) {
 				if (type.isWildcardType() || type.isWildcardSubtype()) {
 					return defaultMediaType;
