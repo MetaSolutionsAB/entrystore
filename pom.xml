@@ -44,6 +44,7 @@
 		<jetbrains-annotations.version>26.1.0</jetbrains-annotations.version>
 		<greenmail.version>2.1.2</greenmail.version>
 		<bouncycastle.version>1.80</bouncycastle.version>
+		<owasp-html-sanitizer.version>20240325.1</owasp-html-sanitizer.version>
 
 		<!-- Override Spring-boot versions -->
 		<log4j2.version>2.25.4</log4j2.version>
@@ -464,6 +465,11 @@
 				<groupId>org.glassfish.hk2.external</groupId>
 				<artifactId>aopalliance-repackaged</artifactId>
 				<version>3.1.1</version>
+			</dependency>
+			<dependency>
+				<groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
+				<artifactId>owasp-java-html-sanitizer</artifactId>
+				<version>${owasp-html-sanitizer.version}</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
