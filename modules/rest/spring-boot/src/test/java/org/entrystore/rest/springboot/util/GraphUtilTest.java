@@ -209,6 +209,13 @@ class GraphUtilTest {
 	}
 
 	@Test
+	void resolveAcceptedMediaType_shouldPreferFirstTypeWhenQualityAndSpecificityAreEqual() {
+		assertEquals("text/turtle",
+				GraphUtil.resolveAcceptedMediaType(
+						"text/turtle;q=0.8, application/rdf+xml;q=0.8", "application/json"));
+	}
+
+	@Test
 	void normalizeLegacyMediaType_shouldMapLegacyN3() {
 		assertEquals("text/n3", GraphUtil.normalizeLegacyMediaType("text/rdf+n3"));
 	}
