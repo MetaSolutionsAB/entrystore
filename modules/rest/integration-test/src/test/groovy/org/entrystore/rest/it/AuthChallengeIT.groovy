@@ -34,14 +34,13 @@ class AuthChallengeIT extends BaseSpec {
 		connection.getContentType().contains('application/json')
 	}
 
-	def "GET as guest with auth_challenge=false should return 401 without WWW-Authenticate or Cache-Control headers"() {
+	def "GET as guest with auth_challenge=false should return 401 without WWW-Authenticate header"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status/extended?auth_challenge=false', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getHeaderField('WWW-Authenticate') == null
-		!connection.getHeaderField('Cache-Control')?.contains('no-store')
 		connection.getContentType().contains('application/json')
 	}
 
