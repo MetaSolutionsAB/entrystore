@@ -168,6 +168,7 @@ public class SecurityConfig {
 	private AuthenticationEntryPoint authChallengeAwareEntryPoint() {
 		return (request, response, authException) -> {
 			if (!"false".equalsIgnoreCase(request.getParameter("auth_challenge"))) {
+				response.setHeader("Cache-Control", "no-store");
 				response.setHeader("WWW-Authenticate", "Basic realm=\"EntryStore\"");
 			}
 			customEntryPoint().commence(request, response, authException);

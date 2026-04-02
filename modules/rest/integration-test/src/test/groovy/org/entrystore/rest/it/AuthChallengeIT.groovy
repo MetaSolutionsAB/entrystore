@@ -53,4 +53,27 @@ class AuthChallengeIT extends BaseSpec {
 		connection.getHeaderField('WWW-Authenticate').contains('Basic')
 		connection.getContentType().contains('application/json')
 	}
+
+	def "GET as guest with auth_challenge=FALSE (uppercase) should suppress WWW-Authenticate header"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/management/status/extended?auth_challenge=FALSE', '')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		connection.getHeaderField('WWW-Authenticate') == null
+		connection.getContentType().contains('application/json')
+	}
+
+	def "GET with invalid Basic credentials and auth_challenge=false should return 401 without WWW-Authenticate header"() {
+		when:
+		def invalidBasicAuth = 'Basic ' + Base64.getEncoder().encodeToString('baduser:badpass'.getBytes())
+		def connection = EntryStoreClient.getRequest(
+				'/management/status/extended?auth_challenge=false', '',
+				'application/json', ['Authorization': invalidBasicAuth])
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		connection.getHeaderField('WWW-Authenticate') == null
+		connection.getContentType().contains('application/json')
+	}
 }
