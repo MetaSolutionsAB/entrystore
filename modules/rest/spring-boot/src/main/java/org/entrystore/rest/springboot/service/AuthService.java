@@ -490,6 +490,10 @@ public class AuthService {
 	}
 
 	private void handleUrlRedirect(String url) {
+		if (!SignupInfo.isPermittedRedirectUrl(url)) {
+			log.warn("Blocked redirect to non-permitted URL: {}", url);
+			throw new InternalServerErrorException("Redirect URL is not permitted");
+		}
 		try {
 			throw new RedirectTemporaryException(new URI(url));
 		} catch (URISyntaxException ex) {

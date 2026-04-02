@@ -99,7 +99,11 @@ public class SignupInfo {
 		this.email = email.toLowerCase();
 	}
 
-	private boolean isPermittedRedirectUrl(@NonNull String redirectUrl) {
+	public static boolean isPermittedRedirectUrl(@NonNull String redirectUrl) {
+		if (permittedBaseUrls == null) {
+			log.warn("Permitted redirect URLs not initialized, rejecting redirect to: {}", redirectUrl);
+			return false;
+		}
 		for (String base : permittedBaseUrls) {
 			if (!base.endsWith("/")) {
 				base += "/";
