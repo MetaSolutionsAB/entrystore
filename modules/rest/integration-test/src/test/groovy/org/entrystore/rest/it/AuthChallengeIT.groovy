@@ -30,6 +30,7 @@ class AuthChallengeIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getHeaderField('WWW-Authenticate') != null
 		connection.getHeaderField('WWW-Authenticate').contains('Basic')
+		connection.getContentType().contains('application/json')
 	}
 
 	def "GET as guest with auth_challenge=false should return 401 without WWW-Authenticate header"() {
@@ -39,6 +40,7 @@ class AuthChallengeIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getHeaderField('WWW-Authenticate') == null
+		connection.getContentType().contains('application/json')
 	}
 
 	def "GET as guest with auth_challenge=true should return 401 with WWW-Authenticate header"() {
@@ -49,5 +51,6 @@ class AuthChallengeIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getHeaderField('WWW-Authenticate') != null
 		connection.getHeaderField('WWW-Authenticate').contains('Basic')
+		connection.getContentType().contains('application/json')
 	}
 }

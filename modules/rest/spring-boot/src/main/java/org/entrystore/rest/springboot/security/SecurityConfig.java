@@ -37,7 +37,6 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.authentication.www.BasicAuthenticationEntryPoint;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.util.Optional;
@@ -134,7 +133,7 @@ public class SecurityConfig {
 
 		if (basicAuthEnabled) {
 			log.info("Basic Auth Enabled");
-			http.httpBasic(Customizer.withDefaults());
+			http.httpBasic(basic -> basic.authenticationEntryPoint(authChallengeAwareEntryPoint()));
 		} else {
 			log.info("Basic Auth Disabled");
 		}
@@ -167,16 +166,11 @@ public class SecurityConfig {
 	}
 
 	private AuthenticationEntryPoint authChallengeAwareEntryPoint() {
-		BasicAuthenticationEntryPoint basicEntryPoint = new BasicAuthenticationEntryPoint();
-		basicEntryPoint.setRealmName("EntryStore");
-		basicEntryPoint.afterPropertiesSet();
-
 		return (request, response, authException) -> {
-			if ("false".equalsIgnoreCase(request.getParameter("auth_challenge"))) {
-				customEntryPoint().commence(request, response, authException);
-			} else {
-				basicEntryPoint.commence(request, response, authException);
+			if (!"false".equalsIgnoreCase(request.getParameter("auth_challenge"))) {
+				response.setHeader("WWW-Authenticate", "Basic realm=\"EntryStore\"");
 			}
+			customEntryPoint().commence(request, response, authException);
 		};
 	}
 
