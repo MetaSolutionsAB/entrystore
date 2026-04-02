@@ -46,7 +46,7 @@ public class MessageService {
 		}
 
 		String userUri = principalManager.getAuthenticatedUserURI().toString();
-		messageRateLimiter.checkRateLimit(userUri);
+		messageRateLimiter.acquirePermit(userUri);
 
 		try {
 			if (principalManager.getPrincipalEntry(request.recipient()) == null) {
@@ -87,7 +87,6 @@ public class MessageService {
 				log.error("Failed to send email to [{}] with subject [{}]", request.recipient(), sanitizedSubject);
 				throw new InternalServerErrorException("Failed to send email message");
 			}
-			messageRateLimiter.recordMessageSent(userUri);
 		}
 	}
 }

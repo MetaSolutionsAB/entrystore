@@ -55,10 +55,10 @@ class MessageRateLimiterTest {
 
 		String user = "http://example.com/user/1";
 
-		rateLimiter.recordMessageSent(user);
-		rateLimiter.recordMessageSent(user);
+		rateLimiter.acquirePermit(user);
+		rateLimiter.acquirePermit(user);
 
-		assertDoesNotThrow(() -> rateLimiter.checkRateLimit(user));
+		assertDoesNotThrow(() -> rateLimiter.acquirePermit(user));
 	}
 
 	@Test
@@ -69,11 +69,11 @@ class MessageRateLimiterTest {
 
 		String user = "http://example.com/user/1";
 
-		rateLimiter.recordMessageSent(user);
-		rateLimiter.recordMessageSent(user);
+		rateLimiter.acquirePermit(user);
+		rateLimiter.acquirePermit(user);
 
 		CustomResponseException ex = assertThrows(CustomResponseException.class,
-				() -> rateLimiter.checkRateLimit(user));
+				() -> rateLimiter.acquirePermit(user));
 		assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatus());
 	}
 
@@ -86,9 +86,9 @@ class MessageRateLimiterTest {
 		String user1 = "http://example.com/user/1";
 		String user2 = "http://example.com/user/2";
 
-		rateLimiter.recordMessageSent(user1);
+		rateLimiter.acquirePermit(user1);
 
-		assertDoesNotThrow(() -> rateLimiter.checkRateLimit(user2));
+		assertDoesNotThrow(() -> rateLimiter.acquirePermit(user2));
 	}
 
 	@Test
@@ -100,7 +100,19 @@ class MessageRateLimiterTest {
 		String user = "http://example.com/user/1";
 
 		// Should never throw even without recording
-		assertDoesNotThrow(() -> rateLimiter.checkRateLimit(user));
+		assertDoesNotThrow(() -> rateLimiter.acquirePermit(user));
+	}
+
+	@Test
+	void resetsCounterAfterWindowExpires() throws InterruptedException {
+		when(config.getInt(MESSAGE_RATE_LIMIT_MAX, 10)).thenReturn(1);
+		when(config.getDuration(MESSAGE_RATE_LIMIT_WINDOW, Duration.ofHours(1))).thenReturn(Duration.ofMillis(50));
+		rateLimiter.init();
+
+		String user = "http://example.com/user/1";
+		rateLimiter.acquirePermit(user);
+		Thread.sleep(100);
+		assertDoesNotThrow(() -> rateLimiter.acquirePermit(user));
 	}
 
 	@Test
@@ -109,6 +121,6 @@ class MessageRateLimiterTest {
 		when(config.getDuration(MESSAGE_RATE_LIMIT_WINDOW, Duration.ofHours(1))).thenReturn(Duration.ofHours(1));
 		rateLimiter.init();
 
-		assertDoesNotThrow(() -> rateLimiter.checkRateLimit("http://example.com/user/new"));
+		assertDoesNotThrow(() -> rateLimiter.acquirePermit("http://example.com/user/new"));
 	}
 }

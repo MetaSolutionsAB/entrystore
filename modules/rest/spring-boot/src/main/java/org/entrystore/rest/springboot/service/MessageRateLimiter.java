@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.config.Config;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -50,39 +51,39 @@ public class MessageRateLimiter {
 		this.window = config.getDuration(MESSAGE_RATE_LIMIT_WINDOW, Duration.ofHours(1));
 	}
 
-	public void checkRateLimit(String userUri) {
-		if (maxMessages <= 0 || window.isZero()) {
+	public void acquirePermit(String userUri) {
+		if (maxMessages <= 0 || !window.isPositive()) {
 			return;
 		}
 
-		MessageSendRecord record = sendMap.get(userUri);
-		if (record == null) {
-			return;
-		}
-
-		if (Instant.now().isAfter(record.windowStart().plus(window))) {
-			sendMap.remove(userUri, record);
-			return;
-		}
-
-		if (record.count() >= maxMessages) {
-			log.warn("User [{}] exceeded message rate limit ({} messages per {})", userUri, maxMessages, window);
-			throw new CustomResponseException("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
-		}
-	}
-
-	public void recordMessageSent(String userUri) {
-		if (maxMessages <= 0 || window.isZero()) {
-			return;
-		}
-
-		sendMap.compute(userUri, (_, current) -> {
+		MessageSendRecord result = sendMap.compute(userUri, (_, current) -> {
 			Instant now = Instant.now();
 			if (current == null || now.isAfter(current.windowStart().plus(window))) {
 				return new MessageSendRecord(1, now);
 			}
 			return new MessageSendRecord(current.count() + 1, current.windowStart());
 		});
+
+		if (result.count() > maxMessages) {
+			throw new CustomResponseException("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
+		}
+	}
+
+	@Scheduled(fixedDelay = 3_600_000)
+	public void evictExpiredEntries() {
+		Instant now = Instant.now();
+		int removed = 0;
+		var iterator = sendMap.entrySet().iterator();
+		while (iterator.hasNext()) {
+			var entry = iterator.next();
+			if (now.isAfter(entry.getValue().windowStart().plus(window))) {
+				iterator.remove();
+				removed++;
+			}
+		}
+		if (removed > 0) {
+			log.debug("Evicted {} expired rate limit entries", removed);
+		}
 	}
 
 	record MessageSendRecord(int count, Instant windowStart) {}
