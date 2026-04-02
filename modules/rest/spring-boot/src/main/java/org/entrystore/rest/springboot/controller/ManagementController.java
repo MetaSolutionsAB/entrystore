@@ -21,7 +21,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.entrystore.rest.springboot.model.api.SetLoggingConfigRequestBody;
-import org.entrystore.rest.springboot.model.api.SolrReindexRequestBody;
+import org.entrystore.rest.springboot.model.api.SolrCommandRequestBody;
 import org.entrystore.rest.springboot.model.api.StatusExtendedIncludeEnum;
 import org.entrystore.rest.springboot.model.api.StatusExtendedResponse;
 import org.entrystore.rest.springboot.model.api.StatusResponse;
@@ -70,12 +70,15 @@ public class ManagementController {
 					"Full reindex (no context) requires admin privileges. " +
 					"Per-context reindex requires Administer access on the context."
 	)
+	@PreAuthorize("isAuthenticated()")
 	@ResponseStatus(HttpStatus.ACCEPTED)
 	@PostMapping(
 			path = "/solr",
 			consumes = MediaType.APPLICATION_JSON_VALUE)
-	public void postSolrCommand(@Valid @RequestBody SolrReindexRequestBody body) {
-		solrManagementService.reindex(body.context());
+	public void postSolrCommand(@Valid @RequestBody SolrCommandRequestBody body) {
+		var _ = switch (body.command()) {
+			case REINDEX -> solrManagementService.reindex(body.context());
+		};
 	}
 
 

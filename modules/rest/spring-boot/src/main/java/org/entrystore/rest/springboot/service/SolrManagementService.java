@@ -38,8 +38,12 @@ public class SolrManagementService {
 	private final RepositoryManagerImpl repositoryManager;
 	private final PrincipalManager principalManager;
 
-	public void reindex(URI contextUri) {
-		if (repositoryManager.getIndex() == null) {
+	// The isIndexing() checks below are best-effort (TOCTOU): a concurrent request could pass
+	// the check before the first enters reindex(). The core layer handles this safely by
+	// cancelling existing futures, so the worst case is a redundant 202 instead of a 409.
+	public String reindex(URI contextUri) {
+		var searchIndex = repositoryManager.getIndex();
+		if (searchIndex == null) {
 			throw new CustomResponseException("Solr search is deactivated", HttpStatus.SERVICE_UNAVAILABLE);
 		}
 
@@ -48,8 +52,12 @@ public class SolrManagementService {
 			if (!principalManager.currentUserIsAdminOrAdminGroup()) {
 				throw new ForbiddenException("Full reindex requires admin privileges");
 			}
-			repositoryManager.getIndex().reindex(false);
+			if (searchIndex.isIndexing()) {
+				throw new CustomResponseException("A full reindex operation is already in progress", HttpStatus.CONFLICT);
+			}
+			searchIndex.reindex(false);
 			log.info("Full Solr reindex initiated");
+			return "Full Solr reindex initiated";
 		} else {
 			// Context scoped reindex
 			Entry contextEntry = repositoryManager.getContextManager().getByEntryURI(contextUri);
@@ -57,8 +65,12 @@ public class SolrManagementService {
 				throw new BadRequestException("No context found for the provided context URI");
 			}
 			principalManager.checkAuthenticatedUserAuthorized(contextEntry, AccessProperty.Administer);
-			repositoryManager.getIndex().reindex(contextUri, false);
+			if (searchIndex.isIndexing(contextUri)) {
+				throw new CustomResponseException("A reindex operation is already in progress for this context", HttpStatus.CONFLICT);
+			}
+			searchIndex.reindex(contextUri, false);
 			log.info("Solr reindex initiated for context: {}", contextUri);
+			return "Solr reindex initiated for context: " + contextUri;
 		}
 	}
 }

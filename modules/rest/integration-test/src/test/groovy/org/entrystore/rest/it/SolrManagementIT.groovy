@@ -18,15 +18,18 @@ package org.entrystore.rest.it
 
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
+import org.entrystore.rest.it.util.NameSpaceConst
 
 import static java.net.HttpURLConnection.HTTP_ACCEPTED
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class SolrManagementIT extends BaseSpec {
 
 	def static contextId = 'solrMgmtTestCtx'
+	def static contextEntryUri = EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
@@ -92,7 +95,6 @@ class SolrManagementIT extends BaseSpec {
 
 	def "POST /management/solr per-context reindex as admin should respond with 202 Accepted"() {
 		given:
-		def contextEntryUri = EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId
 		def body = JsonOutput.toJson([command: 'reindex', context: contextEntryUri])
 
 		when:
@@ -107,7 +109,6 @@ class SolrManagementIT extends BaseSpec {
 
 	def "POST /management/solr per-context reindex as guest should respond with 401 Unauthorized"() {
 		given:
-		def contextEntryUri = EntryStoreClient.baseUrl + '/_contexts/entry/' + contextId
 		def body = JsonOutput.toJson([command: 'reindex', context: contextEntryUri])
 
 		when:
@@ -137,5 +138,41 @@ class SolrManagementIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
+	def "POST /management/solr per-context reindex as non-admin with Administer access should respond with 202 Accepted"() {
+		given: 'grant Administer access (es:write on entry URI) to non-admin user on context'
+		def userResourceUri = EntryStoreClient.createdEsUsers['user']['resourceUri']
+		def aclBody = JsonOutput.toJson([(contextEntryUri): [
+				(NameSpaceConst.TERM_WRITE): [[type: 'uri', value: userResourceUri]]
+		]])
+		def aclConn = EntryStoreClient.putRequest('/_contexts/entry/' + contextId, aclBody, 'admin')
+		assert aclConn.getResponseCode() == HTTP_NO_CONTENT
+
+		def body = JsonOutput.toJson([command: 'reindex', context: contextEntryUri])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/management/solr', body, 'user')
+
+		then:
+		conn.getResponseCode() == HTTP_ACCEPTED
+
+		cleanup:
+		waitForSolrProcessing()
+	}
+
+	def "POST /management/solr per-context reindex as non-admin without Administer access should respond with 403 Forbidden"() {
+		given: 'remove Administer access from non-admin user on context'
+		def aclBody = JsonOutput.toJson([(contextEntryUri): [:]])
+		def aclConn = EntryStoreClient.putRequest('/_contexts/entry/' + contextId, aclBody, 'admin')
+		assert aclConn.getResponseCode() == HTTP_NO_CONTENT
+
+		def body = JsonOutput.toJson([command: 'reindex', context: contextEntryUri])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/management/solr', body, 'user')
+
+		then:
+		conn.getResponseCode() == HTTP_FORBIDDEN
 	}
 }
