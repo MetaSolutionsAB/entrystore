@@ -73,13 +73,16 @@ public class SecurityConfig {
 	}
 
 	@Bean
-	public SecurityFilterChain securityFilterChain(HttpSecurity http, SessionRegistry sessionRegistry) throws Exception {
+	public SecurityFilterChain securityFilterChain(HttpSecurity http, SessionRegistry sessionRegistry,
+												   AuthenticationEntryPoint customEntryPoint) throws Exception {
 
 		if (corsConfig.isCorsEnabled()) {
 			http.cors(Customizer.withDefaults());
 		} else {
 			http.cors(AbstractHttpConfigurer::disable);
 		}
+
+		var entryPoint = basicAuthEnabled ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
 
 		http
 				.csrf(AbstractHttpConfigurer::disable)
@@ -128,12 +131,12 @@ public class SecurityConfig {
 				.addFilterAfter(reloadUserPropertiesFilter, SetUserURIAfterAuthenticationFilter.class)
 				// below disables the auto redirect to login page when user is not authenticated, instead reply with 401
 				.exceptionHandling(e -> e
-						.authenticationEntryPoint(basicAuthEnabled ? authChallengeAwareEntryPoint() : customEntryPoint())
+						.authenticationEntryPoint(entryPoint)
 				);
 
 		if (basicAuthEnabled) {
 			log.info("Basic Auth Enabled");
-			http.httpBasic(basic -> basic.authenticationEntryPoint(authChallengeAwareEntryPoint()));
+			http.httpBasic(basic -> basic.authenticationEntryPoint(entryPoint));
 		} else {
 			log.info("Basic Auth Disabled");
 		}
@@ -165,13 +168,13 @@ public class SecurityConfig {
 		};
 	}
 
-	private AuthenticationEntryPoint authChallengeAwareEntryPoint() {
+	private AuthenticationEntryPoint authChallengeAwareEntryPoint(AuthenticationEntryPoint delegate) {
 		return (request, response, authException) -> {
 			if (!"false".equalsIgnoreCase(request.getParameter("auth_challenge"))) {
 				response.setHeader("Cache-Control", "no-store");
 				response.setHeader("WWW-Authenticate", "Basic realm=\"EntryStore\"");
 			}
-			customEntryPoint().commence(request, response, authException);
+			delegate.commence(request, response, authException);
 		};
 	}
 

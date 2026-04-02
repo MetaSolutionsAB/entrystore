@@ -22,7 +22,7 @@ import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class AuthChallengeIT extends BaseSpec {
 
-	def "GET as guest should return 401 with WWW-Authenticate header when Basic Auth is enabled"() {
+	def "GET as guest should return 401 with WWW-Authenticate and Cache-Control headers when Basic Auth is enabled"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status/extended', '')
 
@@ -30,20 +30,22 @@ class AuthChallengeIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getHeaderField('WWW-Authenticate') != null
 		connection.getHeaderField('WWW-Authenticate').contains('Basic')
+		connection.getHeaderField('Cache-Control')?.contains('no-store')
 		connection.getContentType().contains('application/json')
 	}
 
-	def "GET as guest with auth_challenge=false should return 401 without WWW-Authenticate header"() {
+	def "GET as guest with auth_challenge=false should return 401 without WWW-Authenticate or Cache-Control headers"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status/extended?auth_challenge=false', '')
 
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getHeaderField('WWW-Authenticate') == null
+		!connection.getHeaderField('Cache-Control')?.contains('no-store')
 		connection.getContentType().contains('application/json')
 	}
 
-	def "GET as guest with auth_challenge=true should return 401 with WWW-Authenticate header"() {
+	def "GET as guest with auth_challenge=true should return 401 with WWW-Authenticate and Cache-Control headers"() {
 		when:
 		def connection = EntryStoreClient.getRequest('/management/status/extended?auth_challenge=true', '')
 
@@ -51,6 +53,7 @@ class AuthChallengeIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getHeaderField('WWW-Authenticate') != null
 		connection.getHeaderField('WWW-Authenticate').contains('Basic')
+		connection.getHeaderField('Cache-Control')?.contains('no-store')
 		connection.getContentType().contains('application/json')
 	}
 
@@ -61,6 +64,17 @@ class AuthChallengeIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getHeaderField('WWW-Authenticate') == null
+		connection.getContentType().contains('application/json')
+	}
+
+	def "GET as guest with unrecognized auth_challenge value should return 401 with WWW-Authenticate header"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/management/status/extended?auth_challenge=banana', '')
+
+		then:
+		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		connection.getHeaderField('WWW-Authenticate') != null
+		connection.getHeaderField('WWW-Authenticate').contains('Basic')
 		connection.getContentType().contains('application/json')
 	}
 
