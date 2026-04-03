@@ -181,9 +181,7 @@ class MessageIT extends BaseSpec {
 		!content.contains('<script>')
 		!content.contains('javascript:')
 		content.contains('href="https://safe.com"')
-		!messages[0].getSubject().contains('<script>')
-		messages[0].getSubject().contains('Test')
-		messages[0].getSubject().contains('Subject')
+		messages[0].getSubject() == 'Test  Subject'
 	}
 
 	def "POST /message should return 400 for malformed JSON body"() {

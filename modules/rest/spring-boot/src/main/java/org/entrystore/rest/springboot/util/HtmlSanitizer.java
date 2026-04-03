@@ -34,7 +34,6 @@ public final class HtmlSanitizer {
 			.and(Sanitizers.BLOCKS)
 			.and(Sanitizers.LINKS)
 			.and(Sanitizers.TABLES)
-			.and(Sanitizers.IMAGES)
 			.and(new HtmlPolicyBuilder()
 					.allowStyling(CssSchema.withProperties(Set.of(
 							"color", "background-color", "font-size", "font-weight",

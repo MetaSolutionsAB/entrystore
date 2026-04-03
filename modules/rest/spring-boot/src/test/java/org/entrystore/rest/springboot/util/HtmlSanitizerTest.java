@@ -20,7 +20,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HtmlSanitizerTest {
 
@@ -53,13 +55,6 @@ class HtmlSanitizerTest {
 			String html = "<table><tr><td>cell</td></tr></table>";
 			String result = HtmlSanitizer.sanitizeHtmlBody(html);
 			assertEquals("<table><tbody><tr><td>cell</td></tr></tbody></table>", result);
-		}
-
-		@Test
-		void preservesImages() {
-			String html = "<img src=\"https://example.com/img.png\" alt=\"photo\" />";
-			String result = HtmlSanitizer.sanitizeHtmlBody(html);
-			assertEquals("<img src=\"https://example.com/img.png\" alt=\"photo\" />", result);
 		}
 
 		@Test
@@ -126,6 +121,50 @@ class HtmlSanitizerTest {
 		@Test
 		void handlesEmptyInput() {
 			assertEquals("", HtmlSanitizer.sanitizeHtmlBody(""));
+		}
+
+		@Test
+		void stripsMixedCaseScriptTags() {
+			String html = "<p>Hello</p><ScRiPt>alert('xss')</ScRiPt>";
+			assertEquals("<p>Hello</p>", HtmlSanitizer.sanitizeHtmlBody(html));
+		}
+
+		@Test
+		void stripsDataUriImages() {
+			String html = "<img src=\"data:image/svg+xml,<svg onload=alert(1)>\" />";
+			String result = HtmlSanitizer.sanitizeHtmlBody(html);
+			assertFalse(result.contains("data:"));
+		}
+
+		@Test
+		void stripsDangerousCssProperties() {
+			String html = "<div style=\"position:absolute;z-index:9999;background-image:url(https://evil.com/track)\">overlay</div>";
+			String result = HtmlSanitizer.sanitizeHtmlBody(html);
+			assertFalse(result.contains("position"));
+			assertFalse(result.contains("z-index"));
+			assertFalse(result.contains("background-image"));
+		}
+
+		@Test
+		void stripsEventHandlersOnAllowedElements() {
+			String html = "<blockquote onclick=\"alert('xss')\">quote</blockquote>";
+			String result = HtmlSanitizer.sanitizeHtmlBody(html);
+			assertEquals("<blockquote>quote</blockquote>", result);
+		}
+
+		@Test
+		void stripsExternalImages() {
+			String html = "<img src=\"https://attacker.com/pixel.gif\" />";
+			String result = HtmlSanitizer.sanitizeHtmlBody(html);
+			assertFalse(result.contains("img"));
+		}
+
+		@Test
+		void allowsSafeCssProperties() {
+			String html = "<p style=\"color:red;font-size:14px;text-align:center\">styled</p>";
+			String result = HtmlSanitizer.sanitizeHtmlBody(html);
+			assertTrue(result.contains("color"));
+			assertTrue(result.contains("font-size"));
 		}
 	}
 

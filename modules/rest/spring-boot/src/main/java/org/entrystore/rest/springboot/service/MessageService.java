@@ -23,6 +23,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.rest.springboot.model.api.SendMessageRequestBody;
 import org.entrystore.rest.springboot.model.api.TransportType;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
@@ -66,6 +67,10 @@ public class MessageService {
 		if (request.transport() == TransportType.EMAIL) {
 			String sanitizedSubject = HtmlSanitizer.sanitizeToPlainText(request.subject());
 			String sanitizedBody = HtmlSanitizer.sanitizeHtmlBody(request.body());
+
+			if (sanitizedBody.isBlank() && !request.body().isBlank()) {
+				throw new BadRequestException("Message body is empty after sanitization");
+			}
 
 			boolean sent = Email.sendMessage(
 					repositoryManager.getConfiguration(),

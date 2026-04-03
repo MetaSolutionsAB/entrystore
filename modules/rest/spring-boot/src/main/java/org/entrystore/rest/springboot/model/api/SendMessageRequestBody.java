@@ -19,10 +19,11 @@ package org.entrystore.rest.springboot.model.api;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public record SendMessageRequestBody(
 		@NotNull TransportType transport,
-		@NotBlank String subject,
+		@NotBlank @Size(max = 200) String subject,
 		@NotBlank @JsonProperty("to") String recipient,
-		@NotBlank String body) {
+		@NotBlank @Size(max = 50000) String body) {
 }
