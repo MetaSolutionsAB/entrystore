@@ -180,7 +180,7 @@ class MessageIT extends BaseSpec {
 		content.contains('<p>Hello</p>')
 		!content.contains('<script>')
 		!content.contains('javascript:')
-		content.contains('safe')
+		content.contains('href="https://safe.com"')
 		!messages[0].getSubject().contains('<script>')
 		messages[0].getSubject().contains('Test')
 		messages[0].getSubject().contains('Subject')

@@ -153,6 +153,13 @@ class HtmlSanitizerTest {
 		}
 
 		@Test
+		void decodesHtmlEntitiesInPlainText() {
+			assertEquals("Q&A Session", HtmlSanitizer.sanitizeToPlainText("Q&A Session"));
+			assertEquals("1 < 2 & 3 > 0", HtmlSanitizer.sanitizeToPlainText("1 < 2 & 3 > 0"));
+			assertEquals("He said \"hello\"", HtmlSanitizer.sanitizeToPlainText("He said \"hello\""));
+		}
+
+		@Test
 		void returnsNullForNullInput() {
 			assertNull(HtmlSanitizer.sanitizeToPlainText(null));
 		}

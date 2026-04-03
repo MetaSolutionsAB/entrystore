@@ -16,23 +16,30 @@
 
 package org.entrystore.rest.springboot.util;
 
+import org.owasp.html.CssSchema;
 import org.owasp.html.HtmlPolicyBuilder;
 import org.owasp.html.PolicyFactory;
 import org.owasp.html.Sanitizers;
+
+import java.util.Set;
 
 /**
  * Utility class for sanitizing HTML content in user-supplied messages.
  *
  * @author Patrik Kompuš
  */
-public class HtmlSanitizer {
+public final class HtmlSanitizer {
 
 	private static final PolicyFactory EMAIL_HTML_POLICY = Sanitizers.FORMATTING
 			.and(Sanitizers.BLOCKS)
 			.and(Sanitizers.LINKS)
 			.and(Sanitizers.TABLES)
 			.and(Sanitizers.IMAGES)
-			.and(Sanitizers.STYLES)
+			.and(new HtmlPolicyBuilder()
+					.allowStyling(CssSchema.withProperties(Set.of(
+							"color", "background-color", "font-size", "font-weight",
+							"font-style", "text-align", "text-decoration", "margin", "padding")))
+					.toFactory())
 			.and(new HtmlPolicyBuilder()
 					.allowElements("hr", "sub", "sup", "code", "pre", "blockquote")
 					.toFactory());
@@ -61,6 +68,15 @@ public class HtmlSanitizer {
 		if (html == null) {
 			return null;
 		}
-		return PLAIN_TEXT_POLICY.sanitize(html);
+		String sanitized = PLAIN_TEXT_POLICY.sanitize(html);
+		return decodeHtmlEntities(sanitized);
+	}
+
+	private static String decodeHtmlEntities(String text) {
+		return text.replace("&amp;", "&")
+				.replace("&lt;", "<")
+				.replace("&gt;", ">")
+				.replace("&#34;", "\"")
+				.replace("&#39;", "'");
 	}
 }
