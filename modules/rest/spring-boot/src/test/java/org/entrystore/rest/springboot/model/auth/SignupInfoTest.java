@@ -34,7 +34,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -98,6 +97,13 @@ class SignupInfoTest {
 		createSignupInfo("http://localhost:8181/store/", List.of("https://frontend.example.com/"));
 
 		assertTrue(SignupInfo.isPermittedRedirectUrl("https://frontend.example.com/callback"));
+	}
+
+	@Test
+	void isPermittedRedirectUrl_shouldRejectUserinfoBypass() throws Exception {
+		createSignupInfo("http://localhost:8181/store/");
+
+		assertFalse(SignupInfo.isPermittedRedirectUrl("http://localhost:8181%40@evil.com/"));
 	}
 
 	@Test

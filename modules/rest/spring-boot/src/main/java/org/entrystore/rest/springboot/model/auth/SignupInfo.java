@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,10 +25,14 @@ import org.entrystore.repository.config.Settings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * @author Hannes Ebner
@@ -57,19 +61,20 @@ public class SignupInfo {
 
 	private RepositoryManager rm;
 
-	private static List<String> permittedBaseUrls;
+	private static volatile List<String> permittedBaseUrls;
 
 	public SignupInfo(RepositoryManager rm) {
 		this.rm = rm;
 		if (permittedBaseUrls == null) {
 			String repoUrl = rm.getRepositoryURL().toString();
-			permittedBaseUrls = new ArrayList<>();
+			List<String> urls = new ArrayList<>();
 			if (StringUtils.countMatches(repoUrl, '/') > 2) {
-				permittedBaseUrls.add(repoUrl.substring(0, StringUtils.ordinalIndexOf(repoUrl, "/", 3) + 1));
+				urls.add(repoUrl.substring(0, StringUtils.ordinalIndexOf(repoUrl, "/", 3) + 1));
 			} else {
 				log.warn("Base URL is potentially misconfigured: {}", repoUrl);
 			}
-			permittedBaseUrls.addAll(rm.getConfiguration().getStringList(Settings.AUTH_PERMITTED_REDIRECTS, new ArrayList<>()));
+			urls.addAll(rm.getConfiguration().getStringList(Settings.AUTH_PERMITTED_REDIRECTS, new ArrayList<>()));
+			permittedBaseUrls = Collections.unmodifiableList(urls);
 		}
 	}
 
@@ -104,12 +109,27 @@ public class SignupInfo {
 			log.warn("Permitted redirect URLs not initialized, rejecting redirect to: {}", redirectUrl);
 			return false;
 		}
+		URI redirect;
+		try {
+			redirect = new URI(redirectUrl);
+		} catch (URISyntaxException e) {
+			return false;
+		}
+		if (redirect.getUserInfo() != null) {
+			return false;
+		}
 		for (String base : permittedBaseUrls) {
-			if (!base.endsWith("/")) {
-				base += "/";
-			}
-			if (redirectUrl.startsWith(base)) {
-				return true;
+			try {
+				URI baseUri = new URI(base.endsWith("/") ? base : base + "/");
+				if (Objects.equals(redirect.getScheme(), baseUri.getScheme())
+						&& Objects.equals(redirect.getHost(), baseUri.getHost())
+						&& redirect.getPort() == baseUri.getPort()
+						&& redirect.getPath() != null
+						&& redirect.getPath().startsWith(baseUri.getPath())) {
+					return true;
+				}
+			} catch (URISyntaxException e) {
+				continue;
 			}
 		}
 		return false;
