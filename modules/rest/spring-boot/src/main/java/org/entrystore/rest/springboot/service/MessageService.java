@@ -23,10 +23,12 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.rest.springboot.model.api.SendMessageRequestBody;
 import org.entrystore.rest.springboot.model.api.TransportType;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.springboot.util.Email;
+import org.entrystore.rest.springboot.util.HtmlSanitizer;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -63,11 +65,22 @@ public class MessageService {
 		}
 
 		if (request.transport() == TransportType.EMAIL) {
+			String sanitizedSubject = HtmlSanitizer.sanitizeToPlainText(request.subject());
+			String sanitizedBody = HtmlSanitizer.sanitizeHtmlBody(request.body());
+
+			if (sanitizedSubject.isBlank() && !request.subject().isBlank()) {
+				throw new BadRequestException("Message subject is empty after sanitization");
+			}
+
+			if (sanitizedBody.isBlank() && !request.body().isBlank()) {
+				throw new BadRequestException("Message body is empty after sanitization");
+			}
+
 			boolean sent = Email.sendMessage(
 					repositoryManager.getConfiguration(),
-					request.recipient(), request.subject(), request.body(), null, replyTo);
+					request.recipient(), sanitizedSubject, sanitizedBody, null, replyTo);
 			if (!sent) {
-				log.error("Failed to send email to [{}] with subject [{}]", request.recipient(), request.subject());
+				log.error("Failed to send email to [{}] with subject [{}]", request.recipient(), sanitizedSubject);
 				throw new InternalServerErrorException("Failed to send email message");
 			}
 		}
