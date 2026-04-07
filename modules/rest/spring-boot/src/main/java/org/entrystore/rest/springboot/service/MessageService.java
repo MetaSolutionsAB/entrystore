@@ -68,6 +68,10 @@ public class MessageService {
 			String sanitizedSubject = HtmlSanitizer.sanitizeToPlainText(request.subject());
 			String sanitizedBody = HtmlSanitizer.sanitizeHtmlBody(request.body());
 
+			if (sanitizedSubject.isBlank() && !request.subject().isBlank()) {
+				throw new BadRequestException("Message subject is empty after sanitization");
+			}
+
 			if (sanitizedBody.isBlank() && !request.body().isBlank()) {
 				throw new BadRequestException("Message body is empty after sanitization");
 			}
