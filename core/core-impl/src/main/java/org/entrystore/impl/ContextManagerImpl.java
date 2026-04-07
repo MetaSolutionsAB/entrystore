@@ -897,9 +897,13 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 			Entry contextEntry = getByEntryURI(usplit.getContextMetaMetadataURI());
 			if (contextEntry != null) {
-				return ((Context) contextEntry.getResource()).getByEntryURI(usplit.getMetaMetadataURI());
+				Entry resolved = ((Context) contextEntry.getResource()).getByEntryURI(usplit.getMetaMetadataURI());
+				if (resolved == null) {
+					log.warn("Context {} found but entry not resolvable for URI {}", usplit.getContextMetaMetadataURI(), uri);
+				}
+				return resolved;
 			} else {
-				log.warn("No context found for Entry with URI {}", uri);
+				log.warn("No context found for entry with URI {} (context URI: {})", uri, usplit.getContextMetaMetadataURI());
 			}
 		}
 		return null;
