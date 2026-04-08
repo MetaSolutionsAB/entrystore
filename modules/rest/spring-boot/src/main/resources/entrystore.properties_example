@@ -1,4 +1,8 @@
-## Base URI how it is seen from external clients
+## Base URI how it is seen from external clients.
+## When running behind a reverse proxy, configure the proxy to send
+## X-Forwarded-Proto, X-Forwarded-Host, and X-Forwarded-Port headers.
+## Spring Boot's ForwardedHeaderFilter (server.forward-headers-strategy=framework
+## in application.yaml) processes these headers for request URL resolution.
 entrystore.baseurl.folder=http://entrystore.org/store/
 
 ## Repository store: memory | native | http | sparql
@@ -112,13 +116,6 @@ entrystore.solr.extract-fulltext=off
 
 ## RowStore integration
 # entrystore.rowstore.url=http://localhost:8282/
-
-## By default all references are rewritten. This is necessary to make
-## installations work where the internal references are different from
-## the external ones (this happens when reverse proxying is used). This
-## option can be used to deactivate this feature, e.g. if EntryStore is
-## to be started via EntryStoreApplication.main()
-entrystore.repository.rewrite-basereference=true
 
 ## Enable creation of groups with linked contexts for normal non-admin users
 # entrystore.nonadmin.group-context-creation=on|off (default: off)

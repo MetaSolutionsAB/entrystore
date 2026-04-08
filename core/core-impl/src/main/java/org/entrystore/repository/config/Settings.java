@@ -163,8 +163,6 @@ public interface Settings {
 
 	String SYNDICATION_URL_TEMPLATE = "entrystore.syndication.url-template";
 
-	String REPOSITORY_REWRITE_BASEREFERENCE = "entrystore.repository.rewrite-basereference";
-
 	String REPOSITORY_PUBLIC = "entrystore.repository.public";
 	String REPOSITORY_PUBLIC_PATH = "entrystore.repository.public.path";
 	String REPOSITORY_PUBLIC_INDEXES = "entrystore.repository.public.indexes";

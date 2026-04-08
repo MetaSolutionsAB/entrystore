@@ -691,4 +691,29 @@ class SearchIT extends BaseSpec {
 		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['error'] == 'findEntriesSparql.query: \'query\' param length must be minimum 3'
 	}
+
+	def "GET /search?type=solr&syndication=rss_2.0 with X-Forwarded headers should use configured base URL, not forwarded host"() {
+		given:
+		def extraHeaders = [
+			'X-Forwarded-Proto': 'https',
+			'X-Forwarded-Host' : 'public.example.com',
+			'X-Forwarded-Port' : '443'
+		]
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest(
+				'/search?type=solr&query=description.pl:opissearch&syndication=rss_2.0',
+				'admin', 'application/rss+xml', extraHeaders)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getContentType().contains('application/rss+xml')
+		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
+
+		def channelNode = respXml['channel'][0] as Node
+		channelNode['link'].size() == 1
+		def channelLinkNode = channelNode['link'][0] as Node
+		channelLinkNode.value()[0] == EntryStoreClient.baseUrl + '/search?type=solr&query=description.pl:opissearch&syndication=rss_2.0'
+		!channelLinkNode.value()[0].toString().contains('public.example.com')
+	}
 }
