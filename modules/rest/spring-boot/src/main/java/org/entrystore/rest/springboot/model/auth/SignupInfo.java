@@ -19,20 +19,9 @@ package org.entrystore.rest.springboot.model.auth;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
-import org.apache.commons.lang3.StringUtils;
-import org.entrystore.repository.RepositoryManager;
-import org.entrystore.repository.config.Settings;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * @author Hannes Ebner
@@ -40,8 +29,6 @@ import java.util.Objects;
 @Getter
 @Setter
 public class SignupInfo {
-
-	private static final Logger log = LoggerFactory.getLogger(SignupInfo.class);
 
 	private String firstName;
 
@@ -59,80 +46,10 @@ public class SignupInfo {
 
 	private Map<String, String> customProperties;
 
-	private RepositoryManager rm;
-
-	private static volatile List<String> permittedBaseUrls;
-
-	public SignupInfo(RepositoryManager rm) {
-		this.rm = rm;
-		if (permittedBaseUrls == null) {
-			String repoUrl = rm.getRepositoryURL().toString();
-			List<String> urls = new ArrayList<>();
-			if (StringUtils.countMatches(repoUrl, '/') > 2) {
-				urls.add(repoUrl.substring(0, StringUtils.ordinalIndexOf(repoUrl, "/", 3) + 1));
-			} else {
-				log.warn("Base URL is potentially misconfigured: {}", repoUrl);
-			}
-			urls.addAll(rm.getConfiguration().getStringList(Settings.AUTH_PERMITTED_REDIRECTS, new ArrayList<>()));
-			permittedBaseUrls = Collections.unmodifiableList(urls);
-		}
-	}
-
-	public void setUrlSuccess(String urlSuccess) {
-		if (urlSuccess != null) {
-			if (isPermittedRedirectUrl(urlSuccess)) {
-				this.urlSuccess = urlSuccess;
-			} else {
-				log.warn("Redirect URL (success) is not permitted and will be ignored: {}", urlSuccess);
-			}
-		}
-	}
-
-	public void setUrlFailure(String urlFailure) {
-		if (urlFailure != null) {
-			if (isPermittedRedirectUrl(urlFailure)) {
-				this.urlFailure = urlFailure;
-			} else {
-				log.warn("Redirect URL (failure) is not permitted and will be ignored: {}", urlFailure);
-			}
-		}
-	}
-
 	public void setEmail(@NonNull String email) {
 		// we have to store it in lower case only to avoid problems with different cases in
 		// different steps of the process (if the user provides inconsistent information)
 		this.email = email.toLowerCase();
-	}
-
-	public static boolean isPermittedRedirectUrl(@NonNull String redirectUrl) {
-		if (permittedBaseUrls == null) {
-			log.warn("Permitted redirect URLs not initialized, rejecting redirect to: {}", redirectUrl);
-			return false;
-		}
-		URI redirect;
-		try {
-			redirect = new URI(redirectUrl);
-		} catch (URISyntaxException e) {
-			return false;
-		}
-		if (redirect.getUserInfo() != null) {
-			return false;
-		}
-		for (String base : permittedBaseUrls) {
-			try {
-				URI baseUri = new URI(base.endsWith("/") ? base : base + "/");
-				if (Objects.equals(redirect.getScheme(), baseUri.getScheme())
-						&& Objects.equals(redirect.getHost(), baseUri.getHost())
-						&& redirect.getPort() == baseUri.getPort()
-						&& redirect.getPath() != null
-						&& redirect.getPath().startsWith(baseUri.getPath())) {
-					return true;
-				}
-			} catch (URISyntaxException e) {
-				continue;
-			}
-		}
-		return false;
 	}
 
 }

@@ -16,105 +16,25 @@
 
 package org.entrystore.rest.springboot.model.auth;
 
-import org.entrystore.config.Config;
-import org.entrystore.repository.RepositoryManager;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.lang.reflect.Field;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
 class SignupInfoTest {
 
-	@Mock
-	private RepositoryManager repositoryManager;
+	@Test
+	void setEmail_shouldConvertToLowerCase() {
+		SignupInfo info = new SignupInfo();
 
-	@Mock
-	private Config config;
+		info.setEmail("User@Example.COM");
 
-	@BeforeEach
-	void setUp() throws Exception {
-		// Reset the static permittedBaseUrls field between tests
-		Field field = SignupInfo.class.getDeclaredField("permittedBaseUrls");
-		field.setAccessible(true);
-		field.set(null, null);
-	}
-
-	private SignupInfo createSignupInfo(String baseUrl) throws Exception {
-		return createSignupInfo(baseUrl, new ArrayList<>());
-	}
-
-	private SignupInfo createSignupInfo(String baseUrl, List<String> additionalPermitted) throws Exception {
-		when(repositoryManager.getRepositoryURL()).thenReturn(new URL(baseUrl));
-		when(repositoryManager.getConfiguration()).thenReturn(config);
-		when(config.getStringList(any(), any())).thenReturn(additionalPermitted);
-		return new SignupInfo(repositoryManager);
+		assertEquals("user@example.com", info.getEmail());
 	}
 
 	@Test
-	void isPermittedRedirectUrl_shouldAcceptUrlMatchingBaseUrl() throws Exception {
-		createSignupInfo("http://localhost:8181/store/");
-
-		assertTrue(SignupInfo.isPermittedRedirectUrl("http://localhost:8181/some/path"));
-	}
-
-	@Test
-	void isPermittedRedirectUrl_shouldRejectExternalUrl() throws Exception {
-		createSignupInfo("http://localhost:8181/store/");
-
-		assertFalse(SignupInfo.isPermittedRedirectUrl("https://evil.com/phishing"));
-	}
-
-	@Test
-	void isPermittedRedirectUrl_shouldRejectSimilarHostWithDifferentDomain() throws Exception {
-		createSignupInfo("http://localhost:8181/store/");
-
-		assertFalse(SignupInfo.isPermittedRedirectUrl("http://localhost:8181.evil.com/"));
-	}
-
-	@Test
-	void isPermittedRedirectUrl_shouldRejectDifferentScheme() throws Exception {
-		createSignupInfo("http://localhost:8181/store/");
-
-		assertFalse(SignupInfo.isPermittedRedirectUrl("https://localhost:8181/path"));
-	}
-
-	@Test
-	void isPermittedRedirectUrl_shouldAcceptConfiguredAdditionalUrl() throws Exception {
-		createSignupInfo("http://localhost:8181/store/", List.of("https://frontend.example.com/"));
-
-		assertTrue(SignupInfo.isPermittedRedirectUrl("https://frontend.example.com/callback"));
-	}
-
-	@Test
-	void isPermittedRedirectUrl_shouldRejectUserinfoBypass() throws Exception {
-		createSignupInfo("http://localhost:8181/store/");
-
-		assertFalse(SignupInfo.isPermittedRedirectUrl("http://localhost:8181%40@evil.com/"));
-	}
-
-	@Test
-	void isPermittedRedirectUrl_shouldRejectWhenNotInitialized() {
-		// permittedBaseUrls is null (reset in setUp, no SignupInfo created)
-		assertFalse(SignupInfo.isPermittedRedirectUrl("http://localhost:8181/path"));
-	}
-
-	@Test
-	void setUrlSuccess_shouldStorePermittedUrl() throws Exception {
-		SignupInfo info = createSignupInfo("http://localhost:8181/store/");
+	void setUrlSuccess_shouldStoreValue() {
+		SignupInfo info = new SignupInfo();
 
 		info.setUrlSuccess("http://localhost:8181/success");
 
@@ -122,17 +42,8 @@ class SignupInfoTest {
 	}
 
 	@Test
-	void setUrlSuccess_shouldIgnoreNonPermittedUrl() throws Exception {
-		SignupInfo info = createSignupInfo("http://localhost:8181/store/");
-
-		info.setUrlSuccess("https://evil.com/phishing");
-
-		assertNull(info.getUrlSuccess());
-	}
-
-	@Test
-	void setUrlFailure_shouldStorePermittedUrl() throws Exception {
-		SignupInfo info = createSignupInfo("http://localhost:8181/store/");
+	void setUrlFailure_shouldStoreValue() {
+		SignupInfo info = new SignupInfo();
 
 		info.setUrlFailure("http://localhost:8181/failure");
 
@@ -140,11 +51,14 @@ class SignupInfoTest {
 	}
 
 	@Test
-	void setUrlFailure_shouldIgnoreNonPermittedUrl() throws Exception {
-		SignupInfo info = createSignupInfo("http://localhost:8181/store/");
+	void newSignupInfo_shouldHaveNullFields() {
+		SignupInfo info = new SignupInfo();
 
-		info.setUrlFailure("https://evil.com/phishing");
-
+		assertNull(info.getEmail());
+		assertNull(info.getUrlSuccess());
 		assertNull(info.getUrlFailure());
+		assertNull(info.getFirstName());
+		assertNull(info.getLastName());
 	}
+
 }
