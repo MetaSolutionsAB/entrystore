@@ -158,6 +158,32 @@ class MessageIT extends BaseSpec {
 		message.getAllRecipients()*.toString().contains(recipientUsername)
 	}
 
+	def "POST /message should sanitize HTML in email body and subject"() {
+		given:
+		def recipientUsername = 'msgSanitize@test.com'
+		UserUtil.createUser(recipientUsername)
+		def requestBody = JsonOutput.toJson([
+			transport: 'email',
+			subject  : 'Test <script>alert("xss")</script> Subject',
+			to       : recipientUsername,
+			body     : '<p>Hello</p><script>alert("xss")</script><a href="javascript:alert(1)">click</a><a href="https://safe.com">safe</a>'
+		])
+
+		when:
+		def conn = EntryStoreClient.postRequest('/message', requestBody)
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def messages = greenMail.getReceivedMessages()
+		messages.length == 1
+		def content = messages[0].getContent().toString()
+		content.contains('<p>Hello</p>')
+		!content.contains('<script>')
+		!content.contains('javascript:')
+		content.contains('href="https://safe.com"')
+		messages[0].getSubject() == 'Test  Subject'
+	}
+
 	def "POST /message should return 400 for malformed JSON body"() {
 		given:
 		def requestBody = 'this is not json'

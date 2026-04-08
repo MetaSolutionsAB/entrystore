@@ -24,6 +24,7 @@ class NameSpaceConst {
 	static TERM_HOME_CONTEXT = ES_TERMS + 'homeContext'
 	static TERM_NAMED_RESOURCE = ES_TERMS + 'NamedResource'
 	static TERM_READ = ES_TERMS + 'read'
+	static TERM_WRITE = ES_TERMS + 'write'
 
 	static DC_TERM_TITLE = DC_TERMS + 'title'
 	static DC_TERM_CREATOR = DC_TERMS + 'creator'
