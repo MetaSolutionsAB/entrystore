@@ -177,6 +177,45 @@ class GraphUtilTest {
 	}
 
 	@Test
+	void resolveAcceptedMediaType_shouldPreferSpecificTypeOverWildcardSubtype() {
+		assertEquals("application/rdf+xml",
+				GraphUtil.resolveAcceptedMediaType("text/*, application/rdf+xml", "text/turtle"));
+	}
+
+	@Test
+	void resolveAcceptedMediaType_shouldPreferHigherQualityOverWildcard() {
+		assertEquals("text/turtle",
+				GraphUtil.resolveAcceptedMediaType("*/*;q=0.1, text/turtle;q=0.9", "application/rdf+xml"));
+	}
+
+	@Test
+	void resolveAcceptedMediaType_shouldPreferQualityOverSpecificity() {
+		assertEquals("text/turtle",
+				GraphUtil.resolveAcceptedMediaType("application/rdf+xml;q=0.5, text/turtle;q=1.0", "application/rdf+xml"));
+	}
+
+	@Test
+	void resolveAcceptedMediaType_shouldPreferSpecificTypeOverFullWildcard() {
+		assertEquals("application/json",
+				GraphUtil.resolveAcceptedMediaType("*/*, application/json", "application/rdf+xml"));
+	}
+
+	@Test
+	void resolveAcceptedMediaType_shouldSortMultipleTypesByQuality() {
+		assertEquals("application/rdf+xml",
+				GraphUtil.resolveAcceptedMediaType(
+						"text/turtle;q=0.8, application/rdf+xml;q=0.9, application/json;q=0.7",
+						"text/turtle"));
+	}
+
+	@Test
+	void resolveAcceptedMediaType_shouldPreferFirstTypeWhenQualityAndSpecificityAreEqual() {
+		assertEquals("text/turtle",
+				GraphUtil.resolveAcceptedMediaType(
+						"text/turtle;q=0.8, application/rdf+xml;q=0.8", "application/json"));
+	}
+
+	@Test
 	void normalizeLegacyMediaType_shouldMapLegacyN3() {
 		assertEquals("text/n3", GraphUtil.normalizeLegacyMediaType("text/rdf+n3"));
 	}
