@@ -16,11 +16,9 @@
 
 package org.entrystore.rest.springboot.service;
 
-import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.entrystore.config.Config;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -30,25 +28,20 @@ import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import static org.entrystore.repository.config.Settings.MESSAGE_RATE_LIMIT_MAX;
-import static org.entrystore.repository.config.Settings.MESSAGE_RATE_LIMIT_WINDOW;
-
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class MessageRateLimiter {
-
-	private final Config config;
 
 	private final ConcurrentMap<String, MessageSendRecord> sendMap = new ConcurrentHashMap<>();
 
-	private int maxMessages;
-	private Duration window;
+	private final int maxMessages;
+	private final Duration window;
 
-	@PostConstruct
-	public void init() {
-		this.maxMessages = config.getInt(MESSAGE_RATE_LIMIT_MAX, 10);
-		this.window = config.getDuration(MESSAGE_RATE_LIMIT_WINDOW, Duration.ofHours(1));
+	public MessageRateLimiter(
+			@Value("${entrystore.message.rate.limit.max:10}") int maxMessages,
+			@Value("${entrystore.message.rate.limit.window:1h}") Duration window) {
+		this.maxMessages = maxMessages;
+		this.window = window;
 	}
 
 	public void acquirePermit(String userUri) {

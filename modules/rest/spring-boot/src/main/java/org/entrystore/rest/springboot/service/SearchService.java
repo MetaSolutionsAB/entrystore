@@ -314,12 +314,22 @@ public class SearchService {
 	 * @return Request URI with scheme, host, and port from the configured base URL.
 	 */
 	private String buildRequestUri() {
-		String baseUrl = repositoryManager.getRepositoryURL().toExternalForm();
+		var repositoryURL = repositoryManager.getRepositoryURL();
+		if (repositoryURL == null) {
+			throw new InternalServerErrorException(
+					"Repository base URL is not configured; check 'entrystore.baseurl.folder'");
+		}
+		String baseUrl = repositoryURL.toExternalForm();
 		if (baseUrl.endsWith("/")) {
 			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 		}
 
-		HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+		var attributes = RequestContextHolder.getRequestAttributes();
+		if (!(attributes instanceof ServletRequestAttributes servletAttrs)) {
+			throw new InternalServerErrorException(
+					"Cannot build request URI: no servlet request context available");
+		}
+		HttpServletRequest request = servletAttrs.getRequest();
 		String query = request.getQueryString();
 
 		return baseUrl + request.getServletPath() + (query != null ? "?" + query : "");

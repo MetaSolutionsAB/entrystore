@@ -16,43 +16,21 @@
 
 package org.entrystore.rest.springboot.service;
 
-import org.entrystore.config.Config;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
 import java.time.Duration;
 
-import static org.entrystore.repository.config.Settings.MESSAGE_RATE_LIMIT_MAX;
-import static org.entrystore.repository.config.Settings.MESSAGE_RATE_LIMIT_WINDOW;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
 class MessageRateLimiterTest {
-
-	@Mock
-	private Config config;
-
-	private MessageRateLimiter rateLimiter;
-
-	@BeforeEach
-	void setUp() {
-		rateLimiter = new MessageRateLimiter(config);
-	}
 
 	@Test
 	void allowsMessagesUnderLimit() {
-		when(config.getInt(MESSAGE_RATE_LIMIT_MAX, 10)).thenReturn(3);
-		when(config.getDuration(MESSAGE_RATE_LIMIT_WINDOW, Duration.ofHours(1))).thenReturn(Duration.ofHours(1));
-		rateLimiter.init();
-
+		var rateLimiter = new MessageRateLimiter(3, Duration.ofHours(1));
 		String user = "http://example.com/user/1";
 
 		rateLimiter.acquirePermit(user);
@@ -63,10 +41,7 @@ class MessageRateLimiterTest {
 
 	@Test
 	void throwsWhenLimitExceeded() {
-		when(config.getInt(MESSAGE_RATE_LIMIT_MAX, 10)).thenReturn(2);
-		when(config.getDuration(MESSAGE_RATE_LIMIT_WINDOW, Duration.ofHours(1))).thenReturn(Duration.ofHours(1));
-		rateLimiter.init();
-
+		var rateLimiter = new MessageRateLimiter(2, Duration.ofHours(1));
 		String user = "http://example.com/user/1";
 
 		rateLimiter.acquirePermit(user);
@@ -79,10 +54,7 @@ class MessageRateLimiterTest {
 
 	@Test
 	void differentUsersHaveSeparateLimits() {
-		when(config.getInt(MESSAGE_RATE_LIMIT_MAX, 10)).thenReturn(1);
-		when(config.getDuration(MESSAGE_RATE_LIMIT_WINDOW, Duration.ofHours(1))).thenReturn(Duration.ofHours(1));
-		rateLimiter.init();
-
+		var rateLimiter = new MessageRateLimiter(1, Duration.ofHours(1));
 		String user1 = "http://example.com/user/1";
 		String user2 = "http://example.com/user/2";
 
@@ -93,23 +65,17 @@ class MessageRateLimiterTest {
 
 	@Test
 	void disabledWhenMaxIsZero() {
-		when(config.getInt(MESSAGE_RATE_LIMIT_MAX, 10)).thenReturn(0);
-		when(config.getDuration(MESSAGE_RATE_LIMIT_WINDOW, Duration.ofHours(1))).thenReturn(Duration.ofHours(1));
-		rateLimiter.init();
-
+		var rateLimiter = new MessageRateLimiter(0, Duration.ofHours(1));
 		String user = "http://example.com/user/1";
 
-		// Should never throw even without recording
 		assertDoesNotThrow(() -> rateLimiter.acquirePermit(user));
 	}
 
 	@Test
 	void resetsCounterAfterWindowExpires() throws InterruptedException {
-		when(config.getInt(MESSAGE_RATE_LIMIT_MAX, 10)).thenReturn(1);
-		when(config.getDuration(MESSAGE_RATE_LIMIT_WINDOW, Duration.ofHours(1))).thenReturn(Duration.ofMillis(50));
-		rateLimiter.init();
-
+		var rateLimiter = new MessageRateLimiter(1, Duration.ofMillis(50));
 		String user = "http://example.com/user/1";
+
 		rateLimiter.acquirePermit(user);
 		Thread.sleep(100);
 		assertDoesNotThrow(() -> rateLimiter.acquirePermit(user));
@@ -117,9 +83,7 @@ class MessageRateLimiterTest {
 
 	@Test
 	void allowsFirstMessageWithoutPriorRecord() {
-		when(config.getInt(MESSAGE_RATE_LIMIT_MAX, 10)).thenReturn(1);
-		when(config.getDuration(MESSAGE_RATE_LIMIT_WINDOW, Duration.ofHours(1))).thenReturn(Duration.ofHours(1));
-		rateLimiter.init();
+		var rateLimiter = new MessageRateLimiter(1, Duration.ofHours(1));
 
 		assertDoesNotThrow(() -> rateLimiter.acquirePermit("http://example.com/user/new"));
 	}
