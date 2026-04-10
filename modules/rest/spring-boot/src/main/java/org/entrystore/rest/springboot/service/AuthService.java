@@ -50,6 +50,7 @@ import org.entrystore.rest.springboot.model.exception.PwResetEntityNotFoundHtmlE
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.entrystore.rest.springboot.service.auth.RecaptchaVerifier;
+import org.entrystore.rest.springboot.service.auth.RedirectUrlValidator;
 import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
 import org.entrystore.rest.springboot.util.Email;
 import org.springframework.security.core.session.SessionInformation;
@@ -61,6 +62,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.SecureRandom;
+import java.util.function.Consumer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -104,6 +106,7 @@ public class AuthService {
 	private final ContextManager contextManager;
 	private final RecaptchaVerifier rcVerifier;
 	private final SignupTokenCache signupTokenCache;
+	private final RedirectUrlValidator redirectUrlValidator;
 	private final Config config;
 	private final SessionRegistry sessionRegistry;
 
@@ -227,7 +230,7 @@ public class AuthService {
 	}
 
 	public String pwReset(HttpServletRequest request, PwResetRequestBody requestBody, String title) {
-		SignupInfo ci = new SignupInfo(repositoryManager);
+		SignupInfo ci = new SignupInfo();
 		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 
 		String rcResponseV2;
@@ -252,12 +255,8 @@ public class AuthService {
 			throw new BadRequestHtmlException(parametersMissingMessage, title);
 		}
 
-		if (StringUtils.isNotEmpty(requestBody.urlFailure())) {
-			ci.setUrlFailure(requestBody.urlFailure());
-		}
-		if (StringUtils.isNotEmpty(requestBody.urlSuccess())) {
-			ci.setUrlSuccess(requestBody.urlSuccess());
-		}
+		setRedirectUrlIfPermitted(requestBody.urlFailure(), ci::setUrlFailure, "failure");
+		setRedirectUrlIfPermitted(requestBody.urlSuccess(), ci::setUrlSuccess, "success");
 
 		log.info("Received password reset request for {}", ci.getEmail());
 
@@ -394,7 +393,7 @@ public class AuthService {
 	}
 
 	public String signup(HttpServletRequest request, SignupRequestBody requestBody, Map<String, String> extraProperties, String title) {
-		SignupInfo ci = new SignupInfo(repositoryManager);
+		SignupInfo ci = new SignupInfo();
 		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 
 		String rcResponseV2;
@@ -430,12 +429,8 @@ public class AuthService {
 			throw new BadRequestHtmlException(invalidNameMessage, title);
 		}
 
-		if (StringUtils.isNotEmpty(requestBody.urlFailure())) {
-			ci.setUrlFailure(requestBody.urlFailure());
-		}
-		if (StringUtils.isNotEmpty(requestBody.urlSuccess())) {
-			ci.setUrlSuccess(requestBody.urlSuccess());
-		}
+		setRedirectUrlIfPermitted(requestBody.urlFailure(), ci::setUrlFailure, "failure");
+		setRedirectUrlIfPermitted(requestBody.urlSuccess(), ci::setUrlSuccess, "success");
 
 		if (!extraProperties.isEmpty()) {
 			ci.setCustomProperties(new HashMap<>());
@@ -489,7 +484,20 @@ public class AuthService {
 		return postSuccessMessage.replace("{}", ci.getEmail());
 	}
 
+	private void setRedirectUrlIfPermitted(String url, Consumer<String> setter, String label) {
+		if (StringUtils.isNotEmpty(url)) {
+			if (redirectUrlValidator.isPermitted(url)) {
+				setter.accept(url);
+			} else {
+				log.warn("Redirect URL ({}) is not permitted and will be ignored: {}", label, url);
+			}
+		}
+	}
+
 	private void handleUrlRedirect(String url) {
+		if (!redirectUrlValidator.isPermitted(url)) {
+			throw new InternalServerErrorException("Redirect to non-permitted URL blocked: " + url);
+		}
 		try {
 			throw new RedirectTemporaryException(new URI(url));
 		} catch (URISyntaxException ex) {
