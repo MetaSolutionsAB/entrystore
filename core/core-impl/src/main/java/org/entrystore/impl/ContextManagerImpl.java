@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -884,7 +884,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		try {
 			entryURI = usplit.getMetaMetadataURI();
 		} catch (IllegalArgumentException e) {
-			log.error("Unable to construct entry URI based on likely incorrect URI [{}], error was: {}", uri, e.getMessage());
+			log.warn("Unable to construct entry URI based on likely incorrect URI [{}], error was: {}", uri, e.getMessage());
 			return null;
 		}
 		if (usplit.getUriType() != URIType.Unknown) {
@@ -895,6 +895,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				}
 				return item;
 			}
+			log.debug("SoftCache miss for entry URI {}, falling back to repository lookup", entryURI);
 			Entry contextEntry = getByEntryURI(usplit.getContextMetaMetadataURI());
 			if (contextEntry != null) {
 				Entry resolved = ((Context) contextEntry.getResource()).getByEntryURI(usplit.getMetaMetadataURI());

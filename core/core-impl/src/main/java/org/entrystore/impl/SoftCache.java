@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,44 +14,48 @@
  * limitations under the License.
  */
 
-
 package org.entrystore.impl;
 
 import lombok.Getter;
-import lombok.Setter;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
 
 import java.lang.ref.Reference;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.SoftReference;
 import java.net.URI;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 
-//TODO prioritize recently used objects so they are not
-// garbage collected first. Simple use is to have hard references
-// to everything used within the last 30 minutes, but that does
-// take into account amount of available memory.
+/**
+ * Soft-reference cache for Entry objects, mapping entry URIs to entries and maintaining a reverse
+ * index from resource/metadata/relation URIs back to entry URIs.
+ *
+ * <p>Concurrency model: each ConcurrentHashMap operation is individually atomic, but compound
+ * operations spanning both maps (cache + uri2entryURIs) are NOT atomic as a group. This is
+ * acceptable because callers handle cache misses gracefully (fall back to repository lookup),
+ * and same-entry put()/remove() never races in practice (they are distinct lifecycle events).
+ *
+ * <p>Copy-on-write in push()/pop(): the merge/computeIfPresent remapping functions create a new
+ * Set rather than mutating the existing one. This is required because (1) the ConcurrentHashMap
+ * contract states remapping functions should be side-effect-free as they may be re-applied under
+ * contention, and (2) getByURI() reads the Set outside any lock — mutating in place could expose
+ * a partially-updated Set to concurrent readers.
+ */
+@Slf4j
 public class SoftCache {
 
-	@Getter
-	private final HashMap<URI, SoftReference<Entry>> cache = new HashMap<>();
+	private final ConcurrentHashMap<URI, SoftReference<Entry>> cache = new ConcurrentHashMap<>();
 
-	HashMap<URI, Object> uri2entryURIs = new HashMap<>();
+	private final ConcurrentHashMap<URI, Object> uri2entryURIs = new ConcurrentHashMap<>();
 
-	Thread remover;
-
-	ReferenceQueue<Entry> clearedRefs;
-
-	Log log = LogFactory.getLog(SoftCache.class);
+	private final Thread remover;
+	private final ReferenceQueue<Entry> clearedRefs;
 
 	@Getter
-	@Setter
-	private boolean shutdown = false;
+	private volatile boolean shutdown = false;
 
 	public SoftCache() {
 		clearedRefs = new ReferenceQueue<>();
@@ -65,93 +69,103 @@ public class SoftCache {
 		Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
 	}
 
+	int cacheSize() {
+		return cache.size();
+	}
+
 	public void clear() {
-		synchronized (cache) {
-			cache.clear();
-			uri2entryURIs.clear();
-		}
+		cache.clear();
+		uri2entryURIs.clear();
 	}
 
 	public void put(Entry entry) {
-		synchronized (cache) {
-			URI entryURI = entry.getEntryURI();
-			cache.put(entryURI, new SoftReference<>(entry, clearedRefs));
-			push(entry.getLocalMetadataURI(), entryURI);
-			push(entry.getExternalMetadataURI(), entryURI);
-			push(entry.getResourceURI(), entryURI);
-			push(entry.getRelationURI(), entryURI);
-		}
+		if (entry == null) return;
+		URI entryURI = entry.getEntryURI();
+		cache.put(entryURI, new EntrySoftReference(entry, clearedRefs));
+		push(entry.getLocalMetadataURI(), entryURI);
+		push(entry.getExternalMetadataURI(), entryURI);
+		push(entry.getResourceURI(), entryURI);
+		push(entry.getRelationURI(), entryURI);
 	}
 
+	@SuppressWarnings("unchecked")
 	private void push(URI from, URI to) {
 		if (from == null || to == null) {
 			return;
 		}
-		Object existingTo = uri2entryURIs.get(from);
-		if (existingTo == null) {
-			uri2entryURIs.put(from, to);
-		} else {
-			if (existingTo instanceof Set) {
-				((Set<URI>) existingTo).add(to);
-			} else {
-				HashSet<URI> set = new HashSet<>();
-				set.add((URI) existingTo);
-				set.add(to);
-				uri2entryURIs.put(from, set);
+		uri2entryURIs.merge(from, to, (existing, newVal) -> {
+			if (existing.equals(newVal)) {
+				return existing;
 			}
-		}
+			Set<URI> set = new HashSet<>();
+			if (existing instanceof Set) {
+				set.addAll((Set<URI>) existing);
+			} else {
+				set.add((URI) existing);
+			}
+			set.add((URI) newVal);
+			return set;
+		});
 	}
 
+	@SuppressWarnings("unchecked")
 	private void pop(URI from, URI to) {
 		if (from == null || to == null) {
 			return;
 		}
-		Object existingTo = uri2entryURIs.get(from);
-		if (existingTo != null) {
-			if (existingTo instanceof Set) {
-				((Set) existingTo).remove(to);
-				if (((Set) existingTo).isEmpty()) {
-					uri2entryURIs.remove(from);
-				}
-			} else if (existingTo.equals(to)){
-				uri2entryURIs.remove(from);
+		uri2entryURIs.computeIfPresent(from, (_, existing) -> {
+			if (existing instanceof Set) {
+				Set<URI> newSet = new HashSet<>((Set<URI>) existing);
+				newSet.remove(to);
+				return newSet.isEmpty() ? null : newSet;
 			}
-		}
+			return existing.equals(to) ? null : existing;
+		});
 	}
 
 	public void remove(Entry entry) {
-		if(entry == null) return;
-		synchronized (cache) {
-			URI entryURI = entry.getEntryURI();
-			cache.remove(entryURI);
-			pop(entry.getLocalMetadataURI(), entryURI);
-			pop(entry.getExternalMetadataURI(), entryURI);
-			pop(entry.getResourceURI(), entryURI);
-			pop(entry.getRelationURI(), entryURI);
-		}
+		if (entry == null) return;
+		URI entryURI = entry.getEntryURI();
+		cache.remove(entryURI);
+		pop(entry.getLocalMetadataURI(), entryURI);
+		pop(entry.getExternalMetadataURI(), entryURI);
+		pop(entry.getResourceURI(), entryURI);
+		pop(entry.getRelationURI(), entryURI);
 	}
 
 	public Entry getByEntryURI(URI uri) {
+		if (uri == null) {
+			return null;
+		}
 		SoftReference<Entry> sr = cache.get(uri);
-
 		if (sr != null) {
 			return sr.get();
 		}
 		return null;
 	}
 
+	@SuppressWarnings("unchecked")
 	public Set<Entry> getByURI(URI uri) {
-		if (uri2entryURIs.containsKey(uri)) {
+		if (uri == null) {
+			return null;
+		}
+		Object entryUris = uri2entryURIs.get(uri);
+		if (entryUris != null) {
 			HashSet<Entry> entries = new HashSet<>();
-			Object entryUris = uri2entryURIs.get(uri);
 			if (entryUris instanceof Set) {
 				for (URI entryURI : ((Set<URI>) entryUris)) {
-					entries.add(getByEntryURI(entryURI));
+					Entry entry = getByEntryURI(entryURI);
+					if (entry != null) {
+						entries.add(entry);
+					}
 				}
 			} else {
-				entries.add(getByEntryURI((URI) entryUris));
+				Entry entry = getByEntryURI((URI) entryUris);
+				if (entry != null) {
+					entries.add(entry);
+				}
 			}
-			return entries;
+			return entries.isEmpty() ? null : entries;
 		}
 		return null;
 	}
@@ -161,28 +175,59 @@ public class SoftCache {
 			return;
 		}
 		log.info("Shutting down SoftCache");
-		setShutdown(true);
+		shutdown = true;
 		remover.interrupt();
+	}
+
+	private static class EntrySoftReference extends SoftReference<Entry> {
+
+		final URI entryURI;
+		final URI localMetadataURI;
+		final URI externalMetadataURI;
+		final URI resourceURI;
+		final URI relationURI;
+
+		EntrySoftReference(Entry entry, ReferenceQueue<Entry> queue) {
+			super(entry, queue);
+			this.entryURI = entry.getEntryURI();
+			this.localMetadataURI = entry.getLocalMetadataURI();
+			this.externalMetadataURI = entry.getExternalMetadataURI();
+			this.resourceURI = entry.getResourceURI();
+			this.relationURI = entry.getRelationURI();
+		}
 	}
 
 	private class Remover extends Thread {
 
-		ReferenceQueue<Entry> refQ;
+		private final ReferenceQueue<Entry> refQ;
+		private final SoftCache softCache;
 
-		SoftCache cache;
-
-		public Remover(ReferenceQueue<Entry> rq, SoftCache cache) {
+		public Remover(ReferenceQueue<Entry> rq, SoftCache softCache) {
 			super();
 			this.refQ = rq;
-			this.cache = cache;
+			this.softCache = softCache;
 			setDaemon(true);
 		}
 
 		public void run() {
 			try {
 				while (!shutdown) {
-					Reference ref = refQ.remove();
-					cache.remove((Entry) ref.get());
+					Reference<? extends Entry> ref = refQ.remove();
+					try {
+						if (ref instanceof EntrySoftReference esr) {
+							if (softCache.cache.remove(esr.entryURI, esr)) {
+								softCache.pop(esr.localMetadataURI, esr.entryURI);
+								softCache.pop(esr.externalMetadataURI, esr.entryURI);
+								softCache.pop(esr.resourceURI, esr.entryURI);
+								softCache.pop(esr.relationURI, esr.entryURI);
+							}
+						} else {
+							log.warn("Unexpected reference type dequeued from SoftCache: {}", ref.getClass().getName());
+						}
+					} catch (RuntimeException e) {
+						URI failedURI = (ref instanceof EntrySoftReference esr2) ? esr2.entryURI : null;
+						log.error("Error cleaning up soft reference for entry [{}], continuing", failedURI, e);
+					}
 				}
 			} catch (InterruptedException e) {
 				log.info("SoftCache remover got interrupted, shutting down");
