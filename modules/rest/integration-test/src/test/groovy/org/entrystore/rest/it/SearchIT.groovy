@@ -34,10 +34,11 @@ class SearchIT extends BaseSpec {
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
-		// create local String entry
+		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
+
+		// Create local String entry used by Solr and SPARQL tests
 		def someText = 'Some text'
 		def params = [id: 'searchEntryId', graphtype: 'string']
-		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
 		def body = [resource: someText,
 					metadata: [(newResourceIri): [
 						(NameSpaceConst.DC_TERM_TITLE)      : [
@@ -76,6 +77,18 @@ class SearchIT extends BaseSpec {
 
 		entryId = getOrCreateEntry(contextId, params, body)
 		assert entryId.length() > 0
+
+		// Create a second entry with dc:title so SPARQL tests (which query across the entire
+		// repository) don't depend on entries created by other IT classes running first.
+		def secondParams = [id: 'searchEntryId2', graphtype: 'string']
+		def secondBody = [resource: 'Second text',
+						  metadata: [(newResourceIri): [
+							  (NameSpaceConst.DC_TERM_TITLE): [
+								  [type: 'literal', value: 'second entry title']
+							  ]
+						  ]]]
+		getOrCreateEntry(contextId, secondParams, secondBody)
+
 		Thread.sleep(100)
 		waitForSolrProcessing()
 		// Solr needs even more time to finish processing
