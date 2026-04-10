@@ -40,7 +40,6 @@ public abstract class AbstractCoreTest {
 		Config config = new PropertiesConfiguration("EntryStore Configuration");
 		config.setProperty(Settings.STORE_TYPE, "memory");
 		config.setProperty(Settings.BASE_URL, "http://localhost:8181/");
-		config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
 		config.setProperty(Settings.SOLR, "off");
 		//config.setProperty(Settings.SOLR_REINDEX_ON_STARTUP, "off");
 		//config.setProperty(Settings.SOLR_URL, "/tmp/entrystore-test-solr/");

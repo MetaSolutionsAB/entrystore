@@ -38,11 +38,15 @@ public class MessageService {
 
 	private final PrincipalManager principalManager;
 	private final RepositoryManagerImpl repositoryManager;
+	private final MessageRateLimiter messageRateLimiter;
 
 	public void sendMessage(SendMessageRequestBody request) {
 		if (principalManager.currentUserIsGuest()) {
 			throw new UnauthorizedException("Not allowed for not-logged in or a guest user to send messages");
 		}
+
+		String userUri = principalManager.getAuthenticatedUserURI().toString();
+		messageRateLimiter.acquirePermit(userUri);
 
 		try {
 			if (principalManager.getPrincipalEntry(request.recipient()) == null) {

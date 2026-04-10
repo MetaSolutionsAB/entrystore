@@ -89,6 +89,9 @@ public interface Settings {
 	String AUTH_TEMP_LOCKOUT_DURATION = "entrystore.auth.temp.lockout.duration";
 	String AUTH_TEMP_LOCKOUT_ADMIN = "entrystore.auth.temp.lockout.admin";
 
+	String MESSAGE_RATE_LIMIT_MAX = "entrystore.message.rate.limit.max";
+	String MESSAGE_RATE_LIMIT_WINDOW = "entrystore.message.rate.limit.window";
+
 	String AUTH_HTTP_BASIC_ENABLED = "entrystore.auth.http-basic.enabled";
 
 	String AUTH_FROM_EMAIL_DEPRECATED = "entrystore.auth.email.from";
@@ -162,8 +165,6 @@ public interface Settings {
 	String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";
 
 	String SYNDICATION_URL_TEMPLATE = "entrystore.syndication.url-template";
-
-	String REPOSITORY_REWRITE_BASEREFERENCE = "entrystore.repository.rewrite-basereference";
 
 	String REPOSITORY_PUBLIC = "entrystore.repository.public";
 	String REPOSITORY_PUBLIC_PATH = "entrystore.repository.public.path";

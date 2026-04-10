@@ -25,7 +25,6 @@ public class Benchmark {
 		}
 
 		config.setProperty(Settings.BASE_URL, BenchmarkCommons.BASE_URL);
-		config.setProperty(Settings.REPOSITORY_REWRITE_BASEREFERENCE, false);
 		config.setProperty(Settings.SOLR, "on");
 		config.setProperty(Settings.SOLR_URL, arguments.getSolrPath());
 

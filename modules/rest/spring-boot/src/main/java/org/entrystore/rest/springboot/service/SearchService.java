@@ -32,10 +32,11 @@ import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
-import org.springframework.web.util.UriComponents;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.regex.Pattern;
 import java.time.Duration;
@@ -306,22 +307,31 @@ public class SearchService {
 	}
 
 	/**
-	 * Builds the request URI and makes sure "/store" path is always present.
+	 * Builds the request URI using the configured base URL from {@code entrystore.baseurl.folder}.
+	 * This ensures the URI always uses the canonical public base URL regardless of how the request
+	 * arrived (e.g., via reverse proxy with or without X-Forwarded-* headers).
 	 *
-	 * @return Original request URI with /store path appended if not present.
+	 * @return Request URI with scheme, host, and port from the configured base URL.
 	 */
-	private static String buildRequestUri() {
-		UriComponents ogRequest = ServletUriComponentsBuilder.fromCurrentRequest().build(true);
-		String ogPath = ogRequest.getPath();
-		String newPath = ogPath;
-		if (ogPath == null) {
-			newPath = "/store";
-		} else if (!ogPath.contains("store")) {
-			newPath = "/store" + ogPath;
+	private String buildRequestUri() {
+		var repositoryURL = repositoryManager.getRepositoryURL();
+		if (repositoryURL == null) {
+			throw new InternalServerErrorException(
+					"Repository base URL is not configured; check 'entrystore.baseurl.folder'");
 		}
-		return ServletUriComponentsBuilder.fromCurrentRequest()
-				.replacePath(newPath)
-				.build(true)
-				.toUriString();
+		String baseUrl = repositoryURL.toExternalForm();
+		if (baseUrl.endsWith("/")) {
+			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+		}
+
+		var attributes = RequestContextHolder.getRequestAttributes();
+		if (!(attributes instanceof ServletRequestAttributes servletAttrs)) {
+			throw new InternalServerErrorException(
+					"Cannot build request URI: no servlet request context available");
+		}
+		HttpServletRequest request = servletAttrs.getRequest();
+		String query = request.getQueryString();
+
+		return baseUrl + request.getServletPath() + (query != null ? "?" + query : "");
 	}
 }

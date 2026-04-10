@@ -11,8 +11,11 @@ import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
+// 429 is not in HttpURLConnection constants
+
 class MessageIT extends BaseSpec {
 
+	static final int HTTP_TOO_MANY_REQUESTS = 429
 	static def newPassword = 'newPass12345'
 	static def greenMail = new GreenMail(SMTP)
 	static def genericCredsClone = [:]
@@ -21,6 +24,7 @@ class MessageIT extends BaseSpec {
 		genericCredsClone = EntryStoreClient.creds.clone()
 		EntryStoreClient.creds.put('sender@test.com', newPassword)
 		EntryStoreClient.creds.put('msgReplyTo@test.com', newPassword)
+		EntryStoreClient.creds.put('rateLimitSender@test.com', newPassword)
 		greenMail.start()
 	}
 
@@ -182,6 +186,43 @@ class MessageIT extends BaseSpec {
 		!content.contains('javascript:')
 		content.contains('href="https://safe.com"')
 		messages[0].getSubject() == 'Test  Subject'
+	}
+
+	def "POST /message should return 429 when rate limit is exceeded"() {
+		given:
+		def senderUsername = 'rateLimitSender@test.com'
+		def sender = UserUtil.createUser(senderUsername)
+		UserUtil.setUserPassword(sender['resourceUri'].toString(), newPassword)
+		def recipientUsername = 'rateLimitRecipient@test.com'
+		UserUtil.createUser(recipientUsername)
+
+		def authConn = EntryStoreClient.postRequest('/auth/cookie',
+			'auth_username=' + senderUsername + '&auth_password=' + newPassword, '', 'application/x-www-form-urlencoded')
+		assert authConn.getResponseCode() == HTTP_OK
+
+		// Send messages up to the configured limit (3 in IT config)
+		for (int i = 0; i < 3; i++) {
+			def body = JsonOutput.toJson([
+				transport: 'email',
+				subject  : "Rate limit test ${i}",
+				to       : recipientUsername,
+				body     : 'test'
+			])
+			def sendConn = EntryStoreClient.postRequest('/message', body, senderUsername)
+			assert sendConn.getResponseCode() == HTTP_OK
+		}
+
+		when:
+		def requestBody = JsonOutput.toJson([
+			transport: 'email',
+			subject  : 'Should be rejected',
+			to       : recipientUsername,
+			body     : 'over limit'
+		])
+		def conn = EntryStoreClient.postRequest('/message', requestBody, senderUsername)
+
+		then:
+		conn.getResponseCode() == HTTP_TOO_MANY_REQUESTS
 	}
 
 	def "POST /message should return 400 for malformed JSON body"() {
