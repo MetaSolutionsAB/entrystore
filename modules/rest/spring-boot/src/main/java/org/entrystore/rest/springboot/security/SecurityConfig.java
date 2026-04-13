@@ -14,6 +14,7 @@ import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.web.server.Cookie;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -104,6 +105,7 @@ public class SecurityConfig {
 										.build()))
 				)
 				.authorizeHttpRequests(auth -> auth
+						.requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole(UserAuthRole.ADMIN.name())
 						.requestMatchers("/management/status/extended").hasRole(UserAuthRole.ADMIN.name())
 						.requestMatchers(HttpMethod.POST, "/*/import").hasRole(UserAuthRole.ADMIN.name())
 						.requestMatchers("/auth/tokens").hasAnyRole(UserAuthRole.USER.name(), UserAuthRole.ADMIN.name())
@@ -121,7 +123,7 @@ public class SecurityConfig {
 				.logout(logout -> logout
 						.logoutUrl("/auth/logout")
 						.deleteCookies("auth_token")
-						.logoutSuccessHandler((request, response, authentication) ->
+						.logoutSuccessHandler((_, response, _) ->
 								response.setStatus(HttpStatus.NO_CONTENT.value())
 						)
 						.permitAll())

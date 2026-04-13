@@ -25,6 +25,19 @@ spring:
     max-request-size: 12MB
 
 
+management:
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include: metrics
+      discovery:
+        enabled: false
+  endpoint:
+    metrics:
+      access: read_only
+
+
 logging:
   level:
     org.entrystore: DEBUG

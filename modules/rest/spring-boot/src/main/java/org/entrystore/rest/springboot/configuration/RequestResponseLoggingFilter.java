@@ -48,13 +48,13 @@ public class RequestResponseLoggingFilter extends OncePerRequestFilter {
 	}
 
 	/**
-	 * Skip logging for /actuator endpoint
+	 * Skip logging for /management/* management endpoints
 	 *
 	 * @param request request
 	 * @return whether request should be logged
 	 */
 	@Override
 	protected boolean shouldNotFilter(HttpServletRequest request) {
-		return request.getRequestURI().startsWith("/actuator");
+		return request.getRequestURI().startsWith("/management");
 	}
 }
