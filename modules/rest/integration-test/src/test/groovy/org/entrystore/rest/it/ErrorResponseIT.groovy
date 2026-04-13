@@ -255,6 +255,20 @@ class ErrorResponseIT extends BaseSpec {
 		resp['path'] != null
 	}
 
+	def "GET on unmatched route should return 404 with JSON error response"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/no/such/route/here')
+
+		then:
+		conn.getResponseCode() == HTTP_NOT_FOUND
+		conn.getContentType().contains('application/json')
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
+		resp['status'] == 404
+		resp['error'] == 'You made a request against the EntryStore REST API. There is no resource at this URI.'
+		resp['timestamp'] != null
+		resp['path'] == '/no/such/route/here'
+	}
+
 	// ========================
 	// 405 Method Not Allowed
 	// ========================
