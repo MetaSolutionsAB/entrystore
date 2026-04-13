@@ -1,6 +1,7 @@
 package org.entrystore.rest.springboot.service;
 
 import com.rometools.rome.feed.synd.SyndFeed;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.solr.client.solrj.SolrQuery;
@@ -32,11 +33,8 @@ import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.regex.Pattern;
 import java.time.Duration;
@@ -162,13 +160,13 @@ public class SearchService {
 
 	}
 
-	public String generateSyndication(List<Entry> entries, String feedType, String language, int limit,
-									  String urlTemplate, String feedTitle) {
+	public String generateSyndication(HttpServletRequest request, List<Entry> entries, String feedType, String language,
+									  int limit, String urlTemplate, String feedTitle) {
 
 		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(), esConfig, entries,
 				language, limit, urlTemplate);
 		feed.setTitle(Syndication.sanitizeFeedTitle(feedTitle));
-		feed.setLink(buildRequestUri());
+		feed.setLink(buildRequestUri(request));
 		feed.setFeedType(feedType);
 
 		try {
@@ -313,7 +311,7 @@ public class SearchService {
 	 *
 	 * @return Request URI with scheme, host, and port from the configured base URL.
 	 */
-	private String buildRequestUri() {
+	private String buildRequestUri(HttpServletRequest request) {
 		var repositoryURL = repositoryManager.getRepositoryURL();
 		if (repositoryURL == null) {
 			throw new InternalServerErrorException(
@@ -324,14 +322,7 @@ public class SearchService {
 			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 		}
 
-		var attributes = RequestContextHolder.getRequestAttributes();
-		if (!(attributes instanceof ServletRequestAttributes servletAttrs)) {
-			throw new InternalServerErrorException(
-					"Cannot build request URI: no servlet request context available");
-		}
-		HttpServletRequest request = servletAttrs.getRequest();
 		String query = request.getQueryString();
-
 		return baseUrl + request.getServletPath() + (query != null ? "?" + query : "");
 	}
 }

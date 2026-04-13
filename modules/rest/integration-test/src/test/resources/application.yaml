@@ -1,6 +1,7 @@
 
 server:
   port: 8181
+  forward-headers-strategy: framework
   servlet:
 #    context-path: /store
     session.cookie:

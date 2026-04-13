@@ -2,6 +2,7 @@ package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +57,7 @@ public class SearchController {
 			params = "type=sparql"
 	)
 	public ResponseEntity<String> findEntriesSparql(
+			HttpServletRequest request,
 			@RequestParam @Size(min = 3, message = "'query' param length must be minimum 3") String query,
 			@RequestParam(required = false) String syndication,    // feed type = rss_* or atom_*
 			@RequestParam(name = "urltemplate", required = false) String urlTemplate,
@@ -77,7 +79,7 @@ public class SearchController {
 		String responseBody;
 		MediaType responseMediaType;
 		if (StringUtils.isNotEmpty(syndication)) {
-			responseBody = searchService.generateSyndication(foundEntries, syndication, lang, limit, urlTemplate, feedTitle);
+			responseBody = searchService.generateSyndication(request, foundEntries, syndication, lang, limit, urlTemplate, feedTitle);
 			responseMediaType = Syndication.convertFeedTypeToMediaType(syndication);
 		} else {
 			// In Restlet's SPARQL search logic, the "offset" param is accepted from the user but not used
@@ -93,6 +95,7 @@ public class SearchController {
 			params = "type=solr"
 	)
 	public ResponseEntity<String> findEntriesSolr(
+			HttpServletRequest request,
 			@RequestParam @Size(min = 3, message = "'query' param length must be minimum 3") String query,
 			@RequestParam(required = false) String syndication,    // feed type = rss_* or atom_*
 			@RequestParam(name = "urltemplate", required = false) String urlTemplate,
@@ -138,7 +141,7 @@ public class SearchController {
 		String responseBody;
 		MediaType responseMediaType;
 		if (StringUtils.isNotEmpty(syndication)) {
-			responseBody = searchService.generateSyndication(queryResults.entries(), syndication, lang, limit, urlTemplate, feedTitle);
+			responseBody = searchService.generateSyndication(request, queryResults.entries(), syndication, lang, limit, urlTemplate, feedTitle);
 			responseMediaType = Syndication.convertFeedTypeToMediaType(syndication);
 		} else {
 			responseBody = searchService.generateJson(offset, limit, queryResults, rdfFormat);
