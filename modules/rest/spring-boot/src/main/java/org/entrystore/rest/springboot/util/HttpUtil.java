@@ -29,6 +29,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
@@ -179,6 +180,23 @@ public class HttpUtil {
 		var writer = response.getWriter();
 		writer.write(OBJECT_MAPPER.writeValueAsString(errorResponse));
 		writer.flush();
+	}
+
+	/**
+	 * Redirects to the given URL if non-null, otherwise writes a 401 JSON error response.
+	 * Safe to call from servlet filter context (no exceptions thrown to the filter chain).
+	 */
+	public static void redirectOrWriteUnauthorized(HttpServletResponse response, String requestUri,
+												   String redirectUrl) throws IOException {
+		if (redirectUrl != null) {
+			response.sendRedirect(redirectUrl);
+		} else {
+			writeErrorResponseAsJson(response, ErrorResponse.builder()
+					.status(HttpStatus.UNAUTHORIZED.value())
+					.path(requestUri)
+					.error("SSO login failed")
+					.build());
+		}
 	}
 
 	public static void checkRequestSize(HttpServletRequest request, int maxRequestSize) {

@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.security;
 
 import lombok.RequiredArgsConstructor;
@@ -82,7 +98,7 @@ public class ESUserDetailsService implements UserDetailsService {
 	 * Loads Entrystore User by username using PrincipalManager
 	 *
 	 * @param username User entity name to be loaded
-	 * @return Entrystore User
+	 * @return Entrystore User or null if not found
 	 */
 	public User loadUser(String username) {
 
@@ -100,6 +116,41 @@ public class ESUserDetailsService implements UserDetailsService {
 		}
 
 		return null;
+	}
+
+	/**
+	 * Creates a new EntryStore User with the given principal name.
+	 * Used by SSO login handlers (CAS, SAML) for auto-provisioning.
+	 *
+	 * @param username principal name for the new user
+	 * @return the created User
+	 * @throws IllegalStateException if the entry cannot be created or the principal name is already in use
+	 */
+	public User createUser(String username) {
+		final URI currentUser = pm.getAuthenticatedUserURI();
+		try {
+			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+
+			Entry entry = pm.createResource(null, GraphType.User, null, null);
+			if (entry == null) {
+				throw new IllegalStateException("createResource returned null when provisioning user '%s'".formatted(username));
+			}
+			boolean nameSet = pm.setPrincipalName(entry.getResourceURI(), username);
+			if (!nameSet) {
+				log.warn("Principal name '{}' already in use — removing orphaned entry to prevent account takeover", username);
+				try {
+					pm.remove(entry.getEntryURI());
+				} catch (Exception cleanup) {
+					log.error("Failed to remove orphaned user entry {} after name collision", entry.getEntryURI(), cleanup);
+				}
+				throw new IllegalStateException("Principal name '%s' already in use".formatted(username));
+			}
+			User u = (User) entry.getResource();
+			log.info("Created user '{}'", u.getURI());
+			return u;
+		} finally {
+			pm.setAuthenticatedUserURI(currentUser);
+		}
 	}
 
 	private UserDetails mapESUserToUserSessionDetails(User user, SessionInfo sessionInfo) {

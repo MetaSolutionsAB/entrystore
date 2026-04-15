@@ -17,12 +17,15 @@
 package org.entrystore.rest.springboot.security;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.CorsConfig;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
@@ -40,6 +43,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.cas.authentication.CasAuthenticationProvider;
+import org.springframework.security.cas.web.CasAuthenticationFilter;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -54,6 +60,7 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
+import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
@@ -80,6 +87,11 @@ public class SecurityConfig {
 	private final SamlLoginSuccessHandler samlLoginSuccessHandler;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlAuthStateCache samlAuthStateCache;
+
+	// CAS-auth related beans (optional — only present when entrystore.auth.cas.enabled=true)
+	private final CasCustomConfiguration casConfiguration;
+	private final Optional<CasAuthenticationProvider> casAuthenticationProvider;
+	private final Optional<CasLoginSuccessHandler> casLoginSuccessHandler;
 
 	private boolean basicAuthEnabled;
 
@@ -176,6 +188,32 @@ public class SecurityConfig {
 					.successHandler(samlLoginSuccessHandler));
 		} else {
 			log.info("SAML Auth Disabled");
+		}
+
+		if (casConfiguration.enabled()) {
+			log.info("CAS Auth Enabled");
+
+			var casFilter = new CasAuthenticationFilter() {
+				@Override
+				protected boolean requiresAuthentication(HttpServletRequest request, HttpServletResponse response) {
+					return super.requiresAuthentication(request, response) && obtainArtifact(request) != null;
+				}
+			};
+			casFilter.setFilterProcessesUrl("/auth/cas");
+			casFilter.setAuthenticationManager(new ProviderManager(
+					casAuthenticationProvider.orElseThrow(() -> new IllegalStateException(
+							"CAS is enabled but CasAuthenticationProvider bean is missing — check CasConfig."))));
+
+			var handler = casLoginSuccessHandler.orElseThrow(() -> new IllegalStateException(
+					"CAS is enabled but CasLoginSuccessHandler bean is missing — check CasConfig."));
+			handler.setDefaultTargetUrl(casConfiguration.redirectSuccess().url());
+			casFilter.setAuthenticationSuccessHandler(handler);
+			casFilter.setAuthenticationFailureHandler(
+					new SimpleUrlAuthenticationFailureHandler(casConfiguration.redirectFailure().url()));
+
+			http.addFilterBefore(casFilter, UsernamePasswordAuthenticationFilter.class);
+		} else {
+			log.info("CAS Auth Disabled");
 		}
 
 		return http.build();

@@ -24,7 +24,7 @@ package org.entrystore.repository.config;
 public interface Settings {
 	String AUTH_ADMIN_SECRET = "entrystore.auth.adminpw";
 
-	String AUTH_CAS = "entrystore.auth.cas";
+	String AUTH_CAS_ENABLED = "entrystore.auth.cas.enabled";
 	String AUTH_CAS_VERSION = "entrystore.auth.cas.version";
 	String AUTH_CAS_SERVER_URL = "entrystore.auth.cas.server.url";
 	String AUTH_CAS_SERVER_LOGIN_URL = "entrystore.auth.cas.server.url.login";

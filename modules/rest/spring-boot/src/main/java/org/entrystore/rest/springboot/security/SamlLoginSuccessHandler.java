@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.security;
 
 import jakarta.servlet.ServletException;
@@ -5,19 +21,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.entrystore.Entry;
-import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.model.auth.SamlIdpInfo;
-import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
-import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
-import org.jetbrains.annotations.NotNull;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
@@ -26,7 +38,6 @@ import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.net.URI;
 
 // TODO make it optional bean - instantiated only when saml is enabled
 @Slf4j
@@ -44,6 +55,20 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 	public void onAuthenticationSuccess(HttpServletRequest request,
 										HttpServletResponse response,
 										Authentication authentication) throws IOException, ServletException {
+		try {
+			handleSamlAuthentication(request, response, authentication);
+		} catch (IOException | ServletException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error("Unexpected error during SAML login for user '{}'", authentication.getName(), e);
+			HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(),
+					samlConfiguration.redirectFailure().url());
+		}
+	}
+
+	private void handleSamlAuthentication(HttpServletRequest request,
+										  HttpServletResponse response,
+										  Authentication authentication) throws IOException, ServletException {
 
 		if (authentication instanceof Saml2Authentication samlToken) {
 			String username = samlToken.getName();
@@ -68,7 +93,7 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 
 			if ("admin".equalsIgnoreCase(username)) {
 				log.warn("Ignoring received username 'admin' from SAML IdP '{}'", idpId);
-				redirectToLoginFailureUrl(response, customRedirectFailureUrl);
+				redirectToLoginFailureUrl(request, response, customRedirectFailureUrl);
 				return;
 			}
 
@@ -79,7 +104,7 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 					log.warn("User '{}' not found in EntryStore. User auto-provisioning is deactivated for IdP '{}'", username, idpId);
 				} else {
 					log.info("User '{}' not found in EntryStore. Creating new user since User auto-provisioning is activated for IdP '{}'", username, idpId);
-					esUser = createEsUser(username);
+					esUser = userService.createUser(username);
 				}
 			} else {
 				log.info("Existing EntryStore user '{}' logged in via SAML", username);
@@ -101,42 +126,15 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 			}
 
 			log.info("Login failed with username '{}' via IdP '{}'", username, idpId);
-			redirectToLoginFailureUrl(response, customRedirectFailureUrl);
+			redirectToLoginFailureUrl(request, response, customRedirectFailureUrl);
 		}
 	}
 
-	private @NotNull User createEsUser(String username) {
-		URI currentUser = principalManager.getAuthenticatedUserURI();
-		try {
-			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
-
-			Entry entry = principalManager.createResource(null, GraphType.User, null, null);
-			if (entry != null) {
-				User u = (User) entry.getResource();
-				log.info("Created user '{}'", u.getURI());
-				principalManager.setPrincipalName(entry.getResourceURI(), username);
-				// TODO set some basic metadata, if we can get it from the SAML server
-				// Signup.setFoafMetadata(entry, new org.restlet.security.User(...));
-				return u;
-			} else {
-				throw new InternalServerErrorException("An error occurred when creating the new user");
-			}
-
-		} finally {
-			principalManager.setAuthenticatedUserURI(currentUser);
-		}
-	}
-
-	private void redirectToLoginFailureUrl(HttpServletResponse response,
+	private void redirectToLoginFailureUrl(HttpServletRequest request, HttpServletResponse response,
 										   String customRedirectFailureUrl) throws IOException {
-		if (customRedirectFailureUrl != null) {
-			log.debug("Redirecting to custom failure URL: {}", customRedirectFailureUrl);
-			response.sendRedirect(customRedirectFailureUrl);
-		} else if (samlConfiguration.redirectFailure().url() != null) {
-			log.debug("Redirecting to default failure URL: {}", samlConfiguration.redirectFailure().url());
-			response.sendRedirect(samlConfiguration.redirectFailure().url());
-		} else {
-			throw new UnauthorizedException("Login with SAML failed.");
-		}
+		String redirectUrl = customRedirectFailureUrl != null
+				? customRedirectFailureUrl
+				: samlConfiguration.redirectFailure().url();
+		HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(), redirectUrl);
 	}
 }

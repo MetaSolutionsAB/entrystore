@@ -26,6 +26,14 @@
 				</includes>
 				<filtering>true</filtering>
 			</testResource>
+			<!-- Binary files (e.g. JARs) must be copied without filtering to avoid corruption -->
+			<testResource>
+				<directory>src/test/resources</directory>
+				<includes>
+					<include>**/*.jar</include>
+				</includes>
+				<filtering>false</filtering>
+			</testResource>
 		</testResources>
 
 		<plugins>
