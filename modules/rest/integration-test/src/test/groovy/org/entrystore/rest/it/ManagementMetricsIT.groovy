@@ -18,6 +18,7 @@ package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
 
+import static java.net.HttpURLConnection.HTTP_BAD_METHOD
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
@@ -79,6 +80,7 @@ class ManagementMetricsIT extends BaseSpec {
 		responseJson['measurements'] != null
 		(responseJson['measurements'] as List).size() > 0
 		responseJson['measurements'].any { it['statistic'] == 'COUNT' }
+		responseJson['availableTags'] != null
 	}
 
 	def "GET /management/metrics/http.server.requests as guest should reply with Unauthorized 401"() {
@@ -99,6 +101,26 @@ class ManagementMetricsIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_FORBIDDEN
 		connection.getContentType().contains('application/json')
 		connection.errorStream.text.contains('"error":"Forbidden"')
+	}
+
+	def "GET /management/metrics as userInAdminGroup should reply with list of meter names"() {
+		when:
+		def connection = EntryStoreClient.getRequest('/management/metrics', 'userInAdminGroup')
+
+		then:
+		connection.getResponseCode() == HTTP_OK
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
+		responseJson['names'] != null
+		(responseJson['names'] as List).size() > 0
+	}
+
+	def "POST /management/metrics as admin should reply with 405 Method Not Allowed"() {
+		when:
+		def connection = EntryStoreClient.postRequest('/management/metrics', null)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_METHOD
 	}
 
 	def "GET /management/metrics/nonexistent.metric as admin should reply with 404"() {
