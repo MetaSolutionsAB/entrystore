@@ -46,6 +46,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.ui.Model;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -97,8 +98,8 @@ public class AppExceptionHandler {
 
 	// Separate BadRequest handler for HttpMessageNotReadableException and MethodArgumentTypeMismatchException since those leak Spring/Jackson internals
 	// Those now respond with a generic "Bad Request" error
-	@ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class})
-	public ResponseEntity<ErrorResponse> handleSpringBadRequestException(RuntimeException ex,
+	@ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class, MissingServletRequestParameterException.class})
+	public ResponseEntity<ErrorResponse> handleSpringBadRequestException(Exception ex,
 																		 HttpServletRequest request) {
 		log.debug("BadRequestException of type '{}': {}", ex.getClass().getName(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()

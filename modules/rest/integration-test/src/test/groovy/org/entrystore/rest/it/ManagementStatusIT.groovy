@@ -62,7 +62,7 @@ class ManagementStatusIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
 		connection.getContentType().contains('application/json')
-		connection.errorStream.text.contains('"error":"Forbidden"')
+		connection.errorStream.text.contains('"message":"Forbidden"')
 	}
 
 	def "GET /management/status/extended as admin should reply with detailed status"() {

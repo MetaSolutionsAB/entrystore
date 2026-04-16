@@ -27,7 +27,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class EntryStoreApplicationSpringBoot {
 
-	public static void main(String[] args) {
+	static void main(String[] args) {
 		SpringApplication.run(EntryStoreApplicationSpringBoot.class, args);
 	}
 }
