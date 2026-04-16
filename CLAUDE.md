@@ -112,7 +112,7 @@ springboot/
 
 ## Code Style
 
-**Use Java 25 features** when writing new code or refactoring: records, sealed classes, pattern matching (`instanceof`, `switch`), text blocks, enhanced `switch` expressions, etc. Prefer modern idioms over legacy patterns.
+**Use Java 25 features** when writing new code or refactoring. Prefer modern idioms (records, sealed classes, pattern matching for `instanceof` and `switch`, text blocks, enhanced `switch` expressions, virtual threads, sequenced collections, scoped values) over legacy patterns equivalent to them.
 
 Formatting is IntelliJ-based, defined in `.editorconfig` (with `ij_*` properties) and `.idea/codeStyles/`. No Eclipse formatter is used.
 
@@ -130,7 +130,7 @@ From `.editorconfig`:
  * Copyright (c) 2007-YYYY MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
- * ...
+ * [include the standard Apache 2.0 boilerplate text — copy verbatim from any existing source file in this repo for the canonical wording]
  */
 ```
 
@@ -148,7 +148,7 @@ From `.editorconfig`:
   - `CustomResponseException` — for any other HTTP status (e.g., 504 Gateway Timeout)
 - `AuthorizationException` thrown by core code (e.g., from `PrincipalManager`) is handled by `AppExceptionHandler` and does not need to be caught/re-thrown in the REST layer.
 - **Never throw application exceptions from servlet filters.** `AppExceptionHandler` (`@ControllerAdvice`) only catches exceptions from controllers — filters run before the DispatcherServlet. Instead, write the error response directly: `response.setStatus(...)`, `response.setContentType(...)`, `response.getWriter().write(...)`, then `return` (do not call `filterChain.doFilter`).
-- **Don't leak internal details in exception messages.** `AppExceptionHandler` returns `ex.getMessage()` to the client for custom exceptions (`BadRequestException`, `EntityNotFoundException`, etc.). Keep these messages user-facing. Never include `e.getMessage()` from third-party libraries (RDF4J, Jackson, Spring internals) in exceptions thrown to the client — use a generic message and preserve the original cause via the `(String, Throwable)` constructor for server-side debugging.
+- **Don't leak internal details in exception messages.** `AppExceptionHandler` returns `ex.getMessage()` to the client for custom exceptions in `org.entrystore.rest.springboot.model.exception.*` (e.g. `BadRequestException`, `EntityNotFoundException`, `ForbiddenException`, `CustomResponseException`). Keep these messages user-facing. Never include `e.getMessage()` from third-party libraries (RDF4J, Jackson, Spring internals) in exceptions thrown to the client — use a generic message and preserve the original cause via the `(String, Throwable)` constructor for server-side debugging.
 - **Don't log before throwing exceptions handled by `AppExceptionHandler`.** `AppExceptionHandler` already logs all exceptions it handles. Adding `log.error()` / `log.warn()` in a catch block before re-throwing as an application exception creates duplicate log entries. Instead, include relevant context in the exception message itself and let `AppExceptionHandler` handle logging.
 - **Use `HttpUtil.setLastModifiedAndETag(HttpHeaders, Date)`** to set Last-Modified and ETag response headers. For `ResponseEntity.HeadersBuilder` contexts (e.g., 204 No Content), use `HttpUtil.updateResponseWithModificationDateAndETag()` which delegates to the same logic. Do not set these headers manually.
 
@@ -205,3 +205,13 @@ Example config: `modules/rest/spring-boot/src/main/resources/entrystore.properti
 - Issue tracker: https://metasolutions.atlassian.net/browse/ENTRYSTORE-*
 - **JIRA priorities:** Blocker, Critical, Major, Minor, Trivial
 - **Spring Boot migration epic:** ENTRYSTORE-857 — create JIRA issues related to the Spring Boot REST layer (`modules/rest/spring-boot/`) under this epic
+
+## Model Compatibility
+
+This project targets Claude Opus 4.7 as the primary model. Prompts must be safe under 4.7's literal instruction interpretation:
+
+- Use inspectable predicates (file-pattern matches, regex, explicit enum lists) instead of vague adjectives like "relevant" or "appropriate"
+- State subagent-launch rules explicitly (which agents, one Task call each, same assistant message)
+- Avoid `etc.`, open-ended `...`, and trailing ellipses in instruction text
+- Replace `...` in output templates with `[repeat per X]` directives
+- When stating an absolute rule (`always`, `never`), co-locate the concrete exception if one exists, rather than contradicting it in a later paragraph
