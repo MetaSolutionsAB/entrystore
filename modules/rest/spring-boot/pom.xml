@@ -118,6 +118,14 @@
 				</includes>
 				<filtering>true</filtering>
 			</resource>
+			<!-- Binary static assets must not be filtered (filtering corrupts non-text files). -->
+			<resource>
+				<directory>src/main/resources</directory>
+				<includes>
+					<include>static/**</include>
+				</includes>
+				<filtering>false</filtering>
+			</resource>
 		</resources>
 
 		<testResources>

@@ -185,11 +185,16 @@ abstract class BaseSpec extends Specification {
 		return responseJson['entryId'].toString()
 	}
 
-	Integer getSolrQueueSize() {
+	Map getSolrStatus() {
 		def connection = EntryStoreClient.getRequest('/management/status/extended')
 		assert connection.getResponseCode() == HTTP_OK
 		def responseJson = JSON_PARSER.parseText(connection.getInputStream().text)
-		return responseJson?.solr?.postQueueSize as Integer
+		assert responseJson?.solr != null : "Missing 'solr' field in /management/status/extended response"
+		return responseJson.solr as Map
+	}
+
+	private static final Closure<Boolean> SOLR_IDLE = { Map status ->
+		status.postQueueSize == 0 && (status.indexingContexts as Collection)?.isEmpty()
 	}
 
 	def waitForSolrProcessing() {
@@ -198,6 +203,6 @@ abstract class BaseSpec extends Specification {
 			.pollInterval(50, TimeUnit.MILLISECONDS)
 			.atMost(30, TimeUnit.SECONDS)
 			// separate supplier and predicate for better await logging
-			.until({ getSolrQueueSize() }, { it == 0 })
+			.until({ getSolrStatus() }, SOLR_IDLE)
 	}
 }
