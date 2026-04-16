@@ -49,6 +49,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Generic Exception handler to handle application specific exceptions.
@@ -120,6 +121,18 @@ public class AppExceptionHandler {
 				.status(HttpStatus.NOT_FOUND.value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
+				.build();
+		return jsonResponse(responseBody);
+	}
+
+	@ExceptionHandler(NoResourceFoundException.class)
+	public ResponseEntity<ErrorResponse> handleNoResourceFoundException(NoResourceFoundException ex,
+																		HttpServletRequest request) {
+		log.debug("NoResourceFoundException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(HttpStatus.NOT_FOUND.value())
+				.path(request.getRequestURI())
+				.error("You made a request against the EntryStore REST API. There is no resource at this URI.")
 				.build();
 		return jsonResponse(responseBody);
 	}
