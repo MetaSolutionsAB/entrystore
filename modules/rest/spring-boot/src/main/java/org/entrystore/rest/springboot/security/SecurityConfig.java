@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.security;
 
 import jakarta.annotation.PostConstruct;
@@ -14,6 +30,7 @@ import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.web.server.Cookie;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -104,6 +121,7 @@ public class SecurityConfig {
 										.build()))
 				)
 				.authorizeHttpRequests(auth -> auth
+						.requestMatchers(EndpointRequest.toAnyEndpoint()).hasRole(UserAuthRole.ADMIN.name())
 						.requestMatchers("/management/status/extended").hasRole(UserAuthRole.ADMIN.name())
 						.requestMatchers(HttpMethod.POST, "/*/import").hasRole(UserAuthRole.ADMIN.name())
 						.requestMatchers("/auth/tokens").hasAnyRole(UserAuthRole.USER.name(), UserAuthRole.ADMIN.name())
@@ -121,7 +139,7 @@ public class SecurityConfig {
 				.logout(logout -> logout
 						.logoutUrl("/auth/logout")
 						.deleteCookies("auth_token")
-						.logoutSuccessHandler((request, response, authentication) ->
+						.logoutSuccessHandler((_, response, _) ->
 								response.setStatus(HttpStatus.NO_CONTENT.value())
 						)
 						.permitAll())

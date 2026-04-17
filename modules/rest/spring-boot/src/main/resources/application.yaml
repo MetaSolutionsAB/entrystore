@@ -31,6 +31,19 @@ springdoc:
     enabled: true
 
 
+management:
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include: metrics
+      discovery:
+        enabled: false
+  endpoint:
+    metrics:
+      access: read_only
+
+
 logging:
   http:
     enabled: true   # Enabled is the default (i.e. when this property is not set), set it to "false" to disable request/response logging
