@@ -21,6 +21,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
+import org.entrystore.rest.springboot.configuration.CasVersion;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,7 +68,7 @@ class CasLoginSuccessHandlerTest {
 	@BeforeEach
 	void setUp() {
 		var server = new CasCustomConfiguration.Server("https://cas.example.org/cas", null);
-		var casConfiguration = new CasCustomConfiguration(true, "cas2", server, true,
+		var casConfiguration = new CasCustomConfiguration(true, CasVersion.CAS2, server, true,
 				new CasCustomConfiguration.RedirectSuccess(SUCCESS_URL),
 				new CasCustomConfiguration.RedirectFailure(FAILURE_URL));
 		handler = new CasLoginSuccessHandler(userService, principalManager, casConfiguration);
@@ -106,7 +107,7 @@ class CasLoginSuccessHandlerTest {
 	@Test
 	void userNotFoundAndAutoProvisioningDisabledRedirectsToFailure() throws Exception {
 		var configNoProvisioning = new CasCustomConfiguration(
-				true, "cas2",
+				true, CasVersion.CAS2,
 				new CasCustomConfiguration.Server("https://cas.example.org/cas", null),
 				false, // auto-provisioning disabled
 				new CasCustomConfiguration.RedirectSuccess(SUCCESS_URL),
@@ -176,7 +177,7 @@ class CasLoginSuccessHandlerTest {
 	@Test
 	void failureWithNullRedirectUrlWritesJsonError() throws Exception {
 		var configNoRedirect = new CasCustomConfiguration(
-				true, "cas2",
+				true, CasVersion.CAS2,
 				new CasCustomConfiguration.Server("https://cas.example.org/cas", null),
 				true,
 				new CasCustomConfiguration.RedirectSuccess(SUCCESS_URL),

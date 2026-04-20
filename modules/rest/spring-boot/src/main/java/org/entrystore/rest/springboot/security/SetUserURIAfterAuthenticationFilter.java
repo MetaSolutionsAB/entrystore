@@ -20,6 +20,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
@@ -66,6 +67,13 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 					pm.setAuthenticatedUserURI(user.getURI());
 				} else {
 					log.warn("Authenticated {} user '{}' not found in EntryStore, denying access", authType, username);
+					// Invalidate the session so the client re-authenticates instead of
+					// hitting this branch on every subsequent request.
+					SecurityContextHolder.clearContext();
+					HttpSession session = request.getSession(false);
+					if (session != null) {
+						session.invalidate();
+					}
 					setForbiddenResponse(request, response, "Authenticated " + authType + " user not found in EntryStore");
 					return;
 				}

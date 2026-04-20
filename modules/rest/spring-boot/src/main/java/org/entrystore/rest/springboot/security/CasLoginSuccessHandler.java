@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.security;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
@@ -27,6 +28,7 @@ import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 
@@ -49,7 +51,9 @@ public class CasLoginSuccessHandler extends SavedRequestAwareAuthenticationSucce
 		} catch (IOException | ServletException e) {
 			throw e;
 		} catch (Exception e) {
-			log.error("Unexpected error during CAS login for user '{}'", authentication.getName(), e);
+			String user = authentication != null ? authentication.getName() : "<unknown>";
+			log.error("Unexpected {} during CAS login for user '{}': {}",
+					e.getClass().getSimpleName(), user, e.getMessage(), e);
 			redirectToLoginFailureUrl(request, response);
 		}
 	}
@@ -91,7 +95,15 @@ public class CasLoginSuccessHandler extends SavedRequestAwareAuthenticationSucce
 	}
 
 	private void redirectToLoginFailureUrl(HttpServletRequest request, HttpServletResponse response) throws IOException {
+		// Clear the authenticated SecurityContext and invalidate the session before redirecting —
+		// CasAuthenticationFilter already persisted the token, so without this the rejected user
+		// would remain authenticated on subsequent requests.
+		SecurityContextHolder.clearContext();
+		HttpSession session = request.getSession(false);
+		if (session != null) {
+			session.invalidate();
+		}
 		HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(),
-				casConfiguration.redirectFailure().url());
+				casConfiguration.redirectFailure().url(), "CAS login failed");
 	}
 }

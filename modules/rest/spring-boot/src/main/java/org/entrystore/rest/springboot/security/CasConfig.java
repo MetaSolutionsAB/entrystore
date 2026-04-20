@@ -27,6 +27,7 @@ import org.apereo.cas.client.validation.TicketValidator;
 import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,6 +35,12 @@ import org.springframework.security.cas.ServiceProperties;
 import org.springframework.security.cas.authentication.CasAuthenticationProvider;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.UUID;
 
@@ -53,6 +60,9 @@ public class CasConfig {
 	private final PrincipalManager principalManager;
 	private final RepositoryManagerImpl repositoryManager;
 
+	@Value("${entrystore.https.disable-verification:false}")
+	private boolean disableSslVerification;
+
 	@Bean
 	public ServiceProperties casServiceProperties() {
 		ServiceProperties sp = new ServiceProperties();
@@ -68,29 +78,49 @@ public class CasConfig {
 	@Bean
 	public TicketValidator casTicketValidator() {
 		String casServerUrl = casConfiguration.server().url();
-		AbstractUrlBasedTicketValidator validator = switch (casConfiguration.version().toLowerCase()) {
-			case "cas1" -> new Cas10TicketValidator(casServerUrl);
-			case "cas2" -> new Cas20ServiceTicketValidator(casServerUrl);
-			case "cas3" -> new Cas30ServiceTicketValidator(casServerUrl);
-			default -> throw new IllegalStateException(
-					"Unsupported CAS version '" + casConfiguration.version() +
-							"'. Supported values: cas1, cas2, cas3.");
+		AbstractUrlBasedTicketValidator validator = switch (casConfiguration.version()) {
+			case CAS1 -> new Cas10TicketValidator(casServerUrl);
+			case CAS2 -> new Cas20ServiceTicketValidator(casServerUrl);
+			case CAS3 -> new Cas30ServiceTicketValidator(casServerUrl);
 		};
+		if (disableSslVerification) {
+			log.warn("SSL verification is DISABLED for CAS backchannel validation (entrystore.https.disable-verification=true). " +
+					"This is insecure and should only be used in development environments with self-signed certificates.");
+		}
 		var defaultFactory = new HttpsURLConnectionFactory();
 		validator.setURLConnectionFactory(urlConnection -> {
 			var conn = defaultFactory.buildHttpURLConnection(urlConnection);
 			conn.setConnectTimeout(CAS_CONNECT_TIMEOUT_MS);
 			conn.setReadTimeout(CAS_READ_TIMEOUT_MS);
+			if (disableSslVerification && conn instanceof HttpsURLConnection httpsConn) {
+				httpsConn.setSSLSocketFactory(trustAllSslContext().getSocketFactory());
+				httpsConn.setHostnameVerifier((hostname, session) -> true);
+			}
 			return conn;
 		});
 		return validator;
 	}
 
+	private static SSLContext trustAllSslContext() {
+		try {
+			SSLContext ctx = SSLContext.getInstance("TLS");
+			ctx.init(null, new TrustManager[]{new X509TrustManager() {
+				@Override public void checkClientTrusted(X509Certificate[] chain, String authType) { }
+				@Override public void checkServerTrusted(X509Certificate[] chain, String authType) { }
+				@Override public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+			}}, new java.security.SecureRandom());
+			return ctx;
+		} catch (NoSuchAlgorithmException | java.security.KeyManagementException e) {
+			throw new IllegalStateException("Failed to create trust-all SSLContext for CAS backchannel", e);
+		}
+	}
+
 	@Bean
-	public CasAuthenticationProvider casAuthenticationProvider() {
+	public CasAuthenticationProvider casAuthenticationProvider(ServiceProperties serviceProperties,
+															   TicketValidator ticketValidator) {
 		CasAuthenticationProvider provider = new CasAuthenticationProvider();
-		provider.setServiceProperties(casServiceProperties());
-		provider.setTicketValidator(casTicketValidator());
+		provider.setServiceProperties(serviceProperties);
+		provider.setTicketValidator(ticketValidator);
 		provider.setAuthenticationUserDetailsService(token ->
 				new org.springframework.security.core.userdetails.User(
 						token.getName(),

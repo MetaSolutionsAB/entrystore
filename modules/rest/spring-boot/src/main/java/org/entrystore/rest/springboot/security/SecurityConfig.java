@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.security;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +51,7 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
@@ -62,8 +64,12 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.AndRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
+import java.io.IOException;
 import java.util.Optional;
 
 @Slf4j
@@ -193,13 +199,12 @@ public class SecurityConfig {
 		if (casConfiguration.enabled()) {
 			log.info("CAS Auth Enabled");
 
-			var casFilter = new CasAuthenticationFilter() {
-				@Override
-				protected boolean requiresAuthentication(HttpServletRequest request, HttpServletResponse response) {
-					return super.requiresAuthentication(request, response) && obtainArtifact(request) != null;
-				}
-			};
-			casFilter.setFilterProcessesUrl("/auth/cas");
+			var casFilter = new CasAuthenticationFilter();
+			// Only process requests that carry a ticket. Initial redirects (no ticket)
+			// pass through to AuthController.startCasLogin.
+			RequestMatcher ticketRequired = request -> request.getParameter("ticket") != null;
+			casFilter.setRequiresAuthenticationRequestMatcher(
+					new AndRequestMatcher(PathPatternRequestMatcher.withDefaults().matcher("/auth/cas"), ticketRequired));
 			casFilter.setAuthenticationManager(new ProviderManager(
 					casAuthenticationProvider.orElseThrow(() -> new IllegalStateException(
 							"CAS is enabled but CasAuthenticationProvider bean is missing — check CasConfig."))));
@@ -208,8 +213,20 @@ public class SecurityConfig {
 					"CAS is enabled but CasLoginSuccessHandler bean is missing — check CasConfig."));
 			handler.setDefaultTargetUrl(casConfiguration.redirectSuccess().url());
 			casFilter.setAuthenticationSuccessHandler(handler);
-			casFilter.setAuthenticationFailureHandler(
-					new SimpleUrlAuthenticationFailureHandler(casConfiguration.redirectFailure().url()));
+			// Surface ticket-validation failures at WARN with the full stack trace.
+			// SimpleUrlAuthenticationFailureHandler's default logging is at DEBUG level, which
+			// makes bad-ticket, CAS-server-down, SSL, and clock-skew errors invisible in production.
+			casFilter.setAuthenticationFailureHandler(new SimpleUrlAuthenticationFailureHandler(
+					casConfiguration.redirectFailure().url()) {
+				@Override
+				public void onAuthenticationFailure(HttpServletRequest request,
+													HttpServletResponse response,
+													AuthenticationException exception) throws IOException, ServletException {
+					log.warn("CAS authentication failed at '{}': {}",
+							request.getRequestURI(), exception.getMessage(), exception);
+					super.onAuthenticationFailure(request, response, exception);
+				}
+			});
 
 			http.addFilterBefore(casFilter, UsernamePasswordAuthenticationFilter.class);
 		} else {

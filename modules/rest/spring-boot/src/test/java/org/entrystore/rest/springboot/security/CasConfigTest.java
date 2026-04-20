@@ -23,14 +23,14 @@ import org.apereo.cas.client.validation.TicketValidator;
 import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
+import org.entrystore.rest.springboot.configuration.CasVersion;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(MockitoExtension.class)
 class CasConfigTest {
@@ -44,48 +44,30 @@ class CasConfigTest {
 	@Mock
 	private RepositoryManagerImpl repositoryManager;
 
-	private CasConfig configWithVersion(String version) {
+	private CasConfig configWithVersion(CasVersion version) {
 		var server = new CasCustomConfiguration.Server("https://cas.example.org/cas", null);
 		var casConfig = new CasCustomConfiguration(true, version, server, false, null, null);
-		return new CasConfig(casConfig, userDetailsService, principalManager, repositoryManager);
+		CasConfig config = new CasConfig(casConfig, userDetailsService, principalManager, repositoryManager);
+		// @Value-injected field — set via reflection since we're not using Spring context in this unit test.
+		ReflectionTestUtils.setField(config, "disableSslVerification", false);
+		return config;
 	}
 
 	@Test
 	void cas1VersionCreatesCas10TicketValidator() {
-		TicketValidator validator = configWithVersion("cas1").casTicketValidator();
+		TicketValidator validator = configWithVersion(CasVersion.CAS1).casTicketValidator();
 		assertInstanceOf(Cas10TicketValidator.class, validator);
 	}
 
 	@Test
 	void cas2VersionCreatesCas20TicketValidator() {
-		TicketValidator validator = configWithVersion("cas2").casTicketValidator();
+		TicketValidator validator = configWithVersion(CasVersion.CAS2).casTicketValidator();
 		assertInstanceOf(Cas20ServiceTicketValidator.class, validator);
 	}
 
 	@Test
 	void cas3VersionCreatesCas30TicketValidator() {
-		TicketValidator validator = configWithVersion("cas3").casTicketValidator();
+		TicketValidator validator = configWithVersion(CasVersion.CAS3).casTicketValidator();
 		assertInstanceOf(Cas30ServiceTicketValidator.class, validator);
-	}
-
-	@Test
-	void versionIsCaseInsensitive() {
-		assertInstanceOf(Cas20ServiceTicketValidator.class,
-				configWithVersion("CAS2").casTicketValidator());
-		assertInstanceOf(Cas30ServiceTicketValidator.class,
-				configWithVersion("Cas3").casTicketValidator());
-	}
-
-	@Test
-	void unrecognizedVersionThrows() {
-		var ex = assertThrows(IllegalStateException.class,
-				() -> configWithVersion("saml11").casTicketValidator());
-		assertTrue(ex.getMessage().contains("saml11"));
-	}
-
-	@Test
-	void typoInVersionThrows() {
-		assertThrows(IllegalStateException.class,
-				() -> configWithVersion("cas20").casTicketValidator());
 	}
 }

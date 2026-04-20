@@ -28,7 +28,7 @@ class CasCustomConfigurationTest {
 
 	@Test
 	void disabledConfigurationAllowsMissingServerUrl() {
-		var config = new CasCustomConfiguration(false, "cas2", null, false, null, null);
+		var config = new CasCustomConfiguration(false, CasVersion.CAS2, null, false, null, null);
 		assertNotNull(config.server());
 		assertNull(config.server().url());
 	}
@@ -36,7 +36,7 @@ class CasCustomConfigurationTest {
 	@Test
 	void enabledWithMissingServerUrlFailsFast() {
 		var ex = assertThrows(IllegalArgumentException.class,
-				() -> new CasCustomConfiguration(true, "cas2", null, false, null, null));
+				() -> new CasCustomConfiguration(true, CasVersion.CAS2, null, false, null, null));
 		assertTrue(ex.getMessage().contains("entrystore.auth.cas.server.url"));
 	}
 
@@ -44,20 +44,20 @@ class CasCustomConfigurationTest {
 	void enabledWithBlankServerUrlFailsFast() {
 		var server = new CasCustomConfiguration.Server("  ", null);
 		assertThrows(IllegalArgumentException.class,
-				() -> new CasCustomConfiguration(true, "cas2", server, false, null, null));
+				() -> new CasCustomConfiguration(true, CasVersion.CAS2, server, false, null, null));
 	}
 
 	@Test
 	void enabledWithValidServerUrlSucceeds() {
 		var server = new CasCustomConfiguration.Server("https://cas.example.org/cas", null);
-		var config = new CasCustomConfiguration(true, "cas2", server, false, null, null);
+		var config = new CasCustomConfiguration(true, CasVersion.CAS2, server, false, null, null);
 		assertEquals("https://cas.example.org/cas", config.server().url());
 	}
 
 	@Test
 	void redirectDefaultsAreApplied() {
 		var server = new CasCustomConfiguration.Server("https://cas.example.org/cas", null);
-		var config = new CasCustomConfiguration(true, "cas2", server, false, null, null);
+		var config = new CasCustomConfiguration(true, CasVersion.CAS2, server, false, null, null);
 		assertEquals("/auth/user", config.redirectSuccess().url());
 		assertEquals("/auth/user", config.redirectFailure().url());
 	}

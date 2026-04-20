@@ -21,6 +21,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apereo.cas.client.util.CommonUtils;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
@@ -42,8 +43,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.io.IOException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -75,8 +74,9 @@ public class AuthController {
 				"CAS is enabled but ServiceProperties bean is missing — check CasConfig.")).getService();
 		String loginUrl = casConfiguration.server().resolvedLoginUrl();
 
-		response.sendRedirect(loginUrl + "?service=" +
-				URLEncoder.encode(serviceUrl, StandardCharsets.UTF_8));
+		// CommonUtils.constructRedirectUrl handles query-string parsing and URL encoding,
+		// so it works correctly even when loginUrl already contains a query string.
+		response.sendRedirect(CommonUtils.constructRedirectUrl(loginUrl, "service", serviceUrl, false, false));
 	}
 
 	// Endpoint initiates SAML authentication by redirecting to the IdP for authentication

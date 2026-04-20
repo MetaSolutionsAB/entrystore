@@ -83,7 +83,10 @@ class CasLoginIT extends BaseSpec {
 			'--entrystore.auth.cas.server.url=' + keycloakCasUrl,
 			'--entrystore.auth.cas.user-auto-provisioning=true',
 			'--entrystore.auth.cas.redirect-success.url=' + successLoginUrl,
-			'--entrystore.auth.cas.redirect-failure.url=http://localhost:8181/auth/login'
+			'--entrystore.auth.cas.redirect-failure.url=http://localhost:8181/auth/login',
+			// Override the IT default (httponly=off) so the auth_token HttpOnly assertion is meaningful
+			// for CAS sessions. Production default is HttpOnly=on.
+			'--entrystore.auth.cookie.httponly=on'
 		] as String[]
 		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 		appStarted = true
@@ -170,11 +173,11 @@ class CasLoginIT extends BaseSpec {
 		successRedirectUrl == successLoginUrl
 		def spCookies = casCallbackConn.getHeaderFields()['Set-Cookie']
 		spCookies != null
-		spCookies.any { it.contains('auth_token=') }
+		spCookies.any { it.contains('auth_token=') && it.contains('HttpOnly') }
 
 		when: 'Query EntryStore using the new cookie'
 		def currentlyLoggedInUserConn = EntryStoreClient.getRequest('/auth/user',
-			'', null, [Cookie: spCookies.join('; ')])
+			'', null, [Cookie: spCookies.collect { it.split(';')[0] }.join('; ')])
 
 		then: 'Should return info about the CAS-authenticated user'
 		currentlyLoggedInUserConn.getResponseCode() == HTTP_OK
@@ -183,5 +186,51 @@ class CasLoginIT extends BaseSpec {
 		userJson['id'] != null
 		userJson['user'] == testUsername
 		(userJson['uri'] as String).startsWith(EntryStoreClient.baseUrl + '/_principals/entry/')
+	}
+
+	def '4. Reserved admin username is blocked and does not leak authenticated session'() {
+		// Regression test for the auth-bypass fix. Previously, CasAuthenticationFilter persisted
+		// the CasAuthenticationToken to the session before CasLoginSuccessHandler ran the reserved-
+		// username check — so the rejected "admin" login would still authenticate as the EntryStore
+		// admin on subsequent requests. The handler must now clear SecurityContext and invalidate
+		// the session before redirecting to the failure URL.
+
+		given: 'A CAS flow starting from /auth/cas with fresh (no) cookies'
+		def connection = EntryStoreClient.getRequest('/auth/cas', '')
+
+		when: 'Follow the redirect chain to Keycloak login'
+		def casLoginConn = EntryStoreClient.getRequest(connection.getHeaderField('Location'), '', '')
+		def adminIdpCookies = casLoginConn.getHeaderFields()['Set-Cookie']
+		def adminCookieHeader = adminIdpCookies.collect { it.split(';')[0] }.join('; ')
+		def adminLoginPageHtml = casLoginConn.inputStream.text
+		def adminFormActionMatcher = adminLoginPageHtml =~ /action="([^"]+)"/
+		def adminFormActionUrl = StringEscapeUtils.unescapeHtml4(adminFormActionMatcher[0][1])
+
+		and: 'Submit admin credentials'
+		def adminLoginFormData = "username=${URLEncoder.encode('admin', UTF_8)}&password=${URLEncoder.encode('adminpassword', UTF_8)}"
+		def adminSubmitConn = EntryStoreClient.postRequest(adminFormActionUrl, adminLoginFormData, '',
+			'application/x-www-form-urlencoded', [Cookie: adminCookieHeader])
+		def adminTicketUrl = adminSubmitConn.getHeaderField('Location')
+
+		and: 'Follow redirect to EntryStore with the admin CAS ticket'
+		def adminCallbackConn = EntryStoreClient.getRequest(adminTicketUrl, '')
+
+		then: 'EntryStore redirects to the failure URL, not the success URL'
+		adminCallbackConn.getResponseCode() in [302, 303, 307]
+		adminCallbackConn.getHeaderField('Location') != successLoginUrl
+		adminCallbackConn.getHeaderField('Location').contains('/auth/login')
+
+		when: 'Using any cookies set by the rejected response, query /auth/user'
+		def leakedCookies = adminCallbackConn.getHeaderFields()['Set-Cookie']
+		def userConn
+		if (leakedCookies != null && !leakedCookies.isEmpty()) {
+			userConn = EntryStoreClient.getRequest('/auth/user', '', null,
+				[Cookie: leakedCookies.collect { it.split(';')[0] }.join('; ')])
+		} else {
+			userConn = EntryStoreClient.getRequest('/auth/user', '')
+		}
+
+		then: 'The caller is NOT authenticated as admin — must be guest or 401'
+		userConn.getResponseCode() != HTTP_OK || !JSON_PARSER.parseText(userConn.inputStream.text)['user'].toString().equalsIgnoreCase('admin')
 	}
 }

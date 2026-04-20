@@ -185,16 +185,18 @@ public class HttpUtil {
 	/**
 	 * Redirects to the given URL if non-null, otherwise writes a 401 JSON error response.
 	 * Safe to call from servlet filter context (no exceptions thrown to the filter chain).
+	 *
+	 * @param failureMessage message for the JSON fallback body (e.g. "CAS login failed")
 	 */
 	public static void redirectOrWriteUnauthorized(HttpServletResponse response, String requestUri,
-												   String redirectUrl) throws IOException {
+												   String redirectUrl, String failureMessage) throws IOException {
 		if (redirectUrl != null) {
 			response.sendRedirect(redirectUrl);
 		} else {
 			writeErrorResponseAsJson(response, ErrorResponse.builder()
 					.status(HttpStatus.UNAUTHORIZED.value())
 					.path(requestUri)
-					.error("SSO login failed")
+					.error(failureMessage != null ? failureMessage : "SSO login failed")
 					.build());
 		}
 	}

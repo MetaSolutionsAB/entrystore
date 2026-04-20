@@ -22,7 +22,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties(prefix = "entrystore.auth.cas")
 public record CasCustomConfiguration(
 		@DefaultValue("false") boolean enabled,
-		@DefaultValue("cas2") String version,
+		@DefaultValue("CAS2") CasVersion version,
 		Server server,
 		@DefaultValue("false") boolean userAutoProvisioning,
 		RedirectSuccess redirectSuccess,

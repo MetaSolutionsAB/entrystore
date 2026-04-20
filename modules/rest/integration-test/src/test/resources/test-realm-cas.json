@@ -39,19 +39,19 @@
   ],
   "clients": [
     {
-      "clientId": "http://localhost:8181/store/auth/cas",
+      "clientId": "http://localhost:8181/auth/cas",
       "name": "CAS Test Client",
       "enabled": true,
       "protocol": "cas",
       "publicClient": true,
       "redirectUris": [
         "http://host.docker.internal:8181/*",
-        "http://localhost:8181/*",
-        "*"
+        "http://localhost:8181/*"
       ],
       "baseUrl": "http://host.docker.internal:8181",
       "webOrigins": [
-        "+"
+        "http://host.docker.internal:8181",
+        "http://localhost:8181"
       ]
     }
   ]

@@ -128,28 +128,42 @@ public class ESUserDetailsService implements UserDetailsService {
 	 */
 	public User createUser(String username) {
 		final URI currentUser = pm.getAuthenticatedUserURI();
+		Entry entry = null;
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
-			Entry entry = pm.createResource(null, GraphType.User, null, null);
+			entry = pm.createResource(null, GraphType.User, null, null);
 			if (entry == null) {
 				throw new IllegalStateException("createResource returned null when provisioning user '%s'".formatted(username));
 			}
 			boolean nameSet = pm.setPrincipalName(entry.getResourceURI(), username);
 			if (!nameSet) {
 				log.warn("Principal name '{}' already in use — removing orphaned entry to prevent account takeover", username);
-				try {
-					pm.remove(entry.getEntryURI());
-				} catch (Exception cleanup) {
-					log.error("Failed to remove orphaned user entry {} after name collision", entry.getEntryURI(), cleanup);
-				}
+				removeOrphanedEntry(entry, username);
+				entry = null; // prevent double-removal in the catch block
 				throw new IllegalStateException("Principal name '%s' already in use".formatted(username));
 			}
 			User u = (User) entry.getResource();
 			log.info("Created user '{}'", u.getURI());
 			return u;
+		} catch (RuntimeException e) {
+			// Any failure after createResource succeeded leaves an orphaned nameless User entry.
+			// Remove it unless it was already removed (name-collision branch above).
+			if (entry != null) {
+				removeOrphanedEntry(entry, username);
+			}
+			throw e;
 		} finally {
 			pm.setAuthenticatedUserURI(currentUser);
+		}
+	}
+
+	private void removeOrphanedEntry(Entry entry, String username) {
+		try {
+			pm.remove(entry.getEntryURI());
+		} catch (Exception cleanup) {
+			log.error("Failed to remove orphaned user entry {} for '{}' during cleanup",
+					entry.getEntryURI(), username, cleanup);
 		}
 	}
 

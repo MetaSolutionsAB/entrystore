@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.security;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
@@ -31,6 +32,7 @@ import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
@@ -60,9 +62,10 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 		} catch (IOException | ServletException e) {
 			throw e;
 		} catch (Exception e) {
-			log.error("Unexpected error during SAML login for user '{}'", authentication.getName(), e);
-			HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(),
-					samlConfiguration.redirectFailure().url());
+			String user = authentication != null ? authentication.getName() : "<unknown>";
+			log.error("Unexpected {} during SAML login for user '{}': {}",
+					e.getClass().getSimpleName(), user, e.getMessage(), e);
+			redirectToLoginFailureUrl(request, response, null);
 		}
 	}
 
@@ -132,9 +135,18 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 
 	private void redirectToLoginFailureUrl(HttpServletRequest request, HttpServletResponse response,
 										   String customRedirectFailureUrl) throws IOException {
+		// Clear the authenticated SecurityContext and invalidate the session before redirecting —
+		// Spring Security's SAML filter already persisted the authentication, so without this the
+		// rejected user would remain authenticated on subsequent requests.
+		SecurityContextHolder.clearContext();
+		HttpSession session = request.getSession(false);
+		if (session != null) {
+			session.invalidate();
+		}
 		String redirectUrl = customRedirectFailureUrl != null
 				? customRedirectFailureUrl
 				: samlConfiguration.redirectFailure().url();
-		HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(), redirectUrl);
+		HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(), redirectUrl,
+				"SAML login failed");
 	}
 }
