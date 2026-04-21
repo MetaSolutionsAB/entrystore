@@ -52,7 +52,11 @@ class ManagementStatusIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getContentType().contains('application/json')
-		connection.errorStream.text.contains('"error":"Unauthorized"')
+		def resp = JSON_PARSER.parseText(connection.errorStream.text)
+		resp['status'] == 401
+		resp['error'] == 'Unauthorized'
+		resp['path'] == '/management/status/extended'
+		resp['timestamp'] != null
 	}
 
 	def "GET /management/status/extended as non-admin user should reply with Forbidden"() {
@@ -62,7 +66,11 @@ class ManagementStatusIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
 		connection.getContentType().contains('application/json')
-		connection.errorStream.text.contains('"message":"Forbidden"')
+		def resp = JSON_PARSER.parseText(connection.errorStream.text)
+		resp['status'] == 403
+		resp['error'] != null
+		resp['path'] == '/management/status/extended'
+		resp['timestamp'] != null
 	}
 
 	def "GET /management/status/extended as admin should reply with detailed status"() {
@@ -115,6 +123,10 @@ class ManagementStatusIT extends BaseSpec {
 		then:
 		connection.getResponseCode() == HTTP_UNAUTHORIZED
 		connection.getContentType().contains('application/json')
-		connection.errorStream.text.contains('"error":"Unauthorized"')
+		def resp = JSON_PARSER.parseText(connection.errorStream.text)
+		resp['status'] == 401
+		resp['error'] == 'Unauthorized'
+		resp['path'] == '/management/status/extended'
+		resp['timestamp'] != null
 	}
 }

@@ -53,10 +53,11 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
- * Generic Exception handler to handle application specific exceptions.
- * If an exception is thrown that implements org.springframework.web.ErrorResponse, then it will fall into generic method
- * handler for Exception.class, however ErrorResponse is handled by Spring-boot, so we just re-throw it. Only log as error
- * with 500 response all other exception types.
+ * Generic exception handler for application-specific exceptions.
+ * Builds a consistent {@link ErrorResponse} envelope for every handled exception type, including
+ * Spring's own {@link org.springframework.web.ErrorResponse} subclasses, since
+ * {@code ErrorMvcAutoConfiguration} is excluded from the application and the {@code /error}
+ * dispatch path is not available as a fallback.
  */
 @Slf4j
 @ControllerAdvice
@@ -129,11 +130,11 @@ public class AppExceptionHandler {
 	@ExceptionHandler(NoResourceFoundException.class)
 	public ResponseEntity<ErrorResponse> handleNoResourceFoundException(NoResourceFoundException ex,
 																		HttpServletRequest request) {
-		log.debug("NoResourceFoundException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage());
+		log.debug("NoResourceFoundException: {}", ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.NOT_FOUND.value())
 				.path(request.getRequestURI())
-				.error("You made a request against the EntryStore REST API. There is no resource at this URI.")
+				.error(HttpStatus.NOT_FOUND.getReasonPhrase())
 				.build();
 		return jsonResponse(responseBody);
 	}
@@ -230,12 +231,18 @@ public class AppExceptionHandler {
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ErrorResponse> handleGenericException(Exception ex,
-																HttpServletRequest request) throws Exception {
+																HttpServletRequest request) {
 
-		if (ex instanceof org.springframework.web.ErrorResponse) {
-			// handled by Spring-boot so we don't need to here
-			log.debug("General ErrorResponse Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
-			throw ex;
+		if (ex instanceof org.springframework.web.ErrorResponse errorResponse) {
+			HttpStatus status = HttpStatus.valueOf(errorResponse.getStatusCode().value());
+			log.info("Spring ErrorResponse of type '{}' at endpoint '{}': status={}, message={}",
+					ex.getClass().getName(), request.getRequestURI(), status.value(), ex.getMessage());
+			ErrorResponse responseBody = ErrorResponse.builder()
+					.status(status.value())
+					.path(request.getRequestURI())
+					.error(status.getReasonPhrase())
+					.build();
+			return jsonResponse(responseBody);
 		}
 
 		log.error("Unhandled general Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage(), ex);

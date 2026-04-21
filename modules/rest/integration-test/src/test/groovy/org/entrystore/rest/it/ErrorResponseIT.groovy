@@ -264,7 +264,7 @@ class ErrorResponseIT extends BaseSpec {
 		conn.getContentType().contains('application/json')
 		def resp = JSON_PARSER.parseText(conn.errorStream.text)
 		resp['status'] == 404
-		resp['error'] == 'You made a request against the EntryStore REST API. There is no resource at this URI.'
+		resp['error'] == 'Not Found'
 		resp['timestamp'] != null
 		resp['path'] == '/no/such/route/here'
 	}
