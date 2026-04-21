@@ -193,10 +193,15 @@ public class AppExceptionHandler {
 																  Authentication authentication) {
 		log.info("ForbiddenException of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
 		HttpStatus status = (authentication == null || authentication instanceof AnonymousAuthenticationToken) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
+		// Use reason phrase for UNAUTHORIZED and for Spring Security's generic AccessDeniedException (which has a non-informative "Access Denied" message).
+		// For application-specific ForbiddenException / AuthorizationException, surface the exception message.
+		String errorMessage = (status == HttpStatus.UNAUTHORIZED || ex instanceof AccessDeniedException)
+				? status.getReasonPhrase()
+				: ex.getMessage();
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(status.value())
 				.path(request.getRequestURI())
-				.error((status == HttpStatus.UNAUTHORIZED) ? status.getReasonPhrase() : ex.getMessage())
+				.error(errorMessage)
 				.build();
 		return jsonResponse(responseBody);
 	}
@@ -235,8 +240,7 @@ public class AppExceptionHandler {
 
 		if (ex instanceof org.springframework.web.ErrorResponse errorResponse) {
 			HttpStatus status = HttpStatus.valueOf(errorResponse.getStatusCode().value());
-			log.info("Spring ErrorResponse of type '{}' at endpoint '{}': status={}, message={}",
-					ex.getClass().getName(), request.getRequestURI(), status.value(), ex.getMessage());
+			log.debug("General ErrorResponse Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
 			ErrorResponse responseBody = ErrorResponse.builder()
 					.status(status.value())
 					.path(request.getRequestURI())
