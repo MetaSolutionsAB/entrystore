@@ -471,6 +471,18 @@
 				<artifactId>owasp-java-html-sanitizer</artifactId>
 				<version>${owasp-html-sanitizer.version}</version>
 			</dependency>
+			<dependency>
+				<!-- Global exclusion: every spring-boot-starter-* pulls spring-boot-starter, which
+					 pulls spring-boot-starter-logging (Logback + bridges). We use Log4j2 instead. -->
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-starter</artifactId>
+				<exclusions>
+					<exclusion>
+						<groupId>org.springframework.boot</groupId>
+						<artifactId>spring-boot-starter-logging</artifactId>
+					</exclusion>
+				</exclusions>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 </project>

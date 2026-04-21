@@ -35,6 +35,7 @@ management:
   endpoints:
     web:
       base-path: /management
+      # All exposed Actuator endpoints require ADMIN role — see EndpointRequest.toAnyEndpoint() in SecurityConfig
       exposure:
         include: metrics
       discovery:

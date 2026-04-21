@@ -121,6 +121,7 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_BAD_METHOD
+		connection.getContentType().contains('application/json')
 	}
 
 	def "GET /management/metrics/nonexistent.metric as admin should reply with 404"() {
@@ -129,6 +130,7 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
 	}
 
 	def "GET /management as admin should reply with 404 (actuator discovery disabled)"() {
@@ -137,6 +139,7 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
 	}
 
 	def "GET /management/health as admin should reply with 404 (actuator endpoint not exposed)"() {
@@ -145,6 +148,7 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
 	}
 
 	def "GET /management/env as admin should reply with 404 (actuator endpoint not exposed)"() {
@@ -153,5 +157,6 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
 	}
 }
