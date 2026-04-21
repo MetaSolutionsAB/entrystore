@@ -16,8 +16,7 @@
 
 package org.entrystore.repository.config;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.entrystore.config.Config;
 import org.entrystore.config.DurationStyle;
 
@@ -63,9 +62,8 @@ import java.util.Properties;
  * @see org.entrystore.config.Configurations
  * @see org.entrystore.config.Config
  */
+@Slf4j
 public class PropertiesConfiguration implements Config {
-
-	Log log = LogFactory.getLog(PropertiesConfiguration.class);
 
 	/**
 	 * The main resource in this object. Contains the configuration.

@@ -16,8 +16,7 @@
 
 package org.entrystore.impl.converters;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -36,9 +35,8 @@ import static org.eclipse.rdf4j.model.util.Values.iri;
 import static org.eclipse.rdf4j.model.util.Values.literal;
 
 
+@Slf4j
 public class OAI_DC2RDFGraphConverter implements Converter {
-
-	private static final Log log = LogFactory.getLog(OAI_DC2RDFGraphConverter.class);
 
 	static Map<String, Locale> localeMap;
 
