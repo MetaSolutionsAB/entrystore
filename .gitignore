@@ -2,6 +2,7 @@
 *.iml
 *~
 .classpath
+.factorypath
 .project
 pom.xml.versionsBackup
 target/
