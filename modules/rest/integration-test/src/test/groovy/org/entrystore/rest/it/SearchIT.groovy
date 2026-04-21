@@ -626,7 +626,9 @@ class SearchIT extends BaseSpec {
 
 	def "GET /search?type=sparql&query=dc:title&syndication=atom_1.0&lang=pl should return atom feed with entries having 'dc:title' predicate, with values explicitly in Polish"() {
 		given:
-		def queryParams = [type: 'sparql', query: 'dc:title', syndication: 'atom_1.0', lang: 'pl']
+		// limit=100 (MAX_LIMIT) keeps the feed window wide enough to include this IT's Polish entry
+		// regardless of how many other ITs have added dc:title-bearing entries to the shared repository.
+		def queryParams = [type: 'sparql', query: 'dc:title', syndication: 'atom_1.0', lang: 'pl', limit: '100']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -649,7 +651,7 @@ class SearchIT extends BaseSpec {
 		respXml['link'].size() == 1
 		with(respXml['link'][0] as Node) {
 			attributes().size() == 2
-			attribute('href') == EntryStoreClient.baseUrl + '/search?type=sparql&query=dc%3Atitle&syndication=atom_1.0&lang=pl'
+			attribute('href') == EntryStoreClient.baseUrl + '/search?type=sparql&query=dc%3Atitle&syndication=atom_1.0&lang=pl&limit=100'
 			value().size() == 0
 		}
 
@@ -657,7 +659,7 @@ class SearchIT extends BaseSpec {
 		with(respXml['subtitle'][0] as Node) {
 			attributes().size() == 0
 			value().size() == 1
-			value()[0] == 'Syndication feed containing max 50 items'
+			value()[0] == 'Syndication feed containing max 100 items'
 		}
 
 		respXml['entry'].size() > 1
