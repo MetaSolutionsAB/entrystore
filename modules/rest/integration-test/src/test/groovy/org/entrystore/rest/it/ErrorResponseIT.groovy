@@ -296,6 +296,20 @@ class ErrorResponseIT extends BaseSpec {
 	// 406 Not Acceptable (CustomResponseException)
 	// ========================
 
+	def "GET /management/status with unacceptable Accept header should return 406 JSON envelope from AppExceptionHandler.handleGenericException"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/management/status', 'admin', 'application/x-not-a-real-type')
+
+		then:
+		conn.getResponseCode() == 406
+		conn.getContentType().contains('application/json')
+		def resp = JSON_PARSER.parseText(conn.errorStream.text)
+		resp['status'] == 406
+		resp['error'] != null
+		resp['timestamp'] != null
+		resp['path'] == '/management/status'
+	}
+
 	def "GET /{context-id}/metadata/{entry-id}?format=application/invalid-rdf should return 406 with JSON error response"() {
 		given:
 		getOrCreateContext([contextId: 'err406ctx'])

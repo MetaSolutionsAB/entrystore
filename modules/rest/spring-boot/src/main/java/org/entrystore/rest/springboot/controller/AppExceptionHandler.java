@@ -20,6 +20,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ValidationException;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.entrystore.AuthorizationException;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
@@ -187,21 +188,37 @@ public class AppExceptionHandler {
 		return jsonResponse(responseBody);
 	}
 
-	@ExceptionHandler({AuthorizationException.class, UnauthorizedException.class, ForbiddenException.class, AccessDeniedException.class, AuthenticationCredentialsNotFoundException.class})
+	// Handles Spring Security's AccessDeniedException and the core AuthorizationException.
+	// Both carry internal state in their messages (principal URI, entry URI, ACL bit for core,
+	// or a non-informative "Access Denied" for Spring), so the HTTP body is always the reason
+	// phrase; the original message is retained on the server-side log line for debugging.
+	@ExceptionHandler({AccessDeniedException.class, AuthorizationException.class})
+	public ResponseEntity<ErrorResponse> handleAccessDeniedException(RuntimeException ex,
+																	 HttpServletRequest request,
+																	 Authentication authentication) {
+		log.info("AccessDenied of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+		HttpStatus status = (authentication == null || authentication instanceof AnonymousAuthenticationToken) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(status.value())
+				.path(request.getRequestURI())
+				.error(status.getReasonPhrase())
+				.build();
+		return jsonResponse(responseBody);
+	}
+
+	// Handles application-specific authentication/authorization exceptions whose messages are
+	// intentionally user-facing (hand-crafted at call sites in SolrManagementService, AuthService,
+	// ResourceService, ProxyService, etc.), so the message is surfaced in the HTTP body for 403.
+	@ExceptionHandler({UnauthorizedException.class, ForbiddenException.class, AuthenticationCredentialsNotFoundException.class})
 	public ResponseEntity<ErrorResponse> handleForbiddenException(RuntimeException ex,
 																  HttpServletRequest request,
 																  Authentication authentication) {
 		log.info("ForbiddenException of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
 		HttpStatus status = (authentication == null || authentication instanceof AnonymousAuthenticationToken) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
-		// Use reason phrase for UNAUTHORIZED and for Spring Security's generic AccessDeniedException (which has a non-informative "Access Denied" message).
-		// For application-specific ForbiddenException / AuthorizationException, surface the exception message.
-		String errorMessage = (status == HttpStatus.UNAUTHORIZED || ex instanceof AccessDeniedException)
-				? status.getReasonPhrase()
-				: ex.getMessage();
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(status.value())
 				.path(request.getRequestURI())
-				.error(errorMessage)
+				.error((status == HttpStatus.UNAUTHORIZED) ? status.getReasonPhrase() : ex.getMessage())
 				.build();
 		return jsonResponse(responseBody);
 	}
@@ -239,12 +256,18 @@ public class AppExceptionHandler {
 																HttpServletRequest request) {
 
 		if (ex instanceof org.springframework.web.ErrorResponse errorResponse) {
-			HttpStatus status = HttpStatus.valueOf(errorResponse.getStatusCode().value());
+			int code = errorResponse.getStatusCode().value();
+			HttpStatus status = HttpStatus.resolve(code);
+			String reasonPhrase = status != null ? status.getReasonPhrase() : "Error";
+			// Surface the exception message when present (Spring's own ErrorResponse subclasses
+			// carry structured problem details there — e.g. supported media types for 406/415 —
+			// and their messages do not leak internals). Fall back to the reason phrase otherwise.
+			String errorMessage = StringUtils.isNotBlank(ex.getMessage()) ? ex.getMessage() : reasonPhrase;
 			log.debug("General ErrorResponse Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
 			ErrorResponse responseBody = ErrorResponse.builder()
-					.status(status.value())
+					.status(code)
 					.path(request.getRequestURI())
-					.error(status.getReasonPhrase())
+					.error(errorMessage)
 					.build();
 			return jsonResponse(responseBody);
 		}

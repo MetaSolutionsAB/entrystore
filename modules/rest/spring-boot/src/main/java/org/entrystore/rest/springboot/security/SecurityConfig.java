@@ -184,16 +184,35 @@ public class SecurityConfig {
 	@Bean
 	public AuthenticationEntryPoint customEntryPoint() {
 		return (request, response, authException) -> {
-			// Delegate the exception to global Exception handler
-			handlerExceptionResolver.resolveException(request, response, null, authException);
+			// Delegate the exception to global Exception handler, falling back to a direct envelope
+			// write if the resolver returns null (no handler matched) so the client never gets an
+			// empty committed response.
+			var mv = handlerExceptionResolver.resolveException(request, response, null, authException);
+			if (mv == null && !response.isCommitted()) {
+				log.warn("AuthenticationEntryPoint: exception resolver did not handle {}", authException.getClass().getName());
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.UNAUTHORIZED.value())
+						.path(request.getRequestURI())
+						.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
+						.build());
+			}
 		};
 	}
 
 	@Bean
 	public AccessDeniedHandler customAccessDeniedHandler() {
 		return (request, response, accessDeniedException) -> {
-			// Delegate the exception to global Exception handler (AppExceptionHandler.handleForbiddenException)
-			handlerExceptionResolver.resolveException(request, response, null, accessDeniedException);
+			// Delegate the exception to global Exception handler (AppExceptionHandler.handleAccessDeniedException),
+			// falling back to a direct envelope write if the resolver returns null.
+			var mv = handlerExceptionResolver.resolveException(request, response, null, accessDeniedException);
+			if (mv == null && !response.isCommitted()) {
+				log.warn("AccessDeniedHandler: exception resolver did not handle {}", accessDeniedException.getClass().getName());
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.FORBIDDEN.value())
+						.path(request.getRequestURI())
+						.error(HttpStatus.FORBIDDEN.getReasonPhrase())
+						.build());
+			}
 		};
 	}
 

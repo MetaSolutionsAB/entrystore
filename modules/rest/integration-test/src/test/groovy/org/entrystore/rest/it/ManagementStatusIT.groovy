@@ -68,7 +68,7 @@ class ManagementStatusIT extends BaseSpec {
 		connection.getContentType().contains('application/json')
 		def resp = JSON_PARSER.parseText(connection.errorStream.text)
 		resp['status'] == 403
-		resp['error'] != null
+		resp['error'] == 'Forbidden'
 		resp['path'] == '/management/status/extended'
 		resp['timestamp'] != null
 	}
