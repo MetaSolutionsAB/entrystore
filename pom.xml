@@ -177,6 +177,13 @@
 									<requireMavenVersion>
 										<version>3.6</version>
 									</requireMavenVersion>
+									<bannedDependencies>
+										<excludes>
+											<exclude>ch.qos.logback:*</exclude>
+											<exclude>org.springframework.boot:spring-boot-starter-logging</exclude>
+										</excludes>
+										<message>Logback and spring-boot-starter-logging are banned — this project uses Log4j2. The global dependencyManagement exclusion on spring-boot-starter in the root pom should keep them off the classpath; this rule fails the build if a transitive pull somehow reintroduces them.</message>
+									</bannedDependencies>
 								</rules>
 							</configuration>
 						</execution>

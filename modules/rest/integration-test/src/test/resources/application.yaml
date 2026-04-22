@@ -1,6 +1,7 @@
 
 server:
   port: 8181
+  shutdown: graceful
   forward-headers-strategy: framework
   servlet:
 #    context-path: /store
@@ -19,6 +20,8 @@ info.app.version: @project.version@
 spring:
   config.import:
     - classpath:entrystore-it.properties
+  lifecycle:
+    timeout-per-shutdown-phase: 5s
   mvc.problemdetails.enabled: false
   servlet.multipart:
     max-file-size: 12MB

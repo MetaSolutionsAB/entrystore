@@ -114,6 +114,9 @@ springboot/
 
 **Use Java 25 features** when writing new code or refactoring. Prefer modern idioms (records, sealed classes, pattern matching for `instanceof` and `switch`, text blocks, enhanced `switch` expressions, virtual threads, sequenced collections, scoped values) over legacy patterns equivalent to them.
 
+**Prefer Lombok annotations over hand-written boilerplate.**
+Reach for the annotation first; only write the expansion manually when Lombok can't express the intent.
+
 Formatting is IntelliJ-based, defined in `.editorconfig` (with `ij_*` properties) and `.idea/codeStyles/`. No Eclipse formatter is used.
 
 From `.editorconfig`:
@@ -200,11 +203,11 @@ Example config: `modules/rest/spring-boot/src/main/resources/entrystore.properti
 
 ## Git Conventions
 
+- **Base branch:** `develop-spring`
 - Commit messages reference JIRA issues: `ENTRYSTORE-####: Description`
 - Do not include AI/agent attribution in commit messages (no Co-Authored-By or similar)
 - Issue tracker: https://metasolutions.atlassian.net/browse/ENTRYSTORE-*
 - **JIRA priorities:** Blocker, Critical, Major, Minor, Trivial
-- **Spring Boot migration epic:** ENTRYSTORE-857 — create JIRA issues related to the Spring Boot REST layer (`modules/rest/spring-boot/`) under this epic
 
 ## Model Compatibility
 

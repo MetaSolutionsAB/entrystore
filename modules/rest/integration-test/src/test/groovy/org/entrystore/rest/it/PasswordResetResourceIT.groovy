@@ -310,6 +310,11 @@ class PasswordResetResourceIT extends BaseSpec {
 
 		then:
 		resetPasswordConn.getResponseCode() == HTTP_FORBIDDEN
+		resetPasswordConn.getContentType().contains('application/json')
+		def responseBody = resetPasswordConn.errorStream.text
+		responseBody.contains('Failed to send confirmation request to ' + username.toLowerCase())
+		!responseBody.contains('{}')
+
 		greenMail.getReceivedMessages().size() == 0
 	}
 

@@ -1,5 +1,6 @@
 server:
   port: 8080
+  shutdown: graceful
   forward-headers-strategy: framework
   servlet:
 #    context-path: /store
@@ -18,6 +19,8 @@ info.app.version: "@project.version@"
 spring:
   config.import:
     - file:entrystore.properties
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   mvc.problemdetails.enabled: false
   servlet.multipart:
     max-file-size: 12MB
@@ -35,8 +38,8 @@ management:
   endpoints:
     web:
       base-path: /management
-      # All exposed Actuator endpoints require ADMIN role — see EndpointRequest.toAnyEndpoint() in SecurityConfig
       exposure:
+        # All exposed Actuator endpoints require ADMIN role — see EndpointRequest.toAnyEndpoint() in SecurityConfig
         include: metrics
       discovery:
         enabled: false

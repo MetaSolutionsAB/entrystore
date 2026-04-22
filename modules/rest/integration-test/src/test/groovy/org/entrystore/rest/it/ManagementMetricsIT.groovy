@@ -130,7 +130,10 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
-		connection.getContentType().contains('application/json')
+		// MetricsEndpoint is matched and invoked; returning null from its @ReadOperation
+		// is translated by Actuator into a bare 404 with no body/content-type — it never
+		// reaches Spring MVC's error controller that serves JSON for the other 404s here.
+		connection.getContentType() == null
 	}
 
 	def "GET /management as admin should reply with 404 (actuator discovery disabled)"() {
