@@ -19,7 +19,6 @@ package org.entrystore.rest.springboot.security;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
@@ -32,7 +31,6 @@ import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
@@ -55,8 +53,8 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 
 	@Override
 	public void onAuthenticationSuccess(HttpServletRequest request,
-										HttpServletResponse response,
-										Authentication authentication) throws IOException, ServletException {
+	                                    HttpServletResponse response,
+	                                    Authentication authentication) throws IOException, ServletException {
 		try {
 			handleSamlAuthentication(request, response, authentication);
 		} catch (IOException | ServletException e) {
@@ -70,79 +68,82 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 	}
 
 	private void handleSamlAuthentication(HttpServletRequest request,
-										  HttpServletResponse response,
-										  Authentication authentication) throws IOException, ServletException {
+	                                      HttpServletResponse response,
+	                                      Authentication authentication) throws IOException, ServletException {
 
-		if (authentication instanceof Saml2Authentication samlToken) {
-			String username = samlToken.getName();
-			String idpId = null;
-			if (samlToken.getPrincipal() instanceof DefaultSaml2AuthenticatedPrincipal principal) {
-				idpId = principal.getRelyingPartyRegistrationId();
-			}
-
-			log.info("Successfully authenticated via SAML IdP '{}', username: '{}'", idpId, username);
-
-			// Extract relay state data from the cache, if present
-			AuthState cachedAuthState = null;
-			String relayStateId = request.getParameter("RelayState");
-			if (relayStateId != null) {
-				cachedAuthState = samlAuthStateCache.getAuthState(relayStateId);
-			}
-			String customRedirectFailureUrl = null;
-			if (cachedAuthState != null && cachedAuthState.failureUrl() != null) {
-				customRedirectFailureUrl = cachedAuthState.failureUrl();
-			}
-
-
-			if ("admin".equalsIgnoreCase(username)) {
-				log.warn("Ignoring received username 'admin' from SAML IdP '{}'", idpId);
-				redirectToLoginFailureUrl(request, response, customRedirectFailureUrl);
-				return;
-			}
-
-			User esUser = userService.loadUser(username);
-			if (esUser == null) {
-				SamlIdpInfo idpInfo = samlAuthService.findIdpForSamlResponse(idpId);
-				if (idpInfo == null || !idpInfo.autoProvisioning()) {
-					log.warn("User '{}' not found in EntryStore. User auto-provisioning is deactivated for IdP '{}'", username, idpId);
-				} else {
-					log.info("User '{}' not found in EntryStore. Creating new user since User auto-provisioning is activated for IdP '{}'", username, idpId);
-					esUser = userService.createUser(username);
-				}
-			} else {
-				log.info("Existing EntryStore user '{}' logged in via SAML", username);
-				// shall we update ES user attributes here if they have changed in the IdP?
-			}
-
-			if (esUser != null && !BasicVerifier.isUserDisabled(principalManager, esUser)) {
-				if (cachedAuthState != null && cachedAuthState.successUrl() != null) {
-					log.debug("Redirecting to custom success URL: {}", cachedAuthState.successUrl());
-					response.sendRedirect(cachedAuthState.successUrl());
-					return;
-				}
-
-				// Clear any saved request that might point back to SAML endpoints
-				new HttpSessionRequestCache().removeRequest(request, response);
-				// Proceeds with standard Spring behavior (redirects to defaultTargetUrl)
-				super.onAuthenticationSuccess(request, response, authentication);
-				return;
-			}
-
-			log.info("Login failed with username '{}' via IdP '{}'", username, idpId);
-			redirectToLoginFailureUrl(request, response, customRedirectFailureUrl);
+		if (!(authentication instanceof Saml2Authentication)) {
+			// Defense in depth: Spring Security's SAML filter only ever produces Saml2Authentication,
+			// but if a future provider/test harness emits a different token type we must not treat
+			// that as success — the filter has already persisted it to the SecurityContext.
+			// ERROR because reaching this branch indicates a Spring Security wiring bug.
+			log.error("Unexpected authentication type '{}' in SAML success handler",
+					authentication == null ? "null" : authentication.getClass().getName());
+			redirectToLoginFailureUrl(request, response, null);
+			return;
 		}
+
+		String username = authentication.getName();
+		String idpId = null;
+		if (authentication.getPrincipal() instanceof DefaultSaml2AuthenticatedPrincipal principal) {
+			idpId = principal.getRelyingPartyRegistrationId();
+		}
+
+		log.info("Successfully authenticated via SAML IdP '{}', username: '{}'", idpId, username);
+
+		// Extract relay state data from the cache, if present
+		AuthState cachedAuthState = null;
+		String relayStateId = request.getParameter("RelayState");
+		if (relayStateId != null) {
+			cachedAuthState = samlAuthStateCache.getAuthState(relayStateId);
+		}
+		String customRedirectFailureUrl = null;
+		if (cachedAuthState != null && cachedAuthState.failureUrl() != null) {
+			customRedirectFailureUrl = cachedAuthState.failureUrl();
+		}
+
+		if ("admin".equalsIgnoreCase(username)) {
+			log.warn("Ignoring received username 'admin' from SAML IdP '{}'", idpId);
+			redirectToLoginFailureUrl(request, response, customRedirectFailureUrl);
+			return;
+		}
+
+		User esUser = userService.loadUser(username);
+		if (esUser == null) {
+			SamlIdpInfo idpInfo = samlAuthService.findIdpForSamlResponse(idpId);
+			if (idpInfo == null || !idpInfo.autoProvisioning()) {
+				log.warn("User '{}' not found in EntryStore. User auto-provisioning is deactivated for IdP '{}'", username, idpId);
+			} else {
+				log.info("User '{}' not found in EntryStore. Creating new user since User auto-provisioning is activated for IdP '{}'", username, idpId);
+				esUser = userService.createUser(username);
+			}
+		} else {
+			log.info("Existing EntryStore user '{}' logged in via SAML", username);
+			// shall we update ES user attributes here if they have changed in the IdP?
+		}
+
+		if (esUser != null && !BasicVerifier.isUserDisabled(principalManager, esUser)) {
+			if (cachedAuthState != null && cachedAuthState.successUrl() != null) {
+				log.debug("Redirecting to custom success URL: {}", cachedAuthState.successUrl());
+				response.sendRedirect(cachedAuthState.successUrl());
+				return;
+			}
+
+			// Clear any saved request that might point back to SAML endpoints
+			new HttpSessionRequestCache().removeRequest(request, response);
+			// Proceeds with standard Spring behavior (redirects to defaultTargetUrl)
+			super.onAuthenticationSuccess(request, response, authentication);
+			return;
+		}
+
+		log.info("Login failed with username '{}' via IdP '{}'", username, idpId);
+		redirectToLoginFailureUrl(request, response, customRedirectFailureUrl);
 	}
 
 	private void redirectToLoginFailureUrl(HttpServletRequest request, HttpServletResponse response,
-										   String customRedirectFailureUrl) throws IOException {
-		// Clear the authenticated SecurityContext and invalidate the session before redirecting —
-		// Spring Security's SAML filter already persisted the authentication, so without this the
-		// rejected user would remain authenticated on subsequent requests.
-		SecurityContextHolder.clearContext();
-		HttpSession session = request.getSession(false);
-		if (session != null) {
-			session.invalidate();
-		}
+	                                       String customRedirectFailureUrl) throws IOException {
+		// Spring Security's SAML filter already persisted the authentication to the SecurityContext;
+		// undo that before redirecting so the rejected user doesn't remain authenticated.
+		HttpUtil.clearAuthenticatedSession(request);
 		String redirectUrl = customRedirectFailureUrl != null
 				? customRedirectFailureUrl
 				: samlConfiguration.redirectFailure().url();

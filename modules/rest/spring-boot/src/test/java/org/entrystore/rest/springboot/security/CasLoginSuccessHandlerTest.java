@@ -27,7 +27,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.cas.authentication.CasAuthenticationToken;
 
 import java.net.URI;
 
@@ -55,7 +56,7 @@ class CasLoginSuccessHandlerTest {
 	private HttpServletResponse response;
 
 	@Mock
-	private Authentication authentication;
+	private CasAuthenticationToken authentication;
 
 	@Mock
 	private User esUser;
@@ -72,6 +73,19 @@ class CasLoginSuccessHandlerTest {
 				new CasCustomConfiguration.RedirectSuccess(SUCCESS_URL),
 				new CasCustomConfiguration.RedirectFailure(FAILURE_URL));
 		handler = new CasLoginSuccessHandler(userService, principalManager, casConfiguration);
+	}
+
+	@Test
+	void nonCasAuthenticationTokenIsRejectedWithoutLoadingUser() throws Exception {
+		// Defense-in-depth guard: if the filter wiring ever delivers a non-CAS token to this
+		// handler, we must not process it — the SecurityContext has already been persisted to
+		// the session by the filter chain, so the handler's reject path is what unwinds it.
+		var wrongToken = new UsernamePasswordAuthenticationToken("someone", "pw");
+
+		handler.onAuthenticationSuccess(request, response, wrongToken);
+
+		verify(response).sendRedirect(FAILURE_URL);
+		verify(userService, never()).loadUser(any());
 	}
 
 	@Test

@@ -200,11 +200,12 @@ public class SecurityConfig {
 			log.info("CAS Auth Enabled");
 
 			var casFilter = new CasAuthenticationFilter();
-			// Only process requests that carry a ticket. Initial redirects (no ticket)
-			// pass through to AuthController.startCasLogin.
+			// CSRF is disabled globally and getParameter() reads form bodies, so pinning to GET
+			// prevents a cross-site POST from submitting a stolen ticket.
 			RequestMatcher ticketRequired = request -> request.getParameter("ticket") != null;
-			casFilter.setRequiresAuthenticationRequestMatcher(
-					new AndRequestMatcher(PathPatternRequestMatcher.withDefaults().matcher("/auth/cas"), ticketRequired));
+			casFilter.setRequiresAuthenticationRequestMatcher(new AndRequestMatcher(
+					PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/auth/cas"),
+					ticketRequired));
 			casFilter.setAuthenticationManager(new ProviderManager(
 					casAuthenticationProvider.orElseThrow(() -> new IllegalStateException(
 							"CAS is enabled but CasAuthenticationProvider bean is missing — check CasConfig."))));

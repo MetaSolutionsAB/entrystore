@@ -35,11 +35,15 @@ import org.springframework.security.cas.ServiceProperties;
 import org.springframework.security.cas.authentication.CasAuthenticationProvider;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
+import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.UUID;
@@ -54,6 +58,8 @@ public class CasConfig {
 	// if the CAS server becomes slow or unresponsive during login.
 	private static final int CAS_CONNECT_TIMEOUT_MS = 5_000;
 	private static final int CAS_READ_TIMEOUT_MS = 10_000;
+
+	private static final HostnameVerifier TRUST_ALL_HOSTNAMES = (hostname, session) -> true;
 
 	private final CasCustomConfiguration casConfiguration;
 	private final ESUserDetailsService userDetailsService;
@@ -83,34 +89,41 @@ public class CasConfig {
 			case CAS2 -> new Cas20ServiceTicketValidator(casServerUrl);
 			case CAS3 -> new Cas30ServiceTicketValidator(casServerUrl);
 		};
+		// Built once at bean init so a missing TLS provider fails Spring startup instead of
+		// escaping the lambda as HTTP 500 (IllegalStateException is not an AuthenticationException,
+		// so it would bypass the CAS failure handler).
+		final SSLSocketFactory trustAllSocketFactory;
 		if (disableSslVerification) {
 			log.warn("SSL verification is DISABLED for CAS backchannel validation (entrystore.https.disable-verification=true). " +
 					"This is insecure and should only be used in development environments with self-signed certificates.");
+			trustAllSocketFactory = createTrustAllSocketFactory();
+		} else {
+			trustAllSocketFactory = null;
 		}
 		var defaultFactory = new HttpsURLConnectionFactory();
 		validator.setURLConnectionFactory(urlConnection -> {
 			var conn = defaultFactory.buildHttpURLConnection(urlConnection);
 			conn.setConnectTimeout(CAS_CONNECT_TIMEOUT_MS);
 			conn.setReadTimeout(CAS_READ_TIMEOUT_MS);
-			if (disableSslVerification && conn instanceof HttpsURLConnection httpsConn) {
-				httpsConn.setSSLSocketFactory(trustAllSslContext().getSocketFactory());
-				httpsConn.setHostnameVerifier((hostname, session) -> true);
+			if (trustAllSocketFactory != null && conn instanceof HttpsURLConnection httpsConn) {
+				httpsConn.setSSLSocketFactory(trustAllSocketFactory);
+				httpsConn.setHostnameVerifier(TRUST_ALL_HOSTNAMES);
 			}
 			return conn;
 		});
 		return validator;
 	}
 
-	private static SSLContext trustAllSslContext() {
+	private static SSLSocketFactory createTrustAllSocketFactory() {
 		try {
 			SSLContext ctx = SSLContext.getInstance("TLS");
 			ctx.init(null, new TrustManager[]{new X509TrustManager() {
 				@Override public void checkClientTrusted(X509Certificate[] chain, String authType) { }
 				@Override public void checkServerTrusted(X509Certificate[] chain, String authType) { }
 				@Override public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-			}}, new java.security.SecureRandom());
-			return ctx;
-		} catch (NoSuchAlgorithmException | java.security.KeyManagementException e) {
+			}}, new SecureRandom());
+			return ctx.getSocketFactory();
+		} catch (NoSuchAlgorithmException | KeyManagementException e) {
 			throw new IllegalStateException("Failed to create trust-all SSLContext for CAS backchannel", e);
 		}
 	}

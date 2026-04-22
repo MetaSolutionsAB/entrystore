@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.springboot.security;
 
+import org.apereo.cas.client.ssl.HttpURLConnectionFactory;
+import org.apereo.cas.client.validation.AbstractUrlBasedTicketValidator;
 import org.apereo.cas.client.validation.Cas10TicketValidator;
 import org.apereo.cas.client.validation.Cas20ServiceTicketValidator;
 import org.apereo.cas.client.validation.Cas30ServiceTicketValidator;
@@ -30,7 +32,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import javax.net.ssl.HttpsURLConnection;
+import java.net.URI;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(MockitoExtension.class)
 class CasConfigTest {
@@ -69,5 +78,25 @@ class CasConfigTest {
 	void cas3VersionCreatesCas30TicketValidator() {
 		TicketValidator validator = configWithVersion(CasVersion.CAS3).casTicketValidator();
 		assertInstanceOf(Cas30ServiceTicketValidator.class, validator);
+	}
+
+	@Test
+	void sslVerificationDisabledInstallsTrustAllFactoryAndPinsTimeouts() throws Exception {
+		CasConfig cfg = configWithVersion(CasVersion.CAS2);
+		ReflectionTestUtils.setField(cfg, "disableSslVerification", true);
+
+		var validator = (AbstractUrlBasedTicketValidator) cfg.casTicketValidator();
+		var factory = (HttpURLConnectionFactory) ReflectionTestUtils.getField(validator, "urlConnectionFactory");
+		var conn1 = (HttpsURLConnection) factory.buildHttpURLConnection(
+				URI.create("https://example.invalid").toURL().openConnection());
+		var conn2 = (HttpsURLConnection) factory.buildHttpURLConnection(
+				URI.create("https://example.invalid").toURL().openConnection());
+
+		assertNotSame(HttpsURLConnection.getDefaultSSLSocketFactory(), conn1.getSSLSocketFactory());
+		assertTrue(conn1.getHostnameVerifier().verify("any.host", null));
+		assertEquals(5_000, conn1.getConnectTimeout());
+		assertEquals(10_000, conn1.getReadTimeout());
+		// Factory is built once at bean init and reused; regression would re-allocate per request.
+		assertSame(conn1.getSSLSocketFactory(), conn2.getSSLSocketFactory());
 	}
 }

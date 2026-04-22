@@ -28,6 +28,7 @@ import spock.lang.Stepwise
 
 import static java.net.HttpURLConnection.HTTP_MOVED_TEMP
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static java.nio.charset.StandardCharsets.UTF_8
 
 @Stepwise
@@ -212,6 +213,13 @@ class CasLoginIT extends BaseSpec {
 			'application/x-www-form-urlencoded', [Cookie: adminCookieHeader])
 		def adminTicketUrl = adminSubmitConn.getHeaderField('Location')
 
+		and: 'Keycloak issued a CAS ticket for admin (guards against realm drift — otherwise step 4 can pass vacuously without exercising EntryStore\'s reject path)'
+		assert adminSubmitConn.getResponseCode() in [302, 303, 307]:
+			'Keycloak did not redirect — realm config may have changed (admin disabled? required actions added?)'
+		assert adminTicketUrl != null: 'No Location header in Keycloak response'
+		assert adminTicketUrl.contains('/auth/cas'): 'Keycloak redirect is not to EntryStore CAS callback'
+		assert adminTicketUrl.contains('ticket='): 'Keycloak did not issue a CAS ticket — check test-realm-cas.json'
+
 		and: 'Follow redirect to EntryStore with the admin CAS ticket'
 		def adminCallbackConn = EntryStoreClient.getRequest(adminTicketUrl, '')
 
@@ -230,7 +238,15 @@ class CasLoginIT extends BaseSpec {
 			userConn = EntryStoreClient.getRequest('/auth/user', '')
 		}
 
-		then: 'The caller is NOT authenticated as admin — must be guest or 401'
-		userConn.getResponseCode() != HTTP_OK || !JSON_PARSER.parseText(userConn.inputStream.text)['user'].toString().equalsIgnoreCase('admin')
+		then: 'Caller is not authenticated as admin (401, or 200 resolving to any non-admin user)'
+		// Note: a Set-Cookie for auth_token may still appear on the response (Jetty issues it when
+		// SessionFixationProtectionStrategy changes the session ID, before our success handler
+		// rejects admin). That cookie points to an invalidated session server-side, so reusing it
+		// yields 401/guest (see CookieLoginResourceIT). The bypass signal is the session contents,
+		// not the presence of the cookie header.
+		def responseCode = userConn.getResponseCode()
+		def responseUser = responseCode == HTTP_OK ? JSON_PARSER.parseText(userConn.inputStream.text)['user'] : null
+		responseCode == HTTP_UNAUTHORIZED ||
+			(responseCode == HTTP_OK && responseUser != null && !responseUser.toString().equalsIgnoreCase('admin'))
 	}
 }

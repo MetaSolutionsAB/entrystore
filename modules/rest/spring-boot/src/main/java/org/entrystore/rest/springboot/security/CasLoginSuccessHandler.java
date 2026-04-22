@@ -19,7 +19,6 @@ package org.entrystore.rest.springboot.security;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
@@ -27,8 +26,8 @@ import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.springframework.security.cas.authentication.CasAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 
@@ -61,6 +60,17 @@ public class CasLoginSuccessHandler extends SavedRequestAwareAuthenticationSucce
 	private void handleCasAuthentication(HttpServletRequest request,
 										 HttpServletResponse response,
 										 Authentication authentication) throws IOException, ServletException {
+
+		if (!(authentication instanceof CasAuthenticationToken)) {
+			// Defense in depth: CasAuthenticationFilter only produces CasAuthenticationToken,
+			// but if a different token type ever reaches this handler we must not treat
+			// that as success — the filter has already persisted it to the SecurityContext.
+			// ERROR because reaching this branch indicates a Spring Security wiring bug.
+			log.error("Unexpected authentication type '{}' in CAS success handler",
+					authentication == null ? "null" : authentication.getClass().getName());
+			redirectToLoginFailureUrl(request, response);
+			return;
+		}
 
 		String username = authentication.getName();
 		log.info("Successfully authenticated via CAS, username: '{}'", username);
@@ -95,14 +105,9 @@ public class CasLoginSuccessHandler extends SavedRequestAwareAuthenticationSucce
 	}
 
 	private void redirectToLoginFailureUrl(HttpServletRequest request, HttpServletResponse response) throws IOException {
-		// Clear the authenticated SecurityContext and invalidate the session before redirecting —
-		// CasAuthenticationFilter already persisted the token, so without this the rejected user
-		// would remain authenticated on subsequent requests.
-		SecurityContextHolder.clearContext();
-		HttpSession session = request.getSession(false);
-		if (session != null) {
-			session.invalidate();
-		}
+		// CasAuthenticationFilter already persisted the token to the SecurityContext; undo that
+		// before redirecting so the rejected user doesn't remain authenticated.
+		HttpUtil.clearAuthenticatedSession(request);
 		HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(),
 				casConfiguration.redirectFailure().url(), "CAS login failed");
 	}
