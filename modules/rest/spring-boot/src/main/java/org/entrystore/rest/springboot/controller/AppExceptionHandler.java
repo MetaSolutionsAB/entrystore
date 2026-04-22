@@ -20,6 +20,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.ValidationException;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.entrystore.AuthorizationException;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
@@ -46,15 +47,18 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.ui.Model;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
- * Generic Exception handler to handle application specific exceptions.
- * If an exception is thrown that implements org.springframework.web.ErrorResponse, then it will fall into generic method
- * handler for Exception.class, however ErrorResponse is handled by Spring-boot, so we just re-throw it. Only log as error
- * with 500 response all other exception types.
+ * Generic exception handler for application-specific exceptions.
+ * Builds a consistent {@link ErrorResponse} envelope for every handled exception type, including
+ * Spring's own {@link org.springframework.web.ErrorResponse} subclasses, since
+ * {@code ErrorMvcAutoConfiguration} is excluded from the application and the {@code /error}
+ * dispatch path is not available as a fallback.
  */
 @Slf4j
 @ControllerAdvice
@@ -96,8 +100,8 @@ public class AppExceptionHandler {
 
 	// Separate BadRequest handler for HttpMessageNotReadableException and MethodArgumentTypeMismatchException since those leak Spring/Jackson internals
 	// Those now respond with a generic "Bad Request" error
-	@ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class})
-	public ResponseEntity<ErrorResponse> handleSpringBadRequestException(RuntimeException ex,
+	@ExceptionHandler({MethodArgumentTypeMismatchException.class, HttpMessageNotReadableException.class, MissingServletRequestParameterException.class})
+	public ResponseEntity<ErrorResponse> handleSpringBadRequestException(Exception ex,
 																		 HttpServletRequest request) {
 		log.debug("BadRequestException of type '{}': {}", ex.getClass().getName(), ex.getMessage());
 		ErrorResponse responseBody = ErrorResponse.builder()
@@ -120,6 +124,18 @@ public class AppExceptionHandler {
 				.status(HttpStatus.NOT_FOUND.value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
+				.build();
+		return jsonResponse(responseBody);
+	}
+
+	@ExceptionHandler(NoResourceFoundException.class)
+	public ResponseEntity<ErrorResponse> handleNoResourceFoundException(NoResourceFoundException ex,
+																		HttpServletRequest request) {
+		log.debug("NoResourceFoundException: {}", ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(HttpStatus.NOT_FOUND.value())
+				.path(request.getRequestURI())
+				.error(HttpStatus.NOT_FOUND.getReasonPhrase())
 				.build();
 		return jsonResponse(responseBody);
 	}
@@ -172,7 +188,28 @@ public class AppExceptionHandler {
 		return jsonResponse(responseBody);
 	}
 
-	@ExceptionHandler({AuthorizationException.class, UnauthorizedException.class, ForbiddenException.class, AccessDeniedException.class, AuthenticationCredentialsNotFoundException.class})
+	// Handles Spring Security's AccessDeniedException and the core AuthorizationException.
+	// Both carry internal state in their messages (principal URI, entry URI, ACL bit for core,
+	// or a non-informative "Access Denied" for Spring), so the HTTP body is always the reason
+	// phrase; the original message is retained on the server-side log line for debugging.
+	@ExceptionHandler({AccessDeniedException.class, AuthorizationException.class})
+	public ResponseEntity<ErrorResponse> handleAccessDeniedException(RuntimeException ex,
+																	 HttpServletRequest request,
+																	 Authentication authentication) {
+		log.info("AccessDenied of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+		HttpStatus status = (authentication == null || authentication instanceof AnonymousAuthenticationToken) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(status.value())
+				.path(request.getRequestURI())
+				.error(status.getReasonPhrase())
+				.build();
+		return jsonResponse(responseBody);
+	}
+
+	// Handles application-specific authentication/authorization exceptions whose messages are
+	// intentionally user-facing (hand-crafted at call sites in SolrManagementService, AuthService,
+	// ResourceService, ProxyService, etc.), so the message is surfaced in the HTTP body for 403.
+	@ExceptionHandler({UnauthorizedException.class, ForbiddenException.class, AuthenticationCredentialsNotFoundException.class})
 	public ResponseEntity<ErrorResponse> handleForbiddenException(RuntimeException ex,
 																  HttpServletRequest request,
 																  Authentication authentication) {
@@ -216,12 +253,23 @@ public class AppExceptionHandler {
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ErrorResponse> handleGenericException(Exception ex,
-																HttpServletRequest request) throws Exception {
+																HttpServletRequest request) {
 
-		if (ex instanceof org.springframework.web.ErrorResponse) {
-			// handled by Spring-boot so we don't need to here
+		if (ex instanceof org.springframework.web.ErrorResponse errorResponse) {
+			int code = errorResponse.getStatusCode().value();
+			HttpStatus status = HttpStatus.resolve(code);
+			String reasonPhrase = status != null ? status.getReasonPhrase() : "Error";
+			// Surface the exception message when present (Spring's own ErrorResponse subclasses
+			// carry structured problem details there — e.g. supported media types for 406/415 —
+			// and their messages do not leak internals). Fall back to the reason phrase otherwise.
+			String errorMessage = StringUtils.isNotBlank(ex.getMessage()) ? ex.getMessage() : reasonPhrase;
 			log.debug("General ErrorResponse Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
-			throw ex;
+			ErrorResponse responseBody = ErrorResponse.builder()
+					.status(code)
+					.path(request.getRequestURI())
+					.error(errorMessage)
+					.build();
+			return jsonResponse(responseBody);
 		}
 
 		log.error("Unhandled general Exception of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage(), ex);

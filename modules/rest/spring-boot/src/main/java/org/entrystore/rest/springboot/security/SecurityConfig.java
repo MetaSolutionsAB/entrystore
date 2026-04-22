@@ -52,6 +52,7 @@ import org.springframework.security.saml2.provider.service.web.authentication.Op
 import org.springframework.security.saml2.provider.service.web.authentication.Saml2AuthenticationRequestResolver;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
@@ -91,7 +92,8 @@ public class SecurityConfig {
 
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http, SessionRegistry sessionRegistry,
-												   AuthenticationEntryPoint customEntryPoint) throws Exception {
+												   AuthenticationEntryPoint customEntryPoint,
+												   AccessDeniedHandler customAccessDeniedHandler) throws Exception {
 
 		if (corsConfig.isCorsEnabled()) {
 			http.cors(Customizer.withDefaults());
@@ -150,6 +152,7 @@ public class SecurityConfig {
 				// below disables the auto redirect to login page when user is not authenticated, instead reply with 401
 				.exceptionHandling(e -> e
 						.authenticationEntryPoint(entryPoint)
+						.accessDeniedHandler(customAccessDeniedHandler)
 				);
 
 		if (basicAuthEnabled) {
@@ -181,8 +184,35 @@ public class SecurityConfig {
 	@Bean
 	public AuthenticationEntryPoint customEntryPoint() {
 		return (request, response, authException) -> {
-			// Delegate the exception to global Exception handler
-			handlerExceptionResolver.resolveException(request, response, null, authException);
+			// Delegate the exception to global Exception handler, falling back to a direct envelope
+			// write if the resolver returns null (no handler matched) so the client never gets an
+			// empty committed response.
+			var mv = handlerExceptionResolver.resolveException(request, response, null, authException);
+			if (mv == null && !response.isCommitted()) {
+				log.warn("AuthenticationEntryPoint: exception resolver did not handle {}", authException.getClass().getName());
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.UNAUTHORIZED.value())
+						.path(request.getRequestURI())
+						.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
+						.build());
+			}
+		};
+	}
+
+	@Bean
+	public AccessDeniedHandler customAccessDeniedHandler() {
+		return (request, response, accessDeniedException) -> {
+			// Delegate the exception to global Exception handler (AppExceptionHandler.handleAccessDeniedException),
+			// falling back to a direct envelope write if the resolver returns null.
+			var mv = handlerExceptionResolver.resolveException(request, response, null, accessDeniedException);
+			if (mv == null && !response.isCommitted()) {
+				log.warn("AccessDeniedHandler: exception resolver did not handle {}", accessDeniedException.getClass().getName());
+				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+						.status(HttpStatus.FORBIDDEN.value())
+						.path(request.getRequestURI())
+						.error(HttpStatus.FORBIDDEN.getReasonPhrase())
+						.build());
+			}
 		};
 	}
 
