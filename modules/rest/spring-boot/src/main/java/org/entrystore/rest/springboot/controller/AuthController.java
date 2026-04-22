@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -5,6 +21,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apereo.cas.client.util.CommonUtils;
+import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
@@ -14,6 +32,7 @@ import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.cas.ServiceProperties;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.MultiValueMap;
@@ -23,8 +42,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Controller
@@ -40,6 +61,23 @@ public class AuthController {
 
 	private final AuthService authService;
 	private final SamlAuthService samlAuthService;
+	private final CasCustomConfiguration casConfiguration;
+	private final Optional<ServiceProperties> casServiceProperties;
+
+	@GetMapping("/auth/cas")
+	public void startCasLogin(HttpServletResponse response) throws IOException {
+		if (!casConfiguration.enabled()) {
+			throw new EntityNotFoundException("Not Found");
+		}
+
+		String serviceUrl = casServiceProperties.orElseThrow(() -> new IllegalStateException(
+				"CAS is enabled but ServiceProperties bean is missing — check CasConfig.")).getService();
+		String loginUrl = casConfiguration.server().resolvedLoginUrl();
+
+		// CommonUtils.constructRedirectUrl handles query-string parsing and URL encoding,
+		// so it works correctly even when loginUrl already contains a query string.
+		response.sendRedirect(CommonUtils.constructRedirectUrl(loginUrl, "service", serviceUrl, false, false));
+	}
 
 	// Endpoint initiates SAML authentication by redirecting to the IdP for authentication
 	@GetMapping("/auth/saml")

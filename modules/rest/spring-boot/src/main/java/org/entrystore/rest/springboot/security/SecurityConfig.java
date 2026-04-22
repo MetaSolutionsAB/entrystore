@@ -17,12 +17,16 @@
 package org.entrystore.rest.springboot.security;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.CorsConfig;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
@@ -40,10 +44,14 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.cas.authentication.CasAuthenticationProvider;
+import org.springframework.security.cas.web.CasAuthenticationFilter;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
@@ -54,9 +62,14 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
+import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.AndRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
+import java.io.IOException;
 import java.util.Optional;
 
 @Slf4j
@@ -80,6 +93,11 @@ public class SecurityConfig {
 	private final SamlLoginSuccessHandler samlLoginSuccessHandler;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlAuthStateCache samlAuthStateCache;
+
+	// CAS-auth related beans (optional — only present when entrystore.auth.cas.enabled=true)
+	private final CasCustomConfiguration casConfiguration;
+	private final Optional<CasAuthenticationProvider> casAuthenticationProvider;
+	private final Optional<CasLoginSuccessHandler> casLoginSuccessHandler;
 
 	private boolean basicAuthEnabled;
 
@@ -176,6 +194,44 @@ public class SecurityConfig {
 					.successHandler(samlLoginSuccessHandler));
 		} else {
 			log.info("SAML Auth Disabled");
+		}
+
+		if (casConfiguration.enabled()) {
+			log.info("CAS Auth Enabled");
+
+			var casFilter = new CasAuthenticationFilter();
+			// CSRF is disabled globally and getParameter() reads form bodies, so pinning to GET
+			// prevents a cross-site POST from submitting a stolen ticket.
+			RequestMatcher ticketRequired = request -> request.getParameter("ticket") != null;
+			casFilter.setRequiresAuthenticationRequestMatcher(new AndRequestMatcher(
+					PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/auth/cas"),
+					ticketRequired));
+			casFilter.setAuthenticationManager(new ProviderManager(
+					casAuthenticationProvider.orElseThrow(() -> new IllegalStateException(
+							"CAS is enabled but CasAuthenticationProvider bean is missing — check CasConfig."))));
+
+			var handler = casLoginSuccessHandler.orElseThrow(() -> new IllegalStateException(
+					"CAS is enabled but CasLoginSuccessHandler bean is missing — check CasConfig."));
+			handler.setDefaultTargetUrl(casConfiguration.redirectSuccess().url());
+			casFilter.setAuthenticationSuccessHandler(handler);
+			// Surface ticket-validation failures at WARN with the full stack trace.
+			// SimpleUrlAuthenticationFailureHandler's default logging is at DEBUG level, which
+			// makes bad-ticket, CAS-server-down, SSL, and clock-skew errors invisible in production.
+			casFilter.setAuthenticationFailureHandler(new SimpleUrlAuthenticationFailureHandler(
+					casConfiguration.redirectFailure().url()) {
+				@Override
+				public void onAuthenticationFailure(HttpServletRequest request,
+													HttpServletResponse response,
+													AuthenticationException exception) throws IOException, ServletException {
+					log.warn("CAS authentication failed at '{}': {}",
+							request.getRequestURI(), exception.getMessage(), exception);
+					super.onAuthenticationFailure(request, response, exception);
+				}
+			});
+
+			http.addFilterBefore(casFilter, UsernamePasswordAuthenticationFilter.class);
+		} else {
+			log.info("CAS Auth Disabled");
 		}
 
 		return http.build();

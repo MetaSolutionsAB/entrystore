@@ -1,0 +1,58 @@
+{
+  "realm": "test",
+  "enabled": true,
+  "id": "test-realm-cas",
+  "displayName": "CAS Test Realm",
+  "users": [
+    {
+      "username": "testcasuser",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "testcasuser@test.com",
+      "firstName": "CAS",
+      "lastName": "User",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "caspassword",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "admin@test.com",
+      "firstName": "Admin",
+      "lastName": "Blocked",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "adminpassword",
+          "temporary": false
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "http://localhost:8181/auth/cas",
+      "name": "CAS Test Client",
+      "enabled": true,
+      "protocol": "cas",
+      "publicClient": true,
+      "redirectUris": [
+        "http://host.docker.internal:8181/*",
+        "http://localhost:8181/*"
+      ],
+      "baseUrl": "http://host.docker.internal:8181",
+      "webOrigins": [
+        "http://host.docker.internal:8181",
+        "http://localhost:8181"
+      ]
+    }
+  ]
+}

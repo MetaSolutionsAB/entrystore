@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,8 +30,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.IOException;
 import java.util.Date;
@@ -181,9 +184,47 @@ public class HttpUtil {
 		writer.flush();
 	}
 
+	/**
+	 * Redirects to the given URL if non-null, otherwise writes a 401 JSON error response.
+	 * Safe to call from servlet filter context (no exceptions thrown to the filter chain).
+	 *
+	 * @param failureMessage message for the JSON fallback body (e.g. "CAS login failed")
+	 */
+	public static void redirectOrWriteUnauthorized(HttpServletResponse response, String requestUri,
+												   String redirectUrl, String failureMessage) throws IOException {
+		if (redirectUrl != null) {
+			response.sendRedirect(redirectUrl);
+		} else {
+			writeErrorResponseAsJson(response, ErrorResponse.builder()
+					.status(HttpStatus.UNAUTHORIZED.value())
+					.path(requestUri)
+					.error(failureMessage != null ? failureMessage : "SSO login failed")
+					.build());
+		}
+	}
+
 	public static void checkRequestSize(HttpServletRequest request, int maxRequestSize) {
 		if (HttpUtil.isLargerThan(request, maxRequestSize)) {
 			throw new EntityTooLargeException("The size of the representation is larger than " + maxRequestSize + "bytes or unknown, request blocked.");
+		}
+	}
+
+	/**
+	 * Clears the {@link SecurityContextHolder} and invalidates the current HTTP session if one exists.
+	 * Used on SSO reject paths: the authentication filter has already persisted the token to the
+	 * SecurityContext before the success handler runs, so this undoes that persistence before the
+	 * rejection is redirected back to the user.
+	 */
+	public static void clearAuthenticatedSession(HttpServletRequest request) {
+		SecurityContextHolder.clearContext();
+		HttpSession session = request.getSession(false);
+		if (session != null) {
+			try {
+				session.invalidate();
+			} catch (IllegalStateException alreadyInvalidated) {
+				// Concurrent request (or the container) already invalidated this session — benign.
+				log.debug("Session already invalidated");
+			}
 		}
 	}
 }
