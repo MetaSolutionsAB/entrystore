@@ -203,7 +203,7 @@ Example config: `modules/rest/spring-boot/src/main/resources/entrystore.properti
 
 ## Git Conventions
 
-- **Base branch:** `develop-spring`
+- **PR target branch:** `develop-spring` (not `develop`, until the Spring Boot migration merges back)
 - Commit messages reference JIRA issues: `ENTRYSTORE-####: Description`
 - Do not include AI/agent attribution in commit messages (no Co-Authored-By or similar)
 - Issue tracker: https://metasolutions.atlassian.net/browse/ENTRYSTORE-*
