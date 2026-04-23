@@ -52,6 +52,7 @@ mvn clean test -Dtest=EntryImplTest
 - Unit tests: `src/test/java/` with `*Test.java` pattern (JUnit 5)
 - Integration tests: `modules/rest/integration-test/src/test/groovy/` with `*IT.groovy` pattern (Groovy/Spock)
 - ITs extend `BaseSpec` which starts a Solr Testcontainer and the Spring Boot app on port 8181 (shared across all test classes)
+- ITs that own their own Spring Boot lifecycle (start the app with non-default args) extend `KeycloakBaseSpec` — which adds a shared Keycloak testcontainer — and use a `Zzz*` class-name prefix so Failsafe's alphabetical `runOrder` schedules them after all shared-app ITs (see `ZzzSamlLoginIT`, `ZzzCasLoginIT`)
 - IT config: `modules/rest/integration-test/src/test/resources/entrystore-it.properties`
 - IT Spring config: `modules/rest/integration-test/src/test/resources/application.yaml` (imports entrystore-it.properties)
 - Test HTTP client: `EntryStoreClient.groovy` — uses raw `HttpURLConnection`, cookie-based auth, `asUser=''` for guest
