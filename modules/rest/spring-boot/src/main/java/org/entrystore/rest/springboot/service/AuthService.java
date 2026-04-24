@@ -77,29 +77,29 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class AuthService {
 
-	private final int TTL = 24 * 3600 * 1000;
+	private static final int TTL = 24 * 3600 * 1000;
 
-	private final String postSuccessMessage = "A confirmation message was sent to {}, if the user exists.";
-	private final String confirmPasswordResetSuccessMessage = "Password reset was successful.";
-	private final String confirmSignupSuccessMessage = "Sign-up successful.";
-	private final String parametersMissingMessage = "One or more parameters are missing.";
-	private final String shortPasswordMessage = "The password has to consist of at least 8 characters.";
-	private final String badPasswordFormatMessage = "The password must conform to the configured rules.";
-	private final String invalidEmailMessage = "Invalid email address: {}.";
-	private final String invalidNameMessage = "Invalid name.";
-	private final String recaptchaMissingMessage = "reCaptcha information missing.";
-	private final String recaptchaInvalidMessage = "Invalid reCaptcha received.";
-	private final String failedToSendEmailMessage = "Failed to send confirmation request to {}.";
-	private final String invalidTokenMessage = "The confirmation token is invalid or has been used already.";
-	private final String userNotFoundMessage = "User with provided email address does not exist.";
-	private final String userAlreadyExistsMessage = "User with submitted email address exists already.";
-	private final String internalErrorMessage = "Unable to reset password due to internal error.";
-	private final String domainNotWhitelistedMessage = "The email domain is not allowed for sign-up: {}";
-	private final String invalidSignupTokenMessage = "Invalid confirmation link. " +
+	private static final String POST_SUCCESS_MESSAGE = "A confirmation message was sent to {}, if the user exists.";
+	private static final String CONFIRM_PASSWORD_RESET_SUCCESS_MESSAGE = "Password reset was successful.";
+	private static final String CONFIRM_SIGNUP_SUCCESS_MESSAGE = "Sign-up successful.";
+	private static final String PARAMETERS_MISSING_MESSAGE = "One or more parameters are missing.";
+	private static final String SHORT_PASSWORD_MESSAGE = "The password has to consist of at least 8 characters.";
+	private static final String BAD_PASSWORD_FORMAT_MESSAGE = "The password must conform to the configured rules.";
+	private static final String INVALID_EMAIL_MESSAGE = "Invalid email address: {}.";
+	private static final String INVALID_NAME_MESSAGE = "Invalid name.";
+	private static final String RECAPTCHA_MISSING_MESSAGE = "reCaptcha information missing.";
+	private static final String RECAPTCHA_INVALID_MESSAGE = "Invalid reCaptcha received.";
+	private static final String FAILED_TO_SEND_EMAIL_MESSAGE = "Failed to send confirmation request to {}.";
+	private static final String INVALID_TOKEN_MESSAGE = "The confirmation token is invalid or has been used already.";
+	private static final String USER_NOT_FOUND_MESSAGE = "User with provided email address does not exist.";
+	private static final String USER_ALREADY_EXISTS_MESSAGE = "User with submitted email address exists already.";
+	private static final String INTERNAL_ERROR_MESSAGE = "Unable to reset password due to internal error.";
+	private static final String DOMAIN_NOT_WHITELISTED_MESSAGE = "The email domain is not allowed for sign-up: {}";
+	private static final String INVALID_SIGNUP_TOKEN_MESSAGE = "Invalid confirmation link. " +
 			"This may be because you already clicked the link and have an account, " +
 			"the confirmation link has expired, or the token never existed. " +
 			"Visit the link below to sign up again and receive a new confirmation link.";
-	private final String unableToCreateUserMessage = "Unable to create user.";
+	private static final String UNABLE_TO_CREATE_USER_MESSAGE = "Unable to create user.";
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final PrincipalManager principalManager;
@@ -170,7 +170,7 @@ public class AuthService {
 	public String confirmPassword(String token, String title) {
 		SignupInfo ci = signupTokenCache.getTokenValue(token);
 		if (ci == null) {
-			throw new BadRequestHtmlException(invalidTokenMessage, title);
+			throw new BadRequestHtmlException(INVALID_TOKEN_MESSAGE, title);
 		}
 		signupTokenCache.removeToken(token);
 
@@ -191,7 +191,7 @@ public class AuthService {
 				if (ci.getUrlFailure() != null) {
 					handleUrlRedirect(ci.getUrlFailure());
 				} else {
-					throw new PwResetEntityNotFoundHtmlException(userNotFoundMessage, title);
+					throw new PwResetEntityNotFoundHtmlException(USER_NOT_FOUND_MESSAGE, title);
 				}
 			} else {
 				// Reset password
@@ -214,7 +214,7 @@ public class AuthService {
 					if (ci.getUrlFailure() != null) {
 						handleUrlRedirect(ci.getUrlFailure());
 					} else {
-						throw new InternalServerErrorException(internalErrorMessage);
+						throw new InternalServerErrorException(INTERNAL_ERROR_MESSAGE);
 					}
 				}
 			}
@@ -226,7 +226,7 @@ public class AuthService {
 			handleUrlRedirect(ci.getUrlSuccess());
 		}
 
-		return confirmPasswordResetSuccessMessage;
+		return CONFIRM_PASSWORD_RESET_SUCCESS_MESSAGE;
 	}
 
 	public String pwReset(HttpServletRequest request, PwResetRequestBody requestBody, String title) {
@@ -239,20 +239,20 @@ public class AuthService {
 		if (StringUtils.isNotEmpty(requestBody.email())) {
 			ci.setEmail(requestBody.email());
 		} else {
-			throw new BadRequestHtmlException(parametersMissingMessage, title);
+			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
 
 		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
-			throw new BadRequestHtmlException(invalidEmailMessage.replace("{}", ci.getEmail()), title);
+			throw new BadRequestHtmlException(INVALID_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
 		}
 
 		if (StringUtils.isNotEmpty(requestBody.password())) {
 			password = requestBody.password().trim();
 			if (password.length() < 8) {
-				throw new BadRequestHtmlException(shortPasswordMessage, title);
+				throw new BadRequestHtmlException(SHORT_PASSWORD_MESSAGE, title);
 			}
 		} else {
-			throw new BadRequestHtmlException(parametersMissingMessage, title);
+			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
 
 		setRedirectUrlIfPermitted(requestBody.urlFailure(), ci::setUrlFailure, "failure");
@@ -271,10 +271,10 @@ public class AuthService {
 					log.info("Valid reCaptcha for {}", ci.getEmail());
 				} else {
 					log.info("Invalid reCaptcha for {}", ci.getEmail());
-					throw new BadRequestHtmlException(recaptchaInvalidMessage, title);
+					throw new BadRequestHtmlException(RECAPTCHA_INVALID_MESSAGE, title);
 				}
 			} else {
-				throw new BadRequestHtmlException(recaptchaMissingMessage, title);
+				throw new BadRequestHtmlException(RECAPTCHA_MISSING_MESSAGE, title);
 			}
 		}
 
@@ -297,7 +297,7 @@ public class AuthService {
 			if (u != null) {
 				if (u.isDisabled()) {
 					log.info("User {} is disabled, not allowing password reset", ci.getEmail());
-					throw new ForbiddenException(failedToSendEmailMessage);
+					throw new ForbiddenException(FAILED_TO_SEND_EMAIL_MESSAGE.replace("{}", ci.getEmail()));
 				}
 
 				String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
@@ -310,7 +310,7 @@ public class AuthService {
 					signupTokenCache.putToken(token, ci);
 					log.info("Sent confirmation request to {}", ci.getEmail());
 				} else {
-					throw new BadRequestHtmlException(failedToSendEmailMessage.replace("{}", ci.getEmail()), title);
+					throw new BadRequestHtmlException(FAILED_TO_SEND_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
 				}
 			} else {
 				log.info("Ignoring password reset attempt for non-existing user {}", ci.getEmail());
@@ -319,7 +319,7 @@ public class AuthService {
 			principalManager.setAuthenticatedUserURI(authUser);
 		}
 
-		return postSuccessMessage.replace("{}", ci.getEmail());
+		return POST_SUCCESS_MESSAGE.replace("{}", ci.getEmail());
 	}
 
 	public String confirmSignup(String token, String title) {
@@ -327,7 +327,7 @@ public class AuthService {
 		if (signupInfo == null) {
 			URL bURL = repositoryManager.getRepositoryURL();
 			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + (Arrays.asList(-1, 80, 443).contains(bURL.getPort()) ? "" : ":" + bURL.getPort());
-			throw new BadRequestHtmlException(invalidSignupTokenMessage, title, appURL);
+			throw new BadRequestHtmlException(INVALID_SIGNUP_TOKEN_MESSAGE, title, appURL);
 		}
 		signupTokenCache.removeToken(token);
 
@@ -343,7 +343,7 @@ public class AuthService {
 					handleUrlRedirect(signupInfo.getUrlFailure());
 					return null;
 				} else {
-					throw new DataConflictHtmlException(userAlreadyExistsMessage, title);
+					throw new DataConflictHtmlException(USER_ALREADY_EXISTS_MESSAGE, title);
 				}
 			}
 
@@ -355,7 +355,7 @@ public class AuthService {
 					handleUrlRedirect(signupInfo.getUrlFailure());
 					return null;
 				} else {
-					throw new InternalServerErrorException(unableToCreateUserMessage);
+					throw new InternalServerErrorException(UNABLE_TO_CREATE_USER_MESSAGE);
 				}
 			} else {
 				// Set alias, metadata and password
@@ -389,7 +389,7 @@ public class AuthService {
 			handleUrlRedirect(signupInfo.getUrlSuccess());
 		}
 
-		return confirmSignupSuccessMessage;
+		return CONFIRM_SIGNUP_SUCCESS_MESSAGE;
 	}
 
 	public String signup(HttpServletRequest request, SignupRequestBody requestBody, Map<String, String> extraProperties, String title) {
@@ -402,31 +402,31 @@ public class AuthService {
 		if (StringUtils.isNotEmpty(requestBody.email())) {
 			ci.setEmail(requestBody.email());
 		} else {
-			throw new BadRequestHtmlException(parametersMissingMessage, title);
+			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
 
 		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
-			throw new BadRequestHtmlException(invalidEmailMessage.replace("{}", ci.getEmail()), title);
+			throw new BadRequestHtmlException(INVALID_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
 		}
 
 		if (StringUtils.isNotEmpty(requestBody.password())) {
 			password = requestBody.password().trim();
 			if (password.length() < 8) {
-				throw new BadRequestHtmlException(badPasswordFormatMessage, title);
+				throw new BadRequestHtmlException(BAD_PASSWORD_FORMAT_MESSAGE, title);
 			}
 		} else {
-			throw new BadRequestHtmlException(parametersMissingMessage, title);
+			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
 
 		if (StringUtils.isNotEmpty(requestBody.firstName()) && StringUtils.isNotEmpty(requestBody.lastName())) {
 			ci.setFirstName(requestBody.firstName());
 			ci.setLastName(requestBody.lastName());
 		} else {
-			throw new BadRequestHtmlException(parametersMissingMessage, title);
+			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
 
 		if (isInvalidName(ci.getFirstName()) || isInvalidName(ci.getLastName())) {
-			throw new BadRequestHtmlException(invalidNameMessage, title);
+			throw new BadRequestHtmlException(INVALID_NAME_MESSAGE, title);
 		}
 
 		setRedirectUrlIfPermitted(requestBody.urlFailure(), ci::setUrlFailure, "failure");
@@ -444,7 +444,7 @@ public class AuthService {
 		if (!domainWhitelist.isEmpty()) {
 			String emailDomain = ci.getEmail().substring(ci.getEmail().indexOf("@") + 1).toLowerCase();
 			if (!domainWhitelist.contains(emailDomain)) {
-				throw new ExpectationFailedHtmlException(domainNotWhitelistedMessage.replace("{}", emailDomain), title);
+				throw new ExpectationFailedHtmlException(DOMAIN_NOT_WHITELISTED_MESSAGE.replace("{}", emailDomain), title);
 			}
 		}
 
@@ -461,10 +461,10 @@ public class AuthService {
 					log.info("Valid reCaptcha for {}", ci.getEmail());
 				} else {
 					log.info("Invalid reCaptcha for {}", ci.getEmail());
-					throw new BadRequestHtmlException(recaptchaInvalidMessage, title);
+					throw new BadRequestHtmlException(RECAPTCHA_INVALID_MESSAGE, title);
 				}
 			} else {
-				throw new BadRequestHtmlException(recaptchaMissingMessage, title);
+				throw new BadRequestHtmlException(RECAPTCHA_MISSING_MESSAGE, title);
 			}
 		}
 
@@ -478,10 +478,10 @@ public class AuthService {
 			signupTokenCache.putToken(token, ci);
 			log.info("Sent confirmation request to {}", ci.getEmail());
 		} else {
-			throw new BadRequestHtmlException(failedToSendEmailMessage.replace("{}", ci.getEmail()), title);
+			throw new BadRequestHtmlException(FAILED_TO_SEND_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
 		}
 
-		return postSuccessMessage.replace("{}", ci.getEmail());
+		return POST_SUCCESS_MESSAGE.replace("{}", ci.getEmail());
 	}
 
 	private void setRedirectUrlIfPermitted(String url, Consumer<String> setter, String label) {

@@ -177,6 +177,13 @@
 									<requireMavenVersion>
 										<version>3.6</version>
 									</requireMavenVersion>
+									<bannedDependencies>
+										<excludes>
+											<exclude>ch.qos.logback:*</exclude>
+											<exclude>org.springframework.boot:spring-boot-starter-logging</exclude>
+										</excludes>
+										<message>Logback and spring-boot-starter-logging are banned — this project uses Log4j2. The global dependencyManagement exclusion on spring-boot-starter in the root pom should keep them off the classpath; this rule fails the build if a transitive pull somehow reintroduces them.</message>
+									</bannedDependencies>
 								</rules>
 							</configuration>
 						</execution>
@@ -226,6 +233,10 @@
 		</pluginManagement>
 
 		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-enforcer-plugin</artifactId>
+			</plugin>
 			<plugin>
 				<groupId>org.owasp</groupId>
 				<artifactId>dependency-check-maven</artifactId>
@@ -470,6 +481,18 @@
 				<groupId>com.googlecode.owasp-java-html-sanitizer</groupId>
 				<artifactId>owasp-java-html-sanitizer</artifactId>
 				<version>${owasp-html-sanitizer.version}</version>
+			</dependency>
+			<dependency>
+				<!-- Global exclusion: every spring-boot-starter-* pulls spring-boot-starter, which
+					 pulls spring-boot-starter-logging (Logback + bridges). We use Log4j2 instead. -->
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-starter</artifactId>
+				<exclusions>
+					<exclusion>
+						<groupId>org.springframework.boot</groupId>
+						<artifactId>spring-boot-starter-logging</artifactId>
+					</exclusion>
+				</exclusions>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>

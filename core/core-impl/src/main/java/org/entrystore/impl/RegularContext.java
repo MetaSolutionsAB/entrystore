@@ -16,8 +16,6 @@
 
 package org.entrystore.impl;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
 import org.entrystore.ResourceType;
@@ -28,7 +26,6 @@ import java.net.URI;
  * @author Matthias Palmér
  */
 public class RegularContext extends ContextImpl {
-	private static Log log = LogFactory.getLog(RegularContext.class);
 
 	/**
 	 * Creates a principal manager

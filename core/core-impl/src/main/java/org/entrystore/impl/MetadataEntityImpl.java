@@ -16,8 +16,7 @@
 
 package org.entrystore.impl;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
@@ -36,14 +35,13 @@ import java.util.Date;
 /**
  * @author Matthias Palmér
  */
+@Slf4j
 public class MetadataEntityImpl implements GraphEntity {
     private IRI uri;
     private EntryImpl entry;
     private Date date;
     private IRI attributedURI;
     private boolean latest;
-
-    Log log = LogFactory.getLog(MetadataEntityImpl.class);
 
     public MetadataEntityImpl(EntryImpl entry, IRI uri, Date date, boolean isLatest) {
         this.entry = entry;

@@ -17,8 +17,7 @@
 package org.entrystore.impl;
 
 import com.google.common.collect.Lists;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -46,9 +45,8 @@ import java.util.List;
 /**
  * @author Matthias Palmér
  */
+@Slf4j
 public class ProvenanceImpl implements Provenance {
-
-    Log log = LogFactory.getLog(ProvenanceImpl.class);
 
     private EntryImpl entry;
 

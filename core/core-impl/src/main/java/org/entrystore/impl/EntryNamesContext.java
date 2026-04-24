@@ -17,8 +17,7 @@
 
 package org.entrystore.impl;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Statement;
@@ -43,8 +42,8 @@ import java.util.Set;
  * @author matthias
  *
  */
+@Slf4j
 public class EntryNamesContext extends ContextImpl {
-	private static final Log log = LogFactory.getLog(EntryNamesContext.class);
 
 	HashMap<String, URI> names2EntryURI;
 	HashMap<URI, String> entryURI2Name;

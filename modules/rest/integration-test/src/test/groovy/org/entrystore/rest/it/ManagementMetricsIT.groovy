@@ -121,6 +121,7 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_BAD_METHOD
+		connection.getContentType().contains('application/json')
 	}
 
 	def "GET /management/metrics/nonexistent.metric as admin should reply with 404"() {
@@ -129,6 +130,10 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		// MetricsEndpoint is matched and invoked; returning null from its @ReadOperation
+		// is translated by Actuator into a bare 404 with no body/content-type — it never
+		// reaches Spring MVC's error controller that serves JSON for the other 404s here.
+		connection.getContentType() == null
 	}
 
 	def "GET /management as admin should reply with 404 (actuator discovery disabled)"() {
@@ -137,6 +142,7 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
 	}
 
 	def "GET /management/health as admin should reply with 404 (actuator endpoint not exposed)"() {
@@ -145,6 +151,7 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
 	}
 
 	def "GET /management/env as admin should reply with 404 (actuator endpoint not exposed)"() {
@@ -153,5 +160,6 @@ class ManagementMetricsIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_NOT_FOUND
+		connection.getContentType().contains('application/json')
 	}
 }

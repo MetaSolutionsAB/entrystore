@@ -52,9 +52,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AuthController {
 
-	private final int MAX_REQUEST_SIZE = 32 * 1024;
-	private final String signupTitle = "Sign-up";
-	private final String passwordResetTitle = "Password reset";
+	private static final int MAX_REQUEST_SIZE = 32 * 1024;
+	private static final String SIGNUP_TITLE = "Sign-up";
+	private static final String PASSWORD_RESET_TITLE = "Password reset";
 
 	@Value("${entrystore.auth.saml.enabled:false}")
 	private boolean isSamlAuthEnabled;
@@ -124,8 +124,8 @@ public class AuthController {
 			Model model,
 			@RequestBody PwResetRequestBody pwResetRequestBody) {
 		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
-		String message = authService.pwReset(request, pwResetRequestBody, passwordResetTitle);
-		model.addAttribute("title", passwordResetTitle);
+		String message = authService.pwReset(request, pwResetRequestBody, PASSWORD_RESET_TITLE);
+		model.addAttribute("title", PASSWORD_RESET_TITLE);
 		model.addAttribute("message", message);
 		return "auth";
 	}
@@ -147,8 +147,8 @@ public class AuthController {
 				paramMap.getFirst("urlsuccess"),
 				paramMap.getFirst("urlfailure"),
 				paramMap.getFirst("g-recaptcha-response"));
-		String message = authService.pwReset(request, pwResetRequestBody, passwordResetTitle);
-		model.addAttribute("title", passwordResetTitle);
+		String message = authService.pwReset(request, pwResetRequestBody, PASSWORD_RESET_TITLE);
+		model.addAttribute("title", PASSWORD_RESET_TITLE);
 		model.addAttribute("message", message);
 		return "auth";
 	}
@@ -163,8 +163,8 @@ public class AuthController {
 			return "pwreset_form";
 		}
 
-		String message = authService.confirmPassword(confirm, passwordResetTitle);
-		model.addAttribute("title", passwordResetTitle);
+		String message = authService.confirmPassword(confirm, PASSWORD_RESET_TITLE);
+		model.addAttribute("title", PASSWORD_RESET_TITLE);
 		model.addAttribute("message", message);
 		return "auth";
 	}
@@ -199,8 +199,8 @@ public class AuthController {
 		parameters.remove("urlsuccess");
 		parameters.remove("urlfailure");
 		parameters.remove("grecaptcharesponse");
-		String message = authService.signup(request, signupRequestBody, parameters, signupTitle);
-		model.addAttribute("title", signupTitle);
+		String message = authService.signup(request, signupRequestBody, parameters, SIGNUP_TITLE);
+		model.addAttribute("title", SIGNUP_TITLE);
 		model.addAttribute("message", message);
 		return "auth";
 	}
@@ -233,8 +233,8 @@ public class AuthController {
 		parameters.remove("urlfailure");
 		parameters.remove("g-recaptcha-response");
 
-		String message = authService.signup(request, signupRequestBody, parameters, signupTitle);
-		model.addAttribute("title", signupTitle);
+		String message = authService.signup(request, signupRequestBody, parameters, SIGNUP_TITLE);
+		model.addAttribute("title", SIGNUP_TITLE);
 		model.addAttribute("message", message);
 		return "auth";
 	}
@@ -250,8 +250,8 @@ public class AuthController {
 			return "signup_form";
 		}
 
-		String message = authService.confirmSignup(confirm, signupTitle);
-		model.addAttribute("title", signupTitle);
+		String message = authService.confirmSignup(confirm, SIGNUP_TITLE);
+		model.addAttribute("title", SIGNUP_TITLE);
 		model.addAttribute("message", message);
 		response.setStatus(HttpStatus.CREATED.value());
 		return "auth";

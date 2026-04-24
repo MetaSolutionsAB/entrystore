@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -30,8 +31,6 @@ import org.entrystore.User;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.RepositoryException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.Iterator;
@@ -45,15 +44,11 @@ import java.util.Vector;
  *
  * @author olov
  */
+@Slf4j
 public class GroupImpl extends ListImpl implements Group {
-	
-	/**
-	 * Logger
-	 */
-	static Logger log = LoggerFactory.getLogger(UserImpl.class);
 
 	private URI homeContext;
-	
+
 	/**
 	 * Creates a new group with the specified URI
 	 *
@@ -63,7 +58,7 @@ public class GroupImpl extends ListImpl implements Group {
 	public GroupImpl(EntryImpl entry, IRI uri, SoftCache cache) {
 		super(entry, uri);
 	}
-	
+
 	/**
 	 * Returns the name of the user
 	 *
@@ -108,53 +103,53 @@ public class GroupImpl extends ListImpl implements Group {
 
 	public boolean setHomeContext(Context context) {
 		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, PrincipalManager.AccessProperty.WriteResource);
-        synchronized (this.entry.repository) {
-            RepositoryConnection rc = null;
-            try {
-                rc = this.entry.repository.getConnection();
-                rc.begin();
-                ValueFactory vf = this.entry.repository.getValueFactory();
+		synchronized (this.entry.repository) {
+			RepositoryConnection rc = null;
+			try {
+				rc = this.entry.repository.getConnection();
+				rc.begin();
+				ValueFactory vf = this.entry.repository.getValueFactory();
 
-                //Remove homecontext and remove inverse relation cache.
-                RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
+				//Remove homecontext and remove inverse relation cache.
+				RepositoryResult<Statement> iter = rc.getStatements(resourceURI, RepositoryProperties.homeContext, null, false, entry.getSesameEntryURI());
 				while (iter.hasNext()) {
-                    Statement statement = iter.next();
-                    URI sourceEntryURI = URI.create(statement.getObject().stringValue());
+					Statement statement = iter.next();
+					URI sourceEntryURI = URI.create(statement.getObject().stringValue());
 					EntryImpl sourceEntry = (EntryImpl) this.entry.getRepositoryManager().getContextManager().getEntry(sourceEntryURI);
-                    if (sourceEntry != null) {
-                        sourceEntry.removeRelationSynchronized(statement, rc);
-                    }
-                    rc.remove(statement, entry.getSesameEntryURI());
-                }
-                iter.close();
+					if (sourceEntry != null) {
+						sourceEntry.removeRelationSynchronized(statement, rc);
+					}
+					rc.remove(statement, entry.getSesameEntryURI());
+				}
+				iter.close();
 
-                //Add new homecontext and add inverse relational cache
-                if (context != null) {
-                    Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
-                    rc.add(newStatement);
-                    ((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc);
-                }
-                rc.commit();
+				//Add new homecontext and add inverse relational cache
+				if (context != null) {
+					Statement newStatement = vf.createStatement(resourceURI, RepositoryProperties.homeContext, ((EntryImpl) context.getEntry()).getSesameEntryURI(), entry.getSesameEntryURI());
+					rc.add(newStatement);
+					((EntryImpl) context.getEntry()).addRelationSynchronized(newStatement, rc);
+				}
+				rc.commit();
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
-            } catch (org.eclipse.rdf4j.repository.RepositoryException e) {
-                log.error(e.getMessage(), e);
-                try {
-                    rc.rollback();
-                } catch (org.eclipse.rdf4j.repository.RepositoryException e1) {
-                    log.error(e.getMessage(), e1);
-                }
-            } finally {
-                try {
-                    rc.close();
+			} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
+				log.error(e.getMessage(), e);
+				try {
+					rc.rollback();
+				} catch (org.eclipse.rdf4j.repository.RepositoryException e1) {
+					log.error(e.getMessage(), e1);
+				}
+			} finally {
+				try {
+					rc.close();
 					//We poke in the internals of entryImpl, to notify that it has relations for later setGraph calls to work
 					entry.invRelations = true;
-                } catch (org.eclipse.rdf4j.repository.RepositoryException e) {
-                    log.error(e.getMessage());
-                }
-                this.homeContext = context.getEntry().getEntryURI();
-            }
-        }
-        return true;
+				} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
+					log.error(e.getMessage());
+				}
+				this.homeContext = context.getEntry().getEntryURI();
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -186,11 +181,11 @@ public class GroupImpl extends ListImpl implements Group {
 		if (user == null) {
 			return false;
 		}
-		
+
 		List<URI> children = getChildren();
 		Entry userEntry = user.getEntry();
 		URI userEntryURI = userEntry.getEntryURI();
-		
+
 		return children.contains(userEntryURI);
 	}
 
@@ -226,7 +221,7 @@ public class GroupImpl extends ListImpl implements Group {
 				log.error(e.getMessage());
 			}
 		}
-		
+
 		if (contentError) {
 			log.error("Error in group {} . All members does not seem to be of the type User.", getURI().toString());
 		}
