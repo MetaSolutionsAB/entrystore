@@ -46,7 +46,7 @@ public class ContextController {
 
 	@PreAuthorize("hasRole('ADMIN')")
 	@Operation(summary = "Returns an array of IDs of a context's entries")
-	@GetMapping(path = "/{context-id}", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
+	@GetMapping(path = "/{context-id:(?!favicon\\.ico$).+}", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
 	public List<String> getContextEntries(
 			@PathVariable("context-id") String contextId,
 			@RequestParam(required = false, name = "entryname") String entryName,
@@ -56,7 +56,7 @@ public class ContextController {
 	}
 
 	@Operation(summary = "Creates a new entry inside the given context")
-	@PostMapping(path = "/{context-id}", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
+	@PostMapping(path = "/{context-id:(?!favicon\\.ico$).+}", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
 	public ResponseEntity<CreateEntryResponse> createEntry(
 			@PathVariable("context-id") String contextId,
 			@RequestParam(required = false, name = "id") String entryId,
@@ -93,7 +93,7 @@ public class ContextController {
 	@GetMapping(
 			path = "/{context-id}/export"
 			// we should add the 'produces' MediaType to the endpoint to clearly inform users what type of data is returned
-			// however, then the behaviour differs from Restlet, maybe tweaking Spring-boot content-negotiation strategy will help
+			// however, then the behavior differs from Restlet, maybe tweaking Spring-boot content-negotiation strategy will help
 			//produces = "application/zip"
 	)
 	public ResponseEntity<InputStreamResource> createContextExport(

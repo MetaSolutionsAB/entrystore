@@ -26,6 +26,12 @@ spring:
   servlet.multipart:
     max-file-size: 12MB
     max-request-size: 12MB
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          max-age: 7d
+          cache-public: true
 
 
 management:

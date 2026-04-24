@@ -63,4 +63,10 @@ public class RequestResponseLoggingFilter extends OncePerRequestFilter {
 				response.getStatus(), duration);
 	}
 
+	// Skip logging for favicon requests.
+	@Override
+	protected boolean shouldNotFilter(HttpServletRequest request) {
+		String path = request.getServletPath();
+		return path.equals("/favicon.ico");
+	}
 }
