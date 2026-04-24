@@ -106,6 +106,12 @@
 			<artifactId>owasp-java-html-sanitizer</artifactId>
 		</dependency>
 
+		<dependency>
+			<groupId>org.entrystore</groupId>
+			<artifactId>entrystore-transforms-common</artifactId>
+			<version>${project.version}</version>
+		</dependency>
+
 	</dependencies>
 
 	<build>
