@@ -93,7 +93,7 @@ class ExecuteIT extends BaseSpec {
 
 	def "POST /{context-id}/execute on non-existing context as admin should return Not-Found 404"() {
 		given:
-		def body = JsonOutput.toJson([pipeline: pipelineEntryUri, source: sourceEntryUri])
+		def body = JsonOutput.toJson([pipeline: EntryStoreClient.baseUrl + '/nonexistent-ctx/entry/some-id'])
 
 		when:
 		def connection = EntryStoreClient.postRequest('/nonexistent-ctx/execute', body, 'admin', 'application/json')

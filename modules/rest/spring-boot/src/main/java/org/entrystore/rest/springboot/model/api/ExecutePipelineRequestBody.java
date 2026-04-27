@@ -16,8 +16,15 @@
 
 package org.entrystore.rest.springboot.model.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.NotNull;
+
+import java.net.URI;
+
+@JsonIgnoreProperties(ignoreUnknown = false)
 public record ExecutePipelineRequestBody(
-		String pipeline,
-		String source
+		@NotNull @JsonProperty("pipeline") URI pipelineUri,
+		@JsonProperty("source") URI sourceUri
 ) {
 }

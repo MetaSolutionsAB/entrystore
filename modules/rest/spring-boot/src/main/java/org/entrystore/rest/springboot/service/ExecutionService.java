@@ -26,10 +26,10 @@ import org.entrystore.GraphType;
 import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
-import org.entrystore.rest.springboot.model.api.ExecutePipelineRequestBody;
 import org.entrystore.rest.springboot.model.api.ExecutePipelineResponse;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
+import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.transforms.Pipeline;
 import org.entrystore.transforms.TransformException;
@@ -47,40 +47,33 @@ public class ExecutionService {
 	private final ContextService contextService;
 	private final PrincipalManager principalManager;
 
-	public ExecutePipelineResponse execute(String contextId, ExecutePipelineRequestBody body) {
+	public ExecutePipelineResponse execute(String contextId, URI pipelineUri, URI sourceUri) {
 		Context context = contextService.getContextOrThrow(contextId);
 
-		String pipelineUri = body == null ? null : body.pipeline();
-		if (pipelineUri == null || pipelineUri.isBlank()) {
-			throw new BadRequestException("Request field 'pipeline' is required");
-		}
-		String sourceUri = body.source();
-		if (sourceUri != null && sourceUri.isBlank()) {
-			sourceUri = null;
-		}
-
-		String contextResourceUri = context.getEntry().getResourceURI().toString();
-		if (!pipelineUri.startsWith(contextResourceUri)) {
+		String prefix = context.getEntry().getResourceURI().toString() + "/";
+		if (!pipelineUri.toString().startsWith(prefix)) {
 			throw new BadRequestException("Pipeline entry must belong to the request context");
 		}
-		if (sourceUri != null && !sourceUri.startsWith(contextResourceUri)) {
+		if (sourceUri != null && !sourceUri.toString().startsWith(prefix)) {
 			throw new BadRequestException("Source entry must belong to the request context");
 		}
 
 		principalManager.checkAuthenticatedUserAuthorized(context.getEntry(), AccessProperty.WriteResource);
 
-		Entry pipelineEntry = context.getByEntryURI(URI.create(pipelineUri));
+		Entry pipelineEntry = context.getByEntryURI(pipelineUri);
 		if (pipelineEntry == null) {
-			throw new InternalServerErrorException("Pipeline entry not found in context '" + contextId + "'");
+			throw new EntityNotFoundException("Pipeline entry not found in context '" + contextId + "'");
 		}
+		principalManager.checkAuthenticatedUserAuthorized(pipelineEntry, AccessProperty.ReadResource);
 
 		Entry sourceEntry = null;
 		URI listURI = null;
 		if (sourceUri != null) {
-			sourceEntry = context.getByEntryURI(URI.create(sourceUri));
+			sourceEntry = context.getByEntryURI(sourceUri);
 			if (sourceEntry == null) {
-				throw new InternalServerErrorException("Source entry not found in context '" + contextId + "'");
+				throw new EntityNotFoundException("Source entry not found in context '" + contextId + "'");
 			}
+			principalManager.checkAuthenticatedUserAuthorized(sourceEntry, AccessProperty.ReadResource);
 			if (sourceEntry.getEntryType() != EntryType.Local
 					|| sourceEntry.getResourceType() != ResourceType.InformationResource
 					|| sourceEntry.getMimetype() == null
@@ -90,6 +83,9 @@ public class ExecutionService {
 			Set<URI> lists = sourceEntry.getReferringListsInSameContext();
 			if (lists.size() == 1) {
 				listURI = lists.iterator().next();
+			} else if (lists.size() > 1) {
+				log.debug("Source entry {} belongs to {} referring lists; running pipeline without target list",
+						sourceUri, lists.size());
 			}
 		}
 
@@ -101,7 +97,7 @@ public class ExecutionService {
 		try {
 			processed = new Pipeline(pipelineEntry).run(sourceEntry, listURI);
 		} catch (IllegalStateException e) {
-			throw new BadRequestException("Pipeline execution failed: " + e.getMessage(), e);
+			throw new BadRequestException("Pipeline execution failed", e);
 		} catch (TransformException e) {
 			throw new InternalServerErrorException("Pipeline execution failed", e);
 		}
@@ -109,9 +105,8 @@ public class ExecutionService {
 		if (processed == null || processed.isEmpty()) {
 			return new ExecutePipelineResponse(List.of());
 		}
-		List<String> resultUris = processed.stream()
+		return new ExecutePipelineResponse(processed.stream()
 				.map(entry -> entry.getEntryURI().toString())
-				.toList();
-		return new ExecutePipelineResponse(resultUris);
+				.toList());
 	}
 }

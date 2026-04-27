@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.model.api.ExecutePipelineRequestBody;
@@ -44,9 +45,10 @@ public class ExecutionController {
 			produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<ExecutePipelineResponse> execute(
 			@PathVariable("context-id") String contextId,
-			@RequestBody ExecutePipelineRequestBody body) {
+			@Valid @RequestBody ExecutePipelineRequestBody body) {
 
-		ExecutePipelineResponse response = executionService.execute(contextId, body);
-		return ResponseEntity.status(HttpStatus.CREATED).body(response);
+		ExecutePipelineResponse response = executionService.execute(contextId, body.pipelineUri(), body.sourceUri());
+		HttpStatus status = response.result().isEmpty() ? HttpStatus.OK : HttpStatus.CREATED;
+		return ResponseEntity.status(status).body(response);
 	}
 }
