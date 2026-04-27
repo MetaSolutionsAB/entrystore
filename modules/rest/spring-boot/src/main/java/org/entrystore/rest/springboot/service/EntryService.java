@@ -48,7 +48,6 @@ import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -514,29 +513,14 @@ public class EntryService {
 
 	public Entry modifyEntry(Entry entry, String body, String mediaType, boolean applyACLtoChildren) throws AuthorizationException {
 
-		Model deserializedGraph;
-		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType)) {
-			try {
-				JSONObject rdfJSON = new JSONObject(body);
-				deserializedGraph = RDFJSON.rdfJsonToGraph(rdfJSON);
-			} catch (JSONException e) {
-				throw new BadRequestException("Exception processing request body", e);
-			}
-		} else {
-			deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
+		Model deserializedGraph = GraphUtil.deserializeGraph(body, mediaType);
+		entry.setGraph(deserializedGraph);
+		if (applyACLtoChildren &&
+				GraphType.List.equals(entry.getGraphType()) &&
+				Local.equals(entry.getEntryType())) {
+			((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
 		}
-
-		if (deserializedGraph == null) {
-			throw new BadRequestException("Unable to parse the request body in the requested format: " + mediaType);
-		} else {
-			entry.setGraph(deserializedGraph);
-			if (applyACLtoChildren &&
-					GraphType.List.equals(entry.getGraphType()) &&
-					Local.equals(entry.getEntryType())) {
-				((org.entrystore.List) entry.getResource()).applyACLtoChildren(true);
-			}
-			return entry;
-		}
+		return entry;
 	}
 
 	public void deleteEntry(String contextId, String entryId, boolean recursive) {

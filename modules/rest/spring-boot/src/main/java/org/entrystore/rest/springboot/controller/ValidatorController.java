@@ -19,12 +19,11 @@ package org.entrystore.rest.springboot.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.entrystore.rest.springboot.service.MergeService;
+import org.entrystore.rest.springboot.service.ValidatorService;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -33,18 +32,16 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-public class MergeController {
+public class ValidatorController {
 
 	private static final int MAX_REQUEST_SIZE = 10_485_760; // 10 MB
 
-	private final MergeService mergeService;
+	private final ValidatorService validatorService;
 
-	@PreAuthorize("hasRole('ADMIN')")
-	@Operation(summary = "Merges RDF data into entries of a context")
-	@PostMapping(path = "/{context-id}/merge")
-	public void mergeRdfIntoContext(
-			@PathVariable("context-id") String contextId,
-			@RequestParam(required = false) String resourceId,
+	@PreAuthorize("hasAnyRole('USER','ADMIN')")
+	@Operation(summary = "Validates an RDF graph payload by parsing it, checking IRI validity, and writing it to a fresh NativeStore")
+	@PostMapping(path = "/validator")
+	public void validate(
 			@RequestParam(required = false) String format,
 			@RequestHeader(value = "Content-Type", required = false) String contentType,
 			@RequestBody String body,
@@ -57,7 +54,7 @@ public class MergeController {
 				HttpStatus.BAD_REQUEST
 		);
 
-		mergeService.mergeRdfIntoContext(contextId, body, mediaType, resourceId);
+		validatorService.validate(body, mediaType);
 	}
 
 }

@@ -19,8 +19,6 @@ package org.entrystore.rest.springboot.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.Model;
-import org.eclipse.rdf4j.rio.RDFHandlerException;
-import org.eclipse.rdf4j.rio.RDFParseException;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.impl.converters.Graph2Entries;
@@ -28,7 +26,6 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
 import java.util.Set;
 
 @Slf4j
@@ -50,20 +47,7 @@ public class MergeService {
 	public void mergeRdfIntoContext(String contextId, String rdfBody, String mediaType, String destinationEntryId) {
 		Context context = contextService.getContextOrThrow(contextId);
 
-		Model graph;
-		try {
-			graph = GraphUtil.deserializeGraphUnsafe(rdfBody, mediaType);
-		} catch (RDFParseException e) {
-			throw new BadRequestException("Malformed RDF in request body", e);
-		} catch (RDFHandlerException | IOException e) {
-			throw new BadRequestException("Unable to process the RDF graph from the request body", e);
-		}
-
-		if (graph == null) {
-			throw new BadRequestException(
-					"Unable to parse the RDF graph from the request body; "
-					+ "check that the content matches the specified media type");
-		}
+		Model graph = GraphUtil.deserializeGraph(rdfBody, mediaType);
 
 		Graph2Entries g2e = new Graph2Entries(context);
 		Set<Entry> mergedEntries;
@@ -73,7 +57,7 @@ public class MergeService {
 			throw new BadRequestException("The target entry is not an RDF graph resource; merge requires a Graph-type entry", e);
 		}
 
-		if (mergedEntries == null || mergedEntries.isEmpty()) {
+		if (mergedEntries.isEmpty()) {
 			throw new BadRequestException(
 					"No entries were created or updated; verify the RDF body contains "
 					+ "eterms:mergeResourceId markers or that a resourceId query parameter is provided");
