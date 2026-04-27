@@ -39,12 +39,14 @@ management:
     web:
       base-path: /management
       exposure:
-        include: metrics
+        include: metrics,shutdown
       discovery:
         enabled: false
   endpoint:
     metrics:
       access: read_only
+    shutdown:
+      access: unrestricted
 
 
 logging:

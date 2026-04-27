@@ -69,7 +69,7 @@ public class EntryStoreConfiguration {
 		return properties;
 	}
 
-	@Bean
+	@Bean(destroyMethod = "shutdown")
 	public RepositoryManagerImpl createRepositoryManager(Config config) {
 		String baseURI = config.getString(Settings.BASE_URL);
 		if (baseURI == null) {
