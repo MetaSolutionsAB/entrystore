@@ -16,13 +16,10 @@
 
 package org.entrystore.rest.it
 
-import dasniko.testcontainers.keycloak.KeycloakContainer
 import org.apache.commons.text.StringEscapeUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
 import org.springframework.boot.SpringApplication
-import org.testcontainers.containers.output.Slf4jLogConsumer
-import org.testcontainers.utility.MountableFile
 import spock.lang.Shared
 import spock.lang.Stepwise
 
@@ -31,8 +28,9 @@ import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static java.nio.charset.StandardCharsets.UTF_8
 
+// Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 @Stepwise
-class CasLoginIT extends BaseSpec {
+class ZzzCasLoginIT extends KeycloakBaseSpec {
 
 	static def testUsername = 'testcasuser'
 	static def testUserPassword = 'caspassword'
@@ -47,34 +45,10 @@ class CasLoginIT extends BaseSpec {
 	@Shared
 	def ticketRedirectUrlSaved = ''
 
-	@Shared
-	static KeycloakContainer keycloakContainer
-
 	def setupSpec() {
-		if (appInstance != null) {
-			log.info('Stopping pre-existing ES instance')
-			appInstance.close()
-			EntryStoreClient.cleanCookies()
-		}
-
-		log.info('Starting Keycloak container with CAS protocol provider')
-		// KeycloakContainer() from com.github.dasniko:testcontainers-keycloak:4.1.1 pulls "quay.io/keycloak/keycloak" version 26.5.6
-		keycloakContainer = new KeycloakContainer()
-			.withAdminUsername('admin')
-			.withAdminPassword('admin')
-			.withRealmImportFile('test-realm-cas.json')
-			.withEnv('KC_DB', 'dev-file')
-			.withCopyFileToContainer(
-				MountableFile.forClasspathResource('libs/keycloak-protocol-cas-26.5.6.jar'),
-				'/opt/keycloak/providers/keycloak-protocol-cas.jar'
-			)
-
-		keycloakContainer.start()
-		log.info('Started Keycloak container at: {}:{}', keycloakContainer.getHost(), keycloakContainer.getMappedPort(8080))
-		keycloakCasUrl = keycloakContainer.getAuthServerUrl() + '/realms/test/protocol/cas'
-
-		def logConsumer = new Slf4jLogConsumer(log)
-		keycloakContainer.followOutput(logConsumer)
+		stopPreexistingAppIfRunning()
+		startKeycloakIfNeeded()
+		keycloakCasUrl = getKeycloakCasRealmUrl()
 
 		log.info('Starting EntryStoreApp with CAS')
 		def args = [
@@ -91,14 +65,6 @@ class CasLoginIT extends BaseSpec {
 		] as String[]
 		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 		appStarted = true
-	}
-
-	def cleanupSpec() {
-		if (appInstance != null) {
-			log.info('Stopping EntryStoreApp instance with CAS')
-			appInstance.close()
-		}
-		appStarted = false
 	}
 
 	def '1. GET /auth/cas should redirect to Keycloak CAS login page'() {
@@ -218,7 +184,7 @@ class CasLoginIT extends BaseSpec {
 			'Keycloak did not redirect — realm config may have changed (admin disabled? required actions added?)'
 		assert adminTicketUrl != null: 'No Location header in Keycloak response'
 		assert adminTicketUrl.contains('/auth/cas'): 'Keycloak redirect is not to EntryStore CAS callback'
-		assert adminTicketUrl.contains('ticket='): 'Keycloak did not issue a CAS ticket — check test-realm-cas.json'
+		assert adminTicketUrl.contains('ticket='): 'Keycloak did not issue a CAS ticket — check test-realm-keycloak.json'
 
 		and: 'Follow redirect to EntryStore with the admin CAS ticket'
 		def adminCallbackConn = EntryStoreClient.getRequest(adminTicketUrl, '')

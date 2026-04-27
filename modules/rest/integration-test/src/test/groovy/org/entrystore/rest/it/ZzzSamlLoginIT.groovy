@@ -1,22 +1,36 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
-import dasniko.testcontainers.keycloak.KeycloakContainer
 import org.apache.commons.text.StringEscapeUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.springboot.EntryStoreApplicationSpringBoot
 import org.springframework.boot.SpringApplication
-import org.testcontainers.containers.output.Slf4jLogConsumer
 import spock.lang.Shared
 import spock.lang.Stepwise
 
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.nio.charset.StandardCharsets.UTF_8
 
-// Stepwise makes sure the feature methods run in the order they are declared
+// Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 @Stepwise
-class SamlLoginIT extends BaseSpec {
+class ZzzSamlLoginIT extends KeycloakBaseSpec {
 
-	// below username and password must match the creds configured in Keycloak - "test-realm.json"
+	// below username and password must match the creds configured in Keycloak - "test-realm-keycloak.json"
 	static def testUsername = 'testuserrr'
 	static def testUserPassword = 'passworded'
 	static def successLoginUrl = 'http://localhost:8181/GREAT-SUCCESS/'
@@ -34,31 +48,10 @@ class SamlLoginIT extends BaseSpec {
 	@Shared
 	def samlResponsePageSaved = ''
 
-	@Shared
-	static def keycloakContainer = new KeycloakContainer()
-	// you can access Keycloak admin console by visiting URL printed with the log 'Started Keycloak container at: localhost:xxxx'
-	// need to add a debug-point somewhere after keycloakContainer is started, to stop the test from finishing
-	// use below admin credentials to login to the Keycloak admin console
-		.withAdminUsername('admin')
-		.withAdminPassword('admin')
-		.withRealmImportFile('test-realm.json')
-	// use a simple file-based H2 database. The data is temporary and will be lost when the container stops.
-		.withEnv('KC_DB', 'dev-file')
-
 	def setupSpec() {
-		if (appInstance != null) {
-			log.info('Stopping pre-existing ES instance')
-			appInstance.close()
-			EntryStoreClient.cleanCookies()
-		}
-		log.info('Starting Keycloak container')
-		keycloakContainer.start()
-		log.info('Started Keycloak container at: {}:{}', keycloakContainer.getHost(), keycloakContainer.getMappedPort(8080))
-		keycloakTestRealmUrl = keycloakContainer.getAuthServerUrl() + '/realms/test/protocol/saml'
-
-		// below 2 lines allow to stream Keycloak logs to this Spec execution console
-		def logConsumer = new Slf4jLogConsumer(log)
-		keycloakContainer.followOutput(logConsumer)
+		stopPreexistingAppIfRunning()
+		startKeycloakIfNeeded()
+		keycloakTestRealmUrl = getKeycloakSamlRealmUrl()
 
 		log.info('Starting EntryStoreApp with SAML')
 		def args = [
@@ -69,14 +62,6 @@ class SamlLoginIT extends BaseSpec {
 		] as String[]
 		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 		appStarted = true
-	}
-
-	def cleanupSpec() {
-		if (appInstance != null) {
-			log.info('Stopping EntryStoreApp instance with SAML')
-			appInstance.close()
-		}
-		appStarted = false
 	}
 
 	def '1. GET /auth/saml should start SAML authentication flow - redirect to IDP with SAMLRequest'() {

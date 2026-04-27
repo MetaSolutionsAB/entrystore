@@ -1,9 +1,25 @@
 {
   "realm": "test",
   "enabled": true,
-  "id": "test-realm-cas",
-  "displayName": "CAS Test Realm",
+  "id": "test-realm-merged",
+  "displayName": "Test Realm (SAML + CAS)",
   "users": [
+    {
+      "username": "testuserrr",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "testuser@test.com",
+      "firstName": "Test",
+      "lastName": "User",
+      "requiredActions": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "passworded",
+          "temporary": false
+        }
+      ]
+    },
     {
       "username": "testcasuser",
       "enabled": true,
@@ -38,6 +54,32 @@
     }
   ],
   "clients": [
+    {
+      "clientId": "EntrystoreDev1",
+      "name": "SAML Test Client",
+      "enabled": true,
+      "protocol": "saml",
+      "publicClient": true,
+      "redirectUris": [
+        "http://host.docker.internal:8181/*",
+        "http://localhost:8181/*"
+      ],
+      "baseUrl": "http://host.docker.internal:8181",
+      "adminUrl": "http://host.docker.internal:8181",
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "saml.assertion.signature": "true",
+        "saml.encrypt": "false",
+        "saml.server.signature": "false",
+        "saml.force.post.binding": "true",
+        "saml.client.signature": "false",
+        "saml.authnstatement": "true",
+        "saml_force_name_id_format": "false",
+        "saml_name_id_format": "username"
+      }
+    },
     {
       "clientId": "http://localhost:8181/auth/cas",
       "name": "CAS Test Client",

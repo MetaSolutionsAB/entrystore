@@ -32,6 +32,12 @@ class SearchIT extends BaseSpec {
 	def static contextId = 'searchContextId'
 	def static entryId = ''
 
+	// Test-only predicate attached to this IT's entries so SPARQL syndication tests can query
+	// for a result set containing only SearchIT's entries, regardless of what other ITs have
+	// added to the shared repository. Without this the feed's default-size window fills with
+	// dc:title-bearing entries from other ITs and pushes SearchIT's entries out.
+	static final String MARKER_PREDICATE_IRI = 'http://example.org/ns/searchIT-marker'
+
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -72,19 +78,29 @@ class SearchIT extends BaseSpec {
 								value: 'lokalne metadane opissearch jawnie po polsku',
 								lang : 'pl'
 							]
+						],
+						(MARKER_PREDICATE_IRI)              : [
+							[type: 'literal', value: 'searchIT-entry-1']
 						]
 					]]]
 
 		entryId = getOrCreateEntry(contextId, params, body)
 		assert entryId.length() > 0
 
-		// Create a second entry with dc:title so SPARQL tests (which query across the entire
-		// repository) don't depend on entries created by other IT classes running first.
+		// Second entry also carries the marker predicate and an English-tagged dc:description
+		// so the syndication feed assertions that require size() > 1 for title/summary/description
+		// see at least two values in an EN-lang feed.
 		def secondParams = [id: 'searchEntryId2', graphtype: 'string']
 		def secondBody = [resource: 'Second text',
 						  metadata: [(newResourceIri): [
-							  (NameSpaceConst.DC_TERM_TITLE): [
-								  [type: 'literal', value: 'second entry title']
+							  (NameSpaceConst.DC_TERM_TITLE)      : [
+								  [type: 'literal', value: 'second entry title', lang: 'en']
+							  ],
+							  (NameSpaceConst.DC_TERM_DESCRIPTION): [
+								  [type: 'literal', value: 'second entry description', lang: 'en']
+							  ],
+							  (MARKER_PREDICATE_IRI)              : [
+								  [type: 'literal', value: 'searchIT-entry-2']
 							  ]
 						  ]]]
 		getOrCreateEntry(contextId, secondParams, secondBody)
@@ -531,9 +547,37 @@ class SearchIT extends BaseSpec {
 		dcTitle.find { it['@value'] == 'local metadata title explicitly in EN' } != null
 	}
 
-	def "GET /search?type=sparql&query=dc:title&syndication=rss_2.0 should return rss feed with entries having 'dc:title' predicate, defaulting to explicit English text"() {
+	def "GET /search?type=sparql&query=dc:title&syndication=rss_2.0 should return well-formed RSS feed (curie predicate smoke test)"() {
+		// Smoke-tests the SPARQL curie+syndication code path. Does not assert specific item content
+		// because the dc:title query is repository-wide and not isolated to this IT's entries —
+		// the marker-predicate tests below cover content assertions.
 		given:
 		def queryParams = [type: 'sparql', query: 'dc:title', syndication: 'rss_2.0']
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/rss+xml')
+		def respXml = new XmlParser(false, false).parseText(conn.inputStream.text)
+		respXml.attributes()['xmlns:dc'] == NameSpaceConst.DC_ELEMENTS
+		respXml.attributes()['version'] != null
+		respXml['channel'].size() == 1
+		def channelNode = respXml['channel'][0] as Node
+		channelNode['title'][0]?.value()?[0] == 'Syndication feed of search'
+		// SearchIT populates 2 dc:title-bearing entries in setupSpec, so both must appear in the feed.
+		channelNode['item'].size() >= 2
+		// A curie-resolution regression could return items with the namespace declared but empty
+		// <title> elements; assert at least one item has a non-empty title.
+		channelNode['item']['title'].any { Node n -> (n.value()?[0] as String)?.trim() }
+	}
+
+	def "GET /search?type=sparql with test-only marker predicate, syndication=rss_2.0 should return rss feed with this IT's entries, defaulting to explicit English text"() {
+		given:
+		// Narrow to SearchIT's own entries via the marker predicate — avoids the 50-item feed
+		// window being exhausted by dc:title-bearing entries from other ITs.
+		def queryParams = [type: 'sparql', query: '<' + MARKER_PREDICATE_IRI + '>', syndication: 'rss_2.0']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -562,7 +606,7 @@ class SearchIT extends BaseSpec {
 		with(channelNode['link'][0] as Node) {
 			attributes().size() == 0
 			value().size() == 1
-			value()[0] == EntryStoreClient.baseUrl + '/search?type=sparql&query=dc%3Atitle&syndication=rss_2.0'
+			value()[0] == EntryStoreClient.baseUrl + '/search?type=sparql&query=%3Chttp%3A%2F%2Fexample.org%2Fns%2FsearchIT-marker%3E&syndication=rss_2.0'
 		}
 
 		channelNode['description'].size() == 1
@@ -572,17 +616,19 @@ class SearchIT extends BaseSpec {
 			value()[0] == 'Syndication feed containing max 50 items'
 		}
 
-		channelNode['item'].size() > 1
-		channelNode['item']['title'].size() > 1
-		channelNode['item']['title'].find { Node n -> n.value()?.size() == 1 && n.value()?[0] == 'local metadata title explicitly in EN' } != null
-
-		channelNode['item']['description'].size() > 1
-		channelNode['item']['description'].find { Node n -> n.value()?.size() == 1 && n.value()?[0] == 'local metadata description explicitly in EN' } != null
+		// The marker predicate is unique to SearchIT's 2 entries.
+		channelNode['item'].size() == 2
+		def entry1Item = channelNode['item'].find { Node item ->
+			(item['link'][0]?.value()?[0] as String) == EntryStoreClient.baseUrl + '/' + contextId + '/resource/searchEntryId'
+		} as Node
+		entry1Item != null
+		entry1Item['title'][0].value()[0] == 'local metadata title explicitly in EN'
+		entry1Item['description'][0].value()[0] == 'local metadata description explicitly in EN'
 	}
 
-	def "GET /search?type=sparql&query=dc:title&syndication=atom_1.0 should return atom feed with entries having 'dc:title' predicate, defaulting to explicit English text"() {
+	def "GET /search?type=sparql with test-only marker predicate, syndication=atom_1.0 should return atom feed with this IT's entries, defaulting to explicit English text"() {
 		given:
-		def queryParams = [type: 'sparql', query: 'dc:title', syndication: 'atom_1.0']
+		def queryParams = [type: 'sparql', query: '<' + MARKER_PREDICATE_IRI + '>', syndication: 'atom_1.0']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -605,7 +651,7 @@ class SearchIT extends BaseSpec {
 		respXml['link'].size() == 1
 		with(respXml['link'][0] as Node) {
 			attributes().size() == 2
-			attribute('href') == EntryStoreClient.baseUrl + '/search?type=sparql&query=dc%3Atitle&syndication=atom_1.0'
+			attribute('href') == EntryStoreClient.baseUrl + '/search?type=sparql&query=%3Chttp%3A%2F%2Fexample.org%2Fns%2FsearchIT-marker%3E&syndication=atom_1.0'
 			value().size() == 0
 		}
 
@@ -616,17 +662,18 @@ class SearchIT extends BaseSpec {
 			value()[0] == 'Syndication feed containing max 50 items'
 		}
 
-		respXml['entry'].size() > 1
-		respXml['entry']['title'].size() > 1
-		respXml['entry']['title'].find { Node n -> n.value()?.size() == 1 && n.value()?[0] == 'local metadata title explicitly in EN' } != null
-
-		respXml['entry']['summary'].size() > 1
-		respXml['entry']['summary'].find { Node n -> n.value()?.size() == 1 && n.value()?[0] == 'local metadata description explicitly in EN' } != null
+		respXml['entry'].size() == 2
+		def entry1AtomEntry = respXml['entry'].find { Node e ->
+			(e['link'][0] as Node).attribute('href') == EntryStoreClient.baseUrl + '/' + contextId + '/resource/searchEntryId'
+		} as Node
+		entry1AtomEntry != null
+		entry1AtomEntry['title'][0].value()[0] == 'local metadata title explicitly in EN'
+		entry1AtomEntry['summary'][0].value()[0] == 'local metadata description explicitly in EN'
 	}
 
-	def "GET /search?type=sparql&query=dc:title&syndication=atom_1.0&lang=pl should return atom feed with entries having 'dc:title' predicate, with values explicitly in Polish"() {
+	def "GET /search?type=sparql with test-only marker predicate, syndication=atom_1.0&lang=pl should return atom feed with this IT's entries, with values explicitly in Polish"() {
 		given:
-		def queryParams = [type: 'sparql', query: 'dc:title', syndication: 'atom_1.0', lang: 'pl']
+		def queryParams = [type: 'sparql', query: '<' + MARKER_PREDICATE_IRI + '>', syndication: 'atom_1.0', lang: 'pl']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/search' + convertMapToQueryParams(queryParams))
@@ -649,7 +696,7 @@ class SearchIT extends BaseSpec {
 		respXml['link'].size() == 1
 		with(respXml['link'][0] as Node) {
 			attributes().size() == 2
-			attribute('href') == EntryStoreClient.baseUrl + '/search?type=sparql&query=dc%3Atitle&syndication=atom_1.0&lang=pl'
+			attribute('href') == EntryStoreClient.baseUrl + '/search?type=sparql&query=%3Chttp%3A%2F%2Fexample.org%2Fns%2FsearchIT-marker%3E&syndication=atom_1.0&lang=pl'
 			value().size() == 0
 		}
 
@@ -660,12 +707,14 @@ class SearchIT extends BaseSpec {
 			value()[0] == 'Syndication feed containing max 50 items'
 		}
 
-		respXml['entry'].size() > 1
-		respXml['entry']['title'].size() > 1
-		respXml['entry']['title'].find { Node n -> n.value()?.size() == 1 && n.value()?[0] == 'lokalne metadane tytułsearch jawnie po polsku' } != null
-
-		respXml['entry']['summary'].size() > 0
-		respXml['entry']['summary'].find { Node n -> n.value()?.size() == 1 && n.value()?[0] == 'lokalne metadane opissearch jawnie po polsku' } != null
+		respXml['entry'].size() == 2
+		def entry1PlAtomEntry = respXml['entry'].find { Node e ->
+			(e['link'][0] as Node).attribute('href') == EntryStoreClient.baseUrl + '/' + contextId + '/resource/searchEntryId'
+		} as Node
+		entry1PlAtomEntry != null
+		entry1PlAtomEntry['title'][0].value()[0] == 'lokalne metadane tytułsearch jawnie po polsku'
+		// Only entry 1 has a Polish dc:description; entry 2 has only English, so its summary is absent or "Missing description".
+		entry1PlAtomEntry['summary'][0].value()[0] == 'lokalne metadane opissearch jawnie po polsku'
 	}
 
 	def "GET /search?type=sparql&query=dc:title&syndication=random-string as guest should respond with Unauthorized"() {

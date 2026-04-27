@@ -54,6 +54,16 @@ abstract class BaseSpec extends Specification {
 
 	static def log = LoggerFactory.getLogger(this.class)
 	static def JSON_PARSER = new JsonSlurper()
+
+	// Invariant for lifecycle-owning ITs (those that close this shared app and start their own
+	// with non-default args, e.g. ZzzSamlLoginIT, ZzzCasLoginIT):
+	//   1. Their class name MUST sort alphabetically AFTER all shared-app ITs (Zzz* prefix today),
+	//      enforced by Failsafe runOrder=alphabetical in the integration-test pom.
+	//   2. They MUST set appStarted=true in setupSpec after starting their own app, and MUST NOT
+	//      reset it to false anywhere. If appStarted leaks back to false, the guard below re-runs
+	//      the full init block (Solr + a shared app) between lifecycle-owning ITs, adding an
+	//      extra Spring Boot start per CI run. The asserts in setupSpec catch the two invalid
+	//      (appStarted, appInstance) state pairs.
 	static def appStarted = false
 
 	static ConfigurableApplicationContext appInstance
@@ -66,6 +76,8 @@ abstract class BaseSpec extends Specification {
 
 	def setupSpec() {
 		if (!appStarted) {
+			assert appInstance == null:
+				'appStarted=false but appInstance!=null — an IT started an app without setting appStarted=true.'
 			// clean cookies, in case there are some from a previous instance
 			EntryStoreClient.cleanCookies()
 			log.info('Starting Solr container')
@@ -81,12 +93,13 @@ abstract class BaseSpec extends Specification {
 				'solr', 'create_core', '-c', 'entrystore-core', '-d', '/entrystore-core'
 			)
 
-			log.info('Starting EntryStoreApp without SAML')
+			log.info('Starting common EntryStoreApp (without SSO login)')
 			def args = ['--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core'] as String[]
 			appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 			createCommonUserAccounts()
 			appStarted = true
 		} else {
+			assert appInstance != null: 'Invariant #2 violated — see BaseSpec comment on appStarted.'
 			log.info('EntryStoreApp already started')
 		}
 	}

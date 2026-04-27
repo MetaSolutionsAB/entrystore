@@ -63,6 +63,9 @@
 					</execution>
 				</executions>
 				<configuration>
+					<!-- Alphabetical ordering runs all shared-app ITs before the Zzz*-prefixed
+						 lifecycle-owning ITs. See ENTRYSTORE-1019. -->
+					<runOrder>alphabetical</runOrder>
 					<argLine>
 						-Dfile.encoding=UTF-8
 						-Dstdout.encoding=UTF-8
