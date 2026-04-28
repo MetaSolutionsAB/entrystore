@@ -220,8 +220,22 @@ public class GraphUtil {
 	 * @throws BadRequestException if the body cannot be parsed or the media type is unsupported
 	 */
 	public static Model deserializeGraph(String graphString, String mediaType) {
+		String normalized = normalizeLegacyMediaType(mediaType);
+
+		if (MediaType.APPLICATION_JSON_VALUE.equals(normalized) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(normalized)) {
+			Model graph = RDFJSON.rdfJsonToGraph(graphString);
+			if (graph == null) {
+				throw new BadRequestException("Malformed RDF/JSON in request body");
+			}
+			return graph;
+		}
+
+		RDFParser parser = createRdfParserForMediaType(normalized);
+		if (parser == null) {
+			throw new BadRequestException("Unsupported RDF media type: " + mediaType);
+		}
 		try {
-			return deserializeGraphInternal(graphString, mediaType);
+			return parseWith(parser, graphString);
 		} catch (RDFParseException e) {
 			throw new BadRequestException("Malformed RDF in request body", e);
 		} catch (RDFHandlerException | IOException e) {
@@ -229,22 +243,8 @@ public class GraphUtil {
 		}
 	}
 
-	private static Model deserializeGraphInternal(String graphString, String mediaType)
-			throws RDFHandlerException, IOException, RDFParseException {
-		String normalized = normalizeLegacyMediaType(mediaType);
-
-		if (MediaType.APPLICATION_JSON_VALUE.equals(normalized) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(normalized)) {
-			Model graph = RDFJSON.rdfJsonToGraph(graphString);
-			if (graph == null) {
-				throw new BadRequestException("Unable to parse the request body in the requested format: " + mediaType);
-			}
-			return graph;
-		}
-
-		RDFParser parser = createRdfParserForMediaType(normalized);
-		if (parser == null) {
-			throw new BadRequestException("Unable to parse the request body in the requested format: " + mediaType);
-		}
+	private static Model parseWith(RDFParser parser, String graphString)
+			throws RDFParseException, RDFHandlerException, IOException {
 		StatementCollector collector = new StatementCollector();
 		parser.setRDFHandler(collector);
 		parser.parse(new StringReader(graphString), "");

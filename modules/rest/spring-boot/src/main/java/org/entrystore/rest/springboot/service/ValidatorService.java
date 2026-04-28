@@ -17,7 +17,7 @@
 package org.entrystore.rest.springboot.service;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Literal;
 import org.eclipse.rdf4j.model.Model;
@@ -29,15 +29,12 @@ import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.eclipse.rdf4j.repository.RepositoryException;
 import org.eclipse.rdf4j.repository.sail.SailRepository;
-import org.eclipse.rdf4j.sail.nativerdf.NativeStore;
+import org.eclipse.rdf4j.sail.memory.MemoryStore;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -48,16 +45,22 @@ public class ValidatorService {
 
 	private static final ValueFactory VF = new ValidatingValueFactory();
 
+	private static final int MAX_IRI_LENGTH_IN_ERROR = 200;
+	private static final int MAX_ERRORS_IN_RESPONSE = 50;
+
 	public void validate(String rdfBody, String mediaType) {
 		Model graph = GraphUtil.deserializeGraph(rdfBody, mediaType);
 		assertAllIrisValid(graph);
-		assertWritableToNativeStore(graph);
+		assertWritableToTripleStore(graph);
 	}
 
 	private static void assertAllIrisValid(Model graph) {
 		Set<String> errors = new LinkedHashSet<>();
 		Set<String> seen = new HashSet<>();
 		for (Statement s : graph) {
+			if (errors.size() >= MAX_ERRORS_IN_RESPONSE) {
+				break;
+			}
 			validateIri(s.getSubject(), seen, errors);
 			validateIri(s.getPredicate(), seen, errors);
 			validateIri(s.getObject(), seen, errors);
@@ -69,6 +72,9 @@ public class ValidatorService {
 	}
 
 	private static void validateIri(Value value, Set<String> seen, Set<String> errors) {
+		if (errors.size() >= MAX_ERRORS_IN_RESPONSE) {
+			return;
+		}
 		String iriString = extractIriCandidate(value);
 		if (iriString == null || !seen.add(iriString)) {
 			return;
@@ -76,7 +82,7 @@ public class ValidatorService {
 		try {
 			VF.createIRI(iriString);
 		} catch (IllegalArgumentException e) {
-			errors.add("Invalid IRI: " + iriString);
+			errors.add("Invalid IRI: " + StringUtils.abbreviate(iriString, MAX_IRI_LENGTH_IN_ERROR));
 		}
 	}
 
@@ -91,37 +97,20 @@ public class ValidatorService {
 		};
 	}
 
-	private static void assertWritableToNativeStore(Model graph) {
-		Path tmpPath;
+	private static void assertWritableToTripleStore(Model graph) {
+		Repository repo = new SailRepository(new MemoryStore());
 		try {
-			tmpPath = Files.createTempDirectory("entrystore-validator-");
-		} catch (IOException e) {
-			throw new InternalServerErrorException("Validator temporary storage unavailable", e);
-		}
-
-		Repository repo = null;
-		try {
-			repo = new SailRepository(new NativeStore(tmpPath.toFile()));
-			try {
-				repo.init();
-			} catch (RepositoryException e) {
-				throw new InternalServerErrorException("Failed to initialize validator store", e);
-			}
+			repo.init();
 			try (RepositoryConnection rc = repo.getConnection()) {
 				rc.add(graph);
 			} catch (RepositoryException e) {
-				throw new BadRequestException("Failed to store graph for validation", e);
+				throw new InternalServerErrorException("Validator failed to accept graph", e);
 			}
 		} finally {
-			if (repo != null) {
-				try {
-					repo.shutDown();
-				} catch (RepositoryException e) {
-					log.warn("Failed to shut down validator NativeStore at {}", tmpPath, e);
-				}
-			}
-			if (!FileUtils.deleteQuietly(tmpPath.toFile())) {
-				log.warn("Failed to delete validator temp dir {}", tmpPath);
+			try {
+				repo.shutDown();
+			} catch (RepositoryException e) {
+				log.warn("Failed to shut down validator MemoryStore", e);
 			}
 		}
 	}

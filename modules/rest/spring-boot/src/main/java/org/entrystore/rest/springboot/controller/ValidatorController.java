@@ -39,7 +39,10 @@ public class ValidatorController {
 	private final ValidatorService validatorService;
 
 	@PreAuthorize("hasAnyRole('USER','ADMIN')")
-	@Operation(summary = "Validates an RDF graph payload by parsing it, checking IRI validity, and writing it to a fresh NativeStore")
+	@Operation(
+			summary = "Validates an RDF graph payload: parses it, checks IRI validity, and verifies triplestore round-trip.",
+			description = "IRI validity is checked for all subject/predicate/object/context positions and for literal values that begin with http:// or https://."
+	)
 	@PostMapping(path = "/validator")
 	public void validate(
 			@RequestParam(required = false) String format,

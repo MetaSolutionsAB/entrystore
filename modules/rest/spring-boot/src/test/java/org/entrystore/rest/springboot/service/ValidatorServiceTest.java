@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -121,6 +122,40 @@ class ValidatorServiceTest {
 				"Expected all three offending values in: " + message);
 		assertTrue(idxA < idxB && idxB < idxC,
 				"Expected offending values to appear in input order, but was: " + message);
+	}
+
+	@Test
+	void validate_overlongBadIriLiteral_truncatedInErrorMessage() {
+		String longTail = "/" + "x".repeat(500);
+		String overlongBadIri = "http://bad uri" + longTail;
+		String ntriples = "<http://example.org/a> <http://example.org/p> \"" + overlongBadIri + "\" .\n";
+
+		BadRequestException ex = assertThrows(BadRequestException.class,
+				() -> service.validate(ntriples, NTRIPLES));
+		String message = ex.getMessage();
+		assertTrue(message.contains("..."),
+				"Expected truncation marker in: " + message);
+		assertTrue(message.length() <= "Invalid IRI: ".length() + 200,
+				"Expected message length capped near 200, but was: " + message.length());
+		assertFalse(message.contains(longTail),
+				"Did not expect full bad-IRI tail to appear in: " + message);
+	}
+
+	@Test
+	void validate_manyDistinctBadIriLiterals_errorCountCappedAt50() {
+		StringBuilder body = new StringBuilder();
+		int distinctBadIris = 100;
+		for (int i = 0; i < distinctBadIris; i++) {
+			body.append("<http://example.org/s").append(i)
+					.append("> <http://example.org/p> \"http://bad uri/").append(i)
+					.append("\" .\n");
+		}
+
+		BadRequestException ex = assertThrows(BadRequestException.class,
+				() -> service.validate(body.toString(), NTRIPLES));
+		long occurrences = ex.getMessage().split("Invalid IRI: ", -1).length - 1;
+		assertEquals(50, occurrences,
+				"Expected error count capped at 50, but was: " + occurrences);
 	}
 
 }
