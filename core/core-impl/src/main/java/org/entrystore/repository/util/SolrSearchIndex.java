@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,6 +84,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static java.lang.Thread.interrupted;
 
@@ -103,11 +104,17 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final int SOLR_COMMIT_WITHIN_MAX = 10000;
 
-	private String defaultSortLang = null;
+	private static final int PURGE_POOL_SIZE = 4;
 
-	private boolean extractFulltext = false;
+	private static final long EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS = 10;
 
-	private boolean related = false;
+	private static final long MAX_PURGE_WAIT_NANOS = TimeUnit.MINUTES.toNanos(5);
+
+	private final String defaultSortLang;
+
+	private final boolean extractFulltext;
+
+	private boolean related;
 
 	private Map<IRI, Boolean> relatedProperties = null;
 
@@ -131,9 +138,11 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private final ExecutorService reindexExecutor = Executors.newSingleThreadExecutor();
 
+	private final ExecutorService purgeExecutor = Executors.newFixedThreadPool(PURGE_POOL_SIZE);
+
 	private final Map<URI, DelayedContextIndexerInfo> delayedReindex = Collections.synchronizedMap(new HashMap<>());
 
-	private ValueFactory valueFactory;
+	private final ValueFactory valueFactory;
 
 	public class SolrInputDocumentSubmitter extends Thread {
 
@@ -452,12 +461,31 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		reindexExecutor.shutdown();
+		purgeExecutor.shutdown();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS);
+		awaitOrForceShutdown(reindexExecutor, "Reindex executor", deadline);
+		awaitOrForceShutdown(purgeExecutor, "Purge executor", deadline);
 
 		try {
 			log.debug("Sending commit to Solr");
 			solrServer.commit(true, false);
 		} catch (SolrServerException | IOException e) {
 			log.error(e.getMessage());
+		}
+	}
+
+	private void awaitOrForceShutdown(ExecutorService executor, String name, long deadlineNanos) {
+		long remainingNanos = Math.max(0L, deadlineNanos - System.nanoTime());
+		try {
+			if (!executor.awaitTermination(remainingNanos, TimeUnit.NANOSECONDS)) {
+				List<Runnable> dropped = executor.shutdownNow();
+				log.warn("{} did not terminate before shutdown deadline; forcing shutdownNow, {} pending tasks dropped",
+						name, dropped.size());
+			}
+		} catch (InterruptedException e) {
+			List<Runnable> dropped = executor.shutdownNow();
+			log.warn("{} await interrupted; forcing shutdownNow, {} pending tasks dropped", name, dropped.size());
+			Thread.currentThread().interrupt();
 		}
 	}
 
@@ -472,7 +500,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	public void clearSolrIndex(SolrClient solrServer, Date expirationDate, Entry contextEntry) {
+	public boolean clearSolrIndex(SolrClient solrServer, Date expirationDate, Entry contextEntry) {
 		if (solrServer == null || (expirationDate == null && contextEntry == null)) {
 			throw new IllegalArgumentException("Too many parameters are null");
 		}
@@ -492,8 +520,10 @@ public class SolrSearchIndex implements SearchIndex {
 		req.setCommitWithin(SOLR_COMMIT_WITHIN);
 		try {
 			req.process(solrServer);
+			return true;
 		} catch (SolrServerException | IOException e) {
-			log.error(e.getMessage(), e);
+			log.error("clearSolrIndex failed for query {}: {}", deleteQuery, e.getMessage(), e);
+			return false;
 		}
 	}
 
@@ -541,7 +571,7 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	private void reindex(boolean purgeAllBeforeReindex, boolean sync) {
-		Set<URI> contexts = new HashSet<>();
+		Set<URI> contexts;
 		PrincipalManager pm = rm.getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
 		try {
@@ -586,21 +616,39 @@ public class SolrSearchIndex implements SearchIndex {
 			URI lastIndexedEntryURI = postContextEntriesToQueue(contextURI);
 			if (lastIndexedEntryURI != null) {
 				if (!purgeAllBeforeReindex) {
-					new Thread(() -> {
-						// We need to wait until the last entry of the context is indexed, otherwise this would leave a gap of some time
-						// (between milliseconds to seconds or even minutes) where the entries of that particular context are not in the index
-						while (postQueue.asMap().containsKey(lastIndexedEntryURI)) {
-							try {
+					purgeExecutor.submit(() -> {
+						long deadline = System.nanoTime() + MAX_PURGE_WAIT_NANOS;
+						try {
+							// We need to wait until the last entry of the context is indexed, otherwise this would leave a gap of some time
+							// (between milliseconds to seconds or even minutes) where the entries of that particular context are not in the index
+							while (postQueue.asMap().containsKey(lastIndexedEntryURI) && System.nanoTime() < deadline) {
 								log.debug("Entries of context {} are still in submission queue, sleeping 5 seconds before attempting new purge of expired entries", contextURI);
 								Thread.sleep(5000);
-							} catch (InterruptedException e) {
-								log.error("Cleanup of context index was interrupted, a full Solr reindex may be necessary: {}", e.getMessage());
+								postQueue.cleanUp();
 							}
-							postQueue.cleanUp();
+							if (postQueue.asMap().containsKey(lastIndexedEntryURI)) {
+								log.warn("Delayed purge of context {} aborted after wait timeout; submission queue still contains {}",
+										contextURI, lastIndexedEntryURI);
+								return;
+							}
+							if (clearSolrIndex(solrServer, reindexStart, contextEntry)) {
+								log.info("Expired entries of context {} have been purged from the index", contextURI);
+							} else {
+								log.warn("Delayed purge of context {} did not clear expired entries; rerun reindex with purgeAllBeforeReindex=true if needed",
+										contextURI);
+							}
+						} catch (InterruptedException e) {
+							log.warn("Delayed purge of context {} interrupted before clearSolrIndex completed; expired entries were NOT removed",
+									contextURI, e);
+							Thread.currentThread().interrupt();
+						} catch (RuntimeException e) {
+							log.error("Unexpected {} during delayed purge of context {}; expired entries were NOT removed",
+									e.getClass().getSimpleName(), contextURI, e);
+						} catch (Error e) {
+							log.error("Fatal {} during delayed purge of context {}; expired entries were NOT removed",
+									e.getClass().getSimpleName(), contextURI, e);
 						}
-						clearSolrIndex(solrServer, reindexStart, contextEntry);
-						log.info("Expired entries of context {} have been purged from the index", contextURI);
-					}).start();
+					});
 				}
 				log.info("Finished Solr reindexing of context {}, took {} ms; the Solr submission queue may still contain yet to be processed documents", contextURI, new Date().getTime() - reindexStart.getTime());
 			} else {
