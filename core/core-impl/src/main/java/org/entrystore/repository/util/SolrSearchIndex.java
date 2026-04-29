@@ -104,8 +104,6 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final int SOLR_COMMIT_WITHIN_MAX = 10000;
 
-	private static final int PURGE_POOL_SIZE = 4;
-
 	private static final long EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS = 10;
 
 	private static final long MAX_PURGE_WAIT_NANOS = TimeUnit.MINUTES.toNanos(5);
@@ -138,7 +136,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private final ExecutorService reindexExecutor = Executors.newSingleThreadExecutor();
 
-	private final ExecutorService purgeExecutor = Executors.newFixedThreadPool(PURGE_POOL_SIZE);
+	private final ExecutorService purgeExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
 	private final Map<URI, DelayedContextIndexerInfo> delayedReindex = Collections.synchronizedMap(new HashMap<>());
 
@@ -462,9 +460,15 @@ public class SolrSearchIndex implements SearchIndex {
 
 		reindexExecutor.shutdown();
 		purgeExecutor.shutdown();
-		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS);
-		awaitOrForceShutdown(reindexExecutor, "Reindex executor", deadline);
-		awaitOrForceShutdown(purgeExecutor, "Purge executor", deadline);
+
+		if (documentSubmitter != null) {
+			joinOrWarn(documentSubmitter, "Solr document submitter");
+		}
+		if (delayedContextIndexer != null) {
+			joinOrWarn(delayedContextIndexer, "Delayed context indexer");
+		}
+		awaitOrForceShutdown(reindexExecutor, "Reindex executor");
+		awaitOrForceShutdown(purgeExecutor, "Purge executor");
 
 		try {
 			log.debug("Sending commit to Solr");
@@ -474,13 +478,24 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private void awaitOrForceShutdown(ExecutorService executor, String name, long deadlineNanos) {
-		long remainingNanos = Math.max(0L, deadlineNanos - System.nanoTime());
+	private void joinOrWarn(Thread thread, String name) {
 		try {
-			if (!executor.awaitTermination(remainingNanos, TimeUnit.NANOSECONDS)) {
+			thread.join(TimeUnit.SECONDS.toMillis(EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS));
+			if (thread.isAlive()) {
+				log.warn("{} did not terminate within {}s after interrupt", name, EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS);
+			}
+		} catch (InterruptedException e) {
+			log.warn("Interrupted while joining {}", name);
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	private void awaitOrForceShutdown(ExecutorService executor, String name) {
+		try {
+			if (!executor.awaitTermination(EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
 				List<Runnable> dropped = executor.shutdownNow();
-				log.warn("{} did not terminate before shutdown deadline; forcing shutdownNow, {} pending tasks dropped",
-						name, dropped.size());
+				log.warn("{} did not terminate within {}s; forcing shutdownNow, {} pending tasks dropped",
+						name, EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS, dropped.size());
 			}
 		} catch (InterruptedException e) {
 			List<Runnable> dropped = executor.shutdownNow();
@@ -604,7 +619,9 @@ public class SolrSearchIndex implements SearchIndex {
 		Entry contextEntry = rm.getContextManager().getByEntryURI(contextURI);
 
 		if (purgeAllBeforeReindex) {
-			clearSolrIndex(solrServer, null, contextEntry);
+			if (!clearSolrIndex(solrServer, null, contextEntry)) {
+				log.warn("Pre-reindex purge of context {} failed; proceeding with reindex against potentially dirty index", contextURI);
+			}
 		}
 
 		Date reindexStart = new Date();
@@ -621,7 +638,9 @@ public class SolrSearchIndex implements SearchIndex {
 						try {
 							// We need to wait until the last entry of the context is indexed, otherwise this would leave a gap of some time
 							// (between milliseconds to seconds or even minutes) where the entries of that particular context are not in the index
-							while (postQueue.asMap().containsKey(lastIndexedEntryURI) && System.nanoTime() < deadline) {
+							while (postQueue.asMap().containsKey(lastIndexedEntryURI)
+									&& System.nanoTime() < deadline
+									&& !Thread.currentThread().isInterrupted()) {
 								log.debug("Entries of context {} are still in submission queue, sleeping 5 seconds before attempting new purge of expired entries", contextURI);
 								Thread.sleep(5000);
 								postQueue.cleanUp();
@@ -647,6 +666,7 @@ public class SolrSearchIndex implements SearchIndex {
 						} catch (Error e) {
 							log.error("Fatal {} during delayed purge of context {}; expired entries were NOT removed",
 									e.getClass().getSimpleName(), contextURI, e);
+							throw e;
 						}
 					});
 				}
@@ -1203,7 +1223,9 @@ public class SolrSearchIndex implements SearchIndex {
 
 		// if entry is a context, also remove all entries inside
 		if (GraphType.Context.equals(entry.getGraphType())) {
-			clearSolrIndex(solrServer, null, entry);
+			if (!clearSolrIndex(solrServer, null, entry)) {
+				log.warn("Context-removal purge for context {} failed; expired Solr documents may remain", entry.getEntryURI());
+			}
 		}
 	}
 
