@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,35 @@
 
 package org.entrystore.impl;
 
+import org.entrystore.AuthorizationException;
+import org.entrystore.Context;
+import org.entrystore.Data;
+import org.entrystore.Entry;
+import org.entrystore.GraphType;
+import org.entrystore.ResourceType;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-public class DataImplTest {
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+public class DataImplTest extends AbstractCoreTest {
+
+	private Data data;
+
+	@BeforeEach
+	@Override
+	public void setUp() {
+		super.setUp();
+		rm.setCheckForAuthorization(true);
+
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		Entry contextEntry = cm.createResource(null, GraphType.Context, null, null);
+		Context context = (Context) contextEntry.getResource();
+		Entry entry = context.createResource(null, GraphType.None, ResourceType.InformationResource, null);
+		data = (Data) entry.getResource();
+	}
 
 	@Disabled("To be implemented")
 	@Test
@@ -45,10 +70,16 @@ public class DataImplTest {
 		// TODO
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testDelete() throws Exception {
-		// TODO
+	public void testDelete() {
+		// Unauthorized caller (guest has no WriteResource on the entry) must be rejected
+		pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
+		assertThrows(AuthorizationException.class, () -> data.delete());
+
+		// Authorized caller (admin) must pass the auth check; no backing file exists
+		// (DATA_FOLDER is not configured), so delete() returns false but must not throw.
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		assertFalse(data.delete());
 	}
 
 	@Disabled("To be implemented")
@@ -56,4 +87,5 @@ public class DataImplTest {
 	public void testGetDataFile() throws Exception {
 		// TODO
 	}
+
 }
