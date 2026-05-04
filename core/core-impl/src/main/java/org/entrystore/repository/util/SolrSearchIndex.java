@@ -459,59 +459,87 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		reindexExecutor.shutdown();
-		purgeExecutor.shutdown();
 
+		// `&=` (not `&&`) so we always join both threads even if the first didn't terminate cleanly.
+		boolean threadsClean = true;
 		if (documentSubmitter != null) {
-			joinOrWarn(documentSubmitter, "Solr document submitter");
+			threadsClean &= joinOrWarn(documentSubmitter, "Solr document submitter");
 		}
 		if (delayedContextIndexer != null) {
-			joinOrWarn(delayedContextIndexer, "Delayed context indexer");
+			threadsClean &= joinOrWarn(delayedContextIndexer, "Delayed context indexer");
 		}
 		awaitOrForceShutdown(reindexExecutor, "Reindex executor");
+
+		// Purge executor shuts down only after reindex tasks have fully drained, so any
+		// purgeExecutor.submit(...) calls they make complete before shutdown begins.
+		purgeExecutor.shutdown();
 		awaitOrForceShutdown(purgeExecutor, "Purge executor");
 
-		try {
-			log.debug("Sending commit to Solr");
-			solrServer.commit(true, false);
-		} catch (SolrServerException | IOException e) {
-			log.error(e.getMessage());
+		if (threadsClean) {
+			try {
+				log.debug("Sending commit to Solr");
+				solrServer.commit(true, false);
+			} catch (SolrServerException | IOException e) {
+				log.error(e.getMessage());
+			}
+		} else {
+			log.warn("Skipping final Solr commit because background threads did not terminate cleanly within {}s",
+					EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS);
 		}
 	}
 
-	private void joinOrWarn(Thread thread, String name) {
+	private boolean joinOrWarn(Thread thread, String name) {
 		try {
 			thread.join(TimeUnit.SECONDS.toMillis(EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS));
 			if (thread.isAlive()) {
-				log.warn("{} did not terminate within {}s after interrupt", name, EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS);
+				log.warn("{} did not terminate within {}s after interrupt; subsequent Solr operations may fail",
+						name, EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS);
+				return false;
 			}
+			return true;
 		} catch (InterruptedException e) {
 			log.warn("Interrupted while joining {}", name);
 			Thread.currentThread().interrupt();
+			return false;
 		}
 	}
 
 	private void awaitOrForceShutdown(ExecutorService executor, String name) {
 		try {
 			if (!executor.awaitTermination(EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-				List<Runnable> dropped = executor.shutdownNow();
-				log.warn("{} did not terminate within {}s; forcing shutdownNow, {} pending tasks dropped",
-						name, EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS, dropped.size());
+				forceShutdown(executor, name);
 			}
 		} catch (InterruptedException e) {
-			List<Runnable> dropped = executor.shutdownNow();
-			log.warn("{} await interrupted; forcing shutdownNow, {} pending tasks dropped", name, dropped.size());
+			forceShutdown(executor, name);
 			Thread.currentThread().interrupt();
 		}
 	}
 
-	public void clearSolrIndex(SolrClient solrServer) {
+	private void forceShutdown(ExecutorService executor, String name) {
+		List<Runnable> dropped = executor.shutdownNow();
+		log.warn("{} did not terminate within {}s; forced shutdownNow (running tasks interrupted, {} queued tasks dropped)",
+				name, EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS, dropped.size());
+		try {
+			if (!executor.awaitTermination(EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+				log.warn("{} still has running tasks after shutdownNow; tasks may be ignoring interrupts or blocked in non-interruptible I/O",
+						name);
+			}
+		} catch (InterruptedException e) {
+			log.warn("Interrupted while awaiting forced termination of {}", name);
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	public boolean clearSolrIndex(SolrClient solrServer) {
 		UpdateRequest req = new UpdateRequest();
 		req.deleteByQuery("*:*");
 		req.setCommitWithin(SOLR_COMMIT_WITHIN);
 		try {
 			req.process(solrServer);
+			return true;
 		} catch (SolrServerException | IOException e) {
-			log.error(e.getMessage(), e);
+			log.error("clearSolrIndex (full-wipe *:*) failed: {}", e.getMessage(), e);
+			return false;
 		}
 	}
 
@@ -645,9 +673,14 @@ public class SolrSearchIndex implements SearchIndex {
 								Thread.sleep(5000);
 								postQueue.cleanUp();
 							}
+							if (Thread.currentThread().isInterrupted()) {
+								log.warn("Delayed purge of context {} interrupted (shutdown); expired entries were NOT removed",
+										contextURI);
+								return;
+							}
 							if (postQueue.asMap().containsKey(lastIndexedEntryURI)) {
-								log.warn("Delayed purge of context {} aborted after wait timeout; submission queue still contains {}",
-										contextURI, lastIndexedEntryURI);
+								log.warn("Delayed purge of context {} aborted after {} min wait; submission queue still contains {}",
+										contextURI, TimeUnit.NANOSECONDS.toMinutes(MAX_PURGE_WAIT_NANOS), lastIndexedEntryURI);
 								return;
 							}
 							if (clearSolrIndex(solrServer, reindexStart, contextEntry)) {
@@ -664,9 +697,10 @@ public class SolrSearchIndex implements SearchIndex {
 							log.error("Unexpected {} during delayed purge of context {}; expired entries were NOT removed",
 									e.getClass().getSimpleName(), contextURI, e);
 						} catch (Error e) {
+							// Not re-thrown: with submit() the Error is captured by FutureTask.run() and the
+							// discarded Future means rethrow has no observable effect. Logging is the only signal.
 							log.error("Fatal {} during delayed purge of context {}; expired entries were NOT removed",
 									e.getClass().getSimpleName(), contextURI, e);
-							throw e;
 						}
 					});
 				}
