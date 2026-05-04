@@ -746,7 +746,9 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			solrIndex = new SolrSearchIndex(this, solrServer);
 			if (reindex) {
 				if (reindexWait) {
-					solrIndex.clearSolrIndex(solrServer);
+					if (!solrIndex.clearSolrIndex(solrServer)) {
+						log.warn("Initial Solr full-wipe failed; reindex will run against potentially dirty index");
+					}
 					solrIndex.reindexSync(false);
 				} else {
 					solrIndex.reindex(false);
