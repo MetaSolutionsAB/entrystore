@@ -51,6 +51,7 @@ public class ValidatorService {
 	public void validate(String rdfBody, String mediaType) {
 		Model graph = GraphUtil.deserializeGraph(rdfBody, mediaType);
 		assertAllIrisValid(graph);
+		// Catches Statements the parser produced but a Sail rejects; preserves legacy Restlet validator parity.
 		assertWritableToTripleStore(graph);
 	}
 
@@ -103,9 +104,9 @@ public class ValidatorService {
 			repo.init();
 			try (RepositoryConnection rc = repo.getConnection()) {
 				rc.add(graph);
-			} catch (RepositoryException e) {
-				throw new InternalServerErrorException("Validator failed to accept graph", e);
 			}
+		} catch (RepositoryException e) {
+			throw new InternalServerErrorException("Validator repository could not be initialized or written to", e);
 		} finally {
 			try {
 				repo.shutDown();

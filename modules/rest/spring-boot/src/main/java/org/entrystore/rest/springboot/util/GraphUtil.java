@@ -223,11 +223,15 @@ public class GraphUtil {
 		String normalized = normalizeLegacyMediaType(mediaType);
 
 		if (MediaType.APPLICATION_JSON_VALUE.equals(normalized) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(normalized)) {
-			Model graph = RDFJSON.rdfJsonToGraph(graphString);
-			if (graph == null) {
-				throw new BadRequestException("Malformed RDF/JSON in request body");
+			try {
+				Model graph = RDFJSON.rdfJsonToGraph(graphString);
+				if (graph == null) {
+					throw new BadRequestException("Malformed RDF/JSON in request body");
+				}
+				return graph;
+			} catch (RDFParseException e) {
+				throw new BadRequestException("Malformed RDF/JSON in request body", e);
 			}
-			return graph;
 		}
 
 		RDFParser parser = createRdfParserForMediaType(normalized);

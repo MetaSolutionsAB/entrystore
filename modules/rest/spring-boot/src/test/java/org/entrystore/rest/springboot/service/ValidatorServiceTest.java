@@ -142,6 +142,23 @@ class ValidatorServiceTest {
 	}
 
 	@Test
+	void validate_malformedRdfJsonBody_throwsBadRequest() {
+		BadRequestException ex = assertThrows(BadRequestException.class,
+				() -> service.validate("{not rdf json", "application/rdf+json"));
+		assertTrue(ex.getMessage().contains("Malformed RDF/JSON"),
+				"Expected 'Malformed RDF/JSON' in message, but was: " + ex.getMessage());
+	}
+
+	@Test
+	void validate_rdfJsonBodyWithInvalidIri_throwsBadRequest() {
+		String body = "{\"http://bad uri/x\":{\"http://example.org/p\":[{\"type\":\"literal\",\"value\":\"v\"}]}}";
+		BadRequestException ex = assertThrows(BadRequestException.class,
+				() -> service.validate(body, "application/rdf+json"));
+		assertTrue(ex.getMessage().contains("Malformed RDF/JSON"),
+				"Expected 'Malformed RDF/JSON' in message, but was: " + ex.getMessage());
+	}
+
+	@Test
 	void validate_manyDistinctBadIriLiterals_errorCountCappedAt50() {
 		StringBuilder body = new StringBuilder();
 		int distinctBadIris = 100;

@@ -34,6 +34,12 @@ class ValidatorIT extends BaseSpec {
 	private static final String VALID_NTRIPLES =
 		'<http://example.org/a> <http://purl.org/dc/terms/title> "Title" .\n'
 
+	private static final String VALID_TRIG = '''\
+		<http://example.org/graph> {
+			<http://example.org/a> <http://purl.org/dc/terms/title> "Title" .
+		}
+		'''.stripIndent()
+
 	private static final String VALID_RDFXML = '''\
 		<?xml version="1.0"?>
 		<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
@@ -88,7 +94,7 @@ class ValidatorIT extends BaseSpec {
 		label        | contentType                  | body
 		'RDF/XML'    | 'application/rdf+xml'        | VALID_RDFXML
 		'N-Triples'  | 'application/n-triples'      | VALID_NTRIPLES
-		'TriG'       | 'application/trig'           | VALID_NTRIPLES
+		'TriG'       | 'application/trig'           | VALID_TRIG
 		'legacy N3'  | 'text/rdf+n3'                | VALID_NTRIPLES
 		'JSON-LD'    | 'application/ld+json'        | VALID_JSONLD
 		'RDF/JSON'   | 'application/rdf+json'       | VALID_RDFJSON
