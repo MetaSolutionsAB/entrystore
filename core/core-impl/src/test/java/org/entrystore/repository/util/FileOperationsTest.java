@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -28,12 +30,16 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Scanner;
 import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -253,6 +259,57 @@ public class FileOperationsTest {
 	@Test
 	public void unzipFile_exception() {
 		assertThrows(IllegalArgumentException.class, () -> FileOperations.unzipFile(tempFileSource, tempFileSource));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"../evil.txt", "subdir/../../evil.txt", "a/b/c/../../../../../../../evil.txt"})
+	public void unzipFile_rejectsZipSlipEntry(String entryName) throws IOException {
+		File destDir = FileOperations.createTempDirectory("temp", "folder");
+		destDir.deleteOnExit();
+		IOException ex = assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry(entryName), destDir));
+		assertTrue(ex.getMessage().contains("escapes destination directory"));
+		assertFalse(new File(destDir.getParentFile(), "evil.txt").exists());
+	}
+
+	@Test
+	public void unzipFile_zipSlip_directoryEscape() throws IOException {
+		File destDir = FileOperations.createTempDirectory("temp", "folder");
+		destDir.deleteOnExit();
+		IOException ex = assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("../escapedDir/"), destDir));
+		assertTrue(ex.getMessage().contains("escapes destination directory"));
+		assertFalse(new File(destDir.getParentFile(), "escapedDir").exists());
+	}
+
+	@Test
+	public void unzipFile_zipSlip_siblingPrefix() throws IOException {
+		File destDir = FileOperations.createTempDirectory("entrystore-test-", "dest");
+		destDir.deleteOnExit();
+		// Entry resolves to a sibling directory that shares destDir's string prefix — guards based on
+		// string startsWith (without trailing separator) would incorrectly allow this through.
+		String siblingEntry = "../" + destDir.getName() + "extra/evil.txt";
+		IOException ex = assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry(siblingEntry), destDir));
+		assertTrue(ex.getMessage().contains("escapes destination directory"));
+		assertFalse(new File(destDir.getParentFile(), destDir.getName() + "extra").exists());
+	}
+
+	@Test
+	public void unzipFile_nestedPath_ok() throws IOException {
+		File destDir = FileOperations.createTempDirectory("temp", "folder");
+		destDir.deleteOnExit();
+		File zipFile = createZipWithEntry("subdir/safe.txt");
+		assertDoesNotThrow(() -> FileOperations.unzipFile(zipFile, destDir));
+		assertEquals(1, FileOperations.listFiles(destDir).size());
+	}
+
+	private File createZipWithEntry(String entryName) throws IOException {
+		File zipFile = File.createTempFile("zipslip-test", ".zip");
+		zipFile.deleteOnExit();
+		try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipFile))) {
+			zos.putNextEntry(new ZipEntry(entryName));
+			zos.write("payload".getBytes(StandardCharsets.UTF_8));
+			zos.closeEntry();
+		}
+		return zipFile;
 	}
 
 }

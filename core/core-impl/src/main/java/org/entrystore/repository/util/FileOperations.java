@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -277,36 +277,44 @@ public class FileOperations {
 			throw new IllegalArgumentException("Destination is not a folder.");
 		}
 
-		InputStream fis = Files.newInputStream(zipFile.toPath());
-		CheckedInputStream cis = new CheckedInputStream(fis, new CRC32());
-		BufferedInputStream bis = new BufferedInputStream(cis, BUFFER_SIZE);
-		ZipInputStream zis = new ZipInputStream(bis);
-		ZipEntry entry;
-		while ((entry = zis.getNextEntry()) != null) {
-			log.debug("Extracting file: {}", entry.getName());
-			int count;
+		Path canonicalDest = destination.getCanonicalFile().toPath();
+		CRC32 crc = new CRC32();
+		try (ZipInputStream zis = new ZipInputStream(
+				new BufferedInputStream(
+						new CheckedInputStream(Files.newInputStream(zipFile.toPath()), crc),
+						BUFFER_SIZE))) {
 			byte[] data = new byte[BUFFER_SIZE];
-			File unzippedFile = new File(destination, entry.getName());
-			File parentDir = unzippedFile.getParentFile();
-			if (!parentDir.exists()) {
-				log.debug("Creating directory: {}", parentDir);
-				if (parentDir.mkdirs()) {
-					log.debug("Created directory: {}", parentDir);
-				} else {
-					log.debug("Could not create  directory: {}", parentDir);
+			ZipEntry entry;
+			while ((entry = zis.getNextEntry()) != null) {
+				log.debug("Extracting file: {}", entry.getName());
+				File unzippedFile = new File(destination, entry.getName());
+				if (!unzippedFile.getCanonicalFile().toPath().startsWith(canonicalDest)) {
+					log.warn("ZIP Slip attempt detected, rejecting entry: [{}]",
+							entry.getName().replace("\n", "\\n").replace("\r", "\\r"));
+					deleteDirectory(destination);
+					throw new IOException("ZIP entry escapes destination directory");
+				}
+				File parentDir = unzippedFile.getParentFile();
+				if (!parentDir.exists()) {
+					log.debug("Creating directory: {}", parentDir);
+					if (parentDir.mkdirs()) {
+						log.debug("Created directory: {}", parentDir);
+					} else {
+						log.debug("Could not create  directory: {}", parentDir);
+					}
+				}
+				if (!entry.isDirectory()) {
+					try (OutputStream fos = Files.newOutputStream(unzippedFile.toPath());
+						 BufferedOutputStream bos = new BufferedOutputStream(fos, BUFFER_SIZE)) {
+						int count;
+						while ((count = zis.read(data, 0, BUFFER_SIZE)) != -1) {
+							bos.write(data, 0, count);
+						}
+					}
 				}
 			}
-			OutputStream fos = Files.newOutputStream(unzippedFile.toPath());
-			BufferedOutputStream bos = new BufferedOutputStream(fos, BUFFER_SIZE);
-			while ((count = zis.read(data, 0, BUFFER_SIZE)) != -1) {
-				bos.write(data, 0, count);
-			}
-			bos.flush();
-			bos.close();
 		}
-		zis.close();
-
-		return cis.getChecksum().getValue();
+		return crc.getValue();
 	}
 
 	/**
