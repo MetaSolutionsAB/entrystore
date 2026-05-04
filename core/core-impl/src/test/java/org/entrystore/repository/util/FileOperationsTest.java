@@ -37,6 +37,7 @@ import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -262,21 +263,41 @@ public class FileOperationsTest {
 	public void unzipFile_zipSlip_dotDot() throws IOException {
 		File destDir = FileOperations.createTempDirectory("temp", "folder");
 		destDir.deleteOnExit();
-		assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("../evil.txt"), destDir));
+		IOException ex = assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("../evil.txt"), destDir));
+		assertTrue(ex.getMessage().contains("escapes destination directory"));
 	}
 
 	@Test
 	public void unzipFile_zipSlip_nestedTraversal() throws IOException {
 		File destDir = FileOperations.createTempDirectory("temp", "folder");
 		destDir.deleteOnExit();
-		assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("subdir/../../evil.txt"), destDir));
+		IOException ex = assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("subdir/../../evil.txt"), destDir));
+		assertTrue(ex.getMessage().contains("escapes destination directory"));
 	}
 
 	@Test
 	public void unzipFile_zipSlip_deeplyNested() throws IOException {
 		File destDir = FileOperations.createTempDirectory("temp", "folder");
 		destDir.deleteOnExit();
-		assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("a/b/c/../../../../../../../evil.txt"), destDir));
+		IOException ex = assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("a/b/c/../../../../../../../evil.txt"), destDir));
+		assertTrue(ex.getMessage().contains("escapes destination directory"));
+	}
+
+	@Test
+	public void unzipFile_zipSlip_directoryEscape() throws IOException {
+		File destDir = FileOperations.createTempDirectory("temp", "folder");
+		destDir.deleteOnExit();
+		IOException ex = assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("../escapedDir/"), destDir));
+		assertTrue(ex.getMessage().contains("escapes destination directory"));
+	}
+
+	@Test
+	public void unzipFile_nestedPath_ok() throws IOException {
+		File destDir = FileOperations.createTempDirectory("temp", "folder");
+		destDir.deleteOnExit();
+		File zipFile = createZipWithEntry("subdir/safe.txt");
+		assertDoesNotThrow(() -> FileOperations.unzipFile(zipFile, destDir));
+		assertEquals(1, FileOperations.listFiles(destDir).size());
 	}
 
 	private File createZipWithEntry(String entryName) throws IOException {
