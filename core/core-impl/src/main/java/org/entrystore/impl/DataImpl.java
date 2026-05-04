@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -166,10 +166,15 @@ public class DataImpl extends ResourceImpl implements Data {
 	@Override
 	public void remove(RepositoryConnection rc) throws Exception {
 		super.remove(rc);
-		delete();
+		deleteFile();
 	}
 
 	public boolean delete() {
+		this.entry.getRepositoryManager().getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
+		return deleteFile();
+	}
+
+	private boolean deleteFile() {
 		boolean success = false;
 		try {
 			File f = getFile();
