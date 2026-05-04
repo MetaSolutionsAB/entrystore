@@ -24,6 +24,7 @@ import org.entrystore.rest.it.util.NameSpaceConst
 
 import java.time.Year
 
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
@@ -1885,6 +1886,19 @@ class EntryIT extends BaseSpec {
 		entryRespJson['rights'].collect() == ['administer']
 		entryRespJson['relations'] != null
 		entryRespJson['relations'] as Map == [:]
+	}
+
+	def "PUT /{context-id}/entry/{entry-id} with malformed JSON body should return Bad-Request 400"() {
+		given:
+		def entryId = 'entryForGetTests'
+		getOrCreateEntry(contextId, [id: entryId, entrytype: 'linkreference', resource: resourceUrl])
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId,
+			'{not json', 'admin', 'application/json')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
 	def "PUT /{context-id}/entry/{entry-id} in text/turtle format, should edit the information about the entry"() {

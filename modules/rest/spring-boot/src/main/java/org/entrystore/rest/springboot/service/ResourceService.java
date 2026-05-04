@@ -247,11 +247,8 @@ public class ResourceService {
 					throw new DataConflictException("An entry cannot be added multiple times", re);
 				}
 			} else {
+				Model graph = GraphUtil.deserializeGraph(new String(requestBody, StandardCharsets.UTF_8), mediaType);
 				try {
-					Model graph = GraphUtil.deserializeGraphUnsafe(new String(requestBody, StandardCharsets.UTF_8), mediaType);
-					if (graph == null) {
-						throw new BadRequestException("Unable to deserialize request body as RDF graph");
-					}
 					if (entry.getGraphType() == GraphType.List) {
 						((org.entrystore.List) entry.getResource()).setGraph(graph);
 					} else if (entry.getGraphType() == GraphType.Group) {
@@ -259,10 +256,6 @@ public class ResourceService {
 					} else {
 						throw new BadRequestException("Unsupported graph type for RDF graph update: " + entry.getGraphType());
 					}
-				} catch (org.eclipse.rdf4j.rio.RDFParseException e) {
-					throw new BadRequestException("Malformed RDF in request body", e);
-				} catch (org.eclipse.rdf4j.rio.RDFHandlerException | java.io.IOException e) {
-					throw new InternalServerErrorException("Failed to process RDF graph for entry " + entry.getId(), e);
 				} catch (IllegalArgumentException iae) {
 					throw new BadRequestException(iae.getMessage(), iae); // Core exception — message is safe to return
 				} catch (RepositoryException e) {
@@ -331,22 +324,11 @@ public class ResourceService {
 
 		/* Graph and Pipeline */
 		if (gt == GraphType.Graph || gt == GraphType.Pipeline) {
-			RDFResource graphResource = (RDFResource) entry.getResource();
-			if (graphResource != null) {
-				Model graph;
-				try {
-					graph = GraphUtil.deserializeGraph(new String(requestBody, StandardCharsets.UTF_8), mediaType);
-				} catch (Exception e) {
-					throw new BadRequestException("Unable to read request entity", e);
-				}
-				if (graph != null) {
-					graphResource.setGraph(graph);
-				} else {
-					throw new BadRequestException("Unable to parse request entity.");
-				}
-			} else {
+			if (!(entry.getResource() instanceof RDFResource graphResource)) {
 				throw new InternalServerErrorException("No RDF resource found for entry with ResourceType Graph");
 			}
+			Model graph = GraphUtil.deserializeGraph(new String(requestBody, StandardCharsets.UTF_8), mediaType);
+			graphResource.setGraph(graph);
 
 			return CompletionState.UPDATED;
 		}

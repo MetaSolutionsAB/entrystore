@@ -1593,4 +1593,19 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getContentType().contains('text/turtle')
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} with malformed Turtle on Graph resource should return Bad-Request 400"() {
+		given:
+		def params = [graphtype: 'graph']
+		def entryId = createEntry(contextId, params)
+		assert entryId.length() > 0
+		def resourceUri = '/' + contextId + '/resource/' + entryId
+
+		when:
+		def putResourceConn = EntryStoreClient.putRequest(resourceUri,
+			'this is not valid turtle <<<>>>', 'admin', 'text/turtle')
+
+		then:
+		putResourceConn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
 }

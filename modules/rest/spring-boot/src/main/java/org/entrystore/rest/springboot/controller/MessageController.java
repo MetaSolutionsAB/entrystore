@@ -19,16 +19,13 @@ package org.entrystore.rest.springboot.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.model.api.SendMessageRequestBody;
 import org.entrystore.rest.springboot.service.MessageService;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-@Slf4j
 @RestController
 @RequiredArgsConstructor
 public class MessageController {
@@ -37,8 +34,7 @@ public class MessageController {
 
 	@Operation(summary = "Sends a message to another user")
 	@PostMapping(path = "/message", consumes = MediaType.APPLICATION_JSON_VALUE)
-	public ResponseEntity<Void> sendMessage(@Valid @RequestBody SendMessageRequestBody request) {
+	public void sendMessage(@Valid @RequestBody SendMessageRequestBody request) {
 		messageService.sendMessage(request);
-		return ResponseEntity.ok().build();
 	}
 }

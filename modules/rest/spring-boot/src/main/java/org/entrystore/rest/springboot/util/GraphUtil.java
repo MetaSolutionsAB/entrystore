@@ -49,6 +49,7 @@ import org.eclipse.rdf4j.rio.trix.TriXWriter;
 import org.eclipse.rdf4j.rio.turtle.TurtleParser;
 import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.json.JSONObject;
 import org.springframework.http.HttpStatus;
@@ -121,22 +122,6 @@ public class GraphUtil {
 		}
 		return mediaType;
 	}
-
-/*
-	private final static List<MediaType> supportedMediaTypes = new ArrayList<>();
-
-	static {
-		supportedMediaTypes.add(MediaType.APPLICATION_RDF_XML);
-		supportedMediaTypes.add(MediaType.APPLICATION_JSON);
-		supportedMediaTypes.add(MediaType.TEXT_RDF_N3);
-		supportedMediaTypes.add(new MediaType(RDFFormat.TURTLE.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType(RDFFormat.TRIX.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType(RDFFormat.NTRIPLES.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType(RDFFormat.TRIG.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType(RDFFormat.JSONLD.getDefaultMIMEType()));
-		supportedMediaTypes.add(new MediaType("application/rdf+json"));
-	}
-*/
 
 	/**
 	 * @param graph  The Graph to be serialized.
@@ -223,60 +208,54 @@ public class GraphUtil {
 	}
 
 	/**
-	 * @param serializedGraph The Graph to be deserialized.
-	 * @param parser          Instance of the following: N3Parser, NTriplesParser,
-	 *                        RDFXMLParser, TriGParser, TriXParser, TurtleParser
-	 * @return A String representation of the serialized Graph.
+	 * Deserializes an RDF body into an in-memory {@link Model}. JSON ({@code application/json})
+	 * and RDF/JSON ({@code application/rdf+json}) bodies are routed through {@link RDFJSON};
+	 * all other supported types are parsed via the matching RDF4J {@link RDFParser}. The legacy
+	 * {@code text/rdf+n3} alias is normalized to {@code text/n3} before lookup.
+	 *
+	 * @param graphString the serialized RDF body; must not be {@code null}
+	 * @param mediaType   the media type of the body (e.g. {@code text/turtle},
+	 *                    {@code application/ld+json}); used to select the parser
+	 * @return the parsed graph, never {@code null}
+	 * @throws BadRequestException if the body cannot be parsed or the media type is unsupported
 	 */
-	public static Model deserializeGraph(String serializedGraph, RDFParser parser) {
+	public static Model deserializeGraph(String graphString, String mediaType) {
+		String normalized = normalizeLegacyMediaType(mediaType);
+
+		if (MediaType.APPLICATION_JSON_VALUE.equals(normalized) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(normalized)) {
+			try {
+				Model graph = RDFJSON.rdfJsonToGraph(graphString);
+				if (graph == null) {
+					throw new BadRequestException("Malformed RDF/JSON in request body");
+				}
+				return graph;
+			} catch (RDFParseException e) {
+				throw new BadRequestException("Malformed RDF/JSON in request body", e);
+			}
+		}
+
+		RDFParser parser = createRdfParserForMediaType(normalized);
+		if (parser == null) {
+			throw new BadRequestException("Unsupported RDF media type: " + mediaType);
+		}
 		try {
-			return deserializeGraphUnsafe(serializedGraph, parser);
-		} catch (RDFHandlerException | RDFParseException | IOException e) {
-			log.error(e.getMessage());
-			return null;
+			return parseWith(parser, graphString);
+		} catch (RDFParseException e) {
+			throw new BadRequestException("Malformed RDF in request body", e);
+		} catch (RDFHandlerException | IOException e) {
+			throw new BadRequestException("Unable to process the RDF graph from the request body", e);
 		}
 	}
 
-	public static Model deserializeGraphUnsafe(String serializedGraph, RDFParser parser) throws RDFParseException, RDFHandlerException, IOException {
-		if (serializedGraph == null || parser == null) {
-			throw new IllegalArgumentException("Parameters must not be null");
-		}
-
-		StringReader reader = new StringReader(serializedGraph);
+	private static Model parseWith(RDFParser parser, String graphString)
+			throws RDFParseException, RDFHandlerException, IOException {
 		StatementCollector collector = new StatementCollector();
 		parser.setRDFHandler(collector);
-		parser.parse(reader, "");
-
+		parser.parse(new StringReader(graphString), "");
 		return new LinkedHashModel(collector.getStatements());
 	}
 
-	public static Model deserializeGraph(String graphString, String mediaType) {
-		try {
-			return deserializeGraphUnsafe(graphString, mediaType);
-		} catch (RDFHandlerException | RDFParseException | IOException e) {
-			log.error(e.getMessage());
-		}
-		return null;
-	}
-
-	public static Model deserializeGraphUnsafe(String graphString, String mediaType)
-			throws RDFHandlerException, IOException, RDFParseException {
-		mediaType = normalizeLegacyMediaType(mediaType);
-
-		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {
-			return RDFJSON.rdfJsonToGraph(graphString);
-		}
-
-		RDFParser parser = createRdfParserForMediaType(mediaType);
-		if (parser != null) {
-			return deserializeGraphUnsafe(graphString, parser);
-		} else {
-			return null;
-		}
-	}
-
 	private static RDFParser createRdfParserForMediaType(String mediaType) {
-		mediaType = normalizeLegacyMediaType(mediaType);
 		RDFParser parser = null;
 		if (RDFFormat.RDFXML.getDefaultMIMEType().equals(mediaType)) {
 			parser = new RDFXMLParser();
@@ -373,67 +352,6 @@ public class GraphUtil {
 		log.warn("Model could not be serialized, returning empty JSON object");
 		return new JSONObject();
 	}
-
-/*
-	public static boolean isSupported(MediaType mediaType) {
-		for (MediaType mt : supportedMediaTypes) {
-			if (mt.equals(mediaType, false)) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	/**
-	 * Detects whether an RDF payload can be parsed by RDF4J.
-	 *
-	 * @param rdf       The RDF to validate.
-	 * @param mediaType The media type of the RDF.
-	 * @return Returns null if successful or an error message if there was an error when parsing the payload.
-	 */
-/*	public static String validateRdf(String rdf, MediaType mediaType) {
-		if (!isSupported(mediaType)) {
-			return "Unsupported media type: " + mediaType;
-		}
-
-		StringReader reader = new StringReader(rdf);
-		RDFHandler nullHandler = new URIValidatingRDFHandler();
-		RDFParser parser = new RDFXMLParser();
-		parser.setParserConfig(constructSafeXmlParserConfig());
-		if (mediaType.equals(MediaType.APPLICATION_JSON) || mediaType.getName().equals("application/rdf+json")) {
-			// we have special treatment of RDF/JSON here because it does not implement the Parser interface
-			Model g = RDFJSON.rdfJsonToGraph(rdf);
-			if (g != null) {
-				return "There was an error parsing the RDF/JSON payload";
-			} else {
-				return null;
-			}
-		} else if (mediaType.equals(MediaType.TEXT_RDF_N3)) {
-			parser = new N3ParserFactory().getParser();
-		} else if (mediaType.getName().equals(RDFFormat.TURTLE.getDefaultMIMEType())) {
-			parser = new TurtleParser();
-		} else if (mediaType.getName().equals(RDFFormat.TRIX.getDefaultMIMEType())) {
-			parser = new TriXParser();
-			parser.setParserConfig(constructSafeXmlParserConfig());
-		} else if (mediaType.getName().equals(RDFFormat.NTRIPLES.getDefaultMIMEType())) {
-			parser = new NTriplesParser();
-		} else if (mediaType.getName().equals(RDFFormat.TRIG.getDefaultMIMEType())) {
-			parser = new TriGParser();
-		} else if (mediaType.getName().equals(RDFFormat.JSONLD.getDefaultMIMEType())) {
-			parser = new JSONLDParser();
-		}
-
-		String error = null;
-		try {
-			parser.setRDFHandler(nullHandler);
-			parser.parse(reader, "");
-		} catch (RDFHandlerException | RDFParseException | IOException rdfe) {
-			error = rdfe.getMessage();
-		}
-
-		return error;
-	}
-*/
 
 	/**
 	 * Builds a custom and safe XML parser configuration to prevent XXE attacks. Creates a custom

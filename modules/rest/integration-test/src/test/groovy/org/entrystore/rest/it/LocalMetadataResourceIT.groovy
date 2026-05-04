@@ -241,6 +241,19 @@ class LocalMetadataResourceIT extends BaseSpec {
 		dcTitles[0]['value'] == 'Not cool entry'
 	}
 
+	def "PUT /{context-id}/metadata/{entry-id} with malformed Turtle should return Bad-Request 400"() {
+		given:
+		def params = [entrytype: 'link', resource: resourceUrl]
+		def entryId = createEntry(contextId, params)
+
+		when:
+		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/metadata/' + entryId,
+			'this is not valid turtle <<<>>>', 'admin', 'text/turtle')
+
+		then:
+		editEntryConn.getResponseCode() == HTTP_BAD_REQUEST
+	}
+
 	def "PUT /{context-id}/metadata/{entry-id} as guest should not update the metadata of the entry"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
