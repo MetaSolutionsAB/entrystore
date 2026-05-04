@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,11 +28,14 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Scanner;
 import java.util.UUID;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -253,6 +256,38 @@ public class FileOperationsTest {
 	@Test
 	public void unzipFile_exception() {
 		assertThrows(IllegalArgumentException.class, () -> FileOperations.unzipFile(tempFileSource, tempFileSource));
+	}
+
+	@Test
+	public void unzipFile_zipSlip_dotDot() throws IOException {
+		File destDir = FileOperations.createTempDirectory("temp", "folder");
+		destDir.deleteOnExit();
+		assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("../evil.txt"), destDir));
+	}
+
+	@Test
+	public void unzipFile_zipSlip_nestedTraversal() throws IOException {
+		File destDir = FileOperations.createTempDirectory("temp", "folder");
+		destDir.deleteOnExit();
+		assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("subdir/../../evil.txt"), destDir));
+	}
+
+	@Test
+	public void unzipFile_zipSlip_deeplyNested() throws IOException {
+		File destDir = FileOperations.createTempDirectory("temp", "folder");
+		destDir.deleteOnExit();
+		assertThrows(IOException.class, () -> FileOperations.unzipFile(createZipWithEntry("a/b/c/../../../../../../../evil.txt"), destDir));
+	}
+
+	private File createZipWithEntry(String entryName) throws IOException {
+		File zipFile = File.createTempFile("zipslip-test", ".zip");
+		zipFile.deleteOnExit();
+		try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipFile))) {
+			zos.putNextEntry(new ZipEntry(entryName));
+			zos.write("payload".getBytes(StandardCharsets.UTF_8));
+			zos.closeEntry();
+		}
+		return zipFile;
 	}
 
 }

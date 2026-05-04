@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -282,11 +282,15 @@ public class FileOperations {
 		BufferedInputStream bis = new BufferedInputStream(cis, BUFFER_SIZE);
 		ZipInputStream zis = new ZipInputStream(bis);
 		ZipEntry entry;
+		String canonicalDest = destination.getCanonicalPath() + File.separator;
 		while ((entry = zis.getNextEntry()) != null) {
 			log.debug("Extracting file: {}", entry.getName());
 			int count;
 			byte[] data = new byte[BUFFER_SIZE];
 			File unzippedFile = new File(destination, entry.getName());
+			if (!unzippedFile.getCanonicalPath().startsWith(canonicalDest)) {
+				throw new IOException("ZIP entry escapes destination directory: " + entry.getName());
+			}
 			File parentDir = unzippedFile.getParentFile();
 			if (!parentDir.exists()) {
 				log.debug("Creating directory: {}", parentDir);
