@@ -1,0 +1,361 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.entrystore.rest.springboot.service;
+
+import org.eclipse.rdf4j.model.IRI;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.query.QueryEvaluationException;
+import org.eclipse.rdf4j.query.QueryInterruptedException;
+import org.eclipse.rdf4j.query.QueryLanguage;
+import org.eclipse.rdf4j.query.TupleQueryResultHandler;
+import org.eclipse.rdf4j.query.TupleQueryResultHandlerException;
+import org.eclipse.rdf4j.query.parser.QueryParserUtil;
+import org.eclipse.rdf4j.repository.Repository;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryException;
+import org.eclipse.rdf4j.repository.sail.SailRepository;
+import org.eclipse.rdf4j.repository.sail.SailTupleQuery;
+import org.eclipse.rdf4j.sail.memory.MemoryStore;
+import org.entrystore.Context;
+import org.entrystore.impl.PublicRepository;
+import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
+import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
+import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
+import org.entrystore.rest.springboot.model.exception.NotImplementedException;
+import org.entrystore.rest.springboot.util.SparqlMediaType;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+
+import java.io.IOException;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class SparqlServiceTest {
+
+	private static final String SELECT_ALL = "SELECT * WHERE { ?s ?p ?o } LIMIT 1";
+	private static final String CONTEXT_ID = "ctx-1";
+	private static final String CONTEXT_URI = "http://example.org/ctx-1";
+
+	private static final int MAX_EXECUTION_TIME = 10;
+	private static final long MAX_RESPONSE_BYTES = 64L * 1024L * 1024L;
+
+	@Mock
+	private RepositoryManagerImpl repositoryManager;
+
+	@Mock
+	private ContextService contextService;
+
+	@Mock
+	private PublicRepository publicRepository;
+
+	private static Repository backingRepository;
+	private SparqlService service;
+
+	@BeforeAll
+	static void initRepository() {
+		backingRepository = new SailRepository(new MemoryStore());
+		backingRepository.init();
+	}
+
+	@AfterAll
+	static void shutdownRepository() {
+		if (backingRepository != null) {
+			backingRepository.shutDown();
+		}
+	}
+
+	@BeforeEach
+	void setUp() {
+		lenient().when(repositoryManager.getPublicRepository()).thenReturn(publicRepository);
+		lenient().when(publicRepository.getConnection())
+				.thenAnswer(_ -> backingRepository.getConnection());
+
+		service = new SparqlService(repositoryManager, contextService, MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES);
+	}
+
+	@AfterEach
+	void clearRepository() {
+		try (RepositoryConnection rc = backingRepository.getConnection()) {
+			rc.clear();
+		}
+	}
+
+	@Test
+	void runQuery_publicRepositoryDisabled_throwsNotImplemented() {
+		when(repositoryManager.getPublicRepository()).thenReturn(null);
+
+		assertThrows(NotImplementedException.class,
+				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+	}
+
+	@Test
+	void runQuery_unknownContext_doesNotOpenConnection() {
+		when(contextService.getContextOrThrow("unknown"))
+				.thenThrow(new EntityNotFoundException("Context with id 'unknown' does not exist"));
+
+		assertThrows(EntityNotFoundException.class,
+				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, "unknown"));
+
+		verify(publicRepository, never()).getConnection();
+	}
+
+	@Test
+	void runQuery_malformedSparql_throwsBadRequestWithoutLeakingParserMessage() {
+		BadRequestException ex = assertThrows(BadRequestException.class,
+				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, "this is not sparql {{{", null));
+
+		assertEquals("Malformed SPARQL query", ex.getMessage());
+		assertNotNull(ex.getCause(), "Original parse error should be preserved as cause");
+	}
+
+	@Test
+	void runQuery_validQueryJson_returnsValidJsonResultDocument() {
+		byte[] body = service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null);
+
+		assertTrue(body.length > 0, "Expected non-empty response body");
+		String text = new String(body);
+		assertTrue(text.contains("\"head\""), "Expected SPARQL JSON 'head' member, got: " + text);
+		assertTrue(text.contains("\"results\""), "Expected SPARQL JSON 'results' member, got: " + text);
+	}
+
+	@Test
+	void runQuery_validQueryXml_returnsValidXmlResultDocument() {
+		byte[] body = service.runQuery(SparqlMediaType.SPARQL_RESULTS_XML, SELECT_ALL, null);
+
+		assertTrue(body.length > 0, "Expected non-empty response body");
+		String text = new String(body);
+		assertTrue(text.startsWith("<?xml"), "Expected XML declaration prefix, got: " + text);
+		assertTrue(text.contains("<sparql"), "Expected '<sparql' root element, got: " + text);
+	}
+
+	@Test
+	void runQuery_validQueryCsv_returnsCsvHeaderRow() {
+		byte[] body = service.runQuery(SparqlMediaType.CSV, SELECT_ALL, null);
+
+		assertTrue(body.length > 0, "Expected non-empty response body");
+		String text = new String(body);
+		assertTrue(text.startsWith("s,p,o"), "Expected CSV header row 's,p,o', got: " + text);
+	}
+
+	@Test
+	void runQuery_validQueryBinary_startsWithBrtrMagicHeader() {
+		byte[] body = service.runQuery(SparqlMediaType.BINARY, SELECT_ALL, null);
+
+		// RDF4J BinaryQueryResultWriter prefixes every result with the four ASCII bytes "BRTR"
+		// (BinaryQueryResultConstants.MAGIC_NUMBER); asserting it proves the binary writer was the
+		// one actually invoked, not just "anything that wasn't XML/JSON/CSV".
+		assertTrue(body.length >= 4, "Expected at least 4 magic bytes, got " + body.length);
+		assertEquals("BRTR", new String(body, 0, 4, StandardCharsets.US_ASCII));
+	}
+
+	@Test
+	void runQuery_appliesConfiguredMaxExecutionTimeAndDisablesInferred() {
+		int customExecutionTime = 42;
+		SparqlService customService = new SparqlService(repositoryManager, contextService, customExecutionTime, MAX_RESPONSE_BYTES);
+
+		RepositoryConnection mockConn = mock(RepositoryConnection.class);
+		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
+		when(publicRepository.getConnection()).thenReturn(mockConn);
+		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
+		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
+
+		customService.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null);
+
+		// InOrder pin: setMaxExecutionTime must run BEFORE evaluate so a regression that swaps the
+		// order (timeout no-op'd because evaluate already started) is caught here.
+		InOrder order = inOrder(mockQuery);
+		order.verify(mockQuery).setMaxExecutionTime(customExecutionTime);
+		order.verify(mockQuery).evaluate(any(TupleQueryResultHandler.class));
+		verify(mockQuery).setIncludeInferred(false);
+		verify(mockQuery, never()).setDataset(any());
+	}
+
+	@Test
+	void runQuery_publicRepositoryConnectionNull_throwsInternalServerError() {
+		when(publicRepository.getConnection()).thenReturn(null);
+
+		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
+				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+		assertEquals("Public SPARQL endpoint connection unavailable", ex.getMessage());
+	}
+
+	@Test
+	void runQuery_repositoryException_throwsInternalServerErrorWithoutLeakingMessage() {
+		// PublicRepository.getConnection() catches RepositoryException internally and returns null,
+		// so the only realistically-reachable path through the RepositoryException catch is when
+		// prepareTupleQuery / evaluate / etc. fail mid-query against a live connection.
+		RepositoryConnection mockConn = mock(RepositoryConnection.class);
+		when(publicRepository.getConnection()).thenReturn(mockConn);
+		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString()))
+				.thenThrow(new RepositoryException("backing store offline; pool exhausted; secret-bucket"));
+
+		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
+				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+		assertEquals("SPARQL repository error", ex.getMessage());
+		assertNotNull(ex.getCause(), "Original RepositoryException should be preserved as cause");
+		// Pin the no-leak claim from the test name: the cause-bearing details (pool state, secret-bucket)
+		// must not surface in the user-facing message that AppExceptionHandler will render.
+		assertFalse(ex.getMessage().contains("secret-bucket"));
+		assertFalse(ex.getMessage().contains("backing store"));
+	}
+
+	@Test
+	void runQuery_serviceClause_throwsBadRequest() {
+		String serviceQuery = "SELECT ?s WHERE { SERVICE <http://example.org/sparql> { ?s ?p ?o } }";
+
+		BadRequestException ex = assertThrows(BadRequestException.class,
+				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, serviceQuery, null));
+		assertTrue(ex.getMessage().contains("SERVICE"),
+				"Expected SERVICE-rejection message, got: " + ex.getMessage());
+	}
+
+	@Test
+	void runQuery_resultExceedsMaxResponseBytes_throws413() {
+		SparqlService tinyCapService = new SparqlService(repositoryManager, contextService, MAX_EXECUTION_TIME, 8L);
+
+		try (RepositoryConnection rc = backingRepository.getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			rc.add(vf.createIRI("http://example.org/s"),
+					vf.createIRI("http://example.org/p"),
+					vf.createIRI("http://example.org/o"));
+		}
+
+		CustomResponseException ex = assertThrows(CustomResponseException.class,
+				() -> tinyCapService.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+
+		assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, ex.getStatus());
+	}
+
+	@Test
+	void runQuery_queryEvaluationException_withoutSizeCap_throwsInternalServerError() {
+		RepositoryConnection mockConn = mock(RepositoryConnection.class);
+		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
+		when(publicRepository.getConnection()).thenReturn(mockConn);
+		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
+		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
+		doThrow(new QueryEvaluationException("backend went away"))
+				.when(mockQuery).evaluate(any(TupleQueryResultHandler.class));
+
+		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
+				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+		assertEquals("SPARQL query evaluation failed", ex.getMessage());
+	}
+
+	@Test
+	void runQuery_queryInterruptedException_throwsGatewayTimeout() {
+		RepositoryConnection mockConn = mock(RepositoryConnection.class);
+		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
+		when(publicRepository.getConnection()).thenReturn(mockConn);
+		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
+		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
+		doThrow(new QueryInterruptedException("simulated timeout"))
+				.when(mockQuery).evaluate(any(TupleQueryResultHandler.class));
+
+		CustomResponseException ex = assertThrows(CustomResponseException.class,
+				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+		assertEquals(HttpStatus.GATEWAY_TIMEOUT, ex.getStatus());
+		assertEquals("SPARQL query timed out", ex.getMessage());
+	}
+
+	@Test
+	void runQuery_tupleQueryResultHandlerException_throwsSerializationFailed() {
+		RepositoryConnection mockConn = mock(RepositoryConnection.class);
+		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
+		when(publicRepository.getConnection()).thenReturn(mockConn);
+		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
+		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
+		doThrow(new TupleQueryResultHandlerException("writer broke"))
+				.when(mockQuery).evaluate(any(TupleQueryResultHandler.class));
+
+		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
+				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+		assertEquals("SPARQL result serialization failed", ex.getMessage());
+	}
+
+	@Test
+	void runQuery_unrelatedIoExceptionWithSameMessage_doesNotMisclassifyAs413() {
+		// findSizeCap matches by exception type (SparqlResultTooLargeException) — not by message text —
+		// so an unrelated IOException with a coincidentally similar message must NOT trip the 413 path.
+		RepositoryConnection mockConn = mock(RepositoryConnection.class);
+		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
+		when(publicRepository.getConnection()).thenReturn(mockConn);
+		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
+		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
+		QueryEvaluationException outer = new QueryEvaluationException("writer aborted");
+		outer.addSuppressed(new IOException("SPARQL result exceeds maximum allowed size of 8 bytes"));
+		doThrow(outer).when(mockQuery).evaluate(any(TupleQueryResultHandler.class));
+
+		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
+				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+		assertEquals("SPARQL query evaluation failed", ex.getMessage());
+	}
+
+	@Test
+	void runQuery_withContext_isolatesNamedGraph() {
+		Context context = mock(Context.class);
+		when(context.getURI()).thenReturn(URI.create(CONTEXT_URI));
+		when(contextService.getContextOrThrow(CONTEXT_ID)).thenReturn(context);
+
+		try (RepositoryConnection rc = backingRepository.getConnection()) {
+			ValueFactory vf = rc.getValueFactory();
+			IRI inContextGraph = vf.createIRI(CONTEXT_URI);
+			IRI otherGraph = vf.createIRI("http://example.org/other-graph");
+			rc.add(vf.createIRI("http://example.org/in-context"),
+					vf.createIRI("http://example.org/p"),
+					vf.createIRI("http://example.org/o"),
+					inContextGraph);
+			rc.add(vf.createIRI("http://example.org/leaked"),
+					vf.createIRI("http://example.org/p"),
+					vf.createIRI("http://example.org/o"),
+					otherGraph);
+		}
+
+		byte[] body = service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, CONTEXT_ID);
+		String text = new String(body);
+		assertTrue(text.contains("http://example.org/in-context"),
+				"Expected the in-context triple to be returned, got: " + text);
+		assertFalse(text.contains("http://example.org/leaked"),
+				"Expected no leak from other-graph, got: " + text);
+	}
+}

@@ -101,6 +101,7 @@ springboot/
 **Key patterns:**
 - Controllers: `@RestController` + `@RequiredArgsConstructor` (Lombok) + `@Operation` (Swagger)
 - Services: `@Slf4j` + `@Service` + `@RequiredArgsConstructor`
+- Read config via Spring Boot mechanisms (`@Value("${prop:default}")` or `@ConfigurationProperties`); do not call `repositoryManager.getConfiguration().get*` from a service.
 - Config: `application.yaml` imports `entrystore.properties` (same config format as legacy)
 - Default port: 8080 (production), 8181 (integration tests)
 - Embedded server: Jetty 12 (`spring-boot-starter-jetty`), not Tomcat

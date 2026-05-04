@@ -104,7 +104,7 @@ public class GraphUtil {
 	 * RFC 7231 Section 5.3.2 content negotiation ordering:
 	 * quality value (q) descending as primary key, specificity as tiebreaker.
 	 */
-	private static final Comparator<MediaType> QUALITY_THEN_SPECIFICITY =
+	static final Comparator<MediaType> QUALITY_THEN_SPECIFICITY =
 			Comparator.comparingDouble(MediaType::getQualityValue).reversed()
 					.thenComparing((a, b) -> {
 						if (a.isMoreSpecific(b)) return -1;

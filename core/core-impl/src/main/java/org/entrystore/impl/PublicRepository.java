@@ -83,7 +83,10 @@ public class PublicRepository {
 				postQueue.cleanUp();
 				int batchCount = 0;
 
-				if (postQueue.estimatedSize() > 0 || !deleteQueue.isEmpty()) {
+				// Use asMap().isEmpty() instead of estimatedSize() > 0: Caffeine's estimatedSize() is
+				// documented as weakly consistent and can transiently report 0 right after a put under
+				// concurrent load, which used to make this thread sleep 10 s while entries were waiting.
+				if (!postQueue.asMap().isEmpty() || !deleteQueue.isEmpty()) {
 					if (!deleteQueue.isEmpty()) {
 						Set<Entry> entriesToRemove = new HashSet<>();
 						synchronized (deleteQueue) {
@@ -101,7 +104,7 @@ public class PublicRepository {
 							removeEntries(entriesToRemove);
 						}
 					}
-					if (postQueue.estimatedSize() > 0) {
+					if (!postQueue.asMap().isEmpty()) {
 						Set<Entry> entriesToUpdate = new HashSet<>();
 						synchronized (postQueue) {
 							ConcurrentMap<URI, Entry> postQueueMap = postQueue.asMap();
@@ -118,7 +121,7 @@ public class PublicRepository {
 							}
 						}
 						postQueue.cleanUp();
-						log.info("Sending " + entriesToUpdate.size() + " entries for update in Public Repository, " + postQueue.estimatedSize() + " entries remaining in post queue");
+						log.info("Sending " + entriesToUpdate.size() + " entries for update in Public Repository, " + postQueue.asMap().size() + " entries remaining in post queue");
 						updateEntries(entriesToUpdate);
 					}
 				} else {

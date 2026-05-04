@@ -146,12 +146,25 @@ abstract class BaseSpec extends Specification {
 	}
 
 	/**
+	 * Creates a request query string ?key=value&… with encoded values
 	 *
 	 * @param data a key-val map to be converted
 	 * @return a string in form of "?key1=value1&key2=value2&..."; or empty string for empty map
 	 */
 	def static convertMapToQueryParams(Map<String, String> data) {
-		return (data.size() == 0) ? '' : '?' + data.collect { k, v -> k + '=' + URLEncoder.encode(v, UTF_8) }.join('&')
+		return (data.size() == 0) ? '' : '?' + createFormBody(data)
+	}
+
+	/**
+	 * Creates a form body for www-form-urlencoded requests as a concatenated key=value&… string, with encoded values
+	 *
+	 * @param params input
+	 * @return a String in form of key1=value1&key2=value2&...; empty for an empty map
+	 */
+	def static createFormBody(Map<String, String> params) {
+		return params
+			.collect { k, v -> k + '=' + URLEncoder.encode(v, UTF_8) }
+			.join('&')
 	}
 
 	/**
