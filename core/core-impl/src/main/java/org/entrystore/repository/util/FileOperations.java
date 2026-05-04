@@ -277,7 +277,7 @@ public class FileOperations {
 			throw new IllegalArgumentException("Destination is not a folder.");
 		}
 
-		String canonicalDest = destination.getCanonicalPath() + File.separator;
+		Path canonicalDest = destination.getCanonicalFile().toPath();
 		CRC32 crc = new CRC32();
 		try (ZipInputStream zis = new ZipInputStream(
 				new BufferedInputStream(
@@ -288,7 +288,7 @@ public class FileOperations {
 			while ((entry = zis.getNextEntry()) != null) {
 				log.debug("Extracting file: {}", entry.getName());
 				File unzippedFile = new File(destination, entry.getName());
-				if (!unzippedFile.getCanonicalPath().startsWith(canonicalDest)) {
+				if (!unzippedFile.getCanonicalFile().toPath().startsWith(canonicalDest)) {
 					log.warn("ZIP Slip attempt detected, rejecting entry: [{}]",
 							entry.getName().replace("\n", "\\n").replace("\r", "\\r"));
 					deleteDirectory(destination);
