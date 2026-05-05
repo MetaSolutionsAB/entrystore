@@ -51,8 +51,10 @@ import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.entrystore.rest.springboot.service.auth.RecaptchaVerifier;
 import org.entrystore.rest.springboot.service.auth.RedirectUrlValidator;
+import org.entrystore.rest.springboot.service.auth.SignupRateLimiter;
 import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
 import org.entrystore.rest.springboot.util.Email;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -109,6 +111,7 @@ public class AuthService {
 	private final RedirectUrlValidator redirectUrlValidator;
 	private final Config config;
 	private final SessionRegistry sessionRegistry;
+	private final SignupRateLimiter signupRateLimiter;
 
 	private static final Object mutex = new Object();
 	private static Set<String> domainWhitelist = null;
@@ -393,6 +396,8 @@ public class AuthService {
 	}
 
 	public String signup(HttpServletRequest request, SignupRequestBody requestBody, Map<String, String> extraProperties, String title) {
+		signupRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request));
+
 		SignupInfo ci = new SignupInfo();
 		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 

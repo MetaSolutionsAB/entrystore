@@ -218,4 +218,16 @@ abstract class BaseSpec extends Specification {
 			// separate supplier and predicate for better await logging
 			.until({ getSolrStatus() }, SOLR_IDLE)
 	}
+
+	protected static void stopPreexistingAppIfRunning() {
+		if (appInstance != null) {
+			log.info('Stopping pre-existing ES instance')
+			try {
+				appInstance.close()
+			} finally {
+				appInstance = null
+				EntryStoreClient.cleanCookies()
+			}
+		}
+	}
 }

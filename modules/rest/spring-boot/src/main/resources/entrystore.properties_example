@@ -48,6 +48,10 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.message.rate.limit.max=10
 # entrystore.message.rate.limit.window=1h
 
+## Rate limiting for POST /auth/signup by client IP (0 to disable)
+# entrystore.auth.signup.rate.limit.max=5
+# entrystore.auth.signup.rate.limit.window=1h
+
 ## Generic settings for user-initiated sign-up and password reset
 # entrystore.auth.email.from=signup@yourdomain.tld
 # entrystore.auth.email.bcc=info+signup@yourdomain.tld
