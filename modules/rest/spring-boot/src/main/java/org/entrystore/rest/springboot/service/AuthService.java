@@ -50,6 +50,7 @@ import org.entrystore.rest.springboot.model.exception.PwResetEntityNotFoundHtmlE
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.entrystore.rest.springboot.service.auth.RecaptchaVerifier;
+import org.entrystore.rest.springboot.service.auth.PasswordResetRateLimiter;
 import org.entrystore.rest.springboot.service.auth.RedirectUrlValidator;
 import org.entrystore.rest.springboot.service.auth.SignupRateLimiter;
 import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
@@ -112,6 +113,7 @@ public class AuthService {
 	private final Config config;
 	private final SessionRegistry sessionRegistry;
 	private final SignupRateLimiter signupRateLimiter;
+	private final PasswordResetRateLimiter passwordResetRateLimiter;
 
 	private static final Object mutex = new Object();
 	private static Set<String> domainWhitelist = null;
@@ -262,6 +264,8 @@ public class AuthService {
 		setRedirectUrlIfPermitted(requestBody.urlSuccess(), ci::setUrlSuccess, "success");
 
 		log.info("Received password reset request for {}", ci.getEmail());
+
+		passwordResetRateLimiter.acquirePermit(clientIp(request));
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
@@ -453,8 +457,7 @@ public class AuthService {
 
 		log.info("Received sign-up request for {}", ci.getEmail());
 
-		boolean trustForwardedFor = config.getBoolean(Settings.TRUST_X_FORWARDED_FOR, false);
-		signupRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request, trustForwardedFor));
+		signupRateLimiter.acquirePermit(clientIp(request));
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
@@ -549,5 +552,10 @@ public class AuthService {
 		}
 
 		entry.getLocalMetadata().setGraph(graph);
+	}
+
+	private String clientIp(HttpServletRequest request) {
+		boolean trustForwardedFor = config.getBoolean(Settings.TRUST_X_FORWARDED_FOR, false);
+		return HttpUtil.getClientIpAddress(request, trustForwardedFor);
 	}
 }
