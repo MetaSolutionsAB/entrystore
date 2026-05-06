@@ -51,8 +51,10 @@ import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException
 import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.entrystore.rest.springboot.service.auth.RecaptchaVerifier;
 import org.entrystore.rest.springboot.service.auth.RedirectUrlValidator;
+import org.entrystore.rest.springboot.service.auth.SignupRateLimiter;
 import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
 import org.entrystore.rest.springboot.util.Email;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -109,6 +111,7 @@ public class AuthService {
 	private final RedirectUrlValidator redirectUrlValidator;
 	private final Config config;
 	private final SessionRegistry sessionRegistry;
+	private final SignupRateLimiter signupRateLimiter;
 
 	private static final Object mutex = new Object();
 	private static Set<String> domainWhitelist = null;
@@ -449,6 +452,9 @@ public class AuthService {
 		}
 
 		log.info("Received sign-up request for {}", ci.getEmail());
+
+		boolean trustForwardedFor = config.getBoolean(Settings.TRUST_X_FORWARDED_FOR, false);
+		signupRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request, trustForwardedFor));
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {

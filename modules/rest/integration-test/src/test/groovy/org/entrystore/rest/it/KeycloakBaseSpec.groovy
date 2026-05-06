@@ -62,15 +62,4 @@ abstract class KeycloakBaseSpec extends BaseSpec {
 		return keycloakContainer.getAuthServerUrl() + '/realms/test/protocol/cas'
 	}
 
-	protected static void stopPreexistingAppIfRunning() {
-		if (appInstance != null) {
-			log.info('Stopping pre-existing ES instance')
-			try {
-				appInstance.close()
-			} finally {
-				appInstance = null
-				EntryStoreClient.cleanCookies()
-			}
-		}
-	}
 }

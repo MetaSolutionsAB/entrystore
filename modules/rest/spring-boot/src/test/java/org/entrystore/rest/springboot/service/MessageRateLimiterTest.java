@@ -16,11 +16,13 @@
 
 package org.entrystore.rest.springboot.service;
 
+import com.github.benmanes.caffeine.cache.Ticker;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,7 +32,7 @@ class MessageRateLimiterTest {
 
 	@Test
 	void allowsMessagesUnderLimit() {
-		var rateLimiter = new MessageRateLimiter(3, Duration.ofHours(1));
+		var rateLimiter = new MessageRateLimiter(3, Duration.ofHours(1), Ticker.systemTicker());
 		String user = "http://example.com/user/1";
 
 		rateLimiter.acquirePermit(user);
@@ -41,7 +43,7 @@ class MessageRateLimiterTest {
 
 	@Test
 	void throwsWhenLimitExceeded() {
-		var rateLimiter = new MessageRateLimiter(2, Duration.ofHours(1));
+		var rateLimiter = new MessageRateLimiter(2, Duration.ofHours(1), Ticker.systemTicker());
 		String user = "http://example.com/user/1";
 
 		rateLimiter.acquirePermit(user);
@@ -54,7 +56,7 @@ class MessageRateLimiterTest {
 
 	@Test
 	void differentUsersHaveSeparateLimits() {
-		var rateLimiter = new MessageRateLimiter(1, Duration.ofHours(1));
+		var rateLimiter = new MessageRateLimiter(1, Duration.ofHours(1), Ticker.systemTicker());
 		String user1 = "http://example.com/user/1";
 		String user2 = "http://example.com/user/2";
 
@@ -65,25 +67,27 @@ class MessageRateLimiterTest {
 
 	@Test
 	void disabledWhenMaxIsZero() {
-		var rateLimiter = new MessageRateLimiter(0, Duration.ofHours(1));
+		var rateLimiter = new MessageRateLimiter(0, Duration.ofHours(1), Ticker.systemTicker());
 		String user = "http://example.com/user/1";
 
 		assertDoesNotThrow(() -> rateLimiter.acquirePermit(user));
 	}
 
 	@Test
-	void resetsCounterAfterWindowExpires() throws InterruptedException {
-		var rateLimiter = new MessageRateLimiter(1, Duration.ofMillis(50));
+	void resetsCounterAfterWindowExpires() {
+		var nanos = new AtomicLong();
+		var rateLimiter = new MessageRateLimiter(1, Duration.ofSeconds(1), nanos::get);
 		String user = "http://example.com/user/1";
 
 		rateLimiter.acquirePermit(user);
-		Thread.sleep(100);
+		nanos.set(Duration.ofSeconds(2).toNanos());
+
 		assertDoesNotThrow(() -> rateLimiter.acquirePermit(user));
 	}
 
 	@Test
 	void allowsFirstMessageWithoutPriorRecord() {
-		var rateLimiter = new MessageRateLimiter(1, Duration.ofHours(1));
+		var rateLimiter = new MessageRateLimiter(1, Duration.ofHours(1), Ticker.systemTicker());
 
 		assertDoesNotThrow(() -> rateLimiter.acquirePermit("http://example.com/user/new"));
 	}

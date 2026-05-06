@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.util;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.google.common.net.InetAddresses;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -151,20 +152,33 @@ public class HttpUtil {
 	}
 
 	/**
-	 * Returns the client IP, or a comma separated list of IPs.
+	 * Returns the client IP.
+	 * <p>
+	 * When {@code trustForwardedFor} is {@code false} (the secure default), returns the TCP remote
+	 * address as reported by the servlet container. When {@code true}, returns the leftmost address
+	 * in {@code X-Forwarded-For} if it parses as a valid IP literal; otherwise falls back to the
+	 * remote address.
+	 * <p>
+	 * SECURITY: enable {@code X-Forwarded-For} trust only when running behind a reverse proxy that
+	 * overwrites or strips client-supplied {@code X-Forwarded-For} headers. With trust enabled and
+	 * direct internet exposure, clients can spoof the header to defeat any per-IP logic that uses
+	 * this value.
 	 */
-	public static String getClientIpAddress(HttpServletRequest request) {
+	public static String getClientIpAddress(HttpServletRequest request, boolean trustForwardedFor) {
 		checkArgument(request != null, "request must not be null");
-		String ip = request.getRemoteAddr();
-		if (StringUtils.isBlank(ip)) {
-			String s = request.getHeader(HEADER_X_FORWARDED_FOR);
-			String[] clientIpArray = StringUtils.split(s, ',');
-			if (ArrayUtils.isNotEmpty(clientIpArray)) {
-				return clientIpArray[0];
+		if (trustForwardedFor) {
+			String xff = request.getHeader(HEADER_X_FORWARDED_FOR);
+			if (StringUtils.isNotBlank(xff)) {
+				String[] clientIpArray = StringUtils.split(xff, ',');
+				if (ArrayUtils.isNotEmpty(clientIpArray)) {
+					String first = clientIpArray[0].trim();
+					if (InetAddresses.isInetAddress(first)) {
+						return first;
+					}
+				}
 			}
 		}
-
-		return ip;
+		return request.getRemoteAddr();
 	}
 
 	/**

@@ -1,5 +1,6 @@
 package org.entrystore.rest.springboot.configuration;
 
+import com.github.benmanes.caffeine.cache.Ticker;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -110,6 +111,11 @@ public class EntryStoreConfiguration {
 	@Bean
 	public RestTemplate restTemplate() {
 		return new RestTemplate();
+	}
+
+	@Bean
+	public Ticker systemTicker() {
+		return Ticker.systemTicker();
 	}
 
 }

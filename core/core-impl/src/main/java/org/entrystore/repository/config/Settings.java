@@ -92,6 +92,11 @@ public interface Settings {
 	String MESSAGE_RATE_LIMIT_MAX = "entrystore.message.rate.limit.max";
 	String MESSAGE_RATE_LIMIT_WINDOW = "entrystore.message.rate.limit.window";
 
+	String AUTH_SIGNUP_RATE_LIMIT_MAX = "entrystore.auth.signup.rate.limit.max";
+	String AUTH_SIGNUP_RATE_LIMIT_WINDOW = "entrystore.auth.signup.rate.limit.window";
+
+	String TRUST_X_FORWARDED_FOR = "entrystore.trust.x-forwarded-for";
+
 	String AUTH_HTTP_BASIC_ENABLED = "entrystore.auth.http-basic.enabled";
 
 	String AUTH_FROM_EMAIL_DEPRECATED = "entrystore.auth.email.from";

@@ -14,21 +14,22 @@
  * limitations under the License.
  */
 
-package org.entrystore.rest.springboot.service;
+package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Ticker;
+import org.entrystore.rest.springboot.service.FixedWindowRateLimiter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 
 @Service
-public class MessageRateLimiter extends FixedWindowRateLimiter {
+public class SignupRateLimiter extends FixedWindowRateLimiter {
 
-	public MessageRateLimiter(
-			@Value("${entrystore.message.rate.limit.max:10}") int max,
-			@Value("${entrystore.message.rate.limit.window:1h}") Duration window,
+	public SignupRateLimiter(
+			@Value("${entrystore.auth.signup.rate.limit.max:10}") int max,
+			@Value("${entrystore.auth.signup.rate.limit.window:1h}") Duration window,
 			Ticker ticker) {
-		super(max, window, "message", ticker);
+		super(max, window, "signup", ticker);
 	}
 }
