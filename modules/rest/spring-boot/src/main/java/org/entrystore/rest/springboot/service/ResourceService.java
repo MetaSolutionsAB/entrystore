@@ -281,7 +281,7 @@ public class ResourceService {
 					}
 					entry.setMimetype(mimeType);
 					if (StringUtils.isNotEmpty(filename)) {
-						entry.setFilename(FileUtil.sanitizeFilename(filename.trim()));
+						entry.setFilename(FileUtil.sanitizeFilename(filename));
 					}
 				} catch (QuotaException qe) {
 					throw new EntityTooLargeException(qe.getMessage(), qe);
@@ -465,9 +465,8 @@ public class ResourceService {
 				itemMimeType = mimeType;
 			}
 			entry.setMimetype(itemMimeType);
-			// Documentation for MultipartFile.getName() says it's never null or empty
-			String name = file.getName();
-			entry.setFilename(FileUtil.sanitizeFilename(name.trim()));
+			String name = StringUtils.defaultIfBlank(file.getOriginalFilename(), file.getName());
+			entry.setFilename(FileUtil.sanitizeFilename(name));
 
 			return CompletionState.CREATED;
 		} catch (IOException ioe) {

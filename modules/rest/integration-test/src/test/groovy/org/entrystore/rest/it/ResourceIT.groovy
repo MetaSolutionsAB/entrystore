@@ -1608,4 +1608,33 @@ class ResourceIT extends BaseSpec {
 		putResourceConn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} with exe%20 filename in Content-Disposition should persist _dangerous suffix"() {
+		given:
+		def entryId = createEntry(contextId, [:])
+		assert entryId.length() > 0
+
+		when:
+		def putConn = EntryStoreClient.putRequest(
+			'/' + contextId + '/resource/' + entryId,
+			'',
+			'admin',
+			'application/octet-stream',
+			['Content-Disposition': 'attachment; filename="datei.exe%20"']
+		)
+
+		then:
+		putConn.responseCode == HTTP_CREATED
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		def entryJson = JSON_PARSER.parseText(entryConn.inputStream.text)
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def resourceUri = entryJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE][0]['value'].toString()
+		def rdfsLabel = 'http://www.w3.org/2000/01/rdf-schema#label'
+
+		then:
+		entryConn.responseCode == HTTP_OK
+		entryJson['info'][resourceUri][rdfsLabel][0]['value'] == 'datei.exe%20_dangerous'
+	}
+
 }

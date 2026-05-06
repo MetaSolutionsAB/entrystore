@@ -4,6 +4,8 @@ import lombok.NoArgsConstructor;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 @NoArgsConstructor(access = lombok.AccessLevel.PRIVATE)
@@ -70,16 +72,33 @@ public class FileUtil {
 	/**
 	 * Sanitizes a filename by appending a suffix if it has a dangerous extension.
 	 *
+	 * The extension is determined from a normalized form of the filename: URL-decoded,
+	 * Unicode-whitespace-stripped, and with trailing dots, semicolons, and control
+	 * characters removed. The suffix is always appended to the original (non-normalized)
+	 * filename so that warning signals are preserved in logs and serving paths.
+	 *
 	 * @param filename the original filename to sanitize
 	 * @return sanitized filename with "_dangerous" suffix if extension is dangerous,
 	 * original filename otherwise
 	 */
 	public static String sanitizeFilename(String filename) {
-
-		String fileExt = FilenameUtils.getExtension(filename);
-		return isDangerousExtension(fileExt)
-				? filename + "_dangerous"
-				: filename;
+		String normalized;
+		try {
+			normalized = URLDecoder.decode(filename, StandardCharsets.UTF_8).strip();
+		} catch (IllegalArgumentException e) {
+			// Truncated %-escape — treat as suspicious
+			return filename + "_dangerous";
+		}
+		while (!normalized.isEmpty()) {
+			char last = normalized.charAt(normalized.length() - 1);
+			if (last == '.' || last == ';' || last < ' ' || last == '\u007F' || Character.isSpaceChar(last)) {
+				normalized = normalized.substring(0, normalized.length() - 1);
+			} else {
+				break;
+			}
+		}
+		String fileExt = FilenameUtils.getExtension(normalized);
+		return isDangerousExtension(fileExt) ? filename + "_dangerous" : filename;
 	}
 
 	/**
