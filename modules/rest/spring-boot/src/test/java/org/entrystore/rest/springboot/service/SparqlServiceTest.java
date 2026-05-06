@@ -21,6 +21,7 @@ import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.query.QueryEvaluationException;
 import org.eclipse.rdf4j.query.QueryInterruptedException;
 import org.eclipse.rdf4j.query.QueryLanguage;
+import org.eclipse.rdf4j.query.TupleQuery;
 import org.eclipse.rdf4j.query.TupleQueryResultHandler;
 import org.eclipse.rdf4j.query.TupleQueryResultHandlerException;
 import org.eclipse.rdf4j.query.parser.QueryParserUtil;
@@ -38,7 +39,7 @@ import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
-import org.entrystore.rest.springboot.util.SparqlMediaType;
+import org.entrystore.rest.springboot.util.SparqlResultFormat;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -50,6 +51,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -126,7 +128,7 @@ class SparqlServiceTest {
 		when(repositoryManager.getPublicRepository()).thenReturn(null);
 
 		assertThrows(NotImplementedException.class,
-				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
 	}
 
 	@Test
@@ -135,7 +137,7 @@ class SparqlServiceTest {
 				.thenThrow(new EntityNotFoundException("Context with id 'unknown' does not exist"));
 
 		assertThrows(EntityNotFoundException.class,
-				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, "unknown"));
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, "unknown", new ByteArrayOutputStream()));
 
 		verify(publicRepository, never()).getConnection();
 	}
@@ -143,7 +145,7 @@ class SparqlServiceTest {
 	@Test
 	void runQuery_malformedSparql_throwsBadRequestWithoutLeakingParserMessage() {
 		BadRequestException ex = assertThrows(BadRequestException.class,
-				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, "this is not sparql {{{", null));
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, "this is not sparql {{{", null, new ByteArrayOutputStream()));
 
 		assertEquals("Malformed SPARQL query", ex.getMessage());
 		assertNotNull(ex.getCause(), "Original parse error should be preserved as cause");
@@ -151,8 +153,10 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_validQueryJson_returnsValidJsonResultDocument() {
-		byte[] body = service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null);
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, out);
 
+		byte[] body = out.toByteArray();
 		assertTrue(body.length > 0, "Expected non-empty response body");
 		String text = new String(body);
 		assertTrue(text.contains("\"head\""), "Expected SPARQL JSON 'head' member, got: " + text);
@@ -161,8 +165,10 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_validQueryXml_returnsValidXmlResultDocument() {
-		byte[] body = service.runQuery(SparqlMediaType.SPARQL_RESULTS_XML, SELECT_ALL, null);
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		service.runQuery(SparqlResultFormat.SPARQL_RESULTS_XML, SELECT_ALL, null, out);
 
+		byte[] body = out.toByteArray();
 		assertTrue(body.length > 0, "Expected non-empty response body");
 		String text = new String(body);
 		assertTrue(text.startsWith("<?xml"), "Expected XML declaration prefix, got: " + text);
@@ -171,8 +177,10 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_validQueryCsv_returnsCsvHeaderRow() {
-		byte[] body = service.runQuery(SparqlMediaType.CSV, SELECT_ALL, null);
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		service.runQuery(SparqlResultFormat.CSV, SELECT_ALL, null, out);
 
+		byte[] body = out.toByteArray();
 		assertTrue(body.length > 0, "Expected non-empty response body");
 		String text = new String(body);
 		assertTrue(text.startsWith("s,p,o"), "Expected CSV header row 's,p,o', got: " + text);
@@ -180,11 +188,13 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_validQueryBinary_startsWithBrtrMagicHeader() {
-		byte[] body = service.runQuery(SparqlMediaType.BINARY, SELECT_ALL, null);
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		service.runQuery(SparqlResultFormat.BINARY, SELECT_ALL, null, out);
 
 		// RDF4J BinaryQueryResultWriter prefixes every result with the four ASCII bytes "BRTR"
 		// (BinaryQueryResultConstants.MAGIC_NUMBER); asserting it proves the binary writer was the
 		// one actually invoked, not just "anything that wasn't XML/JSON/CSV".
+		byte[] body = out.toByteArray();
 		assertTrue(body.length >= 4, "Expected at least 4 magic bytes, got " + body.length);
 		assertEquals("BRTR", new String(body, 0, 4, StandardCharsets.US_ASCII));
 	}
@@ -200,14 +210,16 @@ class SparqlServiceTest {
 		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
 		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
 
-		customService.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null);
+		customService.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream());
 
-		// InOrder pin: setMaxExecutionTime must run BEFORE evaluate so a regression that swaps the
-		// order (timeout no-op'd because evaluate already started) is caught here.
+		// InOrder pin: setMaxExecutionTime and setIncludeInferred(false) must both run BEFORE
+		// evaluate. A regression placing setIncludeInferred after evaluate would silently expose
+		// inferred triples on the anonymous endpoint; placing setMaxExecutionTime after would
+		// no-op the timeout. Including both in the InOrder chain catches either reorder.
 		InOrder order = inOrder(mockQuery);
 		order.verify(mockQuery).setMaxExecutionTime(customExecutionTime);
+		order.verify(mockQuery).setIncludeInferred(false);
 		order.verify(mockQuery).evaluate(any(TupleQueryResultHandler.class));
-		verify(mockQuery).setIncludeInferred(false);
 		verify(mockQuery, never()).setDataset(any());
 	}
 
@@ -216,7 +228,7 @@ class SparqlServiceTest {
 		when(publicRepository.getConnection()).thenReturn(null);
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
-				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
 		assertEquals("Public SPARQL endpoint connection unavailable", ex.getMessage());
 	}
 
@@ -231,7 +243,7 @@ class SparqlServiceTest {
 				.thenThrow(new RepositoryException("backing store offline; pool exhausted; secret-bucket"));
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
-				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
 		assertEquals("SPARQL repository error", ex.getMessage());
 		assertNotNull(ex.getCause(), "Original RepositoryException should be preserved as cause");
 		// Pin the no-leak claim from the test name: the cause-bearing details (pool state, secret-bucket)
@@ -245,7 +257,7 @@ class SparqlServiceTest {
 		String serviceQuery = "SELECT ?s WHERE { SERVICE <http://example.org/sparql> { ?s ?p ?o } }";
 
 		BadRequestException ex = assertThrows(BadRequestException.class,
-				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, serviceQuery, null));
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, serviceQuery, null, new ByteArrayOutputStream()));
 		assertTrue(ex.getMessage().contains("SERVICE"),
 				"Expected SERVICE-rejection message, got: " + ex.getMessage());
 	}
@@ -262,7 +274,7 @@ class SparqlServiceTest {
 		}
 
 		CustomResponseException ex = assertThrows(CustomResponseException.class,
-				() -> tinyCapService.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+				() -> tinyCapService.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
 
 		assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, ex.getStatus());
 	}
@@ -278,7 +290,7 @@ class SparqlServiceTest {
 				.when(mockQuery).evaluate(any(TupleQueryResultHandler.class));
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
-				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
 		assertEquals("SPARQL query evaluation failed", ex.getMessage());
 	}
 
@@ -293,7 +305,7 @@ class SparqlServiceTest {
 				.when(mockQuery).evaluate(any(TupleQueryResultHandler.class));
 
 		CustomResponseException ex = assertThrows(CustomResponseException.class,
-				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
 		assertEquals(HttpStatus.GATEWAY_TIMEOUT, ex.getStatus());
 		assertEquals("SPARQL query timed out", ex.getMessage());
 	}
@@ -309,7 +321,7 @@ class SparqlServiceTest {
 				.when(mockQuery).evaluate(any(TupleQueryResultHandler.class));
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
-				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
 		assertEquals("SPARQL result serialization failed", ex.getMessage());
 	}
 
@@ -327,8 +339,49 @@ class SparqlServiceTest {
 		doThrow(outer).when(mockQuery).evaluate(any(TupleQueryResultHandler.class));
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
-				() -> service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, null));
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
 		assertEquals("SPARQL query evaluation failed", ex.getMessage());
+	}
+
+	@Test
+	void constructor_zeroExecutionTime_throws() {
+		assertThrows(IllegalStateException.class,
+				() -> new SparqlService(repositoryManager, contextService, 0, MAX_RESPONSE_BYTES));
+	}
+
+	@Test
+	void constructor_negativeExecutionTime_throws() {
+		assertThrows(IllegalStateException.class,
+				() -> new SparqlService(repositoryManager, contextService, -1, MAX_RESPONSE_BYTES));
+	}
+
+	@Test
+	void constructor_zeroResponseBytes_throws() {
+		assertThrows(IllegalStateException.class,
+				() -> new SparqlService(repositoryManager, contextService, MAX_EXECUTION_TIME, 0L));
+	}
+
+	@Test
+	void constructor_negativeResponseBytes_throws() {
+		assertThrows(IllegalStateException.class,
+				() -> new SparqlService(repositoryManager, contextService, MAX_EXECUTION_TIME, -1L));
+	}
+
+	@Test
+	void runQuery_nonSailTupleQuery_throwsInternalServerError() {
+		// Pins the fail-closed branch in extractTupleExpr: a non-Sail TupleQuery (e.g. one returned
+		// by an HTTP- or SPARQL-endpoint repository) cannot expose its parsed algebra in a way the
+		// FederatedServiceDetector can inspect, so the SSRF defense must refuse to run rather than
+		// silently allow a SERVICE clause through.
+		RepositoryConnection mockConn = mock(RepositoryConnection.class);
+		TupleQuery nonSailQuery = mock(TupleQuery.class);
+		when(publicRepository.getConnection()).thenReturn(mockConn);
+		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(nonSailQuery);
+
+		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
+				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
+		assertTrue(ex.getMessage().contains("Sail-backed"),
+				"Expected fail-closed Sail-only message, got: " + ex.getMessage());
 	}
 
 	@Test
@@ -351,8 +404,9 @@ class SparqlServiceTest {
 					otherGraph);
 		}
 
-		byte[] body = service.runQuery(SparqlMediaType.SPARQL_RESULTS_JSON, SELECT_ALL, CONTEXT_ID);
-		String text = new String(body);
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, CONTEXT_ID, out);
+		String text = out.toString();
 		assertTrue(text.contains("http://example.org/in-context"),
 				"Expected the in-context triple to be returned, got: " + text);
 		assertFalse(text.contains("http://example.org/leaked"),

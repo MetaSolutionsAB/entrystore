@@ -43,17 +43,17 @@ import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
-import org.entrystore.rest.springboot.util.SparqlMediaType;
+import org.entrystore.rest.springboot.util.SparqlResultFormat;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 @Slf4j
@@ -92,19 +92,31 @@ public class SparqlService {
 
 	/**
 	 * Runs the given SPARQL tuple query against the public repository, optionally
-	 * restricting the dataset to a context's named graph, and serialises the result
-	 * using the writer for {@code mediaType}.
+	 * restricting the dataset to a context's named graph, and writes the serialised
+	 * result for {@code format} directly to {@code out}.
 	 *
-	 * @param mediaType   one of the {@link SparqlMediaType} constants
+	 * <p>The result is streamed: bytes are produced incrementally and written through a
+	 * {@code SizeLimitedOutputStream} that caps the total to {@code maxResponseBytes}.
+	 * All validation (public-repo enablement, context lookup, query parse, SERVICE-clause
+	 * rejection) happens before any byte is written, so those failures still produce
+	 * clean 4xx/5xx responses through {@code AppExceptionHandler}. Failures during
+	 * {@code evaluate} (size cap exceeded, evaluator faults) propagate as exceptions; if
+	 * the response buffer has not yet flushed, the handler still produces a clean status
+	 * code, otherwise the connection drops mid-stream.
+	 *
+	 * @param format      the SPARQL tuple-result format
 	 * @param queryString the SPARQL query
 	 * @param contextId   when non-null, both the default graph and the named-graph set are replaced with the
 	 *                    context's resource URI, so the dataset is exactly that one graph in both positions;
 	 *                    when null the query runs against the full public repository
-	 * @return the serialised tuple result
+	 * @param out         the stream that the serialised tuple result is written to; the caller owns its
+	 *                    lifecycle (the wrapping {@code SizeLimitedOutputStream} does not close it)
 	 * @throws NotImplementedException     {@code "Public SPARQL endpoint is not enabled"} when the public
 	 *                                      repository is disabled
 	 * @throws InternalServerErrorException {@code "Public SPARQL endpoint connection unavailable"} when a
 	 *                                      connection cannot be acquired (null return);
+	 *                                      {@code "Public SPARQL endpoint requires a Sail-backed repository..."}
+	 *                                      when the repository is not Sail-backed (fail-closed SSRF defense);
 	 *                                      {@code "SPARQL repository error"} on backing-store failure;
 	 *                                      {@code "SPARQL query evaluation failed"} on RDF4J evaluation failure;
 	 *                                      {@code "SPARQL result serialization failed"} on writer failure
@@ -116,7 +128,7 @@ public class SparqlService {
 	 * @throws CustomResponseException     504 if the query times out; 413 if the result exceeds
 	 *                                      {@code maxResponseBytes}
 	 */
-	public byte[] runQuery(String mediaType, String queryString, String contextId) {
+	public void runQuery(SparqlResultFormat format, String queryString, String contextId, OutputStream out) {
 		PublicRepository publicRepository = repositoryManager.getPublicRepository();
 		if (publicRepository == null) {
 			throw new NotImplementedException("Public SPARQL endpoint is not enabled");
@@ -139,17 +151,14 @@ public class SparqlService {
 				query.setDataset(ds);
 			}
 
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			TupleQueryResultHandler resultHandler = createWriter(mediaType,
-					new SizeLimitedOutputStream(baos, maxResponseBytes));
+			TupleQueryResultHandler resultHandler = createWriter(format,
+					new SizeLimitedOutputStream(out, maxResponseBytes));
 
 			log.debug("Executing query (first {} chars): {}",
 					LOGGED_QUERY_PREFIX_LENGTH, truncate(queryString, LOGGED_QUERY_PREFIX_LENGTH));
 			long before = System.currentTimeMillis();
 			query.evaluate(resultHandler);
 			log.debug("SPARQL query execution took {} ms", System.currentTimeMillis() - before);
-
-			return baos.toByteArray();
 		} catch (MalformedQueryException e) {
 			throw new BadRequestException("Malformed SPARQL query", e);
 		} catch (QueryInterruptedException e) {
@@ -237,15 +246,12 @@ public class SparqlService {
 		return rc;
 	}
 
-	private static TupleQueryResultHandler createWriter(String mediaType, OutputStream out) {
-		return switch (mediaType) {
-			case SparqlMediaType.SPARQL_RESULTS_JSON -> new SPARQLResultsJSONWriter(out);
-			case SparqlMediaType.SPARQL_RESULTS_XML -> new SPARQLResultsXMLWriter(out);
-			case SparqlMediaType.CSV -> new SPARQLResultsCSVWriter(out);
-			case SparqlMediaType.BINARY -> new BinaryQueryResultWriter(out);
-			default -> throw new InternalServerErrorException(
-					"Unable to serialise SPARQL result",
-					new IllegalStateException("Unexpected SPARQL result media type: " + mediaType));
+	private static TupleQueryResultHandler createWriter(SparqlResultFormat format, OutputStream out) {
+		return switch (format) {
+			case SPARQL_RESULTS_JSON -> new SPARQLResultsJSONWriter(out);
+			case SPARQL_RESULTS_XML -> new SPARQLResultsXMLWriter(out);
+			case CSV -> new SPARQLResultsCSVWriter(out);
+			case BINARY -> new BinaryQueryResultWriter(out);
 		};
 	}
 
@@ -284,6 +290,11 @@ public class SparqlService {
 
 		@Override
 		public void write(byte[] b, int off, int len) throws IOException {
+			// Without the bounds check, a negative len would slip past ensureCapacity
+			// (negative > maxBytes - written is always false) and reach the delegate
+			// with the cap silently violated. Objects.checkFromIndexSize also gives us
+			// NPE-on-null via b.length.
+			Objects.checkFromIndexSize(off, len, b.length);
 			ensureCapacity(len);
 			delegate.write(b, off, len);
 			written += len;
@@ -296,7 +307,11 @@ public class SparqlService {
 
 		@Override
 		public void close() throws IOException {
-			delegate.close();
+			// flush()-only: the wrapper does not own the delegate's lifecycle. Important
+			// because the delegate is the response output stream — closing it here would
+			// terminate the response prematurely if an RDF4J writer calls close() on the
+			// handler.
+			delegate.flush();
 		}
 
 		private void ensureCapacity(long inc) throws IOException {

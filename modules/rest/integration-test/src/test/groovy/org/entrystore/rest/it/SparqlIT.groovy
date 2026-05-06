@@ -319,9 +319,30 @@ class SparqlIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
-	def "POST /sparql with body larger than 32KB should return Payload-Too-Large 413"() {
+	def "POST /sparql with body equal to 32KB cap should succeed"() {
 		given:
-		def body = createFormBody([query: 'a'.repeat(33 * 1024)])
+		// HttpUtil.isLargerThan compares with `>`, so size = MAX_POST_REQUEST_SIZE is admitted.
+		// Pad VALID_QUERY with a SPARQL line comment up to the cap. Alphanumeric padding inside
+		// the comment survives URL-encoding 1-to-1, so the wire length is predictable; the
+		// comment runs to end-of-line and does not affect parsing.
+		def overhead = createFormBody([query: VALID_QUERY + ' # ']).length()
+		def body = createFormBody([query: VALID_QUERY + ' # ' + 'a' * (32 * 1024 - overhead)])
+		assert body.length() == 32 * 1024
+
+		when:
+		def conn = EntryStoreClient.postRequest('/sparql', body, '', 'application/x-www-form-urlencoded')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+	}
+
+	def "POST /sparql with body 32KB + 1 should return Payload-Too-Large 413"() {
+		given:
+		// One byte over the cap is the tightest regression guard: a silent change that raises
+		// MAX_POST_REQUEST_SIZE would let this slip through.
+		def overhead = createFormBody([query: VALID_QUERY + ' # ']).length()
+		def body = createFormBody([query: VALID_QUERY + ' # ' + 'a' * (32 * 1024 - overhead + 1)])
+		assert body.length() == 32 * 1024 + 1
 
 		when:
 		def conn = EntryStoreClient.postRequest('/sparql', body, '', 'application/x-www-form-urlencoded')

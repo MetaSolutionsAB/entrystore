@@ -23,7 +23,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.service.SparqlService;
 import org.entrystore.rest.springboot.util.HttpUtil;
-import org.entrystore.rest.springboot.util.SparqlMediaType;
+import org.entrystore.rest.springboot.util.SparqlResultFormat;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequiredArgsConstructor
@@ -43,7 +44,7 @@ public class SparqlController {
 
 	@Operation(summary = "Executes a SPARQL tuple query against the public repository")
 	@GetMapping("/sparql")
-	public ResponseEntity<byte[]> getSparql(
+	public ResponseEntity<StreamingResponseBody> getSparql(
 			@RequestParam("query") String query,
 			@RequestParam(value = "format", required = false) String format,
 			@RequestHeader(value = "Accept", required = false) String acceptHeader) {
@@ -53,7 +54,7 @@ public class SparqlController {
 
 	@Operation(summary = "Executes a SPARQL tuple query restricted to a single context's named graph")
 	@GetMapping("/{context-id}/sparql")
-	public ResponseEntity<byte[]> getContextSparql(
+	public ResponseEntity<StreamingResponseBody> getContextSparql(
 			@PathVariable("context-id") String contextId,
 			@RequestParam("query") String query,
 			@RequestParam(value = "format", required = false) String format,
@@ -64,7 +65,7 @@ public class SparqlController {
 
 	@Operation(summary = "Executes a SPARQL tuple query (form-encoded POST) against the public repository")
 	@PostMapping(path = "/sparql", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-	public ResponseEntity<byte[]> postSparql(
+	public ResponseEntity<StreamingResponseBody> postSparql(
 			HttpServletRequest request,
 			@RequestParam("query") String query,
 			@RequestParam(value = "output", required = false) String output) {
@@ -74,7 +75,7 @@ public class SparqlController {
 
 	@Operation(summary = "Executes a SPARQL tuple query (form-encoded POST) restricted to a single context's named graph")
 	@PostMapping(path = "/{context-id}/sparql", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-	public ResponseEntity<byte[]> postContextSparql(
+	public ResponseEntity<StreamingResponseBody> postContextSparql(
 			HttpServletRequest request,
 			@PathVariable("context-id") String contextId,
 			@RequestParam("query") String query,
@@ -83,22 +84,22 @@ public class SparqlController {
 		return runFormQuery(request, query, output, contextId);
 	}
 
-	private ResponseEntity<byte[]> runQuery(String query, String format, String acceptHeader, String contextId) {
-		return buildResponse(SparqlMediaType.resolve(format, acceptHeader), query, contextId);
+	private ResponseEntity<StreamingResponseBody> runQuery(String query, String format, String acceptHeader, String contextId) {
+		return buildResponse(SparqlResultFormat.resolve(format, acceptHeader), query, contextId);
 	}
 
-	private ResponseEntity<byte[]> runFormQuery(HttpServletRequest request, String query, String output, String contextId) {
+	private ResponseEntity<StreamingResponseBody> runFormQuery(HttpServletRequest request, String query, String output, String contextId) {
 		// @RequestParam binds from BOTH the form body AND the URL query string; without this guard a client
 		// could ship a megabyte query in the URL while keeping the body under the 32 KB cap, defeating it.
 		if (StringUtils.isNotEmpty(request.getQueryString())) {
 			throw new BadRequestException("POST /sparql parameters must be supplied in the form body, not the URL query string");
 		}
 		HttpUtil.checkRequestSize(request, MAX_POST_REQUEST_SIZE);
-		return buildResponse(SparqlMediaType.fromOutputForm(output), query, contextId);
+		return buildResponse(SparqlResultFormat.fromOutputForm(output), query, contextId);
 	}
 
-	private ResponseEntity<byte[]> buildResponse(String mediaType, String query, String contextId) {
-		byte[] body = sparqlService.runQuery(mediaType, query, contextId);
-		return ResponseEntity.ok().contentType(SparqlMediaType.toMediaType(mediaType)).body(body);
+	private ResponseEntity<StreamingResponseBody> buildResponse(SparqlResultFormat format, String query, String contextId) {
+		StreamingResponseBody body = out -> sparqlService.runQuery(format, query, contextId, out);
+		return ResponseEntity.ok().contentType(format.getMediaType()).body(body);
 	}
 }
