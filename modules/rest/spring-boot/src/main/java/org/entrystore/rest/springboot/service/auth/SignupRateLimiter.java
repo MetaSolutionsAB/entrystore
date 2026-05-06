@@ -17,24 +17,19 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Ticker;
-import org.entrystore.rest.springboot.service.SlidingWindowRateLimiter;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.entrystore.rest.springboot.service.FixedWindowRateLimiter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 
 @Service
-public class SignupRateLimiter extends SlidingWindowRateLimiter {
+public class SignupRateLimiter extends FixedWindowRateLimiter {
 
-	@Autowired
 	public SignupRateLimiter(
 			@Value("${entrystore.auth.signup.rate.limit.max:10}") int max,
-			@Value("${entrystore.auth.signup.rate.limit.window:1h}") Duration window) {
-		super(max, window, "signup");
-	}
-
-	SignupRateLimiter(int max, Duration window, Ticker ticker) {
+			@Value("${entrystore.auth.signup.rate.limit.window:1h}") Duration window,
+			Ticker ticker) {
 		super(max, window, "signup", ticker);
 	}
 }

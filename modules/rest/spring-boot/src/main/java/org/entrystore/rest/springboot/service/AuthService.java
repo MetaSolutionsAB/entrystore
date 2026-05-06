@@ -396,8 +396,6 @@ public class AuthService {
 	}
 
 	public String signup(HttpServletRequest request, SignupRequestBody requestBody, Map<String, String> extraProperties, String title) {
-		signupRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request));
-
 		SignupInfo ci = new SignupInfo();
 		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 
@@ -454,6 +452,9 @@ public class AuthService {
 		}
 
 		log.info("Received sign-up request for {}", ci.getEmail());
+
+		boolean trustForwardedFor = config.getBoolean(Settings.TRUST_X_FORWARDED_FOR, false);
+		signupRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request, trustForwardedFor));
 
 		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
 				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {

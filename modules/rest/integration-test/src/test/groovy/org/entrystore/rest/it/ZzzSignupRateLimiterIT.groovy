@@ -46,14 +46,22 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 		def args = [
 			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
 			'--entrystore.auth.signup.rate.limit.max=2',
-			'--entrystore.auth.signup.rate.limit.window=1h'
+			'--entrystore.auth.signup.rate.limit.window=1h',
+			'--entrystore.trust.x-forwarded-for=true'
 		] as String[]
 		appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 		appStarted = true
 	}
 
 	def cleanupSpec() {
-		greenMail.stop()
+		try {
+			appInstance?.close()
+		} finally {
+			appInstance = null
+			appStarted = false
+			EntryStoreClient.cleanCookies()
+			greenMail.stop()
+		}
 	}
 
 	def cleanup() {
@@ -83,9 +91,10 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 		greenMail.getReceivedMessages().length == 1
 	}
 
-	def "POST /auth/signup — second request from same IP is allowed"() {
+	def "POST /auth/signup — form-based request from same IP is allowed and bumps the counter"() {
 		when:
-		def conn = EntryStoreClient.postRequest('/auth/signup', signupBody('signupRateLimit2@test.com'))
+		def conn = EntryStoreClient.postRequest('/auth/signup',
+			signupFormBody('signupRateLimit2@test.com'), 'admin', 'application/x-www-form-urlencoded')
 
 		then:
 		conn.getResponseCode() == HTTP_OK
@@ -97,17 +106,42 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 		def conn = EntryStoreClient.postRequest('/auth/signup', signupBody('signupRateLimit3@test.com'))
 
 		then:
+		// If the previous form-based step had not invoked acquirePermit, the bucket would still
+		// have budget here and the response would be 200 — so this 429 is also evidence that the
+		// form path goes through the limiter.
 		conn.getResponseCode() == HTTP_TOO_MANY_REQUESTS
 		greenMail.getReceivedMessages().length == 0
 	}
 
-	def "POST /auth/signup — form-based request is also rate-limited (429)"() {
+	def "POST /auth/signup — form-based request after limit is exhausted is rate-limited (429)"() {
 		when:
 		def conn = EntryStoreClient.postRequest('/auth/signup',
-			signupFormBody('signupRateLimit4@test.com'), null, 'application/x-www-form-urlencoded')
+			signupFormBody('signupRateLimit4@test.com'), 'admin', 'application/x-www-form-urlencoded')
 
 		then:
 		conn.getResponseCode() == HTTP_TOO_MANY_REQUESTS
 		greenMail.getReceivedMessages().length == 0
+	}
+
+	def "POST /auth/signup — request from a different X-Forwarded-For IP is allowed"() {
+		when:
+		def conn = EntryStoreClient.postRequest('/auth/signup',
+			signupBody('signupRateLimit5@test.com'), 'admin', 'application/json',
+			['X-Forwarded-For': '203.0.113.99'])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		greenMail.getReceivedMessages().length == 1
+	}
+
+	def "POST /auth/signup — request from yet another X-Forwarded-For IP is also allowed"() {
+		when:
+		def conn = EntryStoreClient.postRequest('/auth/signup',
+			signupBody('signupRateLimit6@test.com'), 'admin', 'application/json',
+			['X-Forwarded-For': '203.0.113.100'])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		greenMail.getReceivedMessages().length == 1
 	}
 }

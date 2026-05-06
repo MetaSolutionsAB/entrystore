@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.service.auth;
 
+import com.github.benmanes.caffeine.cache.Ticker;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -31,7 +32,7 @@ class SignupRateLimiterTest {
 
 	@Test
 	void allowsRequestsUnderLimit() {
-		var rateLimiter = new SignupRateLimiter(3, Duration.ofHours(1));
+		var rateLimiter = new SignupRateLimiter(3, Duration.ofHours(1), Ticker.systemTicker());
 		String ip = "192.168.1.1";
 
 		rateLimiter.acquirePermit(ip);
@@ -42,7 +43,7 @@ class SignupRateLimiterTest {
 
 	@Test
 	void throwsWhenLimitExceeded() {
-		var rateLimiter = new SignupRateLimiter(2, Duration.ofHours(1));
+		var rateLimiter = new SignupRateLimiter(2, Duration.ofHours(1), Ticker.systemTicker());
 		String ip = "192.168.1.1";
 
 		rateLimiter.acquirePermit(ip);
@@ -55,7 +56,7 @@ class SignupRateLimiterTest {
 
 	@Test
 	void differentIpsHaveSeparateLimits() {
-		var rateLimiter = new SignupRateLimiter(1, Duration.ofHours(1));
+		var rateLimiter = new SignupRateLimiter(1, Duration.ofHours(1), Ticker.systemTicker());
 		String ip1 = "10.0.0.1";
 		String ip2 = "10.0.0.2";
 
@@ -66,7 +67,7 @@ class SignupRateLimiterTest {
 
 	@Test
 	void disabledWhenMaxIsZero() {
-		var rateLimiter = new SignupRateLimiter(0, Duration.ofHours(1));
+		var rateLimiter = new SignupRateLimiter(0, Duration.ofHours(1), Ticker.systemTicker());
 		String ip = "192.168.1.1";
 
 		assertDoesNotThrow(() -> {
@@ -74,6 +75,20 @@ class SignupRateLimiterTest {
 				rateLimiter.acquirePermit(ip);
 			}
 		});
+	}
+
+	@Test
+	void disabledWhenWindowIsZero() {
+		var rateLimiter = new SignupRateLimiter(5, Duration.ZERO, Ticker.systemTicker());
+
+		assertDoesNotThrow(() -> rateLimiter.acquirePermit("192.168.1.1"));
+	}
+
+	@Test
+	void disabledWhenWindowIsNegative() {
+		var rateLimiter = new SignupRateLimiter(5, Duration.ofSeconds(-1), Ticker.systemTicker());
+
+		assertDoesNotThrow(() -> rateLimiter.acquirePermit("192.168.1.1"));
 	}
 
 	@Test
@@ -109,14 +124,14 @@ class SignupRateLimiterTest {
 
 	@Test
 	void allowsFirstRequestFromNewIp() {
-		var rateLimiter = new SignupRateLimiter(1, Duration.ofHours(1));
+		var rateLimiter = new SignupRateLimiter(1, Duration.ofHours(1), Ticker.systemTicker());
 
 		assertDoesNotThrow(() -> rateLimiter.acquirePermit("203.0.113.42"));
 	}
 
 	@Test
 	void nullKeyUsesSentinelBucket() {
-		var rateLimiter = new SignupRateLimiter(1, Duration.ofHours(1));
+		var rateLimiter = new SignupRateLimiter(1, Duration.ofHours(1), Ticker.systemTicker());
 
 		rateLimiter.acquirePermit(null);
 		assertThrows(CustomResponseException.class, () -> rateLimiter.acquirePermit(null));
@@ -124,7 +139,7 @@ class SignupRateLimiterTest {
 
 	@Test
 	void blankKeyUsesSentinelBucket() {
-		var rateLimiter = new SignupRateLimiter(1, Duration.ofHours(1));
+		var rateLimiter = new SignupRateLimiter(1, Duration.ofHours(1), Ticker.systemTicker());
 
 		rateLimiter.acquirePermit("");
 		assertThrows(CustomResponseException.class, () -> rateLimiter.acquirePermit("   "));

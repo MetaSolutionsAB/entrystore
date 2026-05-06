@@ -49,9 +49,12 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.message.rate.limit.window=1h
 
 ## Rate limiting for POST /auth/signup by client IP
-## Uses X-Forwarded-For when present; when behind a reverse proxy, ensure it sets this header.
+## SECURITY: X-Forwarded-For is consulted only when entrystore.trust.x-forwarded-for=true.
+## Enable only when running behind a reverse proxy that overwrites or strips client-supplied
+## X-Forwarded-For; otherwise the limit is bypassable by spoofing the header.
 # entrystore.auth.signup.rate.limit.max=10
 # entrystore.auth.signup.rate.limit.window=1h
+# entrystore.trust.x-forwarded-for=false
 
 ## Generic settings for user-initiated sign-up and password reset
 # entrystore.auth.email.from=signup@yourdomain.tld
