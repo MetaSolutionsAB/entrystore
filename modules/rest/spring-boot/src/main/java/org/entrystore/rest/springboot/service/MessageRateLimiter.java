@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.springboot.service;
 
+import com.github.benmanes.caffeine.cache.Ticker;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -24,9 +26,14 @@ import java.time.Duration;
 @Service
 public class MessageRateLimiter extends SlidingWindowRateLimiter {
 
+	@Autowired
 	public MessageRateLimiter(
 			@Value("${entrystore.message.rate.limit.max:10}") int max,
 			@Value("${entrystore.message.rate.limit.window:1h}") Duration window) {
 		super(max, window, "message");
+	}
+
+	MessageRateLimiter(int max, Duration window, Ticker ticker) {
+		super(max, window, "message", ticker);
 	}
 }

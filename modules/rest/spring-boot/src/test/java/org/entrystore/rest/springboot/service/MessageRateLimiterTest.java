@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -72,12 +73,14 @@ class MessageRateLimiterTest {
 	}
 
 	@Test
-	void resetsCounterAfterWindowExpires() throws InterruptedException {
-		var rateLimiter = new MessageRateLimiter(1, Duration.ofMillis(50));
+	void resetsCounterAfterWindowExpires() {
+		var nanos = new AtomicLong();
+		var rateLimiter = new MessageRateLimiter(1, Duration.ofSeconds(1), nanos::get);
 		String user = "http://example.com/user/1";
 
 		rateLimiter.acquirePermit(user);
-		Thread.sleep(100);
+		nanos.set(Duration.ofSeconds(2).toNanos());
+
 		assertDoesNotThrow(() -> rateLimiter.acquirePermit(user));
 	}
 

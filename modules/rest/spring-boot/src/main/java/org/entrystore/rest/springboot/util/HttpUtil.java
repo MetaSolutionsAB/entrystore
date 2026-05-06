@@ -151,20 +151,20 @@ public class HttpUtil {
 	}
 
 	/**
-	 * Returns the client IP, or a comma separated list of IPs.
+	 * Returns the client IP. Prefers the leftmost address in {@code X-Forwarded-For} when the
+	 * header is present (set by a trusted reverse proxy); falls back to the TCP remote address.
+	 * When deployed behind a reverse proxy, ensure it sets {@code X-Forwarded-For} correctly.
 	 */
 	public static String getClientIpAddress(HttpServletRequest request) {
 		checkArgument(request != null, "request must not be null");
-		String ip = request.getRemoteAddr();
-		if (StringUtils.isBlank(ip)) {
-			String s = request.getHeader(HEADER_X_FORWARDED_FOR);
-			String[] clientIpArray = StringUtils.split(s, ',');
+		String xff = request.getHeader(HEADER_X_FORWARDED_FOR);
+		if (StringUtils.isNotBlank(xff)) {
+			String[] clientIpArray = StringUtils.split(xff, ',');
 			if (ArrayUtils.isNotEmpty(clientIpArray)) {
-				return clientIpArray[0];
+				return clientIpArray[0].trim();
 			}
 		}
-
-		return ip;
+		return request.getRemoteAddr();
 	}
 
 	/**

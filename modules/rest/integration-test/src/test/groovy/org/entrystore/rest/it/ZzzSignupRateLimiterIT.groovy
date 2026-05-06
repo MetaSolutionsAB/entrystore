@@ -80,6 +80,7 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
+		greenMail.getReceivedMessages().length == 1
 	}
 
 	def "POST /auth/signup — second request from same IP is allowed"() {
@@ -88,6 +89,7 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
+		greenMail.getReceivedMessages().length == 1
 	}
 
 	def "POST /auth/signup — third request from same IP is rate-limited (429)"() {
@@ -96,6 +98,7 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_TOO_MANY_REQUESTS
+		greenMail.getReceivedMessages().length == 0
 	}
 
 	def "POST /auth/signup — form-based request is also rate-limited (429)"() {
@@ -105,5 +108,6 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_TOO_MANY_REQUESTS
+		greenMail.getReceivedMessages().length == 0
 	}
 }

@@ -16,29 +16,34 @@
 
 package org.entrystore.rest.springboot.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Ticker;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.springframework.http.HttpStatus;
-import org.springframework.scheduling.annotation.Scheduled;
 
 import java.time.Duration;
-import java.time.Instant;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 @Slf4j
 public abstract class SlidingWindowRateLimiter {
 
-	private final ConcurrentMap<String, RateLimitRecord> attemptMap = new ConcurrentHashMap<>();
-
+	private final Cache<String, Integer> attemptMap;
 	private final int max;
 	private final Duration window;
 	private final String rateLimitName;
 
 	protected SlidingWindowRateLimiter(int max, Duration window, String rateLimitName) {
+		this(max, window, rateLimitName, Ticker.systemTicker());
+	}
+
+	protected SlidingWindowRateLimiter(int max, Duration window, String rateLimitName, Ticker ticker) {
 		this.max = max;
 		this.window = window;
 		this.rateLimitName = rateLimitName;
+		this.attemptMap = (max > 0 && window.isPositive())
+				? Caffeine.newBuilder().ticker(ticker).maximumSize(100_000).expireAfterWrite(window).build()
+				: null;
 	}
 
 	public void acquirePermit(String key) {
@@ -46,45 +51,15 @@ public abstract class SlidingWindowRateLimiter {
 			return;
 		}
 
-		if (key == null || key.isBlank()) {
-			log.warn("Cannot apply {} rate limit: key is null or blank, skipping", rateLimitName);
-			return;
-		}
+		String effectiveKey = (key == null || key.isBlank()) ? "__unknown__" : key;
 
-		RateLimitRecord result = attemptMap.compute(key, (_, current) -> {
-			Instant now = Instant.now();
-			if (current == null || now.isAfter(current.windowStart().plus(window))) {
-				return new RateLimitRecord(1, now);
-			}
-			return new RateLimitRecord(current.count() + 1, current.windowStart());
-		});
+		Integer result = attemptMap.asMap().compute(effectiveKey, (_, current) ->
+				current == null ? 1 : current + 1);
 
-		if (result.count() > max) {
-			log.info("{} rate limit exceeded for key {}", rateLimitName, key);
+		if (result > max) {
+			log.warn("Rate limit exceeded [event=rate_limit_exceeded, limiter={}, key={}, count={}, max={}]",
+					rateLimitName, effectiveKey, result, max);
 			throw new CustomResponseException("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
 		}
 	}
-
-	@Scheduled(fixedDelay = 3_600_000)
-	public void evictExpiredEntries() {
-		if (max <= 0 || !window.isPositive()) {
-			return;
-		}
-
-		Instant now = Instant.now();
-		int removed = 0;
-		var iterator = attemptMap.entrySet().iterator();
-		while (iterator.hasNext()) {
-			var entry = iterator.next();
-			if (now.isAfter(entry.getValue().windowStart().plus(window))) {
-				iterator.remove();
-				removed++;
-			}
-		}
-		if (removed > 0) {
-			log.debug("Evicted {} expired {} rate limit entries", removed, rateLimitName);
-		}
-	}
-
-	private record RateLimitRecord(int count, Instant windowStart) {}
 }

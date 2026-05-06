@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -76,13 +77,34 @@ class SignupRateLimiterTest {
 	}
 
 	@Test
-	void resetsCounterAfterWindowExpires() throws InterruptedException {
-		var rateLimiter = new SignupRateLimiter(1, Duration.ofMillis(50));
+	void resetsCounterAfterWindowExpires() {
+		var nanos = new AtomicLong();
+		var rateLimiter = new SignupRateLimiter(1, Duration.ofSeconds(1), nanos::get);
 		String ip = "192.168.1.1";
 
 		rateLimiter.acquirePermit(ip);
-		Thread.sleep(100);
+		nanos.set(Duration.ofSeconds(2).toNanos());
+
 		assertDoesNotThrow(() -> rateLimiter.acquirePermit(ip));
+	}
+
+	@Test
+	void windowRolloverResetsCount() {
+		var nanos = new AtomicLong();
+		var rateLimiter = new SignupRateLimiter(2, Duration.ofSeconds(1), nanos::get);
+		String ip = "192.168.1.1";
+
+		rateLimiter.acquirePermit(ip);
+		rateLimiter.acquirePermit(ip);
+		assertThrows(CustomResponseException.class, () -> rateLimiter.acquirePermit(ip));
+
+		nanos.set(Duration.ofSeconds(2).toNanos());
+
+		rateLimiter.acquirePermit(ip);
+		rateLimiter.acquirePermit(ip);
+		CustomResponseException ex = assertThrows(CustomResponseException.class,
+				() -> rateLimiter.acquirePermit(ip));
+		assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatus());
 	}
 
 	@Test
@@ -93,22 +115,18 @@ class SignupRateLimiterTest {
 	}
 
 	@Test
-	void skipsRateLimitForNullIp() {
+	void nullKeyUsesSentinelBucket() {
 		var rateLimiter = new SignupRateLimiter(1, Duration.ofHours(1));
 
-		assertDoesNotThrow(() -> {
-			rateLimiter.acquirePermit(null);
-			rateLimiter.acquirePermit(null);
-		});
+		rateLimiter.acquirePermit(null);
+		assertThrows(CustomResponseException.class, () -> rateLimiter.acquirePermit(null));
 	}
 
 	@Test
-	void skipsRateLimitForBlankIp() {
+	void blankKeyUsesSentinelBucket() {
 		var rateLimiter = new SignupRateLimiter(1, Duration.ofHours(1));
 
-		assertDoesNotThrow(() -> {
-			rateLimiter.acquirePermit("");
-			rateLimiter.acquirePermit("   ");
-		});
+		rateLimiter.acquirePermit("");
+		assertThrows(CustomResponseException.class, () -> rateLimiter.acquirePermit("   "));
 	}
 }

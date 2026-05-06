@@ -48,8 +48,9 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.message.rate.limit.max=10
 # entrystore.message.rate.limit.window=1h
 
-## Rate limiting for POST /auth/signup by client IP (0 to disable)
-# entrystore.auth.signup.rate.limit.max=5
+## Rate limiting for POST /auth/signup by client IP
+## Uses X-Forwarded-For when present; when behind a reverse proxy, ensure it sets this header.
+# entrystore.auth.signup.rate.limit.max=10
 # entrystore.auth.signup.rate.limit.window=1h
 
 ## Generic settings for user-initiated sign-up and password reset
