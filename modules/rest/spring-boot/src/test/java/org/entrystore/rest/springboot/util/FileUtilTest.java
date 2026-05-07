@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FileUtilTest {
@@ -87,6 +88,18 @@ class FileUtilTest {
 		void appendsSuffixForTruncatedPercentEscape() {
 			// Malformed %-sequence → treat as suspicious
 			assertEquals("datei.exe%2_dangerous", FileUtil.sanitizeFilename("datei.exe%2"));
+		}
+
+		@Test
+		void appendsSuffixForTrailingC1ControlChar() {
+			// C1 controls (U+0080–U+009F) are not isWhitespace and not <0x20; without explicit
+			// handling they would survive normalization and bypass the dangerous-extension check.
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe"));
+		}
+
+		@Test
+		void returnsNullForNullInput() {
+			assertNull(FileUtil.sanitizeFilename(null));
 		}
 	}
 

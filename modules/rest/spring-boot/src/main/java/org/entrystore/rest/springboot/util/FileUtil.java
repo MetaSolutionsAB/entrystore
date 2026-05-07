@@ -77,11 +77,14 @@ public class FileUtil {
 	 * characters removed. The suffix is always appended to the original (non-normalized)
 	 * filename so that warning signals are preserved in logs and serving paths.
 	 *
-	 * @param filename the original filename to sanitize
+	 * @param filename the original filename to sanitize, or null
 	 * @return sanitized filename with "_dangerous" suffix if extension is dangerous,
-	 * original filename otherwise
+	 * original filename otherwise; null if the input is null
 	 */
 	public static String sanitizeFilename(String filename) {
+		if (filename == null) {
+			return null;
+		}
 		String normalized;
 		try {
 			normalized = URLDecoder.decode(filename, StandardCharsets.UTF_8).strip();
@@ -91,7 +94,8 @@ public class FileUtil {
 		}
 		while (!normalized.isEmpty()) {
 			char last = normalized.charAt(normalized.length() - 1);
-			if (last == '.' || last == ';' || last < ' ' || last == '\u007F' || Character.isSpaceChar(last)) {
+			if (last == '.' || last == ';' || last < ' ' || last == '\u007F'
+					|| (last >= '\u0080' && last <= '\u009F') || Character.isSpaceChar(last)) {
 				normalized = normalized.substring(0, normalized.length() - 1);
 			} else {
 				break;
