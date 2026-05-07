@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -247,6 +247,14 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			while(entryIterator.hasNext()) {
 				URI nextURI = entryIterator.next();
 				Entry nextEntry = getByEntryURI(nextURI);
+				// getEntries() and getByEntryURI() can race against concurrent deletes — the URI
+				// listing is built first, then a later getByEntryURI returns null if the entry was
+				// removed in between. Without this guard the next .getGraphType() NPEs and unwinds
+				// the caller (e.g. PublicRepository's EntrySubmitter, which has no try/catch and
+				// would silently die on the failing thread).
+				if (nextEntry == null) {
+					continue;
+				}
 				if(GraphType.Group.equals(nextEntry.getGraphType())) {
 					Group nextGroup = (Group) nextEntry.getResource();
 					if(nextGroup != null) {

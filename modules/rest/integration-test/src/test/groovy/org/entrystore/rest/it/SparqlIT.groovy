@@ -55,13 +55,14 @@ class SparqlIT extends BaseSpec {
 		createSegregationTestEntry(CONTEXT_ID, PUBLIC_TITLE, guestUri)
 		createSegregationTestEntry(CONTEXT_ID_2, CTX2_PUBLIC_TITLE, guestUri)
 
-		// Wait until the public entries become queryable; the public-repository submitter is asynchronous,
-		// so we cannot assume the data is indexed immediately after createEntry returns. Each missed
-		// submitter cycle costs 10 s (PublicRepository.EntrySubmitter sleeps 10 s when its post-queue
-		// reads empty), so the window is generously sized for cold CI runners.
+		// Wait until the public entries become queryable. PublicRepository.EntrySubmitter is signalled
+		// directly by enqueue()/remove() (wait/notify on queueSignal), so the latency from createEntry
+		// returning to the entry being queryable is dominated by RDF4J writes — sub-second in steady
+		// state. 5 s is a tight-but-honest ceiling that catches real regressions while leaving margin
+		// for cold-JVM warmup and GC pauses on a contended CI runner.
 		await()
 			.conditionEvaluationListener(new ConditionEvaluationLogger(log::info))
-			.atMost(60, TimeUnit.SECONDS)
+			.atMost(5, TimeUnit.SECONDS)
 			.pollInterval(500, TimeUnit.MILLISECONDS)
 			.until { sparqlContainsTitle(PUBLIC_TITLE) && sparqlContainsTitle(CTX2_PUBLIC_TITLE) }
 	}
