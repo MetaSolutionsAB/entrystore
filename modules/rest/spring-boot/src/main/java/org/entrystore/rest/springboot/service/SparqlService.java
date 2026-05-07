@@ -62,6 +62,11 @@ public class SparqlService {
 
 	private static final int LOGGED_QUERY_PREFIX_LENGTH = 256;
 
+	// Generic message for all internal failures on the anonymous SPARQL endpoint. Avoids leaking
+	// architecture details (repository class, writer state, Sail-vs-non-Sail). Specific cause is
+	// preserved in the cause chain for server-side debugging.
+	private static final String INTERNAL_ERROR_MESSAGE = "Public SPARQL endpoint encountered an internal error";
+
 	private final RepositoryManagerImpl repositoryManager;
 	private final ContextService contextService;
 	private final int maxExecutionTime;
@@ -95,14 +100,15 @@ public class SparqlService {
 	 * restricting the dataset to a context's named graph, and writes the serialised
 	 * result for {@code format} directly to {@code out}.
 	 *
-	 * <p>The result is streamed: bytes are produced incrementally and written through a
-	 * {@code SizeLimitedOutputStream} that caps the total to {@code maxResponseBytes}.
-	 * All validation (public-repo enablement, context lookup, query parse, SERVICE-clause
-	 * rejection) happens before any byte is written, so those failures still produce
-	 * clean 4xx/5xx responses through {@code AppExceptionHandler}. Failures during
-	 * {@code evaluate} (size cap exceeded, evaluator faults) propagate as exceptions; if
-	 * the response buffer has not yet flushed, the handler still produces a clean status
-	 * code, otherwise the connection drops mid-stream.
+	 * <p>The result is streamed through a {@code SizeLimitedOutputStream} that caps the
+	 * total to {@code maxResponseBytes}. All validation (public-repo enablement, context
+	 * lookup, query parse, SERVICE-clause rejection) happens before any byte is written,
+	 * so those failures produce clean 4xx/5xx responses via {@code AppExceptionHandler}.
+	 * Whether a fault during {@code evaluate} (size cap, evaluator error) reaches the
+	 * client as a clean status code or as a mid-stream connection drop depends on
+	 * whether the servlet response buffer has already flushed; for any non-trivial
+	 * response it will have, so 413/500 in that path is observed as a connection drop
+	 * rather than a clean status.
 	 *
 	 * @param format      the SPARQL tuple-result format
 	 * @param queryString the SPARQL query
@@ -111,15 +117,11 @@ public class SparqlService {
 	 *                    when null the query runs against the full public repository
 	 * @param out         the stream that the serialised tuple result is written to; the caller owns its
 	 *                    lifecycle (the wrapping {@code SizeLimitedOutputStream} does not close it)
-	 * @throws NotImplementedException     {@code "Public SPARQL endpoint is not enabled"} when the public
-	 *                                      repository is disabled
-	 * @throws InternalServerErrorException {@code "Public SPARQL endpoint connection unavailable"} when a
-	 *                                      connection cannot be acquired (null return);
-	 *                                      {@code "Public SPARQL endpoint requires a Sail-backed repository..."}
-	 *                                      when the repository is not Sail-backed (fail-closed SSRF defense);
-	 *                                      {@code "SPARQL repository error"} on backing-store failure;
-	 *                                      {@code "SPARQL query evaluation failed"} on RDF4J evaluation failure;
-	 *                                      {@code "SPARQL result serialization failed"} on writer failure
+	 * @throws NotImplementedException     when the public repository is disabled
+	 * @throws InternalServerErrorException 500 with a generic message; the specific cause (connection
+	 *                                      unavailable, non-Sail repository, RDF4J evaluator/writer/repository
+	 *                                      fault) is preserved in the cause chain for server-side debugging
+	 *                                      only and is not surfaced to the client
 	 * @throws BadRequestException         {@code "Malformed SPARQL query"} on parse failure;
 	 *                                      {@code "SPARQL SERVICE clauses are not permitted on the public endpoint"}
 	 *                                      when a federated SERVICE clause is present
@@ -174,11 +176,10 @@ public class SparqlService {
 				tooLarge.addSuppressed(e);
 				throw tooLarge;
 			}
-			throw switch (e) {
-				case RepositoryException re -> new InternalServerErrorException("SPARQL repository error", re);
-				case TupleQueryResultHandlerException he -> new InternalServerErrorException("SPARQL result serialization failed", he);
-				default -> new InternalServerErrorException("SPARQL query evaluation failed", e);
-			};
+			// Single generic message for all three caught types. The specific cause class (Repository /
+			// TupleQueryResultHandler / QueryEvaluation) is preserved in the cause chain for server-side
+			// debugging; the client only needs to know it is a 500.
+			throw new InternalServerErrorException(INTERNAL_ERROR_MESSAGE, e);
 		}
 	}
 
@@ -191,8 +192,10 @@ public class SparqlService {
 		if (query instanceof SailTupleQuery sailQuery) {
 			return sailQuery.getParsedQuery().getTupleExpr();
 		}
-		throw new InternalServerErrorException(
-				"Public SPARQL endpoint requires a Sail-backed repository to enforce SERVICE-clause prohibition");
+		// Fail closed when the public repository isn't Sail-backed: a non-Sail TupleQuery may not
+		// expose the parsed algebra to the federated-service detector, weakening the SERVICE-clause
+		// prohibition. Generic client message; the specific reason lives in this comment + server logs.
+		throw new InternalServerErrorException(INTERNAL_ERROR_MESSAGE);
 	}
 
 	private static void rejectFederatedServices(TupleExpr expr) {
@@ -241,7 +244,7 @@ public class SparqlService {
 	private static RepositoryConnection acquireConnection(PublicRepository publicRepository) {
 		RepositoryConnection rc = publicRepository.getConnection();
 		if (rc == null) {
-			throw new InternalServerErrorException("Public SPARQL endpoint connection unavailable");
+			throw new InternalServerErrorException(INTERNAL_ERROR_MESSAGE);
 		}
 		return rc;
 	}
@@ -277,7 +280,13 @@ public class SparqlService {
 		private long written;
 
 		SizeLimitedOutputStream(OutputStream delegate, long maxBytes) {
-			this.delegate = delegate;
+			// Defense-in-depth on the cross-class invariant: the outer SparqlService constructor
+			// already rejects maxBytes <= 0, but a future caller that bypasses it would otherwise
+			// turn every successful query into a 413 (or risk underflow on long-running streams).
+			if (maxBytes <= 0) {
+				throw new IllegalArgumentException("maxBytes must be positive, got " + maxBytes);
+			}
+			this.delegate = Objects.requireNonNull(delegate, "delegate");
 			this.maxBytes = maxBytes;
 		}
 

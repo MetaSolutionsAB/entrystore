@@ -24,6 +24,7 @@ import org.eclipse.rdf4j.query.QueryLanguage;
 import org.eclipse.rdf4j.query.TupleQuery;
 import org.eclipse.rdf4j.query.TupleQueryResultHandler;
 import org.eclipse.rdf4j.query.TupleQueryResultHandlerException;
+import org.eclipse.rdf4j.query.impl.SimpleDataset;
 import org.eclipse.rdf4j.query.parser.QueryParserUtil;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -46,6 +47,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -59,6 +61,7 @@ import java.nio.charset.StandardCharsets;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -81,6 +84,7 @@ class SparqlServiceTest {
 
 	private static final int MAX_EXECUTION_TIME = 10;
 	private static final long MAX_RESPONSE_BYTES = 64L * 1024L * 1024L;
+	private static final String GENERIC_INTERNAL_ERROR = "Public SPARQL endpoint encountered an internal error";
 
 	@Mock
 	private RepositoryManagerImpl repositoryManager;
@@ -229,7 +233,7 @@ class SparqlServiceTest {
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
 				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
-		assertEquals("Public SPARQL endpoint connection unavailable", ex.getMessage());
+		assertEquals(GENERIC_INTERNAL_ERROR, ex.getMessage());
 	}
 
 	@Test
@@ -244,7 +248,7 @@ class SparqlServiceTest {
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
 				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
-		assertEquals("SPARQL repository error", ex.getMessage());
+		assertEquals(GENERIC_INTERNAL_ERROR, ex.getMessage());
 		assertNotNull(ex.getCause(), "Original RepositoryException should be preserved as cause");
 		// Pin the no-leak claim from the test name: the cause-bearing details (pool state, secret-bucket)
 		// must not surface in the user-facing message that AppExceptionHandler will render.
@@ -291,7 +295,7 @@ class SparqlServiceTest {
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
 				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
-		assertEquals("SPARQL query evaluation failed", ex.getMessage());
+		assertEquals(GENERIC_INTERNAL_ERROR, ex.getMessage());
 	}
 
 	@Test
@@ -322,7 +326,7 @@ class SparqlServiceTest {
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
 				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
-		assertEquals("SPARQL result serialization failed", ex.getMessage());
+		assertEquals(GENERIC_INTERNAL_ERROR, ex.getMessage());
 	}
 
 	@Test
@@ -340,7 +344,7 @@ class SparqlServiceTest {
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
 				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
-		assertEquals("SPARQL query evaluation failed", ex.getMessage());
+		assertEquals(GENERIC_INTERNAL_ERROR, ex.getMessage());
 	}
 
 	@Test
@@ -380,8 +384,10 @@ class SparqlServiceTest {
 
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
 				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, null, new ByteArrayOutputStream()));
-		assertTrue(ex.getMessage().contains("Sail-backed"),
-				"Expected fail-closed Sail-only message, got: " + ex.getMessage());
+		assertEquals(GENERIC_INTERNAL_ERROR, ex.getMessage());
+		// Distinguishes the Sail-only fail-closed branch from the RDF4J-catch branches: the
+		// extractTupleExpr throw site does not wrap a cause, while the catch-block paths do.
+		assertNull(ex.getCause(), "Non-Sail fail-closed branch should not wrap a cause");
 	}
 
 	@Test
@@ -411,5 +417,36 @@ class SparqlServiceTest {
 				"Expected the in-context triple to be returned, got: " + text);
 		assertFalse(text.contains("http://example.org/leaked"),
 				"Expected no leak from other-graph, got: " + text);
+	}
+
+	@Test
+	void runQuery_withContext_setsBothDefaultAndNamedGraph() {
+		// runQuery_withContext_isolatesNamedGraph above pins behavioural isolation against `?s ?p ?o`
+		// queries; this test additionally pins the contract that the SimpleDataset carries the context
+		// URI in BOTH the default-graph slot AND the named-graph set, so `GRAPH ?g {...}` queries see
+		// the same single-graph dataset. A regression that drops addDefaultGraph would still pass the
+		// behavioural test but break GRAPH-scoped queries.
+		Context context = mock(Context.class);
+		when(context.getURI()).thenReturn(URI.create(CONTEXT_URI));
+		when(contextService.getContextOrThrow(CONTEXT_ID)).thenReturn(context);
+
+		RepositoryConnection mockConn = mock(RepositoryConnection.class);
+		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
+		when(publicRepository.getConnection()).thenReturn(mockConn);
+		when(mockConn.prepareTupleQuery(eq(QueryLanguage.SPARQL), anyString())).thenReturn(mockQuery);
+		when(mockQuery.getParsedQuery()).thenReturn(QueryParserUtil.parseTupleQuery(QueryLanguage.SPARQL, SELECT_ALL, null));
+		ValueFactory vf = backingRepository.getValueFactory();
+		when(mockConn.getValueFactory()).thenReturn(vf);
+
+		ArgumentCaptor<SimpleDataset> datasetCaptor = ArgumentCaptor.forClass(SimpleDataset.class);
+		service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, CONTEXT_ID, new ByteArrayOutputStream());
+
+		verify(mockQuery).setDataset(datasetCaptor.capture());
+		SimpleDataset dataset = datasetCaptor.getValue();
+		IRI expected = vf.createIRI(CONTEXT_URI);
+		assertEquals(java.util.Set.of(expected), dataset.getDefaultGraphs(),
+				"Default-graph slot must carry the context URI");
+		assertEquals(java.util.Set.of(expected), dataset.getNamedGraphs(),
+				"Named-graph set must carry the context URI");
 	}
 }

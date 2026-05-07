@@ -83,9 +83,10 @@ public class PublicRepository {
 				postQueue.cleanUp();
 				int batchCount = 0;
 
-				// Use asMap().isEmpty() instead of estimatedSize() > 0: Caffeine's estimatedSize() is
-				// documented as weakly consistent and can transiently report 0 right after a put under
-				// concurrent load, which used to make this thread sleep 10 s while entries were waiting.
+				// Use asMap().isEmpty() instead of estimatedSize() > 0: Caffeine's estimatedSize() returns
+				// an approximate value (per Cache.estimatedSize JavaDoc) that can transiently report 0
+				// right after a put under concurrent load, which would let this thread enter its 10 s
+				// idle sleep while entries are still queued.
 				if (!postQueue.asMap().isEmpty() || !deleteQueue.isEmpty()) {
 					if (!deleteQueue.isEmpty()) {
 						Set<Entry> entriesToRemove = new HashSet<>();

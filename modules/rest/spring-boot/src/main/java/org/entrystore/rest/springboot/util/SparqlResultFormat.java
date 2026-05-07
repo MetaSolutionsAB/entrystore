@@ -23,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
 
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -62,17 +63,37 @@ public enum SparqlResultFormat {
 	private static final List<SparqlResultFormat> PARTIAL_WILDCARD_PREFERENCE =
 			List.of(BINARY, SPARQL_RESULTS_JSON, SPARQL_RESULTS_XML, CSV);
 
+	static {
+		// Fail at class-load if a future enum value forgets to register itself in
+		// PARTIAL_WILDCARD_PREFERENCE; otherwise the new value would silently be unreachable for
+		// `application/*` / `text/*` Accept resolution with no test that would catch it.
+		if (!EnumSet.copyOf(PARTIAL_WILDCARD_PREFERENCE).containsAll(EnumSet.allOf(SparqlResultFormat.class))) {
+			throw new IllegalStateException(
+					"PARTIAL_WILDCARD_PREFERENCE must include every SparqlResultFormat value");
+		}
+	}
+
 	private static final Map<String, SparqlResultFormat> ALIAS_TO_FORMAT = buildAliasMap();
 
 	private static Map<String, SparqlResultFormat> buildAliasMap() {
 		Map<String, SparqlResultFormat> map = new HashMap<>();
 		for (SparqlResultFormat f : values()) {
-			map.put(f.canonical, f);
+			putUnique(map, f.canonical, f);
 			for (String alias : f.aliases) {
-				map.put(alias, f);
+				putUnique(map, alias, f);
 			}
 		}
 		return Map.copyOf(map);
+	}
+
+	private static void putUnique(Map<String, SparqlResultFormat> map, String key, SparqlResultFormat f) {
+		// Fail at class-load if a future value declares an alias matching another value's canonical
+		// or alias, instead of letting HashMap.put silently last-one-wins by enum-iteration order.
+		SparqlResultFormat prior = map.putIfAbsent(key, f);
+		if (prior != null && prior != f) {
+			throw new IllegalStateException(
+					"SparqlResultFormat alias collision: '" + key + "' maps to both " + prior + " and " + f);
+		}
 	}
 
 	public static SparqlResultFormat resolve(String formatParam, String acceptHeader) {
