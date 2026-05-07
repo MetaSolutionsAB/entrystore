@@ -26,7 +26,6 @@ import java.util.concurrent.TimeUnit
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
-import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNSUPPORTED_TYPE
 import static org.awaitility.Awaitility.await
@@ -393,27 +392,37 @@ class SparqlIT extends BaseSpec {
 		json['results'] != null
 	}
 
-	def "GET /{unknownContextId}/sparql should return Not-Found 404"() {
+	def "GET /{unknownContextId}/sparql must not disclose context existence"() {
+		// CWE-204: a 404 here would let an anonymous client enumerate context IDs by observing
+		// the status difference between missing and existing-but-private contexts. Both must
+		// produce 200 with empty bindings.
 		given:
-		def queryParams = [query: VALID_QUERY]
+		def queryParams = [query: VALID_QUERY, format: 'application/sparql-results+json']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/no-such-ctx-' + System.currentTimeMillis() + '/sparql' + convertMapToQueryParams(queryParams), '')
 
 		then:
-		conn.getResponseCode() == HTTP_NOT_FOUND
+		conn.getResponseCode() == HTTP_OK
+		def json = JSON_PARSER.parseText(conn.inputStream.text)
+		(json['results']['bindings'] as List).isEmpty()
 	}
 
 	@Unroll
-	def "GET /#reservedName/sparql should return Not-Found 404 (reserved endpoint name as context-id)"() {
+	def "GET /#reservedName/sparql with reserved endpoint name as context-id returns empty result"() {
+		// Reserved names cannot become real contexts (ContextService rejects them at creation),
+		// so the named-graph filter resolves to a synthesised URI that has no triples in the
+		// public repo. The post-M7 contract is uniform 200/empty for missing/reserved/private.
 		given:
-		def queryParams = [query: VALID_QUERY]
+		def queryParams = [query: VALID_QUERY, format: 'application/sparql-results+json']
 
 		when:
 		def conn = EntryStoreClient.getRequest('/' + reservedName + '/sparql' + convertMapToQueryParams(queryParams), '')
 
 		then:
-		conn.getResponseCode() == HTTP_NOT_FOUND
+		conn.getResponseCode() == HTTP_OK
+		def json = JSON_PARSER.parseText(conn.inputStream.text)
+		(json['results']['bindings'] as List).isEmpty()
 
 		where:
 		reservedName | _
@@ -426,10 +435,10 @@ class SparqlIT extends BaseSpec {
 	@Unroll
 	def "GET /#systemContext/sparql as guest must not leak principal/context data"() {
 		given:
-		// _principals and _contexts are real contexts holding user/group/ACL data. The actual mechanism
-		// that keeps their triples out of the response is the EntrySubmitter's ACL-based replication —
-		// no entry in these contexts has guest-read, so PublicRepository never mirrors them. The
-		// context-scoped query then has nothing to return regardless of the named-graph filter.
+		// _principals and _contexts are real contexts holding user/group/ACL data. resolveNamedGraphUri
+		// scopes the query to that context's named graph, AND PublicRepository.updateEntries refuses to
+		// mirror entries that lack guest-read — so the named graph for these system contexts is empty
+		// in the public repo and the scoped query has nothing to return.
 		def queryParams = [query: VALID_QUERY, format: 'application/sparql-results+json']
 
 		when:

@@ -17,6 +17,7 @@
 package org.entrystore.impl;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.model.Resource;
 import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.ValueFactory;
@@ -32,8 +33,6 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.URISplit;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -50,8 +49,9 @@ import java.util.Set;
  * @author Hannes Ebner
  *
  */
+@Slf4j
 public class PrincipalManagerImpl extends EntryNamesContext implements PrincipalManager {
-	private static final Logger log = LoggerFactory.getLogger(PrincipalManagerImpl.class);
+
 	private static final ThreadLocal<URI> authenticatedUserURI = new ThreadLocal<>();
 	@Getter
 	public User adminUser = null;
@@ -61,8 +61,6 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	public User guestUser = null;
 	@Getter
 	public Group userGroup = null;
-
-	private EntryImpl allPrincipals;
 
 	private static final String ENV_ADMIN_PASSWORD = "ENTRYSTORE_ADMIN_PASSWORD";
 
@@ -247,12 +245,12 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			while(entryIterator.hasNext()) {
 				URI nextURI = entryIterator.next();
 				Entry nextEntry = getByEntryURI(nextURI);
-				// getEntries() and getByEntryURI() can race against concurrent deletes — the URI
-				// listing is built first, then a later getByEntryURI returns null if the entry was
-				// removed in between. Without this guard the next .getGraphType() NPEs and unwinds
-				// the caller (e.g. PublicRepository's EntrySubmitter, which has no try/catch and
-				// would silently die on the failing thread).
+				// Skip if the entry was removed by a concurrent delete between getEntries()
+				// returning the URI and getByEntryURI(URI) being called for it. (Sibling
+				// iterations elsewhere in this class share the same race shape but are out of
+				// scope for ENTRYSTORE-881; this guard is on the access-control hot path.)
 				if (nextEntry == null) {
+					log.debug("Skipping null entry for URI {} in getGroupUris (likely concurrent delete)", nextURI);
 					continue;
 				}
 				if(GraphType.Group.equals(nextEntry.getGraphType())) {

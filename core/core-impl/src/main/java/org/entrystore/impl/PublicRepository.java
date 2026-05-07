@@ -91,10 +91,9 @@ public class PublicRepository {
 				try {
 					runOnce();
 				} catch (RuntimeException e) {
-					// Fault isolation: any unchecked exception from a single iteration's update/remove
-					// batch (e.g. an NPE deep in PrincipalManagerImpl during ACL evaluation) must NOT
-					// kill the submitter thread — that would silently disable public-repo mirroring
-					// for the rest of the JVM lifetime. Log and continue to the next iteration.
+					// Fault isolation: an unchecked exception from a single iteration's update/remove
+					// batch must NOT kill the submitter thread — that would silently disable public-repo
+					// mirroring for the rest of the JVM lifetime. Log and continue to the next iteration.
 					log.error("Public Repository submitter caught unchecked exception, continuing", e);
 				}
 			}
@@ -104,10 +103,10 @@ public class PublicRepository {
 			postQueue.cleanUp();
 			int batchCount = 0;
 
-			// Use asMap().isEmpty() instead of estimatedSize() > 0: Caffeine's estimatedSize() returns
-			// an approximate value (per Cache.estimatedSize JavaDoc) that can transiently report 0
-			// right after a put under concurrent load, which would let this thread enter its 10 s
-			// idle sleep while entries are still queued.
+			// Use asMap().isEmpty() instead of estimatedSize() > 0: Caffeine's estimatedSize() is
+			// documented as approximate (per Cache.estimatedSize JavaDoc) and can lag concurrent
+			// puts; asMap().isEmpty() defers to the backing ConcurrentHashMap and is authoritative,
+			// so the idle branch never sleeps with work already enqueued.
 			if (!postQueue.asMap().isEmpty() || !deleteQueue.isEmpty()) {
 				if (!deleteQueue.isEmpty()) {
 					Set<Entry> entriesToRemove = new HashSet<>();
@@ -122,8 +121,18 @@ public class PublicRepository {
 						}
 					}
 					if (batchCount > 0) {
-						log.info("Removing " + batchCount + " entries from Public Repository, " + deleteQueue.size() + " entries remaining in removal queue");
-						removeEntries(entriesToRemove);
+						log.info("Removing {} entries from Public Repository, {} entries remaining in removal queue",
+								batchCount, deleteQueue.size());
+						try {
+							removeEntries(entriesToRemove);
+						} catch (RuntimeException e) {
+							// Surface which entries were lost; the outer fault-isolation catch keeps the
+							// thread alive but otherwise discards this information.
+							log.error("removeEntries failed; dropped {} entries: {}",
+									entriesToRemove.size(),
+									entriesToRemove.stream().map(Entry::getEntryURI).toList());
+							throw e;
+						}
 					}
 				}
 				if (!postQueue.asMap().isEmpty()) {
@@ -136,15 +145,26 @@ public class PublicRepository {
 							Entry entry = postQueueMap.get(key);
 							postQueueMap.remove(key, entry);
 							if (entry == null) {
-								log.warn("Value for key " + key + " is null in Public Repository submit queue");
+								log.warn("Value for key {} is null in Public Repository submit queue", key);
 							}
 							entriesToUpdate.add(entry);
 							batchCount++;
 						}
 					}
 					postQueue.cleanUp();
-					log.info("Sending " + entriesToUpdate.size() + " entries for update in Public Repository, " + postQueue.asMap().size() + " entries remaining in post queue");
-					updateEntries(entriesToUpdate);
+					log.info("Sending {} entries for update in Public Repository, {} entries remaining in post queue",
+							entriesToUpdate.size(), postQueue.asMap().size());
+					try {
+						updateEntries(entriesToUpdate);
+					} catch (RuntimeException e) {
+						log.error("updateEntries failed; dropped {} entries: {}",
+								entriesToUpdate.size(),
+								entriesToUpdate.stream()
+										.filter(java.util.Objects::nonNull)
+										.map(Entry::getEntryURI)
+										.toList());
+						throw e;
+					}
 				}
 			} else {
 				// Block until enqueue()/remove() signals work is available, or until the timeout

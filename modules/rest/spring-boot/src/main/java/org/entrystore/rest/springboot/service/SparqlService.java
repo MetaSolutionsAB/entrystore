@@ -40,7 +40,6 @@ import org.entrystore.impl.PublicRepository;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
-import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.util.SparqlResultFormat;
@@ -101,10 +100,15 @@ public class SparqlService {
 	 * result for {@code format} directly to {@code out}.
 	 *
 	 * <p>The result is streamed through a {@code SizeLimitedOutputStream} that caps the
-	 * total to {@code maxResponseBytes}. All validation (public-repo enablement, context
-	 * lookup, query parse, SERVICE-clause rejection) happens before any byte is written,
-	 * so those failures produce clean 4xx/5xx responses via {@code AppExceptionHandler}.
-	 * Whether a fault during {@code evaluate} (size cap, evaluator error) reaches the
+	 * total to {@code maxResponseBytes}. Pre-{@code evaluate} validation (public-repo
+	 * enablement, query parse, SERVICE-clause rejection, fail-closed non-Sail check)
+	 * happens before any byte is written, so those failures produce clean 4xx/5xx
+	 * responses via {@code AppExceptionHandler}. A missing or reserved {@code contextId}
+	 * is silently mapped to a synthesised named graph (see {@code resolveNamedGraphUri})
+	 * to avoid context-existence disclosure (CWE-204), so unknown contexts produce the
+	 * same 200/empty response as existing-but-private ones rather than 404.
+	 *
+	 * <p>Whether a fault during {@code evaluate} (size cap, evaluator error) reaches the
 	 * client as a clean status code or as a mid-stream connection drop depends on
 	 * whether the servlet response buffer has already flushed; for any non-trivial
 	 * response it will have, so 413/500 in that path is observed as a connection drop
@@ -113,20 +117,20 @@ public class SparqlService {
 	 * @param format      the SPARQL tuple-result format
 	 * @param queryString the SPARQL query
 	 * @param contextId   when non-null, both the default graph and the named-graph set are replaced with the
-	 *                    context's resource URI, so the dataset is exactly that one graph in both positions;
-	 *                    when null the query runs against the full public repository
+	 *                    context's resource URI (or a synthesised URI for missing/reserved contexts), so the
+	 *                    dataset is exactly that one graph in both positions; when null the query runs against
+	 *                    the full public repository
 	 * @param out         the stream that the serialised tuple result is written to; the caller owns its
 	 *                    lifecycle (the wrapping {@code SizeLimitedOutputStream} does not close it)
 	 * @throws NotImplementedException     when the public repository is disabled
-	 * @throws InternalServerErrorException 500 with a generic message; the specific cause (connection
-	 *                                      unavailable, non-Sail repository, RDF4J evaluator/writer/repository
-	 *                                      fault) is preserved in the cause chain for server-side debugging
-	 *                                      only and is not surfaced to the client
+	 * @throws InternalServerErrorException 500 with a generic message. For RDF4J evaluator/writer/repository
+	 *                                      faults the underlying exception is preserved in the cause chain
+	 *                                      (server-side only). For fail-closed paths (connection unavailable,
+	 *                                      non-Sail repository) no cause is attached and the failure must be
+	 *                                      diagnosed via the operator-facing log line.
 	 * @throws BadRequestException         {@code "Malformed SPARQL query"} on parse failure;
 	 *                                      {@code "SPARQL SERVICE clauses are not permitted on the public endpoint"}
 	 *                                      when a federated SERVICE clause is present
-	 * @throws EntityNotFoundException     {@code "Context with id '<id>' does not exist"} when {@code contextId}
-	 *                                      is non-null and no such context exists
 	 * @throws CustomResponseException     504 if the query times out; 413 if the result exceeds
 	 *                                      {@code maxResponseBytes}
 	 */
@@ -136,7 +140,13 @@ public class SparqlService {
 			throw new NotImplementedException("Public SPARQL endpoint is not enabled");
 		}
 
-		Context context = (contextId != null) ? contextService.getContextOrThrow(contextId) : null;
+		// Don't disclose context existence on the anonymous endpoint. Both missing and
+		// existing-but-private contexts must produce the same observable response (200 with
+		// empty bindings); returning 404 for missing contexts would let a client enumerate
+		// context IDs by observing the status difference (CWE-204). For a missing or reserved
+		// contextId we synthesise the URI a context with this ID would have so the named-graph
+		// filter still applies — to a graph that simply has no triples in the public repo.
+		String namedGraphUri = resolveNamedGraphUri(contextId);
 
 		try (RepositoryConnection rc = acquireConnection(publicRepository)) {
 			TupleQuery query = rc.prepareTupleQuery(QueryLanguage.SPARQL, queryString);
@@ -144,8 +154,8 @@ public class SparqlService {
 			query.setMaxExecutionTime(maxExecutionTime);
 			query.setIncludeInferred(false);
 
-			if (context != null) {
-				IRI contextURI = rc.getValueFactory().createIRI(context.getURI().toString());
+			if (namedGraphUri != null) {
+				IRI contextURI = rc.getValueFactory().createIRI(namedGraphUri);
 				log.debug("Restricting query to named graph {}", contextURI);
 				SimpleDataset ds = new SimpleDataset();
 				ds.addDefaultGraph(contextURI);
@@ -184,18 +194,38 @@ public class SparqlService {
 	}
 
 	private static TupleExpr extractTupleExpr(TupleQuery query) {
-		// SailTupleQuery exposes the already-parsed algebra so the federated-service detector runs
-		// against exactly what the executor will run. A non-Sail backend (e.g. an HTTP- or SPARQL-
-		// endpoint repository) could produce a different algebra at prepare time, weakening the
-		// SERVICE-clause prohibition — fail closed here so a future config change cannot silently
-		// undermine the SSRF defense.
+		// SailTupleQuery exposes the already-parsed algebra so the federated-service detector
+		// runs against exactly what the executor will run. A non-Sail backend (e.g. an HTTP-
+		// or SPARQL-endpoint repository) could produce a different algebra at prepare time,
+		// weakening the SERVICE-clause prohibition — fail closed so a future config change
+		// cannot silently undermine the SSRF defense.
 		if (query instanceof SailTupleQuery sailQuery) {
 			return sailQuery.getParsedQuery().getTupleExpr();
 		}
-		// Fail closed when the public repository isn't Sail-backed: a non-Sail TupleQuery may not
-		// expose the parsed algebra to the federated-service detector, weakening the SERVICE-clause
-		// prohibition. Generic client message; the specific reason lives in this comment + server logs.
+		// Generic client message; log the actual class name so an operator can diagnose
+		// without source-diving.
+		log.error("Public repository TupleQuery is not Sail-backed (got {}); refusing to run query "
+						+ "because the federated-service detector cannot inspect its algebra",
+				query.getClass().getName());
 		throw new InternalServerErrorException(INTERNAL_ERROR_MESSAGE);
+	}
+
+	private String resolveNamedGraphUri(String contextId) {
+		if (contextId == null) {
+			return null;
+		}
+		Context context = contextService.getContext(contextId);
+		if (context != null) {
+			return context.getURI().toString();
+		}
+		// Synthesise the URI a real context with this id would have ({baseUrl}/{contextId} per
+		// the project's URI conventions) so a missing or reserved context produces the same
+		// shape of named-graph filter as an existing one — just against a graph with no triples.
+		String base = repositoryManager.getRepositoryURL().toString();
+		if (!base.endsWith("/")) {
+			base += "/";
+		}
+		return base + contextId;
 	}
 
 	private static void rejectFederatedServices(TupleExpr expr) {
@@ -236,8 +266,11 @@ public class SparqlService {
 	}
 
 	private static String truncate(String value, int max) {
-		// Strip control chars so a query containing CR/LF cannot forge log lines.
-		String visible = value.replaceAll("\\p{Cntrl}", "?");
+		// Strip control chars and Unicode line/paragraph separators so a query containing CR/LF
+		// or U+2028/U+2029 cannot forge log lines (CWE-117). \p{Cntrl} only catches Cc; U+2028
+		// (LINE SEPARATOR, Zl) and U+2029 (PARAGRAPH SEPARATOR, Zp) are line terminators in JS
+		// log viewers and BufferedReader.readLine but slip through Cc-only regexes.
+		String visible = value.replaceAll("[\\p{Cntrl}\\u2028\\u2029]", "?");
 		return visible.length() <= max ? visible : visible.substring(0, max) + "…";
 	}
 

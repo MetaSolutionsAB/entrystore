@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.query.QueryEvaluationException;
@@ -37,7 +38,6 @@ import org.entrystore.impl.PublicRepository;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
-import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.util.SparqlResultFormat;
@@ -55,6 +55,7 @@ import org.springframework.http.HttpStatus;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
@@ -112,10 +113,12 @@ class SparqlServiceTest {
 	}
 
 	@BeforeEach
-	void setUp() {
+	void setUp() throws MalformedURLException {
 		lenient().when(repositoryManager.getPublicRepository()).thenReturn(publicRepository);
 		lenient().when(publicRepository.getConnection())
 				.thenAnswer(_ -> backingRepository.getConnection());
+		lenient().when(repositoryManager.getRepositoryURL())
+				.thenReturn(java.net.URI.create("http://example.org/store/").toURL());
 
 		service = new SparqlService(repositoryManager, contextService, MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES);
 	}
@@ -136,14 +139,23 @@ class SparqlServiceTest {
 	}
 
 	@Test
-	void runQuery_unknownContext_doesNotOpenConnection() {
-		when(contextService.getContextOrThrow("unknown"))
-				.thenThrow(new EntityNotFoundException("Context with id 'unknown' does not exist"));
+	void runQuery_unknownContext_returnsEmptyResultWithoutDisclosingExistence() throws Exception {
+		// CWE-204: a 404 here would let an anonymous client enumerate context IDs by observing
+		// the status difference between missing and existing-but-private contexts. The service
+		// must run the query against a synthesised named graph that has no triples, producing
+		// the same 200/empty response as an existing-but-private context would.
+		when(contextService.getContext("unknown")).thenReturn(null);
 
-		assertThrows(EntityNotFoundException.class,
-				() -> service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, "unknown", new ByteArrayOutputStream()));
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, "unknown", out);
 
-		verify(publicRepository, never()).getConnection();
+		// Parse the SPARQL-results JSON instead of substring-matching, since the writer
+		// pretty-prints whitespace into the body.
+		var json = new ObjectMapper().readTree(out.toByteArray());
+		assertTrue(json.path("results").path("bindings").isArray(),
+				"Expected SPARQL-results 'results.bindings' array, got: " + json);
+		assertEquals(0, json.path("results").path("bindings").size(),
+				"Expected empty bindings for unknown context, got: " + json);
 	}
 
 	@Test
@@ -394,7 +406,7 @@ class SparqlServiceTest {
 	void runQuery_withContext_isolatesNamedGraph() {
 		Context context = mock(Context.class);
 		when(context.getURI()).thenReturn(URI.create(CONTEXT_URI));
-		when(contextService.getContextOrThrow(CONTEXT_ID)).thenReturn(context);
+		when(contextService.getContext(CONTEXT_ID)).thenReturn(context);
 
 		try (RepositoryConnection rc = backingRepository.getConnection()) {
 			ValueFactory vf = rc.getValueFactory();
@@ -428,7 +440,7 @@ class SparqlServiceTest {
 		// behavioural test but break GRAPH-scoped queries.
 		Context context = mock(Context.class);
 		when(context.getURI()).thenReturn(URI.create(CONTEXT_URI));
-		when(contextService.getContextOrThrow(CONTEXT_ID)).thenReturn(context);
+		when(contextService.getContext(CONTEXT_ID)).thenReturn(context);
 
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);

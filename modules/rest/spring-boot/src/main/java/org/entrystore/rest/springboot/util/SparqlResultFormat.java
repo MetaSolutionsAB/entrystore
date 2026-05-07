@@ -32,9 +32,13 @@ import java.util.Map;
 /**
  * SPARQL tuple-result format enum + content negotiation. Each value carries the canonical
  * MIME string, parsed Spring {@link MediaType}, and any legacy aliases that should resolve
- * to the value. Downstream switches (e.g. {@code SparqlService.createWriter}) over this
- * enum are exhaustive at compile time, so adding a fifth result type fails to compile until
- * every consumer has wired it up.
+ * to the value.
+ *
+ * <p>Switch expressions over this enum (e.g. {@code SparqlService.createWriter}) are
+ * exhaustive at compile time, so adding a fifth result type fails to compile until every
+ * such switch has wired it up. The static-init blocks below catch the remaining invariants
+ * at class-load: {@code PARTIAL_WILDCARD_PREFERENCE} must list every value, and
+ * {@code ALIAS_TO_FORMAT} must not have any alias collisions.</p>
  */
 public enum SparqlResultFormat {
 
@@ -169,7 +173,10 @@ public enum SparqlResultFormat {
 	}
 
 	private static String truncate(String value) {
-		String visible = value.replaceAll("\\p{Cntrl}", "?");
+		// Same hardening as SparqlService.truncate: strip ASCII C0/C1 controls AND U+2028/U+2029
+		// line/paragraph separators so an attacker-supplied format/Accept value cannot forge log
+		// lines via the BadRequestException message that AppExceptionHandler echoes (CWE-117).
+		String visible = value.replaceAll("[\\p{Cntrl}\\u2028\\u2029]", "?");
 		return visible.length() <= ECHOED_VALUE_MAX_LENGTH
 				? visible
 				: visible.substring(0, ECHOED_VALUE_MAX_LENGTH) + "…";
