@@ -26,12 +26,21 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * {@code DeferredResult} dispatch (replacing Spring's default unbounded
  * {@code SimpleAsyncTaskExecutor}). Overflow beyond {@code maxPoolSize + queueCapacity} is
  * rejected via {@code AbortPolicy} and mapped to HTTP 503 by {@code AppExceptionHandler}.
+ *
+ * <p>Sizing rationale for {@code queueCapacity}: with {@code corePoolSize=8} and SPARQL
+ * queries up to ~10 s, a request at queue position N waits ~N × 10 / 8 s before executing —
+ * past position ~12 the wait exceeds {@code defaultTimeoutMs} and the request is doomed to
+ * time out while still occupying a slot. Keeping the queue small lets overflow fail fast
+ * (503) so the client can back off, instead of accepting work it cannot complete. The
+ * default {@code 16} is therefore the authoritative documented-good value; an operator
+ * deploying with a custom {@code application.yaml} that omits the {@code mvc.async} block
+ * still gets the same behaviour.
  */
 @ConfigurationProperties(prefix = "mvc.async")
 public record MvcAsyncConfiguration(
 		@DefaultValue("8") int corePoolSize,
 		@DefaultValue("32") int maxPoolSize,
-		@DefaultValue("64") int queueCapacity,
+		@DefaultValue("16") int queueCapacity,
 		@DefaultValue("15000") long defaultTimeoutMs
 ) {
 	public MvcAsyncConfiguration {

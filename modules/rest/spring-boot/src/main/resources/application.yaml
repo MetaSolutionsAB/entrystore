@@ -62,17 +62,9 @@ management:
       access: read_only
 
 
-# Bounded executor for Spring MVC async dispatch (StreamingResponseBody, DeferredResult).
-# Replaces Spring's default SimpleAsyncTaskExecutor so streaming endpoints can't spawn
-# unbounded platform threads. Overflow beyond max-pool-size + queue-capacity is rejected
-# via AbortPolicy and mapped to HTTP 503 by AppExceptionHandler. See MvcAsyncConfiguration.
-#
-# Sizing note: queue-capacity is intentionally small relative to default-timeout-ms. With
-# core-pool-size=8 and SPARQL queries up to ~10 s, a request at queue position N waits
-# ~N × 10 / 8 s before executing — past position ~12 the wait exceeds default-timeout-ms
-# and the request is doomed to time out while still occupying a slot. Keeping the queue
-# small lets overflow fail fast (503) so the client can back off, instead of accepting
-# work it cannot complete.
+# Bounded executor for Spring MVC async dispatch. See MvcAsyncConfiguration for the queue-capacity
+# sizing rationale. Values here mirror the @DefaultValue defaults; this block is kept so an operator
+# can override them with a single edit.
 mvc:
   async:
     core-pool-size: 8

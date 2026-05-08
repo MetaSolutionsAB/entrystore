@@ -149,6 +149,11 @@ public enum SparqlResultFormat {
 		}
 		acceptTypes.sort(GraphUtil.QUALITY_THEN_SPECIFICITY);
 		for (MediaType type : acceptTypes) {
+			// RFC 7231 §5.3.1: q=0 means "explicitly unacceptable"; skip without matching.
+			// Must precede the wildcard branch so a `*/*;q=0` entry does not return BINARY.
+			if (type.getQualityValue() <= 0.0) {
+				continue;
+			}
 			if (type.isWildcardType()) {
 				return BINARY;
 			}

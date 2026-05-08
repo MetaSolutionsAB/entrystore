@@ -246,9 +246,9 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 				URI nextURI = entryIterator.next();
 				Entry nextEntry = getByEntryURI(nextURI);
 				// Skip if the entry was removed by a concurrent delete between getEntries()
-				// returning the URI and getByEntryURI(URI) being called for it. (Sibling
-				// iterations elsewhere in this class share the same race shape but are out of
-				// scope for ENTRYSTORE-881; this guard is on the access-control hot path.)
+				// returning the URI and getByEntryURI(URI) being called for it. Sibling iterations
+				// elsewhere in this class share the same race shape; this guard targets only the
+				// access-control hot path.
 				if (nextEntry == null) {
 					log.debug("Skipping null entry for URI {} in getGroupUris (likely concurrent delete)", nextURI);
 					continue;

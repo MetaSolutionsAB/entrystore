@@ -74,9 +74,14 @@ public class PublicRepository {
 	private final Queue<Entry> deleteQueue = Queues.newConcurrentLinkedQueue();
 
 	// Wakes the EntrySubmitter when an entry is enqueued so it does not have to wait out its
-	// idle timeout. The 10 s timeout on wait() is a safety net for the lost-notify race (notify
-	// arrives before consumer enters wait) and for spurious wakeups; in steady state the
-	// submitter wakes within microseconds of an enqueue.
+	// idle timeout. The 10 s timeout on wait() is defense against spurious wakeups (per
+	// Object.wait spec) and a heartbeat for programming errors elsewhere; in steady state the
+	// submitter wakes within microseconds of an enqueue. Lost-notify is prevented by the
+	// recheck-under-lock pattern in run(): the producer (enqueue/remove → signalSubmitter)
+	// holds the same queueSignal monitor while calling notifyAll, so a notify that arrived
+	// during the consumer's outer emptiness check is observed via the now-non-empty queue
+	// when the recheck-under-lock runs, instead of being delivered to a wait that hasn't
+	// started.
 	private final Object queueSignal = new Object();
 
 	private static final int BATCH_SIZE = 1000;
@@ -95,6 +100,20 @@ public class PublicRepository {
 					// batch must NOT kill the submitter thread — that would silently disable public-repo
 					// mirroring for the rest of the JVM lifetime. Log and continue to the next iteration.
 					log.error("Public Repository submitter caught unchecked exception, continuing", e);
+					// Wait on queueSignal (rather than Thread.sleep) so an enqueue/remove during a
+					// transient-failure recovery window can short-circuit the backoff; otherwise the
+					// consumer would block for the full second after the failure cleared, accruing
+					// queue depth a producer burst would only have to drain. The 1 s ceiling caps
+					// CPU usage when the failure is persistent.
+					synchronized (queueSignal) {
+						try {
+							queueSignal.wait(1000);
+						} catch (InterruptedException ie) {
+							Thread.currentThread().interrupt();
+							log.info("Public Repository submitter got interrupted during failure backoff, shutting down submitter thread");
+							break;
+						}
+					}
 				}
 			}
 		}
@@ -168,11 +187,11 @@ public class PublicRepository {
 				}
 			} else {
 				// Block until enqueue()/remove() signals work is available, or until the timeout
-				// fires as a safety net for spurious wakeups and lost-notify races (the producer
-				// puts into postQueue/deleteQueue *before* taking queueSignal, so a notify can
-				// arrive in the window between the consumer's emptiness check and its wait).
-				// Re-check the predicate inside the lock so a notify that arrived while the
-				// outer if was evaluating is observed via the now-non-empty queue instead.
+				// fires as defense against spurious wakeups (per Object.wait spec) and as a
+				// heartbeat. The recheck below closes the lost-notify race: if a notify arrived
+				// between the outer if and entering this synchronized block, it is observed here
+				// via the now-non-empty queue instead of being delivered to a wait that hasn't
+				// started.
 				synchronized (queueSignal) {
 					if (postQueue.asMap().isEmpty() && deleteQueue.isEmpty()) {
 						try {

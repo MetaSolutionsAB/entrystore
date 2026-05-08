@@ -52,6 +52,7 @@ import java.io.OutputStream;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
@@ -68,12 +69,14 @@ public class SparqlService {
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final ContextService contextService;
+	private final ReservedNamesService reservedNames;
 	private final int maxExecutionTime;
 	private final long maxResponseBytes;
 
 	public SparqlService(
 			RepositoryManagerImpl repositoryManager,
 			ContextService contextService,
+			ReservedNamesService reservedNames,
 			@Value("${entrystore.repository.public.sparql.max-execution-time:10}") int maxExecutionTime,
 			@Value("${entrystore.repository.public.sparql.max-response-bytes:67108864}") long maxResponseBytes) {
 		// Reject misconfigured limits at construction so the app fails to start rather than silently
@@ -88,6 +91,7 @@ public class SparqlService {
 		}
 		this.repositoryManager = repositoryManager;
 		this.contextService = contextService;
+		this.reservedNames = reservedNames;
 		this.maxExecutionTime = maxExecutionTime;
 		this.maxResponseBytes = maxResponseBytes;
 		log.debug("Public SPARQL max execution time: {} seconds; max response bytes: {}",
@@ -109,10 +113,11 @@ public class SparqlService {
 	 * same 200/empty response as existing-but-private ones rather than 404.
 	 *
 	 * <p>Whether a fault during {@code evaluate} (size cap, evaluator error) reaches the
-	 * client as a clean status code or as a mid-stream connection drop depends on
-	 * whether the servlet response buffer has already flushed; for any non-trivial
-	 * response it will have, so 413/500 in that path is observed as a connection drop
-	 * rather than a clean status.
+	 * client as a clean status code or as a mid-stream connection drop depends on whether
+	 * the servlet response buffer (Jetty default ~32 KB) has flushed. Below that threshold
+	 * — single-row aggregates, narrow projections, per-namespace bindings — the same
+	 * fault still produces a clean 413/500 via {@code AppExceptionHandler}. Above it,
+	 * the client sees a connection drop instead.
 	 *
 	 * @param format      the SPARQL tuple-result format
 	 * @param queryString the SPARQL query
@@ -214,9 +219,15 @@ public class SparqlService {
 		if (contextId == null) {
 			return null;
 		}
-		Context context = contextService.getContext(contextId);
-		if (context != null) {
-			return context.getURI().toString();
+		// Reserved names skip contextService.getContext to avoid the false-alert ERROR log it
+		// emits for them (the routing-error message it logs does not apply — SparqlController
+		// is a legitimate caller). The synthesised URI below produces the same uniform-200
+		// empty-bindings response the context-existence non-disclosure contract requires.
+		if (!reservedNames.isReservedName(contextId.toLowerCase(Locale.ROOT))) {
+			Context context = contextService.getContext(contextId);
+			if (context != null) {
+				return context.getURI().toString();
+			}
 		}
 		// Synthesise the URI a real context with this id would have ({baseUrl}/{contextId} per
 		// the project's URI conventions) so a missing or reserved context produces the same

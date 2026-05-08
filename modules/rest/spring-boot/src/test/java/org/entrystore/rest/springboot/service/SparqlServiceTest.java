@@ -94,6 +94,9 @@ class SparqlServiceTest {
 	private ContextService contextService;
 
 	@Mock
+	private ReservedNamesService reservedNames;
+
+	@Mock
 	private PublicRepository publicRepository;
 
 	private static Repository backingRepository;
@@ -119,8 +122,9 @@ class SparqlServiceTest {
 				.thenAnswer(_ -> backingRepository.getConnection());
 		lenient().when(repositoryManager.getRepositoryURL())
 				.thenReturn(java.net.URI.create("http://example.org/store/").toURL());
+		lenient().when(reservedNames.isReservedName(anyString())).thenReturn(false);
 
-		service = new SparqlService(repositoryManager, contextService, MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES);
+		service = new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, MAX_RESPONSE_BYTES);
 	}
 
 	@AfterEach
@@ -218,7 +222,7 @@ class SparqlServiceTest {
 	@Test
 	void runQuery_appliesConfiguredMaxExecutionTimeAndDisablesInferred() {
 		int customExecutionTime = 42;
-		SparqlService customService = new SparqlService(repositoryManager, contextService, customExecutionTime, MAX_RESPONSE_BYTES);
+		SparqlService customService = new SparqlService(repositoryManager, contextService, reservedNames, customExecutionTime, MAX_RESPONSE_BYTES);
 
 		RepositoryConnection mockConn = mock(RepositoryConnection.class);
 		SailTupleQuery mockQuery = mock(SailTupleQuery.class);
@@ -280,7 +284,7 @@ class SparqlServiceTest {
 
 	@Test
 	void runQuery_resultExceedsMaxResponseBytes_throws413() {
-		SparqlService tinyCapService = new SparqlService(repositoryManager, contextService, MAX_EXECUTION_TIME, 8L);
+		SparqlService tinyCapService = new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, 8L);
 
 		try (RepositoryConnection rc = backingRepository.getConnection()) {
 			ValueFactory vf = rc.getValueFactory();
@@ -362,25 +366,25 @@ class SparqlServiceTest {
 	@Test
 	void constructor_zeroExecutionTime_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, 0, MAX_RESPONSE_BYTES));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames, 0, MAX_RESPONSE_BYTES));
 	}
 
 	@Test
 	void constructor_negativeExecutionTime_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, -1, MAX_RESPONSE_BYTES));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames, -1, MAX_RESPONSE_BYTES));
 	}
 
 	@Test
 	void constructor_zeroResponseBytes_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, MAX_EXECUTION_TIME, 0L));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, 0L));
 	}
 
 	@Test
 	void constructor_negativeResponseBytes_throws() {
 		assertThrows(IllegalStateException.class,
-				() -> new SparqlService(repositoryManager, contextService, MAX_EXECUTION_TIME, -1L));
+				() -> new SparqlService(repositoryManager, contextService, reservedNames, MAX_EXECUTION_TIME, -1L));
 	}
 
 	@Test
@@ -429,6 +433,41 @@ class SparqlServiceTest {
 				"Expected the in-context triple to be returned, got: " + text);
 		assertFalse(text.contains("http://example.org/leaked"),
 				"Expected no leak from other-graph, got: " + text);
+	}
+
+	@Test
+	void runQuery_reservedContextId_skipsContextServiceLookup() throws Exception {
+		// Reserved names ("sparql", "search", etc.) must not be passed to contextService.getContext —
+		// that path emits a false-alert ERROR log claiming a routing bug, which the new uniform-200
+		// contract would trigger on every reserved-name request. The synthesised named-graph URI is
+		// still produced (via the no-context fall-through), so the response shape stays uniform.
+		when(reservedNames.isReservedName("sparql")).thenReturn(true);
+
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, "sparql", out);
+
+		verify(contextService, never()).getContext("sparql");
+		var json = new ObjectMapper().readTree(out.toByteArray());
+		assertEquals(0, json.path("results").path("bindings").size(),
+				"Expected empty bindings for reserved-name context, got: " + json);
+	}
+
+	@Test
+	void runQuery_reservedContextIdMixedCase_normalisesAndSkipsLookup() throws Exception {
+		// Pins the Locale.ROOT lowercase normalisation: a request with mixed-case "SPARQL"
+		// must hit the reserved-name skip branch the same way "sparql" does. A regression
+		// dropping or weakening the .toLowerCase(Locale.ROOT) call would re-emit the false-
+		// alert ERROR log for every mixed-case reserved-name request.
+		when(reservedNames.isReservedName("sparql")).thenReturn(true);
+
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, "SPARQL", out);
+
+		verify(contextService, never()).getContext("SPARQL");
+		verify(contextService, never()).getContext("sparql");
+		var json = new ObjectMapper().readTree(out.toByteArray());
+		assertEquals(0, json.path("results").path("bindings").size(),
+				"Expected empty bindings for mixed-case reserved-name context, got: " + json);
 	}
 
 	@Test
