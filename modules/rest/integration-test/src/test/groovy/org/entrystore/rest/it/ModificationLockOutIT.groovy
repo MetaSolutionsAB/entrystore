@@ -122,7 +122,12 @@ class ModificationLockOutIT extends BaseSpec {
 
 	def "POST /auth/logout is allowed while modification lockout is active"() {
 		given:
-		def userCookies = [Cookie: EntryStoreClient.authorize('user').toString()]
+		def isolatedAuth = EntryStoreClient.authorize('user').toString()
+		def isolatedCsrf = EntryStoreClient.csrfTokens['user']
+		def userCookies = [
+				Cookie        : isolatedAuth + '; XSRF-TOKEN=' + isolatedCsrf,
+				'X-XSRF-TOKEN': isolatedCsrf
+		]
 		setLockOut(true)
 
 		when:

@@ -51,7 +51,7 @@ class TokenResourceIT extends BaseSpec {
 		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=100'
 		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
 		assert loginConnection1.getResponseCode() == HTTP_OK
-		def cookie1 = loginConnection1.getHeaderField('Set-Cookie')
+		def cookie1 = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
 		def tokenPart1 = cookie1.substring(cookie1.indexOf('auth_token=') + 11, cookie1.indexOf('.node'))
 		if (tokenPart1.contains(';')) {
 			tokenPart1 = tokenPart1.substring(0, tokenPart1.indexOf(';'))
@@ -59,7 +59,7 @@ class TokenResourceIT extends BaseSpec {
 		def bodyParams2 = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=50'
 		def loginConnection2 = EntryStoreClient.postRequest('/auth/cookie', bodyParams2, '', 'application/x-www-form-urlencoded')
 		assert loginConnection2.getResponseCode() == HTTP_OK
-		def cookie2 = loginConnection2.getHeaderField('Set-Cookie')
+		def cookie2 = EntryStoreClient.findSetCookie(loginConnection2, 'auth_token')
 		def tokenPart2 = cookie2.substring(cookie2.indexOf('auth_token=') + 11, cookie2.indexOf('.node'))
 		if (tokenPart2.contains(';')) {
 			tokenPart2 = tokenPart2.substring(0, tokenPart2.indexOf(';'))
@@ -94,7 +94,7 @@ class TokenResourceIT extends BaseSpec {
 		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password
 		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
 		assert loginConnection1.getResponseCode() == HTTP_OK
-		def cookie = loginConnection1.getHeaderField('Set-Cookie')
+		def cookie = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
 		def tokenPart = cookie.substring(cookie.indexOf('auth_token=') + 11, cookie.indexOf('.node'))
 		if (tokenPart.contains(';')) {
 			tokenPart = tokenPart.substring(0, tokenPart.indexOf(';'))
@@ -136,7 +136,8 @@ class TokenResourceIT extends BaseSpec {
 		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password
 		def loginConnection1 = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
 		assert loginConnection1.getResponseCode() == HTTP_OK
-		def cookie1 = loginConnection1.getHeaderField('Set-Cookie')
+		def cookie1 = EntryStoreClient.findSetCookie(loginConnection1, 'auth_token')
+		def csrf1 = EntryStoreClient.findCookieValue(loginConnection1, 'XSRF-TOKEN')
 		def tokenPart1 = cookie1.substring(cookie1.indexOf('auth_token=') + 11, cookie1.indexOf('.node'))
 		if (tokenPart1.contains(';')) {
 			tokenPart1 = tokenPart1.substring(0, tokenPart1.indexOf(';'))
@@ -144,7 +145,7 @@ class TokenResourceIT extends BaseSpec {
 		def bodyParams2 = 'auth_username=' + username + '&auth_password=' + password
 		def loginConnection2 = EntryStoreClient.postRequest('/auth/cookie', bodyParams2, '', 'application/x-www-form-urlencoded')
 		assert loginConnection2.getResponseCode() == HTTP_OK
-		def cookie2 = loginConnection2.getHeaderField('Set-Cookie')
+		def cookie2 = EntryStoreClient.findSetCookie(loginConnection2, 'auth_token')
 		def tokenPart2 = cookie2.substring(cookie2.indexOf('auth_token=') + 11, cookie2.indexOf('.node'))
 		if (tokenPart2.contains(';')) {
 			tokenPart2 = tokenPart2.substring(0, tokenPart2.indexOf(';'))
@@ -152,7 +153,8 @@ class TokenResourceIT extends BaseSpec {
 		def body = JsonOutput.toJson([token: tokenPart2])
 
 		when:
-		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json', [Cookie: cookie1])
+		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json',
+				[Cookie: cookie1 + '; XSRF-TOKEN=' + csrf1, 'X-XSRF-TOKEN': csrf1])
 
 		then:
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT
@@ -173,7 +175,8 @@ class TokenResourceIT extends BaseSpec {
 		def bodyParams1 = 'auth_username=' + username + '&auth_password=' + password
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams1, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
+		def csrf = EntryStoreClient.findCookieValue(loginConnection, 'XSRF-TOKEN')
 		def tokenPart = cookie.substring(cookie.indexOf('auth_token=') + 11, cookie.indexOf('.node'))
 		if (tokenPart.contains(';')) {
 			tokenPart = tokenPart.substring(0, tokenPart.indexOf(';'))
@@ -182,7 +185,8 @@ class TokenResourceIT extends BaseSpec {
 		assert EntryStoreClient.getRequest('/auth/user', '', '', [Cookie: cookie]).getResponseCode() == HTTP_OK
 
 		when:
-		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json', [Cookie: cookie])
+		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json',
+				[Cookie: cookie + '; XSRF-TOKEN=' + csrf, 'X-XSRF-TOKEN': csrf])
 
 		then:
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT

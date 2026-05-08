@@ -141,8 +141,7 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		loginConnection.getResponseCode() == HTTP_OK
-		loginConnection.getHeaderField('Set-Cookie') != null
-		loginConnection.getHeaderField('Set-Cookie').contains('auth_token=')
+		EntryStoreClient.findSetCookie(loginConnection, 'auth_token') != null
 		loginConnection.getContentType().contains('text/html')
 		loginConnection.inputStream.text.contains('Login successful.')
 	}
@@ -156,7 +155,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
 		assert cookie != null
 		assert cookie.contains('auth_token=')
 		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
@@ -179,7 +178,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
 		assert cookie != null
 		assert cookie.contains('auth_token=')
 		assert cookie.contains('Secure')
@@ -213,7 +212,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=1'
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
 		assert cookie != null
 		assert cookie.contains('auth_token=')
 
@@ -243,7 +242,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password + '&auth_maxage=2'
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
 		assert cookie != null
 		assert cookie.contains('auth_token=')
 		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
@@ -272,7 +271,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
 		assert cookie != null
 		assert cookie.contains('auth_token=')
 		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
@@ -295,7 +294,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
 		assert cookie != null
 		assert cookie.contains('auth_token=')
 		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
@@ -328,7 +327,8 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie = loginConnection.getHeaderField('Set-Cookie')
+		def cookie = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
+		def csrf = EntryStoreClient.findCookieValue(loginConnection, 'XSRF-TOKEN')
 		assert cookie != null
 		assert cookie.contains('auth_token=')
 		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie]).getResponseCode() == HTTP_OK
@@ -337,7 +337,8 @@ class CookieLoginResourceIT extends BaseSpec {
 			password       : newPassword,
 			currentPassword: password
 		])
-		assert EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, null, null, [Cookie: cookie]).getResponseCode() == HTTP_NO_CONTENT
+		assert EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, null, null,
+				[Cookie: cookie + '; XSRF-TOKEN=' + csrf, 'X-XSRF-TOKEN': csrf]).getResponseCode() == HTTP_NO_CONTENT
 
 		when:
 		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
@@ -355,14 +356,15 @@ class CookieLoginResourceIT extends BaseSpec {
 		def bodyParams = 'auth_username=' + username + '&auth_password=' + password
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, null, 'application/x-www-form-urlencoded')
 		assert loginConnection.getResponseCode() == HTTP_OK
-		def cookie1 = loginConnection.getHeaderField('Set-Cookie')
+		def cookie1 = EntryStoreClient.findSetCookie(loginConnection, 'auth_token')
 		assert cookie1 != null
 		assert cookie1.contains('auth_token=')
 		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie1]).getResponseCode() == HTTP_OK
 
 		def loginConnection2 = EntryStoreClient.postRequest('/auth/cookie', bodyParams, null, 'application/x-www-form-urlencoded')
 		assert loginConnection2.getResponseCode() == HTTP_OK
-		def cookie2 = loginConnection2.getHeaderField('Set-Cookie')
+		def cookie2 = EntryStoreClient.findSetCookie(loginConnection2, 'auth_token')
+		def csrf2 = EntryStoreClient.findCookieValue(loginConnection2, 'XSRF-TOKEN')
 		assert cookie2 != null
 		assert cookie2.contains('auth_token=')
 		assert EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie2]).getResponseCode() == HTTP_OK
@@ -371,7 +373,8 @@ class CookieLoginResourceIT extends BaseSpec {
 			password       : newPassword,
 			currentPassword: password
 		])
-		assert EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, null, null, [Cookie: cookie2]).getResponseCode() == HTTP_NO_CONTENT
+		assert EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, null, null,
+				[Cookie: cookie2 + '; XSRF-TOKEN=' + csrf2, 'X-XSRF-TOKEN': csrf2]).getResponseCode() == HTTP_NO_CONTENT
 
 		when:
 		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie1])

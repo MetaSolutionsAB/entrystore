@@ -34,7 +34,9 @@ import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
+import org.springframework.boot.context.properties.bind.BindException;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.web.server.Cookie;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -64,6 +66,9 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
@@ -88,6 +93,9 @@ public class SecurityConfig {
 
 	private final CorsConfig corsConfig;
 
+	private final CsrfRequestMatcher csrfRequestMatcher;
+	private final CsrfCookieFilter csrfCookieFilter;
+
 	// SAML-auth related beans
 	private final SamlCustomConfiguration samlConfiguration;
 	private final SamlLoginSuccessHandler samlLoginSuccessHandler;
@@ -102,10 +110,17 @@ public class SecurityConfig {
 	private boolean basicAuthEnabled;
 
 	private final Config config;
+	private final Environment environment;
+
+	@Value("${server.servlet.session.cookie.secure:true}")
+	private boolean sessionCookieSecure;
+
+	private Cookie.SameSite sessionCookieSameSite;
 
 	@PostConstruct
 	public void init() {
 		basicAuthEnabled = config.getBoolean(Settings.AUTH_HTTP_BASIC_ENABLED, false);
+		sessionCookieSameSite = resolveSessionCookieSameSite(environment);
 	}
 
 	@Bean
@@ -122,7 +137,11 @@ public class SecurityConfig {
 		var entryPoint = basicAuthEnabled ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
 
 		http
-				.csrf(AbstractHttpConfigurer::disable)
+				.csrf(csrf -> csrf
+						.csrfTokenRepository(csrfTokenRepository())
+						.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+						.requireCsrfProtectionMatcher(csrfRequestMatcher))
+				.addFilterAfter(csrfCookieFilter, CsrfFilter.class)
 				.sessionManagement(session -> session
 						.sessionConcurrency(concurrency -> concurrency
 								.maximumSessions(-1)
@@ -157,7 +176,10 @@ public class SecurityConfig {
 						.permitAll()
 				)
 				.logout(logout -> logout
-						.logoutUrl("/auth/logout")
+						// Pin logout to POST so a same-site `<a href="/auth/logout">` or `<img src=…>`
+						// from a relaxed-SameSite cookie context cannot force-log-out the user.
+						// CsrfRequestMatcher then requires a valid X-XSRF-TOKEN on the POST.
+						.logoutRequestMatcher(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/auth/logout"))
 						.deleteCookies("auth_token")
 						.logoutSuccessHandler((_, response, _) ->
 								response.setStatus(HttpStatus.NO_CONTENT.value())
@@ -358,12 +380,45 @@ public class SecurityConfig {
 	}
 
 	@Bean
-	public ServletContextInitializer servletContextInitializer(Environment env) {
-		return servletContext -> {
-			Cookie.SameSite sameSite = Binder.get(env)
+	public FilterRegistrationBean<CsrfCookieFilter> disableCsrfCookieFilterAutoRegistration(CsrfCookieFilter f) {
+		FilterRegistrationBean<CsrfCookieFilter> reg = new FilterRegistrationBean<>(f);
+		reg.setEnabled(false);
+		return reg;
+	}
+
+	private CookieCsrfTokenRepository csrfTokenRepository() {
+		var repo = CookieCsrfTokenRepository.withHttpOnlyFalse();
+		boolean secure = sessionCookieSecure || sessionCookieSameSite == Cookie.SameSite.NONE;
+		repo.setCookieCustomizer(builder -> builder
+				.sameSite(sessionCookieSameSite.attributeValue())
+				.secure(secure));
+		return repo;
+	}
+
+	// Package-private static so SecurityConfigTest can drive it with a MockEnvironment without
+	// constructing the full @RequiredArgsConstructor bean graph.
+	static Cookie.SameSite resolveSessionCookieSameSite(Environment environment) {
+		// Single source of truth for the SameSite enum, shared with servletContextInitializer().
+		// Binder applies Spring Boot's relaxed binding (case-insensitive enum match) and throws
+		// BindException on typos like "Nonee" — which we surface as a WARN before defaulting to
+		// STRICT, so silent misconfiguration cannot leave Secure=false on a cookie the operator
+		// intended to flag SameSite=NONE.
+		try {
+			return Binder.get(environment)
 					.bind("server.servlet.session.cookie.same-site", Cookie.SameSite.class)
 					.orElse(Cookie.SameSite.STRICT);
-			if (sameSite == Cookie.SameSite.NONE) {
+		} catch (BindException e) {
+			String raw = environment.getProperty("server.servlet.session.cookie.same-site");
+			log.warn("Invalid server.servlet.session.cookie.same-site value '{}'; falling back to STRICT. "
+					+ "Valid values: NONE, LAX, STRICT.", raw);
+			return Cookie.SameSite.STRICT;
+		}
+	}
+
+	@Bean
+	public ServletContextInitializer servletContextInitializer() {
+		return servletContext -> {
+			if (sessionCookieSameSite == Cookie.SameSite.NONE) {
 				servletContext.getSessionCookieConfig().setSecure(true);
 			}
 		};
