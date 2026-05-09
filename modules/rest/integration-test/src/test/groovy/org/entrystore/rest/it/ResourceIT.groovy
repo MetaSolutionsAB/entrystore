@@ -401,6 +401,33 @@ class ResourceIT extends BaseSpec {
 		resourceConn.getInputStream().readAllBytes() == testBinFile.getBytes()
 	}
 
+	def "PUT /{context-id}/resource/{entry-id} multipart upload under the configured cap should succeed"() {
+		given:
+		def requestResourceName = [name: 'Large file entry']
+		def body = [resource: requestResourceName]
+		def entryId = getOrCreateEntry(contextId, [id: 'largeFileId'], body)
+		assert entryId.length() > 0
+
+		def largeBinFile = File.createTempFile('large', '.bin')
+		largeBinFile.deleteOnExit()
+		def payload = new byte[13 * 1024 * 1024]
+		new Random(42).nextBytes(payload)
+		largeBinFile.bytes = payload
+
+		when:
+		def sendFileConn = EntryStoreClient.putRequestMultiPart('/' + contextId + '/resource/' + entryId, largeBinFile)
+
+		then:
+		sendFileConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		def resourceConn = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
+
+		then:
+		resourceConn.getResponseCode() == HTTP_OK
+		resourceConn.getInputStream().readAllBytes() == payload
+	}
+
 	def "PUT /{context-id}/resource/{entry-id} as guest should respond with Not Found 404"() {
 		given:
 		// create local String entry

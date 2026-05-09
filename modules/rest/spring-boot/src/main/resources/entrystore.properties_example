@@ -124,6 +124,32 @@ entrystore.solr.extract-fulltext=off
 # entrystore.data.quota=on|off (default: off)
 # entrystore.data.quota.default=100k
 
+## Multipart upload limits at the Spring servlet layer (defaults: 100MB).
+## Application-level caps that DO exist: entrystore.data.max-file-size
+## (resource uploads), 10 MB hardcoded in /echo. POST /{context-id}/import
+## (multipart variant) has NO application-level cap, so its upper bound is
+## whatever you set here. The non-multipart byte[] variant of /import
+## currently has no enforced server-side size cap (Spring's multipart caps
+## do not apply to @RequestBody byte[], and the configured
+## server.jetty.max-http-form-post-size only bounds form-urlencoded bodies)
+## and should be fronted by a reverse-proxy body limit if exposed externally.
+##
+## Rejection contract: Jetty 12 enforces these caps at the container layer
+## and rejects oversize multipart requests with status 400 ("bad multipart")
+## BEFORE the Spring DispatcherServlet sees the request, so callers should
+## treat a 400 on a multipart upload as a possible cap violation rather than
+## necessarily a malformed body.
+##
+## DoS surface to consider before raising these: any authenticated user with
+## WriteResource ACL on a target entry can open parallel slow PUTs, each
+## spooled to spring.servlet.multipart.location (java.io.tmpdir by default,
+## often tmpfs/RAM on modern distros). entrystore.data.max-file-size defaults
+## to -1 (no application backstop), so the servlet-layer cap here is the
+## effective per-request ceiling unless an operator opts into a tighter cap.
+## Use -1B to disable the servlet-layer cap entirely (unlimited).
+# spring.servlet.multipart.max-file-size=100MB
+# spring.servlet.multipart.max-request-size=100MB
+
 ## SPARQL endpoint with public metadata in all contexts
 # entrystore.repository.public=on|off (default: off)
 # entrystore.repository.public.type=native
