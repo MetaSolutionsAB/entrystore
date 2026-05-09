@@ -465,7 +465,14 @@ public class ResourceService {
 				itemMimeType = mimeType;
 			}
 			entry.setMimetype(itemMimeType);
-			String name = StringUtils.defaultIfBlank(file.getOriginalFilename(), file.getName());
+			String originalFilename = file.getOriginalFilename();
+			String name;
+			if (StringUtils.isBlank(originalFilename)) {
+				name = file.getName();
+				log.warn("Multipart upload missing original filename, falling back to part name '{}'", name);
+			} else {
+				name = originalFilename;
+			}
 			entry.setFilename(FileUtil.sanitizeFilename(name));
 
 			return CompletionState.CREATED;

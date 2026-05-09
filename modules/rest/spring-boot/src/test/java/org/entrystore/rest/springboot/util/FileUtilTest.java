@@ -35,24 +35,32 @@ class FileUtilTest {
 		}
 
 		@Test
+		void appendsSuffixForUppercaseDangerousExtension() {
+			// isDangerousExtension is case-insensitive; the normalized filename keeps original case
+			assertEquals("datei.EXE_dangerous", FileUtil.sanitizeFilename("datei.EXE"));
+		}
+
+		@Test
 		void appendsSuffixForUrlEncodedSpace() {
-			assertEquals("datei.exe%20_dangerous", FileUtil.sanitizeFilename("datei.exe%20"));
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe%20"));
 		}
 
 		@Test
 		void appendsSuffixForTrailingAsciiSpace() {
-			assertEquals("datei.exe _dangerous", FileUtil.sanitizeFilename("datei.exe "));
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe "));
 		}
 
 		@Test
 		void appendsSuffixForTrailingNonBreakingSpace() {
-			// NBSP (U+00A0) is not stripped by String.trim() but is stripped by String.strip()
-			assertEquals("datei.exe _dangerous", FileUtil.sanitizeFilename("datei.exe "));
+			// NBSP (U+00A0) is a Zs space char but Character.isWhitespace returns false for it,
+			// so String.strip() does NOT remove it. It is stripped by the loop's
+			// Character.isSpaceChar(last) branch in FileUtil.sanitizeFilename.
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe "));
 		}
 
 		@Test
 		void appendsSuffixForTrailingDot() {
-			assertEquals("datei.exe._dangerous", FileUtil.sanitizeFilename("datei.exe."));
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe."));
 		}
 
 		@Test
@@ -64,8 +72,9 @@ class FileUtilTest {
 
 		@Test
 		void appendsSuffixForUrlEncodedNullByte() {
-			// %00 decodes to null char (U+0000); stripped as a control char
-			assertEquals("datei.exe%00_dangerous", FileUtil.sanitizeFilename("datei.exe%00"));
+			// %00 decodes to U+0000 (NUL); stripped by the loop's `last < 0x20` branch
+			// (String.strip does not remove NUL).
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe%00"));
 		}
 
 		@Test
@@ -74,9 +83,9 @@ class FileUtilTest {
 		}
 
 		@Test
-		void doesNotModifySafeExtensionWithUrlEncodedJunk() {
-			// .png is not dangerous even with trailing %20
-			assertEquals("datei.png%20", FileUtil.sanitizeFilename("datei.png%20"));
+		void normalizesSafeExtensionWithUrlEncodedJunk() {
+			// .png is not dangerous; trailing %20 decodes to space and gets stripped during normalization
+			assertEquals("datei.png", FileUtil.sanitizeFilename("datei.png%20"));
 		}
 
 		@Test
@@ -86,15 +95,132 @@ class FileUtilTest {
 
 		@Test
 		void appendsSuffixForTruncatedPercentEscape() {
-			// Malformed %-sequence → treat as suspicious
+			// Malformed %-sequence → treat as suspicious; the raw input is returned verbatim
+			// with the suffix appended (no normalization on the decode-failure path).
 			assertEquals("datei.exe%2_dangerous", FileUtil.sanitizeFilename("datei.exe%2"));
 		}
 
 		@Test
+		void appendsSuffixForTrailingPercent() {
+			// Trailing bare '%' is also a truncated %-escape (decode failure path)
+			assertEquals("datei.exe%_dangerous", FileUtil.sanitizeFilename("datei.exe%"));
+		}
+
+		@Test
+		void appendsSuffixForMalformedPercentEscape() {
+			// Non-hex %-escape; URLDecoder throws IllegalArgumentException → decode-failure path
+			assertEquals("datei.exe%ZZ_dangerous", FileUtil.sanitizeFilename("datei.exe%ZZ"));
+		}
+
+		@Test
 		void appendsSuffixForTrailingC1ControlChar() {
-			// C1 controls (U+0080–U+009F) are not isWhitespace and not <0x20; without explicit
-			// handling they would survive normalization and bypass the dangerous-extension check.
-			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe"));
+			// C1 controls (U+0080–U+009F) are not isWhitespace and not <0x20; they are stripped
+			// by the explicit C1 range branch in isTrailingNoise.
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe"));
+		}
+
+		@Test
+		void appendsSuffixForChainedTrailingJunk() {
+			// Multiple URL-encoded spaces stripped in sequence by the trailing-noise loop
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe%20%20%20"));
+		}
+
+		@Test
+		void appendsSuffixForMixedTrailingJunk() {
+			// Trailing dot + tab + 2 NBSPs — each removed by a different branch of isTrailingNoise
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe.\t  "));
+		}
+
+		@Test
+		void appendsSuffixForUrlEncodedDot() {
+			// %2E decodes to '.'; trailing dot is stripped, leaving exe as the resolved extension
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe%2E"));
+		}
+
+		@Test
+		void appendsSuffixForUrlEncodedSemicolon() {
+			// %3B decodes to ';'; trailing semicolon is stripped
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe%3B"));
+		}
+
+		@Test
+		void appendsSuffixForUrlEncodedTab() {
+			// %09 decodes to '\t' (U+0009 < U+0020); stripped by the ASCII-control branch
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe%09"));
+		}
+
+		@Test
+		void appendsSuffixForUrlEncodedForwardSlash() {
+			// %2F decodes to '/'; trailing slash is stripped — without this, getExtension('/')
+			// would return "" and bypass the dangerous-extension check.
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe%2F"));
+		}
+
+		@Test
+		void appendsSuffixForUrlEncodedBackslash() {
+			// %5C decodes to '\\'; trailing backslash stripped (Windows path-separator vector)
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe%5C"));
+		}
+
+		@Test
+		void appendsSuffixForTrailingZeroWidthSpace() {
+			// ZWSP (U+200B) is a Cf/FORMAT-category character; stripped by the FORMAT branch.
+			// Many filesystems/browsers ignore zero-width chars when resolving filenames.
+			assertEquals("evil.exe_dangerous", FileUtil.sanitizeFilename("evil.exe​"));
+		}
+
+		@Test
+		void appendsSuffixForUrlEncodedZeroWidthSpace() {
+			// %E2%80%8B is the UTF-8 encoding of ZWSP (U+200B)
+			assertEquals("evil.exe_dangerous", FileUtil.sanitizeFilename("evil.exe%E2%80%8B"));
+		}
+
+		@Test
+		void appendsSuffixForTrailingRtlOverride() {
+			// RTL OVERRIDE (U+202E) is a Cf/FORMAT-category bidi character; stripped by the
+			// FORMAT branch. Used in spoofs that visually rearrange filename characters.
+			assertEquals("evil.exe_dangerous", FileUtil.sanitizeFilename("evil.exe‮"));
+		}
+
+		@Test
+		void appendsSuffixForDoubleEncodedSpace() {
+			// %2520 decodes to %20 on the first pass and to a literal space on the second.
+			// decodeUntilStable iterates until the result is stable.
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe%2520"));
+		}
+
+		@Test
+		void preservesPlusSignInSafeFilename() {
+			// URLDecoder is a form-decoder and would normally fold '+' to space; sanitizeFilename
+			// suppresses that by escaping '+' to %2B before each decode pass.
+			assertEquals("a+b.txt", FileUtil.sanitizeFilename("a+b.txt"));
+		}
+
+		@Test
+		void doesNotFlagMultiDotSafe() {
+			// Last segment after the final dot is "bak" — safe — even though "exe" appears earlier
+			assertEquals("archive.exe.bak", FileUtil.sanitizeFilename("archive.exe.bak"));
+		}
+
+		@Test
+		void appendsSuffixForMultiDotDangerousAfterStrip() {
+			// After stripping the trailing NBSP, last segment is "exe" — dangerous
+			assertEquals("archive.bak.exe_dangerous", FileUtil.sanitizeFilename("archive.bak.exe "));
+		}
+
+		@Test
+		void returnsEmptyForEmptyString() {
+			assertEquals("", FileUtil.sanitizeFilename(""));
+		}
+
+		@Test
+		void returnsEmptyForWhitespaceOnly() {
+			assertEquals("", FileUtil.sanitizeFilename("   "));
+		}
+
+		@Test
+		void returnsEmptyForNbspOnly() {
+			assertEquals("", FileUtil.sanitizeFilename(" "));
 		}
 
 		@Test

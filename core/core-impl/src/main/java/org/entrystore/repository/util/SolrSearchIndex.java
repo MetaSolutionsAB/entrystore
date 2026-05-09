@@ -722,7 +722,12 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public Set<URI> getIndexingContexts() {
-		return reindexing.keySet();
+		// Snapshot under the map's monitor: Collections.synchronizedMap synchronizes
+		// individual ops but iteration over a live keySet view is not thread-safe,
+		// and the reindex executor mutates this map from another thread.
+		synchronized (reindexing) {
+			return Set.copyOf(reindexing.keySet());
+		}
 	}
 
 	public long getPostQueueSize() {
@@ -834,12 +839,13 @@ public class SolrSearchIndex implements SearchIndex {
 			// sort after titles in a specific language
 			Set<String> literalLanguages = literals.get(literal);
 
-			if (literalLanguages.isEmpty() || ObjectUtils.allNull(literalLanguages)) {
+			if (literalLanguages.isEmpty()) {
 				if (!alreadySetLanguages.contains(missingLanguageString)) {
 					doc.addField(String.format("%s.%s", literalType, missingLanguageString), literal);
 					alreadySetLanguages.add(missingLanguageString);
 				}
 			} else {
+				ObjectUtils.allNull(literalLanguages);
 				for (String language : literalLanguages) {
 					if (language != null && language.equalsIgnoreCase(defaultSortLang) && !alreadySetLanguages.contains(defaultString)) {
 						// if a default sorting language is configured, we create a field for that
@@ -1202,7 +1208,7 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	private void addFieldValueOnce(SolrInputDocument doc, String name, Object value) {
-		Collection fieldValues = doc.getFieldValues(name);
+		Collection<Object> fieldValues = doc.getFieldValues(name);
 		if (fieldValues == null || !fieldValues.contains(value)) {
 			doc.addField(name, value);
 		}
@@ -1263,7 +1269,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrClient solrServer, int offset, int limit) {
+	private long sendQueryForEntryURIs(SolrQuery query, Set<URI> result, List<FacetField> facetFields, SolrClient solrServer, int offset) {
 		if (query == null) {
 			throw new IllegalArgumentException("Query object must not be null");
 		}
@@ -1271,8 +1277,8 @@ public class SolrSearchIndex implements SearchIndex {
 		if (offset > -1) {
 			query.setStart(offset);
 		}
-		if (limit > -1) {
-			query.setRows(limit);
+		if (-1 > -1) {
+			query.setRows(-1);
 		}
 
 		// We only need the "uri" field in the response,
@@ -1335,7 +1341,7 @@ public class SolrSearchIndex implements SearchIndex {
 				log.warn("Increasing offset to " + offset + " in an attempt to fill the result limit");
 			}
 			Set<URI> entryURIs = new LinkedHashSet<>();
-			hits = sendQueryForEntryURIs(query, entryURIs, facetFields, solrServer, offset, -1);
+			hits = sendQueryForEntryURIs(query, entryURIs, facetFields, solrServer, offset);
 			Date before = new Date();
 			for (URI uri : entryURIs) {
 				try {

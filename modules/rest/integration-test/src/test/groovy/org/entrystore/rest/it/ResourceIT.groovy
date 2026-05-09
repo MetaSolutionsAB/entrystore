@@ -1608,7 +1608,7 @@ class ResourceIT extends BaseSpec {
 		putResourceConn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
-	def "PUT /{context-id}/resource/{entry-id} with exe%20 filename in Content-Disposition should persist _dangerous suffix"() {
+	def "PUT /{context-id}/resource/{entry-id} with #shape filename in Content-Disposition persists #expectedStored"() {
 		given:
 		def entryId = createEntry(contextId, [:])
 		assert entryId.length() > 0
@@ -1619,7 +1619,7 @@ class ResourceIT extends BaseSpec {
 			'',
 			'admin',
 			'application/octet-stream',
-			['Content-Disposition': 'attachment; filename="datei.exe%20"']
+			['Content-Disposition': 'attachment; filename="' + filenameInHeader + '"']
 		)
 
 		then:
@@ -1634,7 +1634,57 @@ class ResourceIT extends BaseSpec {
 
 		then:
 		entryConn.responseCode == HTTP_OK
-		entryJson['info'][resourceUri][rdfsLabel][0]['value'] == 'datei.exe%20_dangerous'
+		entryJson['info'][resourceUri][rdfsLabel][0]['value'] == expectedStored
+
+		// Only ASCII-safe header shapes are exercised here — non-ASCII bytes (raw NBSP, raw
+		// ZWSP) in HTTP header values have ambiguous encoding across HttpURLConnection /
+		// Jetty and are covered end-to-end by FileUtilTest. The encoded shapes below survive
+		// ASCII transmission and exercise decode + strip in the production code path.
+		where:
+		shape                | filenameInHeader        || expectedStored
+		'%20 (encoded space)'| 'datei.exe%20'          || 'datei.exe_dangerous'
+		'trailing dot'       | 'datei.exe.'            || 'datei.exe_dangerous'
+		'%00 (null byte)'    | 'datei.exe%00'          || 'datei.exe_dangerous'
+		'truncated %2'       | 'datei.exe%2'           || 'datei.exe%2_dangerous'
+		'double-encoded %20' | 'datei.exe%2520'        || 'datei.exe_dangerous'
+		'encoded forward-/'  | 'datei.exe%2F'          || 'datei.exe_dangerous'
+		'encoded ZWSP'       | 'datei.exe%E2%80%8B'    || 'datei.exe_dangerous'
+	}
+
+	def "PUT multipart /{context-id}/resource/{entry-id} with malicious filename persists _dangerous suffix"() {
+		given:
+		def entryId = createEntry(contextId, [:])
+		assert entryId.length() > 0
+
+		// Create a temp file whose name carries the malicious characters; multipart envelope
+		// reuses File.getName() in EntryStoreClient.buildMultipartContent.
+		def tempDir = java.nio.file.Files.createTempDirectory('entrystore-mp-it').toFile()
+		def maliciousFile = new File(tempDir, 'datei.exe%20')
+		maliciousFile.bytes = [0xDE, 0xAD, 0xBE, 0xEF] as byte[]
+
+		when:
+		def putConn = EntryStoreClient.putRequestMultiPart(
+			'/' + contextId + '/resource/' + entryId,
+			maliciousFile
+		)
+
+		then:
+		putConn.responseCode == HTTP_CREATED
+
+		when:
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId)
+		def entryJson = JSON_PARSER.parseText(entryConn.inputStream.text)
+		def entryUri = EntryStoreClient.baseUrl + '/' + contextId + '/entry/' + entryId
+		def resourceUri = entryJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE][0]['value'].toString()
+		def rdfsLabel = 'http://www.w3.org/2000/01/rdf-schema#label'
+
+		then:
+		entryConn.responseCode == HTTP_OK
+		entryJson['info'][resourceUri][rdfsLabel][0]['value'] == 'datei.exe_dangerous'
+
+		cleanup:
+		maliciousFile?.delete()
+		tempDir?.deleteDir()
 	}
 
 }
