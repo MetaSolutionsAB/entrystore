@@ -6,6 +6,7 @@ import org.apache.commons.lang3.RandomStringUtils
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
 
+import java.time.Instant
 
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -36,6 +37,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPasswordSameCookie@test.com', password)
 		EntryStoreClient.creds.put('userForLoginWithCookieChangedOwnPasswordOldCookie@test.com', password)
 		EntryStoreClient.creds.put('userForLoginTemporaryLockout@test.com', password)
+		EntryStoreClient.creds.put('userForDisabledUntilOnEntry@test.com', password)
 	}
 
 	def cleanup() {
@@ -483,11 +485,77 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		when:
 		// wait for the temporary lockout period to pass
-		Thread.sleep(300)
+		Thread.sleep(1100)
 		def login2Connection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
 		login2Connection.getResponseCode() == HTTP_OK
+	}
+
+	def "GET /_principals/entry/{id}?includeAll should expose disabledUntil while user is locked out"() {
+		given:
+		def username = 'userForDisabledUntilOnEntry@test.com'
+		def user = UserUtil.createUser(username)
+		def entryId = user['entryId'].toString()
+		def resourceUri = user['resourceUri'].toString()
+		UserUtil.setUserPassword(resourceUri, password)
+		def entryPath = '/_principals/entry/' + entryId + '?includeAll'
+
+		// sanity: no lockout yet -> field absent on both endpoints
+		def beforeEntryJson = fetchJsonOkAsMap(EntryStoreClient.getRequest(entryPath))
+		assert !(beforeEntryJson['resource'] as Map).containsKey('disabledUntil')
+		def beforeResourceJson = fetchJsonOkAsMap(EntryStoreClient.getRequest(resourceUri))
+		assert !beforeResourceJson.containsKey('disabledUntil')
+
+		// trigger temporary lockout: 3 bad attempts (matches entrystore.auth.temp.lockout.max.attempts=3)
+		def badBody = 'auth_username=' + username + '&auth_password=badPass123'
+		3.times {
+			assert EntryStoreClient.postRequest('/auth/cookie', badBody, '', 'application/x-www-form-urlencoded')
+				.getResponseCode() == HTTP_UNAUTHORIZED
+		}
+
+		when:
+		def lockedEntryConn = EntryStoreClient.getRequest(entryPath)
+		def lockedEntryContentType = lockedEntryConn.getContentType()
+		def lockedEntryJson = fetchJsonOkAsMap(lockedEntryConn)
+		def lockedResource = lockedEntryJson['resource'] as Map
+		def disabledUntilFromEntry = Instant.parse(lockedResource['disabledUntil'].toString())
+
+		then:
+		lockedEntryContentType.contains('application/json')
+		// active lockout must end in the future; 1s configured duration + small skew tolerance
+		disabledUntilFromEntry.isAfter(Instant.now())
+		disabledUntilFromEntry.isBefore(Instant.now().plusSeconds(2))
+
+		when:
+		def lockedResourceJson = fetchJsonOkAsMap(EntryStoreClient.getRequest(resourceUri))
+		def disabledUntilFromResource = Instant.parse(lockedResourceJson['disabledUntil'].toString())
+
+		then:
+		// both endpoints must agree on the lockout instant
+		disabledUntilFromResource == disabledUntilFromEntry
+
+		when:
+		// outlast the 1s lockout window with comfortable slack for slow CI / GC pauses
+		Thread.sleep(2000)
+		def afterEntryJson = fetchJsonOkAsMap(EntryStoreClient.getRequest(entryPath))
+		def afterResourceJson = fetchJsonOkAsMap(EntryStoreClient.getRequest(resourceUri))
+
+		then:
+		!(afterEntryJson['resource'] as Map).containsKey('disabledUntil')
+		!afterResourceJson.containsKey('disabledUntil')
+	}
+
+	private static Map fetchJsonOkAsMap(HttpURLConnection conn) {
+		def code = conn.getResponseCode()
+		def body
+		try {
+			body = code == HTTP_OK ? conn.inputStream.text : (conn.errorStream?.text ?: '')
+		} finally {
+			conn.disconnect()
+		}
+		assert code == HTTP_OK: "Expected 200 OK but got ${code} — body: ${body}"
+		return JSON_PARSER.parseText(body) as Map
 	}
 
 }
