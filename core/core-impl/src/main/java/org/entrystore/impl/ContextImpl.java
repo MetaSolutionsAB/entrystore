@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -702,35 +702,26 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	public Entry getByEntryURI(URI entryURI) {
-		synchronized (softCache) {
-			Entry entry = softCache.getByEntryURI(entryURI);
-			if (entry != null) {
-				//			checkAccess(entry, AccessProperty.ReadMetadata);
-				return entry;
-			}
-
-			try {
-				return getByMMdURIDirect(entryURI);
-			} catch (RepositoryException e) {
-				log.error(e.getMessage(), e);
-			}
-			return null;
+		Entry entry = softCache.getByEntryURI(entryURI);
+		if (entry != null) {
+			return entry;
 		}
+
+		try {
+			return getByMMdURIDirect(entryURI);
+		} catch (RepositoryException e) {
+			log.error(e.getMessage(), e);
+		}
+		return null;
 	}
 
 	private Entry getByMMdURIDirect(URI entryURI) throws RepositoryException {
-		RepositoryConnection rc = null;
-		Entry result;
-		try {
-			rc = this.entry.getRepository().getConnection();
-			result = getByMMdURIDirect(entryURI, rc);
+		try (RepositoryConnection rc = this.entry.getRepository().getConnection()) {
+			return getByMMdURIDirect(entryURI, rc);
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
-		} finally {
-			rc.close();
 		}
-		return result;
 	}
 
 	private Entry getByMMdURIDirect(URI entryURI, RepositoryConnection rc) throws RepositoryException {
@@ -753,17 +744,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 					initResource(newEntry);
 				}
 				softCache.put(newEntry);
-				if (GraphType.Context.equals(newEntry.getGraphType()) &&
-					EntryType.Local.equals(newEntry.getEntryType())) {
-					org.entrystore.Resource resource = newEntry.getResource();
-					if (resource != null) {
-						((Context) resource).initializeSystemEntries();
-					} else {
-						log.error("Entry's resource is null: {}", newEntry.getEntryURI());
-					}
-				}
-
-				// checkAccess(newEntry, AccessProperty.ReadMetadata);
 			} else {
 				newEntry = null;
 			}
