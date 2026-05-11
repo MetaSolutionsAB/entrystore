@@ -53,6 +53,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.concurrent.RejectedExecutionException;
+
 /**
  * Generic exception handler for application-specific exceptions.
  * Builds a consistent {@link ErrorResponse} envelope for every handled exception type, including
@@ -247,6 +249,21 @@ public class AppExceptionHandler {
 				.status(ex.getStatus().value())
 				.path(request.getRequestURI())
 				.error(ex.getMessage())
+				.build();
+		return jsonResponse(responseBody);
+	}
+
+	@ExceptionHandler(RejectedExecutionException.class)
+	public ResponseEntity<ErrorResponse> handleRejectedExecution(RejectedExecutionException ex,
+																 HttpServletRequest request) {
+		// Thrown by AbortPolicy when the bounded MVC async executor (mvc.async.*) overflows.
+		// 503 lets the client back off and retry rather than treating it as a server fault.
+		log.warn("Async dispatch rejected (overflow) at endpoint '{}': {}",
+				request.getRequestURI(), ex.getMessage());
+		ErrorResponse responseBody = ErrorResponse.builder()
+				.status(HttpStatus.SERVICE_UNAVAILABLE.value())
+				.path(request.getRequestURI())
+				.error("Server temporarily overloaded; retry later")
 				.build();
 		return jsonResponse(responseBody);
 	}

@@ -26,7 +26,6 @@ import spock.lang.Stepwise
 import static java.net.HttpURLConnection.HTTP_MOVED_TEMP
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
-import static java.nio.charset.StandardCharsets.UTF_8
 
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 @Stepwise
@@ -109,7 +108,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		assert formActionUrl: 'Form action URL not found in login page'
 		formActionUrl = StringEscapeUtils.unescapeHtml4(formActionUrl)
 
-		def loginFormData = "username=${URLEncoder.encode(testUsername, UTF_8)}&password=${URLEncoder.encode(testUserPassword, UTF_8)}"
+		def loginFormData = createFormBody([username: testUsername, password: testUserPassword])
 
 		when: 'Submit login credentials to Keycloak'
 		def submitLoginConn = EntryStoreClient.postRequest(formActionUrl, loginFormData, '',
@@ -174,7 +173,7 @@ class ZzzCasLoginIT extends KeycloakBaseSpec {
 		def adminFormActionUrl = StringEscapeUtils.unescapeHtml4(adminFormActionMatcher[0][1])
 
 		and: 'Submit admin credentials'
-		def adminLoginFormData = "username=${URLEncoder.encode('admin', UTF_8)}&password=${URLEncoder.encode('adminpassword', UTF_8)}"
+		def adminLoginFormData = createFormBody([username: 'admin', password: 'adminpassword'])
 		def adminSubmitConn = EntryStoreClient.postRequest(adminFormActionUrl, adminLoginFormData, '',
 			'application/x-www-form-urlencoded', [Cookie: adminCookieHeader])
 		def adminTicketUrl = adminSubmitConn.getHeaderField('Location')

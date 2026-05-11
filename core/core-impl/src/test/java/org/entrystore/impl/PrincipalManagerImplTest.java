@@ -30,7 +30,13 @@ import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Set;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -154,6 +160,48 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 		}
 	}
 
+
+	@Test
+	public void getGroupUris_skipsNullEntriesFromConcurrentDelete() {
+		// Pin the null-guard added in PrincipalManagerImpl.getGroupUris(URI): getEntries()
+		// lists URIs, but a concurrent delete can make a subsequent getByEntryURI() return
+		// null for one of those URIs. Without the guard, getGraphType() NPEs and the access-
+		// control check unwinds with an unspecific 500. The guard converts that into the
+		// documented best-effort behaviour: skip stale URIs, return what is currently visible.
+		PrincipalManagerImpl spied = spy((PrincipalManagerImpl) pm);
+
+		// Listing returns a stale URI alongside the real ones.
+		URI staleUri = URI.create("http://example.org/_principals/entry/stale-uri-9999");
+		Set<URI> entriesWithStale = new LinkedHashSet<>(spied.getEntries());
+		entriesWithStale.add(staleUri);
+		doReturn(entriesWithStale).when(spied).getEntries();
+
+		// And getByEntryURI returns null for that stale URI (the concurrent delete).
+		doAnswer(invocation -> {
+			URI requested = invocation.getArgument(0);
+			if (staleUri.equals(requested)) {
+				return null;
+			}
+			return invocation.callRealMethod();
+		}).when(spied).getByEntryURI(any(URI.class));
+
+		// Iterate as admin so getByEntryURI can resolve every real principal entry; the test's
+		// concern is the null path, not the ACL path. Production callers set the authenticated
+		// user to admin/guest before calling into here.
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		URI donaldUri = pm.getPrincipalEntry("Donald").getResourceURI();
+		Set<URI> groupUris = spied.getGroupUris(donaldUri);
+
+		// Stronger assertion than mere non-null: Donald is a member of friendsOfMickey in the
+		// Disney suite; the iteration must continue PAST the stale URI and return the real
+		// group memberships. A regression that catches NPE silently and bails out early would
+		// produce an empty set; a regression that propagates NPE would throw.
+		URI friendsOfMickeyUri = pm.getPrincipalEntry("friendsOfMickey").getResourceURI();
+		assertNotNull(groupUris, "groupUris must be non-null when the listing contains stale URIs");
+		assertTrue(groupUris.contains(friendsOfMickeyUri),
+				"groupUris must include Donald's friendsOfMickey membership despite the stale URI; "
+						+ "got " + groupUris);
+	}
 
 	@Test
 	public void usersCheck() {

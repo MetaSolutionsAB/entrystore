@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -73,60 +73,133 @@ public class PublicRepository {
 
 	private final Queue<Entry> deleteQueue = Queues.newConcurrentLinkedQueue();
 
+	// Wakes the EntrySubmitter when an entry is enqueued so it does not have to wait out its
+	// idle timeout. The 10 s timeout on wait() is defense against spurious wakeups (per
+	// Object.wait spec) and a heartbeat for programming errors elsewhere; in steady state the
+	// submitter wakes within microseconds of an enqueue. Lost-notify is prevented by the
+	// recheck-under-lock pattern in run(): the producer (enqueue/remove → signalSubmitter)
+	// holds the same queueSignal monitor while calling notifyAll, so a notify that arrived
+	// during the consumer's outer emptiness check is observed via the now-non-empty queue
+	// when the recheck-under-lock runs, instead of being delivered to a wait that hasn't
+	// started.
+	private final Object queueSignal = new Object();
+
 	private static final int BATCH_SIZE = 1000;
+
+	private static final long IDLE_TIMEOUT_MS = 10_000;
 
 	public class EntrySubmitter extends Thread {
 
 		@Override
 		public void run() {
 			while (!interrupted()) {
-				postQueue.cleanUp();
-				int batchCount = 0;
+				try {
+					runOnce();
+				} catch (RuntimeException e) {
+					// Fault isolation: an unchecked exception from a single iteration's update/remove
+					// batch must NOT kill the submitter thread — that would silently disable public-repo
+					// mirroring for the rest of the JVM lifetime. Log and continue to the next iteration.
+					log.error("Public Repository submitter caught unchecked exception, continuing", e);
+					// Wait on queueSignal (rather than Thread.sleep) so an enqueue/remove during a
+					// transient-failure recovery window can short-circuit the backoff; otherwise the
+					// consumer would block for the full second after the failure cleared, accruing
+					// queue depth a producer burst would only have to drain. The 1 s ceiling caps
+					// CPU usage when the failure is persistent.
+					synchronized (queueSignal) {
+						try {
+							queueSignal.wait(1000);
+						} catch (InterruptedException ie) {
+							Thread.currentThread().interrupt();
+							log.info("Public Repository submitter got interrupted during failure backoff, shutting down submitter thread");
+							break;
+						}
+					}
+				}
+			}
+		}
 
-				if (postQueue.estimatedSize() > 0 || !deleteQueue.isEmpty()) {
-					if (!deleteQueue.isEmpty()) {
-						Set<Entry> entriesToRemove = new HashSet<>();
-						synchronized (deleteQueue) {
-							while (batchCount < BATCH_SIZE) {
-								Entry e = deleteQueue.poll();
-								if (e == null) {
-									break;
-								}
-								entriesToRemove.add(e);
-								batchCount++;
+		private void runOnce() {
+			postQueue.cleanUp();
+			int batchCount = 0;
+
+			// Use asMap().isEmpty() instead of estimatedSize() > 0: Caffeine's estimatedSize() is
+			// documented as approximate (per Cache.estimatedSize JavaDoc) and can lag concurrent
+			// puts; asMap().isEmpty() defers to the backing ConcurrentHashMap and is authoritative,
+			// so the idle branch never sleeps with work already enqueued.
+			if (!postQueue.asMap().isEmpty() || !deleteQueue.isEmpty()) {
+				if (!deleteQueue.isEmpty()) {
+					Set<Entry> entriesToRemove = new HashSet<>();
+					synchronized (deleteQueue) {
+						while (batchCount < BATCH_SIZE) {
+							Entry e = deleteQueue.poll();
+							if (e == null) {
+								break;
 							}
+							entriesToRemove.add(e);
+							batchCount++;
 						}
-						if (batchCount > 0) {
-							log.info("Removing " + batchCount + " entries from Public Repository, " + deleteQueue.size() + " entries remaining in removal queue");
+					}
+					if (batchCount > 0) {
+						log.info("Removing {} entries from Public Repository, {} entries remaining in removal queue",
+								batchCount, deleteQueue.size());
+						try {
 							removeEntries(entriesToRemove);
+						} catch (RuntimeException e) {
+							// Surface which entries were lost; the outer fault-isolation catch keeps the
+							// thread alive but otherwise discards this information.
+							log.error("removeEntries failed; dropped {} entries: {}",
+									entriesToRemove.size(),
+									entriesToRemove.stream().map(Entry::getEntryURI).toList());
+							throw e;
 						}
 					}
-					if (postQueue.estimatedSize() > 0) {
-						Set<Entry> entriesToUpdate = new HashSet<>();
-						synchronized (postQueue) {
-							ConcurrentMap<URI, Entry> postQueueMap = postQueue.asMap();
-							Iterator<URI> it = postQueueMap.keySet().iterator();
-							while (batchCount < BATCH_SIZE && it.hasNext()) {
-								URI key = it.next();
-								Entry entry = postQueueMap.get(key);
-								postQueueMap.remove(key, entry);
-								if (entry == null) {
-									log.warn("Value for key " + key + " is null in Public Repository submit queue");
-								}
-								entriesToUpdate.add(entry);
-								batchCount++;
+				}
+				if (!postQueue.asMap().isEmpty()) {
+					Set<Entry> entriesToUpdate = new HashSet<>();
+					synchronized (postQueue) {
+						ConcurrentMap<URI, Entry> postQueueMap = postQueue.asMap();
+						Iterator<URI> it = postQueueMap.keySet().iterator();
+						while (batchCount < BATCH_SIZE && it.hasNext()) {
+							URI key = it.next();
+							Entry entry = postQueueMap.get(key);
+							postQueueMap.remove(key, entry);
+							if (entry == null) {
+								log.warn("Value for key {} is null in Public Repository submit queue", key);
 							}
+							entriesToUpdate.add(entry);
+							batchCount++;
 						}
-						postQueue.cleanUp();
-						log.info("Sending " + entriesToUpdate.size() + " entries for update in Public Repository, " + postQueue.estimatedSize() + " entries remaining in post queue");
-						updateEntries(entriesToUpdate);
 					}
-				} else {
+					postQueue.cleanUp();
+					log.info("Sending {} entries for update in Public Repository, {} entries remaining in post queue",
+							entriesToUpdate.size(), postQueue.asMap().size());
 					try {
-						Thread.sleep(10000);
-					} catch (InterruptedException ie) {
-						log.info("Public Repository submitter got interrupted, shutting down submitter thread");
-						return;
+						updateEntries(entriesToUpdate);
+					} catch (RuntimeException e) {
+						log.error("updateEntries failed; dropped {} entries: {}",
+								entriesToUpdate.size(),
+								entriesToUpdate.stream()
+										.filter(java.util.Objects::nonNull)
+										.map(Entry::getEntryURI)
+										.toList());
+						throw e;
+					}
+				}
+			} else {
+				// Block until enqueue()/remove() signals work is available, or until the timeout
+				// fires as defense against spurious wakeups (per Object.wait spec) and as a
+				// heartbeat. The recheck below closes the lost-notify race: if a notify arrived
+				// between the outer if and entering this synchronized block, it is observed here
+				// via the now-non-empty queue instead of being delivered to a wait that hasn't
+				// started.
+				synchronized (queueSignal) {
+					if (postQueue.asMap().isEmpty() && deleteQueue.isEmpty()) {
+						try {
+							queueSignal.wait(IDLE_TIMEOUT_MS);
+						} catch (InterruptedException ie) {
+							log.info("Public Repository submitter got interrupted, shutting down submitter thread");
+							Thread.currentThread().interrupt();
+						}
 					}
 				}
 			}
@@ -200,6 +273,7 @@ public class PublicRepository {
 			log.info("Adding document to update queue: " + entryURI);
 			postQueue.put(entryURI, entry);
 		}
+		signalSubmitter();
 	}
 
 	public void remove(Entry entry) {
@@ -207,6 +281,13 @@ public class PublicRepository {
 		synchronized (deleteQueue) {
 			log.info("Adding entry to delete queue: " + entryURI);
 			deleteQueue.add(entry);
+		}
+		signalSubmitter();
+	}
+
+	private void signalSubmitter() {
+		synchronized (queueSignal) {
+			queueSignal.notifyAll();
 		}
 	}
 

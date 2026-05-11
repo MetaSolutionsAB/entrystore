@@ -24,7 +24,6 @@ import spock.lang.Shared
 import spock.lang.Stepwise
 
 import static java.net.HttpURLConnection.HTTP_OK
-import static java.nio.charset.StandardCharsets.UTF_8
 
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 @Stepwise
@@ -66,7 +65,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 
 	def '1. GET /auth/saml should start SAML authentication flow - redirect to IDP with SAMLRequest'() {
 		when:
-		def connection = EntryStoreClient.getRequest('/auth/saml?successurl=' + URLEncoder.encode(successLoginUrl, UTF_8),
+		def connection = EntryStoreClient.getRequest('/auth/saml' + convertMapToQueryParams([successurl: successLoginUrl]),
 			null, null)
 		connection.setInstanceFollowRedirects(true)
 
@@ -95,14 +94,14 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 	def '2. Send SAMLRequest to IDP and get login page'() {
 		given:
 		assert this.samlRequestSaved: 'idlSamlRequestSaved is null or empty, did the previous test step execute correctly?'
-		def postData = 'SAMLRequest=' + URLEncoder.encode(this.samlRequestSaved, UTF_8)
+		def postData = [SAMLRequest: this.samlRequestSaved]
 		if (this.relayStateSaved) {
-			postData += '&RelayState=' + URLEncoder.encode(this.relayStateSaved, UTF_8)
+			postData['RelayState'] = this.relayStateSaved
 		}
 
 		when: 'SamlRequest is send to IDP'
-		def sendSamlReqToIdpConn = EntryStoreClient.postRequest(keycloakTestRealmUrl, postData, null,
-			'application/x-www-form-urlencoded')
+		def sendSamlReqToIdpConn = EntryStoreClient.postRequest(keycloakTestRealmUrl, createFormBody(postData),
+			null, 'application/x-www-form-urlencoded')
 
 		then: 'IDP should redirect to login page, after successful verification of the client'
 		sendSamlReqToIdpConn.getResponseCode() in [302, 303, 307]
@@ -145,7 +144,7 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		// Unescape HTML entities in the URL (Keycloak escapes &amp;)
 		formActionUrl = StringEscapeUtils.unescapeHtml4(formActionUrl)
 
-		def loginFormData = "username=${URLEncoder.encode(testUsername, UTF_8)}&password=${URLEncoder.encode(testUserPassword, UTF_8)}"
+		def loginFormData = createFormBody([username: testUsername, password: testUserPassword])
 
 		when: 'Submit login credentials to IDP'
 		def submitLoginConn = EntryStoreClient.postRequest(formActionUrl, loginFormData, null,
@@ -185,13 +184,13 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		String samlRelayState = samlRelayStateMatcher ? StringEscapeUtils.unescapeHtml4(samlRelayStateMatcher[0][1]) : ''
 
 		when: 'POST SAMLResponse back to Service Provider'
-		def spPostData = "SAMLResponse=${URLEncoder.encode(samlResponseValue, UTF_8)}"
+		def spPostData = [SAMLResponse: samlResponseValue]
 		if (samlRelayState) {
-			spPostData += "&RelayState=${URLEncoder.encode(samlRelayState, UTF_8)}"
+			spPostData['RelayState'] = samlRelayState
 		}
 
-		def spCallbackConn = EntryStoreClient.postRequest(spCallbackUrl, spPostData, null,
-			'application/x-www-form-urlencoded')
+		def spCallbackConn = EntryStoreClient.postRequest(spCallbackUrl, createFormBody(spPostData),
+			null, 'application/x-www-form-urlencoded')
 
 		then: 'Service Provider should authenticate the user, redirecting to success URL'
 		spCallbackConn.getResponseCode() in [302, 303, 307]
