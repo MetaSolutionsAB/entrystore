@@ -1636,10 +1636,11 @@ class ResourceIT extends BaseSpec {
 		entryConn.responseCode == HTTP_OK
 		entryJson['info'][resourceUri][rdfsLabel][0]['value'] == expectedStored
 
-		// Only ASCII-safe header shapes are exercised here — non-ASCII bytes (raw NBSP, raw
-		// ZWSP) in HTTP header values have ambiguous encoding across HttpURLConnection /
-		// Jetty and are covered end-to-end by FileUtilTest. The encoded shapes below survive
-		// ASCII transmission and exercise decode + strip in the production code path.
+		// Only ASCII-safe header shapes are exercised here — non-ASCII bytes (raw NBSP,
+		// raw ZWSP) in HTTP header values have ambiguous encoding across HttpURLConnection
+		// / Jetty. The sanitization of decoded non-ASCII code points is covered at the
+		// unit level by FileUtilTest; the encoded shapes below survive ASCII transmission
+		// and exercise decode + strip end-to-end through the controller.
 		where:
 		shape                | filenameInHeader        || expectedStored
 		'%20 (encoded space)'| 'datei.exe%20'          || 'datei.exe_dangerous'
@@ -1661,11 +1662,18 @@ class ResourceIT extends BaseSpec {
 		def tempDir = java.nio.file.Files.createTempDirectory('entrystore-mp-it').toFile()
 		def maliciousFile = new File(tempDir, 'datei.exe%20')
 		maliciousFile.bytes = [0xDE, 0xAD, 0xBE, 0xEF] as byte[]
+		// Distinct per-part Content-Type — pins that the multipart code path was exercised.
+		// A routing regression to the raw PUT handler would store the request-level
+		// 'multipart/form-data; boundary=...' instead of this marker.
+		def partContentType = 'application/x-test-multipart-marker'
 
 		when:
 		def putConn = EntryStoreClient.putRequestMultiPart(
 			'/' + contextId + '/resource/' + entryId,
-			maliciousFile
+			maliciousFile,
+			'admin',
+			[:],
+			partContentType
 		)
 
 		then:
@@ -1681,6 +1689,7 @@ class ResourceIT extends BaseSpec {
 		then:
 		entryConn.responseCode == HTTP_OK
 		entryJson['info'][resourceUri][rdfsLabel][0]['value'] == 'datei.exe_dangerous'
+		entryJson['info'][resourceUri][NameSpaceConst.DC_TERM_FORMAT][0]['value'] == partContentType
 
 		cleanup:
 		maliciousFile?.delete()

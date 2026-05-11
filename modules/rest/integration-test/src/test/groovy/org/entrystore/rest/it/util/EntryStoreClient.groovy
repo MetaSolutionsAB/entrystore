@@ -83,21 +83,25 @@ class EntryStoreClient {
 		}
 	}
 
-	def static putRequestMultiPart(String path, File file, String asUser = 'admin', Map<String, String> formData = [:]) {
+	def static putRequestMultiPart(String path, File file, String asUser = 'admin',
+								   Map<String, String> formData = [:],
+								   String partContentType = 'application/octet-stream') {
 		def boundary = '----FormBoundary' + System.currentTimeMillis()
 		def contentType = 'multipart/form-data; boundary=' + boundary
 
-		def content = buildMultipartContent(file, formData, boundary)
+		def content = buildMultipartContent(file, formData, boundary, partContentType)
 		def inputStream = new ByteArrayInputStream(content)
 
 		return sendRequestAsStream(HttpMethod.PUT, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
 	}
 
-	def static postRequestMultiPart(String path, File file, String asUser = 'admin', Map<String, String> formData = [:]) {
+	def static postRequestMultiPart(String path, File file, String asUser = 'admin',
+									Map<String, String> formData = [:],
+									String partContentType = 'application/octet-stream') {
 		def boundary = '----FormBoundary' + System.currentTimeMillis()
 		def contentType = 'multipart/form-data; boundary=' + boundary
 
-		def content = buildMultipartContent(file, formData, boundary)
+		def content = buildMultipartContent(file, formData, boundary, partContentType)
 		def inputStream = new ByteArrayInputStream(content)
 
 		return sendRequestAsStream(HttpMethod.POST, path, inputStream, asUser, contentType, ['Content-Length': content.length.toString()])
@@ -169,7 +173,8 @@ class EntryStoreClient {
 		return cookies
 	}
 
-	def static buildMultipartContent(File file, Map<String, String> formData, String boundary) {
+	def static buildMultipartContent(File file, Map<String, String> formData, String boundary,
+									 String partContentType = 'application/octet-stream') {
 		def os = new ByteArrayOutputStream()
 
 		formData.each { name, value ->
@@ -180,7 +185,7 @@ class EntryStoreClient {
 
 		os.write("--${boundary}\r\n".bytes)
 		os.write("Content-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"\r\n".bytes)
-		os.write("Content-Type: application/octet-stream\r\n\r\n".bytes)
+		os.write("Content-Type: ${partContentType}\r\n\r\n".bytes)
 		os.write(file.bytes)
 		os.write("\r\n--${boundary}--\r\n".bytes)
 

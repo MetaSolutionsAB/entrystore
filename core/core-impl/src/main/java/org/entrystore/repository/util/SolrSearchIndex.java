@@ -19,7 +19,6 @@ package org.entrystore.repository.util;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
-import org.apache.commons.lang3.ObjectUtils;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -845,7 +844,6 @@ public class SolrSearchIndex implements SearchIndex {
 					alreadySetLanguages.add(missingLanguageString);
 				}
 			} else {
-				ObjectUtils.allNull(literalLanguages);
 				for (String language : literalLanguages) {
 					if (language != null && language.equalsIgnoreCase(defaultSortLang) && !alreadySetLanguages.contains(defaultString)) {
 						// if a default sorting language is configured, we create a field for that
@@ -1276,9 +1274,6 @@ public class SolrSearchIndex implements SearchIndex {
 
 		if (offset > -1) {
 			query.setStart(offset);
-		}
-		if (-1 > -1) {
-			query.setRows(-1);
 		}
 
 		// We only need the "uri" field in the response,

@@ -227,6 +227,65 @@ class FileUtilTest {
 		void returnsNullForNullInput() {
 			assertNull(FileUtil.sanitizeFilename(null));
 		}
+
+		@Test
+		void appendsSuffixForMultipleTrailingDots() {
+			// Loops the trailing-noise scan across all three dots — protects against an
+			// `if`→`while` mutation in stripTrailingNoise that the single-dot test wouldn't catch.
+			assertEquals("datei.exe_dangerous", FileUtil.sanitizeFilename("datei.exe..."));
+		}
+
+		@Test
+		void appendsSuffixForTrailingBom() {
+			// BOM/ZWNBSP (U+FEFF) is a Cf/FORMAT-category character distinct from ZWSP;
+			// stripped by the FORMAT branch of isTrailingNoise.
+			assertEquals("evil.exe_dangerous", FileUtil.sanitizeFilename("evil.exe﻿"));
+		}
+
+		@Test
+		void appendsSuffixForDecodeFailureOnSafeExtension() {
+			// Decode-failure path appends _dangerous unconditionally, even when the resolved
+			// extension would have been safe — a future re-ordering of the fall-through that
+			// drops the suffix on the safe branch would silently regress this contract.
+			// The original input (after strip + trailing-noise) is preserved so encoded
+			// hostile forms remain visible in the stored name.
+			assertEquals("datei.txt%2_dangerous", FileUtil.sanitizeFilename("datei.txt%2"));
+		}
+
+		@Test
+		void appendsSuffixForQuadrupleEncodedSpace() {
+			// %25252520 needs 4 decode passes to reach a literal space; the MAX_DECODE_ITERATIONS
+			// cap is 3, so the loop exits with a residual %-escape ("datei.exe%20") and
+			// decodeUntilStable fails closed. Decode-failure path preserves the raw input
+			// (after strip + trailing-noise) and appends _dangerous.
+			assertEquals("datei.exe%25252520_dangerous", FileUtil.sanitizeFilename("datei.exe%25252520"));
+		}
+
+		@Test
+		void appendsSuffixForDoubleExtensionSpoof() {
+			// "image.png.exe%20" — multi-dot with a dangerous segment AND encoded trailing
+			// junk; pins decode + trailing-strip + dangerous-extension all-in-one.
+			assertEquals("image.png.exe_dangerous", FileUtil.sanitizeFilename("image.png.exe%20"));
+		}
+
+		@Test
+		void appendsSuffixForEmbeddedControlChar() {
+			// %00 in the middle of the name decodes to U+0000, which survives the trailing-only
+			// strip and would leak into Content-Disposition response headers (control chars
+			// are invalid in HTTP header values per RFC 9110 §5.5). The embedded-control
+			// check flags this; the decode-failure-style return preserves the raw encoded
+			// form so the suffix is visible in logs and stored names.
+			assertEquals("safe%00name.txt_dangerous", FileUtil.sanitizeFilename("safe%00name.txt"));
+		}
+
+		@Test
+		void appendsSuffixForFullwidthExe() {
+			// Fullwidth Latin (U+FF45 U+FF58 U+FF45 = 'ｅｘｅ') passes the dangerous-extension
+			// check without NFKC; some filesystems / archive extractors normalize on save
+			// and the file then materializes as report.exe. NFKC folds these to ASCII before
+			// the extension check.
+			assertEquals("report.exe_dangerous", FileUtil.sanitizeFilename("report.ｅｘｅ"));
+		}
 	}
 
 	@Nested
