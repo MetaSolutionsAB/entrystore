@@ -22,7 +22,6 @@ import org.entrystore.rest.it.util.EntryStoreClient
 import static java.net.HttpURLConnection.HTTP_ACCEPTED
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
-import static java.net.HttpURLConnection.HTTP_INTERNAL_ERROR
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -116,11 +115,12 @@ class CsrfIT extends BaseSpec {
 		def conn = EntryStoreClient.postRequest('/auth/signup', body, '')
 
 		then:
-		// HTTP_BAD_REQUEST is the expected business response for the fake recaptcha; HTTP_OK would
-		// indicate signup proceeded (acceptable if recaptcha is bypassed in the test profile). 5xx
-		// or 401/403 would indicate a real regression.
-		conn.getResponseCode() < HTTP_INTERNAL_ERROR
-		[HTTP_OK, HTTP_BAD_REQUEST].contains(conn.getResponseCode())
+		// HTTP_BAD_REQUEST is the deterministic business response for the fake recaptcha in the
+		// test profile. A 5xx (server crash) or 401/403 (CSRF rejection) would indicate a real
+		// regression. Narrow == HTTP_BAD_REQUEST so a controller-validation regression that started
+		// returning 400 for legitimate input would still fail when the recaptcha-rejection 400 was
+		// reachable, but we'd notice if the rejection mode itself changed (status moves to 200/422).
+		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
 	def "PUT /management/logging as cookie-authenticated user without CSRF token should be rejected"() {
@@ -147,11 +147,11 @@ class CsrfIT extends BaseSpec {
 		def conn = EntryStoreClient.putRequest('/management/logging', body, 'admin')
 
 		then:
-		// 202 Accepted from the controller (empty config no-ops) or 400 if validation rejects the
-		// empty body — but never 401/403 from the CSRF filter and never 5xx from a server crash.
-		// A weak "not 401 and not 403" would pass on a server crash and falsely report success.
-		conn.getResponseCode() < HTTP_INTERNAL_ERROR
-		[HTTP_ACCEPTED, HTTP_BAD_REQUEST].contains(conn.getResponseCode())
+		// 202 Accepted is the controller's @ResponseStatus for a successful PUT — empty body
+		// deserializes to a no-op SetLoggingConfigRequestBody. A 401/403 would mean CSRF blocked
+		// it; a 5xx would mean the controller crashed; a 400 would mean validation regressed.
+		// Narrow == HTTP_ACCEPTED so any of those drift modes fails the test.
+		conn.getResponseCode() == HTTP_ACCEPTED
 	}
 
 	def "POST with Basic auth (no session cookie) should succeed without CSRF token"() {

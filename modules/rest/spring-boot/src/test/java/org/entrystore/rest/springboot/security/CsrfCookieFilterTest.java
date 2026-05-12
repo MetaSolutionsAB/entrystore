@@ -95,9 +95,9 @@ class CsrfCookieFilterTest {
 
 	@Test
 	void unrelatedCookieDoesNotTriggerResolutionOnSafeMethod() throws Exception {
-		// An XSRF-TOKEN cookie alone does not trigger SPA token resolution unless either the method is
-		// unsafe or the session cookie is present — a bare unrelated cookie on a GET stays the
-		// server-to-server fast path.
+		// A bare unrelated cookie on a safe-method GET does not trigger token resolution — only an
+		// unsafe method, an XSRF-TOKEN cookie, or the session cookie does. Server-to-server GETs without
+		// any of these stay on the fast path.
 		var resolutions = new AtomicInteger();
 		var request = new MockHttpServletRequest("GET", "/_principals/groups");
 		request.setCookies(new Cookie("unrelated", "value"));

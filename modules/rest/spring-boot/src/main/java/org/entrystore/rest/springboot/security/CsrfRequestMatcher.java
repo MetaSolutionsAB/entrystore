@@ -35,10 +35,12 @@ import java.util.Set;
  *   3. path is not on the explicit exemption list (login, signup, password reset,
  *      and the SAML ACS callback)
  *
- * <p>Mutating endpoints under {@code /management/**} (logging, solr reindex, actuator
- * shutdown) are intentionally NOT exempt: a cookie-authenticated user — including a
- * regular user able to POST {@code /management/solr} — is in scope for CSRF. Read-only
- * actuator/status calls remain exempt by virtue of being GETs (see {@link #SAFE_METHODS}).
+ * <p>Mutating endpoints under {@code /management/**} (logging, solr reindex) are
+ * intentionally NOT exempt: a cookie-authenticated user — including a regular user able
+ * to POST {@code /management/solr} — is in scope for CSRF. The path-pattern protection
+ * extends to any future mutating {@code /management/**} endpoint without needing matcher
+ * changes. Read-only actuator/status calls remain exempt by virtue of being GETs (see
+ * {@link #SAFE_METHODS}).
  * Ops scripts that drive these endpoints should authenticate via Basic auth (which sets
  * no session cookie and therefore skips CSRF) or forward {@code X-XSRF-TOKEN} like other
  * cookie-authenticated clients.

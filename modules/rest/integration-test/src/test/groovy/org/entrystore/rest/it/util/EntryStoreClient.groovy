@@ -205,7 +205,9 @@ class EntryStoreClient {
 
 	private static String extractCookieValue(String setCookieLine, String cookieName) {
 		def prefix = cookieName + '='
-		def start = setCookieLine.indexOf(prefix) + prefix.length()
+		def idx = setCookieLine.indexOf(prefix)
+		if (idx == -1) return null
+		def start = idx + prefix.length()
 		def end = setCookieLine.indexOf(';', start)
 		return end == -1 ? setCookieLine.substring(start) : setCookieLine.substring(start, end)
 	}

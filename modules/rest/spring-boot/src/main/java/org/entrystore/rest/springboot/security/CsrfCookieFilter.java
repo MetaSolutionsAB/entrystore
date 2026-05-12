@@ -66,12 +66,14 @@ public class CsrfCookieFilter extends OncePerRequestFilter {
 			CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
 			if (csrfToken != null) {
 				csrfToken.getToken();
-			} else if (logger.isDebugEnabled()) {
+			} else {
 				// Defensive — surfaces filter-ordering drift (Spring upgrade, profile that disables CsrfFilter,
 				// attribute key change). Without this branch the SPA silently never sees Set-Cookie: XSRF-TOKEN
-				// and every subsequent cookie-auth mutation fails 401 with no log explaining why.
-				logger.debug("CsrfToken attribute missing on " + request.getMethod() + " " + request.getRequestURI()
-						+ "; XSRF-TOKEN cookie will not be emitted");
+				// and every subsequent cookie-auth mutation fails 401 with no log explaining why. WARN (not DEBUG)
+				// so the diagnostic surfaces in default production log levels — this branch is unreachable when
+				// CsrfFilter is wired correctly, so log spam from a benign cause is not a concern.
+				logger.warn("CsrfToken attribute missing on " + request.getMethod() + " " + request.getRequestURI()
+						+ "; XSRF-TOKEN cookie will not be emitted — check CsrfFilter ordering/configuration");
 			}
 		}
 
