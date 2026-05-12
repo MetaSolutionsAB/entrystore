@@ -338,7 +338,7 @@ class CookieLoginResourceIT extends BaseSpec {
 			currentPassword: password
 		])
 		assert EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, null, null,
-				[Cookie: cookie + '; XSRF-TOKEN=' + csrf, 'X-XSRF-TOKEN': csrf]).getResponseCode() == HTTP_NO_CONTENT
+				EntryStoreClient.csrfHeaders(cookie, csrf)).getResponseCode() == HTTP_NO_CONTENT
 
 		when:
 		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie])
@@ -374,7 +374,7 @@ class CookieLoginResourceIT extends BaseSpec {
 			currentPassword: password
 		])
 		assert EntryStoreClient.putRequest(resourceUri, passwordChangeRequestBody, null, null,
-				[Cookie: cookie2 + '; XSRF-TOKEN=' + csrf2, 'X-XSRF-TOKEN': csrf2]).getResponseCode() == HTTP_NO_CONTENT
+				EntryStoreClient.csrfHeaders(cookie2, csrf2)).getResponseCode() == HTTP_NO_CONTENT
 
 		when:
 		def info = EntryStoreClient.getRequest('/auth/user', null, null, [Cookie: cookie1])

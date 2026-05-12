@@ -19,8 +19,10 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 
+import static java.net.HttpURLConnection.HTTP_ACCEPTED
+import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
-import static java.net.HttpURLConnection.HTTP_FORBIDDEN
+import static java.net.HttpURLConnection.HTTP_INTERNAL_ERROR
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -108,12 +110,17 @@ class CsrfIT extends BaseSpec {
 		])
 
 		when:
-		// Signup is unauthenticated and exempt from CSRF. Business validation may still reject the
-		// request; what matters here is that the CsrfFilter does not block it (no 403 from CSRF).
+		// Signup is unauthenticated and exempt from CSRF. Business validation rejects this body
+		// (the recaptcha is fake) — what matters here is that CSRF doesn't block it (no 401/403) and
+		// the controller doesn't crash (no 5xx). A weak "not forbidden" would pass on a server crash.
 		def conn = EntryStoreClient.postRequest('/auth/signup', body, '')
 
 		then:
-		conn.getResponseCode() != HTTP_FORBIDDEN
+		// HTTP_BAD_REQUEST is the expected business response for the fake recaptcha; HTTP_OK would
+		// indicate signup proceeded (acceptable if recaptcha is bypassed in the test profile). 5xx
+		// or 401/403 would indicate a real regression.
+		conn.getResponseCode() < HTTP_INTERNAL_ERROR
+		[HTTP_OK, HTTP_BAD_REQUEST].contains(conn.getResponseCode())
 	}
 
 	def "PUT /management/logging as cookie-authenticated user without CSRF token should be rejected"() {
@@ -140,10 +147,11 @@ class CsrfIT extends BaseSpec {
 		def conn = EntryStoreClient.putRequest('/management/logging', body, 'admin')
 
 		then:
-		// 202 Accepted from the controller, or 4xx if validation rejects the empty body — but never
-		// 401/403 from the CSRF filter.
-		conn.getResponseCode() != HTTP_UNAUTHORIZED
-		conn.getResponseCode() != HTTP_FORBIDDEN
+		// 202 Accepted from the controller (empty config no-ops) or 400 if validation rejects the
+		// empty body — but never 401/403 from the CSRF filter and never 5xx from a server crash.
+		// A weak "not 401 and not 403" would pass on a server crash and falsely report success.
+		conn.getResponseCode() < HTTP_INTERNAL_ERROR
+		[HTTP_ACCEPTED, HTTP_BAD_REQUEST].contains(conn.getResponseCode())
 	}
 
 	def "POST with Basic auth (no session cookie) should succeed without CSRF token"() {
@@ -184,11 +192,10 @@ class CsrfIT extends BaseSpec {
 		def isolatedAuth = EntryStoreClient.findSetCookie(loginConn, 'auth_token')
 		def isolatedCsrf = EntryStoreClient.findCookieValue(loginConn, 'XSRF-TOKEN')
 		assert isolatedCsrf != null: 'login response must carry XSRF-TOKEN cookie'
-		def cookieHeader = isolatedAuth + '; XSRF-TOKEN=' + isolatedCsrf
 
 		when:
 		def conn = EntryStoreClient.postRequest('/auth/logout', '', '', 'application/json',
-				[Cookie: cookieHeader, 'X-XSRF-TOKEN': isolatedCsrf])
+				EntryStoreClient.csrfHeaders(isolatedAuth, isolatedCsrf))
 
 		then:
 		conn.getResponseCode() == HTTP_NO_CONTENT

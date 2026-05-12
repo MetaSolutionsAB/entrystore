@@ -75,6 +75,7 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.io.IOException;
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -114,6 +115,9 @@ public class SecurityConfig {
 
 	@Value("${server.servlet.session.cookie.secure:true}")
 	private boolean sessionCookieSecure;
+
+	@Value("${entrystore.csrf.cookie-name:XSRF-TOKEN}")
+	private String csrfCookieName;
 
 	private Cookie.SameSite sessionCookieSameSite;
 
@@ -380,25 +384,37 @@ public class SecurityConfig {
 	}
 
 	@Bean
-	public FilterRegistrationBean<CsrfCookieFilter> disableCsrfCookieFilterAutoRegistration(CsrfCookieFilter f) {
-		FilterRegistrationBean<CsrfCookieFilter> reg = new FilterRegistrationBean<>(f);
+	public FilterRegistrationBean<CsrfCookieFilter> disableCsrfCookieFilterAutoRegistration() {
+		FilterRegistrationBean<CsrfCookieFilter> reg = new FilterRegistrationBean<>(csrfCookieFilter);
 		reg.setEnabled(false);
 		return reg;
 	}
 
 	private CookieCsrfTokenRepository csrfTokenRepository() {
+		Objects.requireNonNull(sessionCookieSameSite,
+				"init() must run before csrfTokenRepository() — sessionCookieSameSite is null");
 		var repo = CookieCsrfTokenRepository.withHttpOnlyFalse();
-		boolean secure = sessionCookieSecure || sessionCookieSameSite == Cookie.SameSite.NONE;
+		repo.setCookieName(csrfCookieName);
+		boolean secure = requiresSecureCookie(sessionCookieSecure, sessionCookieSameSite);
 		repo.setCookieCustomizer(builder -> builder
 				.sameSite(sessionCookieSameSite.attributeValue())
 				.secure(secure));
 		return repo;
 	}
 
+	// Package-private static so SecurityConfigTest can drive the four (secure × sameSite) combinations
+	// without constructing the full @RequiredArgsConstructor bean graph. The rule: a cookie must be
+	// flagged Secure when the operator explicitly configured Secure OR when SameSite=None (the latter
+	// is mandated by all modern browsers; without Secure they silently drop the cookie).
+	static boolean requiresSecureCookie(boolean configuredSecure, Cookie.SameSite sameSite) {
+		return configuredSecure || sameSite == Cookie.SameSite.NONE;
+	}
+
 	// Package-private static so SecurityConfigTest can drive it with a MockEnvironment without
 	// constructing the full @RequiredArgsConstructor bean graph.
 	static Cookie.SameSite resolveSessionCookieSameSite(Environment environment) {
-		// Single source of truth for the SameSite enum, shared with servletContextInitializer().
+		// Resolved once in init() and cached in sessionCookieSameSite so csrfTokenRepository() and
+		// servletContextInitializer() agree on the same value.
 		// Binder applies Spring Boot's relaxed binding (case-insensitive enum match) and throws
 		// BindException on typos like "Nonee" — which we surface as a WARN before defaulting to
 		// STRICT, so silent misconfiguration cannot leave Secure=false on a cookie the operator
@@ -410,7 +426,7 @@ public class SecurityConfig {
 		} catch (BindException e) {
 			String raw = environment.getProperty("server.servlet.session.cookie.same-site");
 			log.warn("Invalid server.servlet.session.cookie.same-site value '{}'; falling back to STRICT. "
-					+ "Valid values: NONE, LAX, STRICT.", raw);
+					+ "Valid values: NONE, LAX, STRICT.", raw, e);
 			return Cookie.SameSite.STRICT;
 		}
 	}

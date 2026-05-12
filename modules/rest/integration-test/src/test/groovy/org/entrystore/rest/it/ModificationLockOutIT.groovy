@@ -124,10 +124,7 @@ class ModificationLockOutIT extends BaseSpec {
 		given:
 		def isolatedAuth = EntryStoreClient.authorize('user').toString()
 		def isolatedCsrf = EntryStoreClient.csrfTokens['user']
-		def userCookies = [
-				Cookie        : isolatedAuth + '; XSRF-TOKEN=' + isolatedCsrf,
-				'X-XSRF-TOKEN': isolatedCsrf
-		]
+		def userCookies = EntryStoreClient.csrfHeaders(isolatedAuth, isolatedCsrf.toString())
 		setLockOut(true)
 
 		when:

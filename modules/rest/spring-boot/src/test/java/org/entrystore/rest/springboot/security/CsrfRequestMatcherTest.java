@@ -84,6 +84,39 @@ class CsrfRequestMatcherTest {
 	}
 
 	@Test
+	void unsafeMethodWithSessionCookieOnMultiSegmentSamlAcs_skipsCsrf() {
+		// `/login/saml2/sso/**` must match multi-segment registration ids (e.g. nested IdP paths) —
+		// a regression dropping `**` to `*` would silently break SAML logins through those endpoints.
+		var request = new MockHttpServletRequest("POST", "/login/saml2/sso/idp/extra/segment");
+		request.setCookies(new Cookie("auth_token", "session-id"));
+		assertFalse(matcher.matches(request));
+	}
+
+	@Test
+	void exemptPathOnUnboundMethod_requiresCsrf() {
+		// Exempt paths are bound to a specific HTTP method (POST). A regression that drops the
+		// HttpMethod argument would silently exempt PUT /auth/cookie, DELETE /auth/signup, etc.
+		for (String path : new String[]{"/auth/cookie", "/auth/signup", "/auth/pwreset"}) {
+			var request = new MockHttpServletRequest("PUT", path);
+			request.setCookies(new Cookie("auth_token", "session-id"));
+			assertTrue(matcher.matches(request), "PUT " + path + " must NOT be exempt");
+		}
+	}
+
+	@Test
+	void exemptPathSubpath_requiresCsrf() {
+		// /auth/cookie is exact-match, not prefix-match. Changing it to /auth/cookie/** would create
+		// an exemption hole for arbitrary subpaths under the login endpoint.
+		var request = new MockHttpServletRequest("POST", "/auth/cookie/extra");
+		request.setCookies(new Cookie("auth_token", "session-id"));
+		assertTrue(matcher.matches(request), "POST /auth/cookie/extra must NOT be exempt");
+
+		var request2 = new MockHttpServletRequest("POST", "/auth/signup/extra");
+		request2.setCookies(new Cookie("auth_token", "session-id"));
+		assertTrue(matcher.matches(request2), "POST /auth/signup/extra must NOT be exempt");
+	}
+
+	@Test
 	void unsafeMethodWithSessionCookieOnManagement_requiresCsrf() {
 		// Mutating /management/** endpoints (logging, solr reindex, actuator shutdown) are NOT
 		// exempt — a cookie-authenticated user submitting these is in CSRF scope.

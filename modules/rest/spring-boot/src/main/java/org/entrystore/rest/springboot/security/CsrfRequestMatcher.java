@@ -46,7 +46,8 @@ import java.util.Set;
 @Component
 public class CsrfRequestMatcher implements RequestMatcher {
 
-	private static final Set<String> SAFE_METHODS = Set.of("GET", "HEAD", "TRACE", "OPTIONS");
+	// Shared with CsrfCookieFilter — both filter and matcher agree on the same notion of "safe".
+	public static final Set<String> SAFE_METHODS = Set.of("GET", "HEAD", "TRACE", "OPTIONS");
 
 	private final String sessionCookieName;
 	private final RequestMatcher exemptPaths;

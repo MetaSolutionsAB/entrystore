@@ -154,7 +154,7 @@ class TokenResourceIT extends BaseSpec {
 
 		when:
 		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json',
-				[Cookie: cookie1 + '; XSRF-TOKEN=' + csrf1, 'X-XSRF-TOKEN': csrf1])
+				EntryStoreClient.csrfHeaders(cookie1, csrf1))
 
 		then:
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT
@@ -186,7 +186,7 @@ class TokenResourceIT extends BaseSpec {
 
 		when:
 		def tokensDeleteConnection = EntryStoreClient.deleteRequest('/auth/tokens', body, '', 'application/json',
-				[Cookie: cookie + '; XSRF-TOKEN=' + csrf, 'X-XSRF-TOKEN': csrf])
+				EntryStoreClient.csrfHeaders(cookie, csrf))
 
 		then:
 		tokensDeleteConnection.getResponseCode() == HTTP_NO_CONTENT

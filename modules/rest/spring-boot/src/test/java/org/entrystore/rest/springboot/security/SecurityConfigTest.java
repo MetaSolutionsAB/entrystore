@@ -21,6 +21,8 @@ import org.springframework.boot.web.server.Cookie;
 import org.springframework.mock.env.MockEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SecurityConfigTest {
 
@@ -78,5 +80,28 @@ class SecurityConfigTest {
 		// Empty string isn't a valid SameSite enum constant — must fall back, not throw.
 		var env = new MockEnvironment().withProperty(KEY, "");
 		assertEquals(Cookie.SameSite.STRICT, SecurityConfig.resolveSessionCookieSameSite(env));
+	}
+
+	@Test
+	void requiresSecureCookie_configuredSecureAlwaysSecure() {
+		// Operator opted in to Secure — every SameSite value must produce Secure=true.
+		assertTrue(SecurityConfig.requiresSecureCookie(true, Cookie.SameSite.NONE));
+		assertTrue(SecurityConfig.requiresSecureCookie(true, Cookie.SameSite.LAX));
+		assertTrue(SecurityConfig.requiresSecureCookie(true, Cookie.SameSite.STRICT));
+	}
+
+	@Test
+	void requiresSecureCookie_sameSiteNoneAutoEnablesSecure() {
+		// SameSite=None is illegal without Secure — browsers silently drop the cookie. The CSRF
+		// repo must auto-enable Secure even when the operator did not configure it.
+		assertTrue(SecurityConfig.requiresSecureCookie(false, Cookie.SameSite.NONE));
+	}
+
+	@Test
+	void requiresSecureCookie_laxAndStrictDoNotAutoEnableSecure() {
+		// Local/CI on plain HTTP runs with samesite=lax or strict and secure=off. A bug auto-setting
+		// Secure for LAX/STRICT would cause browsers to silently reject the cookie on the test rig.
+		assertFalse(SecurityConfig.requiresSecureCookie(false, Cookie.SameSite.LAX));
+		assertFalse(SecurityConfig.requiresSecureCookie(false, Cookie.SameSite.STRICT));
 	}
 }

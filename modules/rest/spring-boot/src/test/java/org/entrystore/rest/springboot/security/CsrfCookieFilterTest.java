@@ -30,17 +30,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class CsrfCookieFilterTest {
 
-	private final CsrfCookieFilter filter = new CsrfCookieFilter();
+	private final CsrfCookieFilter filter = new CsrfCookieFilter("auth_token", "XSRF-TOKEN");
 
 	@Test
 	void unsafeMethod_resolvesToken() throws Exception {
 		var resolutions = new AtomicInteger();
 		var request = new MockHttpServletRequest("POST", "/auth/cookie");
 		request.setAttribute(CsrfToken.class.getName(), countingToken(resolutions));
+		var chain = new MockFilterChain();
 
-		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
 
 		assertEquals(1, resolutions.get(), "POST must trigger CSRF token resolution");
+		assertEquals(request, chain.getRequest(), "Filter chain must still be invoked");
 	}
 
 	@Test
@@ -50,10 +52,12 @@ class CsrfCookieFilterTest {
 		var resolutions = new AtomicInteger();
 		var request = new MockHttpServletRequest("GET", "/_principals/groups");
 		request.setAttribute(CsrfToken.class.getName(), countingToken(resolutions));
+		var chain = new MockFilterChain();
 
-		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
 
-		assertEquals(0, resolutions.get(), "GET without XSRF-TOKEN cookie must skip token resolution");
+		assertEquals(0, resolutions.get(), "GET without session cookie or XSRF-TOKEN cookie must skip token resolution");
+		assertEquals(request, chain.getRequest(), "Filter chain must still be invoked");
 	}
 
 	@Test
@@ -63,24 +67,47 @@ class CsrfCookieFilterTest {
 		var request = new MockHttpServletRequest("GET", "/auth/user");
 		request.setCookies(new Cookie("XSRF-TOKEN", "existing-token"));
 		request.setAttribute(CsrfToken.class.getName(), countingToken(resolutions));
+		var chain = new MockFilterChain();
 
-		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
 
 		assertEquals(1, resolutions.get(), "GET with XSRF-TOKEN cookie must resolve token to refresh it");
+		assertEquals(request, chain.getRequest(), "Filter chain must still be invoked");
 	}
 
 	@Test
-	void unrelatedCookieDoesNotTriggerResolutionOnSafeMethod() throws Exception {
-		// auth_token alone (Basic-auth migration scenario, or partial cookie state) does not pull
-		// the SPA token resolution path on a GET.
+	void safeMethodWithSessionCookieOnly_resolvesToken() throws Exception {
+		// Bootstrap path: an authenticated session that pre-dates this rollout (or whose XSRF-TOKEN
+		// cookie was cleared while the session cookie survived) must be able to mint a new token on
+		// its next safe GET. Without this, the next mutation would be rejected before CsrfCookieFilter
+		// could write a replacement cookie.
 		var resolutions = new AtomicInteger();
 		var request = new MockHttpServletRequest("GET", "/auth/user");
 		request.setCookies(new Cookie("auth_token", "session-id"));
 		request.setAttribute(CsrfToken.class.getName(), countingToken(resolutions));
+		var chain = new MockFilterChain();
 
-		filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
+
+		assertEquals(1, resolutions.get(), "GET with session cookie but no XSRF-TOKEN cookie must mint a new token");
+		assertEquals(request, chain.getRequest(), "Filter chain must still be invoked");
+	}
+
+	@Test
+	void unrelatedCookieDoesNotTriggerResolutionOnSafeMethod() throws Exception {
+		// An XSRF-TOKEN cookie alone does not trigger SPA token resolution unless either the method is
+		// unsafe or the session cookie is present — a bare unrelated cookie on a GET stays the
+		// server-to-server fast path.
+		var resolutions = new AtomicInteger();
+		var request = new MockHttpServletRequest("GET", "/_principals/groups");
+		request.setCookies(new Cookie("unrelated", "value"));
+		request.setAttribute(CsrfToken.class.getName(), countingToken(resolutions));
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, new MockHttpServletResponse(), chain);
 
 		assertEquals(0, resolutions.get(), "Unrelated cookies must not trigger token resolution on safe methods");
+		assertEquals(request, chain.getRequest(), "Filter chain must still be invoked");
 	}
 
 	@Test

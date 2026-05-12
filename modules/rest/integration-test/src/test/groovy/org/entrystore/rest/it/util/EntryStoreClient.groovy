@@ -17,6 +17,9 @@ import static java.nio.charset.StandardCharsets.UTF_8
  */
 class EntryStoreClient {
 
+	private static final Set<HttpMethod> MUTATING_METHODS = Set.of(
+			HttpMethod.POST, HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE)
+
 	static String host = 'localhost'
 	static int port = 8181 // Math.abs(new Random().nextInt() % 50000) + 10000
 	static String origin = 'http://' + host + ':' + port
@@ -123,12 +126,8 @@ class EntryStoreClient {
 		connection.setRequestMethod(method.name())
 		connection.setInstanceFollowRedirects(false)
 		if (asUser?.trim()) {
-			def cookieHeader = cookies[asUser].toString()
-			if (csrfTokens[asUser] != null) {
-				cookieHeader = cookieHeader + '; XSRF-TOKEN=' + csrfTokens[asUser]
-			}
-			connection.setRequestProperty('Cookie', cookieHeader)
-			if (isMutatingMethod(method) && csrfTokens[asUser] != null) {
+			connection.setRequestProperty('Cookie', cookieHeader(asUser))
+			if (MUTATING_METHODS.contains(method) && csrfTokens[asUser] != null) {
 				connection.setRequestProperty('X-XSRF-TOKEN', csrfTokens[asUser].toString())
 			}
 		}
@@ -188,17 +187,20 @@ class EntryStoreClient {
 	}
 
 	/**
-	 * Returns the first Set-Cookie response header line containing the named cookie,
-	 * or null if no such header is present. Use this instead of
-	 * {@code connection.getHeaderField('Set-Cookie')} when the response carries multiple
-	 * Set-Cookie headers (e.g. both auth_token and XSRF-TOKEN are emitted on login).
+	 * Returns the first Set-Cookie response header line whose cookie name matches {@code cookieName}
+	 * (i.e. starts with {@code cookieName + '='}), or null if no such header is present. Use this
+	 * instead of {@code connection.getHeaderField('Set-Cookie')} when the response carries multiple
+	 * Set-Cookie headers (e.g. both auth_token and XSRF-TOKEN are emitted on login). Set-Cookie
+	 * always begins with {@code name=value}, so a startsWith match is exact for the cookie name and
+	 * cannot be tricked by an attribute value (e.g. {@code Path=/x?auth_token=}) that contains a
+	 * similar substring.
 	 */
 	def static findSetCookie(HttpURLConnection connection, String cookieName) {
 		def headerValues = connection.getHeaderFields().get('Set-Cookie')
 		if (headerValues == null) {
 			return null
 		}
-		return headerValues.find { it != null && it.contains(cookieName + '=') }
+		return headerValues.find { it != null && it.startsWith(cookieName + '=') }
 	}
 
 	private static String extractCookieValue(String setCookieLine, String cookieName) {
@@ -231,9 +233,17 @@ class EntryStoreClient {
 		return header
 	}
 
-	private static boolean isMutatingMethod(HttpMethod method) {
-		return method == HttpMethod.POST || method == HttpMethod.PUT ||
-				method == HttpMethod.PATCH || method == HttpMethod.DELETE
+	/**
+	 * Builds the Cookie + X-XSRF-TOKEN header pair required by SecurityConfig's CSRF protection for
+	 * a cookie-authenticated mutation. Use this when constructing extraHeaders for a request that
+	 * does not flow through {@code asUser}-based auto-injection (e.g. isolated-session tests that
+	 * captured their own auth_token/XSRF-TOKEN pair from a fresh login).
+	 */
+	def static Map<String, String> csrfHeaders(String authCookie, String csrf) {
+		return [
+				Cookie        : authCookie + '; XSRF-TOKEN=' + csrf,
+				'X-XSRF-TOKEN': csrf
+		]
 	}
 
 	def static buildMultipartContent(File file, Map<String, String> formData, String boundary,

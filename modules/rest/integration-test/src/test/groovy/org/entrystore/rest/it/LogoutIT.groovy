@@ -18,6 +18,8 @@ package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
 
+import static java.net.HttpURLConnection.HTTP_BAD_METHOD
+import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -159,8 +161,10 @@ class LogoutIT extends BaseSpec {
 		when: 'attacker-controlled GET to /auth/logout (e.g. <a href> or <img src>)'
 		def connection = EntryStoreClient.getRequest('/auth/logout', '', 'application/json', userCookies)
 
-		then: 'logout filter does not match GET, so the request is not handled as a logout'
-		connection.getResponseCode() != HTTP_NO_CONTENT
+		then: 'logout filter does not match GET, so the dispatcher rejects the unmapped GET'
+		// 404 (no /auth/logout GET controller) or 405 (method not allowed). A weak "not 204" would
+		// pass on a 5xx server crash and mask the very CSRF-safety property this test claims to verify.
+		[HTTP_NOT_FOUND, HTTP_BAD_METHOD].contains(connection.getResponseCode())
 
 		when: 'session is queried with the same cookie'
 		def userConn = EntryStoreClient.getRequest('/auth/user', '', 'application/json', userCookies)
@@ -172,13 +176,12 @@ class LogoutIT extends BaseSpec {
 	}
 
 	private static Map<String, String> isolatedCookies(String user) {
-		// Use an isolated session - calling authorize directly does NOT update cookies[user],
-		// so logging it out does not invalidate the shared map entry used by other ITs.
+		// Use an isolated session — calling authorize() directly leaves the shared cookies[user]
+		// entry untouched, so logging it out does not invalidate the shared session other ITs reuse.
+		// Note that authorize() does overwrite csrfTokens[user], which is acceptable because the
+		// CSRF token is regenerated on each login.
 		def authCookie = EntryStoreClient.authorize(user).toString()
 		def csrf = EntryStoreClient.csrfTokens[user]
-		return [
-				Cookie        : authCookie + '; XSRF-TOKEN=' + csrf,
-				'X-XSRF-TOKEN': csrf
-		] as Map<String, String>
+		return EntryStoreClient.csrfHeaders(authCookie, csrf.toString())
 	}
 }
