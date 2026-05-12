@@ -142,20 +142,21 @@ From `.editorconfig`:
 
 ## Testing Guidelines
 
-- **No tautological tests:** Every test must validate real behavior, not merely assert values that were set up by mocks. A test that only verifies mocked return values proves nothing — ensure tests exercise actual logic, integration points, or side effects that could genuinely fail.
+- **No tautological tests.** Every test must validate real behaviour, not assertions over values the test itself set up via mocks. A test that only verifies mocked return values proves nothing.
+- **Keep tests DAMP** (Descriptive And Meaningful Phrases). Do **not** refactor structurally-similar tests into helpers/data-tables — especially the `when:` and `then:` blocks of Spock specs. Each test must read as a complete recipe; helper methods in a `given:` block or a test setup are allowed.
 
 ## Exception Conventions (Spring Boot REST Layer)
 
 - **Never throw `org.entrystore.AuthorizationException` directly from the Spring Boot REST layer** (controllers or services in `modules/rest/spring-boot/`). `AuthorizationException` belongs to the core layer and should only be thrown by core code (e.g., `PrincipalManager.checkAuthenticatedUserAuthorized()`).
 - In the REST layer, use the application-specific exceptions from `org.entrystore.rest.springboot.model.exception.*`:
-  - `ForbiddenException` — for authorization failures (returns 401 for anonymous users, 403 for authenticated users via `AppExceptionHandler`)
+  - `ForbiddenException` — for explicit policy denials (returns 401 for anonymous users, 403 for authenticated users via `AppExceptionHandler`). Note: core `AuthorizationException` (from `PrincipalManager` ACL checks) follows a different rule — anonymous users get 404 instead of 401 to prevent entry-existence enumeration (CWE-204); authenticated users get 403.
   - `BadRequestException` — for invalid input (400)
   - `EntityNotFoundException` — for missing resources (404)
   - `CustomResponseException` — for any other HTTP status (e.g., 504 Gateway Timeout)
 - `AuthorizationException` thrown by core code (e.g., from `PrincipalManager`) is handled by `AppExceptionHandler` and does not need to be caught/re-thrown in the REST layer.
 - **Never throw application exceptions from servlet filters.** `AppExceptionHandler` (`@ControllerAdvice`) only catches exceptions from controllers — filters run before the DispatcherServlet. Instead, write the error response directly: `response.setStatus(...)`, `response.setContentType(...)`, `response.getWriter().write(...)`, then `return` (do not call `filterChain.doFilter`).
 - **Don't leak internal details in exception messages.** `AppExceptionHandler` returns `ex.getMessage()` to the client for custom exceptions in `org.entrystore.rest.springboot.model.exception.*` (e.g. `BadRequestException`, `EntityNotFoundException`, `ForbiddenException`, `CustomResponseException`). Keep these messages user-facing. Never include `e.getMessage()` from third-party libraries (RDF4J, Jackson, Spring internals) in exceptions thrown to the client — use a generic message and preserve the original cause via the `(String, Throwable)` constructor for server-side debugging.
-- **Don't log before throwing exceptions handled by `AppExceptionHandler`.** `AppExceptionHandler` already logs all exceptions it handles. Adding `log.error()` / `log.warn()` in a catch block before re-throwing as an application exception creates duplicate log entries. Instead, include relevant context in the exception message itself and let `AppExceptionHandler` handle logging.
+- **Don't log before throwing exceptions handled by `AppExceptionHandler` — unless the handler logs at a lower level than the situation warrants.** `AppExceptionHandler` already logs everything it handles, so a duplicate pre-throw log creates duplicate entries. Exception: when the rethrow maps to a status whose handler logs at INFO/DEBUG (e.g., `BadRequestException`, `CustomResponseException`) but the underlying event needs ops alerting (RDF4J cleanup failure, redirect-loop abort), keep an explicit `log.error`/`log.warn` so the higher-severity signal is preserved.
 - **Use `HttpUtil.setLastModifiedAndETag(HttpHeaders, Date)`** to set Last-Modified and ETag response headers. For `ResponseEntity.HeadersBuilder` contexts (e.g., 204 No Content), use `HttpUtil.updateResponseWithModificationDateAndETag()` which delegates to the same logic. Do not set these headers manually.
 
 ## CI/CD

@@ -29,7 +29,6 @@ import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
-import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class LocalMetadataResourceIT extends BaseSpec {
 
@@ -40,7 +39,7 @@ class LocalMetadataResourceIT extends BaseSpec {
 		getOrCreateContext([contextId: contextId])
 	}
 
-	def "GET /{context-id}/metadata/{entryId} as guest should respond with Unauthorized 401"() {
+	def "GET /{context-id}/metadata/{entryId} as guest should respond with Not Found 404"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
 		def newResourceIri = EntryStoreClient.baseUrl + '/' + contextId + '/resource/_newId'
@@ -53,7 +52,8 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryMetaConn = EntryStoreClient.getRequest(metadataUri, '')
 
 		then:
-		entryMetaConn.getResponseCode() == HTTP_UNAUTHORIZED
+		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
+		entryMetaConn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
 	def "GET /{context-id}/metadata/{entryId} as non-admin user should respond with Forbidden"() {
@@ -115,7 +115,6 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryMetaConn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	// TODO: Warning - GET as guest returns 401 when metadata exists, and 404 when metadata does not exist
 	def "GET /{context-id}/metadata/{entryId} as guest should not fetch local metadata of deleted entry"() {
 		given:
 		def params = [entrytype: 'link', resource: resourceUrl]
@@ -274,7 +273,8 @@ class LocalMetadataResourceIT extends BaseSpec {
 			JsonOutput.toJson(newBody), '', 'application/json')
 
 		then:
-		editEntryConn.getResponseCode() == HTTP_UNAUTHORIZED
+		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
+		editEntryConn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
 	def "PUT /{context-id}/metadata/{entry-id} should not update the metadata of the non-existing entry"() {
@@ -353,10 +353,14 @@ class LocalMetadataResourceIT extends BaseSpec {
 		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/' + entryId, '[]', '')
 
 		then:
-		entryDeleteConn.getResponseCode() == HTTP_UNAUTHORIZED
+		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
+		entryDeleteConn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	// TODO: Warning - DELETE as guest returns 401 when metadata exists, and 405 when metadata does not exist
+	// DELETE on `/metadata/{id}` for reference-type entries: MetadataService.getEntryLocalMetadata
+	// returns null (only Local/Link/LinkReference expose a local-metadata graph), and
+	// MetadataService.setEntryMetadata then throws MethodNotAllowedException before any ACL check
+	// fires — the 405 is emitted by application code, not by Spring routing.
 	def "DELETE /{context-id}/metadata/{entryId} as guest should not delete metadata of the entry without metadata"() {
 		given:
 		def metadataUrl = 'https://bbc.co.uk/metadata'
@@ -370,7 +374,24 @@ class LocalMetadataResourceIT extends BaseSpec {
 		entryDeleteConn.getResponseCode() == HTTP_BAD_METHOD
 	}
 
-	// TODO: Warning - DELETE as guest returns 401 when metadata exists, and 404 when entry does not exist
+	def "DELETE /{context-id}/metadata/{entryId} as non-admin user should not delete metadata of the entry without metadata"() {
+		given:
+		// Completes the role-tier coverage for the 405-emitted-by-application-code claim: guest gets 405
+		// (test directly above), admin also gets 405 (`DELETE … as admin should not delete metadata of
+		// the entry without metadata` earlier in this file), and non-admin USER must also get 405. If a
+		// future refactor reorders the ACL check ahead of the type check, this case would diverge to 403
+		// and the test would fail.
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
+		def entryId = createEntry(contextId, params)
+
+		when:
+		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/' + entryId, '[]', 'user')
+
+		then:
+		entryDeleteConn.getResponseCode() == HTTP_BAD_METHOD
+	}
+
 	def "DELETE /{context-id}/metadata/{entryId} as guest should not delete non existing metadata"() {
 		when:
 		def entryDeleteConn = EntryStoreClient.deleteRequest('/' + contextId + '/metadata/asdasdasd312123', '')

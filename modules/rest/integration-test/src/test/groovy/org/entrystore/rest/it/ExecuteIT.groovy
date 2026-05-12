@@ -25,7 +25,6 @@ import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
-import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ExecuteIT extends BaseSpec {
 
@@ -69,7 +68,7 @@ class ExecuteIT extends BaseSpec {
 		plainEntryUri = EntryStoreClient.baseUrl + '/' + CONTEXT_ID + '/entry/' + plainId
 	}
 
-	def "POST /{context-id}/execute as guest should return Unauthorized 401"() {
+	def "POST /{context-id}/execute as guest should return Not Found 404"() {
 		given:
 		def body = JsonOutput.toJson([pipeline: pipelineEntryUri, source: sourceEntryUri])
 
@@ -77,7 +76,8 @@ class ExecuteIT extends BaseSpec {
 		def connection = EntryStoreClient.postRequest('/' + CONTEXT_ID + '/execute', body, '', 'application/json')
 
 		then:
-		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// ExecutionController has no @PreAuthorize; core ACL throws AuthorizationException, mapped to 404 for anonymous (CWE-204)
+		connection.getResponseCode() == HTTP_NOT_FOUND
 	}
 
 	def "POST /{context-id}/execute as non-writer user should return Forbidden 403"() {

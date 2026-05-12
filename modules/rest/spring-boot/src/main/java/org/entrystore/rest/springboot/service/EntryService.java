@@ -41,7 +41,6 @@ import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
-import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.RDFJSON;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
@@ -416,7 +415,20 @@ public class EntryService {
 				return null;
 			}
 		} catch (JsonProcessingException e) {
-			return null;
+			safeRollback(context, entry, e);
+			throw new BadRequestException("Cannot create an entry with provided JSON", e);
+		} catch (RuntimeException e) {
+			safeRollback(context, entry, e);
+			throw e;
+		}
+	}
+
+	private void safeRollback(Context context, Entry entry, Throwable original) {
+		try {
+			context.remove(entry.getEntryURI());
+		} catch (RuntimeException cleanupEx) {
+			log.error("Failed to remove orphan entry {} after create failure", entry.getEntryURI(), cleanupEx);
+			original.addSuppressed(cleanupEx);
 		}
 	}
 
@@ -538,8 +550,6 @@ public class EntryService {
 			} else {
 				entry.getContext().remove(entry.getEntryURI());
 			}
-		} catch (AuthorizationException e) {
-			throw new UnauthorizedException("Not authorized");
 		} catch (EntryMissingException e) {
 			throw new EntityNotFoundException("Entry requested for deletion was not found", e);
 		}

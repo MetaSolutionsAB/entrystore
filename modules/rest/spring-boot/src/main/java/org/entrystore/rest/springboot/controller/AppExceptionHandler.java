@@ -194,12 +194,47 @@ public class AppExceptionHandler {
 	// Both carry internal state in their messages (principal URI, entry URI, ACL bit for core,
 	// or a non-informative "Access Denied" for Spring), so the HTTP body is always the reason
 	// phrase; the original message is retained on the server-side log line for debugging.
+	//
+	// Status mapping splits on the exception type for anonymous callers:
+	// - Core `AuthorizationException` (raised by core ACL checks — `PrincipalManager`, `ContextImpl`, etc.) → 404 Not Found,
+	//   to prevent CWE-204 existence enumeration: without this, a guest could distinguish
+	//   "entry exists but is private" (401) from "entry does not exist" (404).
+	// - Spring's `AccessDeniedException` (raised by Spring method security — `@PreAuthorize`,
+	//   `@PostAuthorize`, `@Secured`, or `AuthorizationManager` checks) → 401 Unauthorized,
+	//   preserving the standard "you must authenticate" semantics for endpoints that explicitly
+	//   require a role. In this codebase today these guards are coarse role-based admission and
+	//   don't gate per-entity existence, so they don't open an enumeration oracle. If a future
+	//   contributor adds per-entity SpEL (e.g. `@PreAuthorize("hasPermission(#id, 'read')")`),
+	//   the resulting AccessDeniedException would re-open CWE-204 on that endpoint and this
+	//   mapping must be revisited — see
+	//   AppExceptionHandlerTest#handleAccessDeniedException_anonymousCallerWithSpringAccessDenied_returns401.
+	// Authenticated callers keep 403 in both cases — they've already proven identity, so
+	// existence disclosure is moot.
+	//
+	// The 404 branch also emits a distinguishable log message ("AccessDenied masked as 404 …") so
+	// operators can separate enumeration probes from legitimate missing-entry traffic in dashboards;
+	// that contract is pinned by
+	// AppExceptionHandlerTest#handleAccessDeniedException_emitsMaskedLogLineFor404AndStandardLineForOthers.
 	@ExceptionHandler({AccessDeniedException.class, AuthorizationException.class})
 	public ResponseEntity<ErrorResponse> handleAccessDeniedException(RuntimeException ex,
 																	 HttpServletRequest request,
 																	 Authentication authentication) {
-		log.info("AccessDenied of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
-		HttpStatus status = (authentication == null || authentication instanceof AnonymousAuthenticationToken) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
+		boolean anonymous = authentication == null || authentication instanceof AnonymousAuthenticationToken;
+		HttpStatus status;
+		if (anonymous) {
+			status = (ex instanceof AuthorizationException) ? HttpStatus.NOT_FOUND : HttpStatus.UNAUTHORIZED;
+		} else {
+			status = HttpStatus.FORBIDDEN;
+		}
+		if (status == HttpStatus.NOT_FOUND) {
+			// Tag the masked-404 path distinctly so operators can separate enumeration probes
+			// from legitimate missing-entry traffic in dashboards.
+			log.info("AccessDenied masked as 404 (anonymous, core ACL) at endpoint '{}'. Original: {}",
+					request.getRequestURI(), ex.getMessage());
+		} else {
+			log.info("AccessDenied of type '{}' at endpoint '{}'. Error: {}",
+					ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+		}
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(status.value())
 				.path(request.getRequestURI())
@@ -244,7 +279,7 @@ public class AppExceptionHandler {
 	@ExceptionHandler(CustomResponseException.class)
 	public ResponseEntity<ErrorResponse> handleCustomResponseException(CustomResponseException ex,
 																	   HttpServletRequest request) {
-		log.info("CustomResponseException ({}): {}", ex.getStatus().value(), ex.getMessage(), ex);
+		log.info("CustomResponseException ({}) at endpoint '{}': {}", ex.getStatus().value(), request.getRequestURI(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(ex.getStatus().value())
 				.path(request.getRequestURI())

@@ -10,7 +10,6 @@ import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
-import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class NameResourceIT extends BaseSpec {
 
@@ -91,7 +90,7 @@ class NameResourceIT extends BaseSpec {
 		json['name'] == 'The Context Name'
 	}
 
-	def "PUT /{context-id}/entry/{entry-id}/name as guest on a Context entry should not edit the context name, respond with 401"() {
+	def "PUT /{context-id}/entry/{entry-id}/name as guest on a Context entry should not edit the context name, respond with 404"() {
 		given:
 		def newName = 'new Name / with slash symbol, and {, and }, and [ or ], plus < and >, ouh yeah'
 		def body = JsonOutput.toJson([name: newName])
@@ -100,7 +99,8 @@ class NameResourceIT extends BaseSpec {
 		def connection = EntryStoreClient.putRequest('/_contexts/entry/' + contextIdWithName + '/name', body, '')
 
 		then:
-		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
+		connection.getResponseCode() == HTTP_NOT_FOUND
 	}
 
 	def "PUT /_contexts/entry/{entry-id}/name as non-admin user on a Context entry should respond with Forbidden and not edit the context name"() {
@@ -189,7 +189,8 @@ class NameResourceIT extends BaseSpec {
 		def connection = EntryStoreClient.putRequest('/_principals/entry/' + entryId + '/name', body, '')
 
 		then:
-		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		// Guests get 404 (not 401) for existing-private so they cannot enumerate principals
+		connection.getResponseCode() == HTTP_NOT_FOUND
 
 		def getConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId + '/name')
 		getConn.getResponseCode() == HTTP_OK

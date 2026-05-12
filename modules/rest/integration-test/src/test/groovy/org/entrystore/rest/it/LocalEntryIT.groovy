@@ -197,6 +197,71 @@ class LocalEntryIT extends BaseSpec {
 		responseJson['error'].toString().contains('Regular context only support Lists, ResultLists and None as BuiltinTypes')
 	}
 
+	def "POST /_principals?graphtype=user with malformed JSON resource should return 400 and not leave an orphan entry"() {
+		given:
+		// Outer body is valid JSON, but the 'resource' field's value is a string of unparseable JSON.
+		// Spring deserialises the outer envelope, then EntryService.setResource calls objectMapper.readValue
+		// on the inner string and throws JsonProcessingException. The rollback added in ENTRYSTORE-934 Issue 8
+		// must remove the just-created entry skeleton before re-throwing as BadRequestException.
+		def params = [graphtype: 'user']
+		def body = JsonOutput.toJson([resource: '{not-json'])
+
+		// Snapshot the principal-entry set before the failed POST so we can verify no orphan was left.
+		// Compare as a Set (not just count) so a future paginated listing or reordered output won't mask
+		// the case where a rollback regression leaves a new entry behind while removing an unrelated one.
+		def beforeConn = EntryStoreClient.getRequest('/_principals')
+		assert beforeConn.getResponseCode() == HTTP_OK
+		def entriesBefore = (JSON_PARSER.parseText(beforeConn.inputStream.text) as List).toSet()
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.errorStream.text)
+		responseJson['error'].toString().contains('Cannot create an entry with provided JSON')
+
+		// Orphan rollback: the principal-entry set must be unchanged after the failed POST — no new
+		// orphan added, AND no unrelated entry accidentally removed (e.g. by a buggy rollback that
+		// computes the wrong URI). Both directions must be empty for the rollback to be correct.
+		def afterConn = EntryStoreClient.getRequest('/_principals')
+		afterConn.getResponseCode() == HTTP_OK
+		def entriesAfter = (JSON_PARSER.parseText(afterConn.inputStream.text) as List).toSet()
+		(entriesAfter - entriesBefore).isEmpty()
+		(entriesBefore - entriesAfter).isEmpty()
+	}
+
+	def "POST /_principals?graphtype=user with malformed RDFJSON in info field should not leave an orphan entry"() {
+		given:
+		// 'info' is a valid JSON string, but contains a subject URI ending in '.' which RDFJSON
+		// rejects with RDFParseException (extends RuntimeException, not caught by setEntryGraph).
+		// This fires AFTER the entry skeleton is created and AFTER setResource succeeds, exercising
+		// the broadened catch(RuntimeException) → safeRollback branch in createLocalEntry.
+		def malformedInfo = '{"http://example.com/s.": {"http://example.com/p": [{"type": "uri", "value": "http://example.com/o"}]}}'
+		def params = [graphtype: 'user']
+		def body = JsonOutput.toJson([resource: [name: 'mdRollbackUser'], info: malformedInfo])
+
+		def beforeConn = EntryStoreClient.getRequest('/_principals')
+		assert beforeConn.getResponseCode() == HTTP_OK
+		def entriesBefore = (JSON_PARSER.parseText(beforeConn.inputStream.text) as List).toSet()
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
+
+		then:
+		// RDFParseException propagates as the original RuntimeException type via the broadened
+		// catch — AppExceptionHandler.handleGenericException maps it to a sanitised 500.
+		connection.getResponseCode() == HTTP_INTERNAL_ERROR
+
+		// Orphan rollback must run for the RuntimeException branch too — entry set must be unchanged.
+		def afterConn = EntryStoreClient.getRequest('/_principals')
+		afterConn.getResponseCode() == HTTP_OK
+		def entriesAfter = (JSON_PARSER.parseText(afterConn.inputStream.text) as List).toSet()
+		(entriesAfter - entriesBefore).isEmpty()
+		(entriesBefore - entriesAfter).isEmpty()
+	}
+
 	def "POST /_principals?graphtype=user should create a local entry of type User"() {
 		given:
 		def requestResourceName = [name: 'Test User name']

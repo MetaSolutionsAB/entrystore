@@ -8,7 +8,7 @@ import static java.net.HttpURLConnection.HTTP_OK
 
 class UserUtil {
 
-	def static createUser(String username, String homecontext = null, boolean isAdmin = false) {
+	static def createUser(String username, String homecontext = null, boolean isAdmin = false) {
 		def user = [:]
 		user['username'] = username
 		user['entryId'] = createUserEntry(username, homecontext, isAdmin ? EntryStoreClient.adminsGroupUri : null)
@@ -37,7 +37,7 @@ class UserUtil {
 		return BaseSpec.createEntry('_principals', params, body)
 	}
 
-	def static setUserPassword(String resourceUri, String password) {
+	static def setUserPassword(String resourceUri, String password) {
 		def requestBody = JsonOutput.toJson([
 			password: password
 		])
