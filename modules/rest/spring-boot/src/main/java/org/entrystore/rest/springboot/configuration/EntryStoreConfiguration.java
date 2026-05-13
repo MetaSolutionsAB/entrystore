@@ -15,6 +15,7 @@ import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.config.SortedProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -24,6 +25,7 @@ import org.springframework.core.env.PropertySource;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
+import java.time.Duration;
 
 @Slf4j
 @Configuration
@@ -111,6 +113,19 @@ public class EntryStoreConfiguration {
 	@Bean
 	public RestTemplate restTemplate() {
 		return new RestTemplate();
+	}
+
+	/**
+	 * Dedicated RestTemplate for the reCAPTCHA verifier. Tight timeouts ensure that a hung
+	 * Google siteverify call cannot pin a Jetty request thread indefinitely while users
+	 * try to sign up or reset their password.
+	 */
+	@Bean
+	public RestTemplate recaptchaRestTemplate(RestTemplateBuilder builder) {
+		return builder
+			.connectTimeout(Duration.ofSeconds(3))
+			.readTimeout(Duration.ofSeconds(5))
+			.build();
 	}
 
 	@Bean

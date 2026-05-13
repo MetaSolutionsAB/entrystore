@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.it
 
+import com.github.tomakehurst.wiremock.WireMockServer
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import org.awaitility.core.ConditionEvaluationLogger
@@ -36,6 +37,10 @@ import spock.lang.Specification
 
 import java.util.concurrent.TimeUnit
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
+import static com.github.tomakehurst.wiremock.client.WireMock.post
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
@@ -74,12 +79,34 @@ abstract class BaseSpec extends Specification {
 		.withEnv('SOLR_MODULES', 'analysis-extras')
 		.withCopyFileToContainer(MountableFile.forClasspathResource('solr/'), '/entrystore-core/conf')
 
+	// Shared WireMock server used to stub external HTTP services so ITs never hit the live network.
+	// Started once per JVM (same lifetime as solrContainer) — any IT that starts its own Spring Boot
+	// app (Zzz* lifecycle-owning ITs) must pass '--entrystore.auth.recaptcha.url=' +
+	// BaseSpec.getRecaptchaStubUrl() in its args.
+	static WireMockServer wireMockServer = new WireMockServer(options().dynamicPort())
+
+	static String getRecaptchaStubUrl() {
+		return 'http://localhost:' + wireMockServer.port() + '/recaptcha/api/siteverify'
+	}
+
+	static void registerDefaultRecaptchaStub() {
+		wireMockServer.stubFor(
+			post(urlPathEqualTo('/recaptcha/api/siteverify'))
+				.willReturn(aResponse()
+					.withStatus(200)
+					.withHeader('Content-Type', 'application/json')
+					.withBody('{"success": true}')))
+	}
+
 	def setupSpec() {
 		if (!appStarted) {
 			assert appInstance == null:
 				'appStarted=false but appInstance!=null — an IT started an app without setting appStarted=true.'
 			// clean cookies, in case there are some from a previous instance
 			EntryStoreClient.cleanCookies()
+			log.info('Starting WireMock for external-service stubs')
+			wireMockServer.start()
+			registerDefaultRecaptchaStub()
 			log.info('Starting Solr container')
 			solrContainer.start()
 			// below 2 lines allow to stream Solr container logs to the console
@@ -94,7 +121,10 @@ abstract class BaseSpec extends Specification {
 			)
 
 			log.info('Starting common EntryStoreApp (without SSO login)')
-			def args = ['--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core'] as String[]
+			def args = [
+				'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+				'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl()
+			] as String[]
 			appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 			createCommonUserAccounts()
 			appStarted = true

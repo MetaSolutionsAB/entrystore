@@ -45,6 +45,7 @@ class ZzzSignupRateLimiterIT extends BaseSpec {
 
 		def args = [
 			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.auth.signup.rate.limit.max=2',
 			'--entrystore.auth.signup.rate.limit.window=1h',
 			'--entrystore.trust.x-forwarded-for=true'

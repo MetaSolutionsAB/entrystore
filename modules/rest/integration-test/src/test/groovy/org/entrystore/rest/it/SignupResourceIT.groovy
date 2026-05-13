@@ -24,12 +24,16 @@ import org.entrystore.rest.it.util.UserUtil
 
 import jakarta.mail.internet.InternetAddress
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
+import static com.github.tomakehurst.wiremock.client.WireMock.post
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAVAILABLE
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class SignupResourceIT extends BaseSpec {
@@ -811,5 +815,36 @@ class SignupResourceIT extends BaseSpec {
 		def body = conn.errorStream.text
 		!body.contains('<script>alert(1)</script>')
 		body.contains('&lt;script&gt;alert(1)&lt;/script&gt;')
+	}
+
+	def "POST /auth/signup should return 503 when the reCaptcha verifier returns an upstream 5xx"() {
+		given:
+		def failStub = wireMockServer.stubFor(
+			post(urlPathEqualTo('/recaptcha/api/siteverify'))
+				.atPriority(1)
+				.willReturn(aResponse().withStatus(502)))
+
+		def username = 'userSignupVerifierDown@test.com'
+		def requestBody = JsonOutput.toJson([
+			firstname         : firstName,
+			lastname          : lastName,
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
+		])
+
+		when:
+		def signupConn = EntryStoreClient.postRequest('/auth/signup', requestBody)
+
+		then:
+		signupConn.getResponseCode() == HTTP_UNAVAILABLE
+		signupConn.getContentType().contains('application/json')
+		def body = JSON_PARSER.parseText(signupConn.errorStream.text)
+		body['status'] == HTTP_UNAVAILABLE
+		body['error'].toLowerCase().contains('unavailable')
+		greenMail.getReceivedMessages().size() == 0
+
+		cleanup:
+		wireMockServer.removeStub(failStub)
 	}
 }

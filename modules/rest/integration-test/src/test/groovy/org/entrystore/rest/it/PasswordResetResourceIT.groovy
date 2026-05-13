@@ -24,6 +24,9 @@ import org.entrystore.rest.it.util.UserUtil
 
 import jakarta.mail.internet.InternetAddress
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
+import static com.github.tomakehurst.wiremock.client.WireMock.post
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
@@ -31,6 +34,7 @@ import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAVAILABLE
 
 class PasswordResetResourceIT extends BaseSpec {
 
@@ -588,5 +592,35 @@ class PasswordResetResourceIT extends BaseSpec {
 		def body = conn.errorStream.text
 		!body.contains('<script>alert(1)</script>')
 		body.contains('&lt;script&gt;alert(1)&lt;/script&gt;')
+	}
+
+	def "POST /auth/pwreset should return 503 when the reCaptcha verifier returns an upstream 5xx"() {
+		given:
+		def failStub = wireMockServer.stubFor(
+			post(urlPathEqualTo('/recaptcha/api/siteverify'))
+				.atPriority(1)
+				.willReturn(aResponse().withStatus(502)))
+
+		def username = 'userPwResetVerifierDown@test.com'
+		UserUtil.createUser(username)
+		def requestBody = JsonOutput.toJson([
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
+		])
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_UNAVAILABLE
+		resetPasswordConn.getContentType().contains('application/json')
+		def body = JSON_PARSER.parseText(resetPasswordConn.errorStream.text)
+		body['status'] == HTTP_UNAVAILABLE
+		body['error'].toLowerCase().contains('unavailable')
+		greenMail.getReceivedMessages().size() == 0
+
+		cleanup:
+		wireMockServer.removeStub(failStub)
 	}
 }

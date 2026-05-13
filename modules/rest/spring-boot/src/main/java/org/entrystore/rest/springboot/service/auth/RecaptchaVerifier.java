@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,16 +21,21 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.UnknownHttpStatusCodeException;
 
 /**
  * Verifies the validity of a reCaptcha user response token.
@@ -47,7 +52,7 @@ public class RecaptchaVerifier {
 	private static final String RECAPTCHA_URL_DEFAULT = "https://www.google.com/recaptcha/api/siteverify";
 
 	private final Config esConfig;
-	private final RestTemplate restTemplate;
+	private final RestTemplate recaptchaRestTemplate;
 
 	private static String url;
 	private static String secret;
@@ -87,7 +92,18 @@ public class RecaptchaVerifier {
 		}
 
 		HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
-		ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
+		ResponseEntity<String> response;
+		try {
+			response = recaptchaRestTemplate.postForEntity(url, request, String.class);
+		} catch (ResourceAccessException | HttpServerErrorException | UnknownHttpStatusCodeException e) {
+			// Map transport failures (DNS, connect refused, timeout) and upstream 5xx to a
+			// deterministic 503 so AppExceptionHandler doesn't return a generic 500. A 4xx
+			// (HttpClientErrorException) means the request is wrong — let it surface so a
+			// misconfigured secret isn't silently treated as a transient outage.
+			throw new CustomResponseException(
+				"reCaptcha verifier is currently unavailable. Please try again later.",
+				HttpStatus.SERVICE_UNAVAILABLE, e);
+		}
 
 		if (!response.getStatusCode().is2xxSuccessful()) {
 			return false;

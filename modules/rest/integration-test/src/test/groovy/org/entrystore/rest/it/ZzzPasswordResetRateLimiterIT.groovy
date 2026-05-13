@@ -44,6 +44,7 @@ class ZzzPasswordResetRateLimiterIT extends BaseSpec {
 
 		def args = [
 			'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
+			'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
 			'--entrystore.auth.password-reset.rate.limit.max=2',
 			'--entrystore.auth.password-reset.rate.limit.window=1h',
 			'--entrystore.trust.x-forwarded-for=true'

@@ -170,5 +170,14 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!-- Use the shaded (-standalone) distribution to avoid Jetty / Jackson
+			 classpath conflicts with the Spring Boot app under test. -->
+		<dependency>
+			<groupId>org.wiremock</groupId>
+			<artifactId>wiremock-standalone</artifactId>
+			<version>3.10.0</version>
+			<scope>test</scope>
+		</dependency>
+
 	</dependencies>
 </project>
