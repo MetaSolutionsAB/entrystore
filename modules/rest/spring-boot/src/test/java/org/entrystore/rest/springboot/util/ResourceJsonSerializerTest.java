@@ -67,7 +67,9 @@ class ResourceJsonSerializerTest {
 		JSONObject result = serializer.serializeResourceUser(user);
 
 		assertTrue(result.has("disabledUntil"));
-		// Round-trip through the JSON wire format to pin the ISO-8601 string clients consume.
+		// Round-trip through the JSON wire format to pin the ISO-8601 string clients consume:
+		// the serializer stores `Instant` in the JSONObject and relies on Instant.toString()
+		// being invoked during JSON serialization, so we must serialize-then-parse to assert it.
 		JSONObject roundTripped = new JSONObject(result.toString());
 		assertEquals(lockedUntil.toString(), roundTripped.getString("disabledUntil"));
 		assertFalse(result.has("disabled"));
@@ -98,7 +100,7 @@ class ResourceJsonSerializerTest {
 	}
 
 	@Test
-	void serializeResourceUser_disabledFlagIndependentOfDisabledUntil() {
+	void serializeResourceUser_disabledWithoutLockout_omitsDisabledUntil() {
 		when(user.getName()).thenReturn("charlie");
 		when(user.isDisabled()).thenReturn(true);
 		when(loginAttemptService.getLockedUntil("charlie")).thenReturn(null);
@@ -108,5 +110,22 @@ class ResourceJsonSerializerTest {
 		assertTrue(result.has("disabled"));
 		assertEquals(true, result.get("disabled"));
 		assertFalse(result.has("disabledUntil"));
+	}
+
+	@Test
+	void serializeResourceUser_disabledAndLockedOut_includesBothFields() {
+		// Guards against a refactor that makes one field's emission depend on the other's
+		// absence (e.g., `if (!isDisabled()) checkLockout(...)`).
+		Instant lockedUntil = Instant.parse("2026-05-11T10:30:00Z");
+		when(user.getName()).thenReturn("dave");
+		when(user.isDisabled()).thenReturn(true);
+		when(loginAttemptService.getLockedUntil("dave")).thenReturn(lockedUntil);
+
+		JSONObject result = serializer.serializeResourceUser(user);
+
+		assertTrue(result.has("disabled"));
+		assertEquals(true, result.get("disabled"));
+		assertTrue(result.has("disabledUntil"));
+		assertEquals(lockedUntil.toString(), new JSONObject(result.toString()).getString("disabledUntil"));
 	}
 }

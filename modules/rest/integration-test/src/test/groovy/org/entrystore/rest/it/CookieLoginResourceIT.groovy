@@ -484,8 +484,9 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getErrorStream().text.contains('User account is temporarily disabled. Too many failed logins.')
 
 		when:
-		// wait for the temporary lockout period to pass
-		Thread.sleep(1100)
+		// wait for the temporary lockout period to pass; 2s outlasts the 1s configured duration
+		// with the same comfortable slack the new disabledUntil IT below uses
+		Thread.sleep(2000)
 		def login2Connection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
@@ -510,8 +511,12 @@ class CookieLoginResourceIT extends BaseSpec {
 		// trigger temporary lockout: 3 bad attempts (matches entrystore.auth.temp.lockout.max.attempts=3)
 		def badBody = 'auth_username=' + username + '&auth_password=badPass123'
 		3.times {
-			assert EntryStoreClient.postRequest('/auth/cookie', badBody, '', 'application/x-www-form-urlencoded')
-				.getResponseCode() == HTTP_UNAUTHORIZED
+			def badConn = EntryStoreClient.postRequest('/auth/cookie', badBody, '', 'application/x-www-form-urlencoded')
+			try {
+				assert badConn.getResponseCode() == HTTP_UNAUTHORIZED
+			} finally {
+				badConn.disconnect()
+			}
 		}
 
 		when:
@@ -544,6 +549,17 @@ class CookieLoginResourceIT extends BaseSpec {
 		then:
 		!(afterEntryJson['resource'] as Map).containsKey('disabledUntil')
 		!afterResourceJson.containsKey('disabledUntil')
+
+		and:
+		// confirm the lockout itself cleared, not just its JSON projection: a regression that
+		// drops disabledUntil from the response while leaving the lockout active would otherwise pass
+		def goodBody = 'auth_username=' + username + '&auth_password=' + password
+		def postLockoutLogin = EntryStoreClient.postRequest('/auth/cookie', goodBody, '', 'application/x-www-form-urlencoded')
+		try {
+			assert postLockoutLogin.getResponseCode() == HTTP_OK
+		} finally {
+			postLockoutLogin.disconnect()
+		}
 	}
 
 	private static Map fetchJsonOkAsMap(HttpURLConnection conn) {
