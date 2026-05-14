@@ -17,6 +17,7 @@
 package org.entrystore.rest.it
 
 import com.github.tomakehurst.wiremock.WireMockServer
+import com.github.tomakehurst.wiremock.stubbing.StubMapping
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import org.awaitility.core.ConditionEvaluationLogger
@@ -80,22 +81,18 @@ abstract class BaseSpec extends Specification {
 		.withCopyFileToContainer(MountableFile.forClasspathResource('solr/'), '/entrystore-core/conf')
 
 	// Shared WireMock server used to stub external HTTP services so ITs never hit the live network.
-	// Started once per JVM (same lifetime as solrContainer) — any IT that starts its own Spring Boot
-	// app (Zzz* lifecycle-owning ITs) must pass '--entrystore.auth.recaptcha.url=' +
-	// BaseSpec.getRecaptchaStubUrl() in its args.
-	static WireMockServer wireMockServer = new WireMockServer(options().dynamicPort())
+	static WireMockServer wireMockServer = new WireMockServer(
+		options().dynamicPort().usingFilesUnderClasspath('wiremock'))
 
 	static String getRecaptchaStubUrl() {
 		return 'http://localhost:' + wireMockServer.port() + '/recaptcha/api/siteverify'
 	}
 
-	static void registerDefaultRecaptchaStub() {
-		wireMockServer.stubFor(
+	static StubMapping registerRecaptchaFailStub(int status) {
+		return wireMockServer.stubFor(
 			post(urlPathEqualTo('/recaptcha/api/siteverify'))
-				.willReturn(aResponse()
-					.withStatus(200)
-					.withHeader('Content-Type', 'application/json')
-					.withBody('{"success": true}')))
+				.atPriority(1)
+				.willReturn(aResponse().withStatus(status)))
 	}
 
 	def setupSpec() {
@@ -106,7 +103,6 @@ abstract class BaseSpec extends Specification {
 			EntryStoreClient.cleanCookies()
 			log.info('Starting WireMock for external-service stubs')
 			wireMockServer.start()
-			registerDefaultRecaptchaStub()
 			log.info('Starting Solr container')
 			solrContainer.start()
 			// below 2 lines allow to stream Solr container logs to the console

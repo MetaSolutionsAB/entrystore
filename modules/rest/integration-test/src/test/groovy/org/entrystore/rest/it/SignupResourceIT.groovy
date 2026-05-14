@@ -24,8 +24,7 @@ import org.entrystore.rest.it.util.UserUtil
 
 import jakarta.mail.internet.InternetAddress
 
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
-import static com.github.tomakehurst.wiremock.client.WireMock.post
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
@@ -819,10 +818,7 @@ class SignupResourceIT extends BaseSpec {
 
 	def "POST /auth/signup should return 503 when the reCaptcha verifier returns an upstream 5xx"() {
 		given:
-		def failStub = wireMockServer.stubFor(
-			post(urlPathEqualTo('/recaptcha/api/siteverify'))
-				.atPriority(1)
-				.willReturn(aResponse().withStatus(502)))
+		def failStub = registerRecaptchaFailStub(502)
 
 		def username = 'userSignupVerifierDown@test.com'
 		def requestBody = JsonOutput.toJson([
@@ -843,6 +839,7 @@ class SignupResourceIT extends BaseSpec {
 		body['status'] == HTTP_UNAVAILABLE
 		body['error'].toLowerCase().contains('unavailable')
 		greenMail.getReceivedMessages().size() == 0
+		wireMockServer.verify(1, postRequestedFor(urlPathEqualTo('/recaptcha/api/siteverify')))
 
 		cleanup:
 		wireMockServer.removeStub(failStub)

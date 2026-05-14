@@ -24,6 +24,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -52,6 +53,8 @@ public class RecaptchaVerifier {
 	private static final String RECAPTCHA_URL_DEFAULT = "https://www.google.com/recaptcha/api/siteverify";
 
 	private final Config esConfig;
+
+	@Qualifier("recaptchaRestTemplate")
 	private final RestTemplate recaptchaRestTemplate;
 
 	private static String url;
@@ -96,10 +99,7 @@ public class RecaptchaVerifier {
 		try {
 			response = recaptchaRestTemplate.postForEntity(url, request, String.class);
 		} catch (ResourceAccessException | HttpServerErrorException | UnknownHttpStatusCodeException e) {
-			// Map transport failures (DNS, connect refused, timeout) and upstream 5xx to a
-			// deterministic 503 so AppExceptionHandler doesn't return a generic 500. A 4xx
-			// (HttpClientErrorException) means the request is wrong — let it surface so a
-			// misconfigured secret isn't silently treated as a transient outage.
+			// 4xx (HttpClientErrorException) is deliberately not remapped: a misconfigured secret must surface, not be masked as a transient 503.
 			throw new CustomResponseException(
 				"reCaptcha verifier is currently unavailable. Please try again later.",
 				HttpStatus.SERVICE_UNAVAILABLE, e);
