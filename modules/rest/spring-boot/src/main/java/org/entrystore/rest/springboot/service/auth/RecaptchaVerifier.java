@@ -99,7 +99,8 @@ public class RecaptchaVerifier {
 		try {
 			response = recaptchaRestTemplate.postForEntity(url, request, String.class);
 		} catch (ResourceAccessException | HttpServerErrorException | UnknownHttpStatusCodeException e) {
-			// 4xx (HttpClientErrorException) is deliberately not remapped: a misconfigured secret must surface, not be masked as a transient 503.
+			// 4xx (HttpClientErrorException) is deliberately not remapped: a misconfigured
+			// secret must surface, not be masked as a transient 503.
 			throw new CustomResponseException(
 				"reCaptcha verifier is currently unavailable. Please try again later.",
 				HttpStatus.SERVICE_UNAVAILABLE, e);

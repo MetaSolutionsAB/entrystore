@@ -103,6 +103,9 @@ abstract class BaseSpec extends Specification {
 			EntryStoreClient.cleanCookies()
 			log.info('Starting WireMock for external-service stubs')
 			wireMockServer.start()
+			assert wireMockServer.listAllStubMappings().mappings.any {
+				it.request.urlPath == '/recaptcha/api/siteverify'
+			}: 'Default reCAPTCHA stub failed to load from classpath wiremock/mappings/'
 			log.info('Starting Solr container')
 			solrContainer.start()
 			// below 2 lines allow to stream Solr container logs to the console
@@ -128,6 +131,13 @@ abstract class BaseSpec extends Specification {
 			assert appInstance != null: 'Invariant #2 violated — see BaseSpec comment on appStarted.'
 			log.info('EntryStoreApp already started')
 		}
+	}
+
+	// Reset the WireMock request journal before each feature so per-test verify(N, ...) assertions
+	// count only this feature's requests, not the JVM-wide accumulation across prior specs.
+	// Does not clear stubs — classpath defaults and per-test atPriority(1) overrides remain intact.
+	def setup() {
+		wireMockServer.resetRequests()
 	}
 
 	static void createCommonUserAccounts() {
