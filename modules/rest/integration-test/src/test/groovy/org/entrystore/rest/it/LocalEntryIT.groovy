@@ -201,8 +201,8 @@ class LocalEntryIT extends BaseSpec {
 		given:
 		// Outer body is valid JSON, but the 'resource' field's value is a string of unparseable JSON.
 		// Spring deserialises the outer envelope, then EntryService.setResource calls objectMapper.readValue
-		// on the inner string and throws JsonProcessingException. The rollback added in ENTRYSTORE-934 Issue 8
-		// must remove the just-created entry skeleton before re-throwing as BadRequestException.
+		// on the inner string and throws JsonProcessingException. The just-created entry skeleton must be
+		// rolled back before re-throwing as BadRequestException — no orphan can remain on a 400 response.
 		def params = [graphtype: 'user']
 		def body = JsonOutput.toJson([resource: '{not-json'])
 
@@ -235,9 +235,9 @@ class LocalEntryIT extends BaseSpec {
 	def "POST /_principals?graphtype=user with malformed RDFJSON in info field should not leave an orphan entry"() {
 		given:
 		// 'info' is a valid JSON string, but contains a subject URI ending in '.' which RDFJSON
-		// rejects with RDFParseException (extends RuntimeException, not caught by setEntryGraph).
-		// This fires AFTER the entry skeleton is created and AFTER setResource succeeds, exercising
-		// the broadened catch(RuntimeException) → safeRollback branch in createLocalEntry.
+		// rejects with RDFParseException (a RuntimeException). The failure fires AFTER the entry
+		// skeleton is created and AFTER setResource succeeds — i.e. a post-creation RuntimeException
+		// must still trigger the orphan rollback, not just the JsonProcessingException path.
 		def malformedInfo = '{"http://example.com/s.": {"http://example.com/p": [{"type": "uri", "value": "http://example.com/o"}]}}'
 		def params = [graphtype: 'user']
 		def body = JsonOutput.toJson([resource: [name: 'mdRollbackUser'], info: malformedInfo])

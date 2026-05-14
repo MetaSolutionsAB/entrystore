@@ -114,9 +114,15 @@ public class AppExceptionHandler {
 		return jsonResponse(responseBody);
 	}
 
+	// Anonymous callers receive the bare reason phrase to prevent CWE-204 entry-existence enumeration
+	// (the message would carry "No entry with id 'X' found in context 'Y'" and let a guest distinguish
+	// missing-entry from private-entry via handleAccessDeniedException's 404). Authenticated callers
+	// receive the call-site-crafted message: EntityNotFoundException messages don't carry internal
+	// state (no principal URIs, no hostnames), only entry/context IDs the caller already knows.
 	@ExceptionHandler(EntityNotFoundException.class)
 	public ResponseEntity<ErrorResponse> handleEntityNotFoundException(EntityNotFoundException ex,
-																	   HttpServletRequest request) {
+																	   HttpServletRequest request,
+																	   Authentication authentication) {
 		if (ex.getCause() != null) {
 			log.debug("EntityNotFoundException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
 		} else {
@@ -125,7 +131,7 @@ public class AppExceptionHandler {
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.NOT_FOUND.value())
 				.path(request.getRequestURI())
-				.error(ex.getMessage())
+				.error(isAnonymous(authentication) ? HttpStatus.NOT_FOUND.getReasonPhrase() : ex.getMessage())
 				.build();
 		return jsonResponse(responseBody);
 	}
@@ -219,16 +225,13 @@ public class AppExceptionHandler {
 	public ResponseEntity<ErrorResponse> handleAccessDeniedException(RuntimeException ex,
 																	 HttpServletRequest request,
 																	 Authentication authentication) {
-		boolean anonymous = authentication == null || authentication instanceof AnonymousAuthenticationToken;
 		HttpStatus status;
-		if (anonymous) {
+		if (isAnonymous(authentication)) {
 			status = (ex instanceof AuthorizationException) ? HttpStatus.NOT_FOUND : HttpStatus.UNAUTHORIZED;
 		} else {
 			status = HttpStatus.FORBIDDEN;
 		}
 		if (status == HttpStatus.NOT_FOUND) {
-			// Tag the masked-404 path distinctly so operators can separate enumeration probes
-			// from legitimate missing-entry traffic in dashboards.
 			log.info("AccessDenied masked as 404 (anonymous, core ACL) at endpoint '{}'. Original: {}",
 					request.getRequestURI(), ex.getMessage());
 		} else {
@@ -251,7 +254,7 @@ public class AppExceptionHandler {
 																  HttpServletRequest request,
 																  Authentication authentication) {
 		log.info("ForbiddenException of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
-		HttpStatus status = (authentication == null || authentication instanceof AnonymousAuthenticationToken) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
+		HttpStatus status = isAnonymous(authentication) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(status.value())
 				.path(request.getRequestURI())
@@ -335,6 +338,10 @@ public class AppExceptionHandler {
 
 	private static ResponseEntity<ErrorResponse> jsonResponse(ErrorResponse body) {
 		return ResponseEntity.status(body.status()).contentType(MediaType.APPLICATION_JSON).body(body);
+	}
+
+	private static boolean isAnonymous(Authentication authentication) {
+		return authentication == null || authentication instanceof AnonymousAuthenticationToken;
 	}
 
 	@ExceptionHandler(HtmlResponseException.class)

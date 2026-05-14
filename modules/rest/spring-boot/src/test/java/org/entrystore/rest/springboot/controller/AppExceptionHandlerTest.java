@@ -74,10 +74,10 @@ class AppExceptionHandlerTest {
 
 	@Test
 	void handleAccessDeniedException_anonymousCaller_returns404ToPreventEnumeration() {
-		// Pins the CWE-204 fix (ENTRYSTORE-934 Issue 5): an anonymous caller hitting a private entry
-		// must receive 404 with the bare "Not Found" reason phrase, indistinguishable from a missing
-		// entry. A regression flipping back to 401 (or surfacing the exception message) would re-open
-		// the existence-enumeration oracle on every ACL-protected endpoint.
+		// Pins the CWE-204 fix: an anonymous caller hitting a private entry must receive 404 with the
+		// bare "Not Found" reason phrase, indistinguishable from a missing entry. A regression flipping
+		// back to 401 (or surfacing the exception message) would re-open the existence-enumeration
+		// oracle on every ACL-protected endpoint.
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
 		Mockito.when(req.getRequestURI()).thenReturn("/1/entry/42");
 		Authentication anonymous = new AnonymousAuthenticationToken(

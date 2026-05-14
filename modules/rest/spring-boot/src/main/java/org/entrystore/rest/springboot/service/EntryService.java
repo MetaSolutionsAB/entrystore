@@ -411,7 +411,7 @@ public class EntryService {
 				}
 				return entry;
 			} else {
-				context.remove(entry.getEntryURI());
+				removeOrphan(context, entry);
 				return null;
 			}
 		} catch (JsonProcessingException e) {
@@ -429,6 +429,14 @@ public class EntryService {
 		} catch (RuntimeException cleanupEx) {
 			log.error("Failed to remove orphan entry {} after create failure", entry.getEntryURI(), cleanupEx);
 			original.addSuppressed(cleanupEx);
+		}
+	}
+
+	private void removeOrphan(Context context, Entry entry) {
+		try {
+			context.remove(entry.getEntryURI());
+		} catch (RuntimeException cleanupEx) {
+			log.error("Failed to remove orphan entry {}", entry.getEntryURI(), cleanupEx);
 		}
 	}
 

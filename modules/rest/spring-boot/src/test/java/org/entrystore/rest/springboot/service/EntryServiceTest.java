@@ -84,12 +84,12 @@ class EntryServiceTest {
 
 	@Test
 	void createLocalEntry_jsonParseFailureWithCleanupAlsoThrowing_preservesOriginalCauseAndSuppressesCleanup() {
-		// Pins the safeRollback contract: when a JsonProcessingException triggers rollback AND the
-		// rollback itself throws, the BadRequestException must carry the original parse error as its
-		// cause (not the cleanup exception), and the cleanup exception must be attached as a suppressed
-		// exception under that cause. A regression that flips addSuppressed to drop the cleanup error,
-		// or rethrows cleanupEx instead of the original, would change the client-visible status or lose
-		// the diagnostic chain.
+		// Pins the rollback contract: when a JSON parse failure triggers the orphan rollback AND the
+		// rollback itself fails, the client-visible BadRequestException must carry the original parse
+		// error as its cause (status stays 400, not 500), and the cleanup failure must remain visible
+		// on the exception chain for server-side debugging. A regression that drops the cleanup
+		// failure, or rethrows it instead of the original error, would change the response status
+		// or hide the diagnostic trail.
 		URI entryUri = URI.create("http://example.org/1/entry/orphan");
 		when(context.createResource(any(), any(), any(), any())).thenReturn(entry);
 		when(entry.getEntryURI()).thenReturn(entryUri);

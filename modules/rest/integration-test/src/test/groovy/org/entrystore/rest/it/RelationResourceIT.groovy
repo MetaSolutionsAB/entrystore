@@ -24,7 +24,7 @@ class RelationResourceIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
 		def json = JSON_PARSER.parseText(connection.errorStream.text)
-		json['error'] == 'No entry with id \'randomEntryId\' found in context \'60\''
+		json['error'] == 'Not Found'
 	}
 
 	def "GET /{context-id}/relations/{entry-id} as admin on non-existing entry should return 404"() {

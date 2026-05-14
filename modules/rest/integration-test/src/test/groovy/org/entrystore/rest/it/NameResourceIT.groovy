@@ -57,7 +57,7 @@ class NameResourceIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
 		def jsonResponse = JSON_PARSER.parseText(connection.errorStream.text)
-		jsonResponse['error'] == 'No entry with id \'randomEntryId\' found in context \'70\''
+		jsonResponse['error'] == 'Not Found'
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/name as admin on a String entry without name should return 404"() {
