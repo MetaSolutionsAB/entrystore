@@ -708,43 +708,36 @@ public class ResourceService {
 		File tmpFile = null;
 		try {
 			tmpFile = writeStreamToTmpFile(new ByteArrayInputStream(requestBody));
-			if (tmpFile != null && tmpFile.exists()) {
-				ZipFile zipFile = new ZipFile(tmpFile);
-				Enumeration<? extends ZipEntry> zipEntries = zipFile.entries();
-				while (zipEntries.hasMoreElements()) {
-					ZipEntry entry = zipEntries.nextElement();
-					String nameLC = entry.getName();
-					if (!entry.isDirectory() && (nameLC.endsWith(".xml") || nameLC.endsWith(".rdf"))) {
-						InputStream fileIS = zipFile.getInputStream(entry);
-						if (fileIS == null) {
-							log.error("Unable to get InputStream of ZipEntry: {}", nameLC);
-							continue;
-						}
-						String fileString;
-						try {
-							StringWriter writer = new StringWriter();
-							IOUtils.copy(fileIS, writer, StandardCharsets.UTF_8);
-							fileString = writer.toString();
-							if (fileString == null) {
-								log.error("[IMPORT] Problem with reading ZipEntry into String");
-								continue;
-							}
-						} finally {
-							fileIS.close();
-						}
-						if (nameLC.endsWith(".rdf")) {
-							importRDFResource(fileString);
-						}
-					}
-				}
-			} else {
-				throw new InternalServerErrorException("Unable to create temporary file for ZIP import");
-			}
+			importZipFile(tmpFile);
 		} catch (IOException ioe) {
 			throw new InternalServerErrorException("Failed to process ZIP import", ioe);
 		} finally {
 			if (tmpFile != null) {
-				tmpFile.delete();
+				try {
+					Files.deleteIfExists(tmpFile.toPath());
+				} catch (IOException e) {
+					log.warn("[IMPORT] Failed to delete temporary ZIP file: {}", tmpFile, e);
+				}
+			}
+		}
+	}
+
+	private void importZipFile(File tmpFile) throws IOException {
+		try (ZipFile zipFile = new ZipFile(tmpFile)) {
+			Enumeration<? extends ZipEntry> zipEntries = zipFile.entries();
+			while (zipEntries.hasMoreElements()) {
+				ZipEntry entry = zipEntries.nextElement();
+				String name = entry.getName();
+				if (entry.isDirectory() || !name.endsWith(".rdf")) {
+					continue;
+				}
+				String fileString;
+				try (InputStream fileIS = zipFile.getInputStream(entry)) {
+					StringWriter writer = new StringWriter();
+					IOUtils.copy(fileIS, writer, StandardCharsets.UTF_8);
+					fileString = writer.toString();
+				}
+				importRDFResource(fileString);
 			}
 		}
 	}
@@ -752,8 +745,9 @@ public class ResourceService {
 	private File writeStreamToTmpFile(InputStream is) throws IOException {
 		File tmpFile = File.createTempFile("entrystore_res_import", ".zip");
 		log.info("[IMPORT] Created temporary file: {}", tmpFile);
-		OutputStream fos = Files.newOutputStream(tmpFile.toPath());
-		FileOperations.copyFile(is, fos);
+		try (OutputStream fos = Files.newOutputStream(tmpFile.toPath())) {
+			FileOperations.copyFile(is, fos);
+		}
 		return tmpFile;
 	}
 
