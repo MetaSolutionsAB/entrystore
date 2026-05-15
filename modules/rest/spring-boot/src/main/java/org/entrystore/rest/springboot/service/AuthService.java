@@ -44,7 +44,6 @@ import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.springboot.model.exception.BadRequestHtmlException;
 import org.entrystore.rest.springboot.model.exception.DataConflictHtmlException;
 import org.entrystore.rest.springboot.model.exception.ExpectationFailedHtmlException;
-import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.PwResetEntityNotFoundHtmlException;
 import org.entrystore.rest.springboot.model.exception.RedirectTemporaryException;
@@ -300,13 +299,13 @@ public class AuthService {
 				u = principalManager.getUserByExternalID(ci.getEmail());
 			}
 
-			// to avoid spamming, etc., we only send emails to users that exist
-			if (u != null) {
-				if (u.isDisabled()) {
-					log.info("User {} is disabled, not allowing password reset", ci.getEmail());
-					throw new ForbiddenException(FAILED_TO_SEND_EMAIL_MESSAGE.replace("{}", ci.getEmail()));
-				}
-
+			// Nonexistent and disabled users receive the same success response as a real send so the
+			// endpoint does not leak which usernames exist or are active; the actual outcome is only logged.
+			if (u == null) {
+				log.info("Ignoring password reset attempt for non-existing user {}", ci.getEmail());
+			} else if (u.isDisabled()) {
+				log.info("Ignoring password reset attempt for disabled user {}", ci.getEmail());
+			} else {
 				String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 				String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
 				log.info("Generated password reset token for {}", ci.getEmail());
@@ -317,10 +316,10 @@ public class AuthService {
 					signupTokenCache.putToken(token, ci);
 					log.info("Sent confirmation request to {}", ci.getEmail());
 				} else {
-					throw new BadRequestHtmlException(FAILED_TO_SEND_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
+					// Stays in the generic success response so attackers cannot distinguish
+					// "user exists AND mail failed" from "user does not exist".
+					log.error("Failed to send password reset email to {}", ci.getEmail());
 				}
-			} else {
-				log.info("Ignoring password reset attempt for non-existing user {}", ci.getEmail());
 			}
 		} finally {
 			principalManager.setAuthenticatedUserURI(authUser);

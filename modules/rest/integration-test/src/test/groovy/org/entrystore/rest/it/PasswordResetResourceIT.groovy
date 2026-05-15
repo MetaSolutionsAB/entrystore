@@ -29,7 +29,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
-import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
@@ -288,7 +287,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		greenMail.getReceivedMessages().size() == 0
 	}
 
-	def "POST /auth/pwreset should not send an email with generated token for a disabled user"() {
+	def "POST /auth/pwreset should respond with the generic success body for a disabled user and not send an email"() {
 		given:
 		def username = 'userResetDisabled@test.com'
 		def user = UserUtil.createUser(username)
@@ -312,12 +311,10 @@ class PasswordResetResourceIT extends BaseSpec {
 		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
 
 		then:
-		resetPasswordConn.getResponseCode() == HTTP_FORBIDDEN
-		resetPasswordConn.getContentType().contains('application/json')
-		def responseBody = resetPasswordConn.errorStream.text
-		responseBody.contains('Failed to send confirmation request to ' + username.toLowerCase())
-		!responseBody.contains('{}')
-
+		// Response is byte-identical to the nonexistent-user case so account state is not leaked.
+		resetPasswordConn.getResponseCode() == HTTP_OK
+		resetPasswordConn.getContentType().contains('text/html')
+		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
 		greenMail.getReceivedMessages().size() == 0
 	}
 
@@ -591,6 +588,43 @@ class PasswordResetResourceIT extends BaseSpec {
 		def body = conn.errorStream.text
 		!body.contains('<script>alert(1)</script>')
 		body.contains('&lt;script&gt;alert(1)&lt;/script&gt;')
+	}
+
+	def "POST /auth/pwreset disabled and nonexistent responses have identical shape"() {
+		given:
+		// Pins the normalization invariant: disabled and nonexistent users must produce structurally
+		// identical responses so the body cannot be used to enumerate account state.
+		def disabledEmail = 'userResetEqualityDisabled@test.com'
+		def disabledUser = UserUtil.createUser(disabledEmail)
+		def disabledUri = disabledUser['resourceUri'].toString()
+		assert EntryStoreClient.putRequest(disabledUri, JsonOutput.toJson([disabled: 'true'])).getResponseCode() == HTTP_NO_CONTENT
+
+		def nonexistentEmail = 'userResetEqualityNonexistent@test.com'
+
+		def disabledBody = JsonOutput.toJson([
+			email             : disabledEmail,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
+		])
+		def nonexistentBody = JsonOutput.toJson([
+			email             : nonexistentEmail,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
+		])
+
+		when:
+		def disabledConn = EntryStoreClient.postRequest('/auth/pwreset', disabledBody)
+		def nonexistentConn = EntryStoreClient.postRequest('/auth/pwreset', nonexistentBody)
+
+		then:
+		disabledConn.getResponseCode() == nonexistentConn.getResponseCode()
+		disabledConn.getContentType() == nonexistentConn.getContentType()
+		// Replace each submitted email with a placeholder so the comparison ignores the only
+		// substitution point and asserts the rest of the body is byte-identical.
+		def disabledBodyText = disabledConn.inputStream.text.replace(disabledEmail.toLowerCase(), '<EMAIL>')
+		def nonexistentBodyText = nonexistentConn.inputStream.text.replace(nonexistentEmail.toLowerCase(), '<EMAIL>')
+		disabledBodyText == nonexistentBodyText
+		greenMail.getReceivedMessages().size() == 0
 	}
 
 	def "POST /auth/pwreset should return 503 when the reCaptcha verifier returns an upstream 5xx"() {

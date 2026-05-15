@@ -47,25 +47,21 @@ class LoginAttemptServiceTest {
 		service.init();
 	}
 
-	private void setupUserExists() {
-		when(pm.getPrincipalEntry(USERNAME)).thenReturn(userEntry);
-	}
-
 	private void setupUserExistsAsAdmin() {
-		setupUserExists();
+		when(pm.getPrincipalEntry(USERNAME)).thenReturn(userEntry);
 		when(userEntry.getResourceURI()).thenReturn(USER_URI);
 		when(pm.isUserAdminOrAdminGroup(USER_URI)).thenReturn(true);
 	}
 
 	@BeforeEach
 	void setUp() {
+		// With includeAdmin=true (the default) the service never consults PrincipalManager, so most
+		// tests do not need to stub pm. Only adminExemptWhenIncludeAdminFalse exercises that path.
 		initService(3, Duration.ofMinutes(5), true);
 	}
 
 	@Test
 	void belowMaxAttempts_notLockedOut() {
-		setupUserExists();
-
 		service.recordFailure(USERNAME);
 		service.recordFailure(USERNAME);
 
@@ -74,8 +70,6 @@ class LoginAttemptServiceTest {
 
 	@Test
 	void atMaxAttempts_lockedOut() {
-		setupUserExists();
-
 		service.recordFailure(USERNAME);
 		service.recordFailure(USERNAME);
 		service.recordFailure(USERNAME);
@@ -86,8 +80,6 @@ class LoginAttemptServiceTest {
 
 	@Test
 	void successAfterFailures_clearsCounter() {
-		setupUserExists();
-
 		service.recordFailure(USERNAME);
 		service.recordFailure(USERNAME);
 
@@ -100,7 +92,6 @@ class LoginAttemptServiceTest {
 	@Test
 	void lockoutExpiresAfterDuration() throws InterruptedException {
 		initService(2, Duration.ofMillis(100), true);
-		setupUserExists();
 
 		service.recordFailure(USERNAME);
 		service.recordFailure(USERNAME);
@@ -159,8 +150,6 @@ class LoginAttemptServiceTest {
 
 	@Test
 	void adminLockedWhenIncludeAdminTrue() {
-		setupUserExists();
-
 		service.recordFailure(USERNAME);
 		service.recordFailure(USERNAME);
 		service.recordFailure(USERNAME);
@@ -169,18 +158,38 @@ class LoginAttemptServiceTest {
 	}
 
 	@Test
-	void nonExistentUser_noLockoutEntryCreated() {
-		when(pm.getPrincipalEntry("ghost")).thenReturn(null);
-
+	void nonExistentUser_lockoutAppliesUniformly() {
+		// Nonexistent usernames are tracked the same way as known users so the absence of a 429
+		// response cannot be used to enumerate accounts.
+		service.recordFailure("ghost");
+		service.recordFailure("ghost");
 		service.recordFailure("ghost");
 
-		assertFalse(service.isLockedOut("ghost"));
+		assertTrue(service.isLockedOut("ghost"));
+	}
+
+	@Test
+	void overlyLongUsername_ignored() {
+		String huge = "x".repeat(257);
+
+		service.recordFailure(huge);
+		service.recordFailure(huge);
+		service.recordFailure(huge);
+
+		assertFalse(service.isLockedOut(huge));
+	}
+
+	@Test
+	void nullUsername_doesNotThrow() {
+		service.recordFailure(null);
+		service.recordSuccess(null);
+
+		assertFalse(service.isLockedOut(null));
 	}
 
 	@Test
 	void counterResetsAfterLockoutExpires() throws InterruptedException {
 		initService(2, Duration.ofMillis(100), true);
-		setupUserExists();
 
 		service.recordFailure(USERNAME);
 		service.recordFailure(USERNAME);

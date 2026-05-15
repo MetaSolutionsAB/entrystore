@@ -11,7 +11,6 @@ import java.time.Instant
 import static com.icegreen.greenmail.util.ServerSetupTest.SMTP
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_ENTITY_TOO_LARGE
-import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
 import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
@@ -399,7 +398,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		then:
 		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
 		loginConnection.getContentType().contains('application/json')
-		loginConnection.getErrorStream().text.contains('Login failed')
+		loginConnection.getErrorStream().text.contains('Unauthorized')
 	}
 
 	def "POST /auth/cookie with Accept json header should not log in the blacklisted user and respond with json"() {
@@ -417,7 +416,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		then:
 		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
 		loginConnection.getContentType().contains('application/json')
-		loginConnection.getErrorStream().text.contains('Login failed')
+		loginConnection.getErrorStream().text.contains('Unauthorized')
 	}
 
 	def "POST /auth/cookie with Accept html header should not log in the blacklisted user and respond with json"() {
@@ -435,10 +434,10 @@ class CookieLoginResourceIT extends BaseSpec {
 		then:
 		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
 		loginConnection.getContentType().contains('application/json')
-		loginConnection.getErrorStream().text.contains('Login failed')
+		loginConnection.getErrorStream().text.contains('Unauthorized')
 	}
 
-	def "POST /auth/cookie should not log in the disabled user"() {
+	def "POST /auth/cookie should not log in the disabled user and respond with the same 401 as wrong credentials"() {
 		given:
 		def username = 'userForLoginDisabled@test.com'
 		def user = UserUtil.createUser(username)
@@ -454,9 +453,9 @@ class CookieLoginResourceIT extends BaseSpec {
 		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
 
 		then:
-		loginConnection.getResponseCode() == HTTP_FORBIDDEN
-		loginConnection.getContentType().contains('text/html')
-		loginConnection.getErrorStream().text.contains('Login failed. The account is disabled.')
+		loginConnection.getResponseCode() == HTTP_UNAUTHORIZED
+		loginConnection.getContentType().contains('application/json')
+		loginConnection.getErrorStream().text.contains('Unauthorized')
 	}
 
 	def "POST /auth/cookie should temporarily lockout user who entered wrong password too many times"() {
@@ -481,7 +480,7 @@ class CookieLoginResourceIT extends BaseSpec {
 		then:
 		loginConnection.getResponseCode() == 429
 		loginConnection.getContentType().contains('application/json')
-		loginConnection.getErrorStream().text.contains('User account is temporarily disabled. Too many failed logins.')
+		loginConnection.getErrorStream().text.contains('Too many login attempts. Please try again later.')
 
 		when:
 		// wait for the temporary lockout period to pass; 2s outlasts the 1s configured duration
@@ -491,6 +490,58 @@ class CookieLoginResourceIT extends BaseSpec {
 
 		then:
 		login2Connection.getResponseCode() == HTTP_OK
+	}
+
+	def "POST /auth/cookie should also temporarily lockout nonexistent usernames"() {
+		given:
+		// Username that is never created — verifies that lockout tracking is not limited to known users,
+		// which would otherwise leak account existence via the absence of 429 responses.
+		def username = 'unknownUserForLockout@test.com'
+		def bodyParams = 'auth_username=' + username + '&auth_password=anyBadPass'
+		// 3 attempts before the lockout threshold
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+
+		when:
+		// 4th attempt trips the lockout
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+
+		then:
+		loginConnection.getResponseCode() == 429
+		loginConnection.getContentType().contains('application/json')
+		loginConnection.getErrorStream().text.contains('Too many login attempts. Please try again later.')
+	}
+
+	def "POST /auth/cookie wrong-password and disabled-user responses are byte-identical"() {
+		given:
+		// Pins the normalization invariant against future regressions that might reintroduce
+		// a disabled-account discriminator (different status, body, or content type).
+		def enabledUsername = 'userForLoginEquality@test.com'
+		def enabledUser = UserUtil.createUser(enabledUsername)
+		UserUtil.setUserPassword(enabledUser['resourceUri'].toString(), password)
+
+		def disabledUsername = 'userForLoginEqualityDisabled@test.com'
+		def disabledUser = UserUtil.createUser(disabledUsername)
+		def disabledUri = disabledUser['resourceUri'].toString()
+		UserUtil.setUserPassword(disabledUri, password)
+		assert EntryStoreClient.putRequest(disabledUri, JsonOutput.toJson([disabled: true])).getResponseCode() == HTTP_NO_CONTENT
+
+		def wrongPasswordBody = 'auth_username=' + enabledUsername + '&auth_password=wrongPass123'
+		def disabledLoginBody = 'auth_username=' + disabledUsername + '&auth_password=' + password
+
+		when:
+		def wrongPasswordConn = EntryStoreClient.postRequest('/auth/cookie', wrongPasswordBody, '', 'application/x-www-form-urlencoded')
+		def disabledConn = EntryStoreClient.postRequest('/auth/cookie', disabledLoginBody, '', 'application/x-www-form-urlencoded')
+
+		then:
+		wrongPasswordConn.getResponseCode() == disabledConn.getResponseCode()
+		wrongPasswordConn.getContentType() == disabledConn.getContentType()
+		// Compare every field of the JSON envelope except the per-response timestamp.
+		def wrongPasswordJson = JSON_PARSER.parseText(wrongPasswordConn.getErrorStream().text)
+		def disabledJson = JSON_PARSER.parseText(disabledConn.getErrorStream().text)
+		wrongPasswordJson.keySet() == disabledJson.keySet()
+		wrongPasswordJson.findAll { k, _ -> k != 'timestamp' } == disabledJson.findAll { k, _ -> k != 'timestamp' }
 	}
 
 	def "GET /_principals/entry/{id}?includeAll should expose disabledUntil while user is locked out"() {

@@ -223,6 +223,40 @@ public class HttpUtil {
 		}
 	}
 
+	private static final int LOG_VALUE_MAX_LENGTH = 128;
+
+	/**
+	 * Writes the unified 401 JSON envelope used for every authentication failure
+	 * (bad credentials, unknown user, disabled account, blacklisted user). Centralised
+	 * here so the response stays byte-identical across all call sites and no caller
+	 * can accidentally introduce a discriminator into the body.
+	 */
+	public static void writeUnauthorizedAsJson(HttpServletResponse response, HttpServletRequest request) throws IOException {
+		writeErrorResponseAsJson(response, ErrorResponse.builder()
+				.status(HttpStatus.UNAUTHORIZED.value())
+				.path(request.getRequestURI())
+				.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
+				.build());
+	}
+
+	/**
+	 * Returns a representation of {@code value} that is safe to embed in a log line:
+	 * control characters (including CR/LF) are replaced with {@code ?} so attacker-supplied
+	 * input cannot forge synthetic log entries, and the result is truncated so a multi-MB
+	 * username cannot blow up the log appender. Returns the literal string {@code "null"}
+	 * when the input is null so the call site does not have to guard.
+	 */
+	public static String sanitizeForLog(String value) {
+		if (value == null) {
+			return "null";
+		}
+		String stripped = value.replaceAll("\\p{Cntrl}", "?");
+		if (stripped.length() > LOG_VALUE_MAX_LENGTH) {
+			return stripped.substring(0, LOG_VALUE_MAX_LENGTH) + "…";
+		}
+		return stripped;
+	}
+
 	/**
 	 * Clears the {@link SecurityContextHolder} and invalidates the current HTTP session if one exists.
 	 * Used on SSO reject paths: the authentication filter has already persisted the token to the

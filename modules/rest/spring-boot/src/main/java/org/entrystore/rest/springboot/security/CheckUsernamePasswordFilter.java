@@ -96,21 +96,19 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			// with their local credentials, see https://entrystore.org/#!KB/Authentication.md
 			if ((passwordLoginBlacklist != null && passwordLoginBlacklist.stream().anyMatch(s -> s.equalsIgnoreCase(username.toLowerCase()))) ||
 					(passwordLoginWhitelist != null && passwordLoginWhitelist.stream().noneMatch(s -> s.equalsIgnoreCase(username.toLowerCase())))) {
-				log.warn("User {} is blacklisted", username);
-				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
-						.status(HttpStatus.UNAUTHORIZED.value())
-						.path(request.getRequestURI())
-						.error("Login failed")
-						.build());
+				log.warn("User {} is blacklisted", HttpUtil.sanitizeForLog(username));
+				// Body must remain identical to the generic 401 used for all other authentication
+				// failures so account state cannot be enumerated.
+				HttpUtil.writeUnauthorizedAsJson(response, request);
 				return;
 			}
 
 			if (loginAttemptService.isLockedOut(username.toLowerCase())) {
-				log.warn("User {} is temporarily locked out due to too many failed login attempts", username);
+				log.warn("User {} is temporarily locked out due to too many failed login attempts", HttpUtil.sanitizeForLog(username));
 				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.TOO_MANY_REQUESTS.value())
 						.path(request.getRequestURI())
-						.error("User account is temporarily disabled. Too many failed logins.")
+						.error("Too many login attempts. Please try again later.")
 						.build());
 				return;
 			}
