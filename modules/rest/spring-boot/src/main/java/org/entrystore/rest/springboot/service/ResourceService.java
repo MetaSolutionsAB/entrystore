@@ -1,7 +1,8 @@
 package org.entrystore.rest.springboot.service;
 
-import jakarta.annotation.PostConstruct;
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -46,6 +47,7 @@ import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -91,8 +93,6 @@ public class ResourceService {
 
 	private static final int MAX_DELETE_REDIRECTS = 10;
 
-	private static Boolean rewriteMediaTypeJavaScript;
-
 	private final RepositoryManagerImpl repositoryManager;
 	private final ResourceJsonSerializer resourceSerializer;
 
@@ -100,11 +100,12 @@ public class ResourceService {
 
 	private final SessionRegistry sessionRegistry;
 
-	@PostConstruct
-	public void init() {
-		// Runs after class constructor
-		rewriteMediaTypeJavaScript = repositoryManager.getConfiguration().getBoolean(Settings.HTTP_ALLOW_MEDIA_TYPE_JAVASCRIPT, false);
-	}
+	@Value("${entrystore.import.tmpdir:${java.io.tmpdir}}")
+	@Setter(AccessLevel.PACKAGE)
+	private File importTmpDir;
+
+	@Value("${entrystore.http.allow-media-type-javascript:false}")
+	private boolean rewriteMediaTypeJavaScript;
 
 	public String serializeResourceAsJson(Entry entry, String mediaType, ListFilter listFilter) {
 
@@ -708,52 +709,46 @@ public class ResourceService {
 		File tmpFile = null;
 		try {
 			tmpFile = writeStreamToTmpFile(new ByteArrayInputStream(requestBody));
-			if (tmpFile != null && tmpFile.exists()) {
-				ZipFile zipFile = new ZipFile(tmpFile);
-				Enumeration<? extends ZipEntry> zipEntries = zipFile.entries();
-				while (zipEntries.hasMoreElements()) {
-					ZipEntry entry = zipEntries.nextElement();
-					String nameLC = entry.getName();
-					if (!entry.isDirectory() && (nameLC.endsWith(".xml") || nameLC.endsWith(".rdf"))) {
-						InputStream fileIS = zipFile.getInputStream(entry);
-						if (fileIS == null) {
-							log.error("Unable to get InputStream of ZipEntry: {}", nameLC);
-							continue;
-						}
-						String fileString;
-						try {
-							StringWriter writer = new StringWriter();
-							IOUtils.copy(fileIS, writer, StandardCharsets.UTF_8);
-							fileString = writer.toString();
-							if (fileString == null) {
-								log.error("[IMPORT] Problem with reading ZipEntry into String");
-								continue;
-							}
-						} finally {
-							fileIS.close();
-						}
-						if (nameLC.endsWith(".rdf")) {
-							importRDFResource(fileString);
-						}
-					}
-				}
-			} else {
-				throw new InternalServerErrorException("Unable to create temporary file for ZIP import");
-			}
+			importZipFile(tmpFile);
 		} catch (IOException ioe) {
 			throw new InternalServerErrorException("Failed to process ZIP import", ioe);
 		} finally {
 			if (tmpFile != null) {
-				tmpFile.delete();
+				try {
+					Files.deleteIfExists(tmpFile.toPath());
+				} catch (IOException e) {
+					log.warn("[IMPORT] Failed to delete temporary ZIP file: {}", tmpFile, e);
+				}
+			}
+		}
+	}
+
+	private void importZipFile(File tmpFile) throws IOException {
+		try (ZipFile zipFile = new ZipFile(tmpFile)) {
+			Enumeration<? extends ZipEntry> zipEntries = zipFile.entries();
+			while (zipEntries.hasMoreElements()) {
+				ZipEntry entry = zipEntries.nextElement();
+				String name = entry.getName();
+				if (entry.isDirectory() || !name.endsWith(".rdf")) {
+					continue;
+				}
+				String fileString;
+				try (InputStream fileIS = zipFile.getInputStream(entry)) {
+					StringWriter writer = new StringWriter();
+					IOUtils.copy(fileIS, writer, StandardCharsets.UTF_8);
+					fileString = writer.toString();
+				}
+				importRDFResource(fileString);
 			}
 		}
 	}
 
 	private File writeStreamToTmpFile(InputStream is) throws IOException {
-		File tmpFile = File.createTempFile("entrystore_res_import", ".zip");
+		File tmpFile = File.createTempFile("entrystore_res_import", ".zip", importTmpDir);
 		log.info("[IMPORT] Created temporary file: {}", tmpFile);
-		OutputStream fos = Files.newOutputStream(tmpFile.toPath());
-		FileOperations.copyFile(is, fos);
+		try (OutputStream fos = Files.newOutputStream(tmpFile.toPath())) {
+			FileOperations.copyFile(is, fos);
+		}
 		return tmpFile;
 	}
 
