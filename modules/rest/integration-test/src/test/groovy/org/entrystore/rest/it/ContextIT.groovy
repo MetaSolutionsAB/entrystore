@@ -120,6 +120,68 @@ class ContextIT extends BaseSpec {
 		responseJson['info'] != null
 	}
 
+	def "POST /_principals/groups with #field=#value should return BAD_REQUEST 400"() {
+		when:
+		def connection = EntryStoreClient.postRequest('/_principals/groups' + convertMapToQueryParams(params))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		def body = JSON_PARSER.parseText(connection.errorStream.text)
+		body['error'] != null
+		body['error'].toString().contains("'" + field + "'")
+		body['error'].toString().contains(reasonContains)
+
+		where:
+		field       | value              | params                         | reasonContains
+		'name'      | 'foo/bar'          | [name: 'foo/bar']              | 'must contain only'
+		'name'      | 'foo$bar'          | [name: 'foo$bar']              | 'must contain only'
+		'name'      | '...'              | [name: '...']                  | 'must contain only'
+		'name'      | '_admin'           | [name: '_admin']               | 'must not start with'
+		'name'      | 'auth'             | [name: 'auth']                 | 'reserved name'
+		'name'      | 'Auth'             | [name: 'Auth']                 | 'reserved name'
+		'name'      | ('a' * 65)         | [name: ('a' * 65)]             | 'exceeds maximum length'
+		'contextId' | 'ctx with spaces'  | [contextId: 'ctx with spaces'] | 'must contain only'
+		'contextId' | 'ctx/with/slashes' | [contextId: 'ctx/with/slashes']| 'must contain only'
+		'contextId' | '---'              | [contextId: '---']             | 'must contain only'
+		'contextId' | '_admin'           | [contextId: '_admin']          | 'must not start with'
+		'contextId' | ('a' * 65)         | [contextId: ('a' * 65)]        | 'exceeds maximum length'
+	}
+
+	def "POST /_principals/groups with name at exact 64-character limit should return CREATED 201"() {
+		given:
+		def contextId = 'boundary-ctx-64'
+		def name = 'a' * 64
+		def params = [contextId: contextId, name: name]
+
+		when:
+		def groupId = createContext(params)
+
+		then:
+		groupId != null
+		groupId.length() > 0
+		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId)
+		conn.getResponseCode() == HTTP_OK
+		def responseJson = JSON_PARSER.parseText(conn.inputStream.text)
+		responseJson['entryId'] == contextId
+		responseJson['name'] == name
+	}
+
+	def "POST /_principals/groups with contextId at exact 64-character limit should return CREATED 201"() {
+		given:
+		def contextId = 'b' * 64
+		def params = [contextId: contextId, name: 'boundary-name-64']
+
+		when:
+		def groupId = createContext(params)
+
+		then:
+		groupId != null
+		def conn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId)
+		conn.getResponseCode() == HTTP_OK
+		def responseJson = JSON_PARSER.parseText(conn.inputStream.text)
+		responseJson['entryId'] == contextId
+	}
+
 	def "POST /_contexts?id={id} as guest should respond with Unauthorized 401"() {
 		given:
 		def contextId = 'new-context-2'

@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.service;
 
 import com.google.common.collect.Sets;
@@ -12,21 +28,30 @@ import org.entrystore.Group;
 import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
+import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class GroupService {
 
+	// contextId becomes a URI segment, so restrict to URL-safe characters. Require at least one alphanumeric.
+	private static final Pattern VALID_CONTEXT_ID = Pattern.compile("^(?=.*[A-Za-z0-9])[A-Za-z0-9_-]+$");
+	// name is a human-readable label stored as an RDF literal; allow spaces and dots, require at least one alphanumeric.
+	private static final Pattern VALID_NAME = Pattern.compile("^(?=.*[A-Za-z0-9])[A-Za-z0-9 ._-]+$");
+	private static final int MAX_IDENTIFIER_LENGTH = 64;
+
 	private final RepositoryManagerImpl repositoryManager;
 	private final PrincipalManager principalManager;
 
 	private final UserService userService;
+	private final ReservedNamesService reservedNamesService;
 
 
 	/**
@@ -50,16 +75,16 @@ public class GroupService {
 				}
 			}
 
-			// read name, to be used for group and context
-			boolean setName = false;
-			if (name != null) {
-				name = name.trim();
-				setName = !name.isEmpty();
-			}
+			// normalize inputs to null when blank
+			name = StringUtils.trimToNull(name);
+			contextId = StringUtils.trimToNull(contextId);
 
-			// we allow to manually set the context entry ID
+			// validate inputs BEFORE escalating to admin so a rejected request never runs with admin rights
+			if (name != null) {
+				validateIdentifier(name, "name", VALID_NAME, "letters, digits, spaces, dots, hyphens, and underscores");
+			}
 			if (contextId != null) {
-				contextId = StringUtils.trimToNull(contextId);
+				validateIdentifier(contextId, "contextId", VALID_CONTEXT_ID, "letters, digits, hyphens, and underscores");
 			}
 
 			// we need admin-rights to create groups and contexts
@@ -67,7 +92,7 @@ public class GroupService {
 
 			// check whether context or group with desired name already exists
 			// and abort execution of request if necessary
-			if (setName && principalManager.getPrincipalEntry(name) != null || cm.getContextURI(name) != null) {
+			if (name != null && (principalManager.getPrincipalEntry(name) != null || cm.getContextURI(name) != null)) {
 				throw new DataConflictException("Requested value of the name parameter: '" + name + "' is already used");
 			}
 
@@ -86,7 +111,7 @@ public class GroupService {
 			// make requesting user a group member
 			newGroup.addMember(principalManager.getUser(requestingUserUri));
 
-			if (setName) {
+			if (name != null) {
 				// set name of the group
 				newGroup.setName(name);
 			}
@@ -102,7 +127,7 @@ public class GroupService {
 
 			Context newContext = (Context) newContextEntry.getResource();
 
-			if (setName) {
+			if (name != null) {
 				// set name of the new context
 				cm.setName(newContextEntry.getEntryURI(), name);
 			}
@@ -113,6 +138,21 @@ public class GroupService {
 			return newGroupEntry;
 		} finally {
 			principalManager.setAuthenticatedUserURI(requestingUserUri);
+		}
+	}
+
+	private void validateIdentifier(String value, String fieldName, Pattern allowed, String allowedDescription) {
+		if (value.length() > MAX_IDENTIFIER_LENGTH) {
+			throw new BadRequestException("Parameter '" + fieldName + "' exceeds maximum length of " + MAX_IDENTIFIER_LENGTH + " characters");
+		}
+		if (!allowed.matcher(value).matches()) {
+			throw new BadRequestException("Parameter '" + fieldName + "' must contain only " + allowedDescription);
+		}
+		if (value.startsWith("_")) {
+			throw new BadRequestException("Parameter '" + fieldName + "' must not start with an underscore (reserved for system entities)");
+		}
+		if (reservedNamesService.isReservedName(value.toLowerCase())) {
+			throw new BadRequestException("Parameter '" + fieldName + "' is a reserved name");
 		}
 	}
 
