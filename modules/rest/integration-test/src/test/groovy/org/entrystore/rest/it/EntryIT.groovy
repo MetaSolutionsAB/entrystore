@@ -26,6 +26,7 @@ import java.time.Year
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CONFLICT
+import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
@@ -681,6 +682,50 @@ class EntryIT extends BaseSpec {
 
 		then:
 		connection.getResponseCode() == HTTP_FORBIDDEN
+	}
+
+	def "POST /{context-id}?entrytype=link as authenticated USER with write ACL should create the entry"() {
+		given:
+		// Pins the positive side of @PreAuthorize("hasAnyRole('USER','ADMIN')") on ContextController.createEntry:
+		// a non-admin authenticated user with write access must be able to create entries.
+		// Tightening the @PreAuthorize to hasRole('ADMIN') would lock out every regular user and fail this test.
+		def preauthContextId = 'preauth-positive-ctx'
+		getOrCreateContext([contextId: preauthContextId])
+		// Grant es:write on the context entry to the standard 'user' fixture (non-admin USER role).
+		def userResourceUri = EntryStoreClient.createdEsUsers['user']['resourceUri']
+		def contextEntryUri = EntryStoreClient.baseUrl + '/_contexts/entry/' + preauthContextId
+		def aclBody = JsonOutput.toJson([(contextEntryUri): [
+				(NameSpaceConst.TERM_WRITE): [[type: 'uri', value: userResourceUri]]
+		]])
+		def aclConn = EntryStoreClient.putRequest('/_contexts/entry/' + preauthContextId, aclBody, 'admin')
+		assert aclConn.getResponseCode() == HTTP_NO_CONTENT
+		def params = [entrytype: 'link', resource: resourceUrl]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + preauthContextId + convertMapToQueryParams(params),
+				'', 'user')
+
+		then:
+		connection.getResponseCode() == HTTP_CREATED
+		connection.getContentType().contains('application/json')
+		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
+		responseJson['entryId'] != null
+		def createdEntryId = responseJson['entryId'].toString()
+		createdEntryId.length() > 0
+
+		// Round-trip: confirm the entry was actually persisted, not just that a 201 was returned.
+		// Without this a regression returning a hallucinated 201 (e.g. a controller refactor that
+		// short-circuits before delegating to the service) would still pass the test.
+		def getConn = EntryStoreClient.getRequest('/' + preauthContextId + '/entry/' + createdEntryId, 'user')
+		getConn.getResponseCode() == HTTP_OK
+		def getJson = JSON_PARSER.parseText(getConn.inputStream.text)
+		getJson['entryId'] == createdEntryId
+		// Also pin that the POSTed `resource` parameter was preserved — a refactor that silently
+		// drops it would still return 201 with a valid entryId and pass the entryId check alone.
+		def entryUri = EntryStoreClient.baseUrl + '/' + preauthContextId + '/entry/' + createdEntryId
+		def entryResources = getJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE].collect()
+		entryResources.size() == 1
+		entryResources[0]['value'] == resourceUrl
 	}
 
 	def "POST /{context-id}?entrytype=link&template=templateEntry with metadata in the body, should create a new link entry with local metadata combined with MD from template entry"() {
@@ -2005,7 +2050,8 @@ class EntryIT extends BaseSpec {
 		def editEntryConn = EntryStoreClient.putRequest('/' + contextId + '/entry/' + entryId, putBody, '', 'text/turtle')
 
 		then:
-		editEntryConn.getResponseCode() == HTTP_UNAUTHORIZED
+		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
+		editEntryConn.getResponseCode() == HTTP_NOT_FOUND
 
 		def getEntryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
 		getEntryConn.getResponseCode() == HTTP_OK
@@ -2150,10 +2196,11 @@ class EntryIT extends BaseSpec {
 		def entryConn = EntryStoreClient.deleteRequest('/' + contextId + '/entry/' + entryId, '[]', '')
 
 		then:
-		entryConn.getResponseCode() == HTTP_UNAUTHORIZED
+		// Guests get 404 (not 401) for existing-private so they cannot enumerate entries
+		entryConn.getResponseCode() == HTTP_NOT_FOUND
 		entryConn.getContentType().contains('application/json')
 		def response = entryConn.errorStream.text
-		response.contains('Unauthorized')
+		response.contains('Not Found')
 	}
 
 	def "DELETE /{context-id}/entry/{entry-id} as non-admin user should respond with Forbidden and not delete the entry"() {
@@ -2179,8 +2226,13 @@ class EntryIT extends BaseSpec {
 		then:
 		entryConn.getResponseCode() == HTTP_FORBIDDEN
 		entryConn.getContentType().contains('application/json')
-		def response = entryConn.errorStream.text
-		response.contains('Not authorized')
+		def responseJson = JSON_PARSER.parseText(entryConn.errorStream.text)
+		// Pins the no-ACL-leak invariant by construction: any new field, or any deviation from the
+		// bare "Forbidden" reason phrase, fails the test. A denylist of substrings would miss https://,
+		// bare hostnames, principal usernames — equivalent CWE-209 disclosures.
+		responseJson.keySet().sort() == ['error', 'path', 'status', 'timestamp']
+		responseJson['error'] == 'Forbidden'
+		responseJson['status'] == 403
 	}
 
 	def "DELETE /{context-id}/entry/{entry-id} as admin should delete the entry"() {

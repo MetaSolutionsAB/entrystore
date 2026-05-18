@@ -14,6 +14,7 @@ import org.eclipse.rdf4j.model.Statement;
 import org.eclipse.rdf4j.model.Value;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.rio.RDFParseException;
 import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.ContextManager;
@@ -41,7 +42,7 @@ import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
-import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
+import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.RDFJSON;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
@@ -395,7 +396,23 @@ public class EntryService {
 
 
 	/**
-	 * Creates a local entry
+	 * Creates a local entry.
+	 *
+	 * <p><b>Error-propagation contract:</b>
+	 * <ul>
+	 *   <li>JSON/RDF parse failures of the user-supplied body are converted to {@link BadRequestException} (400)
+	 *       via {@code safeRollback} (logs the cleanup failure if it fires, attaches it as a suppressed exception).
+	 *   <li>Any other {@code RuntimeException} from a post-skeleton step (RDF4J {@code RepositoryException},
+	 *       ACL-copy failure, etc.) is rethrown unchanged so {@code AppExceptionHandler.handleGenericException}
+	 *       sanitises it to a generic 500.
+	 *   <li>If {@code setResource} returns {@code false} (validation rejected the body) the just-created
+	 *       skeleton is removed via {@code removeOrphan}, which throws {@link InternalServerErrorException}
+	 *       (500) if cleanup fails — so a partial store-inconsistency cannot be masked as the caller's 400.
+	 * </ul>
+	 * <p>Callers <b>must not</b> wrap-and-rethrow propagated {@code RuntimeException}s as
+	 * {@code BadRequestException(e.getMessage(), e)} (or any handler that echoes the message) — the
+	 * original messages may carry RDF4J/Jackson internals (file paths, store details) that must not
+	 * reach the client.
 	 *
 	 * @return the new created entry
 	 */
@@ -411,12 +428,39 @@ public class EntryService {
 					((ContextImpl) context).copyACL(listUri, entry);
 				}
 				return entry;
-			} else {
-				context.remove(entry.getEntryURI());
-				return null;
 			}
-		} catch (JsonProcessingException e) {
-			return null;
+		} catch (JsonProcessingException | RDFParseException e) {
+			// Both fire on user-supplied content (JSON envelope or inner RDFJSON in `info`/`metadata`)
+			// — client-side input failure, mapped to 400. The cause chain preserves the underlying
+			// parser detail for server-side debugging without echoing it to the client.
+			safeRollback(context, entry, e);
+			throw new BadRequestException("Cannot create an entry with provided JSON/RDF", e);
+		} catch (RuntimeException e) {
+			safeRollback(context, entry, e);
+			throw e;
+		}
+		// setResource returned false (validation failure) — clean up the just-created skeleton. This
+		// path is outside the try/catch above so that a cleanup failure here (rethrown by removeOrphan)
+		// does NOT then trigger safeRollback to call context.remove a second time on the same entry.
+		removeOrphan(context, entry);
+		return null;
+	}
+
+	private void safeRollback(Context context, Entry entry, Throwable original) {
+		try {
+			context.remove(entry.getEntryURI());
+		} catch (RuntimeException cleanupEx) {
+			log.error("Failed to remove orphan entry {} after create failure", entry.getEntryURI(), cleanupEx);
+			original.addSuppressed(cleanupEx);
+		}
+	}
+
+	private void removeOrphan(Context context, Entry entry) {
+		try {
+			context.remove(entry.getEntryURI());
+		} catch (RuntimeException cleanupEx) {
+			log.error("Failed to remove orphan entry {}", entry.getEntryURI(), cleanupEx);
+			throw new InternalServerErrorException("Orphan cleanup failed for entry " + entry.getEntryURI(), cleanupEx);
 		}
 	}
 
@@ -538,8 +582,6 @@ public class EntryService {
 			} else {
 				entry.getContext().remove(entry.getEntryURI());
 			}
-		} catch (AuthorizationException e) {
-			throw new UnauthorizedException("Not authorized");
 		} catch (EntryMissingException e) {
 			throw new EntityNotFoundException("Entry requested for deletion was not found", e);
 		}

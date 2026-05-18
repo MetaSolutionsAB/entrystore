@@ -114,9 +114,15 @@ public class AppExceptionHandler {
 		return jsonResponse(responseBody);
 	}
 
+	// Anonymous callers receive the bare reason phrase to prevent CWE-204 entry-existence enumeration
+	// (the message would carry "No entry with id 'X' found in context 'Y'" and let a guest distinguish
+	// missing-entry from private-entry via handleAccessDeniedException's 404). Authenticated callers
+	// receive the call-site-crafted message: EntityNotFoundException messages don't carry internal
+	// state (no principal URIs, no hostnames), only entry/context IDs the caller already knows.
 	@ExceptionHandler(EntityNotFoundException.class)
 	public ResponseEntity<ErrorResponse> handleEntityNotFoundException(EntityNotFoundException ex,
-																	   HttpServletRequest request) {
+																	   HttpServletRequest request,
+																	   Authentication authentication) {
 		if (ex.getCause() != null) {
 			log.debug("EntityNotFoundException at endpoint '{}': {}", request.getRequestURI(), ex.getMessage(), ex);
 		} else {
@@ -125,7 +131,7 @@ public class AppExceptionHandler {
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(HttpStatus.NOT_FOUND.value())
 				.path(request.getRequestURI())
-				.error(ex.getMessage())
+				.error(isAnonymous(authentication) ? HttpStatus.NOT_FOUND.getReasonPhrase() : ex.getMessage())
 				.build();
 		return jsonResponse(responseBody);
 	}
@@ -194,12 +200,47 @@ public class AppExceptionHandler {
 	// Both carry internal state in their messages (principal URI, entry URI, ACL bit for core,
 	// or a non-informative "Access Denied" for Spring), so the HTTP body is always the reason
 	// phrase; the original message is retained on the server-side log line for debugging.
+	//
+	// Status mapping splits on the exception type for anonymous callers:
+	// - Core `AuthorizationException` (raised by core ACL checks — `PrincipalManager`, `ContextImpl`, etc.) → 404 Not Found,
+	//   to prevent CWE-204 existence enumeration: without this, a guest could distinguish
+	//   "entry exists but is private" (401) from "entry does not exist" (404).
+	// - Spring's `AccessDeniedException` (raised by Spring method security — `@PreAuthorize`,
+	//   `@PostAuthorize`, `@Secured`, or `AuthorizationManager` checks) → 401 Unauthorized,
+	//   preserving the standard "you must authenticate" semantics for endpoints that explicitly
+	//   require a role. In this codebase today these guards are coarse role-based admission and
+	//   don't gate per-entity existence, so they don't open an enumeration oracle. If a future
+	//   contributor adds per-entity SpEL (e.g. `@PreAuthorize("hasPermission(#id, 'read')")`),
+	//   the resulting AccessDeniedException would re-open CWE-204 on that endpoint and this
+	//   mapping must be revisited — see
+	//   AppExceptionHandlerTest#handleAccessDeniedException_anonymousCallerWithSpringAccessDenied_returns401.
+	// Authenticated callers keep 403 in both cases — they've already proven identity, so
+	// existence disclosure is moot.
+	//
+	// The 404 branch also emits a distinguishable log message ("AccessDenied masked as 404 …") so
+	// operators can separate enumeration probes from legitimate missing-entry traffic in dashboards;
+	// that contract is pinned by
+	// AppExceptionHandlerTest#handleAccessDeniedException_emitsMaskedLogLineFor404AndStandardLineForOthers.
 	@ExceptionHandler({AccessDeniedException.class, AuthorizationException.class})
 	public ResponseEntity<ErrorResponse> handleAccessDeniedException(RuntimeException ex,
 																	 HttpServletRequest request,
 																	 Authentication authentication) {
-		log.info("AccessDenied of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
-		HttpStatus status = (authentication == null || authentication instanceof AnonymousAuthenticationToken) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
+		HttpStatus status;
+		if (isAnonymous(authentication)) {
+			status = (ex instanceof AuthorizationException) ? HttpStatus.NOT_FOUND : HttpStatus.UNAUTHORIZED;
+		} else {
+			status = HttpStatus.FORBIDDEN;
+		}
+		if (status == HttpStatus.NOT_FOUND) {
+			// Stays at INFO because the log line itself fires per anonymous request and is therefore
+			// attacker-floodable. CWE-204 enumeration-scan detection belongs in an aggregated signal
+			// (e.g. a Micrometer counter on this branch tag), not in a per-event log level.
+			log.info("AccessDenied masked as 404 (anonymous, core ACL) at endpoint '{}'. Original: {}",
+					request.getRequestURI(), ex.getMessage());
+		} else {
+			log.info("AccessDenied of type '{}' at endpoint '{}'. Error: {}",
+					ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
+		}
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(status.value())
 				.path(request.getRequestURI())
@@ -216,7 +257,7 @@ public class AppExceptionHandler {
 																  HttpServletRequest request,
 																  Authentication authentication) {
 		log.info("ForbiddenException of type '{}' at endpoint '{}'. Error: {}", ex.getClass().getName(), request.getRequestURI(), ex.getMessage());
-		HttpStatus status = (authentication == null || authentication instanceof AnonymousAuthenticationToken) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
+		HttpStatus status = isAnonymous(authentication) ? HttpStatus.UNAUTHORIZED : HttpStatus.FORBIDDEN;
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(status.value())
 				.path(request.getRequestURI())
@@ -244,7 +285,7 @@ public class AppExceptionHandler {
 	@ExceptionHandler(CustomResponseException.class)
 	public ResponseEntity<ErrorResponse> handleCustomResponseException(CustomResponseException ex,
 																	   HttpServletRequest request) {
-		log.info("CustomResponseException ({}): {}", ex.getStatus().value(), ex.getMessage(), ex);
+		log.info("CustomResponseException ({}) at endpoint '{}': {}", ex.getStatus().value(), request.getRequestURI(), ex.getMessage(), ex);
 		ErrorResponse responseBody = ErrorResponse.builder()
 				.status(ex.getStatus().value())
 				.path(request.getRequestURI())
@@ -300,6 +341,10 @@ public class AppExceptionHandler {
 
 	private static ResponseEntity<ErrorResponse> jsonResponse(ErrorResponse body) {
 		return ResponseEntity.status(body.status()).contentType(MediaType.APPLICATION_JSON).body(body);
+	}
+
+	private static boolean isAnonymous(Authentication authentication) {
+		return authentication == null || authentication instanceof AnonymousAuthenticationToken;
 	}
 
 	@ExceptionHandler(HtmlResponseException.class)

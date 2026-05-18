@@ -9,7 +9,6 @@ import java.util.concurrent.TimeUnit
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
-import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 import static org.awaitility.Awaitility.await
 
 class IndexResourceIT extends BaseSpec {
@@ -28,7 +27,7 @@ class IndexResourceIT extends BaseSpec {
 		connection.getResponseCode() == HTTP_NOT_FOUND
 		connection.getContentType().contains('application/json')
 		def json = JSON_PARSER.parseText(connection.errorStream.text)
-		json['error'] == 'No entry with id \'randomEntryId\' found in context \'60\''
+		json['error'] == 'Not Found'
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/index as admin on non-existing entry should return 404"() {
@@ -42,7 +41,7 @@ class IndexResourceIT extends BaseSpec {
 		json['error'] == 'No entry with id \'randomEntryId\' found in context \'60\''
 	}
 
-	def "GET /{context-id}/entry/{entry-id}/index as guest should respond with Unauthorized 401"() {
+	def "GET /{context-id}/entry/{entry-id}/index as guest should respond with Not Found 404"() {
 		given:
 		// create local String entry
 		def someText = 'Some text'
@@ -52,18 +51,13 @@ class IndexResourceIT extends BaseSpec {
 		assert entryId.length() > 0
 
 		when:
-		def connection = null
-		await()
-			.conditionEvaluationListener(new ConditionEvaluationLogger(log::info))
-			.pollInterval(100, TimeUnit.MILLISECONDS)
-			.atMost(20, TimeUnit.SECONDS)
-			.until({
-				connection = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '/index', '')
-				return connection.getResponseCode() != HTTP_NOT_FOUND
-			})
+		// The Administer-ACL check fires before the Solr lookup, so the response is the same regardless
+		// of indexing state — no need to poll. Guests get 404 (not 401) for existing-private so they
+		// cannot enumerate entries.
+		def connection = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '/index', '')
 
 		then:
-		connection.getResponseCode() == HTTP_UNAUTHORIZED
+		connection.getResponseCode() == HTTP_NOT_FOUND
 	}
 
 	def "GET /{context-id}/entry/{entry-id}/index as non-admin user should respond with Forbidden"() {

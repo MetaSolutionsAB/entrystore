@@ -235,7 +235,7 @@ class ProxyIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
-	def 'GET /{context-id}/proxy as guest should return 401'() {
+	def 'GET /{context-id}/proxy as guest should return 404 (avoiding context-existence enumeration)'() {
 		given:
 		getOrCreateContext([contextId: 'proxy-guest'])
 
@@ -243,7 +243,8 @@ class ProxyIT extends BaseSpec {
 		def conn = EntryStoreClient.getRequest('/proxy-guest/proxy?url=' + mockUrl('/api/data'), '')
 
 		then:
-		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		// Guests get 404 (not 401) so they cannot distinguish "context exists but is private" from "context does not exist"
+		conn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
 	def 'GET /{context-id}/proxy as non-admin user without context access should return 403'() {

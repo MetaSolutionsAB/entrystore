@@ -55,6 +55,7 @@ public class ContextController {
 		return contextService.getContextEntries(contextId, deletedEntries != null, entryName);
 	}
 
+	@PreAuthorize("hasAnyRole('USER','ADMIN')")
 	@Operation(summary = "Creates a new entry inside the given context")
 	@PostMapping(path = "/{context-id:(?!favicon\\.ico$).+}", produces = {MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE})
 	public ResponseEntity<CreateEntryResponse> createEntry(

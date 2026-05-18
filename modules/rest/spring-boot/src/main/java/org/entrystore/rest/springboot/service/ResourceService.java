@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.rdf4j.model.Model;
-import org.entrystore.AuthorizationException;
 import org.entrystore.Context;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -30,6 +29,7 @@ import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.springboot.model.api.ListFilter;
 import org.entrystore.rest.springboot.model.dto.CompletionState;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.EntityTooLargeException;
@@ -47,6 +47,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.session.SessionInformation;
@@ -87,6 +88,8 @@ import java.util.zip.ZipFile;
 public class ResourceService {
 
 	private static final String EMPTY_REPRESENTATION = "";
+
+	private static final int MAX_DELETE_REDIRECTS = 10;
 
 	private static Boolean rewriteMediaTypeJavaScript;
 
@@ -313,10 +316,12 @@ public class ResourceService {
 			try {
 				StringResource stringResource = (StringResource) entry.getResource();
 				stringResource.setString(new String(requestBody, StandardCharsets.UTF_8));
-			} catch (AuthorizationException e) {
-				throw e;
-			} catch (Exception e) {
-				throw new BadRequestException("Problem with input", e);
+			} catch (RepositoryException e) {
+				throw new InternalServerErrorException("Failed to store string resource for entry " + entry.getEntryURI(), e);
+			} catch (IllegalArgumentException e) {
+				throw new BadRequestException("Invalid string resource payload for entry " + entry.getEntryURI(), e);
+			} catch (ClassCastException e) {
+				throw new InternalServerErrorException("Resource of entry " + entry.getEntryURI() + " is not a StringResource", e);
 			}
 
 			return CompletionState.UPDATED;
@@ -538,17 +543,17 @@ public class ResourceService {
 		if ((entryType == EntryType.Link || entryType == EntryType.Reference || entryType == EntryType.LinkReference)
 				&& "true".equalsIgnoreCase(proxy)) {
 
-			deleteRemoteResource(entry.getResourceURI().toString(), 0);
+			deleteRemoteResource(entry.getResourceURI().toString(), entry.getEntryURI().toString(), 0);
 		} else {
 			deleteLocalResource(entry, isRecursive);
 		}
 	}
 
-	private void deleteRemoteResource(String url, int redirectCount) {
+	private void deleteRemoteResource(String url, String entryUri, int redirectCount) {
 
-		if (redirectCount > 10) {
-			log.warn("More than 10 redirect loops detected, aborting");
-			return;
+		if (redirectCount > MAX_DELETE_REDIRECTS) {
+			log.warn("More than {} redirect loops detected for entry {}, aborting", MAX_DELETE_REDIRECTS, entryUri);
+			throw new CustomResponseException("Too many redirects for entry " + entryUri, HttpStatus.BAD_GATEWAY);
 		}
 
 		/*
@@ -570,7 +575,7 @@ public class ResourceService {
 				if (e.getResponseHeaders() != null && e.getResponseHeaders().getLocation() != null) {
 					String redirectUrl = e.getResponseHeaders().getLocation().toString();
 					log.info("DELETE Request redirected to {}", redirectUrl);
-					deleteRemoteResource(redirectUrl, ++redirectCount);
+					deleteRemoteResource(redirectUrl, entryUri, ++redirectCount);
 				} else {
 					throw new InternalServerErrorException("Redirect response received without a Location header.", e);
 				}
@@ -604,9 +609,17 @@ public class ResourceService {
 			if (entry.getResourceType() == ResourceType.InformationResource) {
 				Data data = (Data) entry.getResource();
 				if (!data.delete()) {
-					log.error("Unable to delete resource of entry {}", entry.getEntryURI());
-					// Not sure why 400, should be 500?
-					throw new BadRequestException("Unable to delete resource of entry " + entry.getEntryURI());
+					File dataFile = data.getDataFile();
+					String diagnostics;
+					if (dataFile == null) {
+						diagnostics = "dataFile=null";
+					} else {
+						boolean exists = dataFile.exists();
+						long size = exists ? dataFile.length() : -1;
+						diagnostics = "path=" + dataFile.getAbsolutePath() + ", exists=" + exists + ", size=" + size;
+					}
+					log.error("Unable to delete resource of entry {} ({})", entry.getEntryURI(), diagnostics);
+					throw new InternalServerErrorException("Unable to delete resource of entry " + entry.getEntryURI());
 				}
 			}
 		}
