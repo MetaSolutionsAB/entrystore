@@ -22,7 +22,6 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,9 +38,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
 
@@ -50,8 +51,6 @@ class ResourceServiceTest {
 
 	@TempDir
 	Path isolatedTmpDir;
-
-	private String originalTmpDir;
 
 	@Mock
 	private RepositoryManagerImpl repositoryManager;
@@ -72,19 +71,11 @@ class ResourceServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		// Redirect java.io.tmpdir to a JUnit-managed isolated directory so the
-		// temp-file cleanup assertions cannot be polluted by other processes or
-		// orphan files left in the shared system temp directory.
-		originalTmpDir = System.getProperty("java.io.tmpdir");
-		System.setProperty("java.io.tmpdir", isolatedTmpDir.toString());
 		service = new ResourceService(repositoryManager, resourceSerializer, restTemplate, sessionRegistry);
-	}
-
-	@AfterEach
-	void restoreTmpDir() {
-		if (originalTmpDir != null) {
-			System.setProperty("java.io.tmpdir", originalTmpDir);
-		}
+		// Point importTmpDir at the JUnit-managed isolated directory so the
+		// temp-file cleanup assertions are scoped to this test and cannot be
+		// polluted by other processes or orphan files in the shared system temp.
+		service.setImportTmpDir(isolatedTmpDir.toFile());
 	}
 
 	@Test
@@ -116,8 +107,9 @@ class ResourceServiceTest {
 
 		// new ZipFile(tmpFile) throws ZipException (an IOException) for a non-ZIP
 		// payload; importFromZIP wraps it as InternalServerErrorException.
-		assertThrows(InternalServerErrorException.class,
+		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
 				() -> service.importEntryResource(entry, notAZip, true));
+		assertInstanceOf(ZipException.class, ex.getCause());
 
 		assertIsolatedTmpDirIsEmpty("exception path from ZipFile constructor");
 	}

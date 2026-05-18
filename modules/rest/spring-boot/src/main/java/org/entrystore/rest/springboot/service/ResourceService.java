@@ -1,7 +1,8 @@
 package org.entrystore.rest.springboot.service;
 
-import jakarta.annotation.PostConstruct;
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -46,6 +47,7 @@ import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -91,8 +93,6 @@ public class ResourceService {
 
 	private static final int MAX_DELETE_REDIRECTS = 10;
 
-	private static Boolean rewriteMediaTypeJavaScript;
-
 	private final RepositoryManagerImpl repositoryManager;
 	private final ResourceJsonSerializer resourceSerializer;
 
@@ -100,11 +100,12 @@ public class ResourceService {
 
 	private final SessionRegistry sessionRegistry;
 
-	@PostConstruct
-	public void init() {
-		// Runs after class constructor
-		rewriteMediaTypeJavaScript = repositoryManager.getConfiguration().getBoolean(Settings.HTTP_ALLOW_MEDIA_TYPE_JAVASCRIPT, false);
-	}
+	@Value("${entrystore.import.tmpdir:${java.io.tmpdir}}")
+	@Setter(AccessLevel.PACKAGE)
+	private File importTmpDir;
+
+	@Value("${entrystore.http.allow-media-type-javascript:false}")
+	private boolean rewriteMediaTypeJavaScript;
 
 	public String serializeResourceAsJson(Entry entry, String mediaType, ListFilter listFilter) {
 
@@ -743,7 +744,7 @@ public class ResourceService {
 	}
 
 	private File writeStreamToTmpFile(InputStream is) throws IOException {
-		File tmpFile = File.createTempFile("entrystore_res_import", ".zip");
+		File tmpFile = File.createTempFile("entrystore_res_import", ".zip", importTmpDir);
 		log.info("[IMPORT] Created temporary file: {}", tmpFile);
 		try (OutputStream fos = Files.newOutputStream(tmpFile.toPath())) {
 			FileOperations.copyFile(is, fos);
