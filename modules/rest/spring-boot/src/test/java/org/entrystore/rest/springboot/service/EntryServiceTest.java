@@ -104,11 +104,17 @@ class EntryServiceTest {
 		BadRequestException thrown = assertThrows(BadRequestException.class, () ->
 				service.createLocalEntry(context, "orphan", GraphType.User, null, null, body));
 
-		assertEquals("Cannot create an entry with provided JSON", thrown.getMessage());
+		assertEquals("Cannot create an entry with provided JSON/RDF", thrown.getMessage());
 		Throwable cause = thrown.getCause();
 		assertInstanceOf(JsonProcessingException.class, cause, "Original parse error must be the cause");
-		assertTrue(Arrays.asList(cause.getSuppressed()).contains(cleanupFailure),
-				"Cleanup failure must be attached as a suppressed exception on the original cause");
+		// Walk both levels: the cleanup failure may be attached to the original parse error (current
+		// implementation) OR to the rethrown BadRequestException (a plausible future refactor — the
+		// cleanup failure relates to this operation, not to the parse error). Either is acceptable
+		// as long as it remains visible on the exception chain a server-side log line will print.
+		boolean cleanupVisible =
+				Arrays.asList(thrown.getSuppressed()).contains(cleanupFailure)
+				|| Arrays.asList(cause.getSuppressed()).contains(cleanupFailure);
+		assertTrue(cleanupVisible, "Cleanup failure must be visible somewhere on the exception chain");
 		verify(context).remove(entryUri);
 	}
 }

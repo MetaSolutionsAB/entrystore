@@ -320,6 +320,8 @@ public class ResourceService {
 				throw new InternalServerErrorException("Failed to store string resource for entry " + entry.getEntryURI(), e);
 			} catch (IllegalArgumentException e) {
 				throw new BadRequestException("Invalid string resource payload for entry " + entry.getEntryURI(), e);
+			} catch (ClassCastException e) {
+				throw new InternalServerErrorException("Resource of entry " + entry.getEntryURI() + " is not a StringResource", e);
 			}
 
 			return CompletionState.UPDATED;
@@ -541,17 +543,17 @@ public class ResourceService {
 		if ((entryType == EntryType.Link || entryType == EntryType.Reference || entryType == EntryType.LinkReference)
 				&& "true".equalsIgnoreCase(proxy)) {
 
-			deleteRemoteResource(entry.getResourceURI().toString(), 0);
+			deleteRemoteResource(entry.getResourceURI().toString(), entry.getEntryURI().toString(), 0);
 		} else {
 			deleteLocalResource(entry, isRecursive);
 		}
 	}
 
-	private void deleteRemoteResource(String url, int redirectCount) {
+	private void deleteRemoteResource(String url, String entryUri, int redirectCount) {
 
 		if (redirectCount > MAX_DELETE_REDIRECTS) {
-			log.warn("More than {} redirect loops detected, aborting", MAX_DELETE_REDIRECTS);
-			throw new CustomResponseException("Too many redirects", HttpStatus.BAD_GATEWAY);
+			log.warn("More than {} redirect loops detected for entry {}, aborting", MAX_DELETE_REDIRECTS, entryUri);
+			throw new CustomResponseException("Too many redirects for entry " + entryUri, HttpStatus.BAD_GATEWAY);
 		}
 
 		/*
@@ -573,7 +575,7 @@ public class ResourceService {
 				if (e.getResponseHeaders() != null && e.getResponseHeaders().getLocation() != null) {
 					String redirectUrl = e.getResponseHeaders().getLocation().toString();
 					log.info("DELETE Request redirected to {}", redirectUrl);
-					deleteRemoteResource(redirectUrl, ++redirectCount);
+					deleteRemoteResource(redirectUrl, entryUri, ++redirectCount);
 				} else {
 					throw new InternalServerErrorException("Redirect response received without a Location header.", e);
 				}
@@ -607,6 +609,16 @@ public class ResourceService {
 			if (entry.getResourceType() == ResourceType.InformationResource) {
 				Data data = (Data) entry.getResource();
 				if (!data.delete()) {
+					File dataFile = data.getDataFile();
+					String diagnostics;
+					if (dataFile == null) {
+						diagnostics = "dataFile=null";
+					} else {
+						boolean exists = dataFile.exists();
+						long size = exists ? dataFile.length() : -1;
+						diagnostics = "path=" + dataFile.getAbsolutePath() + ", exists=" + exists + ", size=" + size;
+					}
+					log.error("Unable to delete resource of entry {} ({})", entry.getEntryURI(), diagnostics);
 					throw new InternalServerErrorException("Unable to delete resource of entry " + entry.getEntryURI());
 				}
 			}

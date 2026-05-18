@@ -25,7 +25,9 @@ import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.logging.log4j.core.config.Property;
 import org.entrystore.AuthorizationException;
+import org.entrystore.Entry;
 import org.entrystore.PrincipalManager.AccessProperty;
+import org.entrystore.User;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -39,13 +41,14 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AppExceptionHandlerTest {
 
@@ -74,17 +77,23 @@ class AppExceptionHandlerTest {
 
 	@Test
 	void handleAccessDeniedException_anonymousCaller_returns404ToPreventEnumeration() {
-		// Pins the CWE-204 fix: an anonymous caller hitting a private entry must receive 404 with the
-		// bare "Not Found" reason phrase, indistinguishable from a missing entry. A regression flipping
-		// back to 401 (or surfacing the exception message) would re-open the existence-enumeration
-		// oracle on every ACL-protected endpoint.
+		// Pins the CWE-204 fix: an anonymous caller hitting a private entry must receive 404 with
+		// `body.error()` equal to the bare reason phrase, indistinguishable from a missing entry.
+		// The AuthorizationException is built with realistic principal/entry URIs so `ex.getMessage()`
+		// genuinely carries those substrings; the assertions below pin that `body.error()` stays
+		// exactly "Not Found" and never echoes them, which would fail if a future regression wires
+		// `ex.getMessage()` into that field.
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
 		Mockito.when(req.getRequestURI()).thenReturn("/1/entry/42");
 		Authentication anonymous = new AnonymousAuthenticationToken(
 				"key", "anonymousUser",
 				List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS")));
 
-		AuthorizationException ex = new AuthorizationException(null, null, AccessProperty.ReadMetadata);
+		User user = Mockito.mock(User.class);
+		Mockito.when(user.getURI()).thenReturn(URI.create("http://example.org/_principals/resource/alice"));
+		Entry entry = Mockito.mock(Entry.class);
+		Mockito.when(entry.getEntryURI()).thenReturn(URI.create("http://example.org/1/entry/42"));
+		AuthorizationException ex = new AuthorizationException(user, entry, AccessProperty.ReadMetadata);
 
 		ResponseEntity<ErrorResponse> response = handler.handleAccessDeniedException(ex, req, anonymous);
 
@@ -92,7 +101,12 @@ class AppExceptionHandlerTest {
 		ErrorResponse body = response.getBody();
 		assertNotNull(body, "Expected non-null ErrorResponse body");
 		assertEquals(404, body.status());
+		// Body field MUST be exactly the reason phrase — not just any non-null string. Below assertions
+		// pin that none of the realistic internal substrings from ex.getMessage() leak.
 		assertEquals("Not Found", body.error());
+		assertFalse(body.error().contains("_principals"));
+		assertFalse(body.error().contains("ReadMetadata"));
+		assertFalse(body.error().contains("alice"));
 	}
 
 	@Test
@@ -262,13 +276,21 @@ class AppExceptionHandlerTest {
 			appender.stop();
 		}
 
-		assertEquals(3, captured.size(), "Expected exactly three log events");
-		assertTrue(captured.get(0).getMessage().getFormattedMessage().contains("masked as 404"),
-				"Anonymous + AuthorizationException must emit the 'masked as 404' tag");
-		assertTrue(captured.get(1).getMessage().getFormattedMessage().contains("of type"),
-				"Anonymous + AccessDeniedException must take the standard branch");
-		assertTrue(captured.get(2).getMessage().getFormattedMessage().contains("of type"),
-				"Authenticated callers must take the standard branch regardless of exception type");
+		// Predicate-based counts decouple the assertion from emission order, so the handler is free
+		// to reorder its two branches without touching the test. The "of type" substring is paired
+		// with the exception class name so a reworded template that drops the URI/class fields would
+		// degrade the ops signal AND fail the assertion.
+		long masked = captured.stream()
+				.filter(e -> e.getMessage().getFormattedMessage().contains("masked as 404 (anonymous, core ACL)"))
+				.count();
+		long standard = captured.stream()
+				.filter(e -> e.getMessage().getFormattedMessage().contains("AccessDenied of type"))
+				.filter(e -> e.getMessage().getFormattedMessage().contains("AuthorizationException")
+						|| e.getMessage().getFormattedMessage().contains("AccessDeniedException"))
+				.count();
+		assertEquals(1L, masked, "Exactly one event must carry the masked-404 tag");
+		assertEquals(2L, standard, "Exactly two events must take the standard branch with exception-class detail");
+		assertEquals(3, captured.size(), "Total captured events must match the three handler invocations");
 	}
 
 	@Test

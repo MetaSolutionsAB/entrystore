@@ -232,12 +232,12 @@ class LocalEntryIT extends BaseSpec {
 		(entriesBefore - entriesAfter).isEmpty()
 	}
 
-	def "POST /_principals?graphtype=user with malformed RDFJSON in info field should not leave an orphan entry"() {
+	def "POST /_principals?graphtype=user with malformed RDFJSON in info field should return 400 and not leave an orphan entry"() {
 		given:
 		// 'info' is a valid JSON string, but contains a subject URI ending in '.' which RDFJSON
-		// rejects with RDFParseException (a RuntimeException). The failure fires AFTER the entry
-		// skeleton is created and AFTER setResource succeeds — i.e. a post-creation RuntimeException
-		// must still trigger the orphan rollback, not just the JsonProcessingException path.
+		// rejects with RDFParseException. The failure fires AFTER the entry skeleton is created
+		// and AFTER setResource succeeds — the orphan rollback must run, AND the client must see
+		// a 400 (malformed user input is a client-side fault, not a server fault).
 		def malformedInfo = '{"http://example.com/s.": {"http://example.com/p": [{"type": "uri", "value": "http://example.com/o"}]}}'
 		def params = [graphtype: 'user']
 		def body = JsonOutput.toJson([resource: [name: 'mdRollbackUser'], info: malformedInfo])
@@ -250,11 +250,11 @@ class LocalEntryIT extends BaseSpec {
 		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
 
 		then:
-		// RDFParseException propagates as the original RuntimeException type via the broadened
-		// catch — AppExceptionHandler.handleGenericException maps it to a sanitised 500.
-		connection.getResponseCode() == HTTP_INTERNAL_ERROR
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		def responseJson = JSON_PARSER.parseText(connection.errorStream.text)
+		responseJson['error'].toString().contains('Cannot create an entry with provided JSON/RDF')
 
-		// Orphan rollback must run for the RuntimeException branch too — entry set must be unchanged.
+		// Orphan rollback must still run for the RDFParseException branch — entry set unchanged.
 		def afterConn = EntryStoreClient.getRequest('/_principals')
 		afterConn.getResponseCode() == HTTP_OK
 		def entriesAfter = (JSON_PARSER.parseText(afterConn.inputStream.text) as List).toSet()

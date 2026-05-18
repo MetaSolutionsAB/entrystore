@@ -232,6 +232,9 @@ public class AppExceptionHandler {
 			status = HttpStatus.FORBIDDEN;
 		}
 		if (status == HttpStatus.NOT_FOUND) {
+			// Stays at INFO because the log line itself fires per anonymous request and is therefore
+			// attacker-floodable. CWE-204 enumeration-scan detection belongs in an aggregated signal
+			// (e.g. a Micrometer counter on this branch tag), not in a per-event log level.
 			log.info("AccessDenied masked as 404 (anonymous, core ACL) at endpoint '{}'. Original: {}",
 					request.getRequestURI(), ex.getMessage());
 		} else {

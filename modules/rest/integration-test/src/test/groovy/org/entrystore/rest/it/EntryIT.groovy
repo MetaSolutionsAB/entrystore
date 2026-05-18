@@ -2226,13 +2226,13 @@ class EntryIT extends BaseSpec {
 		then:
 		entryConn.getResponseCode() == HTTP_FORBIDDEN
 		entryConn.getContentType().contains('application/json')
-		def response = entryConn.errorStream.text
-		def responseJson = JSON_PARSER.parseText(response)
-		// Pins the no-ACL-leak invariant the handler comments call out: the body must carry the bare
-		// reason phrase and no ACL/principal URIs (CWE-209 — internal host/port through baseURL).
+		def responseJson = JSON_PARSER.parseText(entryConn.errorStream.text)
+		// Pins the no-ACL-leak invariant by construction: any new field, or any deviation from the
+		// bare "Forbidden" reason phrase, fails the test. A denylist of substrings would miss https://,
+		// bare hostnames, principal usernames — equivalent CWE-209 disclosures.
+		responseJson.keySet().sort() == ['error', 'path', 'status', 'timestamp']
 		responseJson['error'] == 'Forbidden'
-		!response.contains('http://')
-		!response.contains('_principals/resource/')
+		responseJson['status'] == 403
 	}
 
 	def "DELETE /{context-id}/entry/{entry-id} as admin should delete the entry"() {
