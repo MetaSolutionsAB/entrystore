@@ -92,24 +92,32 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 				return;
 			}
 
-			// Use case for whitelisting: enforced SSO with some users that should be able to log in
-			// with their local credentials, see https://entrystore.org/#!KB/Authentication.md
-			if ((passwordLoginBlacklist != null && passwordLoginBlacklist.stream().anyMatch(s -> s.equalsIgnoreCase(username.toLowerCase()))) ||
-					(passwordLoginWhitelist != null && passwordLoginWhitelist.stream().noneMatch(s -> s.equalsIgnoreCase(username.toLowerCase())))) {
-				log.warn("User {} is blacklisted", HttpUtil.sanitizeForLog(username));
-				// Body must remain identical to the generic 401 used for all other authentication
-				// failures so account state cannot be enumerated.
-				HttpUtil.writeUnauthorizedAsJson(response, request);
-				return;
-			}
-
-			if (loginAttemptService.isLockedOut(username.toLowerCase())) {
+			// Lockout is checked before any short-circuit branch so locked-out attempts always
+			// produce a 429 regardless of whether the username is blacklisted, on the whitelist,
+			// or unknown — preventing an attacker from using the absence of 429 to enumerate which
+			// usernames take the normal auth path.
+			if (loginAttemptService.isLockedOut(username)) {
 				log.warn("User {} is temporarily locked out due to too many failed login attempts", HttpUtil.sanitizeForLog(username));
 				HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
 						.status(HttpStatus.TOO_MANY_REQUESTS.value())
 						.path(request.getRequestURI())
 						.error("Too many login attempts. Please try again later.")
 						.build());
+				return;
+			}
+
+			// Use case for whitelisting: enforced SSO with some users that should be able to log in
+			// with their local credentials, see https://entrystore.org/#!KB/Authentication.md
+			if ((passwordLoginBlacklist != null && passwordLoginBlacklist.stream().anyMatch(s -> s.equalsIgnoreCase(username))) ||
+					(passwordLoginWhitelist != null && passwordLoginWhitelist.stream().noneMatch(s -> s.equalsIgnoreCase(username)))) {
+				log.warn("User {} is blacklisted", HttpUtil.sanitizeForLog(username));
+				// Record the failure so blacklisted attempts trip the same lockout threshold as
+				// any other username — otherwise the absence of 429 on retries would identify
+				// which usernames are blacklisted.
+				loginAttemptService.recordFailure(username);
+				// Body must remain identical to the generic 401 used for all other authentication
+				// failures so account state cannot be enumerated.
+				HttpUtil.writeUnauthorizedAsJson(response, request);
 				return;
 			}
 		}

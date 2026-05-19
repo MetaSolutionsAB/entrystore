@@ -513,6 +513,28 @@ class CookieLoginResourceIT extends BaseSpec {
 		loginConnection.getErrorStream().text.contains('Too many login attempts. Please try again later.')
 	}
 
+	def "POST /auth/cookie should temporarily lockout repeated attempts against a blacklisted username"() {
+		given:
+		// Verifies that the blacklist short-circuit also records failures, so the lockout 429
+		// applies to blacklisted usernames too. Otherwise an attacker could count 401s without
+		// ever seeing a 429 and conclude the username is blacklisted (enumeration oracle).
+		def username = 'userForLoginBlacklistLockout@test.com'
+		def bodyParams = 'auth_username=' + username + '&auth_password=anyBadPass'
+		// 3 attempts before the lockout threshold — each should return 401 from the blacklist branch
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+		assert EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded').getResponseCode() == HTTP_UNAUTHORIZED
+
+		when:
+		// 4th attempt trips the lockout — proves the blacklist branch records failures
+		def loginConnection = EntryStoreClient.postRequest('/auth/cookie', bodyParams, '', 'application/x-www-form-urlencoded')
+
+		then:
+		loginConnection.getResponseCode() == 429
+		loginConnection.getContentType().contains('application/json')
+		loginConnection.getErrorStream().text.contains('Too many login attempts. Please try again later.')
+	}
+
 	def "POST /auth/cookie wrong-password and disabled-user responses are byte-identical"() {
 		given:
 		// Pins the normalization invariant against future regressions that might reintroduce

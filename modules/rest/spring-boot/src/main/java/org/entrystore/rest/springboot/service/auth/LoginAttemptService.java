@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
 
 import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_ADMIN;
 import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_DURATION;
@@ -56,24 +57,29 @@ public class LoginAttemptService {
 		if (maxAttempts <= 0 || lockoutDuration.isZero()) {
 			return;
 		}
-		if (username == null || username.length() > MAX_USERNAME_LENGTH) {
+		if (username == null) {
 			return;
 		}
+		if (username.length() > MAX_USERNAME_LENGTH) {
+			log.debug("Skipping login attempt tracking for oversized username (len={})", username.length());
+			return;
+		}
+		String key = username.toLowerCase(Locale.ROOT);
 
 		// Failures are tracked for every submitted username, whether or not it resolves to an actual
 		// user. Otherwise a never-existing username would be visibly absent from the lockout, leaking
 		// account state. The principal lookup only happens when admin exclusion is configured.
 		if (!includeAdmin) {
-			Entry userEntry = pm.getPrincipalEntry(username);
+			Entry userEntry = pm.getPrincipalEntry(key);
 			if (userEntry != null && pm.isUserAdminOrAdminGroup(userEntry.getResourceURI())) {
-				log.warn("Login attempt of user [{}] is not counted towards temporary lockout because of configuration for admin users", HttpUtil.sanitizeForLog(username));
+				log.warn("Login attempt of user [{}] is not counted towards temporary lockout because of configuration for admin users", HttpUtil.sanitizeForLog(key));
 				return;
 			}
 		}
 
-		log.info("Failed login attempt for [{}]", HttpUtil.sanitizeForLog(username));
+		log.info("Failed login attempt for [{}]", HttpUtil.sanitizeForLog(key));
 
-		attemptCache.asMap().compute(username, (_, current) -> {
+		attemptCache.asMap().compute(key, (_, current) -> {
 			int previousFailures = 0;
 			if (current != null && (current.lockedUntil() == null || !Instant.now().isAfter(current.lockedUntil()))) {
 				previousFailures = current.failedAttempts();
@@ -82,7 +88,7 @@ public class LoginAttemptService {
 			int newCount = previousFailures + 1;
 			if (newCount >= maxAttempts) {
 				Instant lockedUntil = Instant.now().plus(lockoutDuration);
-				log.warn("User [{}] failed too many login attempts and will be locked out until {}", HttpUtil.sanitizeForLog(username), lockedUntil);
+				log.warn("User [{}] failed too many login attempts and will be locked out until {}", HttpUtil.sanitizeForLog(key), lockedUntil);
 				return new LoginAttemptInfo(newCount, lockedUntil);
 			}
 			return new LoginAttemptInfo(newCount, null);
@@ -93,7 +99,7 @@ public class LoginAttemptService {
 		if (username == null) {
 			return;
 		}
-		attemptCache.invalidate(username);
+		attemptCache.invalidate(username.toLowerCase(Locale.ROOT));
 	}
 
 	public boolean isLockedOut(String username) {
@@ -104,13 +110,14 @@ public class LoginAttemptService {
 		if (username == null) {
 			return null;
 		}
-		LoginAttemptInfo info = attemptCache.getIfPresent(username);
+		String key = username.toLowerCase(Locale.ROOT);
+		LoginAttemptInfo info = attemptCache.getIfPresent(key);
 		if (info == null || info.lockedUntil() == null) {
 			return null;
 		}
 		if (Instant.now().isAfter(info.lockedUntil())) {
-			log.info("User [{}] stopped being locked out", HttpUtil.sanitizeForLog(username));
-			attemptCache.asMap().remove(username, info);
+			log.info("User [{}] stopped being locked out", HttpUtil.sanitizeForLog(key));
+			attemptCache.asMap().remove(key, info);
 			return null;
 		}
 		return info.lockedUntil();

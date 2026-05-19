@@ -38,7 +38,7 @@ public class FormLoginAuthenticationFailureHandler implements AuthenticationFail
 		String username = request.getParameter("auth_username");
 		if (username != null) {
 			try {
-				loginAttemptService.recordFailure(username.toLowerCase());
+				loginAttemptService.recordFailure(username);
 			} catch (RuntimeException e) {
 				// Lockout bookkeeping must never break the normalized response contract.
 				log.warn("Failed to record login attempt for [{}]", HttpUtil.sanitizeForLog(username), e);

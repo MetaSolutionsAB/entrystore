@@ -590,6 +590,34 @@ class PasswordResetResourceIT extends BaseSpec {
 		body.contains('&lt;script&gt;alert(1)&lt;/script&gt;')
 	}
 
+	def "POST /auth/pwreset responds with generic 200 when SMTP delivery fails"() {
+		given:
+		// Pins the SMTP-failure → generic 200 contract: a future regression that re-throws on
+		// !sendSuccessful would re-open the body-based enumeration leak (the existing user would
+		// see an error body where a nonexistent user gets the generic success body).
+		def username = 'userResetSmtpFailure@test.com'
+		def user = UserUtil.createUser(username)
+		UserUtil.setUserPassword(user['resourceUri'].toString(), password)
+		greenMail.stop()
+
+		def requestBody = JsonOutput.toJson([
+			email             : username,
+			password          : newPassword,
+			grecaptcharesponse: grecaptcharesponse
+		])
+
+		when:
+		def resetPasswordConn = EntryStoreClient.postRequest('/auth/pwreset', requestBody)
+
+		then:
+		resetPasswordConn.getResponseCode() == HTTP_OK
+		resetPasswordConn.getContentType().contains('text/html')
+		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
+
+		cleanup:
+		greenMail.start()
+	}
+
 	def "POST /auth/pwreset disabled and nonexistent responses have identical shape"() {
 		given:
 		// Pins the normalization invariant: disabled and nonexistent users must produce structurally

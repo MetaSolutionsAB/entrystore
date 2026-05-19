@@ -38,6 +38,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.IOException;
 import java.util.Date;
+import java.util.regex.Pattern;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
@@ -224,6 +225,7 @@ public class HttpUtil {
 	}
 
 	private static final int LOG_VALUE_MAX_LENGTH = 128;
+	private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
 
 	/**
 	 * Writes the unified 401 JSON envelope used for every authentication failure
@@ -250,7 +252,7 @@ public class HttpUtil {
 		if (value == null) {
 			return "null";
 		}
-		String stripped = value.replaceAll("\\p{Cntrl}", "?");
+		String stripped = CONTROL_CHARS.matcher(value).replaceAll("?");
 		if (stripped.length() > LOG_VALUE_MAX_LENGTH) {
 			return stripped.substring(0, LOG_VALUE_MAX_LENGTH) + "…";
 		}

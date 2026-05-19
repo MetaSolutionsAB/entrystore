@@ -91,7 +91,7 @@ public class AuthService {
 	private static final String INVALID_NAME_MESSAGE = "Invalid name.";
 	private static final String RECAPTCHA_MISSING_MESSAGE = "reCaptcha information missing.";
 	private static final String RECAPTCHA_INVALID_MESSAGE = "Invalid reCaptcha received.";
-	private static final String FAILED_TO_SEND_EMAIL_MESSAGE = "Failed to send confirmation request to {}.";
+	private static final String FAILED_TO_SEND_SIGNUP_EMAIL_MESSAGE = "Failed to send confirmation request to {}.";
 	private static final String INVALID_TOKEN_MESSAGE = "The confirmation token is invalid or has been used already.";
 	private static final String USER_NOT_FOUND_MESSAGE = "User with provided email address does not exist.";
 	private static final String USER_ALREADY_EXISTS_MESSAGE = "User with submitted email address exists already.";
@@ -302,23 +302,23 @@ public class AuthService {
 			// Nonexistent and disabled users receive the same success response as a real send so the
 			// endpoint does not leak which usernames exist or are active; the actual outcome is only logged.
 			if (u == null) {
-				log.info("Ignoring password reset attempt for non-existing user {}", ci.getEmail());
+				log.info("Ignoring password reset attempt for non-existing user {}", HttpUtil.sanitizeForLog(ci.getEmail()));
 			} else if (u.isDisabled()) {
-				log.info("Ignoring password reset attempt for disabled user {}", ci.getEmail());
+				log.info("Ignoring password reset attempt for disabled user {}", HttpUtil.sanitizeForLog(ci.getEmail()));
 			} else {
 				String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 				String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
-				log.info("Generated password reset token for {}", ci.getEmail());
+				log.info("Generated password reset token for {}", HttpUtil.sanitizeForLog(ci.getEmail()));
 
 				boolean sendSuccessful = Email.sendPasswordResetConfirmation(config, ci.getEmail(), confirmationLink);
 				if (sendSuccessful) {
 					ci.setSaltedHashedPassword(Password.getSaltedHash(password));
 					signupTokenCache.putToken(token, ci);
-					log.info("Sent confirmation request to {}", ci.getEmail());
+					log.info("Sent confirmation request to {}", HttpUtil.sanitizeForLog(ci.getEmail()));
 				} else {
 					// Stays in the generic success response so attackers cannot distinguish
 					// "user exists AND mail failed" from "user does not exist".
-					log.error("Failed to send password reset email to {}", ci.getEmail());
+					log.error("Failed to send password reset email to {}", HttpUtil.sanitizeForLog(ci.getEmail()));
 				}
 			}
 		} finally {
@@ -486,7 +486,7 @@ public class AuthService {
 			signupTokenCache.putToken(token, ci);
 			log.info("Sent confirmation request to {}", ci.getEmail());
 		} else {
-			throw new BadRequestHtmlException(FAILED_TO_SEND_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
+			throw new BadRequestHtmlException(FAILED_TO_SEND_SIGNUP_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
 		}
 
 		return POST_SUCCESS_MESSAGE.replace("{}", ci.getEmail());
