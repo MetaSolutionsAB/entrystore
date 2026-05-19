@@ -562,11 +562,10 @@ class CookieLoginResourceIT extends BaseSpec {
 		then:
 		wrongPasswordConn.getResponseCode() == disabledConn.getResponseCode()
 		wrongPasswordConn.getContentType() == disabledConn.getContentType()
-		// Compare every field of the JSON envelope except the per-response timestamp.
-		def wrongPasswordJson = JSON_PARSER.parseText(wrongPasswordConn.getErrorStream().text)
-		def disabledJson = JSON_PARSER.parseText(disabledConn.getErrorStream().text)
-		wrongPasswordJson.keySet() == disabledJson.keySet()
-		wrongPasswordJson.findAll { k, _ -> k != 'timestamp' } == disabledJson.findAll { k, _ -> k != 'timestamp' }
+		// The unified 401 envelope is byte-identical across branches: timestamp is nulled in
+		// HttpUtil.writeUnauthorizedAsJson so it cannot leak the bcrypt/no-bcrypt latency
+		// difference between branches, and the request URI (path) is the same for both calls.
+		wrongPasswordConn.getErrorStream().text == disabledConn.getErrorStream().text
 	}
 
 	def "GET /_principals/entry/{id}?includeAll should expose disabledUntil while user is locked out"() {

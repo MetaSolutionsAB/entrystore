@@ -113,8 +113,14 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 				log.warn("User {} is blacklisted", HttpUtil.sanitizeForLog(username));
 				// Record the failure so blacklisted attempts trip the same lockout threshold as
 				// any other username — otherwise the absence of 429 on retries would identify
-				// which usernames are blacklisted.
-				loginAttemptService.recordFailure(username);
+				// which usernames are blacklisted. The call is guarded so a Caffeine fault cannot
+				// surface as a 500 that itself becomes the enumeration oracle.
+				try {
+					loginAttemptService.recordFailure(username);
+				} catch (RuntimeException e) {
+					log.error("Failed to record blacklist login attempt for [{}] — lockout tracking is degraded",
+							HttpUtil.sanitizeForLog(username), e);
+				}
 				// Body must remain identical to the generic 401 used for all other authentication
 				// failures so account state cannot be enumerated.
 				HttpUtil.writeUnauthorizedAsJson(response, request);

@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_ADMIN;
 import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_DURATION;
@@ -24,15 +26,29 @@ import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_MAX_AT
 @RequiredArgsConstructor
 public class LoginAttemptService {
 
-	// Caps both the per-username key size and the total number of tracked entries so an attacker
-	// streaming arbitrary usernames cannot grow the lockout map without bound.
+	// Caps both the per-username key size and the total number of tracked counters so an attacker
+	// streaming arbitrary usernames cannot grow the lockout map without bound. The locked-until
+	// map is unbounded by design (see {@link #lockoutMap}).
 	private static final int MAX_USERNAME_LENGTH = 256;
 	private static final long MAX_TRACKED_USERNAMES = 100_000L;
 
 	private final Config config;
 	private final PrincipalManager pm;
 
-	private Cache<String, LoginAttemptInfo> attemptCache;
+	// Pre-lockout counters live in a bounded, evictable Caffeine cache. expireAfterWrite (not access)
+	// pins the lifetime to the write time so a continuously-probed counter cannot have its TTL
+	// refreshed indefinitely; the entry ages out lockoutDuration*2 after the last failure, by which
+	// point any in-progress attack window has already elapsed.
+	private Cache<String, Integer> counterCache;
+
+	// Lockout state lives in a separate, unevictable map. Splitting this out closes the cache-eviction
+	// "unlock" attack: with a single bounded cache holding both counters and lockedUntil, an attacker
+	// could flood the cache with junk usernames and evict an entry whose lockout was about to fire (or
+	// already had). A locked entry will always be visible until it actually expires by wall clock.
+	// Memory is bounded by the rate at which an attacker can successfully push entries to lockout
+	// (maxAttempts failures each) over a single lockoutDuration window, plus the per-entry footprint
+	// is just a String key and an Instant — under realistic attack rates this stays well under MB-scale.
+	private final ConcurrentMap<String, Instant> lockoutMap = new ConcurrentHashMap<>();
 
 	private int maxAttempts;
 	private Duration lockoutDuration;
@@ -44,11 +60,9 @@ public class LoginAttemptService {
 		this.lockoutDuration = config.getDuration(AUTH_TEMP_LOCKOUT_DURATION, Duration.ofMinutes(5));
 		this.includeAdmin = config.getBoolean(AUTH_TEMP_LOCKOUT_ADMIN, true);
 
-		// expireAfterAccess ages out idle entries (including non-locked counters that would
-		// otherwise persist forever); maximumSize caps the worst case under attacker traffic.
 		Duration ttl = lockoutDuration.isZero() ? Duration.ofMinutes(5) : lockoutDuration.multipliedBy(2);
-		this.attemptCache = Caffeine.newBuilder()
-				.expireAfterAccess(ttl)
+		this.counterCache = Caffeine.newBuilder()
+				.expireAfterWrite(ttl)
 				.maximumSize(MAX_TRACKED_USERNAMES)
 				.build();
 	}
@@ -79,27 +93,30 @@ public class LoginAttemptService {
 
 		log.info("Failed login attempt for [{}]", HttpUtil.sanitizeForLog(key));
 
-		attemptCache.asMap().compute(key, (_, current) -> {
-			int previousFailures = 0;
-			if (current != null && (current.lockedUntil() == null || !Instant.now().isAfter(current.lockedUntil()))) {
-				previousFailures = current.failedAttempts();
-			}
+		// If a previous lockout has expired by wall clock, clear it before recounting so the next
+		// failure starts a fresh counter rather than tipping the entry immediately back to locked.
+		Instant existingLockout = lockoutMap.get(key);
+		if (existingLockout != null && Instant.now().isAfter(existingLockout)) {
+			lockoutMap.remove(key, existingLockout);
+			counterCache.invalidate(key);
+		}
 
-			int newCount = previousFailures + 1;
-			if (newCount >= maxAttempts) {
-				Instant lockedUntil = Instant.now().plus(lockoutDuration);
-				log.warn("User [{}] failed too many login attempts and will be locked out until {}", HttpUtil.sanitizeForLog(key), lockedUntil);
-				return new LoginAttemptInfo(newCount, lockedUntil);
-			}
-			return new LoginAttemptInfo(newCount, null);
-		});
+		Integer updated = counterCache.asMap().compute(key, (_, current) -> (current == null ? 0 : current) + 1);
+		if (updated != null && updated >= maxAttempts) {
+			Instant lockedUntil = Instant.now().plus(lockoutDuration);
+			lockoutMap.put(key, lockedUntil);
+			counterCache.invalidate(key);
+			log.warn("User [{}] failed too many login attempts and will be locked out until {}", HttpUtil.sanitizeForLog(key), lockedUntil);
+		}
 	}
 
 	public void recordSuccess(String username) {
 		if (username == null) {
 			return;
 		}
-		attemptCache.invalidate(username.toLowerCase(Locale.ROOT));
+		String key = username.toLowerCase(Locale.ROOT);
+		counterCache.invalidate(key);
+		lockoutMap.remove(key);
 	}
 
 	public boolean isLockedOut(String username) {
@@ -111,17 +128,15 @@ public class LoginAttemptService {
 			return null;
 		}
 		String key = username.toLowerCase(Locale.ROOT);
-		LoginAttemptInfo info = attemptCache.getIfPresent(key);
-		if (info == null || info.lockedUntil() == null) {
+		Instant lockedUntil = lockoutMap.get(key);
+		if (lockedUntil == null) {
 			return null;
 		}
-		if (Instant.now().isAfter(info.lockedUntil())) {
+		if (Instant.now().isAfter(lockedUntil)) {
 			log.info("User [{}] stopped being locked out", HttpUtil.sanitizeForLog(key));
-			attemptCache.asMap().remove(key, info);
+			lockoutMap.remove(key, lockedUntil);
 			return null;
 		}
-		return info.lockedUntil();
+		return lockedUntil;
 	}
-
-	public record LoginAttemptInfo(int failedAttempts, Instant lockedUntil) {}
 }

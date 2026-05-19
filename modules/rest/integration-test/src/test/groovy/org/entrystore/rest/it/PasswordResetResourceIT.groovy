@@ -636,11 +636,17 @@ class PasswordResetResourceIT extends BaseSpec {
 		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
 
 		cleanup:
-		// Give the async dispatch enough time to attempt SMTP (and fail with connection-refused while
-		// greenMail is still down) before restarting greenMail. Otherwise a delayed retry could race
-		// the restart and pollute the next test's mailbox.
-		Thread.sleep(500)
+		// greenMail.stop() closes the listening socket so the async dispatch's connect attempt fails
+		// fast with ECONNREFUSED — Email.sendMessage's 3 internal retries against a closed port
+		// complete in milliseconds, not seconds. Two seconds is therefore well above the worst-case
+		// drain time on CI runners while still keeping the test snappy.
+		Thread.sleep(2_000)
 		greenMail.start()
+		// Belt-and-braces: confirm no delayed delivery raced the restart. If this fires we'd otherwise
+		// see the previous-test's message pollute the next test's mailbox. The probe gives the queue
+		// 200ms post-restart to receive any in-flight delivery before asserting nothing arrived.
+		assert !greenMail.waitForIncomingEmail(200, 1)
+		assert greenMail.getReceivedMessages().size() == 0
 	}
 
 	def "POST /auth/pwreset disabled and nonexistent responses have identical shape"() {

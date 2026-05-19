@@ -74,8 +74,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -122,10 +125,22 @@ public class AuthService {
 	private static final Object mutex = new Object();
 	private static Set<String> domainWhitelist = null;
 
+	// Shared SecureRandom — token generation runs from the executor's worker threads and these never
+	// construct one per call. Reseeding a fresh SecureRandom every request is an unnecessary entropy
+	// hit and was also a residual timing discriminator before token generation moved off the request
+	// thread (see dispatchPasswordResetEmail).
+	private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
 	// Pool size is intentionally small: pwReset throughput is bounded by PasswordResetRateLimiter,
 	// so two daemon threads are enough to absorb concurrent dispatches without blocking the request
 	// path. Threads are daemons so a shutdown that misses the @PreDestroy still does not block JVM exit.
+	// The queue is bounded to cap heap growth under distributed credential-stuffing or an SMTP outage:
+	// at queue saturation `execute` throws RejectedExecutionException, which pwReset catches and treats
+	// as a silent drop (the response stays at the generic 200 so the timing-equivalence guarantee is
+	// preserved). A CallerRunsPolicy would have run the rejected task on the request thread, which
+	// re-opens the timing oracle this whole executor exists to close.
 	private static final int PASSWORD_RESET_POOL_SIZE = 2;
+	private static final int PASSWORD_RESET_QUEUE_CAPACITY = 100;
 	private ExecutorService passwordResetExecutor;
 
 	@PostConstruct
@@ -149,11 +164,20 @@ public class AuthService {
 		}
 
 		AtomicInteger threadIndex = new AtomicInteger();
-		this.passwordResetExecutor = Executors.newFixedThreadPool(PASSWORD_RESET_POOL_SIZE, r -> {
+		ThreadFactory threadFactory = r -> {
 			Thread t = new Thread(r, "password-reset-async-" + threadIndex.incrementAndGet());
 			t.setDaemon(true);
+			// An Error escaping the worker would otherwise be swallowed by ThreadPoolExecutor's default
+			// Worker.run path; ensure it always reaches the logs so a regression is observable.
+			t.setUncaughtExceptionHandler((thread, ex) ->
+					log.error("Uncaught error in password-reset worker {}", thread.getName(), ex));
 			return t;
-		});
+		};
+		this.passwordResetExecutor = new ThreadPoolExecutor(
+				PASSWORD_RESET_POOL_SIZE, PASSWORD_RESET_POOL_SIZE,
+				0L, TimeUnit.MILLISECONDS,
+				new ArrayBlockingQueue<>(PASSWORD_RESET_QUEUE_CAPACITY),
+				threadFactory);
 	}
 
 	@PreDestroy
@@ -320,7 +344,7 @@ public class AuthService {
 		}
 
 		URI authUser = principalManager.getAuthenticatedUserURI();
-		String token = null;
+		boolean shouldSend = false;
 
 		try {
 			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
@@ -342,22 +366,30 @@ public class AuthService {
 			} else if (u.isDisabled()) {
 				log.info("Ignoring password reset attempt for disabled user {}", HttpUtil.sanitizeForLog(ci.getEmail()));
 			} else {
-				token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
-				log.info("Generated password reset token for {}", HttpUtil.sanitizeForLog(ci.getEmail()));
+				shouldSend = true;
+				log.info("Resolved active user for password reset attempt {}", HttpUtil.sanitizeForLog(ci.getEmail()));
 			}
 		} finally {
 			principalManager.setAuthenticatedUserURI(authUser);
 		}
 
-		// The expensive work (bcrypt + SMTP send) runs on a background thread so all three branches
-		// (nonexistent / disabled / active) return to the client in the same wall-clock time, closing
-		// the timing-based account-enumeration side channel that synchronous send introduces.
-		if (token != null) {
-			String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
-			String tokenFinal = token;
-			String passwordFinal = password;
-			SignupInfo ciFinal = ci;
-			passwordResetExecutor.execute(() -> dispatchPasswordResetEmail(tokenFinal, ciFinal, passwordFinal, confirmationLink));
+		// The expensive work (token generation + bcrypt + SMTP send) runs on a background thread so
+		// all three branches (nonexistent / disabled / active) return to the client without the
+		// bcrypt/SMTP timing gap, closing the timing-based account-enumeration side channel that a
+		// synchronous send introduces. Remaining synchronous work in the active branch is the boolean
+		// gate flip and the executor submit — both sub-microsecond and not intended as a hard
+		// timing-equality guarantee. Do not add further synchronous work to the active branch.
+		if (shouldSend) {
+			try {
+				passwordResetExecutor.execute(() -> dispatchPasswordResetEmail(ci, password));
+			} catch (RejectedExecutionException rex) {
+				// Bounded queue saturated (likely SMTP outage backing up dispatches) or executor
+				// shutting down. We stay on the generic 200 path so attackers cannot distinguish
+				// "user exists, queue full" from "user does not exist"; the user can retry, the
+				// operator sees a log line.
+				log.error("Password reset executor rejected dispatch for {} (queue saturated or shutting down)",
+						HttpUtil.sanitizeForLog(ci.getEmail()), rex);
+			}
 		}
 
 		return POST_SUCCESS_MESSAGE.replace("{}", ci.getEmail());
@@ -366,11 +398,16 @@ public class AuthService {
 	// Runs on the passwordResetExecutor. Storing the token in the cache BEFORE sending the email
 	// guarantees the link is usable by the time it lands in the recipient's inbox; if the SMTP send
 	// fails we remove the token so an attacker who somehow learned it cannot complete the reset.
-	private void dispatchPasswordResetEmail(String token, SignupInfo ci, String password, String confirmationLink) {
+	private void dispatchPasswordResetEmail(SignupInfo ci, String password) {
 		String emailLog = HttpUtil.sanitizeForLog(ci.getEmail());
+		String token = RandomStringUtils.random(16, 0, 0, true, true, null, SECURE_RANDOM);
+		String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
+		log.info("Generated password reset token for {}", emailLog);
+		boolean tokenStored = false;
 		try {
 			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
 			signupTokenCache.putToken(token, ci);
+			tokenStored = true;
 
 			boolean sendSuccessful = Email.sendPasswordResetConfirmation(config, ci.getEmail(), confirmationLink);
 			if (sendSuccessful) {
@@ -381,9 +418,17 @@ public class AuthService {
 				// "user exists AND mail failed" from "user does not exist".
 				log.error("Failed to send password reset email to {}", emailLog);
 			}
-		} catch (RuntimeException e) {
-			signupTokenCache.removeToken(token);
-			log.error("Async password reset dispatch failed for {}", emailLog, e);
+		} catch (Throwable t) {
+			// Catch Throwable so an Error subclass (OOM, NoClassDefFoundError, StackOverflowError) is
+			// observable in the logs and the token is cleaned up before the JVM unwinds. Errors are
+			// rethrown so the JVM's normal handling (e.g., OOM termination) still applies.
+			if (tokenStored) {
+				signupTokenCache.removeToken(token);
+			}
+			log.error("Async password reset dispatch failed for {}", emailLog, t);
+			if (t instanceof Error err) {
+				throw err;
+			}
 		}
 	}
 

@@ -230,11 +230,15 @@ public class HttpUtil {
 	/**
 	 * Writes the unified 401 JSON envelope used for every authentication failure
 	 * (bad credentials, unknown user, disabled account, blacklisted user). Centralised
-	 * here so the response stays byte-identical across all call sites and no caller
-	 * can accidentally introduce a discriminator into the body.
+	 * here so the body stays identical across all call sites for a given request URI
+	 * and no caller can accidentally introduce a discriminator. The timestamp field
+	 * is explicitly nulled so the wall-clock delta between branches (immediate
+	 * blacklist short-circuit vs. post-bcrypt bad-credentials path) does not leak
+	 * through {@code body.timestamp − client.sentAt}; only the request URI varies.
 	 */
 	public static void writeUnauthorizedAsJson(HttpServletResponse response, HttpServletRequest request) throws IOException {
 		writeErrorResponseAsJson(response, ErrorResponse.builder()
+				.timestamp(null)
 				.status(HttpStatus.UNAUTHORIZED.value())
 				.path(request.getRequestURI())
 				.error(HttpStatus.UNAUTHORIZED.getReasonPhrase())
