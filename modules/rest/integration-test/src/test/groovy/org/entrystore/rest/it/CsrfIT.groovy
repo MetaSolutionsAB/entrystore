@@ -19,7 +19,6 @@ package org.entrystore.rest.it
 import groovy.json.JsonOutput
 import org.entrystore.rest.it.util.EntryStoreClient
 
-import static java.net.HttpURLConnection.HTTP_ACCEPTED
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_NO_CONTENT
@@ -123,14 +122,14 @@ class CsrfIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 	}
 
-	def "PUT /management/logging as cookie-authenticated user without CSRF token should be rejected"() {
+	def "POST /management/loggers/{name} as cookie-authenticated user without CSRF token should be rejected"() {
 		given:
 		// Plain session cookie — no XSRF-TOKEN cookie, no X-XSRF-TOKEN header.
 		def cookie = EntryStoreClient.cookies['admin'].toString()
-		def body = JsonOutput.toJson([:])
+		def body = JsonOutput.toJson([configuredLevel: 'INFO'])
 
 		when:
-		def conn = EntryStoreClient.putRequest('/management/logging', body, '', 'application/json', [Cookie: cookie])
+		def conn = EntryStoreClient.postRequest('/management/loggers/ROOT', body, '', 'application/json', [Cookie: cookie])
 
 		then:
 		// /management/** mutations are NOT exempt: a cookie-auth request without CSRF token must
@@ -138,20 +137,25 @@ class CsrfIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
-	def "PUT /management/logging as cookie-authenticated user with valid CSRF token should succeed"() {
+	def "POST /management/loggers/{name} as cookie-authenticated user with valid CSRF token should succeed"() {
 		given:
 		// Use the IT client's auto-injection path which forwards both Cookie and X-XSRF-TOKEN.
-		def body = JsonOutput.toJson([:])
+		def body = JsonOutput.toJson([configuredLevel: 'INFO'])
 
 		when:
-		def conn = EntryStoreClient.putRequest('/management/logging', body, 'admin')
+		def conn = EntryStoreClient.postRequest('/management/loggers/ROOT', body, 'admin')
 
 		then:
-		// 202 Accepted is the controller's @ResponseStatus for a successful PUT — empty body
-		// deserializes to a no-op SetLoggingConfigRequestBody. A 401/403 would mean CSRF blocked
-		// it; a 5xx would mean the controller crashed; a 400 would mean validation regressed.
-		// Narrow == HTTP_ACCEPTED so any of those drift modes fails the test.
-		conn.getResponseCode() == HTTP_ACCEPTED
+		// 204 No Content is Actuator's documented response for a successful logger-level change.
+		// A 401/403 would mean CSRF blocked it; a 5xx would mean the endpoint crashed; a 400 would
+		// mean the request body shape regressed. Narrow == HTTP_NO_CONTENT so any of those drift
+		// modes fails the test.
+		conn.getResponseCode() == HTTP_NO_CONTENT
+
+		cleanup:
+		// Reset ROOT to its inherited level so this CSRF test doesn't leak logger state to other IT classes.
+		assert EntryStoreClient.postRequest('/management/loggers/ROOT',
+				JsonOutput.toJson([configuredLevel: null])).getResponseCode() == HTTP_NO_CONTENT
 	}
 
 	def "POST with Basic auth (no session cookie) should succeed without CSRF token"() {

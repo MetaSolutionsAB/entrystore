@@ -118,11 +118,11 @@ class CsrfRequestMatcherTest {
 
 	@Test
 	void unsafeMethodWithSessionCookieOnManagement_requiresCsrf() {
-		// Mutating /management/** endpoints (logging, solr reindex) are NOT exempt — a
+		// Mutating /management/** endpoints (actuator loggers, solr reindex) are NOT exempt — a
 		// cookie-authenticated user submitting these is in CSRF scope. The matcher protects every
 		// unsafe path under /management/** regardless of which controller mappings exist today, so
 		// future mutating endpoints inherit the protection without matcher changes.
-		var request = new MockHttpServletRequest("PUT", "/management/logging");
+		var request = new MockHttpServletRequest("POST", "/management/loggers/ROOT");
 		request.setCookies(new Cookie("auth_token", "session-id"));
 		assertTrue(matcher.matches(request));
 

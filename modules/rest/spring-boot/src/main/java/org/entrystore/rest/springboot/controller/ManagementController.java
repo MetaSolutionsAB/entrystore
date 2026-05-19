@@ -20,12 +20,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.entrystore.rest.springboot.model.api.SetLoggingConfigRequestBody;
 import org.entrystore.rest.springboot.model.api.SolrCommandRequestBody;
 import org.entrystore.rest.springboot.model.api.StatusExtendedIncludeEnum;
 import org.entrystore.rest.springboot.model.api.StatusExtendedResponse;
 import org.entrystore.rest.springboot.model.api.StatusResponse;
-import org.entrystore.rest.springboot.service.LoggingService;
 import org.entrystore.rest.springboot.service.SolrManagementService;
 import org.entrystore.rest.springboot.service.StatusService;
 import org.springframework.http.HttpStatus;
@@ -33,7 +31,6 @@ import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -47,22 +44,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ManagementController {
 
-	private final LoggingService loggingService;
 	private final SolrManagementService solrManagementService;
 	private final StatusService statusService;
-
-	@Operation(
-			summary = "Provides a way to temporarily override parts of the logging configuration"
-	)
-	@PreAuthorize("hasRole('ADMIN')")
-	@ResponseStatus(HttpStatus.ACCEPTED)
-	@PutMapping(
-			path = "/logging",
-			consumes = MediaType.APPLICATION_JSON_VALUE)
-	public void setLoggingConfig(@RequestBody SetLoggingConfigRequestBody body) {
-		loggingService.updateLoggingConfig(body);
-	}
-
 
 	@Operation(
 			summary = "Triggers Solr reindex operations",
