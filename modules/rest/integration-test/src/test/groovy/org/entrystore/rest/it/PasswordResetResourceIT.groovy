@@ -596,8 +596,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		// !sendSuccessful would re-open the body-based enumeration leak (the existing user would
 		// see an error body where a nonexistent user gets the generic success body).
 		def username = 'userResetSmtpFailure@test.com'
-		def user = UserUtil.createUser(username)
-		UserUtil.setUserPassword(user['resourceUri'].toString(), password)
+		UserUtil.createUser(username)
 		greenMail.stop()
 
 		def requestBody = JsonOutput.toJson([
