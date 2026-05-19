@@ -18,6 +18,7 @@ package org.entrystore.rest.springboot.service;
 
 import com.google.common.base.Joiner;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -73,6 +74,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
@@ -117,6 +122,12 @@ public class AuthService {
 	private static final Object mutex = new Object();
 	private static Set<String> domainWhitelist = null;
 
+	// Pool size is intentionally small: pwReset throughput is bounded by PasswordResetRateLimiter,
+	// so two daemon threads are enough to absorb concurrent dispatches without blocking the request
+	// path. Threads are daemons so a shutdown that misses the @PreDestroy still does not block JVM exit.
+	private static final int PASSWORD_RESET_POOL_SIZE = 2;
+	private ExecutorService passwordResetExecutor;
+
 	@PostConstruct
 	public void init() {
 		synchronized (mutex) {
@@ -135,6 +146,30 @@ public class AuthService {
 					log.info("No domains provided for sign-up whitelist; sign-ups for any domain are allowed");
 				}
 			}
+		}
+
+		AtomicInteger threadIndex = new AtomicInteger();
+		this.passwordResetExecutor = Executors.newFixedThreadPool(PASSWORD_RESET_POOL_SIZE, r -> {
+			Thread t = new Thread(r, "password-reset-async-" + threadIndex.incrementAndGet());
+			t.setDaemon(true);
+			return t;
+		});
+	}
+
+	@PreDestroy
+	public void shutdown() {
+		if (passwordResetExecutor == null) {
+			return;
+		}
+		passwordResetExecutor.shutdown();
+		try {
+			if (!passwordResetExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+				log.warn("Password reset executor did not drain within 30s; forcing shutdown");
+				passwordResetExecutor.shutdownNow();
+			}
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			passwordResetExecutor.shutdownNow();
 		}
 	}
 
@@ -285,6 +320,7 @@ public class AuthService {
 		}
 
 		URI authUser = principalManager.getAuthenticatedUserURI();
+		String token = null;
 
 		try {
 			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
@@ -306,26 +342,49 @@ public class AuthService {
 			} else if (u.isDisabled()) {
 				log.info("Ignoring password reset attempt for disabled user {}", HttpUtil.sanitizeForLog(ci.getEmail()));
 			} else {
-				String token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
-				String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
+				token = RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
 				log.info("Generated password reset token for {}", HttpUtil.sanitizeForLog(ci.getEmail()));
-
-				boolean sendSuccessful = Email.sendPasswordResetConfirmation(config, ci.getEmail(), confirmationLink);
-				if (sendSuccessful) {
-					ci.setSaltedHashedPassword(Password.getSaltedHash(password));
-					signupTokenCache.putToken(token, ci);
-					log.info("Sent confirmation request to {}", HttpUtil.sanitizeForLog(ci.getEmail()));
-				} else {
-					// Stays in the generic success response so attackers cannot distinguish
-					// "user exists AND mail failed" from "user does not exist".
-					log.error("Failed to send password reset email to {}", HttpUtil.sanitizeForLog(ci.getEmail()));
-				}
 			}
 		} finally {
 			principalManager.setAuthenticatedUserURI(authUser);
 		}
 
+		// The expensive work (bcrypt + SMTP send) runs on a background thread so all three branches
+		// (nonexistent / disabled / active) return to the client in the same wall-clock time, closing
+		// the timing-based account-enumeration side channel that synchronous send introduces.
+		if (token != null) {
+			String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
+			String tokenFinal = token;
+			String passwordFinal = password;
+			SignupInfo ciFinal = ci;
+			passwordResetExecutor.execute(() -> dispatchPasswordResetEmail(tokenFinal, ciFinal, passwordFinal, confirmationLink));
+		}
+
 		return POST_SUCCESS_MESSAGE.replace("{}", ci.getEmail());
+	}
+
+	// Runs on the passwordResetExecutor. Storing the token in the cache BEFORE sending the email
+	// guarantees the link is usable by the time it lands in the recipient's inbox; if the SMTP send
+	// fails we remove the token so an attacker who somehow learned it cannot complete the reset.
+	private void dispatchPasswordResetEmail(String token, SignupInfo ci, String password, String confirmationLink) {
+		String emailLog = HttpUtil.sanitizeForLog(ci.getEmail());
+		try {
+			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
+			signupTokenCache.putToken(token, ci);
+
+			boolean sendSuccessful = Email.sendPasswordResetConfirmation(config, ci.getEmail(), confirmationLink);
+			if (sendSuccessful) {
+				log.info("Sent confirmation request to {}", emailLog);
+			} else {
+				signupTokenCache.removeToken(token);
+				// Stays in the generic success response so attackers cannot distinguish
+				// "user exists AND mail failed" from "user does not exist".
+				log.error("Failed to send password reset email to {}", emailLog);
+			}
+		} catch (RuntimeException e) {
+			signupTokenCache.removeToken(token);
+			log.error("Async password reset dispatch failed for {}", emailLog, e);
+		}
 	}
 
 	public String confirmSignup(String token, String title) {

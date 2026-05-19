@@ -307,6 +307,9 @@ class CookieLoginResourceIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		// pwReset dispatches SMTP send + bcrypt asynchronously to avoid leaking account existence via
+		// response timing; wait for the email to arrive before extracting the confirmation token.
+		assert greenMail.waitForIncomingEmail(5000, 2)
 		def messageContent = greenMail.getReceivedMessages()[1].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)

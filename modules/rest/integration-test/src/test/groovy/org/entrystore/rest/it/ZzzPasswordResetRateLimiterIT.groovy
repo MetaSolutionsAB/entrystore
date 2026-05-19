@@ -87,6 +87,9 @@ class ZzzPasswordResetRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
+		// pwReset dispatches SMTP send asynchronously to avoid a timing side-channel; wait
+		// for the email to land in the mailbox before asserting on it.
+		greenMail.waitForIncomingEmail(5000, 1)
 		greenMail.getReceivedMessages().length == 1
 	}
 
@@ -96,6 +99,7 @@ class ZzzPasswordResetRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
+		greenMail.waitForIncomingEmail(5000, 1)
 		greenMail.getReceivedMessages().length == 1
 	}
 
@@ -116,6 +120,7 @@ class ZzzPasswordResetRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
+		greenMail.waitForIncomingEmail(5000, 1)
 		greenMail.getReceivedMessages().length == 1
 	}
 
@@ -127,6 +132,7 @@ class ZzzPasswordResetRateLimiterIT extends BaseSpec {
 
 		then:
 		conn.getResponseCode() == HTTP_OK
+		greenMail.waitForIncomingEmail(5000, 1)
 		greenMail.getReceivedMessages().length == 1
 	}
 }

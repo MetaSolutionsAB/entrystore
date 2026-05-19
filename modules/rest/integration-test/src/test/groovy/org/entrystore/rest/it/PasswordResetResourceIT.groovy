@@ -96,6 +96,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
 		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
+		// pwReset dispatches SMTP send + bcrypt asynchronously so the response and the email arrive
+		// in O(constant) time regardless of account state; wait for the email before asserting on it.
+		greenMail.waitForIncomingEmail(5000, 1)
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -121,6 +124,9 @@ class PasswordResetResourceIT extends BaseSpec {
 		resetPasswordConn.getResponseCode() == HTTP_OK
 		resetPasswordConn.getContentType().contains('text/html')
 		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
+		// pwReset dispatches SMTP send + bcrypt asynchronously so the response and the email arrive
+		// in O(constant) time regardless of account state; wait for the email before asserting on it.
+		greenMail.waitForIncomingEmail(5000, 1)
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 1
 		def message = messages[0]
@@ -340,6 +346,7 @@ class PasswordResetResourceIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 1)
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -351,6 +358,7 @@ class PasswordResetResourceIT extends BaseSpec {
 		confirmConn.getResponseCode() == HTTP_OK
 		confirmConn.getContentType().contains('text/html')
 		confirmConn.inputStream.text.contains('Password reset was successful.')
+		greenMail.waitForIncomingEmail(5000, 2)
 		def messages = greenMail.getReceivedMessages()
 		messages.size() == 2
 		def message = messages[1]
@@ -369,6 +377,10 @@ class PasswordResetResourceIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		// Even though this test ignores the real token, we must wait for the async dispatch to
+		// deliver its email before continuing, otherwise the delayed email would land in the next
+		// test's mailbox and be mistaken for that test's own confirmation.
+		assert greenMail.waitForIncomingEmail(5000, 1)
 		def token = "something123"
 
 		when:
@@ -391,6 +403,7 @@ class PasswordResetResourceIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 1)
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -417,6 +430,7 @@ class PasswordResetResourceIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 1)
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -441,10 +455,12 @@ class PasswordResetResourceIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 1)
 		def oldMessageContent = greenMail.getReceivedMessages()[0].getContent()
 		def oldStartIndex = oldMessageContent.toString().indexOf('?confirm') + 9
 		def oldToken = oldMessageContent.toString().substring(oldStartIndex, oldStartIndex + 16)
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 2)
 		def newMessageContent = greenMail.getReceivedMessages()[1].getContent()
 		def newStartIndex = newMessageContent.toString().indexOf('?confirm') + 9
 		def newToken = newMessageContent.toString().substring(newStartIndex, newStartIndex + 16)
@@ -478,10 +494,12 @@ class PasswordResetResourceIT extends BaseSpec {
 		])
 
 		assert EntryStoreClient.postRequest('/auth/pwreset', request1Body).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 1)
 		def user1MessageContent = greenMail.getReceivedMessages()[0].getContent()
 		def user1StartIndex = user1MessageContent.toString().indexOf('?confirm') + 9
 		def user1Token = user1MessageContent.toString().substring(user1StartIndex, user1StartIndex + 16)
 		assert EntryStoreClient.postRequest('/auth/pwreset', request2Body).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 2)
 		def user2MessageContent = greenMail.getReceivedMessages()[1].getContent()
 		def user2StartIndex = user2MessageContent.toString().indexOf('?confirm') + 9
 		def user2Token = user2MessageContent.toString().substring(user2StartIndex, user2StartIndex + 16)
@@ -508,6 +526,7 @@ class PasswordResetResourceIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 1)
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -531,6 +550,7 @@ class PasswordResetResourceIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 1)
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -556,6 +576,7 @@ class PasswordResetResourceIT extends BaseSpec {
 			grecaptcharesponse: grecaptcharesponse
 		])
 		assert EntryStoreClient.postRequest('/auth/pwreset', requestBody).getResponseCode() == HTTP_OK
+		assert greenMail.waitForIncomingEmail(5000, 1)
 		def messageContent = greenMail.getReceivedMessages()[0].getContent()
 		def startIndex = messageContent.toString().indexOf('?confirm') + 9
 		def token = messageContent.toString().substring(startIndex, startIndex + 16)
@@ -590,11 +611,12 @@ class PasswordResetResourceIT extends BaseSpec {
 		body.contains('&lt;script&gt;alert(1)&lt;/script&gt;')
 	}
 
-	def "POST /auth/pwreset responds with generic 200 when SMTP delivery fails"() {
+	def "POST /auth/pwreset responds with generic 200 even when SMTP delivery fails"() {
 		given:
-		// Pins the SMTP-failure → generic 200 contract: a future regression that re-throws on
-		// !sendSuccessful would re-open the body-based enumeration leak (the existing user would
-		// see an error body where a nonexistent user gets the generic success body).
+		// Pins the SMTP-failure → generic 200 contract: a future regression that re-throws or
+		// changes the response status on send failure would re-open the body-based enumeration leak
+		// (the existing user would see an error body where a nonexistent user gets the generic
+		// success body). Stopping greenMail forces the async dispatch to fail with connection-refused.
 		def username = 'userResetSmtpFailure@test.com'
 		UserUtil.createUser(username)
 		greenMail.stop()
@@ -614,6 +636,10 @@ class PasswordResetResourceIT extends BaseSpec {
 		resetPasswordConn.inputStream.text.contains('A confirmation message was sent to ' + username.toLowerCase() + ', if the user exists.')
 
 		cleanup:
+		// Give the async dispatch enough time to attempt SMTP (and fail with connection-refused while
+		// greenMail is still down) before restarting greenMail. Otherwise a delayed retry could race
+		// the restart and pollute the next test's mailbox.
+		Thread.sleep(500)
 		greenMail.start()
 	}
 
