@@ -17,6 +17,8 @@
 package org.entrystore.rest.springboot.service;
 
 import com.google.common.base.Joiner;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.servlet.http.HttpServletRequest;
@@ -121,6 +123,7 @@ public class AuthService {
 	private final SessionRegistry sessionRegistry;
 	private final SignupRateLimiter signupRateLimiter;
 	private final PasswordResetRateLimiter passwordResetRateLimiter;
+	private final MeterRegistry meterRegistry;
 
 	private static final Object mutex = new Object();
 	private static Set<String> domainWhitelist = null;
@@ -136,12 +139,15 @@ public class AuthService {
 	// path. Threads are daemons so a shutdown that misses the @PreDestroy still does not block JVM exit.
 	// The queue is bounded to cap heap growth under distributed credential-stuffing or an SMTP outage:
 	// at queue saturation `execute` throws RejectedExecutionException, which pwReset catches and treats
-	// as a silent drop (the response stays at the generic 200 so the timing-equivalence guarantee is
-	// preserved). A CallerRunsPolicy would have run the rejected task on the request thread, which
-	// re-opens the timing oracle this whole executor exists to close.
+	// as a client-silent drop — the response stays at the generic 200 so the timing-equivalence
+	// guarantee is preserved, but the rejection is logged at ERROR and increments the
+	// `auth.pwreset.rejected` Micrometer counter so operators can alert on sustained drops via
+	// monitoring rather than log scraping. A CallerRunsPolicy would have run the rejected task on the
+	// request thread, which re-opens the timing oracle this whole executor exists to close.
 	private static final int PASSWORD_RESET_POOL_SIZE = 2;
 	private static final int PASSWORD_RESET_QUEUE_CAPACITY = 100;
 	private ExecutorService passwordResetExecutor;
+	private Counter passwordResetRejectedCounter;
 
 	@PostConstruct
 	public void init() {
@@ -178,6 +184,10 @@ public class AuthService {
 				0L, TimeUnit.MILLISECONDS,
 				new ArrayBlockingQueue<>(PASSWORD_RESET_QUEUE_CAPACITY),
 				threadFactory);
+
+		this.passwordResetRejectedCounter = Counter.builder("auth.pwreset.rejected")
+				.description("Password-reset dispatches dropped because the executor queue was saturated or shutting down")
+				.register(meterRegistry);
 	}
 
 	@PreDestroy
@@ -385,8 +395,10 @@ public class AuthService {
 			} catch (RejectedExecutionException rex) {
 				// Bounded queue saturated (likely SMTP outage backing up dispatches) or executor
 				// shutting down. We stay on the generic 200 path so attackers cannot distinguish
-				// "user exists, queue full" from "user does not exist"; the user can retry, the
-				// operator sees a log line.
+				// "user exists, queue full" from "user does not exist"; the user can retry. The
+				// rejection is recorded in a Micrometer counter and logged at ERROR so operators
+				// can alert on sustained drops.
+				passwordResetRejectedCounter.increment();
 				log.error("Password reset executor rejected dispatch for {} (queue saturated or shutting down)",
 						HttpUtil.sanitizeForLog(ci.getEmail()), rex);
 			}
@@ -403,12 +415,15 @@ public class AuthService {
 		String token = RandomStringUtils.random(16, 0, 0, true, true, null, SECURE_RANDOM);
 		String confirmationLink = repositoryManager.getRepositoryURL().toExternalForm() + "auth/pwreset?confirm=" + token;
 		log.info("Generated password reset token for {}", emailLog);
-		boolean tokenStored = false;
-		try {
-			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
-			signupTokenCache.putToken(token, ci);
-			tokenStored = true;
 
+		// Bcrypt and putToken run outside the try block — a Throwable here propagates to the worker's
+		// UncaughtExceptionHandler (which already logs at ERROR) and no cleanup is needed because the
+		// token was never stored. Once we reach the try block, putToken has returned successfully, so
+		// the catch can unconditionally remove the token without an extra flag.
+		ci.setSaltedHashedPassword(Password.getSaltedHash(password));
+		signupTokenCache.putToken(token, ci);
+
+		try {
 			boolean sendSuccessful = Email.sendPasswordResetConfirmation(config, ci.getEmail(), confirmationLink);
 			if (sendSuccessful) {
 				log.info("Sent confirmation request to {}", emailLog);
@@ -420,11 +435,10 @@ public class AuthService {
 			}
 		} catch (Throwable t) {
 			// Catch Throwable so an Error subclass (OOM, NoClassDefFoundError, StackOverflowError) is
-			// observable in the logs and the token is cleaned up before the JVM unwinds. Errors are
-			// rethrown so the JVM's normal handling (e.g., OOM termination) still applies.
-			if (tokenStored) {
-				signupTokenCache.removeToken(token);
-			}
+			// observable in the logs and the token is cleaned up. Errors are rethrown so the JVM's
+			// normal handling continues — on `-XX:+ExitOnOutOfMemoryError` the JVM terminates; otherwise
+			// the worker thread dies and ThreadPoolExecutor spawns a replacement on the next submit.
+			signupTokenCache.removeToken(token);
 			log.error("Async password reset dispatch failed for {}", emailLog, t);
 			if (t instanceof Error err) {
 				throw err;

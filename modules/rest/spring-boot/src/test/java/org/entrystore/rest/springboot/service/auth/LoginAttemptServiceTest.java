@@ -206,4 +206,73 @@ class LoginAttemptServiceTest {
 		service.recordFailure(USERNAME);
 		assertTrue(service.isLockedOut(USERNAME));
 	}
+
+	@Test
+	void lockoutSurvivesCounterCacheFlood() {
+		// Pins the central invariant of the counter / lockout split: a flood of failures against
+		// unique junk usernames evicts entries from the counter cache (safe — eviction only resets
+		// the failure count to zero), but must NOT evict an already-locked entry. A regression that
+		// re-merges the two stores would silently reopen the cache-eviction "unlock" attack.
+		initService(3, Duration.ofMinutes(5), true);
+
+		service.recordFailure(USERNAME);
+		service.recordFailure(USERNAME);
+		service.recordFailure(USERNAME);
+		assertTrue(service.isLockedOut(USERNAME));
+
+		// 100_000 is MAX_TRACKED_USERNAMES — flooding past the cap forces Caffeine to evict
+		// counter entries, but the locked entry lives in a separate cache and must persist.
+		for (long i = 0; i < 100_001L; i++) {
+			service.recordFailure("flood-" + i);
+		}
+
+		assertTrue(service.isLockedOut(USERNAME),
+				"Lockout must persist even after the counter cache evicts the victim's key");
+	}
+
+	@Test
+	void postExpiryGetsFullFreshBudget() throws InterruptedException {
+		// After a lockout expires, the user must get a full maxAttempts-sized fresh budget of
+		// failures — not just one before re-lockout. A regression that fails to invalidate the
+		// counter when migrating to the lockout cache would leave a stale counter that re-locks on
+		// the very next failure.
+		initService(3, Duration.ofMillis(100), true);
+
+		service.recordFailure(USERNAME);
+		service.recordFailure(USERNAME);
+		service.recordFailure(USERNAME);
+		assertTrue(service.isLockedOut(USERNAME));
+
+		Thread.sleep(150);
+		assertFalse(service.isLockedOut(USERNAME));
+
+		// First two failures after expiry must NOT re-lock.
+		service.recordFailure(USERNAME);
+		assertFalse(service.isLockedOut(USERNAME));
+		service.recordFailure(USERNAME);
+		assertFalse(service.isLockedOut(USERNAME));
+
+		// Third failure re-locks.
+		service.recordFailure(USERNAME);
+		assertTrue(service.isLockedOut(USERNAME));
+	}
+
+	@Test
+	void recordSuccessClearsActiveLockout() {
+		// recordSuccess must invalidate BOTH the counter and the active lockout entry, so an
+		// out-of-band manual unlock (or a successful login at the threshold-tipping moment) does
+		// not leave the user stuck behind a stale lockout.
+		initService(3, Duration.ofMinutes(5), true);
+
+		service.recordFailure(USERNAME);
+		service.recordFailure(USERNAME);
+		service.recordFailure(USERNAME);
+		assertTrue(service.isLockedOut(USERNAME));
+
+		service.recordSuccess(USERNAME);
+
+		assertFalse(service.isLockedOut(USERNAME));
+		assertNull(service.getLockedUntil(USERNAME));
+	}
+
 }
