@@ -93,6 +93,23 @@ entrystore.data.folder=/srv/entrystore/files/
 entrystore.auth.temp.lockout.max.attempts=0
 entrystore.auth.temp.lockout.duration=0ms
 
+## HTTP Basic authentication (default: false)
+## Renamed in 6.0 — previously `entrystore.auth.http-basic`. If the legacy key
+## is left on upgrade, HTTP Basic auth is silently disabled. Check the startup
+## log for "Basic Auth Enabled" / "Basic Auth Disabled" to verify the state.
+# entrystore.auth.http-basic.enabled=true|false
+
+## SAML authentication (default: false)
+## Renamed in 6.0 — previously `entrystore.auth.saml`. If the legacy key is
+## left on upgrade, SAML auth is silently disabled. Check the startup log for
+## "SAML Auth Enabled" / "SAML Auth Disabled" to verify the state.
+# entrystore.auth.saml.enabled=true|false
+
+## CAS authentication (default: false)
+## Renamed in 6.0 — previously `entrystore.auth.cas`. If the legacy key is
+## left on upgrade, CAS auth is silently disabled. Check the startup log for
+## "CAS Auth Enabled" / "CAS Auth Disabled" to verify the state.
+# entrystore.auth.cas.enabled=true|false
 
 ## OpenID (deprecated)
 # entrystore.auth.openid=on|off (default: off)

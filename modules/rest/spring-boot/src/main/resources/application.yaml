@@ -75,4 +75,4 @@ mvc:
 
 logging:
   http:
-    enabled: true   # Enabled is the default (i.e. when this property is not set), set it to "false" to disable request/response logging
+    enabled: true   # Enabled by default when unset; set to "false" to disable request/response logging
