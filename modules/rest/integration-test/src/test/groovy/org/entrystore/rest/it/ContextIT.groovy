@@ -135,16 +135,30 @@ class ContextIT extends BaseSpec {
 		field       | value              | params                         | reasonContains
 		'name'      | 'foo/bar'          | [name: 'foo/bar']              | 'must contain only'
 		'name'      | 'foo$bar'          | [name: 'foo$bar']              | 'must contain only'
-		'name'      | '...'              | [name: '...']                  | 'must contain only'
+		'name'      | '...'              | [name: '...']                  | 'at least one letter or digit'
 		'name'      | '_admin'           | [name: '_admin']               | 'must not start with'
 		'name'      | 'auth'             | [name: 'auth']                 | 'reserved name'
 		'name'      | 'Auth'             | [name: 'Auth']                 | 'reserved name'
 		'name'      | ('a' * 65)         | [name: ('a' * 65)]             | 'exceeds maximum length'
 		'contextId' | 'ctx with spaces'  | [contextId: 'ctx with spaces'] | 'must contain only'
 		'contextId' | 'ctx/with/slashes' | [contextId: 'ctx/with/slashes']| 'must contain only'
-		'contextId' | '---'              | [contextId: '---']             | 'must contain only'
+		'contextId' | '---'              | [contextId: '---']             | 'at least one letter or digit'
 		'contextId' | '_admin'           | [contextId: '_admin']          | 'must not start with'
 		'contextId' | ('a' * 65)         | [contextId: ('a' * 65)]        | 'exceeds maximum length'
+	}
+
+	def "POST /_principals/groups with invalid name and valid contextId should not create the context"() {
+		given:
+		def contextId = 'no-side-effect-' + UUID.randomUUID().toString()
+		def params = [name: 'foo$bar', contextId: contextId]
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_principals/groups' + convertMapToQueryParams(params))
+
+		then:
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+		def getConn = EntryStoreClient.getRequest('/_contexts/entry/' + contextId)
+		getConn.getResponseCode() == HTTP_NOT_FOUND
 	}
 
 	def "POST /_principals/groups with name at exact 64-character limit should return CREATED 201"() {

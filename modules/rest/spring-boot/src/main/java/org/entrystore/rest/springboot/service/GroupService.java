@@ -34,6 +34,7 @@ import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -41,10 +42,10 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class GroupService {
 
-	// contextId becomes a URI segment, so restrict to URL-safe characters. Require at least one alphanumeric.
-	private static final Pattern VALID_CONTEXT_ID = Pattern.compile("^(?=.*[A-Za-z0-9])[A-Za-z0-9_-]+$");
-	// name is a human-readable label stored as an RDF literal; allow spaces and dots, require at least one alphanumeric.
-	private static final Pattern VALID_NAME = Pattern.compile("^(?=.*[A-Za-z0-9])[A-Za-z0-9 ._-]+$");
+	// contextId becomes a URI segment, so restrict to URL-safe characters.
+	private static final Pattern VALID_CONTEXT_ID = Pattern.compile("^[A-Za-z0-9_-]+$");
+	// name is a human-readable label stored as an RDF literal; allow spaces and dots.
+	private static final Pattern VALID_NAME = Pattern.compile("^[A-Za-z0-9 ._-]+$");
 	private static final int MAX_IDENTIFIER_LENGTH = 64;
 
 	private final RepositoryManagerImpl repositoryManager;
@@ -148,10 +149,13 @@ public class GroupService {
 		if (!allowed.matcher(value).matches()) {
 			throw new BadRequestException("Parameter '" + fieldName + "' must contain only " + allowedDescription);
 		}
+		if (value.chars().noneMatch(Character::isLetterOrDigit)) {
+			throw new BadRequestException("Parameter '" + fieldName + "' must contain at least one letter or digit");
+		}
 		if (value.startsWith("_")) {
 			throw new BadRequestException("Parameter '" + fieldName + "' must not start with an underscore (reserved for system entities)");
 		}
-		if (reservedNamesService.isReservedName(value.toLowerCase())) {
+		if (reservedNamesService.isReservedName(value.toLowerCase(Locale.ROOT))) {
 			throw new BadRequestException("Parameter '" + fieldName + "' is a reserved name");
 		}
 	}
