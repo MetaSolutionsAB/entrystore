@@ -34,7 +34,7 @@ Configuration:
 
 | Container | Image | Lifecycle | Shared with |
 |---|---|---|---|
-| Solr | `solr:9.10.1` | Started once in `BaseSpec`, reused by every IT | All ITs |
+| Solr | `solr:10.0.0` | Started once in `BaseSpec`, reused by every IT | All ITs |
 | Keycloak | `quay.io/keycloak/keycloak:26.5.6` (via `dasniko/testcontainers-keycloak:4.1.1`) | Constructed as a static field in `KeycloakBaseSpec`; started on first use via `startKeycloakIfNeeded()` in a lifecycle-owning IT; reused thereafter | `ZzzSamlLoginIT`, `ZzzCasLoginIT` |
 
 Keycloak loads `src/test/resources/test-realm-keycloak.json`, a single realm containing both the SAML client (`EntrystoreDev1`) and the CAS client (`http://localhost:8181/auth/cas`). The CAS protocol provider jar under `src/test/resources/libs/` is mounted unconditionally, so both protocols work from the same container.

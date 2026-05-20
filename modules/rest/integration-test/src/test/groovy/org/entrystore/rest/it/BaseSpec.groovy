@@ -76,7 +76,7 @@ abstract class BaseSpec extends Specification {
 
 	// make sure Solr version matches the version used in the parent pom - 'solr.version' property
 	@Shared
-	def static solrContainer = new SolrContainer(DockerImageName.parse('solr:9.10.1'))
+	def static solrContainer = new SolrContainer(DockerImageName.parse('solr:10.0.0'))
 		.withEnv('SOLR_MODULES', 'analysis-extras')
 		.withCopyFileToContainer(MountableFile.forClasspathResource('solr/'), '/entrystore-core/conf')
 
@@ -116,7 +116,7 @@ abstract class BaseSpec extends Specification {
 			// solrContainer.withCommand('solr-precreate') - to pre create core on startup, does not seem to work here,
 			// as probably the Solr image creates its own ENTRYPOINT cmd that overrides the custom given command on startup
 			solrContainer.execInContainer(
-				'solr', 'create_core', '-c', 'entrystore-core', '-d', '/entrystore-core'
+				'solr', 'create', '-c', 'entrystore-core', '-d', '/entrystore-core'
 			)
 
 			log.info('Starting common EntryStoreApp (without SSO login)')

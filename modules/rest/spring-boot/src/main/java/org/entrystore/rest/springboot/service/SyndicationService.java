@@ -9,7 +9,7 @@ import com.rometools.rome.feed.synd.SyndFeedImpl;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.util.ClientUtils;
 import org.entrystore.AuthorizationException;
 import org.entrystore.ContextManager;

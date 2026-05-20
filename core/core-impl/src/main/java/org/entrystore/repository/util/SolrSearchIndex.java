@@ -19,10 +19,10 @@ package org.entrystore.repository.util;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import org.apache.solr.client.solrj.RemoteSolrException;
 import org.apache.solr.client.solrj.SolrClient;
-import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
-import org.apache.solr.client.solrj.impl.BaseHttpSolrClient;
+import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.client.solrj.response.QueryResponse;
@@ -84,6 +84,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.interrupted;
 
@@ -136,6 +137,11 @@ public class SolrSearchIndex implements SearchIndex {
 	private final ExecutorService reindexExecutor = Executors.newSingleThreadExecutor();
 
 	private final ExecutorService purgeExecutor = Executors.newVirtualThreadPerTaskExecutor();
+
+	// Incremented whenever Solr rejects a batch with a RemoteSolrException — those documents are
+	// permanently dropped from the index. RepositoryManagerImpl reads this counter around startup
+	// reindex to decide whether version markers may safely be persisted.
+	private final AtomicLong discardedBatchCount = new AtomicLong();
 
 	private final Map<URI, DelayedContextIndexerInfo> delayedReindex = Collections.synchronizedMap(new HashMap<>());
 
@@ -267,7 +273,8 @@ public class SolrSearchIndex implements SearchIndex {
 							addBatch.size(), attempt, MAX_RETRIES, postQueue.estimatedSize());
 					addReq.process(solrServer);
 					return false;
-				} catch (BaseHttpSolrClient.RemoteSolrException e) {
+				} catch (RemoteSolrException e) {
+					discardedBatchCount.incrementAndGet();
 					log.error("Solr rejected {} entries (not retryable, discarding batch): {}", addBatch.size(), e.getMessage());
 					return false;
 				} catch (RuntimeException e) {
@@ -736,6 +743,33 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public long getDeleteQueueSize() {
 		return deleteQueue.size();
+	}
+
+	public long getDiscardedBatchCount() {
+		return discardedBatchCount.get();
+	}
+
+	/**
+	 * Polls the submission queue until it is empty or the timeout elapses. Used by the startup
+	 * reindex path to ensure all queued documents have been dispatched before persisting version
+	 * markers (otherwise a marker can be written while the submitter is still processing entries).
+	 *
+	 * @return true if the queue drained within the timeout, false on timeout or interruption
+	 */
+	public boolean waitForQueueDrain(long timeout, TimeUnit unit) {
+		long deadline = System.nanoTime() + unit.toNanos(timeout);
+		while (getPostQueueSize() > 0) {
+			if (System.nanoTime() >= deadline) {
+				return false;
+			}
+			try {
+				Thread.sleep(500);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+		}
+		return true;
 	}
 
 	@Override

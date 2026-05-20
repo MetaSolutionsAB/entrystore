@@ -28,7 +28,7 @@
 	<!-- ================= Default Properties ================= -->
 	<properties>
 		<java.version>25</java.version>
-		<solr.version>9.10.1</solr.version>
+		<solr.version>10.0.0</solr.version>
 		<rdf4j.version>5.2.2</rdf4j.version>
 		<servlet.version>3.1.0</servlet.version>
 		<xerces.version>2.12.2</xerces.version>
@@ -38,7 +38,6 @@
 		<zookeeper.version>3.9.5</zookeeper.version>
 		<swagger.version>2.2.29</swagger.version>
 		<xmlsec.version>3.0.6</xmlsec.version>
-		<httpmime.version>4.5.14</httpmime.version>
 		<commonscli.version>1.10.0</commonscli.version>
 		<snappy.version>1.1.10.8</snappy.version>
 		<jetbrains-annotations.version>26.1.0</jetbrains-annotations.version>
@@ -421,11 +420,6 @@
 				<groupId>org.apache.santuario</groupId>
 				<artifactId>xmlsec</artifactId>
 				<version>${xmlsec.version}</version>
-			</dependency>
-			<dependency>
-				<groupId>org.apache.httpcomponents</groupId>
-				<artifactId>httpmime</artifactId>
-				<version>${httpmime.version}</version>
 			</dependency>
 			<dependency>
 				<groupId>com.google.guava</groupId>

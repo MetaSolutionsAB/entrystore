@@ -4,7 +4,7 @@ import com.rometools.rome.feed.synd.SyndFeed;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.common.SolrException;
 import org.eclipse.rdf4j.model.Model;

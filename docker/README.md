@@ -126,7 +126,7 @@ This creates a container named `solr-example.org` with data stored at `/srv/exam
 | Variable | Default | Description |
 |---|---|---|
 | `SOLR_PORT` | `8983` | Host port for Solr |
-| `SOLR_VERSION` | `9.10.1` | Solr Docker image version |
+| `SOLR_VERSION` | `10.0.0` | Solr Docker image version |
 | `SOLR_DATA` | `/srv/<domain>/data/solr` | Solr data directory |
 | `SOLR_MEMORY` | `512m` | Container memory limit |
 
