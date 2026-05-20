@@ -118,9 +118,17 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 				try {
 					loginAttemptService.recordFailure(username);
 				} catch (RuntimeException e) {
+					loginAttemptService.getRecordFailureErrorCounter().increment();
 					log.error("Failed to record blacklist login attempt for [{}] — lockout tracking is degraded",
 							HttpUtil.sanitizeForLog(username), e);
 				}
+				// Equalize wall-clock cost with the bad-credentials path. A non-blacklisted submission
+				// falls through filterChain.doFilter, which eventually runs DaoAuthenticationProvider's
+				// bcrypt verification against the stored hash; the blacklist branch never reaches that
+				// code. Without a synthetic equivalent here an attacker classifies blacklisted vs
+				// non-blacklisted usernames by timing alone — re-opening the very enumeration channel
+				// the unified 401 was meant to close. The synthetic hash is discarded.
+				Password.getSaltedHash(password);
 				// Body must remain identical to the generic 401 used for all other authentication
 				// failures so account state cannot be enumerated.
 				HttpUtil.writeUnauthorizedAsJson(response, request);

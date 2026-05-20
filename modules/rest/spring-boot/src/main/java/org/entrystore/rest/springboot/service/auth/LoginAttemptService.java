@@ -3,7 +3,10 @@ package org.entrystore.rest.springboot.service.auth;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Expiry;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
@@ -33,6 +36,7 @@ public class LoginAttemptService {
 
 	private final Config config;
 	private final PrincipalManager pm;
+	private final MeterRegistry meterRegistry;
 
 	// Pre-lockout counters live in a bounded, evictable Caffeine cache. expireAfterWrite caps the
 	// lifetime relative to the last failure rather than the last read, so a probe that only reads
@@ -55,6 +59,14 @@ public class LoginAttemptService {
 	private int maxAttempts;
 	private Duration lockoutDuration;
 	private boolean includeAdmin;
+
+	// Increments whenever a call site's try/catch around recordFailure swallows a RuntimeException
+	// (currently Caffeine misuse / cache faults). Exposed so operators can alert on degraded
+	// lockout tracking via `rate(auth_loginattempt_record_failure_error_total[5m]) > 0` — without
+	// it, the only signal is one log line per fault and sustained degradation would re-open the
+	// enumeration oracle (response stays 401, lockout never trips) without any monitoring hook.
+	@Getter
+	private Counter recordFailureErrorCounter;
 
 	@PostConstruct
 	public void init() {
@@ -87,20 +99,40 @@ public class LoginAttemptService {
 				})
 				.maximumSize(MAX_TRACKED_USERNAMES)
 				.build();
+
+		this.recordFailureErrorCounter = Counter.builder("auth.loginattempt.record_failure_error")
+				.description("Login-attempt bookkeeping failures swallowed by call-site try/catch — sustained increments mean lockout tracking is degraded and the enumeration oracle may be open")
+				.register(meterRegistry);
+	}
+
+	/**
+	 * Applies the input-policy gate uniformly across all four entry points: null is rejected,
+	 * oversized inputs are skipped (and logged at INFO so the bypass is grep-able for forensic
+	 * review), and the key is lower-cased so cache lookups are case-insensitive. Returning null
+	 * means "do not process this username".
+	 */
+	private String normalize(String username) {
+		if (username == null) {
+			return null;
+		}
+		if (username.length() > MAX_USERNAME_LENGTH) {
+			// INFO (not DEBUG) so the bypass is visible in default-level production logs: an
+			// attacker padding usernames to escape lockout tracking otherwise leaves no
+			// operator-visible signal.
+			log.info("Skipping login attempt tracking for oversized username (len={})", username.length());
+			return null;
+		}
+		return username.toLowerCase(Locale.ROOT);
 	}
 
 	public void recordFailure(String username) {
 		if (maxAttempts <= 0 || lockoutDuration.isZero()) {
 			return;
 		}
-		if (username == null) {
+		String key = normalize(username);
+		if (key == null) {
 			return;
 		}
-		if (username.length() > MAX_USERNAME_LENGTH) {
-			log.debug("Skipping login attempt tracking for oversized username (len={})", username.length());
-			return;
-		}
-		String key = username.toLowerCase(Locale.ROOT);
 
 		// Failures are tracked for every submitted username, whether or not it resolves to an actual
 		// user. Otherwise a never-existing username would be visibly absent from the lockout, leaking
@@ -115,9 +147,11 @@ public class LoginAttemptService {
 
 		log.info("Failed login attempt for [{}]", HttpUtil.sanitizeForLog(key));
 
-		// Clear any expired lockout so the next failure starts a fresh counter rather than re-locking
-		// the entry immediately. The Expiry would also evict the stale entry asynchronously, but we
-		// remove it deterministically here so the compute below can observe a clean slate.
+		// Belt-and-braces: the lockoutCache's per-entry Expiry already auto-evicts past-lockedUntil
+		// entries asynchronously. This explicit clear handles the microsecond window before async
+		// eviction completes and guards against wall-clock skew between Expiry evaluation and
+		// Instant.now(). Without it, the very next failure after expiry could re-lock the entry
+		// immediately rather than starting a fresh counter.
 		Instant existingLockout = lockoutCache.getIfPresent(key);
 		if (existingLockout != null && Instant.now().isAfter(existingLockout)) {
 			lockoutCache.invalidate(key);
@@ -125,6 +159,8 @@ public class LoginAttemptService {
 		}
 
 		Integer updated = counterCache.asMap().compute(key, (_, current) -> (current == null ? 0 : current) + 1);
+		// Caffeine's compute returns null only if the remapping function returns null; ours always
+		// returns a non-null Integer, so the guard is defense against an API contract change.
 		if (updated != null && updated >= maxAttempts) {
 			Instant lockedUntil = Instant.now().plus(lockoutDuration);
 			lockoutCache.put(key, lockedUntil);
@@ -134,10 +170,10 @@ public class LoginAttemptService {
 	}
 
 	public void recordSuccess(String username) {
-		if (username == null) {
+		String key = normalize(username);
+		if (key == null) {
 			return;
 		}
-		String key = username.toLowerCase(Locale.ROOT);
 		counterCache.invalidate(key);
 		lockoutCache.invalidate(key);
 	}
@@ -147,10 +183,10 @@ public class LoginAttemptService {
 	}
 
 	public Instant getLockedUntil(String username) {
-		if (username == null) {
+		String key = normalize(username);
+		if (key == null) {
 			return null;
 		}
-		String key = username.toLowerCase(Locale.ROOT);
 		Instant lockedUntil = lockoutCache.getIfPresent(key);
 		if (lockedUntil == null) {
 			return null;

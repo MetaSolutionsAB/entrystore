@@ -16,6 +16,8 @@
 
 package org.entrystore.rest.springboot.security;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class FormLoginAuthenticationFailureHandlerTest {
@@ -87,15 +90,19 @@ class FormLoginAuthenticationFailureHandlerTest {
 	}
 
 	@Test
-	void recordFailureThrowing_stillEmits401() throws Exception {
+	void recordFailureThrowing_stillEmits401AndIncrementsCounter() throws Exception {
 		// The whole point of the try/catch around recordFailure: a bookkeeping failure
-		// must never break the normalized response contract.
+		// must never break the normalized response contract. The Micrometer counter
+		// makes sustained degradation alertable beyond log scraping.
+		Counter counter = new SimpleMeterRegistry().counter("auth.loginattempt.record_failure_error");
+		when(loginAttemptService.getRecordFailureErrorCounter()).thenReturn(counter);
 		doThrow(new RuntimeException("caffeine boom")).when(loginAttemptService).recordFailure(anyString());
 		request.setParameter("auth_username", "alice@example.com");
 
 		handler.onAuthenticationFailure(request, response, new BadCredentialsException("bad password"));
 
 		assertUnifiedUnauthorizedJson();
+		assertEquals(1.0, counter.count(), "Caffeine fault should increment the record_failure_error counter");
 	}
 
 	@Test

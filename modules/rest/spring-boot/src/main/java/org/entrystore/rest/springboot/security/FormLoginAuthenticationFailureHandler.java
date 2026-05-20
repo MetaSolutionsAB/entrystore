@@ -40,7 +40,10 @@ public class FormLoginAuthenticationFailureHandler implements AuthenticationFail
 			try {
 				loginAttemptService.recordFailure(username);
 			} catch (RuntimeException e) {
-				// Lockout bookkeeping must never break the normalized response contract.
+				// Lockout bookkeeping must never break the normalized response contract. The
+				// counter increment makes sustained Caffeine degradation alertable via metrics
+				// rather than log scraping — without it the enumeration oracle silently re-opens.
+				loginAttemptService.getRecordFailureErrorCounter().increment();
 				log.warn("Failed to record login attempt for [{}]", HttpUtil.sanitizeForLog(username), e);
 			}
 		}

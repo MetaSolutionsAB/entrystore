@@ -1,5 +1,6 @@
 package org.entrystore.rest.springboot.service.auth;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
@@ -43,7 +44,7 @@ class LoginAttemptServiceTest {
 		when(config.getDuration(AUTH_TEMP_LOCKOUT_DURATION, Duration.ofMinutes(5))).thenReturn(duration);
 		when(config.getBoolean(AUTH_TEMP_LOCKOUT_ADMIN, true)).thenReturn(includeAdmin);
 
-		service = new LoginAttemptService(config, pm);
+		service = new LoginAttemptService(config, pm, new SimpleMeterRegistry());
 		service.init();
 	}
 

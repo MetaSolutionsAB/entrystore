@@ -64,4 +64,19 @@ class HttpUtilTest {
 	void sanitizeForLog_emptyReturnsEmpty() {
 		assertEquals("", HttpUtil.sanitizeForLog(""));
 	}
+
+	@Test
+	void sanitizeForLog_truncatesBeforeRegexScan() {
+		// A multi-MB padded username on the credential-stuffing hot path must not force the
+		// regex pass over its full length. Compare two inputs that share the first 128 chars
+		// but differ wildly past that boundary — including control characters in the tail —
+		// and assert the two sanitized outputs are byte-identical. If truncation happens
+		// after the regex pass, the second input's control-character tail would alter the
+		// output (and produce a much larger intermediate StringBuilder while it's at it).
+		String prefix = "x".repeat(128);
+		String plainTail = "y".repeat(200);
+		String controlTail = "\r\n".repeat(50); // 200 control chars
+		assertEquals(HttpUtil.sanitizeForLog(prefix + plainTail),
+				HttpUtil.sanitizeForLog(prefix + controlTail));
+	}
 }

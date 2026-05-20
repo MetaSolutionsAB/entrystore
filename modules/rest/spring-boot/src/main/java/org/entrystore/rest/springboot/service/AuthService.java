@@ -390,21 +390,26 @@ public class AuthService {
 		// gate flip and the executor submit — both sub-microsecond and not intended as a hard
 		// timing-equality guarantee. Do not add further synchronous work to the active branch.
 		if (shouldSend) {
-			try {
-				passwordResetExecutor.execute(() -> dispatchPasswordResetEmail(ci, password));
-			} catch (RejectedExecutionException rex) {
-				// Bounded queue saturated (likely SMTP outage backing up dispatches) or executor
-				// shutting down. We stay on the generic 200 path so attackers cannot distinguish
-				// "user exists, queue full" from "user does not exist"; the user can retry. The
-				// rejection is recorded in a Micrometer counter and logged at ERROR so operators
-				// can alert on sustained drops.
-				passwordResetRejectedCounter.increment();
-				log.error("Password reset executor rejected dispatch for {} (queue saturated or shutting down)",
-						HttpUtil.sanitizeForLog(ci.getEmail()), rex);
-			}
+			submitPasswordResetDispatch(ci, password);
 		}
 
 		return POST_SUCCESS_MESSAGE.replace("{}", ci.getEmail());
+	}
+
+	// Package-private for unit testing the rejected-execution path.
+	void submitPasswordResetDispatch(SignupInfo ci, String password) {
+		try {
+			passwordResetExecutor.execute(() -> dispatchPasswordResetEmail(ci, password));
+		} catch (RejectedExecutionException rex) {
+			// Bounded queue saturated (likely SMTP outage backing up dispatches) or executor
+			// shutting down. We stay on the generic 200 path so attackers cannot distinguish
+			// "user exists, queue full" from "user does not exist"; the user can retry. The
+			// rejection is recorded in a Micrometer counter and logged at ERROR so operators
+			// can alert on sustained drops.
+			passwordResetRejectedCounter.increment();
+			log.error("Password reset executor rejected dispatch for {} (queue saturated or shutting down)",
+					HttpUtil.sanitizeForLog(ci.getEmail()), rex);
+		}
 	}
 
 	// Runs on the passwordResetExecutor. Storing the token in the cache BEFORE sending the email

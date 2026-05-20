@@ -249,18 +249,21 @@ public class HttpUtil {
 	 * Returns a representation of {@code value} that is safe to embed in a log line:
 	 * control characters (including CR/LF) are replaced with {@code ?} so attacker-supplied
 	 * input cannot forge synthetic log entries, and the result is truncated so a multi-MB
-	 * username cannot blow up the log appender. Returns the literal string {@code "null"}
-	 * when the input is null so the call site does not have to guard.
+	 * username cannot blow up the log appender. Truncation happens before the regex pass so
+	 * the matcher only ever scans at most {@link #LOG_VALUE_MAX_LENGTH} characters — an
+	 * attacker padding a login parameter with megabytes of garbage cannot force a full-input
+	 * scan + intermediate StringBuilder allocation on the credential-stuffing hot path.
+	 * Returns the literal string {@code "null"} when the input is null so the call site does
+	 * not have to guard.
 	 */
 	public static String sanitizeForLog(String value) {
 		if (value == null) {
 			return "null";
 		}
-		String stripped = CONTROL_CHARS.matcher(value).replaceAll("?");
-		if (stripped.length() > LOG_VALUE_MAX_LENGTH) {
-			return stripped.substring(0, LOG_VALUE_MAX_LENGTH) + "…";
-		}
-		return stripped;
+		boolean truncated = value.length() > LOG_VALUE_MAX_LENGTH;
+		String head = truncated ? value.substring(0, LOG_VALUE_MAX_LENGTH) : value;
+		String stripped = CONTROL_CHARS.matcher(head).replaceAll("?");
+		return truncated ? stripped + "…" : stripped;
 	}
 
 	/**
