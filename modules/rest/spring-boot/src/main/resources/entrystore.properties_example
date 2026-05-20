@@ -99,6 +99,16 @@ entrystore.auth.temp.lockout.duration=0ms
 ## log for "Basic Auth Enabled" / "Basic Auth Disabled" to verify the state.
 # entrystore.auth.http-basic.enabled=true|false
 
+## HTTP Basic credential cache — successful PBKDF2 verifications are memoised
+## so a repeated `Authorization: Basic …` from the same caller skips PBKDF2 for
+## up to the TTL. Only takes effect when http-basic is enabled. TTL is also the
+## staleness budget for a password change to take effect for already-cached
+## callers (disabled accounts are re-checked every request, unaffected by the
+## cache). max-size caps memory at one entry per (user × distinct password) in
+## flight; raise it for deployments with many active basic-auth principals.
+# entrystore.auth.http-basic.cache.ttl=1h
+# entrystore.auth.http-basic.cache.max-size=10000
+
 ## SAML authentication (default: false)
 ## Renamed in 6.0 — previously `entrystore.auth.saml`. If the legacy key is
 ## left on upgrade, SAML auth is silently disabled. Check the startup log for

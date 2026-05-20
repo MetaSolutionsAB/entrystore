@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.security;
 
+import com.github.benmanes.caffeine.cache.Ticker;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -75,6 +76,7 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -200,7 +202,9 @@ public class SecurityConfig {
 				);
 
 		if (basicAuthEnabled) {
-			log.info("Basic Auth Enabled");
+			log.info("Basic Auth Enabled (credential cache TTL={}, max entries={})",
+					config.getDuration(Settings.AUTH_HTTP_BASIC_CACHE_TTL, DEFAULT_BASIC_AUTH_CACHE_TTL),
+					config.getInt(Settings.AUTH_HTTP_BASIC_CACHE_MAX_SIZE, DEFAULT_BASIC_AUTH_CACHE_MAX_SIZE));
 			http.httpBasic(basic -> basic.authenticationEntryPoint(entryPoint));
 		} else {
 			log.info("Basic Auth Disabled");
@@ -308,9 +312,37 @@ public class SecurityConfig {
 		};
 	}
 
-	@Bean
-	public PasswordEncoder passwordEncoder() {
+	// The TTL is the staleness budget: a password change or account-disable only takes effect for
+	// already-authenticated callers after the TTL elapses (since the cache short-circuits PBKDF2,
+	// not the upstream UserDetails refresh — disabled is re-checked every request).
+	// The size cap bounds memory at one (Boolean + SHA-256 digest) per (user × distinct password)
+	// in flight. 10_000 fits typical EntryStore deployments; operators with many active basic-auth
+	// principals can raise it via entrystore.auth.http-basic.cache.max-size.
+	static final Duration DEFAULT_BASIC_AUTH_CACHE_TTL = Duration.ofHours(1);
+	static final int DEFAULT_BASIC_AUTH_CACHE_MAX_SIZE = 10_000;
 
+	@Bean
+	public PasswordEncoder passwordEncoder(Ticker ticker) {
+		// Read AUTH_HTTP_BASIC_ENABLED inline rather than via the basicAuthEnabled field —
+		// @PostConstruct init() vs @Bean factory invocation ordering inside the same @Configuration
+		// class is not contractually guaranteed.
+		return buildPasswordEncoder(
+				config.getBoolean(Settings.AUTH_HTTP_BASIC_ENABLED, false),
+				config.getDuration(Settings.AUTH_HTTP_BASIC_CACHE_TTL, DEFAULT_BASIC_AUTH_CACHE_TTL),
+				config.getInt(Settings.AUTH_HTTP_BASIC_CACHE_MAX_SIZE, DEFAULT_BASIC_AUTH_CACHE_MAX_SIZE),
+				ticker);
+	}
+
+	// Pure function of its arguments — no bean state — so it stays static and unit-testable
+	// directly from SecurityConfigTest without the full @RequiredArgsConstructor bean graph.
+	static PasswordEncoder buildPasswordEncoder(boolean basicAuthEnabled, Duration ttl, long maxSize, Ticker ticker) {
+		PasswordEncoder pbkdf2 = pbkdf2PasswordEncoder();
+		return basicAuthEnabled
+				? new CachingPasswordEncoder(pbkdf2, ttl, maxSize, ticker)
+				: pbkdf2;
+	}
+
+	private static PasswordEncoder pbkdf2PasswordEncoder() {
 		return new PasswordEncoder() {
 			@Override
 			public String encode(CharSequence rawPassword) {

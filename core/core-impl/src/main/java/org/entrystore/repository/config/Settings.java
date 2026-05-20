@@ -98,6 +98,8 @@ public interface Settings {
 	String TRUST_X_FORWARDED_FOR = "entrystore.trust.x-forwarded-for";
 
 	String AUTH_HTTP_BASIC_ENABLED = "entrystore.auth.http-basic.enabled";
+	String AUTH_HTTP_BASIC_CACHE_TTL = "entrystore.auth.http-basic.cache.ttl";
+	String AUTH_HTTP_BASIC_CACHE_MAX_SIZE = "entrystore.auth.http-basic.cache.max-size";
 
 	String AUTH_FROM_EMAIL_DEPRECATED = "entrystore.auth.email.from";
 	String AUTH_BCC_EMAIL_DEPRECATED = "entrystore.auth.email.bcc";

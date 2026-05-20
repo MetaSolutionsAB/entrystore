@@ -16,12 +16,17 @@
 
 package org.entrystore.rest.springboot.security;
 
+import com.github.benmanes.caffeine.cache.Ticker;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.server.Cookie;
 import org.springframework.mock.env.MockEnvironment;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SecurityConfigTest {
@@ -103,5 +108,23 @@ class SecurityConfigTest {
 		// Secure for LAX/STRICT would cause browsers to silently reject the cookie on the test rig.
 		assertFalse(SecurityConfig.requiresSecureCookie(false, Cookie.SameSite.LAX));
 		assertFalse(SecurityConfig.requiresSecureCookie(false, Cookie.SameSite.STRICT));
+	}
+
+	@Test
+	void buildPasswordEncoder_basicAuthEnabled_returnsCachingWrapper() {
+		// When basic auth is on, every request runs through DaoAuthenticationProvider.matches() —
+		// without the wrapper PBKDF2 fires on every request.
+		PasswordEncoder encoder = SecurityConfig.buildPasswordEncoder(true, Duration.ofHours(1), 100L, Ticker.systemTicker());
+
+		assertInstanceOf(CachingPasswordEncoder.class, encoder);
+	}
+
+	@Test
+	void buildPasswordEncoder_basicAuthDisabled_returnsPlainEncoder() {
+		// Form-login matches once per session, so caching adds no value when basic auth is off —
+		// keeping hashed-secret keys in memory then would be cost without benefit.
+		PasswordEncoder encoder = SecurityConfig.buildPasswordEncoder(false, Duration.ofHours(1), 100L, Ticker.systemTicker());
+
+		assertFalse(encoder instanceof CachingPasswordEncoder);
 	}
 }
