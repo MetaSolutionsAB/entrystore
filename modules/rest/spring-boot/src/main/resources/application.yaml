@@ -61,6 +61,8 @@ management:
     metrics:
       access: read_only
     shutdown:
+      # Boot defaults endpoint access to 'none' even when exposed; 'unrestricted' here defers
+      # access control to the global ADMIN filter in SecurityConfig (it does NOT mean public).
       access: unrestricted
 
 

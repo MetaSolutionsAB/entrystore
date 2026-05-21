@@ -138,31 +138,34 @@ class ManagementLoggingIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_NO_CONTENT
 
 		// Direct verification that Actuator applied the level (not just that POST returned 204).
-		def updatedLogger = JSON_PARSER.parseText(EntryStoreClient.getRequest(
-				'/management/loggers/' + appExceptionHandlerLogger).inputStream.text)
+		def verifyConn = EntryStoreClient.getRequest('/management/loggers/' + appExceptionHandlerLogger)
+		assert verifyConn.getResponseCode() == HTTP_OK
+		def updatedLogger = JSON_PARSER.parseText(verifyConn.inputStream.text)
 		updatedLogger.configuredLevel == 'INFO'
 		updatedLogger.effectiveLevel == 'INFO'
 
-		// Triggering a 405 exception should not be logged now, as it is a DEBUG level event, but we configured INFO level
-		EntryStoreClient.putRequest('/management/status').getResponseCode() == HTTP_BAD_METHOD
+		when: 'a 405 is triggered after raising the level above DEBUG'
+		assert EntryStoreClient.putRequest('/management/status').getResponseCode() == HTTP_BAD_METHOD
 
+		then: 'the DEBUG event is not captured (configured level is INFO)'
 		appender.events.count {
 			it.level == Level.DEBUG &&
 					it.message.formattedMessage.contains("General ErrorResponse Exception of type 'org.springframework.web.HttpRequestMethodNotSupportedException' at endpoint '/management/status'. Error: ")
 		} == 1
 
-		// Trigger a 409 response - should still be logged at WARN level
-		EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params)).getResponseCode() == HTTP_CONFLICT
+		when: 'a 409 is triggered (WARN is still emitted)'
+		assert EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params)).getResponseCode() == HTTP_CONFLICT
 
+		then: 'the WARN event is captured'
 		appender.events.count {
 			it.level == Level.WARN &&
 					it.message.formattedMessage.contains("Entry with provided ID already exists. EntryID: 'duplicatedEntryId'")
 		} == 2
 
 		cleanup:
-		logger.removeAppender(appender)
-		appender.stop()
 		assert EntryStoreClient.postRequest('/management/loggers/' + appExceptionHandlerLogger,
 				JsonOutput.toJson([configuredLevel: 'DEBUG'])).getResponseCode() == HTTP_NO_CONTENT
+		logger.removeAppender(appender)
+		appender.stop()
 	}
 }
