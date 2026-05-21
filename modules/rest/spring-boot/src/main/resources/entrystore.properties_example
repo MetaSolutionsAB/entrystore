@@ -3,6 +3,10 @@
 ## X-Forwarded-Proto, X-Forwarded-Host, and X-Forwarded-Port headers.
 ## Spring Boot's ForwardedHeaderFilter (server.forward-headers-strategy=framework
 ## in application.yaml) processes these headers for request URL resolution.
+## SECURITY: Spring does NOT validate which client sent the X-Forwarded-* headers,
+## so the reverse proxy MUST strip them from untrusted (client-originating) requests
+## before forwarding. Otherwise a client can spoof X-Forwarded-Host/Proto/Prefix to
+## influence baseURL resolution and potentially poison shared caches.
 entrystore.baseurl.folder=http://entrystore.org/store/
 
 ## Repository store: memory | native | http | sparql
