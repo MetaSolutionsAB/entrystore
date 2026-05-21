@@ -85,7 +85,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static java.lang.Thread.interrupted;
 
@@ -138,10 +137,6 @@ public class SolrSearchIndex implements SearchIndex {
 	private final ExecutorService reindexExecutor = Executors.newSingleThreadExecutor();
 
 	private final ExecutorService purgeExecutor = Executors.newVirtualThreadPerTaskExecutor();
-
-	// Incremented whenever Solr rejects a batch with a RemoteSolrException — those documents are
-	// permanently dropped from the index.
-	private final AtomicLong discardedBatchCount = new AtomicLong();
 
 	// True while the submitter is between drain and process/requeue — observers awaiting a quiescent
 	// queue must wait for this to clear too, otherwise an in-flight batch can be missed.
@@ -285,7 +280,6 @@ public class SolrSearchIndex implements SearchIndex {
 						addReq.process(solrServer);
 						return false;
 					} catch (RemoteSolrException e) {
-						discardedBatchCount.incrementAndGet();
 						log.error("Solr rejected {} entries (HTTP {}, discarding batch). URIs: {}",
 								addBatch.size(), e.code(), addBatch.keySet(), e);
 						return false;
@@ -464,9 +458,11 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		documentSubmitter = new SolrInputDocumentSubmitter();
+		documentSubmitter.setDaemon(true);
 		documentSubmitter.start();
 
 		delayedContextIndexer = new DelayedContextIndexer();
+		delayedContextIndexer.setDaemon(true);
 		delayedContextIndexer.start();
 	}
 
@@ -760,40 +756,17 @@ public class SolrSearchIndex implements SearchIndex {
 		return deleteQueue.size();
 	}
 
-	public long getDiscardedBatchCount() {
-		return discardedBatchCount.get();
-	}
-
 	/**
-	 * Blocks until both queues are empty and no batch is in flight. Returns false on thread
-	 * interruption (typically JVM shutdown) or when the queue has been stuck at the same non-zero
-	 * size for ~10 minutes across submitter cycles — a poison-pill batch hitting transport-level
-	 * SolrServerException / IOException is re-queued without limit (see {@code processAddBatch}),
-	 * so a sustained Solr outage would otherwise hang the caller indefinitely.
+	 * Blocks until both queues are empty and no batch is in flight. Returns false only on thread
+	 * interruption (typically JVM shutdown). Trade-off: a sustained Solr outage with a poison-pill
+	 * batch re-queued by the {@code SolrServerException | IOException} retry path will block this
+	 * call indefinitely; for EntryStore's single-instance ops model the operator's recourse is to
+	 * kill the JVM and investigate.
 	 *
-	 * @return true if the submitter became quiescent, false on interruption or detected stall
+	 * @return true if the submitter became quiescent, false if interrupted
 	 */
 	public boolean waitForQueueDrain() {
-		long lastSize = -1;
-		int stagnantTicks = 0;
-		boolean wasInFlight = false;
-		boolean sawCycle = false;
 		while (getPostQueueSize() > 0 || !deleteQueue.isEmpty() || submitterInFlight.get()) {
-			boolean nowInFlight = submitterInFlight.get();
-			if (wasInFlight && !nowInFlight) {
-				sawCycle = true;
-			}
-			wasInFlight = nowInFlight;
-			long size = getPostQueueSize() + deleteQueue.size();
-			if (size == lastSize && sawCycle) {
-				if (++stagnantTicks > DRAIN_STAGNANT_TICKS_BEFORE_ABORT) {
-					log.error("Queue drain abandoned: {} items stuck for ~{}s across submitter cycles; a transport-level failure is most likely re-queuing the same batch", size, stagnantTicks / 2);
-					return false;
-				}
-			} else {
-				stagnantTicks = 0;
-				lastSize = size;
-			}
 			try {
 				Thread.sleep(500);
 			} catch (InterruptedException e) {
@@ -803,9 +776,6 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 		return true;
 	}
-
-	// ~10 minutes of identical queue size across submitter cycles before aborting the drain.
-	private static final int DRAIN_STAGNANT_TICKS_BEFORE_ABORT = 1200;
 
 	@Override
 	public boolean ping() {

@@ -579,6 +579,17 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	}
 
 	private void initSolr() {
+		try {
+			initSolrInternal();
+		} catch (RuntimeException e) {
+			// Release RDF4J native-store file locks and any other resources before propagating;
+			// otherwise stale lock files block subsequent boots.
+			this.shutdown();
+			throw e;
+		}
+	}
+
+	private void initSolrInternal() {
 		boolean reindex = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false);
 		boolean reindexWait = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, false);
 
@@ -589,7 +600,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		String dataFolderPath = configuration.getString(Settings.DATA_FOLDER);
 		File dataFolder = dataFolderPath == null ? null : new File(dataFolderPath);
-		boolean wipeRequired = false;
 		if (dataFolder == null) {
 			log.warn("'{}' is not configured; Solr schema/version mismatch detection is disabled", Settings.DATA_FOLDER);
 		} else {
@@ -597,13 +607,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				if (SolrVersionMarker.needsReindex(dataFolder, getVersion())) {
 					reindex = true;
 					reindexWait = true;
-					wipeRequired = true;
 				}
 			} catch (IOException e) {
 				log.error("Failed to read Solr version markers from {}; forcing reindex as a precaution", dataFolder, e);
 				reindex = true;
 				reindexWait = true;
-				wipeRequired = true;
 			}
 		}
 
@@ -638,23 +646,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			boolean reindexSucceeded = false;
 			if (reindex) {
 				if (reindexWait) {
-					long discardedBefore = solrIndex.getDiscardedBatchCount();
-					boolean wipeOk = solrIndex.clearSolrIndex(solrServer);
-					if (!wipeOk) {
-						// A schema/version mismatch (or unreadable markers) means the existing index is the wrong shape
-						// for the running Solr/EntryStore; refusing to serve it is safer than answering /search with stale data.
-						if (wipeRequired) {
-							throw new IllegalStateException("Solr schema/version mismatch was detected, but the initial *:* wipe failed; refusing to start with a stale or schema-incompatible index. Fix Solr and restart.");
-						}
+					if (!solrIndex.clearSolrIndex(solrServer)) {
 						log.error("Initial Solr full-wipe failed; skipping reindex to avoid serving a dirty index. Next restart will retry.");
 					} else {
 						solrIndex.reindexSync(false);
-						boolean drained = solrIndex.waitForQueueDrain();
-						boolean noDiscards = solrIndex.getDiscardedBatchCount() == discardedBefore;
-						reindexSucceeded = drained && noDiscards;
+						reindexSucceeded = solrIndex.waitForQueueDrain();
 						if (!reindexSucceeded) {
-							log.warn("Solr reindex did not complete cleanly (queueDrained={}, noDiscards={}); skipping version-marker write so the next restart re-triggers reindex.",
-									drained, noDiscards);
+							log.warn("Solr submission queue did not drain; skipping version-marker write so the next restart re-triggers reindex.");
 						}
 					}
 				} else {
