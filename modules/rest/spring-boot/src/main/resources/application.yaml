@@ -54,12 +54,16 @@ management:
       base-path: /management
       exposure:
         # All exposed Actuator endpoints require ADMIN role — see EndpointRequest.toAnyEndpoint() in SecurityConfig
-        include: metrics
+        include: metrics,shutdown,loggers
       discovery:
         enabled: false
   endpoint:
     metrics:
       access: read_only
+    shutdown:
+      # Boot defaults endpoint access to 'none' even when exposed; 'unrestricted' here defers
+      # access control to the global ADMIN filter in SecurityConfig (it does NOT mean public).
+      access: unrestricted
 
 
 # Bounded executor for Spring MVC async dispatch. See MvcAsyncConfiguration for the queue-capacity

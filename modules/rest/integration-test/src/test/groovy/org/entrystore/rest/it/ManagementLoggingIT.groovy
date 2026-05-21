@@ -14,9 +14,11 @@ import org.entrystore.rest.springboot.controller.AppExceptionHandler
 
 import java.util.concurrent.CopyOnWriteArrayList
 
-import static java.net.HttpURLConnection.HTTP_ACCEPTED
 import static java.net.HttpURLConnection.HTTP_BAD_METHOD
 import static java.net.HttpURLConnection.HTTP_CONFLICT
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN
+import static java.net.HttpURLConnection.HTTP_NO_CONTENT
+import static java.net.HttpURLConnection.HTTP_OK
 import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ManagementLoggingIT extends BaseSpec {
@@ -24,16 +26,12 @@ class ManagementLoggingIT extends BaseSpec {
 	def static contextId = '_contexts'
 	def static entryId = 'duplicatedEntryId'
 	def static resourceUrl = 'https://bbc.co.uk'
+	def static appExceptionHandlerLogger = 'org.entrystore.rest.springboot.controller.AppExceptionHandler'
 
 	def cleanupSpec() {
-		// Set original logging config
-		def config = [
-				level   : 'info',
-				packages: [
-						'org.entrystore.rest.springboot.controller.AppExceptionHandler': 'debug'
-				]]
-
-		assert EntryStoreClient.putRequest('/management/logging', JsonOutput.toJson(config)).getResponseCode() == HTTP_ACCEPTED
+		// Safety net in case the per-test cleanup didn't run.
+		assert EntryStoreClient.postRequest('/management/loggers/' + appExceptionHandlerLogger,
+				JsonOutput.toJson([configuredLevel: 'DEBUG'])).getResponseCode() == HTTP_NO_CONTENT
 	}
 
 	// logging helper class
@@ -54,20 +52,58 @@ class ManagementLoggingIT extends BaseSpec {
 		}
 	}
 
-	// TODO: Add the same test with user-account, should also be UNAUTHORIZED
-	def "PUT /management/logging as Guest should respond with UNAUTHORIZED"() {
-		given:
-		def config = [level: 'info']
-
-		when: 'a new logging config is sent as guest'
-		def conn = EntryStoreClient.putRequest('/management/logging', JsonOutput.toJson(config), null)
+	def "GET /management/loggers as Guest should respond with UNAUTHORIZED"() {
+		when: 'an unauthenticated user requests the loggers endpoint'
+		def conn = EntryStoreClient.getRequest('/management/loggers', null)
 
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.errorStream.text.contains('"error":"Unauthorized"')
 	}
 
-	def "PUT /management/logging should update logging configuration"() {
+	def "GET /management/loggers as a non-admin user should respond with FORBIDDEN"() {
+		when: 'an authenticated non-admin user requests the loggers endpoint'
+		def conn = EntryStoreClient.getRequest('/management/loggers', 'user')
+
+		then:
+		conn.getResponseCode() == HTTP_FORBIDDEN
+		conn.errorStream.text.contains('"error":"Forbidden"')
+	}
+
+	def "POST /management/loggers/{name} as Guest should respond with UNAUTHORIZED"() {
+		when: 'an unauthenticated user attempts to change a logger level'
+		def conn = EntryStoreClient.postRequest('/management/loggers/ROOT',
+				JsonOutput.toJson([configuredLevel: 'INFO']), null)
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		conn.errorStream.text.contains('"error":"Unauthorized"')
+	}
+
+	def "POST /management/loggers/{name} as a non-admin user should respond with FORBIDDEN"() {
+		when: 'an authenticated non-admin user attempts to change a logger level'
+		def conn = EntryStoreClient.postRequest('/management/loggers/ROOT',
+				JsonOutput.toJson([configuredLevel: 'INFO']), 'user')
+
+		then:
+		conn.getResponseCode() == HTTP_FORBIDDEN
+		conn.errorStream.text.contains('"error":"Forbidden"')
+	}
+
+	def "GET /management/loggers as admin should return the logger list"() {
+		when: 'an admin requests the loggers endpoint'
+		def conn = EntryStoreClient.getRequest('/management/loggers')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		def body = JSON_PARSER.parseText(conn.inputStream.text)
+		body.loggers != null
+		body.loggers.size() > 0
+		// Actuator always exposes the root logger under the literal key 'ROOT'
+		body.loggers.containsKey('ROOT')
+	}
+
+	def "POST /management/loggers/{name} should update the logger level"() {
 		given:
 		// add in-memory appender to AppExceptionHandler class, so we can capture the log events
 		def ctx = (LoggerContext) LogManager.getContext(false)
@@ -94,33 +130,42 @@ class ManagementLoggingIT extends BaseSpec {
 					it.message.formattedMessage.contains("Entry with provided ID already exists. EntryID: 'duplicatedEntryId'")
 		} == 1
 
-
-		// New logging config to log only INFO level for AppExceptionHandler
-		def config = [
-				level   : 'warn',
-				packages: [
-						'org.entrystore.rest.springboot.controller.AppExceptionHandler': 'info'
-				]]
-
-		when: 'New logging config is accepted'
-		EntryStoreClient.putRequest('/management/logging', JsonOutput.toJson(config)).getResponseCode() == HTTP_ACCEPTED
+		when: 'AppExceptionHandler level is raised to INFO via Actuator'
+		def conn = EntryStoreClient.postRequest('/management/loggers/' + appExceptionHandlerLogger,
+				JsonOutput.toJson([configuredLevel: 'INFO']))
 
 		then:
-		// Triggering a 405 exception should not be logged now, as it is a DEBUG level event, but we configured INFO level
-		EntryStoreClient.putRequest('/management/status').getResponseCode() == HTTP_BAD_METHOD
+		conn.getResponseCode() == HTTP_NO_CONTENT
 
+		// Direct verification that Actuator applied the level (not just that POST returned 204).
+		def verifyConn = EntryStoreClient.getRequest('/management/loggers/' + appExceptionHandlerLogger)
+		assert verifyConn.getResponseCode() == HTTP_OK
+		def updatedLogger = JSON_PARSER.parseText(verifyConn.inputStream.text)
+		updatedLogger.configuredLevel == 'INFO'
+		updatedLogger.effectiveLevel == 'INFO'
+
+		when: 'a 405 is triggered after raising the level above DEBUG'
+		assert EntryStoreClient.putRequest('/management/status').getResponseCode() == HTTP_BAD_METHOD
+
+		then: 'the DEBUG event is not captured (configured level is INFO)'
 		appender.events.count {
 			it.level == Level.DEBUG &&
 					it.message.formattedMessage.contains("General ErrorResponse Exception of type 'org.springframework.web.HttpRequestMethodNotSupportedException' at endpoint '/management/status'. Error: ")
 		} == 1
 
-		// Trigger a 409 response - should still be logged at WARN level
-		EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params)).getResponseCode() == HTTP_CONFLICT
+		when: 'a 409 is triggered (WARN is still emitted)'
+		assert EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params)).getResponseCode() == HTTP_CONFLICT
 
+		then: 'the WARN event is captured'
 		appender.events.count {
 			it.level == Level.WARN &&
 					it.message.formattedMessage.contains("Entry with provided ID already exists. EntryID: 'duplicatedEntryId'")
 		} == 2
 
+		cleanup:
+		assert EntryStoreClient.postRequest('/management/loggers/' + appExceptionHandlerLogger,
+				JsonOutput.toJson([configuredLevel: 'DEBUG'])).getResponseCode() == HTTP_NO_CONTENT
+		logger.removeAppender(appender)
+		appender.stop()
 	}
 }

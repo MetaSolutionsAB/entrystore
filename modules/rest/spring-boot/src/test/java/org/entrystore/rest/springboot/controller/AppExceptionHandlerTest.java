@@ -119,7 +119,7 @@ class AppExceptionHandlerTest {
 		// endpoint adopts that, the mapping rule in handleAccessDeniedException must be revisited so
 		// the per-entity AccessDeniedException doesn't re-open the enumeration oracle.
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
-		Mockito.when(req.getRequestURI()).thenReturn("/management/logging");
+		Mockito.when(req.getRequestURI()).thenReturn("/management/loggers/ROOT");
 		Authentication anonymous = new AnonymousAuthenticationToken(
 				"key", "anonymousUser",
 				List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS")));
@@ -143,7 +143,7 @@ class AppExceptionHandlerTest {
 		// only. A regression that special-cased the exact class would slip this case to 404 (re-opening
 		// the oracle on @PreAuthorize-guarded endpoints).
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
-		Mockito.when(req.getRequestURI()).thenReturn("/management/logging");
+		Mockito.when(req.getRequestURI()).thenReturn("/management/loggers/ROOT");
 		Authentication anonymous = new AnonymousAuthenticationToken(
 				"key", "anonymousUser",
 				List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS")));
@@ -190,7 +190,7 @@ class AppExceptionHandlerTest {
 		// exception subclass fired. A regression that flipped this cell (e.g. to 401) would
 		// otherwise slip through.
 		HttpServletRequest req = Mockito.mock(HttpServletRequest.class);
-		Mockito.when(req.getRequestURI()).thenReturn("/management/logging");
+		Mockito.when(req.getRequestURI()).thenReturn("/management/loggers/ROOT");
 		Authentication authenticated = new UsernamePasswordAuthenticationToken(
 				"alice", "n/a",
 				List.of(new SimpleGrantedAuthority("ROLE_USER")));

@@ -103,7 +103,7 @@ springboot/
 - Controllers: `@RestController` + `@RequiredArgsConstructor` (Lombok) + `@Operation` (Swagger)
 - Services: `@Slf4j` + `@Service` + `@RequiredArgsConstructor`
 - For new services, read config via Spring Boot mechanisms (`@Value("${prop:default}")` or `@ConfigurationProperties`). Some services still call `repositoryManager.getConfiguration().get*` directly — migrate when touching them.
-- Config: `application.yaml` imports `entrystore.properties` (same config format as legacy)
+- Config: `application.yaml` imports `entrystore.properties` via `spring.config.import` — every `entrystore.*` key is bound to the Spring `Environment` and is readable via `@Value`, `@ConfigurationProperties`, and `@ConditionalOnProperty`, not only via the legacy `Config` wrapper
 - Default port: 8080 (production), 8181 (integration tests)
 - Embedded server: Jetty 12 (`spring-boot-starter-jetty`), not Tomcat
 

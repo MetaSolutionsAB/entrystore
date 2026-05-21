@@ -39,7 +39,7 @@ management:
     web:
       base-path: /management
       exposure:
-        include: metrics,shutdown
+        include: metrics,shutdown,loggers
       discovery:
         enabled: false
   endpoint:
