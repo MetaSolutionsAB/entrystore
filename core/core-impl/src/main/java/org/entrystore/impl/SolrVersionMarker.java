@@ -43,10 +43,7 @@ final class SolrVersionMarker {
 		return new File(dataFolder, SOLR_FILENAME);
 	}
 
-	// Returns null when the marker file is absent or its content is blank (empty after stripping
-	// whitespace). Throws IOException on read failure so the caller can distinguish a missing
-	// marker (semantically "no marker") from an existing-but-unreadable one (which must not be
-	// silently re-interpreted as a mismatch — that would trigger a destructive reindex).
+	// Returns null when the marker file is absent or its content is blank; throws IOException on read failure.
 	static String read(File file) throws IOException {
 		if (!file.isFile()) {
 			return null;
@@ -59,9 +56,7 @@ final class SolrVersionMarker {
 		return content;
 	}
 
-	// Returns true on success, false on failure (already logged). Callers should warn loudly when
-	// a write fails — an absent marker on the next boot will be detected as "no marker" and
-	// trigger another full reindex, looping until the underlying problem is fixed.
+	// Returns true on success, false on failure (already logged).
 	static boolean write(File file, String content) {
 		try {
 			FileOperations.writeStringToFile(file, content);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -93,6 +93,8 @@ import java.util.zip.GZIPOutputStream;
 public class RepositoryManagerImpl implements RepositoryManager {
 
 	private static final Logger log = LoggerFactory.getLogger(RepositoryManagerImpl.class);
+
+	private static final long REINDEX_DRAIN_TIMEOUT_MINUTES = 30;
 
 	@Getter
 	private Repository repository;
@@ -578,8 +580,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 	}
 
-	// useHttp1_1(true) on HttpJettySolrClient is a hard Jetty transport choice (HttpClientTransportOverHTTP),
-	// not a JDK-HttpClient-style preference. This structurally avoids HTTP/2 RST_STREAM frames from Solr's h2c endpoint.
 	private void initSolr() {
 		boolean reindex = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false);
 		boolean reindexWait = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, false);
@@ -591,7 +591,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		String dataFolderPath = configuration.getString(Settings.DATA_FOLDER);
 		File dataFolder = dataFolderPath == null ? null : new File(dataFolderPath);
-		boolean markersReadable = true;
 		if (dataFolder == null) {
 			log.warn("'{}' is not configured; Solr schema/version mismatch detection is disabled", Settings.DATA_FOLDER);
 		} else {
@@ -601,10 +600,12 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					reindexWait = true;
 				}
 			} catch (IOException e) {
-				// Existing-but-unreadable marker — do NOT trigger a destructive reindex here.
-				// The next boot will re-attempt detection once the underlying I/O issue is fixed.
-				log.error("Failed to read Solr version markers from {}; skipping schema/version mismatch detection", dataFolder, e);
-				markersReadable = false;
+				// Fail-safe: a transient read error against the marker file forces a reindex rather
+				// than silently serving with a potentially-stale index. The reindex rebuilds from
+				// the RDF source of truth and will retry on every boot until the I/O issue is fixed.
+				log.error("Failed to read Solr version markers from {}; forcing reindex as a precaution", dataFolder, e);
+				reindex = true;
+				reindexWait = true;
 			}
 		}
 
@@ -612,11 +613,14 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at {}", solrURL);
 
+			int requestTimeoutSeconds = configuration.getInt(Settings.SOLR_REQUEST_TIMEOUT_SECONDS, 60);
 			HttpJettySolrClient.Builder solrClientBuilder = new HttpJettySolrClient.Builder(solrURL)
+					// useHttp1_1(true) is a hard Jetty transport choice (HttpClientTransportOverHTTP), not a
+					// JDK-HttpClient-style preference. Structurally avoids HTTP/2 RST_STREAM frames from h2c.
 					.useHttp1_1(true)
 					.withConnectionTimeout(5, TimeUnit.SECONDS)
 					.withIdleTimeout(30, TimeUnit.SECONDS)
-					.withRequestTimeout(60, TimeUnit.SECONDS);
+					.withRequestTimeout(requestTimeoutSeconds, TimeUnit.SECONDS);
 
 			String solrUsername = configuration.getString(Settings.SOLR_AUTH_USERNAME);
 			String solrPassword = configuration.getString(Settings.SOLR_AUTH_PASSWORD);
@@ -648,13 +652,17 @@ public class RepositoryManagerImpl implements RepositoryManager {
 								wipeOk, drained, noDiscards);
 					}
 				} else {
+					// Async path is reached only when the operator explicitly picked WAIT=false (legacy
+					// "reindex every boot" semantics). Markers are not persisted because completion is
+					// unobservable from here; that is the contract for this config.
+					log.info("Async reindex started; Solr version markers will not be persisted on this run because '{}=false' means reindex runs on every boot.",
+							Settings.SOLR_REINDEX_ON_STARTUP_WAIT);
 					solrIndex.reindex(false);
 				}
 			}
-			// Only persist markers when no reindex was needed, or a sync reindex completed cleanly.
-			// Async reindex and failed sync reindex must not stamp "current" markers, otherwise the
-			// next restart would skip recovery and leave the index permanently incomplete.
-			if (dataFolder != null && markersReadable && reindexSucceeded) {
+			// Async reindex and failed sync reindex must not stamp "current" markers — otherwise the next
+			// restart would skip recovery and leave the index permanently incomplete.
+			if (dataFolder != null && reindexSucceeded) {
 				boolean schemaWritten = SolrVersionMarker.write(SolrVersionMarker.schemaMarker(dataFolder), getVersion());
 				boolean solrWritten = SolrVersionMarker.write(SolrVersionMarker.solrMarker(dataFolder), SolrVersion.LATEST.toString());
 				if (!schemaWritten || !solrWritten) {
@@ -667,9 +675,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 	}
 
-	private static final long REINDEX_DRAIN_TIMEOUT_MINUTES = 30;
-
-private void registerSolrListeners() {
+	private void registerSolrListeners() {
 		if (solrServer != null) {
 			RepositoryListener updater = new RepositoryListener() {
 				@Override

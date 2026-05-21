@@ -124,6 +124,9 @@ entrystore.solr.url=http://localhost:8080/solr/entrystore-core1
 #entrystore.solr.url=/srv/entrystore/files/solr/
 entrystore.solr.ngram-all-literals=off
 entrystore.solr.extract-fulltext=off
+# Per-request HTTP timeout for the SolrJ client (seconds, default 60). Increase for cold-cache
+# faceted searches over large indices, or for heavy bulk-index batches against a busy Solr.
+# entrystore.solr.request-timeout-seconds=60
 
 ## OAI-PMH harvester (not to confuse with the OAI-PMH target which is an own WebApp
 # entrystore.harvester.oai=on|off (default: off)
