@@ -127,6 +127,12 @@ class SolrVersionMarkerTest {
 	}
 
 	@Test
+	void solrVersionLatestRoundTripsThroughValueOf() {
+		// Guards against a future SolrVersion.toString() format that valueOf rejects (would otherwise force a destructive reindex on every boot).
+		assertEquals(SolrVersion.LATEST, SolrVersion.valueOf(SolrVersion.LATEST.toString()));
+	}
+
+	@Test
 	void solrVersionMatchesCurrentReturnsFalseForNewerMajor() {
 		int otherMajor = SolrVersion.LATEST.getMajorVersion() + 1;
 		String otherVersion = otherMajor + "." + SolrVersion.LATEST.getMinorVersion() + "." + SolrVersion.LATEST.getPatchVersion();

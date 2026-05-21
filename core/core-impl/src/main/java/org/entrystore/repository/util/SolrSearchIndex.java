@@ -765,16 +765,15 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Polls until both queues are empty and no batch is in flight, or the timeout elapses.
+	 * Blocks until both queues are empty and no batch is in flight. Returns false only on thread
+	 * interruption (typically JVM shutdown). The submitter has its own per-batch retry budget, so
+	 * this method will not block on a single failing batch — it only blocks while real work is
+	 * outstanding.
 	 *
-	 * @return true if the submitter became fully quiescent within the timeout, false on timeout or interruption
+	 * @return true if the submitter became quiescent, false if interrupted
 	 */
-	public boolean waitForQueueDrain(long timeout, TimeUnit unit) {
-		long deadline = System.nanoTime() + unit.toNanos(timeout);
+	public boolean waitForQueueDrain() {
 		while (getPostQueueSize() > 0 || !deleteQueue.isEmpty() || submitterInFlight.get()) {
-			if (System.nanoTime() >= deadline) {
-				return false;
-			}
 			try {
 				Thread.sleep(500);
 			} catch (InterruptedException e) {

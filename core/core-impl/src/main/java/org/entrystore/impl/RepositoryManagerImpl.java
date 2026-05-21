@@ -94,8 +94,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 	private static final Logger log = LoggerFactory.getLogger(RepositoryManagerImpl.class);
 
-	private static final long REINDEX_DRAIN_TIMEOUT_MINUTES = 30;
-
 	@Getter
 	private Repository repository;
 
@@ -600,9 +598,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					reindexWait = true;
 				}
 			} catch (IOException e) {
-				// Fail-safe: a transient read error against the marker file forces a reindex rather
-				// than silently serving with a potentially-stale index. The reindex rebuilds from
-				// the RDF source of truth and will retry on every boot until the I/O issue is fixed.
 				log.error("Failed to read Solr version markers from {}; forcing reindex as a precaution", dataFolder, e);
 				reindex = true;
 				reindexWait = true;
@@ -610,6 +605,10 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 
 		String solrURL = configuration.getString(Settings.SOLR_URL);
+		if (solrURL == null || solrURL.isBlank()) {
+			log.error("'{}' is not configured", Settings.SOLR_URL);
+			System.exit(1);
+		}
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at {}", solrURL);
 
@@ -635,34 +634,33 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 		if (solrServer != null) {
 			solrIndex = new SolrSearchIndex(this, solrServer);
-			boolean reindexSucceeded = !reindex;
+			boolean reindexSucceeded = false;
 			if (reindex) {
 				if (reindexWait) {
 					long discardedBefore = solrIndex.getDiscardedBatchCount();
 					boolean wipeOk = solrIndex.clearSolrIndex(solrServer);
 					if (!wipeOk) {
-						log.warn("Initial Solr full-wipe failed; reindex will run against potentially dirty index");
-					}
-					solrIndex.reindexSync(false);
-					boolean drained = solrIndex.waitForQueueDrain(REINDEX_DRAIN_TIMEOUT_MINUTES, TimeUnit.MINUTES);
-					boolean noDiscards = solrIndex.getDiscardedBatchCount() == discardedBefore;
-					reindexSucceeded = wipeOk && drained && noDiscards;
-					if (!reindexSucceeded) {
-						log.warn("Solr reindex did not complete cleanly (wipeOk={}, queueDrained={}, noDiscards={}); skipping version-marker write so the next restart re-triggers reindex.",
-								wipeOk, drained, noDiscards);
+						log.error("Initial Solr full-wipe failed; skipping reindex to avoid serving a dirty index. Next restart will retry.");
+					} else {
+						solrIndex.reindexSync(false);
+						boolean drained = solrIndex.waitForQueueDrain();
+						boolean noDiscards = solrIndex.getDiscardedBatchCount() == discardedBefore;
+						reindexSucceeded = drained && noDiscards;
+						if (!reindexSucceeded) {
+							log.warn("Solr reindex did not complete cleanly (queueDrained={}, noDiscards={}); skipping version-marker write so the next restart re-triggers reindex.",
+									drained, noDiscards);
+						}
 					}
 				} else {
-					// Async path is reached only when the operator explicitly picked WAIT=false (legacy
-					// "reindex every boot" semantics). Markers are not persisted because completion is
-					// unobservable from here; that is the contract for this config.
 					log.info("Async reindex started; Solr version markers will not be persisted on this run because '{}=false' means reindex runs on every boot.",
 							Settings.SOLR_REINDEX_ON_STARTUP_WAIT);
 					solrIndex.reindex(false);
 				}
 			}
-			// Async reindex and failed sync reindex must not stamp "current" markers — otherwise the next
-			// restart would skip recovery and leave the index permanently incomplete.
-			if (dataFolder != null && reindexSucceeded) {
+			// Markers are written only on the success path of an actually-run reindex, never on
+			// async runs (completion unobservable) or no-op boots (avoids per-boot disk I/O,
+			// especially on NFS-mounted data folders).
+			if (dataFolder != null && reindex && reindexSucceeded) {
 				boolean schemaWritten = SolrVersionMarker.write(SolrVersionMarker.schemaMarker(dataFolder), getVersion());
 				boolean solrWritten = SolrVersionMarker.write(SolrVersionMarker.solrMarker(dataFolder), SolrVersion.LATEST.toString());
 				if (!schemaWritten || !solrWritten) {
