@@ -101,11 +101,16 @@ entrystore.auth.temp.lockout.duration=0ms
 
 ## HTTP Basic credential cache — successful PBKDF2 verifications are memoised
 ## so a repeated `Authorization: Basic …` from the same caller skips PBKDF2 for
-## up to the TTL. Only takes effect when http-basic is enabled. TTL is also the
-## staleness budget for a password change to take effect for already-cached
-## callers (disabled accounts are re-checked every request, unaffected by the
-## cache). max-size caps memory at one entry per (user × distinct password) in
-## flight; raise it for deployments with many active basic-auth principals.
+## up to the TTL. Only takes effect when http-basic is enabled. A password
+## change invalidates the entry immediately (new PBKDF2 salt → new encoded →
+## new cache key) and disabled accounts are re-checked every request, so
+## neither path waits for TTL. TTL only bounds forced credential invalidation
+## — e.g., revoking a still-valid (raw, encoded) pair after a leak — which
+## takes effect after at most TTL. Lower the TTL if you need post-incident
+## revocation to propagate faster. max-size caps memory at one entry per
+## (encoded-hash × raw-password) in flight; password rotation produces a new
+## encoded → new key, so old and new entries coexist until TTL eviction
+## (size for the rotation window, not just steady state).
 # entrystore.auth.http-basic.cache.ttl=1h
 # entrystore.auth.http-basic.cache.max-size=10000
 

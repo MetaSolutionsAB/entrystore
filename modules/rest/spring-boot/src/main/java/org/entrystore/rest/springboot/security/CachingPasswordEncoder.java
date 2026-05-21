@@ -29,10 +29,17 @@ import java.util.Objects;
  * Wraps a {@link PasswordEncoder} with a short-lived in-memory cache of successful verifications,
  * so repeated HTTP Basic auth requests skip the PBKDF2 cost after the first hit. The cache key is
  * {@code SHA-256(encoded + ":" + raw)} so two users with the same password get distinct entries
- * (the encoded hash carries a per-user salt). Only successful verifications are cached, password
- * rotation invalidates entries naturally (a new salt yields a new key), and disabled-user
- * freshness is preserved by Spring's {@code AbstractUserDetailsAuthenticationProvider} which runs
- * pre-auth checks on the live {@code UserDetails} before {@link #matches} is invoked.
+ * (the encoded hash carries a per-user salt). Only successful verifications are cached, and
+ * password rotation invalidates entries naturally (a new salt yields a new key).
+ *
+ * <p>Disabled-user freshness: {@link #matches} is only ever reached for HTTP Basic — the wrapper
+ * is installed only when basic auth is enabled, and {@code DaoAuthenticationProvider} is the
+ * single caller. {@code DaoAuthenticationProvider} reloads {@code UserDetails} from
+ * {@code ESUserDetailsService} on every basic-auth request and runs pre-auth checks (disabled,
+ * locked, expired) <em>before</em> delegating to {@link #matches}, so a freshly-disabled account
+ * is rejected even while its cache entry is still warm. Session-authenticated callers (form
+ * login, SAML, CAS) never re-enter {@code matches}; their disabled-account freshness is provided
+ * by {@code ReloadUserPropertiesFilter}, not by this cache.
  */
 public class CachingPasswordEncoder implements PasswordEncoder {
 
@@ -87,5 +94,13 @@ public class CachingPasswordEncoder implements PasswordEncoder {
 			return null;
 		}
 		return Password.sha256(encodedPassword + ":" + rawPassword);
+	}
+
+	// Test seam: lets CachingPasswordEncoderTest assert storage-level invariants — the
+	// no-negative-cache contract (delegate false → cache stays empty) and the maxSize bound —
+	// directly, rather than only through behavioural proxies a refactor could pass while
+	// breaking the invariant.
+	Cache<String, Boolean> cache() {
+		return cache;
 	}
 }

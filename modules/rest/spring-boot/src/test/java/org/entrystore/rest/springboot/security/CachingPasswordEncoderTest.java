@@ -151,17 +151,20 @@ class CachingPasswordEncoderTest {
 
 	@Test
 	void matches_concurrentFirstMissesForSameKey_delegateCalledOnce() throws InterruptedException {
-		// Pins the stampede fix: when N threads race on a cold cache for the same (raw, encoded)
-		// pair, Caffeine's get(key, loader) must deduplicate so PBKDF2 runs exactly once.
-		// The blocking delegate forces all threads to arrive before any can complete the loader.
+		// Pins the stampede fix: Caffeine's get(key, loader) holds a per-key compute lock so only
+		// ONE thread enters the loader; the other (threadCount - 1) threads block on Caffeine's
+		// lock, never reaching the delegate. The countdown latch therefore counts down exactly
+		// once — we poll until it drops below threadCount (proving the loader is engaged) before
+		// releasing it. The real invariant the test pins is matchCalls == 1 after all
+		// submissions complete.
 		int threadCount = 16;
-		var allThreadsQueued = new CountDownLatch(threadCount);
+		var loaderEntered = new CountDownLatch(threadCount);
 		var releaseLoader = new CountDownLatch(1);
 		var blockingDelegate = new CountingDelegate(true) {
 			@Override
 			public boolean matches(CharSequence rawPassword, String encodedPassword) {
 				try {
-					allThreadsQueued.countDown();
+					loaderEntered.countDown();
 					if (!releaseLoader.await(5, TimeUnit.SECONDS)) {
 						throw new IllegalStateException("loader release latch timed out");
 					}
@@ -179,11 +182,15 @@ class CachingPasswordEncoderTest {
 			for (int i = 0; i < threadCount; i++) {
 				pool.submit(() -> encoder.matches(RAW, ENCODED));
 			}
-			// Wait until at least one thread reached the loader; under Caffeine's get-with-loader,
-			// only one thread enters — the others block on the per-key compute lock.
-			assertTrue(allThreadsQueued.getCount() <= threadCount - 1
-							|| allThreadsQueued.await(5, TimeUnit.SECONDS) || allThreadsQueued.getCount() < threadCount,
-					"at least one thread should reach the loader");
+			// Poll until the one thread inside the loader counts the latch down once. Caffeine's
+			// per-key compute lock guarantees the other threads never enter the loader, so the
+			// latch can never reach zero — await() would always time out.
+			long deadlineNanos = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+			while (loaderEntered.getCount() == threadCount && System.nanoTime() < deadlineNanos) {
+				Thread.sleep(10);
+			}
+			assertTrue(loaderEntered.getCount() < threadCount,
+					"at least one thread should reach the loader within 5s");
 			releaseLoader.countDown();
 		} finally {
 			pool.shutdown();
@@ -192,6 +199,62 @@ class CachingPasswordEncoderTest {
 
 		assertEquals(1, blockingDelegate.matchCalls.get(),
 				"cache.get(key, loader) must deduplicate concurrent first-misses");
+	}
+
+	@Test
+	void matches_delegateReturnsFalse_doesNotStoreInCache() {
+		// Pins the loader's null-vs-FALSE invariant directly at the storage layer. A refactor that
+		// simplifies the loader to `_ -> delegate.matches(...)` would box FALSE into the
+		// Cache<String,Boolean> and lock a user out after a single bad attempt — a DoS oracle the
+		// behavioural matches_delegateReturnsFalse_doesNotCache test alone wouldn't catch.
+		var delegate = new CountingDelegate(false);
+		var encoder = new CachingPasswordEncoder(delegate, Duration.ofHours(1), 100L, Ticker.systemTicker());
+
+		encoder.matches(RAW, ENCODED);
+
+		assertEquals(0L, encoder.cache().estimatedSize(),
+				"failed verification must not be stored — boxing FALSE would create a DoS oracle");
+	}
+
+	@Test
+	void matches_cacheKeySeparator_isUnambiguous() {
+		// Pins the encoded+":"+raw separator. The two pairs below produce distinct keys under the
+		// correct construction ("a:bcd" vs "ab:cd") but COLLIDE to "abcd" under a separator-drop
+		// refactor (encoded + raw). A separator-drop regression would make the second matches()
+		// call a silent cache hit, the delegate would be invoked once instead of twice, and an
+		// attacker who could construct (raw, encoded) pairs that concat-collide with a legitimate
+		// credential pair would skip PBKDF2 entirely — pre-authentication for free.
+		var delegate = new CountingDelegate(true);
+		var encoder = new CachingPasswordEncoder(delegate, Duration.ofHours(1), 100L, Ticker.systemTicker());
+
+		encoder.matches("bcd", "a");
+		encoder.matches("cd", "ab");
+
+		assertEquals(2, delegate.matchCalls.get(),
+				"distinct (raw, encoded) pairs must build distinct cache keys (separator must not be droppable)");
+		assertEquals(2L, encoder.cache().estimatedSize(),
+				"both successful matches must produce separate cache entries");
+	}
+
+	@Test
+	void matches_aboveMaxSize_evictsOldestEntries() {
+		// Pins the .maximumSize(maxSize) Caffeine builder call. A regression that drops that line
+		// — or an off-by-one in HttpBasicAuthConfiguration plumbing — would silently produce
+		// unbounded memory growth under credential churn. cleanUp() forces Caffeine's
+		// otherwise-asynchronous size-based eviction to run synchronously so the assertion is
+		// deterministic. Eviction is best-effort, so we assert the post-cleanup size stays at or
+		// below the cap, not strict equality.
+		var delegate = new CountingDelegate(true);
+		long maxSize = 2L;
+		var encoder = new CachingPasswordEncoder(delegate, Duration.ofHours(1), maxSize, Ticker.systemTicker());
+
+		encoder.matches("raw-1", "encoded-1");
+		encoder.matches("raw-2", "encoded-2");
+		encoder.matches("raw-3", "encoded-3");
+		encoder.cache().cleanUp();
+
+		assertTrue(encoder.cache().estimatedSize() <= maxSize,
+				"cache must enforce maxSize=" + maxSize + " after cleanUp(), got " + encoder.cache().estimatedSize());
 	}
 
 	@Test

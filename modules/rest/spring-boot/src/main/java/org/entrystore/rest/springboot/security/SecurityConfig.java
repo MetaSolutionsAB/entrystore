@@ -24,11 +24,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.CorsConfig;
+import org.entrystore.rest.springboot.configuration.HttpBasicAuthConfiguration;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
 import org.entrystore.rest.springboot.model.auth.AuthState;
@@ -110,9 +109,8 @@ public class SecurityConfig {
 	private final Optional<CasAuthenticationProvider> casAuthenticationProvider;
 	private final Optional<CasLoginSuccessHandler> casLoginSuccessHandler;
 
-	private boolean basicAuthEnabled;
+	private final HttpBasicAuthConfiguration httpBasicConfig;
 
-	private final Config config;
 	private final Environment environment;
 
 	@Value("${server.servlet.session.cookie.secure:true}")
@@ -125,7 +123,6 @@ public class SecurityConfig {
 
 	@PostConstruct
 	public void init() {
-		basicAuthEnabled = config.getBoolean(Settings.AUTH_HTTP_BASIC_ENABLED, false);
 		sessionCookieSameSite = resolveSessionCookieSameSite(environment);
 	}
 
@@ -140,7 +137,7 @@ public class SecurityConfig {
 			http.cors(AbstractHttpConfigurer::disable);
 		}
 
-		var entryPoint = basicAuthEnabled ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
+		var entryPoint = httpBasicConfig.enabled() ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
 
 		http
 				.csrf(csrf -> csrf
@@ -201,10 +198,9 @@ public class SecurityConfig {
 						.accessDeniedHandler(customAccessDeniedHandler)
 				);
 
-		if (basicAuthEnabled) {
+		if (httpBasicConfig.enabled()) {
 			log.info("Basic Auth Enabled (credential cache TTL={}, max entries={})",
-					config.getDuration(Settings.AUTH_HTTP_BASIC_CACHE_TTL, DEFAULT_BASIC_AUTH_CACHE_TTL),
-					config.getInt(Settings.AUTH_HTTP_BASIC_CACHE_MAX_SIZE, DEFAULT_BASIC_AUTH_CACHE_MAX_SIZE));
+					httpBasicConfig.cache().ttl(), httpBasicConfig.cache().maxSize());
 			http.httpBasic(basic -> basic.authenticationEntryPoint(entryPoint));
 		} else {
 			log.info("Basic Auth Disabled");
@@ -312,29 +308,17 @@ public class SecurityConfig {
 		};
 	}
 
-	// The TTL is the staleness budget: a password change or account-disable only takes effect for
-	// already-authenticated callers after the TTL elapses (since the cache short-circuits PBKDF2,
-	// not the upstream UserDetails refresh — disabled is re-checked every request).
-	// The size cap bounds memory at one (Boolean + SHA-256 digest) per (user × distinct password)
-	// in flight. 10_000 fits typical EntryStore deployments; operators with many active basic-auth
-	// principals can raise it via entrystore.auth.http-basic.cache.max-size.
-	static final Duration DEFAULT_BASIC_AUTH_CACHE_TTL = Duration.ofHours(1);
-	static final int DEFAULT_BASIC_AUTH_CACHE_MAX_SIZE = 10_000;
-
 	@Bean
 	public PasswordEncoder passwordEncoder(Ticker ticker) {
-		// Read AUTH_HTTP_BASIC_ENABLED inline rather than via the basicAuthEnabled field —
-		// @PostConstruct init() vs @Bean factory invocation ordering inside the same @Configuration
-		// class is not contractually guaranteed.
 		return buildPasswordEncoder(
-				config.getBoolean(Settings.AUTH_HTTP_BASIC_ENABLED, false),
-				config.getDuration(Settings.AUTH_HTTP_BASIC_CACHE_TTL, DEFAULT_BASIC_AUTH_CACHE_TTL),
-				config.getInt(Settings.AUTH_HTTP_BASIC_CACHE_MAX_SIZE, DEFAULT_BASIC_AUTH_CACHE_MAX_SIZE),
+				httpBasicConfig.enabled(),
+				httpBasicConfig.cache().ttl(),
+				httpBasicConfig.cache().maxSize(),
 				ticker);
 	}
 
 	// Pure function of its arguments — no bean state — so it stays static and unit-testable
-	// directly from SecurityConfigTest without the full @RequiredArgsConstructor bean graph.
+	// directly from SecurityConfigTest without standing up the full @Configuration bean graph.
 	static PasswordEncoder buildPasswordEncoder(boolean basicAuthEnabled, Duration ttl, long maxSize, Ticker ticker) {
 		PasswordEncoder pbkdf2 = pbkdf2PasswordEncoder();
 		return basicAuthEnabled
