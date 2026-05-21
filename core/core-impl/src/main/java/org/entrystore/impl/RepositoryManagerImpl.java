@@ -589,6 +589,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		String dataFolderPath = configuration.getString(Settings.DATA_FOLDER);
 		File dataFolder = dataFolderPath == null ? null : new File(dataFolderPath);
+		boolean wipeRequired = false;
 		if (dataFolder == null) {
 			log.warn("'{}' is not configured; Solr schema/version mismatch detection is disabled", Settings.DATA_FOLDER);
 		} else {
@@ -596,18 +597,19 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				if (SolrVersionMarker.needsReindex(dataFolder, getVersion())) {
 					reindex = true;
 					reindexWait = true;
+					wipeRequired = true;
 				}
 			} catch (IOException e) {
 				log.error("Failed to read Solr version markers from {}; forcing reindex as a precaution", dataFolder, e);
 				reindex = true;
 				reindexWait = true;
+				wipeRequired = true;
 			}
 		}
 
 		String solrURL = configuration.getString(Settings.SOLR_URL);
 		if (solrURL == null || solrURL.isBlank()) {
-			log.error("'{}' is not configured", Settings.SOLR_URL);
-			System.exit(1);
+			throw new IllegalStateException("'" + Settings.SOLR_URL + "' is not configured; set it in entrystore.properties or pass --" + Settings.SOLR_URL + "=... on the command line");
 		}
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at {}", solrURL);
@@ -629,8 +631,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 			solrServer = solrClientBuilder.build();
 		} else {
-			log.error("Error embedded Solr server unavailable");
-			System.exit(1);
+			throw new IllegalStateException("Embedded Solr is no longer supported; '" + Settings.SOLR_URL + "' must be an http(s) URL");
 		}
 		if (solrServer != null) {
 			solrIndex = new SolrSearchIndex(this, solrServer);
@@ -640,6 +641,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					long discardedBefore = solrIndex.getDiscardedBatchCount();
 					boolean wipeOk = solrIndex.clearSolrIndex(solrServer);
 					if (!wipeOk) {
+						// A schema/version mismatch (or unreadable markers) means the existing index is the wrong shape
+						// for the running Solr/EntryStore; refusing to serve it is safer than answering /search with stale data.
+						if (wipeRequired) {
+							throw new IllegalStateException("Solr schema/version mismatch was detected, but the initial *:* wipe failed; refusing to start with a stale or schema-incompatible index. Fix Solr and restart.");
+						}
 						log.error("Initial Solr full-wipe failed; skipping reindex to avoid serving a dirty index. Next restart will retry.");
 					} else {
 						solrIndex.reindexSync(false);
@@ -657,9 +663,6 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					solrIndex.reindex(false);
 				}
 			}
-			// Markers are written only on the success path of an actually-run reindex, never on
-			// async runs (completion unobservable) or no-op boots (avoids per-boot disk I/O,
-			// especially on NFS-mounted data folders).
 			if (dataFolder != null && reindex && reindexSucceeded) {
 				boolean schemaWritten = SolrVersionMarker.write(SolrVersionMarker.schemaMarker(dataFolder), getVersion());
 				boolean solrWritten = SolrVersionMarker.write(SolrVersionMarker.solrMarker(dataFolder), SolrVersion.LATEST.toString());

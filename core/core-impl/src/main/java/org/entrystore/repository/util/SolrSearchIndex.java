@@ -765,15 +765,35 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	/**
-	 * Blocks until both queues are empty and no batch is in flight. Returns false only on thread
-	 * interruption (typically JVM shutdown). The submitter has its own per-batch retry budget, so
-	 * this method will not block on a single failing batch — it only blocks while real work is
-	 * outstanding.
+	 * Blocks until both queues are empty and no batch is in flight. Returns false on thread
+	 * interruption (typically JVM shutdown) or when the queue has been stuck at the same non-zero
+	 * size for ~10 minutes across submitter cycles — a poison-pill batch hitting transport-level
+	 * SolrServerException / IOException is re-queued without limit (see {@code processAddBatch}),
+	 * so a sustained Solr outage would otherwise hang the caller indefinitely.
 	 *
-	 * @return true if the submitter became quiescent, false if interrupted
+	 * @return true if the submitter became quiescent, false on interruption or detected stall
 	 */
 	public boolean waitForQueueDrain() {
+		long lastSize = -1;
+		int stagnantTicks = 0;
+		boolean wasInFlight = false;
+		boolean sawCycle = false;
 		while (getPostQueueSize() > 0 || !deleteQueue.isEmpty() || submitterInFlight.get()) {
+			boolean nowInFlight = submitterInFlight.get();
+			if (wasInFlight && !nowInFlight) {
+				sawCycle = true;
+			}
+			wasInFlight = nowInFlight;
+			long size = getPostQueueSize() + deleteQueue.size();
+			if (size == lastSize && sawCycle) {
+				if (++stagnantTicks > DRAIN_STAGNANT_TICKS_BEFORE_ABORT) {
+					log.error("Queue drain abandoned: {} items stuck for ~{}s across submitter cycles; a transport-level failure is most likely re-queuing the same batch", size, stagnantTicks / 2);
+					return false;
+				}
+			} else {
+				stagnantTicks = 0;
+				lastSize = size;
+			}
 			try {
 				Thread.sleep(500);
 			} catch (InterruptedException e) {
@@ -783,6 +803,9 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 		return true;
 	}
+
+	// ~10 minutes of identical queue size across submitter cycles before aborting the drain.
+	private static final int DRAIN_STAGNANT_TICKS_BEFORE_ABORT = 1200;
 
 	@Override
 	public boolean ping() {
