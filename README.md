@@ -8,6 +8,16 @@ So called "entries" are used for handling resources and their various metadata g
 
 The documentation can be found at the [EntryStore web page](https://entrystore.org).
 
+## Building from source
+
+Requires Java 25. Maven is provided by the Maven Wrapper — no system Maven install needed.
+
+```bash
+./mvnw clean install
+```
+
+On Windows: `mvnw.cmd clean install`.
+
 ## Commercial support
 
 The company [MetaSolutions AB](https://www.metasolutions.se) provides professional support and services around [EntryScape](http://www.entryscape.com), [EntryStore](https://www.entrystore.org) and [RDForms](https://rdforms.org).

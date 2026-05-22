@@ -1,4 +1,3 @@
 #!/bin/bash
 
-#JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64 mvn $1 $2 -Dmaven.test.skip=true install
-mvn $1 $2 -Dmaven.test.skip=true install
+./mvnw "$@" -Dmaven.test.skip=true install

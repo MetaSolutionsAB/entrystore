@@ -17,7 +17,7 @@ fi
 JAR_FILE="$PROJECT_ROOT/modules/rest/spring-boot/target/entrystore-rest-spring-boot-${ENTRYSTORE_VERSION}-exec.jar"
 
 echo "Building EntryStore project..."
-mvn -f "$PROJECT_ROOT/pom.xml" clean package -DskipTests
+./mvnw -f "$PROJECT_ROOT/pom.xml" clean package -DskipTests
 
 if [ ! -f "$JAR_FILE" ]; then
   echo "Error: Build did not produce expected jar:"

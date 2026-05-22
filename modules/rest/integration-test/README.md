@@ -4,10 +4,11 @@ Groovy/Spock integration tests for the Spring Boot REST layer. Tests drive real 
 
 ## Requirements
 
-- **Java 25** (`mvn -v` must report JDK 25)
+- **Java 25** (`./mvnw -v` must report JDK 25)
 - **Docker** with the daemon running — used by [Testcontainers](https://www.testcontainers.org/) to spin up Solr and Keycloak images
-- **Maven 3**
 - Environment variable `TESTCONTAINERS_RYUK_DISABLED=true` in CI (see `bitbucket-pipelines.yml`); optional locally — without it, Testcontainers launches a Ryuk reaper container to clean up dangling containers on JVM exit
+
+Maven is supplied by the Maven Wrapper (`./mvnw`, pinned to 3.9.16) — no system Maven install needed.
 
 No local Solr or Keycloak installation is needed — the tests pull and start images automatically.
 
@@ -17,13 +18,13 @@ From the repository root:
 
 ```bash
 # All integration tests
-mvn clean verify -pl modules/rest/integration-test
+./mvnw clean verify -pl modules/rest/integration-test
 
 # A single IT class
-mvn clean verify -pl modules/rest/integration-test -Dtest=ProxyIT
+./mvnw clean verify -pl modules/rest/integration-test -Dtest=ProxyIT
 
 # Skip OWASP dependency-check for faster local runs
-mvn clean verify -pl modules/rest/integration-test -DskipDependencyCheck=true
+./mvnw clean verify -pl modules/rest/integration-test -DskipDependencyCheck=true
 ```
 
 Configuration:

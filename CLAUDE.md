@@ -8,44 +8,46 @@ EntryStore is the reference implementation of the Resource and Metadata Manageme
 
 ## Build Commands
 
-**Always use `mvn clean`** — stale artifacts from other branches cause subtle failures.
+**Always use `./mvnw clean`** — stale artifacts from other branches cause subtle failures.
+
+Maven is supplied by the Maven Wrapper (`./mvnw` / `mvnw.cmd`), pinned to 3.9.16. No system Maven install required.
 
 **Java 25 required** — Lombok annotation processing is configured explicitly via `annotationProcessorPaths` (required since JDK 23+).
 
 ```bash
 # Quick build (skip tests)
-mvn clean install -Dmaven.test.skip=true
+./mvnw clean install -Dmaven.test.skip=true
 # or use the provided script:
 ./build.sh install
 
 # Full build with all tests
-mvn clean install
+./mvnw clean install
 
 # Build specific module
-mvn clean install -pl core/core-impl
-mvn clean install -pl modules/rest/spring-boot
+./mvnw clean install -pl core/core-impl
+./mvnw clean install -pl modules/rest/spring-boot
 
 # Build Spring Boot module and all its dependencies
-mvn clean install -pl modules/rest/spring-boot -am -DskipTests
+./mvnw clean install -pl modules/rest/spring-boot -am -DskipTests
 ```
 
 ## Testing
 
 ```bash
 # Run all tests (unit + integration)
-mvn clean install
+./mvnw clean install
 
 # Unit tests only
-mvn clean test
+./mvnw clean test
 
 # Integration tests only (runs all ITs)
-mvn clean verify -pl modules/rest/integration-test
+./mvnw clean verify -pl modules/rest/integration-test
 
 # Run a specific integration test class
-mvn clean verify -pl modules/rest/integration-test -Dtest=ProxyIT
+./mvnw clean verify -pl modules/rest/integration-test -Dtest=ProxyIT
 
 # Run specific unit test
-mvn clean test -Dtest=EntryImplTest
+./mvnw clean test -Dtest=EntryImplTest
 ```
 
 **Test structure:**
@@ -161,22 +163,22 @@ From `.editorconfig`:
 
 ## CI/CD
 
-Bitbucket Pipelines with Maven 3 + Eclipse Temurin 25. Integration tests use Docker (TestContainers with `TESTCONTAINERS_RYUK_DISABLED=true`).
+Bitbucket Pipelines with Eclipse Temurin 25; Maven is supplied by the wrapper (`./mvnw`, pinned to 3.9.16). Integration tests use Docker (TestContainers with `TESTCONTAINERS_RYUK_DISABLED=true`).
 
 **Build optimization flags:**
 ```bash
 # Skip OWASP dependency check (faster local builds)
-mvn clean install -DskipDependencyCheck=true
+./mvnw clean install -DskipDependencyCheck=true
 
 # Debug mode
-mvn clean install -X
+./mvnw clean install -X
 ```
 
 ## Running EntryStore
 
 ```bash
 # Build the executable jar (version from VERSION.txt, e.g. 6.0-SNAPSHOT)
-mvn clean package -DskipTests
+./mvnw clean package -DskipTests
 
 # Run (-exec classifier is the executable fat jar)
 java -jar modules/rest/spring-boot/target/entrystore-rest-spring-boot-*-exec.jar

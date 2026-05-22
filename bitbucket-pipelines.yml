@@ -1,4 +1,4 @@
-image: maven:3-eclipse-temurin-25-noble
+image: eclipse-temurin:25-jdk-noble
 
 options:
   max-time: 12
@@ -9,11 +9,13 @@ stepdefinitions:
       size: 4x
       caches:
         - maven
+        - maven-wrapper-dists
       script:
+        - apt-get update && apt-get install -y --no-install-recommends unzip
         - java -version
-        - mvn --version
+        - ./mvnw --version
         - export TESTCONTAINERS_RYUK_DISABLED=true
-        - mvn -B -ntp clean install
+        - ./mvnw -B -ntp clean install
         - rm -rf ~/.m2/repository/org/entrystore/
       services:
         - docker-large
@@ -85,6 +87,8 @@ pipelines:
       - step: *dockerhub
 
 definitions:
+  caches:
+    maven-wrapper-dists: ~/.m2/wrapper/dists
   services:
     docker-large:
       # this seems to not be multiplied with the "size" value above
