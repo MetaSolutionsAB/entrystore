@@ -19,10 +19,10 @@ package org.entrystore.repository.util;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.Queues;
+import org.apache.solr.client.solrj.RemoteSolrException;
 import org.apache.solr.client.solrj.SolrClient;
-import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
-import org.apache.solr.client.solrj.impl.BaseHttpSolrClient;
+import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.FacetField;
 import org.apache.solr.client.solrj.response.QueryResponse;
@@ -84,6 +84,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static java.lang.Thread.interrupted;
 
@@ -136,6 +137,10 @@ public class SolrSearchIndex implements SearchIndex {
 	private final ExecutorService reindexExecutor = Executors.newSingleThreadExecutor();
 
 	private final ExecutorService purgeExecutor = Executors.newVirtualThreadPerTaskExecutor();
+
+	// True while the submitter is between drain and process/requeue — observers awaiting a quiescent
+	// queue must wait for this to clear too, otherwise an in-flight batch can be missed.
+	private final AtomicBoolean submitterInFlight = new AtomicBoolean();
 
 	private final Map<URI, DelayedContextIndexerInfo> delayedReindex = Collections.synchronizedMap(new HashMap<>());
 
@@ -201,96 +206,107 @@ public class SolrSearchIndex implements SearchIndex {
 		 * @return true if the batch failed permanently and a cooldown is needed
 		 */
 		private boolean processDeleteBatch() {
-			List<URI> deleteBatch = drainDeleteQueue();
-			if (deleteBatch.isEmpty()) {
-				return false;
-			}
-
-			StringJoiner joiner = new StringJoiner(" OR ", "uri:(", ")");
-			deleteBatch.forEach(uri -> joiner.add(ClientUtils.escapeQueryChars(uri.toString())));
-
-			UpdateRequest delReq = new UpdateRequest();
-			delReq.deleteByQuery(joiner.toString());
-			delReq.setCommitWithin(SOLR_COMMIT_WITHIN);
-
-			for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-				try {
-					log.info("Sending request to delete {} entries from Solr (attempt {}/{}), {} entries remaining in delete queue",
-							deleteBatch.size(), attempt, MAX_RETRIES, deleteQueue.size());
-					delReq.process(solrServer);
+			submitterInFlight.set(true);
+			try {
+				List<URI> deleteBatch = drainDeleteQueue();
+				if (deleteBatch.isEmpty()) {
 					return false;
-				} catch (RuntimeException e) {
-					requeueDeletes(deleteBatch);
-					if (e.getCause() instanceof InterruptedException) {
-						log.info("Solr document submitter got interrupted during delete, re-queuing and shutting down");
-						Thread.currentThread().interrupt();
-						return true;
-					}
-					throw e;
-				} catch (SolrServerException | IOException e) {
-					log.warn("Failed to delete {} entries from Solr (attempt {}/{}): {}",
-							deleteBatch.size(), attempt, MAX_RETRIES, e.getMessage());
-					if (attempt < MAX_RETRIES && sleepForRetry(attempt)) {
+				}
+
+				StringJoiner joiner = new StringJoiner(" OR ", "uri:(", ")");
+				deleteBatch.forEach(uri -> joiner.add(ClientUtils.escapeQueryChars(uri.toString())));
+
+				UpdateRequest delReq = new UpdateRequest();
+				delReq.deleteByQuery(joiner.toString());
+				delReq.setCommitWithin(SOLR_COMMIT_WITHIN);
+
+				for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+					try {
+						log.info("Sending request to delete {} entries from Solr (attempt {}/{}), {} entries remaining in delete queue",
+								deleteBatch.size(), attempt, MAX_RETRIES, deleteQueue.size());
+						delReq.process(solrServer);
+						return false;
+					} catch (RuntimeException e) {
 						requeueDeletes(deleteBatch);
-						return true;
+						if (e.getCause() instanceof InterruptedException) {
+							log.info("Solr document submitter got interrupted during delete, re-queuing and shutting down");
+							Thread.currentThread().interrupt();
+							return true;
+						}
+						throw e;
+					} catch (SolrServerException | IOException e) {
+						log.warn("Failed to delete {} entries from Solr (attempt {}/{}): {}",
+								deleteBatch.size(), attempt, MAX_RETRIES, e.getMessage());
+						if (attempt < MAX_RETRIES && sleepForRetry(attempt)) {
+							requeueDeletes(deleteBatch);
+							return true;
+						}
 					}
 				}
-			}
 
-			log.error("Permanently failed to delete {} entries from Solr after {} attempts, re-queuing", deleteBatch.size(), MAX_RETRIES);
-			requeueDeletes(deleteBatch);
-			return true;
+				log.error("Permanently failed to delete {} entries from Solr after {} attempts, re-queuing", deleteBatch.size(), MAX_RETRIES);
+				requeueDeletes(deleteBatch);
+				return true;
+			} finally {
+				submitterInFlight.set(false);
+			}
 		}
 
 		/**
 		 * @return true if the batch failed permanently and a cooldown is needed
 		 */
 		private boolean processAddBatch() {
-			Map<URI, SolrInputDocument> addBatch = drainPostQueue();
-			if (addBatch.isEmpty()) {
-				return false;
-			}
-
-			UpdateRequest addReq = new UpdateRequest();
-			addBatch.values().forEach(addReq::add);
-
-			postQueue.cleanUp();
-			if (postQueue.estimatedSize() > BATCH_SIZE_ADD * 5) {
-				addReq.setCommitWithin(SOLR_COMMIT_WITHIN_MAX);
-			} else {
-				addReq.setCommitWithin(SOLR_COMMIT_WITHIN);
-			}
-
-			for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-				try {
-					log.info("Sending {} entries to Solr (attempt {}/{}), {} entries remaining in post queue",
-							addBatch.size(), attempt, MAX_RETRIES, postQueue.estimatedSize());
-					addReq.process(solrServer);
+			submitterInFlight.set(true);
+			try {
+				Map<URI, SolrInputDocument> addBatch = drainPostQueue();
+				if (addBatch.isEmpty()) {
 					return false;
-				} catch (BaseHttpSolrClient.RemoteSolrException e) {
-					log.error("Solr rejected {} entries (not retryable, discarding batch): {}", addBatch.size(), e.getMessage());
-					return false;
-				} catch (RuntimeException e) {
-					requeueAdds(addBatch);
-					if (e.getCause() instanceof InterruptedException) {
-						log.info("Solr document submitter got interrupted during send, re-queuing and shutting down");
-						Thread.currentThread().interrupt();
-						return true;
-					}
-					throw e;
-				} catch (SolrServerException | IOException e) {
-					log.warn("Failed to send {} entries to Solr (attempt {}/{}): {}",
-							addBatch.size(), attempt, MAX_RETRIES, e.getMessage());
-					if (attempt < MAX_RETRIES && sleepForRetry(attempt)) {
+				}
+
+				UpdateRequest addReq = new UpdateRequest();
+				addBatch.values().forEach(addReq::add);
+
+				postQueue.cleanUp();
+				if (postQueue.estimatedSize() > BATCH_SIZE_ADD * 5) {
+					addReq.setCommitWithin(SOLR_COMMIT_WITHIN_MAX);
+				} else {
+					addReq.setCommitWithin(SOLR_COMMIT_WITHIN);
+				}
+
+				for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+					try {
+						log.info("Sending {} entries to Solr (attempt {}/{}), {} entries remaining in post queue",
+								addBatch.size(), attempt, MAX_RETRIES, postQueue.estimatedSize());
+						addReq.process(solrServer);
+						return false;
+					} catch (RemoteSolrException e) {
+						log.error("Solr rejected {} entries (HTTP {}, discarding batch). URIs: {}",
+								addBatch.size(), e.code(), addBatch.keySet(), e);
+						return false;
+					} catch (RuntimeException e) {
 						requeueAdds(addBatch);
-						return true;
+						if (e.getCause() instanceof InterruptedException) {
+							log.info("Solr document submitter got interrupted during send, re-queuing and shutting down");
+							Thread.currentThread().interrupt();
+							return true;
+						}
+						throw e;
+					} catch (SolrServerException | IOException e) {
+						log.warn("Failed to send {} entries to Solr (attempt {}/{}): {}",
+								addBatch.size(), attempt, MAX_RETRIES, e.getMessage());
+						if (attempt < MAX_RETRIES && sleepForRetry(attempt)) {
+							requeueAdds(addBatch);
+							return true;
+						}
 					}
 				}
-			}
 
-			log.error("Permanently failed to send {} entries to Solr after {} attempts, re-queuing", addBatch.size(), MAX_RETRIES);
-			requeueAdds(addBatch);
-			return true;
+				log.error("Permanently failed to send {} entries to Solr after {} attempts, re-queuing", addBatch.size(), MAX_RETRIES);
+				requeueAdds(addBatch);
+				return true;
+			} finally {
+				submitterInFlight.set(false);
+			}
 		}
 
 		/**
@@ -442,9 +458,11 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		documentSubmitter = new SolrInputDocumentSubmitter();
+		documentSubmitter.setDaemon(true);
 		documentSubmitter.start();
 
 		delayedContextIndexer = new DelayedContextIndexer();
+		delayedContextIndexer.setDaemon(true);
 		delayedContextIndexer.start();
 	}
 
@@ -736,6 +754,27 @@ public class SolrSearchIndex implements SearchIndex {
 
 	public long getDeleteQueueSize() {
 		return deleteQueue.size();
+	}
+
+	/**
+	 * Blocks until both queues are empty and no batch is in flight. Returns false only on thread
+	 * interruption (typically JVM shutdown). Trade-off: a sustained Solr outage with a poison-pill
+	 * batch re-queued by the {@code SolrServerException | IOException} retry path will block this
+	 * call indefinitely; for EntryStore's single-instance ops model the operator's recourse is to
+	 * kill the JVM and investigate.
+	 *
+	 * @return true if the submitter became quiescent, false if interrupted
+	 */
+	public boolean waitForQueueDrain() {
+		while (getPostQueueSize() > 0 || !deleteQueue.isEmpty() || submitterInFlight.get()) {
+			try {
+				Thread.sleep(500);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return false;
+			}
+		}
+		return true;
 	}
 
 	@Override

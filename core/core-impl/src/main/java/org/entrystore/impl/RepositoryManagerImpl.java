@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,12 +20,9 @@ import lombok.Getter;
 import lombok.Setter;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.impl.client.BasicCredentialsProvider;
-import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.solr.client.api.util.SolrVersion;
 import org.apache.solr.client.solrj.SolrClient;
-import org.apache.solr.client.solrj.impl.HttpSolrClient;
+import org.apache.solr.client.solrj.jetty.HttpJettySolrClient;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.repository.Repository;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
@@ -59,7 +56,6 @@ import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.ConfigurationManager;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.DataCorrection;
-import org.entrystore.repository.util.FileOperations;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.repository.util.StringUtils;
@@ -582,176 +578,99 @@ public class RepositoryManagerImpl implements RepositoryManager {
 		}
 	}
 
-	// HttpSolrClient (Apache HttpClient 4.x) is deprecated since SolrJ 9.0 but guarantees HTTP/1.1.
-	// HttpJdkSolrClient's useHttp1_1(true) does not reliably prevent HTTP/2 — the JDK HttpClient
-	// treats HTTP_1_1 as a preference, not a hard constraint, leading to RST_STREAM errors.
-	@SuppressWarnings("deprecation")
 	private void initSolr() {
+		try {
+			initSolrInternal();
+		} catch (RuntimeException e) {
+			// Release RDF4J native-store file locks and any other resources before propagating;
+			// otherwise stale lock files block subsequent boots. shutdown() can itself throw, so
+			// surface any cleanup failure as a suppressed cause to preserve the original cause.
+			try {
+				this.shutdown();
+			} catch (RuntimeException cleanup) {
+				e.addSuppressed(cleanup);
+			}
+			throw e;
+		}
+	}
+
+	private void initSolrInternal() {
 		boolean reindex = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP, false);
 		boolean reindexWait = configuration.getBoolean(Settings.SOLR_REINDEX_ON_STARTUP_WAIT, false);
 
-		// Check whether memory store is configured without persistence and enforce
-		// reindexing to avoid inconsistencies between memory store and Solr index
+		// Memory store without persistence loses state across restarts, so the Solr index must be rebuilt.
 		if (!reindex && "memory".equalsIgnoreCase(configuration.getString(Settings.STORE_TYPE)) && !configuration.containsKey(Settings.STORE_PATH)) {
 			reindex = true;
 		}
 
+		String dataFolderPath = configuration.getString(Settings.DATA_FOLDER);
+		File dataFolder = dataFolderPath == null ? null : new File(dataFolderPath);
+		if (dataFolder == null) {
+			log.warn("'{}' is not configured; Solr schema/version mismatch detection is disabled", Settings.DATA_FOLDER);
+		} else {
+			try {
+				if (SolrVersionMarker.needsReindex(dataFolder, getVersion())) {
+					reindex = true;
+					reindexWait = true;
+				}
+			} catch (IOException e) {
+				log.error("Failed to read Solr version markers from {}; forcing reindex as a precaution", dataFolder, e);
+				reindex = true;
+				reindexWait = true;
+			}
+		}
+
 		String solrURL = configuration.getString(Settings.SOLR_URL);
+		if (solrURL == null || solrURL.isBlank()) {
+			throw new IllegalStateException("'" + Settings.SOLR_URL + "' is not configured; set it in entrystore.properties or pass --" + Settings.SOLR_URL + "=... on the command line");
+		}
 		if (solrURL.startsWith("http://") || solrURL.startsWith("https://")) {
 			log.info("Using HTTP Solr server at {}", solrURL);
 
-			HttpSolrClient.Builder solrClientBuilder = new HttpSolrClient.Builder(solrURL);
-			solrClientBuilder.withConnectionTimeout(5, TimeUnit.SECONDS);
-			solrClientBuilder.withSocketTimeout(30, TimeUnit.SECONDS);
+			int requestTimeoutSeconds = configuration.getInt(Settings.SOLR_REQUEST_TIMEOUT_SECONDS, 60);
+			HttpJettySolrClient.Builder solrClientBuilder = new HttpJettySolrClient.Builder(solrURL)
+					// useHttp1_1(true) is a hard Jetty transport choice (HttpClientTransportOverHTTP), not a
+					// JDK-HttpClient-style preference. Structurally avoids HTTP/2 RST_STREAM frames from h2c.
+					.useHttp1_1(true)
+					.withConnectionTimeout(5, TimeUnit.SECONDS)
+					.withIdleTimeout(30, TimeUnit.SECONDS)
+					.withRequestTimeout(requestTimeoutSeconds, TimeUnit.SECONDS);
 
 			String solrUsername = configuration.getString(Settings.SOLR_AUTH_USERNAME);
 			String solrPassword = configuration.getString(Settings.SOLR_AUTH_PASSWORD);
-
 			if (solrUsername != null && solrPassword != null) {
-				BasicCredentialsProvider credentialsProvider = new BasicCredentialsProvider();
-				credentialsProvider.setCredentials(AuthScope.ANY,
-						new UsernamePasswordCredentials(solrUsername, solrPassword));
-				solrClientBuilder.withHttpClient(
-						HttpClientBuilder.create()
-								.setDefaultCredentialsProvider(credentialsProvider)
-								.build());
+				solrClientBuilder.withBasicAuthCredentials(solrUsername, solrPassword);
 			}
 
 			solrServer = solrClientBuilder.build();
 		} else {
-			log.error("Error embedded Solr server unavailable");
-			System.exit(1);
-/*			log.info("Using embedded Solr server");
-			String coreName = "core1";
-			String schemaFileName = "SCHEMA_VERSION";
-			String solrFileName = "SOLR_VERSION";
-			File solrDir = new File(solrURL);
-			File solrSchemaVersionFile = new File(solrDir, schemaFileName);
-			File solrVersionFile = new File(solrDir, solrFileName);
-
-			// we remove only files if we actually find a version file in the folder as we don't want
-			// to risk removing the wrong files because of a misconfigured Solr path
-			if (solrSchemaVersionFile.isFile()) {
-				String schemaVersion = null;
-				try {
-					schemaVersion = IOUtils.toString(solrSchemaVersionFile.toURI(), StandardCharsets.UTF_8);
-					schemaVersion = schemaVersion.replace("\n", "");
-					schemaVersion = schemaVersion.replace("\r", "");
-				} catch (IOException e) {
-					log.error(e.getMessage());
-				}
-				String solrVersion = null;
-				try {
-					solrVersion = IOUtils.toString(solrVersionFile.toURI(), StandardCharsets.UTF_8);
-					solrVersion = solrVersion.replace("\n", "");
-					solrVersion = solrVersion.replace("\r", "");
-				} catch (IOException e) {
-					log.error(e.getMessage());
-				}
-
-				boolean solrVersionMismatch = true;
-				if (solrVersion != null) {
-					SolrVersion solrVersionOfIndex = SolrVersion.valueOf(solrVersion);
-					if (SolrVersion.LATEST.getMajorVersion() == solrVersionOfIndex.getMajorVersion() &&
-							SolrVersion.LATEST.getMinorVersion() == solrVersionOfIndex.getMinorVersion()) {
-						solrVersionMismatch = false;
-					}
-				}
-
-				if (!getVersion().equals(schemaVersion) || solrVersionMismatch) {
-					if (solrVersion == null) {
-						solrVersion = "<unknown>";
-					}
-					log.warn("Solr index was created with: EntryStore {} (running version is {}) and Solr {} (running version is {})", schemaVersion, getVersion(), solrVersion,
-							SolrVersion.LATEST);
-					log.warn("Deleting contents of Solr directory at {} to trigger a clean reindex with current Solr schema", solrDir);
-					try {
-						FileUtils.cleanDirectory(solrDir);
-					} catch (IOException e) {
-						log.error(e.getMessage());
-					}
-				}
-			}
-
-			if (solrDir.list() != null && Objects.requireNonNull(solrDir.list()).length == 0) {
-				log.info("Solr directory is empty, scheduling conditional reindexing of repository");
-				reindex = true;
-				reindexWait = true;
-				try {
-					log.info("Writing EntryStore version to schema version file at {}", solrSchemaVersionFile);
-					FileOperations.writeStringToFile(solrSchemaVersionFile, getVersion());
-				} catch (IOException e) {
-					log.error(e.getMessage());
-				}
-
-				try {
-					log.info("Writing Solr version to version file at {}", solrVersionFile);
-					FileOperations.writeStringToFile(solrVersionFile, SolrVersion.LATEST.toString());
-				} catch (IOException e) {
-					log.error(e.getMessage());
-				}
-			}
-
-			File solrCoreConfDir = new File(new File(solrDir, coreName), "conf");
-			if (!solrCoreConfDir.exists()) {
-				if (!solrCoreConfDir.mkdirs()) {
-					log.warn("Unable to create directory {}", solrCoreConfDir);
-				}
-			}
-
-			URL solrConfigXmlSource = configuration.getURL(Settings.SOLR_CONFIG_URL, ConverterUtil.findResource("solrconfig.xml_default"));
-			File solrConfigXmlDest = new File(solrCoreConfDir, "solrconfig.xml");
-			try {
-				log.info("Copying Solr solrconfig.xml from {} to {}", solrConfigXmlSource, solrConfigXmlDest);
-				Files.copy(solrConfigXmlSource.openStream(), solrConfigXmlDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
-			} catch (IOException e) {
-				log.error(e.getMessage());
-			}
-
-			URL solrSchemaXmlSource = configuration.getURL(Settings.SOLR_SCHEMA_URL, ConverterUtil.findResource("schema.xml_default"));
-			File solrSchemaXmlDest = new File(solrCoreConfDir, "schema.xml");
-			try {
-				log.info("Copying Solr schema.xml from {} to {}", solrSchemaXmlSource, solrSchemaXmlDest);
-				Files.copy(solrSchemaXmlSource.openStream(), solrSchemaXmlDest.toPath(), StandardCopyOption.REPLACE_EXISTING);
-			} catch (IOException e) {
-				log.error(e.getMessage());
-			}
-
-			try {
-				System.setProperty("solr.install.dir", solrDir.getCanonicalPath());
-				NodeConfig config = new NodeConfig.NodeConfigBuilder("embeddedSolrServerNode", solrDir.toPath())
-						.setConfigSetBaseDirectory(solrURL)
-						.build();
-				this.solrServer = new EmbeddedSolrServer(config, coreName);
-
-				try {
-					CoreStatus status = CoreAdminRequest.getCoreStatus(coreName, solrServer);
-					// This following triggers an exception if the core does not exist,
-					// we need this to test for the core's existence
-					status.getCoreStartTime();
-				} catch (Exception e) {
-					log.info("Creating Solr core");
-					CoreAdminRequest.Create createRequest = new CoreAdminRequest.Create();
-					createRequest.setCoreName(coreName);
-					createRequest.setConfigSet("");
-					createRequest.process(solrServer);
-					reindex = true;
-					reindexWait = true;
-				}
-			} catch (Exception e) {
-				log.error("Failed to initialize Solr: {}", e.getMessage());
-			}*/
+			throw new IllegalStateException("Embedded Solr is no longer supported; '" + Settings.SOLR_URL + "' must be an http(s) URL");
 		}
 		if (solrServer != null) {
 			solrIndex = new SolrSearchIndex(this, solrServer);
+			boolean reindexSucceeded = false;
 			if (reindex) {
 				if (reindexWait) {
 					if (!solrIndex.clearSolrIndex(solrServer)) {
-						log.warn("Initial Solr full-wipe failed; reindex will run against potentially dirty index");
+						log.error("Initial Solr full-wipe failed; skipping reindex to avoid serving a dirty index. Next restart will retry.");
+					} else {
+						solrIndex.reindexSync(false);
+						reindexSucceeded = solrIndex.waitForQueueDrain();
+						if (!reindexSucceeded) {
+							log.warn("Solr submission queue did not drain; skipping version-marker write so the next restart re-triggers reindex.");
+						}
 					}
-					solrIndex.reindexSync(false);
 				} else {
+					log.info("Async reindex started; Solr version markers will not be persisted on this run because '{}=false' means reindex runs on every boot.",
+							Settings.SOLR_REINDEX_ON_STARTUP_WAIT);
 					solrIndex.reindex(false);
+				}
+			}
+			if (dataFolder != null && reindex && reindexSucceeded) {
+				boolean schemaWritten = SolrVersionMarker.write(SolrVersionMarker.schemaMarker(dataFolder), getVersion());
+				boolean solrWritten = SolrVersionMarker.write(SolrVersionMarker.solrMarker(dataFolder), SolrVersion.LATEST.toString());
+				if (!schemaWritten || !solrWritten) {
+					log.warn("Failed to persist Solr version markers in {}; the next restart will detect them as missing and trigger another full reindex until the underlying I/O issue is resolved.", dataFolder);
 				}
 			}
 		} else {

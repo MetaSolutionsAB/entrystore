@@ -166,6 +166,7 @@ public interface Settings {
 	String SOLR_DEFAULT_SORTING_LANG = "entrystore.solr.default-sorting-lang";
 	String SOLR_AUTH_USERNAME = "entrystore.solr.auth.username";
 	String SOLR_AUTH_PASSWORD = "entrystore.solr.auth.password";
+	String SOLR_REQUEST_TIMEOUT_SECONDS = "entrystore.solr.request-timeout-seconds";
 	String SOLR_RELATED = "entrystore.solr.related";
 	String SOLR_RELATED_PROPERTIES = "entrystore.solr.related.properties";
 
