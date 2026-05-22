@@ -31,6 +31,7 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.DataConflictException;
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
+import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -138,7 +139,7 @@ public class GroupService {
 
 			return newGroupEntry;
 		} finally {
-			principalManager.setAuthenticatedUserURI(requestingUserUri);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, requestingUserUri);
 		}
 	}
 

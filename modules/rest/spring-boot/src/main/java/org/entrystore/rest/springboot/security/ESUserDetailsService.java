@@ -25,6 +25,7 @@ import org.entrystore.User;
 import org.entrystore.rest.springboot.model.auth.SessionInfo;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
 import org.entrystore.rest.springboot.service.UserService;
+import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -88,7 +89,7 @@ public class ESUserDetailsService implements UserDetailsService {
 				log.info("User Entry not found for username: '{}'", username);
 			}
 		} finally {
-			pm.setAuthenticatedUserURI(currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
 		}
 
 		throw new UsernameNotFoundException("User not found " + username);
@@ -112,7 +113,7 @@ public class ESUserDetailsService implements UserDetailsService {
 				log.info("User Entry not found for username: '{}'", username);
 			}
 		} finally {
-			pm.setAuthenticatedUserURI(currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
 		}
 
 		return null;
@@ -154,7 +155,7 @@ public class ESUserDetailsService implements UserDetailsService {
 			}
 			throw e;
 		} finally {
-			pm.setAuthenticatedUserURI(currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
 		}
 	}
 

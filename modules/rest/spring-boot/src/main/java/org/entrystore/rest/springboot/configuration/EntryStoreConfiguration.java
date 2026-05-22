@@ -14,6 +14,7 @@ import org.entrystore.repository.backup.BackupScheduler;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.config.SortedProperties;
+import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
@@ -106,7 +107,7 @@ public class EntryStoreConfiguration {
 			}
 			return bs;
 		} finally {
-			pm.setAuthenticatedUserURI(currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
 		}
 	}
 

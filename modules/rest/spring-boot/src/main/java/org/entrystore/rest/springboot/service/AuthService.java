@@ -58,6 +58,7 @@ import org.entrystore.rest.springboot.service.auth.SignupRateLimiter;
 import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
 import org.entrystore.rest.springboot.util.Email;
 import org.entrystore.rest.springboot.util.HttpUtil;
+import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -292,7 +293,7 @@ public class AuthService {
 				}
 			}
 		} finally {
-			principalManager.setAuthenticatedUserURI(authUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser);
 		}
 
 		if (ci.getUrlSuccess() != null) {
@@ -380,7 +381,7 @@ public class AuthService {
 				log.info("Resolved active user for password reset attempt {}", HttpUtil.sanitizeForLog(ci.getEmail()));
 			}
 		} finally {
-			principalManager.setAuthenticatedUserURI(authUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser);
 		}
 
 		// The expensive work (token generation + bcrypt + SMTP send) runs on a background thread so
@@ -511,7 +512,7 @@ public class AuthService {
 			}
 
 		} finally {
-			principalManager.setAuthenticatedUserURI(authUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser);
 		}
 
 		if (signupInfo.getUrlSuccess() != null) {
