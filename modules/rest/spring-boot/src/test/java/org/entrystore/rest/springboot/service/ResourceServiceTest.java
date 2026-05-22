@@ -16,8 +16,11 @@
 
 package org.entrystore.rest.springboot.service;
 
+import org.entrystore.AuthorizationException;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
+import org.entrystore.PrincipalManager;
+import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
@@ -44,6 +47,8 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -59,6 +64,9 @@ class ResourceServiceTest {
 	private ResourceJsonSerializer resourceSerializer;
 
 	@Mock
+	private PrincipalManager principalManager;
+
+	@Mock
 	private RestTemplate restTemplate;
 
 	@Mock
@@ -71,7 +79,7 @@ class ResourceServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new ResourceService(repositoryManager, resourceSerializer, restTemplate, sessionRegistry);
+		service = new ResourceService(repositoryManager, resourceSerializer, principalManager, restTemplate, sessionRegistry);
 		// Point importTmpDir at the JUnit-managed isolated directory so the
 		// temp-file cleanup assertions are scoped to this test and cannot be
 		// polluted by other processes or orphan files in the shared system temp.
@@ -98,6 +106,20 @@ class ResourceServiceTest {
 				() -> service.importEntryResource(entry, zipBytes, true));
 
 		assertIsolatedTmpDirIsEmpty("exception path from importRDFResource stub");
+	}
+
+	@Test
+	void deleteResource_proxyTrueUnauthorized_throwsBeforeOutboundDelete() {
+		// Pins the contract that the WriteResource check fires BEFORE the proxy branch
+		// reaches deleteRemoteResource — otherwise an unauthorized caller could trigger
+		// an outbound DELETE (the SSRF surface tracked in ENTRYSTORE-950).
+		doThrow(new AuthorizationException(null, null, AccessProperty.WriteResource))
+				.when(principalManager).checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteResource);
+
+		assertThrows(AuthorizationException.class,
+				() -> service.deleteResource(entry, "true", false));
+
+		verifyNoInteractions(restTemplate);
 	}
 
 	@Test

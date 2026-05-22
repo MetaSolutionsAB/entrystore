@@ -9,6 +9,10 @@ import org.springframework.http.HttpMethod
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
+import static com.github.tomakehurst.wiremock.client.WireMock.delete
+import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
@@ -35,6 +39,8 @@ class ResourceIT extends BaseSpec {
 		EntryStoreClient.creds.put('userChangePasswordBadNewPassword@test.com', password)
 		EntryStoreClient.creds.put('userAdminChangePassword@test.com', password)
 		EntryStoreClient.creds.put('resourceTestUserName@test.com', password)
+		EntryStoreClient.creds.put('resDelOther@test.com', password)
+		EntryStoreClient.creds.put('resDelProxyOther@test.com', password)
 	}
 
 	def cleanupSpec() {
@@ -1332,6 +1338,119 @@ class ResourceIT extends BaseSpec {
 		def resourceConn2 = EntryStoreClient.getRequest('/' + contextId + '/resource/' + entryId)
 		resourceConn2.getResponseCode() == HTTP_NO_CONTENT
 		resourceConn2.inputStream.text == ''
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id} on file resource as guest should respond with 404 Not Found and not delete the file"() {
+		given:
+		// create None-graph entry as admin and PUT a small binary file into it
+		def fileEntryId = createEntry(contextId, [:], [resource: [name: 'Guest delete target']])
+		def expectedBytes = [0xDE, 0xAD, 0xBE, 0xEF] as byte[]
+		def testBinFile = File.createTempFile('test-guest-delete', '.bin')
+		testBinFile.deleteOnExit()
+		testBinFile.withOutputStream { out -> out.write(expectedBytes) }
+		def resourcePath = '/' + contextId + '/resource/' + fileEntryId
+		def sendFileConn = EntryStoreClient.putRequestFile(resourcePath, testBinFile,
+			'admin', 'application/octet-stream')
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+
+		when:
+		// attempt delete as guest (empty asUser => no auth cookie)
+		def deleteResourceConn = EntryStoreClient.deleteRequest(resourcePath, '', '')
+
+		then:
+		// CWE-204 enumeration mask: anonymous gets 404, not 401
+		deleteResourceConn.getResponseCode() == HTTP_NOT_FOUND
+		// file is still on disk — admin can still read its bytes back
+		def readBackConn = EntryStoreClient.getRequest(resourcePath)
+		readBackConn.getResponseCode() == HTTP_OK
+		readBackConn.inputStream.bytes == expectedBytes
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id} on file resource as authenticated non-owner should respond with 403 Forbidden and not delete the file"() {
+		given:
+		// create None-graph entry as admin and PUT a small binary file into it
+		def fileEntryId = createEntry(contextId, [:], [resource: [name: 'Non-owner delete target']])
+		def expectedBytes = [0xDE, 0xAD, 0xBE, 0xEF] as byte[]
+		def testBinFile = File.createTempFile('test-nonowner-delete', '.bin')
+		testBinFile.deleteOnExit()
+		testBinFile.withOutputStream { out -> out.write(expectedBytes) }
+		def resourcePath = '/' + contextId + '/resource/' + fileEntryId
+		def sendFileConn = EntryStoreClient.putRequestFile(resourcePath, testBinFile,
+			'admin', 'application/octet-stream')
+		assert sendFileConn.getResponseCode() == HTTP_CREATED
+		// create a regular user with no ACL on the entry
+		def otherUsername = 'resDelOther@test.com'
+		def otherUser = UserUtil.createUser(otherUsername)
+		UserUtil.setUserPassword(otherUser['resourceUri'].toString(), password)
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest(resourcePath, '', otherUsername)
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_FORBIDDEN
+		// file is still on disk — admin can still read its bytes back
+		def readBackConn = EntryStoreClient.getRequest(resourcePath)
+		readBackConn.getResponseCode() == HTTP_OK
+		readBackConn.inputStream.bytes == expectedBytes
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true on link entry as guest should respond with 404 Not Found and not issue an outbound request"() {
+		given:
+		// register a WireMock stub for the would-be proxy target; if the auth check fails to fire,
+		// the outbound DELETE will land here and the verify(0, ...) below will catch the regression
+		def stubPath = '/it/proxy-delete-guest'
+		wireMockServer.stubFor(delete(urlPathEqualTo(stubPath))
+			.willReturn(aResponse().withStatus(204)))
+		def targetUrl = 'http://localhost:' + wireMockServer.port() + stubPath
+		// create the link entry as admin
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true', '', '')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_NOT_FOUND
+		// the auth check must fire before the outbound proxy — no DELETE must reach the external URL
+		wireMockServer.verify(0, deleteRequestedFor(urlPathEqualTo(stubPath)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true on link entry as authenticated non-owner should respond with 403 Forbidden and not issue an outbound request"() {
+		given:
+		def stubPath = '/it/proxy-delete-nonowner'
+		wireMockServer.stubFor(delete(urlPathEqualTo(stubPath))
+			.willReturn(aResponse().withStatus(204)))
+		def targetUrl = 'http://localhost:' + wireMockServer.port() + stubPath
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+		// create a regular user with no ACL on the entry
+		def otherUsername = 'resDelProxyOther@test.com'
+		def otherUser = UserUtil.createUser(otherUsername)
+		UserUtil.setUserPassword(otherUser['resourceUri'].toString(), password)
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true', '', otherUsername)
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_FORBIDDEN
+		wireMockServer.verify(0, deleteRequestedFor(urlPathEqualTo(stubPath)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true on link entry as admin should issue exactly one outbound DELETE and return 204"() {
+		given:
+		// Positive-path counterpart to the two guest/non-owner proxy specs above.
+		// Locks in that WriteResource (not a stricter property like Administer) is the gate,
+		// and that the auth check does not break the legitimate proxy-delete flow.
+		def stubPath = '/it/proxy-delete-admin'
+		wireMockServer.stubFor(delete(urlPathEqualTo(stubPath))
+			.willReturn(aResponse().withStatus(204)))
+		def targetUrl = 'http://localhost:' + wireMockServer.port() + stubPath
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_NO_CONTENT
+		wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo(stubPath)))
 	}
 
 	def "DELETE /{context-id}/resource/{entry-id} does not delete resource if it has type String"() {
