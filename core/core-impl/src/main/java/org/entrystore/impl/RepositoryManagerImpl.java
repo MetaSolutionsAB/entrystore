@@ -583,8 +583,13 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			initSolrInternal();
 		} catch (RuntimeException e) {
 			// Release RDF4J native-store file locks and any other resources before propagating;
-			// otherwise stale lock files block subsequent boots.
-			this.shutdown();
+			// otherwise stale lock files block subsequent boots. shutdown() can itself throw, so
+			// surface any cleanup failure as a suppressed cause to preserve the original cause.
+			try {
+				this.shutdown();
+			} catch (RuntimeException cleanup) {
+				e.addSuppressed(cleanup);
+			}
 			throw e;
 		}
 	}
