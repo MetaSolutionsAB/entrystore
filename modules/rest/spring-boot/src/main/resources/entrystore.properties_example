@@ -41,6 +41,16 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.cors.headers=X-Custom-Header
 # entrystore.cors.max-age=7200
 
+## HTTP Server response header.
+## Default: EntryStore/<version-from-VERSION.txt>.
+## Set to an explicit string for a fully custom value (wins over version-precision below).
+# entrystore.http.header.server=Acme Portal
+
+## Or control how much of the auto-computed default's version is exposed.
+## Values: full (default; e.g. EntryStore/6.0-SNAPSHOT), minor (EntryStore/6.0),
+## major (EntryStore/6), none (bare EntryStore). Ignored when the explicit override above is set.
+# entrystore.http.header.server.version-precision=major
+
 ## SMTP settings, required for e.g. sign-up
 # entrystore.smtp.host=smtp.host.tld
 # entrystore.smtp.port=587

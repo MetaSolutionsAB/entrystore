@@ -19,12 +19,15 @@ package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
 
+import static java.net.HttpURLConnection.HTTP_FORBIDDEN
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_OK
+import static java.net.HttpURLConnection.HTTP_UNAUTHORIZED
 
 class ServerHeaderIT extends BaseSpec {
 
 	def static contextId = '60'
+	private static final String SERVER_HEADER_PREFIX = 'EntryStore/IntegrationTests'
 
 	def "GET /auth/user should include Server header starting with EntryStore/"() {
 		when:
@@ -34,7 +37,7 @@ class ServerHeaderIT extends BaseSpec {
 		info.getResponseCode() == HTTP_OK
 		def serverHeader = info.getHeaderField('Server')
 		serverHeader != null
-		serverHeader.startsWith('EntryStore/IntegrationTests')
+		serverHeader.startsWith(SERVER_HEADER_PREFIX)
 	}
 
 	def "GET /foo should include Server header even for 404 response"() {
@@ -45,6 +48,43 @@ class ServerHeaderIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_NOT_FOUND
 		def serverHeader = conn.getHeaderField('Server')
 		serverHeader != null
-		serverHeader.startsWith('EntryStore/IntegrationTests')
+		serverHeader.startsWith(SERVER_HEADER_PREFIX)
+	}
+
+	def "GET /management/status/extended as guest (401 from AuthenticationEntryPoint) should include Server header"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/management/status/extended', '')
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		def serverHeader = conn.getHeaderField('Server')
+		serverHeader != null
+		serverHeader.startsWith(SERVER_HEADER_PREFIX)
+	}
+
+	def "GET /management/status/extended as non-admin user (403 from AccessDeniedHandler) should include Server header"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/management/status/extended', 'user')
+
+		then:
+		conn.getResponseCode() == HTTP_FORBIDDEN
+		def serverHeader = conn.getHeaderField('Server')
+		serverHeader != null
+		serverHeader.startsWith(SERVER_HEADER_PREFIX)
+	}
+
+	def "POST without CSRF token (401 from CSRF reject) should include Server header"() {
+		given:
+		def cookie = EntryStoreClient.cookieHeader('admin')
+
+		when: 'cookie-authenticated mutation without an X-XSRF-TOKEN header'
+		def conn = EntryStoreClient.postRequest('/_principals/groups?name=serverHeaderCsrfGroup',
+				'{}', '', 'application/json', [Cookie: cookie])
+
+		then:
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		def serverHeader = conn.getHeaderField('Server')
+		serverHeader != null
+		serverHeader.startsWith(SERVER_HEADER_PREFIX)
 	}
 }
