@@ -65,6 +65,7 @@ public class GroupService {
 		ContextManager cm = repositoryManager.getContextManager();
 
 		URI requestingUserUri = principalManager.getAuthenticatedUserURI();
+		Throwable primary = null;
 		try {
 			// guests are prohibited from using this resource
 			if (requestingUserUri == null || principalManager.getGuestUser().getURI().equals(requestingUserUri)) {
@@ -138,8 +139,11 @@ public class GroupService {
 			newGroup.setHomeContext(newContext);
 
 			return newGroupEntry;
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, requestingUserUri);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, requestingUserUri, primary);
 		}
 	}
 

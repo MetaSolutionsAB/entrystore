@@ -179,6 +179,7 @@ public class StatusService {
 	private Map<String, Object> buildCountStats() {
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
+		Throwable primary = null;
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			return Map.of(
@@ -188,8 +189,11 @@ public class StatusService {
 				"namedGraphCount", repositoryManager.getNamedGraphCount(),
 				"tripleCount", repositoryManager.getTripleCount()
 			);
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
 		}
 	}
 

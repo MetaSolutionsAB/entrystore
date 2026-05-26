@@ -249,6 +249,7 @@ public class AuthService {
 		signupTokenCache.removeToken(token);
 
 		URI authUser = principalManager.getAuthenticatedUserURI();
+		Throwable primary = null;
 		try {
 			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
 
@@ -292,8 +293,11 @@ public class AuthService {
 					}
 				}
 			}
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
 		}
 
 		if (ci.getUrlSuccess() != null) {
@@ -356,6 +360,7 @@ public class AuthService {
 
 		URI authUser = principalManager.getAuthenticatedUserURI();
 		boolean shouldSend = false;
+		Throwable primary = null;
 
 		try {
 			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
@@ -380,8 +385,11 @@ public class AuthService {
 				shouldSend = true;
 				log.info("Resolved active user for password reset attempt {}", HttpUtil.sanitizeForLog(ci.getEmail()));
 			}
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
 		}
 
 		// The expensive work (token generation + bcrypt + SMTP send) runs on a background thread so
@@ -462,6 +470,7 @@ public class AuthService {
 		signupTokenCache.removeToken(token);
 
 		URI authUser = principalManager.getAuthenticatedUserURI();
+		Throwable primary = null;
 		try {
 			principalManager.setAuthenticatedUserURI(principalManager.getAdminUser().getURI());
 
@@ -511,8 +520,11 @@ public class AuthService {
 				}
 			}
 
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(principalManager, authUser, primary);
 		}
 
 		if (signupInfo.getUrlSuccess() != null) {

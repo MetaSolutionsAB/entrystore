@@ -17,82 +17,78 @@
 package org.entrystore.rest.springboot.util;
 
 import org.entrystore.PrincipalManager;
-import org.entrystore.User;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.net.URI;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class PrincipalManagerUtilTest {
 
 	private static final URI PREVIOUS = URI.create("http://localhost/store/_principals/resource/42");
-	private static final URI GUEST = URI.create("http://localhost/store/_principals/resource/_guest");
 
 	@Mock
 	private PrincipalManager pm;
 
-	@Mock
-	private User guestUser;
-
 	@Test
-	void restoreAuthenticatedUserSafely_happyPath_setsPreviousAndSkipsGuest() {
+	void restoreAuthenticatedUserSafely_happyPath_withNullPrimary_returnsSilently() {
 		doNothing().when(pm).setAuthenticatedUserURI(PREVIOUS);
 
-		PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, PREVIOUS);
+		assertDoesNotThrow(() -> PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, PREVIOUS, null));
 
-		// Only the restore call should fire — guest fallback must NOT be touched on the happy path.
 		verify(pm).setAuthenticatedUserURI(PREVIOUS);
-		verify(pm, never()).getGuestUser();
 	}
 
 	@Test
-	void restoreAuthenticatedUserSafely_restoreThrows_clearsToGuestAndSwallows() {
-		when(pm.getGuestUser()).thenReturn(guestUser);
-		when(guestUser.getURI()).thenReturn(GUEST);
-		doThrow(new RuntimeException("restore failed")).when(pm).setAuthenticatedUserURI(PREVIOUS);
-		doNothing().when(pm).setAuthenticatedUserURI(GUEST);
+	void restoreAuthenticatedUserSafely_happyPath_withPrimary_leavesPrimaryUntouched() {
+		// A successful cleanup must NOT decorate the primary with a suppressed entry — that would lie
+		// about a failure that did not occur.
+		RuntimeException tryBodyFailure = new RuntimeException("try body blew up");
+		doNothing().when(pm).setAuthenticatedUserURI(PREVIOUS);
 
-		// No exception is propagated — the helper logs and continues.
-		PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, PREVIOUS);
+		PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, PREVIOUS, tryBodyFailure);
 
-		// The fallback path must (1) ask the PM for the guest user and (2) set the URI to guest, in order.
-		InOrder order = inOrder(pm);
-		order.verify(pm).setAuthenticatedUserURI(PREVIOUS);
-		order.verify(pm).setAuthenticatedUserURI(GUEST);
+		assertArrayEquals(new Throwable[0], tryBodyFailure.getSuppressed(),
+				"successful cleanup should not attach any suppressed exception to the primary");
 	}
 
 	@Test
-	void restoreAuthenticatedUserSafely_bothCallsThrow_raisesIllegalStateWithClearAsCause() {
-		RuntimeException restoreFailure = new RuntimeException("restore failed");
-		RuntimeException clearFailure = new RuntimeException("clear failed");
-		when(pm.getGuestUser()).thenReturn(guestUser);
-		when(guestUser.getURI()).thenReturn(GUEST);
-		doThrow(restoreFailure).when(pm).setAuthenticatedUserURI(PREVIOUS);
-		doThrow(clearFailure).when(pm).setAuthenticatedUserURI(GUEST);
+	void restoreAuthenticatedUserSafely_cleanupThrows_withNullPrimary_propagatesCleanupException() {
+		// With no primary to attach to, the caller's finally block must surface the cleanup failure
+		// itself — that is the only signal the request failed at all.
+		RuntimeException cleanupFailure = new RuntimeException("restore failed");
+		doThrow(cleanupFailure).when(pm).setAuthenticatedUserURI(PREVIOUS);
 
-		IllegalStateException thrown = assertThrows(IllegalStateException.class,
-				() -> PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, PREVIOUS));
+		RuntimeException thrown = assertThrows(RuntimeException.class,
+				() -> PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, PREVIOUS, null));
 
-		// The clear failure (not the restore failure) is preserved as the cause, since at the moment we
-		// give up the most recent failure is the most informative.
-		assertSame(clearFailure, thrown.getCause(),
-				"clear-to-guest failure should be the IllegalStateException's cause");
-		assertEquals(
-				"Authenticated user URI is in an inconsistent state; aborting to prevent execution under unintended privileges",
-				thrown.getMessage());
+		assertSame(cleanupFailure, thrown, "the original cleanup exception should propagate unchanged");
+	}
+
+	@Test
+	void restoreAuthenticatedUserSafely_cleanupThrows_withPrimary_attachesAsSuppressedAndDoesNotThrow() {
+		// This is the anti-masking branch the ticket targets: the try body's primary exception must
+		// keep propagating; the cleanup failure rides along as a suppressed exception so neither is
+		// lost.
+		RuntimeException tryBodyFailure = new RuntimeException("try body blew up");
+		RuntimeException cleanupFailure = new RuntimeException("restore failed");
+		doThrow(cleanupFailure).when(pm).setAuthenticatedUserURI(PREVIOUS);
+
+		assertDoesNotThrow(() -> PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, PREVIOUS, tryBodyFailure),
+				"helper must not throw when primary is present — the caller already has an in-flight exception to surface");
+
+		Throwable[] suppressed = tryBodyFailure.getSuppressed();
+		assertArrayEquals(new Throwable[]{cleanupFailure}, suppressed,
+				"cleanup failure should be attached to primary as the sole suppressed exception");
 	}
 }

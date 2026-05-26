@@ -18,37 +18,48 @@ package org.entrystore.rest.springboot.util;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
 
 import java.net.URI;
 
-@Slf4j
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class PrincipalManagerUtil {
 
 	/**
 	 * Restore the per-thread authenticated user URI to {@code previous} from inside a {@code finally}
-	 * block, without masking any exception thrown by the surrounding {@code try} body.
+	 * block, without masking an exception thrown by the surrounding {@code try} body.
 	 * <p>
-	 * If the restore call throws, the failure is logged and the thread is forced to the guest URI as
-	 * a defense-in-depth measure (so a Jetty worker thread cannot be returned to the pool with admin
-	 * bound after a failed restore). If the clear-to-guest call also throws, this method throws
-	 * {@link IllegalStateException} — the thread's auth state is irrecoverable and execution must not
-	 * continue.
+	 * Intended usage — the caller captures any try-body exception via precise rethrow and passes it
+	 * as {@code primary}:
+	 * <pre>{@code
+	 * URI previous = pm.getAuthenticatedUserURI();
+	 * Throwable primary = null;
+	 * try {
+	 *     // body
+	 * } catch (Throwable t) {
+	 *     primary = t;
+	 *     throw t;
+	 * } finally {
+	 *     PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, previous, primary);
+	 * }
+	 * }</pre>
+	 * <p>
+	 * If the restore call throws:
+	 * <ul>
+	 *   <li>when {@code primary != null}, the cleanup failure is attached to {@code primary} via
+	 *       {@link Throwable#addSuppressed(Throwable)} so the original try-body exception still
+	 *       propagates and the cleanup failure is preserved in the same error event;</li>
+	 *   <li>when {@code primary == null}, the cleanup failure propagates unchanged.</li>
+	 * </ul>
 	 */
-	public static void restoreAuthenticatedUserSafely(PrincipalManager pm, URI previous) {
+	public static void restoreAuthenticatedUserSafely(PrincipalManager pm, URI previous, Throwable primary) {
 		try {
 			pm.setAuthenticatedUserURI(previous);
-		} catch (Exception e) {
-			log.error("Failed to restore authenticated user URI, clearing to guest", e);
-			try {
-				pm.setAuthenticatedUserURI(pm.getGuestUser().getURI());
-			} catch (Exception clearEx) {
-				log.error("Failed to clear authenticated user URI to guest", clearEx);
-				throw new IllegalStateException(
-						"Authenticated user URI is in an inconsistent state; aborting to prevent execution under unintended privileges",
-						clearEx);
+		} catch (Throwable cleanupEx) {
+			if (primary != null) {
+				primary.addSuppressed(cleanupEx);
+			} else {
+				throw cleanupEx;
 			}
 		}
 	}

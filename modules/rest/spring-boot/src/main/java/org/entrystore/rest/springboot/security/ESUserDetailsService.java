@@ -68,6 +68,7 @@ public class ESUserDetailsService implements UserDetailsService {
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 
 		final URI currentUser = pm.getAuthenticatedUserURI();
+		Throwable primary = null;
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			Entry userEntry;
@@ -88,8 +89,11 @@ public class ESUserDetailsService implements UserDetailsService {
 			} else {
 				log.info("User Entry not found for username: '{}'", username);
 			}
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
 		}
 
 		throw new UsernameNotFoundException("User not found " + username);
@@ -104,6 +108,7 @@ public class ESUserDetailsService implements UserDetailsService {
 	public User loadUser(String username) {
 
 		final URI currentUser = pm.getAuthenticatedUserURI();
+		Throwable primary = null;
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			Entry userEntry = pm.getPrincipalEntry(username);
@@ -112,8 +117,11 @@ public class ESUserDetailsService implements UserDetailsService {
 			} else {
 				log.info("User Entry not found for username: '{}'", username);
 			}
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
 		}
 
 		return null;
@@ -130,6 +138,7 @@ public class ESUserDetailsService implements UserDetailsService {
 	public User createUser(String username) {
 		final URI currentUser = pm.getAuthenticatedUserURI();
 		Entry entry = null;
+		Throwable primary = null;
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 
@@ -147,15 +156,16 @@ public class ESUserDetailsService implements UserDetailsService {
 			User u = (User) entry.getResource();
 			log.info("Created user '{}'", u.getURI());
 			return u;
-		} catch (RuntimeException e) {
+		} catch (Throwable t) {
+			primary = t;
 			// Any failure after createResource succeeded leaves an orphaned nameless User entry.
 			// Remove it unless it was already removed (name-collision branch above).
 			if (entry != null) {
 				removeOrphanedEntry(entry, username);
 			}
-			throw e;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
 		}
 	}
 

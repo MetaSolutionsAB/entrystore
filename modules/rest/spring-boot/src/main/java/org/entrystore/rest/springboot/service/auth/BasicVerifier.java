@@ -36,6 +36,7 @@ public class BasicVerifier {
 
 	public static String getSaltedHashedSecret(PrincipalManager pm, String identifier) {
 		URI authUser = pm.getAuthenticatedUserURI();
+		Throwable primary = null;
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			Entry userEntry = pm.getPrincipalEntry(identifier);
@@ -47,8 +48,11 @@ public class BasicVerifier {
 					log.error("No secret found for principal: {}", identifier);
 				}
 			}
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, authUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, authUser, primary);
 		}
 
 		return null;
@@ -60,25 +64,33 @@ public class BasicVerifier {
 		}
 
 		URI currentUser = pm.getAuthenticatedUserURI();
+		Throwable primary = null;
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			Entry userEntry = pm.getPrincipalEntry(userName);
 			if (userEntry != null) {
 				return true;
 			}
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
 		}
 		return false;
 	}
 
 	public static boolean isUserDisabled(PrincipalManager pm, User user) {
 		URI currentUser = pm.getAuthenticatedUserURI();
+		Throwable primary = null;
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			return user.isDisabled();
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
 		}
 	}
 /*

@@ -99,6 +99,7 @@ public class EntryStoreConfiguration {
 		log.info("Starting backup scheduler");
 		PrincipalManager pm = repositoryManager.getPrincipalManager();
 		URI currentUser = pm.getAuthenticatedUserURI();
+		Throwable primary = null;
 		try {
 			pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
 			BackupScheduler bs = BackupScheduler.createInstance(repositoryManager);
@@ -106,8 +107,11 @@ public class EntryStoreConfiguration {
 				bs.run();
 			}
 			return bs;
+		} catch (Throwable t) {
+			primary = t;
+			throw t;
 		} finally {
-			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser);
+			PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, currentUser, primary);
 		}
 	}
 
