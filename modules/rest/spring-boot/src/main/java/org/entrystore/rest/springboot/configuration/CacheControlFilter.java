@@ -30,20 +30,24 @@ import org.springframework.web.util.WebUtils;
 import java.io.IOException;
 
 /**
- * Forces session-bearing responses to be uncacheable by shared infrastructure (CDNs,
- * forward proxies) so authenticated content cannot be served back to a different user
- * — defensive hardening against shared-cache poisoning when {@code X-Forwarded-Prefix}
- * is spoofable upstream.
+ * Marks responses to authenticated requests as uncacheable by shared infrastructure
+ * (CDNs, forward proxies) unless a prior filter or controller has already set
+ * {@code Cache-Control} — defensive hardening against shared-cache poisoning when
+ * {@code X-Forwarded-Prefix} is spoofable upstream.
  * <p>
- * Yields to any {@code Cache-Control} a prior filter or controller already set, so a
- * deliberate {@code no-store} from the Basic-Auth challenge entry point or an explicit
- * cache directive from a controller wins. A controller running after this filter can
- * still override with {@code setHeader}.
+ * A request is treated as authenticated when it carries the session cookie or an
+ * {@code Authorization: Basic} header. The filter yields to any {@code Cache-Control}
+ * a prior filter or controller already set, so a deliberate {@code no-store} from the
+ * Basic-Auth challenge entry point or an explicit cache directive from a controller
+ * wins. A controller running after this filter can still override with
+ * {@code setHeader}.
  */
 @Component
 public class CacheControlFilter extends OncePerRequestFilter {
 
 	static final String CACHE_CONTROL_AUTHENTICATED = "private, no-store";
+
+	private static final String BASIC_AUTH_SCHEME_PREFIX = "Basic ";
 
 	private final String sessionCookieName;
 
@@ -56,10 +60,20 @@ public class CacheControlFilter extends OncePerRequestFilter {
 									@NotNull HttpServletResponse response,
 									@NotNull FilterChain filterChain)
 			throws ServletException, IOException {
-		if (WebUtils.getCookie(request, sessionCookieName) != null
+		if (isAuthenticatedRequest(request)
 				&& response.getHeader(HttpHeaders.CACHE_CONTROL) == null) {
 			response.setHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL_AUTHENTICATED);
 		}
 		filterChain.doFilter(request, response);
+	}
+
+	private boolean isAuthenticatedRequest(HttpServletRequest request) {
+		if (WebUtils.getCookie(request, sessionCookieName) != null) {
+			return true;
+		}
+		String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+		// RFC 7235: auth-scheme is case-insensitive.
+		return authHeader != null
+				&& authHeader.regionMatches(true, 0, BASIC_AUTH_SCHEME_PREFIX, 0, BASIC_AUTH_SCHEME_PREFIX.length());
 	}
 }

@@ -1,12 +1,12 @@
 ## Base URI how it is seen from external clients.
 ## When running behind a reverse proxy, configure the proxy to send
-## X-Forwarded-Proto, X-Forwarded-Host, and X-Forwarded-Port headers.
+## X-Forwarded-Proto, X-Forwarded-Host, X-Forwarded-Port, and X-Forwarded-Prefix headers.
 ## Spring Boot's ForwardedHeaderFilter (server.forward-headers-strategy=framework
 ## in application.yaml) processes these headers for request URL resolution.
 ## SECURITY: Spring does NOT validate which client sent the X-Forwarded-* headers,
 ## so the reverse proxy MUST strip them from untrusted (client-originating) requests
-## before forwarding. Otherwise a client can spoof X-Forwarded-Host/Proto/Prefix to
-## influence baseURL resolution and potentially poison shared caches.
+## before forwarding. Otherwise a client can spoof X-Forwarded-Proto/Host/Port/Prefix
+## to influence baseURL resolution and potentially poison shared caches.
 entrystore.baseurl.folder=http://entrystore.org/store/
 
 ## Repository store: memory | native | http | sparql

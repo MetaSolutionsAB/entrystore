@@ -59,4 +59,14 @@ class CacheControlIT extends BaseSpec {
 		conn.getResponseCode() == HTTP_OK
 		conn.getHeaderField('Cache-Control') == null
 	}
+
+	def "GET with Authorization: Basic and no session cookie returns Cache-Control: private, no-store"() {
+		when:
+		def basicAuth = 'Basic ' + Base64.getEncoder().encodeToString('admin:adminpass'.getBytes())
+		def conn = EntryStoreClient.getRequest('/auth/user', '', null, ['Authorization': basicAuth])
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getHeaderField('Cache-Control') == 'private, no-store'
+	}
 }
