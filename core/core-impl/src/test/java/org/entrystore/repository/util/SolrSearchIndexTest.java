@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,87 @@
 
 package org.entrystore.repository.util;
 
+import org.apache.solr.client.solrj.SolrClient;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.config.Config;
+import org.entrystore.repository.RepositoryManager;
+import org.entrystore.repository.config.PropertiesConfiguration;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
+import java.net.URI;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 public class SolrSearchIndexTest {
+
+	private SolrSearchIndex index;
+	private Map<URI, Future> reindexingMap;
+
+	@BeforeEach
+	@SuppressWarnings("unchecked")
+	public void setUp() throws Exception {
+		RepositoryManager rm = mock(RepositoryManager.class);
+		Config config = new PropertiesConfiguration("EntryStore Test Configuration");
+		when(rm.getConfiguration()).thenReturn(config);
+		when(rm.getValueFactory()).thenReturn(SimpleValueFactory.getInstance());
+		SolrClient solrServer = mock(SolrClient.class);
+
+		index = new SolrSearchIndex(rm, solrServer);
+
+		Field f = SolrSearchIndex.class.getDeclaredField("reindexing");
+		f.setAccessible(true);
+		reindexingMap = (Map<URI, Future>) f.get(index);
+	}
+
+	@AfterEach
+	public void tearDown() {
+		if (index != null) {
+			index.shutdown();
+		}
+	}
+
+	@Test
+	public void isIndexingReturnsTrueWhenAnyContextIsBeingIndexed() {
+		URI ctx = URI.create("http://localhost:8181/_contexts/entry/1");
+		reindexingMap.put(ctx, CompletableFuture.completedFuture(null));
+
+		assertTrue(index.isIndexing(), "isIndexing() must be true while any per-context reindex is in progress");
+	}
+
+	@Test
+	public void isIndexingReturnsFalseWhenNoContextIsBeingIndexed() {
+		assertFalse(index.isIndexing(), "isIndexing() must be false when reindexing map is empty");
+	}
+
+	@Test
+	public void isIndexingWithUriReturnsTrueOnlyForMatchingContext() {
+		URI ctx1 = URI.create("http://localhost:8181/_contexts/entry/1");
+		URI ctx2 = URI.create("http://localhost:8181/_contexts/entry/2");
+		reindexingMap.put(ctx1, CompletableFuture.completedFuture(null));
+
+		assertTrue(index.isIndexing(ctx1));
+		assertFalse(index.isIndexing(ctx2));
+	}
+
+	@Test
+	public void isIndexingWithNullReturnsFalseWhenOnlyPerContextEntriesPresent() {
+		// Regression-protect: the no-arg method must NOT silently probe the `null` key,
+		// and the URI overload must keep its literal containsKey() semantics.
+		URI ctx = URI.create("http://localhost:8181/_contexts/entry/1");
+		reindexingMap.put(ctx, CompletableFuture.completedFuture(null));
+
+		assertFalse(index.isIndexing(null));
+	}
 
 	@Disabled("To be implemented")
 	@Test
