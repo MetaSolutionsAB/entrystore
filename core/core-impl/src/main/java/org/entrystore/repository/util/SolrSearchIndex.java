@@ -731,7 +731,7 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public boolean isIndexing() {
-		return isIndexing(null);
+		return !reindexing.isEmpty();
 	}
 
 	public boolean isIndexing(URI contextURI) {
