@@ -43,12 +43,14 @@ entrystore.data.folder=/srv/entrystore/files/
 
 ## HTTP Server response header.
 ## Default: EntryStore/<version-from-VERSION.txt>.
-## Set to an explicit string for a fully custom value (wins over version-precision below).
+## A non-blank string here wins over the auto-computed default. Blank or unset falls through.
 # entrystore.http.header.server=Acme Portal
 
 ## Or control how much of the auto-computed default's version is exposed.
 ## Values: full (default; e.g. EntryStore/6.0-SNAPSHOT), minor (EntryStore/6.0),
-## major (EntryStore/6), none (bare EntryStore). Ignored when the explicit override above is set.
+## major (EntryStore/6), none (bare EntryStore). The minor and major modes strip the
+## Maven qualifier (e.g. -SNAPSHOT, +build.x). Ignored when the explicit override above
+## is set to a non-blank value.
 # entrystore.http.header.server.version-precision=major
 
 ## SMTP settings, required for e.g. sign-up

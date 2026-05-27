@@ -76,7 +76,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -862,7 +861,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 			}
 			if (VERSION == null) {
-				VERSION = new SimpleDateFormat("yyyyMMddHHmm").format(new Date());
+				VERSION = "unknown";
 			}
 		}
 		return VERSION;

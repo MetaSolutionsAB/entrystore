@@ -52,8 +52,11 @@ public class ServerHeaderCustomizer implements WebServerFactoryCustomizer<Config
 		}
 		try {
 			return composeDefault(versionSupplier.get(), precision);
-		} catch (Exception e) {
-			log.error("Failed to compose default Server header, falling back to 'EntryStore': {}", e.getMessage(), e);
+		} catch (RuntimeException e) {
+			// Server header is non-essential to startup; degrade gracefully so a version-loading
+			// glitch never prevents Jetty from coming up.
+			log.error("Failed to compose default Server header (precision={}), falling back to 'EntryStore'",
+					precision, e);
 			return "EntryStore";
 		}
 	}
