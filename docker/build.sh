@@ -5,19 +5,22 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-if [ ! -f "$PROJECT_ROOT/VERSION.txt" ]; then
+cd "$PROJECT_ROOT"
+
+if [ ! -f VERSION.txt ]; then
   echo "Error: VERSION.txt not found at $PROJECT_ROOT/VERSION.txt" >&2
   exit 1
 fi
-ENTRYSTORE_VERSION=$(cat "$PROJECT_ROOT/VERSION.txt" | tr -d '[:space:]')
+
+ENTRYSTORE_VERSION=$(tr -d '[:space:]' < VERSION.txt)
 if [ -z "$ENTRYSTORE_VERSION" ]; then
   echo "Error: VERSION.txt is empty" >&2
   exit 1
 fi
-JAR_FILE="$PROJECT_ROOT/modules/rest/spring-boot/target/entrystore-rest-spring-boot-${ENTRYSTORE_VERSION}-exec.jar"
+JAR_FILE="modules/rest/spring-boot/target/entrystore-rest-spring-boot-${ENTRYSTORE_VERSION}-exec.jar"
 
 echo "Building EntryStore project..."
-mvn -f "$PROJECT_ROOT/pom.xml" clean package -DskipTests
+./mvnw clean package -DskipTests
 
 if [ ! -f "$JAR_FILE" ]; then
   echo "Error: Build did not produce expected jar:"
@@ -35,4 +38,4 @@ docker build \
   --pull \
   --build-arg ENTRYSTORE_VERSION="$ENTRYSTORE_VERSION" \
   --tag "$DOCKER_IMAGE_TAG" \
-  "$PROJECT_ROOT"
+  .

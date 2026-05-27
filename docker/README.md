@@ -4,7 +4,8 @@
 
 - Docker
 - Java 25
-- Maven 3.6+
+
+(Maven is supplied by the Maven Wrapper — no system install needed.)
 
 ## Building
 
@@ -19,7 +20,7 @@ The build script builds the project and the Docker image in one step. The versio
 Or build manually:
 
 ```bash
-mvn clean package -DskipTests
+./mvnw clean package -DskipTests
 docker build \
   -f docker/Dockerfile \
   --build-arg ENTRYSTORE_VERSION=$(cat VERSION.txt) \
