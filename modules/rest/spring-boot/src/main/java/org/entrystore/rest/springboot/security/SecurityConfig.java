@@ -140,6 +140,13 @@ public class SecurityConfig {
 		var entryPoint = httpBasicConfig.enabled() ? authChallengeAwareEntryPoint(customEntryPoint) : customEntryPoint;
 
 		http
+				// Disable Spring Security's default CacheControlHeadersWriter so that CacheControlFilter
+				// governs the Cache-Control / Pragma / Expires headers end-to-end. The default writer would
+				// otherwise stamp "no-cache, no-store, max-age=0, must-revalidate" on every response,
+				// including permit-all public endpoints — which contradicts the per-request policy this app
+				// needs (private,no-store for authenticated; no header for anonymous so static and
+				// controller-set values can pass through unchanged).
+				.headers(headers -> headers.cacheControl(cache -> cache.disable()))
 				.csrf(csrf -> csrf
 						.csrfTokenRepository(csrfTokenRepository())
 						.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
@@ -206,12 +213,18 @@ public class SecurityConfig {
 			log.info("Basic Auth Disabled");
 		}
 
+		var cacheAwareRedirectStrategy = new CacheAwareRedirectStrategy();
+
 		if (samlConfiguration.enabled()) {
 			log.info("SAML Auth Enabled");
 
 			// below modifies the login success handler, to set the redirect URL param name
 			samlLoginSuccessHandler.setTargetUrlParameter("successurl");
 			samlLoginSuccessHandler.setDefaultTargetUrl(samlConfiguration.redirectSuccess().url());
+			// Stamp Cache-Control: private, no-store on the 302 carrying the session Set-Cookie
+			// before sendRedirect commits the response — CacheControlFilter's post-chain check
+			// cannot run after a committed response, so the redirect strategy closes that gap.
+			samlLoginSuccessHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
 
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
@@ -239,6 +252,8 @@ public class SecurityConfig {
 			var handler = casLoginSuccessHandler.orElseThrow(() -> new IllegalStateException(
 					"CAS is enabled but CasLoginSuccessHandler bean is missing — check CasConfig."));
 			handler.setDefaultTargetUrl(casConfiguration.redirectSuccess().url());
+			// See the SAML branch above for the rationale.
+			handler.setRedirectStrategy(cacheAwareRedirectStrategy);
 			casFilter.setAuthenticationSuccessHandler(handler);
 			// Surface ticket-validation failures at WARN with the full stack trace.
 			// SimpleUrlAuthenticationFailureHandler's default logging is at DEBUG level, which

@@ -41,18 +41,39 @@ import java.io.IOException;
  * Basic-Auth challenge entry point or an explicit cache directive from a controller
  * wins. A controller running after this filter can still override with
  * {@code setHeader}.
+ * <p>
+ * After the chain runs, the filter also stamps {@link #CACHE_CONTROL_AUTHENTICATED}
+ * on responses that establish the session cookie via {@code Set-Cookie} when the
+ * response has not yet committed. The form-login {@code /auth/cookie} handler
+ * buffers a small body before commit, so its 200 response is covered here.
+ * <p>
+ * The SAML and CAS success-redirect paths commit the response inside
+ * {@code sendRedirect}, so this post-chain check would otherwise be too late.
+ * {@code SamlLoginSuccessHandler} and {@code CasLoginSuccessHandler} are wired
+ * to use {@code CacheAwareRedirectStrategy} (see {@code SecurityConfig}) which
+ * stamps the same {@code Cache-Control} value before {@code sendRedirect}
+ * commits — closing the same gap on the 302 + {@code Set-Cookie} path.
  */
 @Component
 public class CacheControlFilter extends OncePerRequestFilter {
 
-	static final String CACHE_CONTROL_AUTHENTICATED = "private, no-store";
+	/**
+	 * Single source of truth for the {@code Cache-Control} value stamped on authenticated
+	 * and session-establishing responses. Referenced by {@code CacheAwareRedirectStrategy}
+	 * and by the unit + integration tests that assert on it, so a future change here
+	 * (e.g. adding {@code must-revalidate}) cannot drift between filter, strategy, and
+	 * test expectations.
+	 */
+	public static final String CACHE_CONTROL_AUTHENTICATED = "private, no-store";
 
 	private static final String BASIC_AUTH_SCHEME_PREFIX = "Basic ";
 
 	private final String sessionCookieName;
+	private final String sessionCookieAttributePrefix;
 
 	public CacheControlFilter(@Value("${server.servlet.session.cookie.name:auth_token}") String sessionCookieName) {
 		this.sessionCookieName = sessionCookieName;
+		this.sessionCookieAttributePrefix = sessionCookieName + "=";
 	}
 
 	@Override
@@ -65,6 +86,11 @@ public class CacheControlFilter extends OncePerRequestFilter {
 			response.setHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL_AUTHENTICATED);
 		}
 		filterChain.doFilter(request, response);
+		if (!response.isCommitted()
+				&& response.getHeader(HttpHeaders.CACHE_CONTROL) == null
+				&& responseEstablishesSession(response)) {
+			response.setHeader(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL_AUTHENTICATED);
+		}
 	}
 
 	private boolean isAuthenticatedRequest(HttpServletRequest request) {
@@ -75,5 +101,15 @@ public class CacheControlFilter extends OncePerRequestFilter {
 		// RFC 7235: auth-scheme is case-insensitive.
 		return authHeader != null
 				&& authHeader.regionMatches(true, 0, BASIC_AUTH_SCHEME_PREFIX, 0, BASIC_AUTH_SCHEME_PREFIX.length());
+	}
+
+	private boolean responseEstablishesSession(HttpServletResponse response) {
+		// RFC 6265 cookie names are case-sensitive — compare verbatim against the configured name.
+		for (String setCookie : response.getHeaders(HttpHeaders.SET_COOKIE)) {
+			if (setCookie != null && setCookie.startsWith(sessionCookieAttributePrefix)) {
+				return true;
+			}
+		}
+		return false;
 	}
 }

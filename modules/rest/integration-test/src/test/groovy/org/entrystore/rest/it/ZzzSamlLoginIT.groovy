@@ -24,6 +24,7 @@ import spock.lang.Shared
 import spock.lang.Stepwise
 
 import static java.net.HttpURLConnection.HTTP_OK
+import static org.entrystore.rest.springboot.configuration.CacheControlFilter.CACHE_CONTROL_AUTHENTICATED
 
 // Zzz prefix sorts this class after all shared-app ITs under Failsafe's alphabetical runOrder.
 @Stepwise
@@ -201,6 +202,13 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		def spCookies = spCallbackConn.getHeaderFields()['Set-Cookie']
 		spCookies != null
 		spCookies.any { it.contains('auth_token=') }
+
+		and: 'The 302 carrying the session Set-Cookie must ship with Cache-Control: private, no-store'
+		// Regression sentinel for ENTRYSTORE-945 PR #283 round-1 review: a shared cache keying
+		// on URL alone must not cache the redirect and replay the session cookie to another
+		// client. CacheAwareRedirectStrategy stamps the header before sendRedirect commits the
+		// response — see CacheControlFilter Javadoc.
+		spCallbackConn.getHeaderField('Cache-Control') == CACHE_CONTROL_AUTHENTICATED
 
 		// Query Entrystore using the new cookie - should return info about the new testuser
 		def currentlyLoggedInUserConn = EntryStoreClient.getRequest('/auth/user',

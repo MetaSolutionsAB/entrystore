@@ -124,7 +124,10 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 		if (esUser != null && !BasicVerifier.isUserDisabled(principalManager, esUser)) {
 			if (cachedAuthState != null && cachedAuthState.successUrl() != null) {
 				log.debug("Redirecting to custom success URL: {}", cachedAuthState.successUrl());
-				response.sendRedirect(cachedAuthState.successUrl());
+				// Route through the configured RedirectStrategy so CacheAwareRedirectStrategy
+				// can stamp Cache-Control: private, no-store before sendRedirect commits the
+				// response — preventing a shared cache from replaying the Set-Cookie.
+				getRedirectStrategy().sendRedirect(request, response, cachedAuthState.successUrl());
 				return;
 			}
 
