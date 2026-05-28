@@ -78,6 +78,14 @@ public class Email {
 			msgReplyTo = config.getString(Settings.SMTP_EMAIL_REPLYTO);
 		}
 		String host = config.getString(Settings.SMTP_HOST);
+		if (host == null || host.isBlank()) {
+			log.warn("SMTP host is not configured; email to {} not sent", msgTo);
+			return false;
+		}
+		if (msgFrom == null || msgFrom.isBlank()) {
+			log.warn("SMTP from-address is not configured; email to {} not sent", msgTo);
+			return false;
+		}
 		int port = config.getInt(Settings.SMTP_PORT, 25);
 		boolean ssl = "ssl".equalsIgnoreCase(config.getString(Settings.SMTP_SECURITY));
 		boolean starttls = "starttls".equalsIgnoreCase(config.getString(Settings.SMTP_SECURITY));

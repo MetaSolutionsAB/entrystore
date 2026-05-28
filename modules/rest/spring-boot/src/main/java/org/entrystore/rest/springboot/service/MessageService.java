@@ -24,11 +24,12 @@ import org.entrystore.repository.RepositoryException;
 import org.entrystore.rest.springboot.model.api.SendMessageRequestBody;
 import org.entrystore.rest.springboot.model.api.TransportType;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
-import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.UnauthorizedException;
 import org.entrystore.rest.springboot.util.Email;
 import org.entrystore.rest.springboot.util.HtmlSanitizer;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -85,7 +86,7 @@ public class MessageService {
 					request.recipient(), sanitizedSubject, sanitizedBody, null, replyTo);
 			if (!sent) {
 				log.error("Failed to send email to [{}] with subject [{}]", request.recipient(), sanitizedSubject);
-				throw new InternalServerErrorException("Failed to send email message");
+				throw new CustomResponseException("Failed to send email message", HttpStatus.SERVICE_UNAVAILABLE);
 			}
 		}
 	}
