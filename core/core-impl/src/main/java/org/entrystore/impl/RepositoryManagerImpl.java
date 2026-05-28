@@ -885,6 +885,7 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	// sentinel that would always equal itself on the next boot.
 	static boolean isVersionResolved(String version) {
 		return version != null
+				&& !version.isBlank()
 				&& !"unknown".equals(version)
 				&& !version.contains("@project.version@");
 	}

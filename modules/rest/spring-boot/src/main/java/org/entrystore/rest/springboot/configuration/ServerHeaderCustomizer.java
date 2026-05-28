@@ -31,7 +31,23 @@ import java.util.stream.Collectors;
 @Component
 public class ServerHeaderCustomizer implements WebServerFactoryCustomizer<ConfigurableWebServerFactory> {
 
-	public enum VersionPrecision { FULL, MINOR, MAJOR, NONE }
+	/**
+	 * Controls how much of the EntryStore version appears in the {@code Server}
+	 * response header. Naming follows Apache httpd's {@code ServerTokens}
+	 * (MAJOR = "1 segment", MINOR = "2 segments") — NOT semver ordering.
+	 */
+	enum VersionPrecision {
+		/** Full version, e.g. {@code 6.0-SNAPSHOT}. */                 FULL(-1),
+		/** Major + minor, e.g. {@code 6.0}. */                         MINOR(2),
+		/** Major only, e.g. {@code 6}. */                              MAJOR(1),
+		/** Suppress version entirely, header is {@code EntryStore}. */ NONE(0);
+
+		final int segments;
+
+		VersionPrecision(int segments) {
+			this.segments = segments;
+		}
+	}
 
 	@Value("${entrystore.http.header.server:}")
 	private String configuredServerHeader;
@@ -73,8 +89,7 @@ public class ServerHeaderCustomizer implements WebServerFactoryCustomizer<Config
 		return switch (precision) {
 			case FULL -> version;
 			case NONE -> "";
-			case MAJOR -> keepNumericSegments(version, 1);
-			case MINOR -> keepNumericSegments(version, 2);
+			case MAJOR, MINOR -> keepNumericSegments(version, precision.segments);
 		};
 	}
 
