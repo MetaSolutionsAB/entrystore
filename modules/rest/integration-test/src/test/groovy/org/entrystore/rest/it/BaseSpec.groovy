@@ -122,7 +122,9 @@ abstract class BaseSpec extends Specification {
 			log.info('Starting common EntryStoreApp (without SSO login)')
 			def args = [
 				'--entrystore.solr.url=http://localhost:' + solrContainer.getSolrPort() + '/solr/entrystore-core',
-				'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl()
+				'--entrystore.auth.recaptcha.url=' + getRecaptchaStubUrl(),
+				// Inject the dynamic WireMock origin into the DELETE whitelist; the port is only known at runtime.
+				'--entrystore.proxy.remote-resource.delete.whitelist.1=http://localhost:' + wireMockServer.port()
 			] as String[]
 			appInstance = SpringApplication.run(EntryStoreApplicationSpringBoot.class, args)
 			createCommonUserAccounts()

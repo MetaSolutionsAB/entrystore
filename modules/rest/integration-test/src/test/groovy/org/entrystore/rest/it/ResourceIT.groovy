@@ -13,10 +13,12 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse
 import static com.github.tomakehurst.wiremock.client.WireMock.delete
 import static com.github.tomakehurst.wiremock.client.WireMock.deleteRequestedFor
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
+import static java.net.HttpURLConnection.HTTP_BAD_GATEWAY
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_CONFLICT
 import static java.net.HttpURLConnection.HTTP_CREATED
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
+import static java.net.HttpURLConnection.HTTP_INTERNAL_ERROR
 import static java.net.HttpURLConnection.HTTP_NOT_ACCEPTABLE
 import static java.net.HttpURLConnection.HTTP_NOT_FOUND
 import static java.net.HttpURLConnection.HTTP_NOT_IMPLEMENTED
@@ -1451,6 +1453,180 @@ class ResourceIT extends BaseSpec {
 		then:
 		deleteResourceConn.getResponseCode() == HTTP_NO_CONTENT
 		wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo(stubPath)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true blocks IPv4-literal SSRF target with 403 and no outbound"() {
+		// IPv4 literal must be caught by the SSRF blacklist regex even though the WireMock
+		// localhost origin is whitelisted — a literal IP is a different origin.
+		given:
+		def stubPath = '/it/proxy-delete-ssrf-ipv4'
+		wireMockServer.stubFor(delete(urlPathEqualTo(stubPath))
+			.willReturn(aResponse().withStatus(204)))
+		def targetUrl = 'http://127.0.0.1:1' + stubPath
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_FORBIDDEN
+		wireMockServer.verify(0, deleteRequestedFor(urlPathEqualTo(stubPath)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true blocks non-http scheme with 400 and no outbound"() {
+		// Scheme allowlist must reject ftp:// before any outbound attempt.
+		given:
+		def stubPath = '/it/proxy-delete-ssrf-scheme'
+		wireMockServer.stubFor(delete(urlPathEqualTo(stubPath))
+			.willReturn(aResponse().withStatus(204)))
+		def targetUrl = 'ftp://example.org' + stubPath
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_BAD_REQUEST
+		wireMockServer.verify(0, deleteRequestedFor(urlPathEqualTo(stubPath)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true blocks same-host-different-port SSRF with 403"() {
+		// Different port on the same host is a different origin: blacklist must fire even though
+		// the WireMock origin (http://localhost:<wireMockPort>) is whitelisted.
+		given:
+		def stubPath = '/it/proxy-delete-ssrf-port'
+		def stubAtWireMockOrigin = '/it/proxy-delete-ssrf-port-wm-side'
+		wireMockServer.stubFor(delete(urlPathEqualTo(stubAtWireMockOrigin))
+			.willReturn(aResponse().withStatus(204)))
+		def targetUrl = 'http://localhost:1' + stubPath
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_FORBIDDEN
+		wireMockServer.verify(0, deleteRequestedFor(urlPathEqualTo(stubAtWireMockOrigin)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true re-validates redirect target and blocks 127.0.0.1 redirect"() {
+		// On each redirect hop the validator re-runs; the redirect to 127.0.0.1 must hit the
+		// blacklist and prevent any DELETE to the hostile target.
+		given:
+		def initialStub = '/it/proxy-delete-redirect-to-ipv4'
+		def hostileStub = '/it/proxy-delete-redirect-to-ipv4-hostile'
+		wireMockServer.stubFor(delete(urlPathEqualTo(initialStub))
+			.willReturn(aResponse().withStatus(302).withHeader('Location', 'http://127.0.0.1:1' + hostileStub)))
+		wireMockServer.stubFor(delete(urlPathEqualTo(hostileStub))
+			.willReturn(aResponse().withStatus(204)))
+		def targetUrl = 'http://localhost:' + wireMockServer.port() + initialStub
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_FORBIDDEN
+		// First hop landed once at the WireMock; second hop must NOT fire.
+		wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo(initialStub)))
+		wireMockServer.verify(0, deleteRequestedFor(urlPathEqualTo(hostileStub)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true re-validates redirect target and blocks ftp:// redirect"() {
+		// Scheme allowlist re-applies on redirect.
+		given:
+		def initialStub = '/it/proxy-delete-redirect-to-ftp'
+		wireMockServer.stubFor(delete(urlPathEqualTo(initialStub))
+			.willReturn(aResponse().withStatus(302).withHeader('Location', 'ftp://example.org/x')))
+		def targetUrl = 'http://localhost:' + wireMockServer.port() + initialStub
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_BAD_REQUEST
+		wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo(initialStub)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true handles redirect without Location header"() {
+		// 3xx without Location is a malformed upstream response — surface as 500, do not retry.
+		given:
+		def stubPath = '/it/proxy-delete-redirect-no-location'
+		wireMockServer.stubFor(delete(urlPathEqualTo(stubPath))
+			.willReturn(aResponse().withStatus(302))) // no Location header
+		def targetUrl = 'http://localhost:' + wireMockServer.port() + stubPath
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_INTERNAL_ERROR
+		wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo(stubPath)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true surfaces upstream 5xx as 500"() {
+		// Upstream returns a non-redirect error (500) — EntryStore must surface this as 500 to the
+		// client without relaying the upstream body (which may leak internal details).
+		given:
+		def stubPath = '/it/proxy-delete-upstream-500'
+		wireMockServer.stubFor(delete(urlPathEqualTo(stubPath))
+			.willReturn(aResponse().withStatus(500).withBody('internal upstream state — must not leak')))
+		def targetUrl = 'http://localhost:' + wireMockServer.port() + stubPath
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_INTERNAL_ERROR
+		wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo(stubPath)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true aborts after MAX_DELETE_REDIRECTS hops with 502"() {
+		// Chain of MAX_DELETE_REDIRECTS+1 stubs: the 12th hop must trip the cap before any
+		// further outbound connection.
+		given:
+		def chainLength = 11
+		(0..<chainLength).each { i ->
+			wireMockServer.stubFor(delete(urlPathEqualTo('/it/proxy-delete-redir-loop-' + i))
+				.willReturn(aResponse().withStatus(302).withHeader('Location',
+					'http://localhost:' + wireMockServer.port() + '/it/proxy-delete-redir-loop-' + (i + 1))))
+		}
+		def targetUrl = 'http://localhost:' + wireMockServer.port() + '/it/proxy-delete-redir-loop-0'
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_BAD_GATEWAY
+		(0..<chainLength).each { i ->
+			wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo('/it/proxy-delete-redir-loop-' + i)))
+		}
+		wireMockServer.verify(0, deleteRequestedFor(urlPathEqualTo('/it/proxy-delete-redir-loop-' + chainLength)))
+	}
+
+	def "DELETE /{context-id}/resource/{entry-id}?proxy=true follows relative redirect to second hop and returns 204"() {
+		// Relative Location header must resolve against the original URL, not be treated as an origin jump.
+		given:
+		def initialStub = '/it/proxy-delete-rel-redir-1'
+		def secondStub = '/it/proxy-delete-rel-redir-2'
+		wireMockServer.stubFor(delete(urlPathEqualTo(initialStub))
+			.willReturn(aResponse().withStatus(302).withHeader('Location', secondStub)))
+		wireMockServer.stubFor(delete(urlPathEqualTo(secondStub))
+			.willReturn(aResponse().withStatus(204)))
+		def targetUrl = 'http://localhost:' + wireMockServer.port() + initialStub
+		def linkEntryId = createEntry(contextId, [entrytype: 'link', resource: targetUrl])
+
+		when:
+		def deleteResourceConn = EntryStoreClient.deleteRequest('/' + contextId + '/resource/' + linkEntryId + '?proxy=true')
+
+		then:
+		deleteResourceConn.getResponseCode() == HTTP_NO_CONTENT
+		wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo(initialStub)))
+		wireMockServer.verify(1, deleteRequestedFor(urlPathEqualTo(secondStub)))
 	}
 
 	def "DELETE /{context-id}/resource/{entry-id} does not delete resource if it has type String"() {

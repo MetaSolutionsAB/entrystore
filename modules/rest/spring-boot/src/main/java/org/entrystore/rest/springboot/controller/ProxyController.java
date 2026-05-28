@@ -20,6 +20,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.rest.springboot.model.dto.ProxyResponse;
+import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.service.ProxyService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
@@ -30,12 +31,16 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
+import java.util.Locale;
+
 @Slf4j
 @RestController
 @RequiredArgsConstructor
 public class ProxyController {
 
 	private final ProxyService proxyService;
+	private final SsrfValidator ssrfValidator;
 
 	@Operation(summary = "Proxy a request to an external URL", description = "Fetches the content of the given URL and returns it to the client. Guest users can only access whitelisted hosts.")
 	@GetMapping("/proxy")
@@ -43,10 +48,12 @@ public class ProxyController {
 			@RequestParam("url") String url,
 			@RequestHeader(value = "Accept", required = false, defaultValue = "*/*") String acceptHeader) {
 
-		proxyService.validateUrl(url);
-		String host = proxyService.extractHost(url);
-		proxyService.validateGlobalAccess(host);
-		return doProxy(url, acceptHeader);
+		// Order matches ENTRYSTORE-949: cheap URL parse + scheme/userinfo check before auth,
+		// then guest-whitelist auth, then DNS resolution.
+		URI uri = ssrfValidator.parseAndValidateUrl(url);
+		proxyService.validateGlobalAccess(uri.getHost().toLowerCase(Locale.ROOT));
+		SsrfValidator.ValidatedTarget target = ssrfValidator.resolveForProxy(uri);
+		return doProxy(target, acceptHeader);
 	}
 
 	@Operation(summary = "Proxy a request to an external URL within a context scope", description = "Fetches the content of the given URL, scoped to the given context. Requires ReadResource access on the context.")
@@ -56,14 +63,15 @@ public class ProxyController {
 			@RequestParam("url") String url,
 			@RequestHeader(value = "Accept", required = false, defaultValue = "*/*") String acceptHeader) {
 
-		proxyService.validateUrl(url);
+		URI uri = ssrfValidator.parseAndValidateUrl(url);
 		proxyService.validateContextAccess(contextId);
-		return doProxy(url, acceptHeader);
+		SsrfValidator.ValidatedTarget target = ssrfValidator.resolveForProxy(uri);
+		return doProxy(target, acceptHeader);
 	}
 
-	private ResponseEntity<byte[]> doProxy(String url, String acceptHeader) {
-		log.debug("Received proxy request for {}", url);
-		ProxyResponse response = proxyService.fetchUrl(url, acceptHeader);
+	private ResponseEntity<byte[]> doProxy(SsrfValidator.ValidatedTarget target, String acceptHeader) {
+		log.debug("Received proxy request for {}", target.uri());
+		ProxyResponse response = proxyService.fetchUrl(target, acceptHeader);
 
 		HttpHeaders headers = new HttpHeaders();
 		headers.set("Content-Security-Policy", "script-src 'none'; form-action 'none';"); // XSS and SSRF protection
