@@ -21,6 +21,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.util.HttpQueryRedactor;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.Ordered;
@@ -49,7 +50,7 @@ public class RequestResponseLoggingFilter extends OncePerRequestFilter {
 
 		log.info("REQUEST  {} {} | query={} | client={}",
 				request.getMethod(), request.getRequestURI(),
-				request.getQueryString(), request.getRemoteAddr());
+				HttpQueryRedactor.redact(request.getQueryString()), request.getRemoteAddr());
 
 		long start = System.currentTimeMillis();
 

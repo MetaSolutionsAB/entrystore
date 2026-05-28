@@ -44,6 +44,7 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.HttpQueryRedactor;
 import org.entrystore.rest.springboot.util.Syndication;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
@@ -327,7 +328,8 @@ public class SearchService {
 	 *
 	 * @return Request URI with scheme, host, and port from the configured base URL.
 	 */
-	private String buildRequestUri(HttpServletRequest request) {
+	// Package-private for direct unit testing of the redactor-integration contract.
+	String buildRequestUri(HttpServletRequest request) {
 		var repositoryURL = repositoryManager.getRepositoryURL();
 		if (repositoryURL == null) {
 			throw new InternalServerErrorException(
@@ -338,7 +340,10 @@ public class SearchService {
 			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 		}
 
-		String query = request.getQueryString();
+		// Redact known sensitive parameters (confirm, token, ticket, RelayState, …) before the
+		// query string lands in a public Atom/RSS self-link. No current search endpoint accepts
+		// any of these names; this is defensive against a future addition.
+		String query = HttpQueryRedactor.redact(request.getQueryString());
 		return baseUrl + request.getServletPath() + (query != null ? "?" + query : "");
 	}
 }
