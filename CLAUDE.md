@@ -145,7 +145,7 @@ From `.editorconfig`:
 ## Testing Guidelines
 
 - **No tautological tests.** Every test must validate real behaviour, not assertions over values the test itself set up via mocks. A test that only verifies mocked return values proves nothing.
-- **Keep tests DAMP** (Descriptive And Meaningful Phrases). Do **not** refactor structurally-similar tests into helpers/data-tables — especially the `when:` and `then:` blocks of Spock specs. Each test must read as a complete recipe; helper methods in a `given:` block or a test setup are allowed.
+- **Keep tests DAMP** (Descriptive And Meaningful Phrases). Default to one `@Test` (or Spock `def`) per case so each test reads as a complete recipe; helper methods in a `given:` block or a test setup are allowed. This is not a hard rule: a `@ParameterizedTest` / `@CsvSource` / `@MethodSource` (JUnit) or `where:` table (Spock) is fine — and preferred — when **at least 4** structurally-identical cases share the exact same `when:`/`then:` shape and only the inputs/expected outputs vary. Keep a descriptive `name = "{0}"` template (or equivalent display names) so each row still documents itself.
 
 ## Exception Conventions (Spring Boot REST Layer)
 
