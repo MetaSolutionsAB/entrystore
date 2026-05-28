@@ -604,11 +604,20 @@ public class RepositoryManagerImpl implements RepositoryManager {
 
 		String dataFolderPath = configuration.getString(Settings.DATA_FOLDER);
 		File dataFolder = dataFolderPath == null ? null : new File(dataFolderPath);
+		String currentVersion = getVersion();
+		boolean versionResolved = isVersionResolved(currentVersion);
 		if (dataFolder == null) {
 			log.warn("'{}' is not configured; Solr schema/version mismatch detection is disabled", Settings.DATA_FOLDER);
+		} else if (!versionResolved) {
+			// Mirror the pre-existing safety net: when the version cannot be resolved (missing
+			// VERSION.txt, unfiltered Maven token) force a reindex and skip marker persistence
+			// so the next restart re-triggers the same reindex until packaging is fixed.
+			log.warn("EntryStore version is unresolved ('{}'); forcing reindex and skipping Solr version-marker persistence until VERSION.txt resolution is fixed.", currentVersion);
+			reindex = true;
+			reindexWait = true;
 		} else {
 			try {
-				if (SolrVersionMarker.needsReindex(dataFolder, getVersion())) {
+				if (SolrVersionMarker.needsReindex(dataFolder, currentVersion)) {
 					reindex = true;
 					reindexWait = true;
 				}
@@ -665,8 +674,8 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					solrIndex.reindex(false);
 				}
 			}
-			if (dataFolder != null && reindex && reindexSucceeded) {
-				boolean schemaWritten = SolrVersionMarker.write(SolrVersionMarker.schemaMarker(dataFolder), getVersion());
+			if (dataFolder != null && reindex && reindexSucceeded && versionResolved) {
+				boolean schemaWritten = SolrVersionMarker.write(SolrVersionMarker.schemaMarker(dataFolder), currentVersion);
 				boolean solrWritten = SolrVersionMarker.write(SolrVersionMarker.solrMarker(dataFolder), SolrVersion.LATEST.toString());
 				if (!schemaWritten || !solrWritten) {
 					log.warn("Failed to persist Solr version markers in {}; the next restart will detect them as missing and trigger another full reindex until the underlying I/O issue is resolved.", dataFolder);
@@ -856,8 +865,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 					VERSION = IOUtils.toString(versionFile, StandardCharsets.UTF_8);
 					VERSION = VERSION.replace("\n", "");
 					VERSION = VERSION.replace("\r", "");
+					if (VERSION.contains("@project.version@")) {
+						log.error("VERSION.txt at {} contains unfiltered Maven token '@project.version@'; check core-impl/pom.xml resource-filtering rule.", versionFile);
+					}
 				} catch (IOException e) {
-					log.error(e.getMessage());
+					log.error("Failed to read EntryStore version from {}", versionFile, e);
 				}
 			}
 			if (VERSION == null) {
@@ -865,6 +877,16 @@ public class RepositoryManagerImpl implements RepositoryManager {
 			}
 		}
 		return VERSION;
+	}
+
+	// True when the version string identifies a specific build. Used to gate Solr version-marker
+	// persistence so a future packaging regression (missing VERSION.txt, removed resource-filtering
+	// rule) cannot silently disable SolrVersionMarker's drift detection by persisting an unresolved
+	// sentinel that would always equal itself on the next boot.
+	static boolean isVersionResolved(String version) {
+		return version != null
+				&& !"unknown".equals(version)
+				&& !version.contains("@project.version@");
 	}
 
 }
