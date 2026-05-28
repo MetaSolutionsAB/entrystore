@@ -43,7 +43,7 @@ import java.util.stream.Collectors;
  */
 public final class HttpQueryRedactor {
 
-	static final String REDACTED = "***";
+	private static final String REDACTED = "***";
 
 	/**
 	 * Names whose values are always replaced. Stored lowercase for the
