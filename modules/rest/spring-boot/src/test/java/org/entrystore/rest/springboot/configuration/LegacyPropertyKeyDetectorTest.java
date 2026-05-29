@@ -24,6 +24,7 @@ import org.springframework.boot.DefaultBootstrapContext;
 import org.springframework.boot.env.EnvironmentPostProcessor;
 import org.springframework.boot.env.EnvironmentPostProcessorsFactory;
 import org.springframework.boot.logging.DeferredLogFactory;
+import org.springframework.core.Ordered;
 import org.springframework.mock.env.MockEnvironment;
 
 import java.util.ArrayList;
@@ -85,6 +86,8 @@ class LegacyPropertyKeyDetectorTest {
 
 		assertThrows(IllegalStateException.class,
 				() -> detector.postProcessEnvironment(env, null));
+		assertTrue(warnings.isEmpty(),
+				"Truthy fail-fast should surface findings via the exception, not via the deferred log");
 	}
 
 	@ParameterizedTest
@@ -100,6 +103,23 @@ class LegacyPropertyKeyDetectorTest {
 		assertEquals(1, warnings.size());
 		assertTrue(warnings.getFirst().contains("'entrystore.auth.cas'"));
 		assertTrue(warnings.getFirst().contains("'entrystore.auth.cas.enabled'"));
+	}
+
+	@Test
+	void legacySamlIdpKey_truthy_failsFastNamingBothKeys() {
+		var warnings = new ArrayList<String>();
+		var detector = newDetector(warnings);
+		var env = new MockEnvironment()
+				.withProperty("entrystore.auth.saml.user-auto-provisioning", "enabled");
+
+		var ex = assertThrows(IllegalStateException.class,
+				() -> detector.postProcessEnvironment(env, null));
+
+		assertTrue(ex.getMessage().contains("'entrystore.auth.saml.user-auto-provisioning'"));
+		assertTrue(ex.getMessage()
+				.contains("'entrystore.auth.saml.idp.<idp-id>.user-auto-provisioning'"));
+		assertTrue(warnings.isEmpty(),
+				"Truthy fail-fast on a SAML IdP-prefix key should surface via the exception, not the log");
 	}
 
 	@Test
@@ -177,9 +197,15 @@ class LegacyPropertyKeyDetectorTest {
 		detector.postProcessEnvironment(env, null);
 
 		assertEquals(3, warnings.size());
-		assertTrue(warnings.stream().anyMatch(w -> w.contains("'entrystore.auth.http-basic'")));
-		assertTrue(warnings.stream().anyMatch(w -> w.contains("'entrystore.auth.saml'")));
-		assertTrue(warnings.stream().anyMatch(w -> w.contains("'entrystore.auth.cas'")));
+		assertTrue(warnings.stream().anyMatch(w ->
+				w.contains("'entrystore.auth.http-basic'")
+						&& w.contains("'entrystore.auth.http-basic.enabled'")));
+		assertTrue(warnings.stream().anyMatch(w ->
+				w.contains("'entrystore.auth.saml'")
+						&& w.contains("'entrystore.auth.saml.enabled'")));
+		assertTrue(warnings.stream().anyMatch(w ->
+				w.contains("'entrystore.auth.cas'")
+						&& w.contains("'entrystore.auth.cas.enabled'")));
 	}
 
 	@Test
@@ -198,6 +224,8 @@ class LegacyPropertyKeyDetectorTest {
 		assertTrue(ex.getMessage().contains("'entrystore.auth.cas'"),
 				"Falsy hits should still surface in the fail-fast message so operators see both");
 		assertTrue(ex.getMessage().contains("'entrystore.auth.cas.enabled'"));
+		assertTrue(warnings.isEmpty(),
+				"Mixed truthy/falsy must surface all findings via the exception, not the deferred log");
 	}
 
 	@Test
@@ -240,9 +268,33 @@ class LegacyPropertyKeyDetectorTest {
 		assertEquals("entrystore.auth.http-basic.enabled", map.get("entrystore.auth.http-basic"));
 		assertEquals("entrystore.auth.saml.enabled", map.get("entrystore.auth.saml"));
 		assertEquals("entrystore.auth.cas.enabled", map.get("entrystore.auth.cas"));
+		assertEquals("entrystore.auth.saml.idp.<idp-id>.relying-party-id",
+				map.get("entrystore.auth.saml.relying-party-id"));
+		assertEquals("entrystore.auth.saml.idp.<idp-id>.metadata.url",
+				map.get("entrystore.auth.saml.idp-metadata.url"));
+		assertEquals("entrystore.auth.saml.idp.<idp-id>.metadata.max-age",
+				map.get("entrystore.auth.saml.idp-metadata.max-age"));
+		assertEquals("entrystore.auth.saml.idp.<idp-id>.user-auto-provisioning",
+				map.get("entrystore.auth.saml.user-auto-provisioning"));
+		assertEquals("entrystore.auth.saml.idp.<idp-id>.redirect-method",
+				map.get("entrystore.auth.saml.redirect-method"));
 		assertFalse(map.containsKey("entrystore.auth.saml.assertion-consumer-service.url"));
 		assertFalse(map.containsKey("entrystore.auth.saml.redirect-success.url"));
 		assertFalse(map.containsKey("entrystore.auth.saml.redirect-failure.url"));
+	}
+
+	@Test
+	void legacyKeysMap_isImmutable() {
+		assertThrows(UnsupportedOperationException.class,
+				() -> LegacyPropertyKeyDetector.legacyKeys().put("x", "y"),
+				"LEGACY_KEYS is shared global state; legacyKeys() must expose an immutable view");
+	}
+
+	@Test
+	void runsAfterConfigData_viaLowestPrecedenceOrdering() {
+		assertEquals(Ordered.LOWEST_PRECEDENCE, newDetector(new ArrayList<>()).getOrder(),
+				"Must keep LOWEST_PRECEDENCE so the detector runs after ConfigDataEnvironmentPostProcessor "
+						+ "and sees entrystore.properties imported via spring.config.import");
 	}
 
 	@Test
@@ -264,8 +316,10 @@ class LegacyPropertyKeyDetectorTest {
 	}
 
 	/**
-	 * Minimal {@link Log} that records both {@code warn} overloads into a list. Other levels are
-	 * no-ops; the production code only emits at WARN.
+	 * Minimal {@link Log} that records single-argument {@code warn} calls. The detector only ever
+	 * emits via single-argument WARN; every other level and the two-argument {@code warn} overload
+	 * fail loudly with an {@link AssertionError} so an unexpected production log call surfaces as a
+	 * test failure instead of being silently dropped.
 	 */
 	private static final class RecordingLog implements Log {
 
@@ -286,18 +340,21 @@ class LegacyPropertyKeyDetectorTest {
 		@Override public boolean isInfoEnabled() { return false; }
 		@Override public boolean isTraceEnabled() { return false; }
 
-		@Override public void debug(Object message) {}
-		@Override public void debug(Object message, Throwable t) {}
-		@Override public void error(Object message) {}
-		@Override public void error(Object message, Throwable t) {}
-		@Override public void fatal(Object message) {}
-		@Override public void fatal(Object message, Throwable t) {}
-		@Override public void info(Object message) {}
-		@Override public void info(Object message, Throwable t) {}
-		@Override public void trace(Object message) {}
-		@Override public void trace(Object message, Throwable t) {}
-		@Override public void warn(Object message, Throwable t) {
-			warnings.add(String.valueOf(message));
+		@Override public void debug(Object message) { throw unexpected("debug"); }
+		@Override public void debug(Object message, Throwable t) { throw unexpected("debug"); }
+		@Override public void error(Object message) { throw unexpected("error"); }
+		@Override public void error(Object message, Throwable t) { throw unexpected("error"); }
+		@Override public void fatal(Object message) { throw unexpected("fatal"); }
+		@Override public void fatal(Object message, Throwable t) { throw unexpected("fatal"); }
+		@Override public void info(Object message) { throw unexpected("info"); }
+		@Override public void info(Object message, Throwable t) { throw unexpected("info"); }
+		@Override public void trace(Object message) { throw unexpected("trace"); }
+		@Override public void trace(Object message, Throwable t) { throw unexpected("trace"); }
+		@Override public void warn(Object message, Throwable t) { throw unexpected("warn(message, throwable)"); }
+
+		private static AssertionError unexpected(String level) {
+			return new AssertionError("Unexpected log call at level '" + level
+					+ "'; the detector should only emit via single-argument WARN");
 		}
 	}
 }

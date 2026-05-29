@@ -20,6 +20,7 @@ import org.apache.commons.logging.Log;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.env.EnvironmentPostProcessor;
 import org.springframework.boot.logging.DeferredLogFactory;
+import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
 
 import java.util.LinkedHashMap;
@@ -28,16 +29,18 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Detects legacy {@code entrystore.*} property keys that were renamed in 6.0 and are no longer
- * read by any consumer — Spring Boot silently ignores them, which on upgrade leaves an auth method
- * disabled (or a SAML IdP unconfigured) with no diagnostic. The diagnostic depends on the values
- * present: WARN when only falsy legacy values are detected; fail-fast {@link IllegalStateException}
- * when any value is truthy, with the falsy hits surfaced in the exception message rather than
- * logged separately.
+ * Detects legacy {@code entrystore.*} property keys that were renamed in 6.0 and are no longer read
+ * by any production consumer. Without this detector Spring Boot would silently ignore them, leaving
+ * the renamed feature misconfigured on upgrade (an auth method disabled, or a SAML IdP unconfigured)
+ * with no startup diagnostic. The diagnostic depends on the values present: WARN when only falsy
+ * legacy values are detected; fail-fast {@link IllegalStateException} when any value is truthy, with
+ * the falsy hits surfaced in the exception message rather than logged separately.
  *
- * <p>Adding a future rename: append one {@code map.put(...)} call in {@link #buildLegacyKeys()}.
+ * <p>Adding a future rename: append one {@code map.put(...)} call in {@link #buildLegacyKeys()} — but
+ * only if the legacy string does not also bind to a live new key (see the exclusion note in
+ * {@link #buildLegacyKeys()}).
  */
-public final class LegacyPropertyKeyDetector implements EnvironmentPostProcessor {
+public final class LegacyPropertyKeyDetector implements EnvironmentPostProcessor, Ordered {
 
 	private static final Map<String, String> LEGACY_KEYS = buildLegacyKeys();
 
@@ -72,6 +75,13 @@ public final class LegacyPropertyKeyDetector implements EnvironmentPostProcessor
 		for (var entry : falsyHits.entrySet()) {
 			log.warn(legacyMessage(entry.getKey(), entry.getValue()));
 		}
+	}
+
+	// Must run after ConfigDataEnvironmentPostProcessor so entrystore.properties
+	// (imported via spring.config.import) is part of the Environment when we scan.
+	@Override
+	public int getOrder() {
+		return Ordered.LOWEST_PRECEDENCE;
 	}
 
 	static boolean isTruthy(String value) {
