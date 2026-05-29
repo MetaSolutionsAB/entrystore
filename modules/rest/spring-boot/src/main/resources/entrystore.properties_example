@@ -210,6 +210,16 @@ entrystore.solr.extract-fulltext=off
 ## RowStore integration
 # entrystore.rowstore.url=http://localhost:8282/
 
+## SSRF whitelist for the resource-DELETE proxy path
+## (DELETE /{context}/resource/{id}?proxy=true on Link/Reference/LinkReference entries).
+## Entries are ORIGIN URLs (scheme://host:port), NOT bare hostnames — this differs from
+## the proxy-GET whitelist `entrystore.proxy.whitelist.local`, which is host-only.
+## http://x normalizes to http://x:80 and https://x to https://x:443. The origin of
+## entrystore.rowstore.url above (when set) is implicitly trusted for the DELETE path,
+## so single-host RowStore deployments need no additional configuration here.
+# entrystore.proxy.remote-resource.delete.whitelist.1=http://rowstore.internal:8282
+# entrystore.proxy.remote-resource.delete.whitelist.2=https://other-rowstore.example.com
+
 ## Enable creation of groups with linked contexts for normal non-admin users
 # entrystore.nonadmin.group-context-creation=on|off (default: off)
 

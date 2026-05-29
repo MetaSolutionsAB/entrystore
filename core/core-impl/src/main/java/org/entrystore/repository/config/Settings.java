@@ -190,6 +190,7 @@ public interface Settings {
 
 	String PROXY_WHITELIST_ANONYMOUS = "entrystore.proxy.whitelist.anonymous";
 	String PROXY_WHITELIST_LOCAL = "entrystore.proxy.whitelist.local";
+	String PROXY_REMOTE_RESOURCE_DELETE_WHITELIST = "entrystore.proxy.remote-resource.delete.whitelist";
 
 	String SMTP_HOST = "entrystore.smtp.host";
 	String SMTP_PORT = "entrystore.smtp.port";

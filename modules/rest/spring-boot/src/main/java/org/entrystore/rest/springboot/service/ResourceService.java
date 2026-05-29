@@ -54,6 +54,7 @@ import org.entrystore.rest.springboot.model.exception.ForbiddenException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
+import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.util.Email;
 import org.entrystore.rest.springboot.util.FileUtil;
@@ -64,16 +65,12 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.NotAcceptableStatusException;
 
@@ -83,7 +80,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringWriter;
+import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -113,7 +112,7 @@ public class ResourceService {
 	private final ResourceJsonSerializer resourceSerializer;
 	private final PrincipalManager principalManager;
 
-	private final RestTemplate restTemplate;
+	private final SsrfValidator ssrfValidator;
 
 	private final SessionRegistry sessionRegistry;
 
@@ -576,33 +575,46 @@ public class ResourceService {
 			throw new CustomResponseException("Too many redirects for entry " + entryUri, HttpStatus.BAD_GATEWAY);
 		}
 
-		/*
-		 * RestTemplate does not automatically follow redirects for DELETE requests.
-		 * Instead, it treats a 3xx status code as a client-side error and throws an HttpClientErrorException
-		 */
+		SsrfValidator.ValidatedTarget target = ssrfValidator.validateForDelete(url);
+
+		// Capture the next URL while the current connection is open, then disconnect before
+		// recursing so a redirect chain doesn't hold N concurrent connections on the call stack.
+		String nextUrl = null;
+		HttpURLConnection conn = null;
 		try {
-			ResponseEntity<String> response = restTemplate.exchange(
-					url,
-					HttpMethod.DELETE,
-					null,
-					String.class
-			);
-			// no exception = successfully deleted
+			conn = ssrfValidator.openPinnedConnection(target.uri(), target.resolved());
+			conn.setRequestMethod("DELETE");
 
-		} catch (HttpClientErrorException e) {
+			int status = conn.getResponseCode();
 
-			if (e.getStatusCode().is3xxRedirection()) {
-				if (e.getResponseHeaders() != null && e.getResponseHeaders().getLocation() != null) {
-					String redirectUrl = e.getResponseHeaders().getLocation().toString();
-					log.info("DELETE Request redirected to {}", redirectUrl);
-					deleteRemoteResource(redirectUrl, entryUri, ++redirectCount);
-				} else {
-					throw new InternalServerErrorException("Redirect response received without a Location header.", e);
-				}
-			} else {
-				// Other errors (4xx, 5xx)
-				throw new InternalServerErrorException("Delete request received an error response. Message: " + e.getResponseBodyAsString(), e);
+			if (status >= 200 && status < 300) {
+				return;
 			}
+
+			if (status >= 300 && status < 400) {
+				String location = conn.getHeaderField("Location");
+				if (location == null) {
+					throw new InternalServerErrorException("Redirect response received without a Location header.");
+				}
+				URI resolvedLocation = target.uri().resolve(location);
+				log.info("DELETE request redirected to {}", resolvedLocation);
+				nextUrl = resolvedLocation.toString();
+			} else {
+				// Suppress upstream body — may leak internal details.
+				throw new InternalServerErrorException("Delete request received an error response (status " + status + ")");
+			}
+
+		} catch (IOException | URISyntaxException | IllegalArgumentException e) {
+			// IllegalArgumentException: URI.resolve(location) on a malformed upstream Location header.
+			throw new InternalServerErrorException("Delete request failed for " + entryUri, e);
+		} finally {
+			if (conn != null) {
+				conn.disconnect();
+			}
+		}
+
+		if (nextUrl != null) {
+			deleteRemoteResource(nextUrl, entryUri, redirectCount + 1);
 		}
 	}
 

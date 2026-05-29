@@ -17,9 +17,9 @@
 package org.entrystore.rest.springboot.service;
 
 import org.entrystore.PrincipalManager;
-import org.entrystore.impl.RepositoryManagerImpl;
-import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.User;
 import org.entrystore.rest.springboot.model.exception.ForbiddenException;
+import org.entrystore.rest.springboot.security.SsrfValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,12 +27,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.net.InetAddress;
+import java.net.URI;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ProxyServiceTest {
@@ -41,108 +42,124 @@ class ProxyServiceTest {
 	private PrincipalManager principalManager;
 
 	@Mock
-	private RepositoryManagerImpl repositoryManager;
+	private ContextService contextService;
 
 	@Mock
-	private ContextService contextService;
+	private SsrfValidator ssrfValidator;
+
+	@Mock
+	private User guestUser;
 
 	private ProxyService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new ProxyService(principalManager, repositoryManager, contextService);
-		service.setWhitelistLocal(Set.of());
+		service = new ProxyService(principalManager, contextService, ssrfValidator);
 		service.setWhitelistAnon(Set.of());
 	}
 
-	// --- validateUrl tests ---
-
 	@Test
-	void validateUrl_httpScheme_noException() {
-		assertDoesNotThrow(() -> service.validateUrl("http://example.com"));
-	}
+	void validateGlobalAccess_guest_hostNotWhitelisted_throwsForbidden() {
+		URI guestUri = URI.create("http://example.com/_principals/resource/_guest");
+		when(principalManager.getGuestUser()).thenReturn(guestUser);
+		when(guestUser.getURI()).thenReturn(guestUri);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(guestUri);
 
-	@Test
-	void validateUrl_httpsScheme_noException() {
-		assertDoesNotThrow(() -> service.validateUrl("https://example.com"));
-	}
-
-	@Test
-	void validateUrl_ftpScheme_throwsBadRequest() {
-		assertThrows(BadRequestException.class, () -> service.validateUrl("ftp://example.com"));
-	}
-
-	@Test
-	void validateUrl_fileScheme_throwsBadRequest() {
-		assertThrows(BadRequestException.class, () -> service.validateUrl("file:///etc/passwd"));
-	}
-
-	@Test
-	void validateUrl_noScheme_throwsBadRequest() {
-		assertThrows(BadRequestException.class, () -> service.validateUrl("example.com/path"));
-	}
-
-	@Test
-	void validateUrl_malformedUrl_throwsBadRequest() {
-		assertThrows(BadRequestException.class, () -> service.validateUrl("://bad"));
-	}
-
-	@Test
-	void validateUrl_userinfo_throwsBadRequest() {
-		assertThrows(BadRequestException.class,
-				() -> service.validateUrl("http://user:pass@example.com/path"));
-	}
-
-	@Test
-	void validateUrl_userinfoUsernameOnly_throwsBadRequest() {
-		assertThrows(BadRequestException.class,
-				() -> service.validateUrl("http://user@example.com/path"));
-	}
-
-	// --- resolveAndValidate tests ---
-
-	@Test
-	void resolveAndValidate_publicHostname_returnsAddress() {
-		InetAddress result = service.resolveAndValidate("example.com");
-		assertNotNull(result);
-	}
-
-	@Test
-	void resolveAndValidate_localhost_notWhitelisted_throwsForbidden() {
-		assertThrows(ForbiddenException.class, () -> service.resolveAndValidate("localhost"));
-	}
-
-	@Test
-	void resolveAndValidate_localhost_whitelisted_returnsAddress() {
-		service.setWhitelistLocal(Set.of("localhost"));
-		InetAddress result = service.resolveAndValidate("localhost");
-		assertNotNull(result);
-		assertTrue(result.isLoopbackAddress());
-	}
-
-	@Test
-	void resolveAndValidate_ipv4_throwsForbidden() {
-		assertThrows(ForbiddenException.class, () -> service.resolveAndValidate("192.168.1.1"));
-	}
-
-	@Test
-	void resolveAndValidate_numericIpv4_throwsForbidden() {
-		assertThrows(ForbiddenException.class, () -> service.resolveAndValidate("2130706433"));
-	}
-
-	@Test
-	void resolveAndValidate_ipv6_throwsForbidden() {
-		assertThrows(ForbiddenException.class, () -> service.resolveAndValidate("::1"));
-	}
-
-	@Test
-	void resolveAndValidate_localDomain_throwsForbidden() {
-		assertThrows(ForbiddenException.class, () -> service.resolveAndValidate("myhost.local"));
-	}
-
-	@Test
-	void resolveAndValidate_unresolvableHost_throwsForbidden() {
 		assertThrows(ForbiddenException.class,
-				() -> service.resolveAndValidate("definitely-not-a-real-host-xyz123.invalid"));
+				() -> service.validateGlobalAccess("example.com"));
+	}
+
+	@Test
+	void validateGlobalAccess_guest_hostWhitelisted_noException() {
+		URI guestUri = URI.create("http://example.com/_principals/resource/_guest");
+		when(principalManager.getGuestUser()).thenReturn(guestUser);
+		when(guestUser.getURI()).thenReturn(guestUri);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(guestUri);
+		service.setWhitelistAnon(Set.of("wikidata.org"));
+
+		assertDoesNotThrow(() -> service.validateGlobalAccess("wikidata.org"));
+	}
+
+	@Test
+	void validateGlobalAccess_authenticatedUser_noException() {
+		URI guestUri = URI.create("http://example.com/_principals/resource/_guest");
+		URI userUri = URI.create("http://example.com/_principals/resource/alice");
+		when(principalManager.getGuestUser()).thenReturn(guestUser);
+		when(guestUser.getURI()).thenReturn(guestUri);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(userUri);
+
+		assertDoesNotThrow(() -> service.validateGlobalAccess("any-host.example.com"));
+	}
+
+	@Test
+	void validateRedirectTarget_guest_globalProxy_redirectHostNotWhitelisted_throwsForbidden() throws Exception {
+		URI base = URI.create("http://whitelisted-upstream.example.com/start");
+		String location = "http://evil-public.example.com/landing";
+		SsrfValidator.ValidatedTarget redirectTarget = new SsrfValidator.ValidatedTarget(
+				URI.create(location), "evil-public.example.com", InetAddress.getByName("192.0.2.1"));
+		when(ssrfValidator.validateForProxy("http://evil-public.example.com/landing")).thenReturn(redirectTarget);
+		URI guestUri = URI.create("http://example.com/_principals/resource/_guest");
+		when(principalManager.getGuestUser()).thenReturn(guestUser);
+		when(guestUser.getURI()).thenReturn(guestUri);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(guestUri);
+		// Only the initial upstream is whitelisted; the redirect target is not.
+		service.setWhitelistAnon(Set.of("whitelisted-upstream.example.com"));
+
+		assertThrows(ForbiddenException.class,
+				() -> service.validateRedirectTarget(base, location, true));
+	}
+
+	@Test
+	void validateRedirectTarget_guest_globalProxy_redirectHostWhitelisted_returnsTarget() throws Exception {
+		URI base = URI.create("http://whitelisted-upstream.example.com/start");
+		String location = "http://cdn.example.com/asset";
+		SsrfValidator.ValidatedTarget redirectTarget = new SsrfValidator.ValidatedTarget(
+				URI.create(location), "cdn.example.com", InetAddress.getByName("192.0.2.2"));
+		when(ssrfValidator.validateForProxy("http://cdn.example.com/asset")).thenReturn(redirectTarget);
+		URI guestUri = URI.create("http://example.com/_principals/resource/_guest");
+		when(principalManager.getGuestUser()).thenReturn(guestUser);
+		when(guestUser.getURI()).thenReturn(guestUri);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(guestUri);
+		service.setWhitelistAnon(Set.of("whitelisted-upstream.example.com", "cdn.example.com"));
+
+		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(base, location, true);
+
+		assertEquals("cdn.example.com", result.host());
+	}
+
+	@Test
+	void validateRedirectTarget_guest_contextProxy_redirectHostNotWhitelisted_noException() throws Exception {
+		URI base = URI.create("http://some-context-upstream.example.com/start");
+		String location = "http://another-public.example.com/landing";
+		SsrfValidator.ValidatedTarget redirectTarget = new SsrfValidator.ValidatedTarget(
+				URI.create(location), "another-public.example.com", InetAddress.getByName("192.0.2.3"));
+		when(ssrfValidator.validateForProxy("http://another-public.example.com/landing")).thenReturn(redirectTarget);
+		// Empty anon whitelist would block a guest if it were enforced; the context path must not enforce it,
+		// so validateGlobalAccess (and thus principalManager) is never consulted on this path.
+		service.setWhitelistAnon(Set.of());
+
+		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(base, location, false);
+
+		assertEquals("another-public.example.com", result.host());
+	}
+
+	@Test
+	void validateRedirectTarget_authenticatedUser_globalProxy_redirectHostNotWhitelisted_noException() throws Exception {
+		URI base = URI.create("http://whitelisted-upstream.example.com/start");
+		String location = "http://public.example.com/landing";
+		SsrfValidator.ValidatedTarget redirectTarget = new SsrfValidator.ValidatedTarget(
+				URI.create(location), "public.example.com", InetAddress.getByName("192.0.2.4"));
+		when(ssrfValidator.validateForProxy("http://public.example.com/landing")).thenReturn(redirectTarget);
+		URI guestUri = URI.create("http://example.com/_principals/resource/_guest");
+		URI userUri = URI.create("http://example.com/_principals/resource/alice");
+		when(principalManager.getGuestUser()).thenReturn(guestUser);
+		when(guestUser.getURI()).thenReturn(guestUri);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(userUri);
+		// Empty anon whitelist would block a guest, but an authenticated user is exempt from the anon-whitelist check.
+		service.setWhitelistAnon(Set.of());
+
+		SsrfValidator.ValidatedTarget result = service.validateRedirectTarget(base, location, true);
+
+		assertEquals("public.example.com", result.host());
 	}
 }
