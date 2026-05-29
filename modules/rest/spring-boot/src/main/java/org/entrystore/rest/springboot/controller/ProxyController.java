@@ -53,7 +53,7 @@ public class ProxyController {
 		URI uri = ssrfValidator.parseAndValidateUrl(url);
 		proxyService.validateGlobalAccess(uri.getHost().toLowerCase(Locale.ROOT));
 		SsrfValidator.ValidatedTarget target = ssrfValidator.resolveForProxy(uri);
-		return doProxy(target, acceptHeader);
+		return doProxy(target, acceptHeader, true);
 	}
 
 	@Operation(summary = "Proxy a request to an external URL within a context scope", description = "Fetches the content of the given URL, scoped to the given context. Requires ReadResource access on the context.")
@@ -66,12 +66,14 @@ public class ProxyController {
 		URI uri = ssrfValidator.parseAndValidateUrl(url);
 		proxyService.validateContextAccess(contextId);
 		SsrfValidator.ValidatedTarget target = ssrfValidator.resolveForProxy(uri);
-		return doProxy(target, acceptHeader);
+		// Context-scoped proxy is gated by the context ACL check above, not the guest anon-whitelist,
+		// so redirect hops must not re-apply validateGlobalAccess.
+		return doProxy(target, acceptHeader, false);
 	}
 
-	private ResponseEntity<byte[]> doProxy(SsrfValidator.ValidatedTarget target, String acceptHeader) {
+	private ResponseEntity<byte[]> doProxy(SsrfValidator.ValidatedTarget target, String acceptHeader, boolean enforceAnonWhitelist) {
 		log.debug("Received proxy request for {}", target.uri());
-		ProxyResponse response = proxyService.fetchUrl(target, acceptHeader);
+		ProxyResponse response = proxyService.fetchUrl(target, acceptHeader, enforceAnonWhitelist);
 
 		HttpHeaders headers = new HttpHeaders();
 		headers.set("Content-Security-Policy", "script-src 'none'; form-action 'none';"); // XSS and SSRF protection

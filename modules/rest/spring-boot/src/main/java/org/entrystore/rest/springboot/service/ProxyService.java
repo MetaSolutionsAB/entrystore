@@ -35,6 +35,7 @@ import java.io.InputStream;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Set;
 
@@ -81,11 +82,11 @@ public class ProxyService {
 		this.whitelistAnon = whitelistAnon;
 	}
 
-	public ProxyResponse fetchUrl(SsrfValidator.ValidatedTarget target, String acceptHeader) {
-		return fetchUrl(target, acceptHeader, 0);
+	public ProxyResponse fetchUrl(SsrfValidator.ValidatedTarget target, String acceptHeader, boolean enforceAnonWhitelist) {
+		return fetchUrl(target, acceptHeader, enforceAnonWhitelist, 0);
 	}
 
-	private ProxyResponse fetchUrl(SsrfValidator.ValidatedTarget target, String acceptHeader, int redirectCount) {
+	private ProxyResponse fetchUrl(SsrfValidator.ValidatedTarget target, String acceptHeader, boolean enforceAnonWhitelist, int redirectCount) {
 		if (redirectCount > MAX_REDIRECTS) {
 			log.warn("More than {} redirect loops detected, aborting", MAX_REDIRECTS);
 			throw new CustomResponseException("Too many redirects", HttpStatus.BAD_GATEWAY);
@@ -105,11 +106,8 @@ public class ProxyService {
 			if (status >= 300 && status < 400) {
 				String location = conn.getHeaderField("Location");
 				if (location != null) {
-					String resolvedLocation = target.uri().resolve(location).toString();
-					log.debug("Request redirected to {}", resolvedLocation);
-					// Re-validate on every hop — redirect target may differ from origin.
-					SsrfValidator.ValidatedTarget next = ssrfValidator.validateForProxy(resolvedLocation);
-					return fetchUrl(next, acceptHeader, redirectCount + 1);
+					SsrfValidator.ValidatedTarget next = validateRedirectTarget(target.uri(), location, enforceAnonWhitelist);
+					return fetchUrl(next, acceptHeader, enforceAnonWhitelist, redirectCount + 1);
 				}
 				log.warn("Upstream returned {} redirect without Location header for URL: {}", status, target.uri());
 				throw new CustomResponseException("Upstream returned redirect without Location header", HttpStatus.BAD_GATEWAY);
@@ -135,6 +133,25 @@ public class ProxyService {
 				conn.disconnect();
 			}
 		}
+	}
+
+	/**
+	 * Resolves a redirect {@code Location} against the current request URI and re-validates the
+	 * target. SSRF re-validation ({@link SsrfValidator#validateForProxy(String)}) runs on every
+	 * hop because the redirect target may differ from the origin. When {@code enforceAnonWhitelist}
+	 * is set (global {@code /proxy} path), the guest anon-whitelist check is re-applied to the
+	 * redirect host as well, so a whitelisted upstream cannot redirect a guest to a non-whitelisted
+	 * host. The context-scoped path passes {@code false} — it is gated by a one-time context ACL
+	 * check, not the anon whitelist.
+	 */
+	SsrfValidator.ValidatedTarget validateRedirectTarget(URI base, String location, boolean enforceAnonWhitelist) {
+		String resolvedLocation = base.resolve(location).toString();
+		log.debug("Request redirected to {}", resolvedLocation);
+		SsrfValidator.ValidatedTarget next = ssrfValidator.validateForProxy(resolvedLocation);
+		if (enforceAnonWhitelist) {
+			validateGlobalAccess(next.host());
+		}
+		return next;
 	}
 
 	private byte[] readWithLimit(InputStream is) throws IOException {
