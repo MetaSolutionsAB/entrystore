@@ -16,7 +16,6 @@
 
 package org.entrystore.rest.springboot.security;
 
-import org.entrystore.rest.springboot.configuration.CacheControlFilter;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -40,7 +39,10 @@ class CacheAwareRedirectStrategyTest {
 
 		strategy.sendRedirect(request, response, "/store/_principals/resource/_currentuser");
 
-		assertEquals(CacheControlFilter.CACHE_CONTROL_AUTHENTICATED, response.getHeader(HttpHeaders.CACHE_CONTROL));
+		// Literal anchor (not the CacheControlFilter constant) so that a regression to the constant's
+		// value — e.g. changing it to "" or to a cacheable directive — fails this test instead of
+		// silently shifting both production code and assertion together.
+		assertEquals("private, no-store", response.getHeader(HttpHeaders.CACHE_CONTROL));
 		assertEquals(SC_MOVED_TEMPORARILY, response.getStatus());
 		assertEquals("/store/_principals/resource/_currentuser", response.getRedirectedUrl());
 	}
@@ -68,7 +70,7 @@ class CacheAwareRedirectStrategyTest {
 
 		strategy.sendRedirect(request, response, "https://entrystore.example/store/welcome");
 
-		assertEquals(CacheControlFilter.CACHE_CONTROL_AUTHENTICATED, response.getHeader(HttpHeaders.CACHE_CONTROL));
+		assertEquals("private, no-store", response.getHeader(HttpHeaders.CACHE_CONTROL));
 		assertEquals("https://entrystore.example/store/welcome", response.getRedirectedUrl());
 	}
 }
