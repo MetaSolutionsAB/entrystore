@@ -59,7 +59,7 @@ management:
       base-path: /management
       exposure:
         # All exposed Actuator endpoints require ADMIN role — see EndpointRequest.toAnyEndpoint() in SecurityConfig
-        include: metrics,shutdown,loggers
+        include: metrics,shutdown,loggers,env,httpexchanges,caches
       discovery:
         enabled: false
   endpoint:
@@ -69,6 +69,19 @@ management:
       # Boot defaults endpoint access to 'none' even when exposed; 'unrestricted' here defers
       # access control to the global ADMIN filter in SecurityConfig (it does NOT mean public).
       access: unrestricted
+    env:
+      # show-values=WHEN_AUTHORIZED reveals property values only to authorized admins (the endpoint
+      # is already ADMIN-gated in SecurityConfig). Credentials stay masked as ****** via the
+      # SanitizingFunction bean in ActuatorConfiguration — which covers entrystore.auth.adminpw and
+      # sun.java.command in addition to the conventional password/secret/key/token/credentials keys.
+      show-values: when_authorized
+  httpexchanges:
+    recording:
+      # The endpoint is admin-only, but recording the Cookie/Authorization headers or the session id
+      # would let an admin read other users' live auth_token sessions. Capture only method/URI/status,
+      # the requesting principal, remote address and latency — cookie-headers, authorization-header
+      # and session-id are intentionally omitted.
+      include: request-headers,response-headers,principal,remote-address,time-taken
 
 
 # Bounded executor for Spring MVC async dispatch. See MvcAsyncConfiguration for the queue-capacity

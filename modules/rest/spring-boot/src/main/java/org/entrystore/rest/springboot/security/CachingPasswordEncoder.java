@@ -20,9 +20,11 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Ticker;
 import org.entrystore.repository.security.Password;
+import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -41,7 +43,7 @@ import java.util.Objects;
  * login, SAML, CAS) never re-enter {@code matches}; their disabled-account freshness is provided
  * by {@code ReloadUserPropertiesFilter}, not by this cache.
  */
-public class CachingPasswordEncoder implements PasswordEncoder {
+public class CachingPasswordEncoder implements PasswordEncoder, CaffeineCacheSource {
 
 	private final PasswordEncoder delegate;
 	private final Cache<String, Boolean> cache;
@@ -68,7 +70,13 @@ public class CachingPasswordEncoder implements PasswordEncoder {
 				.expireAfterWrite(ttl)
 				.maximumSize(maxSize)
 				.ticker(ticker)
+				.recordStats()
 				.build();
+	}
+
+	@Override
+	public Map<String, Cache<?, ?>> caffeineCaches() {
+		return Map.of("password-verification", cache);
 	}
 
 	@Override

@@ -39,7 +39,7 @@ management:
     web:
       base-path: /management
       exposure:
-        include: metrics,shutdown,loggers
+        include: metrics,shutdown,loggers,env,httpexchanges,caches
       discovery:
         enabled: false
   endpoint:
@@ -47,6 +47,12 @@ management:
       access: read_only
     shutdown:
       access: unrestricted
+    env:
+      show-values: when_authorized
+  httpexchanges:
+    recording:
+      # Mirrors production so ManagementHttpExchangesIT can assert Cookie/Authorization are not recorded.
+      include: request-headers,response-headers,principal,remote-address,time-taken
 
 
 logging:
