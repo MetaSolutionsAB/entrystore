@@ -98,14 +98,13 @@ public final class LegacyPropertyKeyDetector implements EnvironmentPostProcessor
 
 	private static Map<String, String> buildLegacyKeys() {
 		var map = new LinkedHashMap<String, String>();
-		// Three auth-method enable keys renamed in 6.0 (ENTRYSTORE-925, ENTRYSTORE-973).
+		// Auth-method enable keys renamed in 6.0.
 		map.put("entrystore.auth.http-basic", "entrystore.auth.http-basic.enabled");
 		map.put("entrystore.auth.saml", "entrystore.auth.saml.enabled");
 		map.put("entrystore.auth.cas", "entrystore.auth.cas.enabled");
-		// Five SAML IdP-per-prefix keys from the multi-IdP migration. The other three
-		// AUTH_SAML_LEGACY_* constants in Settings.java (assertion-consumer-service.url,
-		// redirect-success.url, redirect-failure.url) share their string value with a live
-		// new key, so they bind via the new shape and are intentionally not listed here.
+		// Per-prefix SAML IdP keys whose legacy string does not also resolve to a live new key.
+		// Siblings in Settings.AUTH_SAML_LEGACY_* that share a string with a current new key are
+		// intentionally omitted — Spring binds those through the new shape.
 		map.put("entrystore.auth.saml.relying-party-id", "entrystore.auth.saml.idp.<idp-id>.relying-party-id");
 		map.put("entrystore.auth.saml.idp-metadata.url", "entrystore.auth.saml.idp.<idp-id>.metadata.url");
 		map.put("entrystore.auth.saml.idp-metadata.max-age", "entrystore.auth.saml.idp.<idp-id>.metadata.max-age");

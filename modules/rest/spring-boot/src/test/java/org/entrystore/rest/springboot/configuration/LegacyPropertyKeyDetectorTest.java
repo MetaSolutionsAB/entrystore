@@ -59,6 +59,8 @@ class LegacyPropertyKeyDetectorTest {
 
 		assertTrue(ex.getMessage().contains("'entrystore.auth.saml'"));
 		assertTrue(ex.getMessage().contains("'entrystore.auth.saml.enabled'"));
+		assertFalse(ex.getMessage().contains("Additionally"),
+				"Fail-fast message must not advertise a falsy section when there are no falsy hits");
 		assertTrue(warnings.isEmpty(),
 				"Truthy fail-fast should surface findings via the exception, not via the deferred log");
 	}
@@ -84,8 +86,13 @@ class LegacyPropertyKeyDetectorTest {
 		var detector = newDetector(warnings);
 		var env = new MockEnvironment().withProperty("entrystore.auth.cas", truthyValue);
 
-		assertThrows(IllegalStateException.class,
+		var ex = assertThrows(IllegalStateException.class,
 				() -> detector.postProcessEnvironment(env, null));
+
+		assertTrue(ex.getMessage().contains("'entrystore.auth.cas'"),
+				"Truthy fail-fast must name the legacy key for value: " + truthyValue);
+		assertTrue(ex.getMessage().contains("'entrystore.auth.cas.enabled'"),
+				"Truthy fail-fast must name the replacement key for value: " + truthyValue);
 		assertTrue(warnings.isEmpty(),
 				"Truthy fail-fast should surface findings via the exception, not via the deferred log");
 	}
@@ -224,6 +231,8 @@ class LegacyPropertyKeyDetectorTest {
 		assertTrue(ex.getMessage().contains("'entrystore.auth.cas'"),
 				"Falsy hits should still surface in the fail-fast message so operators see both");
 		assertTrue(ex.getMessage().contains("'entrystore.auth.cas.enabled'"));
+		assertTrue(ex.getMessage().contains("Additionally"),
+				"Falsy hits must appear under their own header so operators can tell them apart from the abort cause");
 		assertTrue(warnings.isEmpty(),
 				"Mixed truthy/falsy must surface all findings via the exception, not the deferred log");
 	}
@@ -241,6 +250,8 @@ class LegacyPropertyKeyDetectorTest {
 
 		assertTrue(ex.getMessage().contains("'entrystore.auth.saml'"),
 				"Detector still fail-fasts on the legacy key even when the new key is also set");
+		assertTrue(warnings.isEmpty(),
+				"Setting the new key alongside the legacy one must not produce a WARN; the diagnostic comes via the exception");
 	}
 
 	@Test
