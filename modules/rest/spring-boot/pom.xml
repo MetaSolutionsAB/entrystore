@@ -151,6 +151,14 @@
 				</includes>
 				<filtering>false</filtering>
 			</resource>
+			<!-- Spring Boot service-loader registrations (spring.factories, *.imports). -->
+			<resource>
+				<directory>src/main/resources</directory>
+				<includes>
+					<include>META-INF/**</include>
+				</includes>
+				<filtering>false</filtering>
+			</resource>
 		</resources>
 
 		<testResources>
