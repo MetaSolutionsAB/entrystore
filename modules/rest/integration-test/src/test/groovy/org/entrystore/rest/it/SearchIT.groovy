@@ -796,4 +796,114 @@ class SearchIT extends BaseSpec {
 		channelLinkNode.value()[0] == EntryStoreClient.baseUrl + '/search?type=solr&query=description.pl:opissearch&syndication=rss_2.0'
 		!channelLinkNode.value()[0].toString().contains('public.example.com')
 	}
+
+	// ---------- ENTRYSTORE-1010: input validation specs ----------
+
+	def "GET /search?type=solr with overlong 'query' should reply with Bad Request 400"() {
+		given: 'a query parameter exceeding the configured 1024-char cap'
+		def oversize = 'a' * 1025
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + oversize, '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		conn.errorStream.text.contains("'query'")
+	}
+
+	def "GET /search?type=solr with 'sort' on a non-allowlisted field should reply with Bad Request 400"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=description.pl:opissearch&sort=evilField+desc', '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		conn.errorStream.text.contains("'sort'")
+	}
+
+	def "GET /search?type=solr with 'sort' on an allowlisted field should return search results"() {
+		when:
+		def conn = EntryStoreClient.getRequest(
+			'/search?type=solr&query=description.pl:opissearch&sort=modified+desc,title.en+asc')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+	}
+
+	def "GET /search?type=solr with too many filter queries should reply with Bad Request 400"() {
+		given: '17 comma-separated FQs (cap is 16)'
+		def fqs = (1..17).collect { "rdfType:Type${it}" }.join(',')
+
+		when:
+		def conn = EntryStoreClient.getRequest(
+			'/search?type=solr&query=description.pl:opissearch&filterQuery=' + URLEncoder.encode(fqs, 'UTF-8'), '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		conn.errorStream.text.contains("'filterQuery'")
+	}
+
+	def "GET /search?type=solr with overlong combined 'filterQuery' should reply with Bad Request 400"() {
+		given: 'a single FQ longer than the 1024-char cap'
+		def oversize = 'rdfType:' + ('a' * 1025)
+
+		when:
+		def conn = EntryStoreClient.getRequest(
+			'/search?type=solr&query=description.pl:opissearch&filterQuery=' + URLEncoder.encode(oversize, 'UTF-8'), '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		conn.errorStream.text.contains("'filterQuery'")
+	}
+
+	def "GET /search?type=solr with 'facetFields' on a non-allowlisted field should reply with Bad Request 400"() {
+		when:
+		def conn = EntryStoreClient.getRequest(
+			'/search?type=solr&query=description.pl:opissearch&facetFields=secret_field', '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		conn.errorStream.text.contains("'facetFields'")
+	}
+
+	def "GET /search?type=solr with dynamic-family 'facetFields' (metadata.predicate.uri.*) should return search results"() {
+		when:
+		def conn = EntryStoreClient.getRequest(
+			'/search?type=solr&query=description.pl:opissearch&facetFields=metadata.predicate.uri.deadbeef')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+	}
+
+	@Unroll
+	def "GET /search?type=solr with regex-shaped facetMatches '#matches' should reply with Bad Request 400"() {
+		when:
+		def conn = EntryStoreClient.getRequest(
+			'/search?type=solr&query=description.pl:opissearch&facetFields=rdfType&facetMatches='
+			+ URLEncoder.encode(matches, 'UTF-8'), '')
+
+		then:
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		conn.getContentType().contains('application/json')
+		conn.errorStream.text.contains("'facetMatches'")
+
+		where:
+		matches << ['.*', '(a|b)+', 'foo bar', 'a' * 65]
+	}
+
+	def "GET /search?type=solr with literal facetMatches should return search results"() {
+		when:
+		def conn = EntryStoreClient.getRequest(
+			'/search?type=solr&query=description.pl:opissearch&facetFields=rdfType&facetMatches=abc-1')
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+	}
 }

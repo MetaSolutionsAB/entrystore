@@ -57,14 +57,12 @@ class ZzzPasswordResetRateLimiterIT extends BaseSpec {
 	}
 
 	def cleanupSpec() {
-		try {
-			appInstance?.close()
-		} finally {
-			appInstance = null
-			appStarted = false
-			EntryStoreClient.cleanCookies()
-			greenMail.stop()
-		}
+		// Only release the SMTP port. Closing appInstance or resetting appStarted/appInstance
+		// would violate BaseSpec invariant #2 (see BaseSpec.groovy:64-72) — the next lifecycle-
+		// owning IT's stopPreexistingAppIfRunning() is what closes our appInstance, and an extra
+		// shared-app re-init between Zzz ITs makes the Jetty rebind to port 8181 racy with the
+		// OS socket-release timer.
+		greenMail.stop()
 	}
 
 	def cleanup() {

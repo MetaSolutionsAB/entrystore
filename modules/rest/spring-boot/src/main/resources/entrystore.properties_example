@@ -76,6 +76,19 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.password-reset.rate.limit.max=5
 # entrystore.auth.password-reset.rate.limit.window=1h
 
+## Search input constraints and per-IP rate limiting for /search.
+## The endpoint is guest-accessible; these caps protect Solr from expensive or abusive input.
+## Rate limit is keyed by client IP (X-Forwarded-For honoured only when trust.x-forwarded-for=true).
+## Set rate.limit.max=0 to disable rate limiting.
+# entrystore.solr.search.rate.limit.max=60
+# entrystore.solr.search.rate.limit.window=1m
+# entrystore.solr.search.query.max-length=1024
+# entrystore.solr.search.sort.max-length=1024
+# entrystore.solr.search.filter-query.max-length=1024
+# entrystore.solr.search.filter-query.max-count=16
+# entrystore.solr.search.facet-fields.max-length=1024
+# entrystore.solr.search.facet-fields.max-count=16
+
 ## Generic settings for user-initiated sign-up and password reset
 # entrystore.auth.email.from=signup@yourdomain.tld
 # entrystore.auth.email.bcc=info+signup@yourdomain.tld

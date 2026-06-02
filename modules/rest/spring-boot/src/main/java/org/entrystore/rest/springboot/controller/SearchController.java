@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,7 +30,10 @@ import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.model.api.FacetSettingsRequestParams;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
+import org.entrystore.rest.springboot.service.SearchRateLimiter;
 import org.entrystore.rest.springboot.service.SearchService;
+import org.entrystore.rest.springboot.service.SolrSearchInputValidator;
+import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.Syndication;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -43,13 +62,18 @@ public class SearchController {
 	private static int MAX_FACET_LIMIT;
 
 	private final SearchService searchService;
+	private final SolrSearchInputValidator solrSearchInputValidator;
+	private final SearchRateLimiter searchRateLimiter;
 	private final Config esConfig;
+
+	private boolean trustForwardedFor;
 
 	@PostConstruct
 	public void init() {
 		// Runs after class constructor
 		MAX_LIMIT = esConfig.getInt(Settings.SOLR_MAX_LIMIT, 100);
 		MAX_FACET_LIMIT = esConfig.getInt(Settings.SOLR_FACET_MAX_LIMIT, 1000);
+		trustForwardedFor = esConfig.getBoolean(Settings.TRUST_X_FORWARDED_FOR, false);
 	}
 
 	@Operation(summary = "Searches the repository and returns entries")
@@ -66,6 +90,8 @@ public class SearchController {
 			@RequestParam(defaultValue = "en") String lang,
 			@RequestParam(defaultValue = "50") int limit
 	) {
+
+		searchRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request, trustForwardedFor));
 
 		if (limit > MAX_LIMIT) {
 			limit = MAX_LIMIT;
@@ -109,6 +135,12 @@ public class SearchController {
 			FacetSettingsRequestParams facetRequest
 	) {
 
+		searchRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request, trustForwardedFor));
+
+		solrSearchInputValidator.validateQuery(query);
+		solrSearchInputValidator.validateSort(sort);
+		solrSearchInputValidator.validateFacetSettings(facetRequest);
+
 		if (StringUtils.isNotEmpty(syndication) && offset > 0) {
 			throw new BadRequestException("Query parameter 'offset' not supported with syndication");
 		}
@@ -133,6 +165,7 @@ public class SearchController {
 				filterQueries.add(URLDecoder.decode(fq, UTF_8));
 			}
 		}
+		solrSearchInputValidator.validateFilterQueries(filterQueries, filterQuery);
 
 		SolrSearchIndex.FacetSettings facetSettings = facetRequest.toSolrFacetSettings(MAX_FACET_LIMIT, DEFAULT_FACET_LIMIT);
 
