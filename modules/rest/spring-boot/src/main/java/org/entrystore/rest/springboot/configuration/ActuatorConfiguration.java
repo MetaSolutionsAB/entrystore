@@ -44,14 +44,15 @@ import java.util.regex.Pattern;
  * old {@code keys-to-sanitize} property is gone, so all masking here is supplied by two
  * {@link SanitizingFunction} beans: {@link #environmentValueSanitizer()} masks a value when its key
  * is credential-shaped, and {@link #urlCredentialSanitizer()} strips {@code user:pass@} userinfo from
- * URL-valued properties whose key is not credential-shaped (e.g. a store or Solr URL with embedded
- * credentials) that the key-based pass would otherwise reveal.
+ * any string value containing a URL. The URL pass runs on every property; when the key is already
+ * credential-shaped the value has been fully masked by the first sanitizer, so it is only observable
+ * for non-credential-shaped keys such as a store or Solr URL with embedded credentials.
  */
 @Configuration
 public class ActuatorConfiguration {
 
-	// Matches the "user:pass@" (or bare "user@") userinfo between a scheme's "://" and the host.
-	private static final Pattern URL_USERINFO = Pattern.compile("://[^/@\\s:]+(?::[^/@\\s]*)?@");
+	// Matches "user:pass@", bare "user@", or ":pass@" userinfo between a scheme's "://" and the host.
+	private static final Pattern URL_USERINFO = Pattern.compile("://[^/@\\s:]*(?::[^/@\\s]*)?@");
 
 	// Recording runs on every request; allow operators to switch it off (and with it the endpoint)
 	// via management.httpexchanges.recording.enabled=false. On by default so the endpoint works out
@@ -82,10 +83,14 @@ public class ActuatorConfiguration {
 
 	/**
 	 * Keys whose {@code env} values must stay masked even when values are shown to admins. Covers the
-	 * conventional credential suffixes, any key containing {@code credentials}, and two cases the
-	 * conventional credential shapes miss: {@code entrystore.auth.adminpw} (the admin-password
-	 * override, whose key ends in {@code adminpw}, not {@code password}) and {@code sun.java.command}
-	 * (the JVM command line, which can carry secrets passed as {@code --args}).
+	 * conventional credential suffixes, any key containing {@code credentials}, and the one case the
+	 * conventional shapes miss: {@code entrystore.auth.adminpw} (the admin-password override, whose key
+	 * ends in {@code adminpw}, not {@code password}).
+	 *
+	 * <p>The JVM-argument carriers ({@code sun.java.command}, {@code JAVA_TOOL_OPTIONS}) are deliberately
+	 * NOT masked: on an admin-only endpoint they are shareable operational/tuning data, and the only
+	 * secret they could expose is one an operator chose to pass on the command line — masking them would
+	 * hide the very tuning info {@code /env} exists to surface.
 	 */
 	static boolean isSensitiveEnvironmentKey(String key) {
 		String lowerKey = key.toLowerCase(Locale.ROOT);
@@ -94,13 +99,12 @@ public class ActuatorConfiguration {
 				|| lowerKey.endsWith("token")
 				|| lowerKey.endsWith("key")
 				|| lowerKey.endsWith("adminpw")
-				|| lowerKey.contains("credentials")
-				|| lowerKey.equals("sun.java.command");
+				|| lowerKey.contains("credentials");
 	}
 
 	/**
-	 * Replaces {@code user:pass@} userinfo in any URL within {@code value} with {@code ******@},
-	 * leaving the rest of the URL visible. Connection URLs (an HTTP/SPARQL store or Solr URL) can
+	 * Replaces {@code user:pass@} or bare {@code user@} userinfo in any URL within {@code value} with
+	 * {@code ******@}, leaving the rest of the URL visible. Connection URLs (an HTTP/SPARQL store or Solr URL) can
 	 * embed backend credentials in the value even when the property key is not credential-shaped, so
 	 * key-based masking alone would expose them under {@code /env}.
 	 */

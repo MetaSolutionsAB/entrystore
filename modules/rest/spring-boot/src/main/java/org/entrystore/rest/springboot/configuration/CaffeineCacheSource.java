@@ -31,6 +31,7 @@ import java.util.Map;
  * through Spring's {@code @Cacheable} abstraction; this interface is the bridge that keeps them
  * visible until that migration (ENTRYSTORE-1036) lands.
  */
+@FunctionalInterface
 public interface CaffeineCacheSource {
 
 	/**

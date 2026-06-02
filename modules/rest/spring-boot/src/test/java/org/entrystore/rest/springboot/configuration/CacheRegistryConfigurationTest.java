@@ -22,12 +22,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.cache.CacheManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CacheRegistryConfigurationTest {
@@ -112,6 +114,36 @@ class CacheRegistryConfigurationTest {
 		assertEquals(1, manager.getCacheNames().size());
 		// The retained cache is the first source's, so the value seen through the manager is the winner's.
 		assertEquals("from-winner", manager.getCache("collision").get("k").get());
+	}
+
+	@Test
+	void throwsWhenSourceReturnsNullMap() {
+		CaffeineCacheSource nullSource = () -> null;
+
+		IllegalStateException ex = assertThrows(IllegalStateException.class,
+				() -> config.cacheManager(List.of(nullSource), plainEncoder()));
+		assertTrue(ex.getMessage().contains("caffeineCaches()"));
+	}
+
+	@Test
+	void throwsWhenSourceMapContainsNullCache() {
+		Map<String, Cache<?, ?>> withNull = new HashMap<>();
+		withNull.put("broken", null);
+		CaffeineCacheSource source = () -> withNull;
+
+		IllegalStateException ex = assertThrows(IllegalStateException.class,
+				() -> config.cacheManager(List.of(source), plainEncoder()));
+		assertTrue(ex.getMessage().contains("Null cache for name 'broken'"));
+	}
+
+	@Test
+	void passwordEncoderAlreadyInSourceListIsNotRegisteredTwice() {
+		CachingEncoderDouble encoder = new CachingEncoderDouble();
+
+		CacheManager manager = config.cacheManager(List.of(encoder), encoder);
+
+		assertEquals(1, manager.getCacheNames().size());
+		assertTrue(manager.getCacheNames().contains("password-verification"));
 	}
 
 	private static PasswordEncoder plainEncoder() {

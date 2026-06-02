@@ -25,6 +25,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,7 @@ public class CacheRegistryConfiguration {
 		manager.setCacheNames(List.of());
 
 		var registered = new LinkedHashMap<String, Cache<?, ?>>();
+		var owners = new HashMap<String, String>();
 		for (CaffeineCacheSource source : allSources) {
 			Map<String, Cache<?, ?>> caches = source.caffeineCaches();
 			if (caches == null) {
@@ -70,9 +72,11 @@ public class CacheRegistryConfiguration {
 							+ source.getClass().getName());
 				}
 				if (registered.putIfAbsent(name, cache) == null) {
+					owners.put(name, source.getClass().getName());
 					manager.registerCustomCache(name, asObjectCache(cache));
 				} else {
-					log.warn("Duplicate cache name '{}'; ignoring the second registration", name);
+					log.warn("Duplicate cache name '{}' from {}; keeping the registration from {}",
+							name, source.getClass().getName(), owners.get(name));
 				}
 			});
 		}

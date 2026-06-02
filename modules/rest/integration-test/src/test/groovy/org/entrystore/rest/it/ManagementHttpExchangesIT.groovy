@@ -95,11 +95,12 @@ class ManagementHttpExchangesIT extends BaseSpec {
 		exchanges.size() > 0
 		// request-headers recording is on, so ordinary headers are captured...
 		exchanges.any { !((it['request']['headers'] ?: [:]) as Map).isEmpty() }
-		// ...but cookie-headers and authorization-header are excluded from recording.include, so the
-		// auth_token cookie that authenticated requests send is never written into the buffer.
+		// ...but cookie-headers, authorization-header and session-id are excluded from recording.include,
+		// so neither the auth_token cookie nor the session id of authenticated requests is ever recorded.
 		exchanges.every { exchange ->
 			def headerNames = ((exchange['request']['headers'] ?: [:]) as Map).keySet().collect { it.toLowerCase() }
-			!headerNames.contains('cookie') && !headerNames.contains('authorization')
+			!headerNames.contains('cookie') && !headerNames.contains('authorization') &&
+					(exchange['session'] == null || exchange['session']['id'] == null)
 		}
 	}
 }

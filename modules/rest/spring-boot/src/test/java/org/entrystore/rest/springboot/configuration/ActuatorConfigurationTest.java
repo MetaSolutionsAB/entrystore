@@ -16,21 +16,24 @@
 
 package org.entrystore.rest.springboot.configuration;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.actuate.web.exchanges.HttpExchangeRepository;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ActuatorConfigurationTest {
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = {
 			"entrystore.auth.adminpw",                      // admin-password override; key ends in "adminpw", not "password"
 			"ENTRYSTORE.AUTH.ADMINPW",                      // matching is case-insensitive
-			"sun.java.command",                             // JVM command line, may carry secrets passed as --args
 			"entrystore.repository.store.password",
 			"entrystore.solr.auth.password",
 			"entrystore.smtp.password",
@@ -43,7 +46,7 @@ class ActuatorConfigurationTest {
 		assertTrue(ActuatorConfiguration.isSensitiveEnvironmentKey(key), key + " should be masked");
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0}")
 	@ValueSource(strings = {
 			"java.version",
 			"server.port",
@@ -51,15 +54,18 @@ class ActuatorConfigurationTest {
 			"entrystore.baseurl.folder",
 			"entrystore.auth.password.rule.min-length",     // password POLICY, not a secret value
 			"entrystore.auth.password.whitelist",
-			"management.endpoints.web.base-path"
+			"management.endpoints.web.base-path",
+			"sun.java.command",                             // JVM-arg carrier — deliberately shown as operational data
+			"JAVA_TOOL_OPTIONS"                             // JVM-arg carrier — deliberately shown as operational data
 	})
 	void showsNonSensitiveKeys(String key) {
 		assertFalse(ActuatorConfiguration.isSensitiveEnvironmentKey(key), key + " should not be masked");
 	}
 
-	@ParameterizedTest
+	@ParameterizedTest(name = "{0} -> {1}")
 	@CsvSource({
 			"http://user:pass@host/db,           http://******@host/db",
+			"http://:secret@host/db,             http://******@host/db",
 			"jdbc:postgresql://u:p@h:5432/store, jdbc:postgresql://******@h:5432/store",
 			"http://user@host/db,                http://******@host/db",
 			"https://solr.example.com/solr,      https://solr.example.com/solr",
@@ -69,5 +75,20 @@ class ActuatorConfigurationTest {
 	})
 	void redactsUrlUserInfoFromValues(String input, String expected) {
 		assertEquals(expected, ActuatorConfiguration.redactUrlUserInfo(input));
+	}
+
+	@Test
+	void httpExchangeRepositoryPresentByDefault() {
+		new ApplicationContextRunner()
+				.withUserConfiguration(ActuatorConfiguration.class)
+				.run(ctx -> assertThat(ctx).hasSingleBean(HttpExchangeRepository.class));
+	}
+
+	@Test
+	void httpExchangeRepositoryAbsentWhenRecordingDisabled() {
+		new ApplicationContextRunner()
+				.withUserConfiguration(ActuatorConfiguration.class)
+				.withPropertyValues("management.httpexchanges.recording.enabled=false")
+				.run(ctx -> assertThat(ctx).doesNotHaveBean(HttpExchangeRepository.class));
 	}
 }

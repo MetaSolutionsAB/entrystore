@@ -69,18 +69,17 @@ class ManagementEnvIT extends BaseSpec {
 		responseJson['property']['value'] != 'adminpass'
 	}
 
-	def "GET /management/env for sun.java.command should return a masked value"() {
+	def "GET /management/env for a URL-valued non-credential key should redact the userinfo"() {
 		when:
-		// sun.java.command is always present as a system property and is masked end-to-end by the
-		// SanitizingFunction bean (not only by the predicate unit test). It can carry secrets passed as
-		// --args (e.g. --entrystore.auth.adminpw=...), so a regression in the bean wiring must be caught here.
-		def connection = EntryStoreClient.getRequest('/management/env/sun.java.command')
+		// entrystore.test.backend-url is a URL-valued, non-credential-shaped key (see entrystore-it.properties),
+		// so only urlCredentialSanitizer acts on it — redacting user:pass@ while leaving the rest visible.
+		def connection = EntryStoreClient.getRequest('/management/env/entrystore.test.backend-url')
 
 		then:
 		connection.getResponseCode() == HTTP_OK
 		connection.getContentType().contains('application/json')
 		def responseJson = JSON_PARSER.parseText(connection.inputStream.text)
-		responseJson['property']['value'] ==~ /\*+/
+		responseJson['property']['value'] == 'https://******@backend.test/db'
 	}
 
 	def "GET /management/env for a non-secret property should return its real value"() {

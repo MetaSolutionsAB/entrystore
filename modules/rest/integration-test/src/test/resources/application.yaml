@@ -51,7 +51,8 @@ management:
       show-values: when_authorized
   httpexchanges:
     recording:
-      # Mirrors production so ManagementHttpExchangesIT can assert Cookie/Authorization are not recorded.
+      # Mirrors the production include list so the integration tests verify the same
+      # Cookie/Authorization exclusions that protect real deployments.
       include: request-headers,response-headers,principal,remote-address,time-taken
 
 
