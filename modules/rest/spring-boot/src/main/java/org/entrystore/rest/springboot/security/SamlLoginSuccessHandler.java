@@ -24,8 +24,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
+import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration.Idp;
 import org.entrystore.rest.springboot.model.auth.AuthState;
-import org.entrystore.rest.springboot.model.auth.SamlIdpInfo;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.service.auth.BasicVerifier;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
@@ -109,8 +109,8 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 
 		User esUser = userService.loadUser(username);
 		if (esUser == null) {
-			SamlIdpInfo idpInfo = samlAuthService.findIdpForSamlResponse(idpId);
-			if (idpInfo == null || !idpInfo.autoProvisioning()) {
+			Idp idpInfo = samlAuthService.findIdpForSamlResponse(idpId);
+			if (idpInfo == null || !idpInfo.userAutoProvisioning()) {
 				log.warn("User '{}' not found in EntryStore. User auto-provisioning is deactivated for IdP '{}'", username, idpId);
 			} else {
 				log.info("User '{}' not found in EntryStore. Creating new user since User auto-provisioning is activated for IdP '{}'", username, idpId);
@@ -122,7 +122,8 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 		}
 
 		if (esUser != null && !BasicVerifier.isUserDisabled(principalManager, esUser)) {
-			if (cachedAuthState != null && cachedAuthState.successUrl() != null) {
+			if (cachedAuthState != null && cachedAuthState.successUrl() != null
+					&& samlAuthService.isValidRedirectUrl(cachedAuthState.successUrl())) {
 				log.debug("Redirecting to custom success URL: {}", cachedAuthState.successUrl());
 				// Route through the configured RedirectStrategy so CacheAwareRedirectStrategy
 				// can stamp Cache-Control: private, no-store before sendRedirect commits the
@@ -147,10 +148,22 @@ public class SamlLoginSuccessHandler extends SavedRequestAwareAuthenticationSucc
 		// Spring Security's SAML filter already persisted the authentication to the SecurityContext;
 		// undo that before redirecting so the rejected user doesn't remain authenticated.
 		HttpUtil.clearAuthenticatedSession(request);
-		String redirectUrl = customRedirectFailureUrl != null
-				? customRedirectFailureUrl
-				: samlConfiguration.redirectFailure().url();
+		// isValidRedirectUrl returns false for null, so the guard also covers the no-custom-URL case.
+		String redirectUrl = samlConfiguration.redirectFailure().url();
+		if (samlAuthService.isValidRedirectUrl(customRedirectFailureUrl)) {
+			redirectUrl = customRedirectFailureUrl;
+		}
 		HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(), redirectUrl,
 				"SAML login failed");
+	}
+
+	@Override
+	protected String determineTargetUrl(HttpServletRequest request, HttpServletResponse response) {
+		// ENTRYSTORE-996: a custom success URL is resolved and whitelist-validated from the cached
+		// relay state in handleSamlAuthentication. On fall-through we must use only the trusted default
+		// target and never derive it from a request parameter (e.g. ?successurl=) — doing so would be an
+		// open redirect, since Saml2WebSsoAuthenticationFilter processes the ACS callback independently.
+		// Overriding the two-arg variant intercepts the parameter/referer logic in the Spring base class.
+		return getDefaultTargetUrl();
 	}
 }

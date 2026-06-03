@@ -1,74 +1,55 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.service;
 
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
-import org.entrystore.rest.springboot.model.auth.SamlIdpInfo;
+import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
+import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration.Idp;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SamlAuthService {
 
-	private static final Map<String, SamlIdpInfo> samlIDPsConfig = new HashMap<>();
-
-	private static String defaultIdp;
-	private static List<String> redirectDomainWhitelist;
-
-	private final Config config;
-
-	@PostConstruct
-	public void init() {
-		List<String> idps = config.getStringList(Settings.AUTH_SAML_IDPS);
-		if (idps == null) {
-			return;
-		}
-		for (String idp : idps) {
-			SamlIdpInfo idpInfo = SamlIdpInfo.builder()
-					.id(idp)
-					.domains(config.getStringList(idpSetting(Settings.AUTH_SAML_IDP_DOMAINS, idp), List.of("*")))
-					.autoProvisioning(config.getBoolean(idpSetting(Settings.AUTH_SAML_IDP_USER_AUTO_PROVISIONING, idp), false))
-					.build();
-
-			samlIDPsConfig.put(idp, idpInfo);
-			logIdpInfo(idpInfo);
-		}
-
-		defaultIdp = config.getString(Settings.AUTH_SAML_DEFAULT_IDP);
-		log.info("SAML Default IdP: {}", defaultIdp);
-
-		redirectDomainWhitelist = config.getStringList(Settings.AUTH_SAML_REDIRECT_DOMAIN_WHITELIST, new ArrayList<>());
-		for (String domain : redirectDomainWhitelist) {
-			log.info("Allowed domain for redirects: {}", domain);
-		}
-	}
+	private final SamlCustomConfiguration samlConfiguration;
 
 	public boolean isValidRedirectUrl(String url) {
 		if (StringUtils.isEmpty(url)) {
 			return false;
 		}
-		return redirectDomainWhitelist.contains(URI.create(url).getHost());
-	}
-
-	private String idpSetting(String configKey, String idp) {
-		return String.format(configKey, idp);
-	}
-
-	private void logIdpInfo(SamlIdpInfo info) {
-		String prefix = "SAML IdP \"" + info.id() + "\" -";
-		log.info("{} Domains: {}", prefix, info.domains());
-		log.info("{} Auto Provisioning: {}", prefix, info.autoProvisioning());
+		try {
+			var uri = URI.create(url);
+			var scheme = uri.getScheme();
+			if (scheme != null && !"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+				return false;
+			}
+			// A hostless URL (relative path, opaque URI) can never match a host whitelist; guard
+			// explicitly because the whitelist is an immutable List, whose contains(null) throws.
+			var host = uri.getHost();
+			return host != null && samlConfiguration.redirectDomainWhitelist().contains(host);
+		} catch (IllegalArgumentException e) {
+			return false;
+		}
 	}
 
 	public String findIdpIdForRequest(String username, String idp) {
@@ -83,7 +64,8 @@ public class SamlAuthService {
 			return idp;
 		}
 
-		if (defaultIdp == null || defaultIdp.isEmpty()) {
+		String defaultIdp = samlConfiguration.defaultIdp();
+		if (StringUtils.isEmpty(defaultIdp)) {
 			log.warn("IdP parameter missing and no default IdP configured, unable to properly initialize IDP configuration.");
 			throw new BadRequestException("Unable to initialize IDP configuration. IdP parameter missing and no default IdP configured.");
 		}
@@ -92,12 +74,13 @@ public class SamlAuthService {
 
 	private String findIdpIdForDomain(String domain) {
 		String wildcardIdp = null;
-		for (SamlIdpInfo idpInfo : samlIDPsConfig.values()) {
-			if (idpInfo.domains().contains("*")) {
-				wildcardIdp = idpInfo.id();
+		for (var entry : samlConfiguration.idp().entrySet()) {
+			var domains = entry.getValue().domains();
+			if (domains.contains("*")) {
+				wildcardIdp = entry.getKey();
 			}
-			if (idpInfo.domains().contains(domain.toLowerCase())) {
-				return idpInfo.id();
+			if (domains.contains(domain.toLowerCase())) {
+				return entry.getKey();
 			}
 		}
 		// we return the IDP matching the wildcard only if we cannot find anything more
@@ -105,18 +88,19 @@ public class SamlAuthService {
 		return wildcardIdp;
 	}
 
-	public SamlIdpInfo findIdpForSamlResponse(String idpName) {
+	public Idp findIdpForSamlResponse(String idpName) {
 
 		if (StringUtils.isNotBlank(idpName)) {
-			return samlIDPsConfig.get(idpName);
+			return samlConfiguration.idp().get(idpName);
 		}
 
-		if (defaultIdp == null || defaultIdp.isEmpty()) {
+		String defaultIdp = samlConfiguration.defaultIdp();
+		if (StringUtils.isEmpty(defaultIdp)) {
 			log.warn("IdP parameter missing and no default IdP configured, unable to properly initialize IDP configuration. " +
 					"IDP from SAML response: {}", idpName);
 			return null;
 		}
-		return samlIDPsConfig.get(defaultIdp);
+		return samlConfiguration.idp().get(defaultIdp);
 	}
 
 }
