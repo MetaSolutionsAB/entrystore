@@ -108,7 +108,6 @@
 	<modules>
 		<module>core</module>
 		<module>modules</module>
-		<!--<module>apps</module>-->
 	</modules>
 
 	<!-- ================= Licenses ================= -->
