@@ -154,12 +154,4 @@ class ManagementMetricsIT extends BaseSpec {
 		connection.getContentType().contains('application/json')
 	}
 
-	def "GET /management/env as admin should reply with 404 (actuator endpoint not exposed)"() {
-		when:
-		def connection = EntryStoreClient.getRequest('/management/env')
-
-		then:
-		connection.getResponseCode() == HTTP_NOT_FOUND
-		connection.getContentType().contains('application/json')
-	}
 }

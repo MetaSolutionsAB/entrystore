@@ -16,12 +16,31 @@
 
 package org.entrystore.rest.springboot.util;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class HttpUtilTest {
+
+	@AfterEach
+	void clearSecurityContext() {
+		SecurityContextHolder.clearContext();
+	}
 
 	@Test
 	void sanitizeForLog_replacesCrLf() {
@@ -78,5 +97,55 @@ class HttpUtilTest {
 		String controlTail = "\r\n".repeat(50); // 200 control chars
 		assertEquals(HttpUtil.sanitizeForLog(prefix + plainTail),
 				HttpUtil.sanitizeForLog(prefix + controlTail));
+	}
+
+	@Test
+	void clearAuthenticatedSession_clearsContextAndInvalidatesSession() {
+		SecurityContextHolder.getContext().setAuthentication(
+				new UsernamePasswordAuthenticationToken("u", "p", List.of()));
+		var request = new MockHttpServletRequest();
+		MockHttpSession session = (MockHttpSession) request.getSession(true);
+
+		HttpUtil.clearAuthenticatedSession(request);
+
+		assertNull(SecurityContextHolder.getContext().getAuthentication(),
+				"SecurityContext must be cleared");
+		assertTrue(session.isInvalid(), "Session must be invalidated");
+	}
+
+	@Test
+	void clearAuthenticatedSession_withoutSession_clearsContextOnly() {
+		SecurityContextHolder.getContext().setAuthentication(
+				new UsernamePasswordAuthenticationToken("u", "p", List.of()));
+		var request = new MockHttpServletRequest();
+		// No prior getSession(true) call — request.getSession(false) inside the method returns null.
+
+		HttpUtil.clearAuthenticatedSession(request);
+
+		assertNull(SecurityContextHolder.getContext().getAuthentication(),
+				"SecurityContext must be cleared even when no session exists");
+	}
+
+	@Test
+	void clearAuthenticatedSession_invalidateThrowsIllegalStateException_caughtAndContextStillCleared() {
+		// Models a race where another request or async dispatch already invalidated the session
+		// between getSession(false) returning a non-null reference and our call to invalidate().
+		// Spring's MockHttpServletRequest hides this race (it returns null from getSession(false)
+		// when the underlying MockHttpSession is invalid), so use Mockito to construct the
+		// invariant directly: a non-null session whose invalidate() throws. Without the catch,
+		// this IllegalStateException would propagate out of the filter and bypass the JSON
+		// deny contract.
+		SecurityContextHolder.getContext().setAuthentication(
+				new UsernamePasswordAuthenticationToken("u", "p", List.of()));
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		HttpSession session = mock(HttpSession.class);
+		when(request.getSession(false)).thenReturn(session);
+		doThrow(new IllegalStateException("already invalidated")).when(session).invalidate();
+
+		HttpUtil.clearAuthenticatedSession(request);
+
+		verify(session).invalidate();
+		assertNull(SecurityContextHolder.getContext().getAuthentication(),
+				"SecurityContext must be cleared even when session.invalidate() throws IllegalStateException");
 	}
 }

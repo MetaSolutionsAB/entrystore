@@ -39,7 +39,7 @@ management:
     web:
       base-path: /management
       exposure:
-        include: metrics,shutdown,loggers
+        include: metrics,shutdown,loggers,env,httpexchanges,caches
       discovery:
         enabled: false
   endpoint:
@@ -47,6 +47,13 @@ management:
       access: read_only
     shutdown:
       access: unrestricted
+    env:
+      show-values: when_authorized
+  httpexchanges:
+    recording:
+      # Mirrors the production include list so the integration tests verify the same
+      # Cookie/Authorization exclusions that protect real deployments.
+      include: request-headers,response-headers,principal,remote-address,time-taken
 
 
 logging:
