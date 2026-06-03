@@ -20,10 +20,12 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Ticker;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.springframework.http.HttpStatus;
 
 import java.time.Duration;
+import java.util.Map;
 
 /**
  * Per-key fixed-window rate limiter backed by a Caffeine cache. The first request for a key
@@ -34,7 +36,7 @@ import java.time.Duration;
  * the average rate rather than guarantee a strict sliding-window cap.
  */
 @Slf4j
-public abstract class FixedWindowRateLimiter {
+public abstract class FixedWindowRateLimiter implements CaffeineCacheSource {
 
 	private final Cache<String, Integer> attemptMap;
 	private final int max;
@@ -50,6 +52,7 @@ public abstract class FixedWindowRateLimiter {
 					.ticker(ticker)
 					.maximumSize(100_000)
 					.expireAfterWrite(window)
+					.recordStats()
 					.build();
 			log.info("Rate limiter [{}] enabled: max={}, window={}", rateLimitName, max, window);
 		} else {
@@ -57,6 +60,12 @@ public abstract class FixedWindowRateLimiter {
 			log.warn("Rate limiter [{}] DISABLED (max={}, window={}); all requests will pass",
 					rateLimitName, max, window);
 		}
+	}
+
+	@Override
+	public Map<String, Cache<?, ?>> caffeineCaches() {
+		// A disabled limiter (max <= 0 or non-positive window) holds no cache; expose nothing then.
+		return attemptMap == null ? Map.of() : Map.of("rate-limit-" + rateLimitName, attemptMap);
 	}
 
 	public void acquirePermit(String key) {

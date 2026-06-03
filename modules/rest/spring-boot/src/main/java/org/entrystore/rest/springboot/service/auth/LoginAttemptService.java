@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.service.auth;
 
 import com.github.benmanes.caffeine.cache.Cache;
@@ -12,12 +28,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.entrystore.Entry;
 import org.entrystore.PrincipalManager;
 import org.entrystore.config.Config;
+import org.entrystore.rest.springboot.configuration.CaffeineCacheSource;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Map;
 
 import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_ADMIN;
 import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_DURATION;
@@ -26,7 +44,7 @@ import static org.entrystore.repository.config.Settings.AUTH_TEMP_LOCKOUT_MAX_AT
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class LoginAttemptService {
+public class LoginAttemptService implements CaffeineCacheSource {
 
 	// Caps both the per-username key size and the total number of tracked entries (counters and
 	// lockouts each) so an attacker streaming arbitrary usernames cannot grow either cache without
@@ -78,6 +96,7 @@ public class LoginAttemptService {
 		this.counterCache = Caffeine.newBuilder()
 				.expireAfterWrite(ttl)
 				.maximumSize(MAX_TRACKED_USERNAMES)
+				.recordStats()
 				.build();
 
 		this.lockoutCache = Caffeine.newBuilder()
@@ -98,11 +117,21 @@ public class LoginAttemptService {
 					}
 				})
 				.maximumSize(MAX_TRACKED_USERNAMES)
+				.recordStats()
 				.build();
 
 		this.recordFailureErrorCounter = Counter.builder("auth.loginattempt.record_failure_error")
 				.description("Login-attempt bookkeeping failures swallowed by call-site try/catch — sustained increments mean lockout tracking is degraded and the enumeration oracle may be open")
 				.register(meterRegistry);
+	}
+
+	@Override
+	public Map<String, Cache<?, ?>> caffeineCaches() {
+		// Both caches are built unconditionally in init(), which runs before this bean is injected
+		// into the CacheManager, so neither is null here.
+		return Map.of(
+				"login-attempt-counters", counterCache,
+				"login-lockouts", lockoutCache);
 	}
 
 	/**
