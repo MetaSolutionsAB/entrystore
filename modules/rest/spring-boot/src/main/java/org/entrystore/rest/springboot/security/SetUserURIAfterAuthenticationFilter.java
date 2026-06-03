@@ -20,7 +20,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
@@ -82,11 +81,28 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 			};
 			if (externalAuthType != null) {
 				String username = auth.getName();
-				User user = userDetailsService.loadUser(username);
+				User user;
+				try {
+					user = userDetailsService.loadUser(username);
+				} catch (RuntimeException e) {
+					// Store-layer failure (e.g. RDF4J briefly unavailable) — fail closed with a
+					// JSON deny response so the contract stays consistent with the rest of the filter.
+					// Filters run before the DispatcherServlet, so AppExceptionHandler cannot
+					// convert a propagating exception into the JSON contract.
+					log.warn("User lookup failed for authenticated {} user '{}', denying access",
+							externalAuthType, HttpUtil.sanitizeForLog(username), e);
+					HttpUtil.clearAuthenticatedSession(request);
+					HttpUtil.writeErrorResponseAsJson(response, ErrorResponse.builder()
+							.status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+							.path(request.getRequestURI())
+							.error("Authenticated " + externalAuthType + " user lookup failed")
+							.build());
+					return;
+				}
 				if (user == null) {
 					log.warn("Authenticated {} user '{}' not found in EntryStore, denying access",
 							externalAuthType, HttpUtil.sanitizeForLog(username));
-					clearSessionAndContext(request);
+					HttpUtil.clearAuthenticatedSession(request);
 					setForbiddenResponse(request, response,
 							"Authenticated " + externalAuthType + " user not found in EntryStore");
 					return;
@@ -95,7 +111,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 				if (userUri == null) {
 					log.warn("Authenticated {} user '{}' has no URI in EntryStore, denying access",
 							externalAuthType, HttpUtil.sanitizeForLog(username));
-					clearSessionAndContext(request);
+					HttpUtil.clearAuthenticatedSession(request);
 					setForbiddenResponse(request, response,
 							"Authenticated " + externalAuthType + " user has no URI in EntryStore");
 					return;
@@ -107,7 +123,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 				if (userUri == null) {
 					log.warn("Cookie-authenticated session for '{}' has no usable EntryStore user, denying access",
 							HttpUtil.sanitizeForLog(esUser.getUsername()));
-					clearSessionAndContext(request);
+					HttpUtil.clearAuthenticatedSession(request);
 					setForbiddenResponse(request, response,
 							"Cookie-authenticated user no longer exists in EntryStore");
 					return;
@@ -117,7 +133,7 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 				Object principal = auth.getPrincipal();
 				String principalType = principal == null ? "<null>" : principal.getClass().getName();
 				log.warn("Authenticated user has unrecognized principal type: '{}'. Denying access.", principalType);
-				clearSessionAndContext(request);
+				HttpUtil.clearAuthenticatedSession(request);
 				setForbiddenResponse(request, response, "Unrecognized principal type");
 				return;
 			}
@@ -129,19 +145,6 @@ public class SetUserURIAfterAuthenticationFilter extends OncePerRequestFilter {
 	private URI guestUserUri() {
 		User guest = pm.getGuestUser();
 		return guest == null ? null : guest.getURI();
-	}
-
-	private static void clearSessionAndContext(HttpServletRequest request) {
-		SecurityContextHolder.clearContext();
-		HttpSession session = request.getSession(false);
-		if (session != null) {
-			try {
-				session.invalidate();
-			} catch (IllegalStateException e) {
-				// Concurrent request or async dispatch already invalidated this session.
-				log.debug("Session was already invalidated when filter tried to invalidate it", e);
-			}
-		}
 	}
 
 	private void setForbiddenResponse(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {

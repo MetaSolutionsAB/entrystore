@@ -44,14 +44,11 @@ import org.springframework.security.saml2.provider.service.authentication.Saml2A
 
 import java.net.URI;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -152,6 +149,27 @@ class SetUserURIAfterAuthenticationFilterTest {
 	}
 
 	@Test
+	void guestUserHasNullURI_writes500WithoutTouchingChain() throws Exception {
+		// Distinct from getGuestUser() == null: the User exists but its URI was never set.
+		// Same 500 contract — both branches route through guestUserUri() and short-circuit
+		// before touching the SecurityContext, so neither can leak a stale ThreadLocal.
+		when(guestUser.getURI()).thenReturn(null);
+		SecurityContextHolder.clearContext();
+		var request = new MockHttpServletRequest("GET", "/some/resource");
+		var response = new MockHttpServletResponse();
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, response, chain);
+
+		assertEquals(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, response.getStatus());
+		assertEquals("application/json", response.getContentType());
+		assertTrue(response.getContentAsString().contains("PrincipalManager is not initialized"),
+				"500 body must name the unavailable-guest cause");
+		assertNull(chain.getRequest(),
+				"Chain must NOT be invoked when the guest user has no URI");
+	}
+
+	@Test
 	void samlAuthenticated_userFound_setsUserURIAndCallsChain() throws Exception {
 		when(aliceUser.getURI()).thenReturn(ALICE_URI);
 		when(userDetailsService.loadUser("alice")).thenReturn(aliceUser);
@@ -211,6 +229,34 @@ class SetUserURIAfterAuthenticationFilterTest {
 				"Forbidden body must name the missing-URI cause so operators see why a found user was still denied");
 		assertNull(chain.getRequest(),
 				"Chain must NOT be invoked when the resolved user has no URI");
+	}
+
+	@Test
+	void samlAuthenticated_loadUserThrows_writes500AndStopsChain() throws Exception {
+		// Models a store-layer failure (e.g. RDF4J briefly unavailable). Without the try/catch
+		// the exception would escape doFilterInternal — and because servlet filters run before
+		// the DispatcherServlet, AppExceptionHandler cannot convert it into the JSON deny
+		// contract. The filter must catch it, clear the session, and write a 500 itself.
+		when(userDetailsService.loadUser("alice")).thenThrow(new RuntimeException("store unavailable"));
+		SecurityContextHolder.getContext().setAuthentication(samlAuth("alice"));
+		var request = new MockHttpServletRequest("GET", "/some/resource");
+		request.getSession(true);
+		var response = new MockHttpServletResponse();
+		var chain = new MockFilterChain();
+
+		filter.doFilter(request, response, chain);
+
+		InOrder order = inOrder(pm);
+		order.verify(pm).setAuthenticatedUserURI(GUEST_URI);
+		order.verifyNoMoreInteractions();
+		assertEquals(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, response.getStatus());
+		assertEquals("application/json", response.getContentType());
+		assertTrue(response.getContentAsString().contains("SAML user lookup failed"),
+				"500 body must name the SAML branch so operators can correlate the diagnostic");
+		assertNull(SecurityContextHolder.getContext().getAuthentication(),
+				"Security context must be cleared on store-layer failure so a stuck token does not repeat the 500");
+		assertNull(chain.getRequest(),
+				"Chain must NOT be invoked when loadUser throws");
 	}
 
 	@Test
@@ -371,44 +417,6 @@ class SetUserURIAfterAuthenticationFilterTest {
 		order.verify(pm).setAuthenticatedUserURI(GUEST_URI);
 		order.verify(pm).setAuthenticatedUserURI(BOB_URI);
 		order.verifyNoMoreInteractions();
-	}
-
-	@Test
-	void postCondition_pmHasNonNullURIAfterEveryBranch() throws Exception {
-		// Track what setAuthenticatedUserURI was last called with, and answer
-		// getAuthenticatedUserURI from that captured state — so the test can assert the
-		// "downstream code never sees null URI" invariant regardless of which branch ran.
-		var lastUri = new AtomicReference<URI>();
-		doAnswer(inv -> {
-			lastUri.set(inv.getArgument(0));
-			return null;
-		}).when(pm).setAuthenticatedUserURI(any(URI.class));
-		when(pm.getAuthenticatedUserURI()).thenAnswer(_ -> lastUri.get());
-
-		// Guest path
-		SecurityContextHolder.clearContext();
-		filter.doFilter(new MockHttpServletRequest(), new MockHttpServletResponse(), new MockFilterChain());
-		assertEquals(GUEST_URI, pm.getAuthenticatedUserURI(),
-				"Guest request must leave the URI set to the guest URI");
-
-		// Authenticated path (SAML)
-		when(aliceUser.getURI()).thenReturn(ALICE_URI);
-		when(userDetailsService.loadUser("alice")).thenReturn(aliceUser);
-		SecurityContextHolder.getContext().setAuthentication(samlAuth("alice"));
-		filter.doFilter(new MockHttpServletRequest(), new MockHttpServletResponse(), new MockFilterChain());
-		assertEquals(ALICE_URI, pm.getAuthenticatedUserURI(),
-				"Authenticated request must leave the URI set to the authenticated user's URI");
-
-		// Error path (unrecognized principal): the unconditional reset still ran first,
-		// so the URI is guest — never null and never the previous authenticated URI.
-		SecurityContextHolder.clearContext();
-		Authentication weird = mock(Authentication.class);
-		when(weird.isAuthenticated()).thenReturn(true);
-		when(weird.getPrincipal()).thenReturn("not-a-known-principal-type");
-		SecurityContextHolder.getContext().setAuthentication(weird);
-		filter.doFilter(new MockHttpServletRequest(), new MockHttpServletResponse(), new MockFilterChain());
-		assertEquals(GUEST_URI, pm.getAuthenticatedUserURI(),
-				"Unrecognized-principal error path must still leave the URI set to guest");
 	}
 
 	private static Saml2Authentication samlAuth(String username) {
