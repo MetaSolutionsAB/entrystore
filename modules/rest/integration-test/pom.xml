@@ -26,11 +26,13 @@
 				</includes>
 				<filtering>true</filtering>
 			</testResource>
-			<!-- Binary files (e.g. JARs) must be copied without filtering to avoid corruption -->
+			<!-- Binary files (e.g. JARs) and extension-less descriptors (e.g. META-INF/services service
+			     files, which have no file extension) must be copied without filtering. -->
 			<testResource>
 				<directory>src/test/resources</directory>
 				<includes>
 					<include>**/*.jar</include>
+					<include>META-INF/services/**</include>
 				</includes>
 				<filtering>false</filtering>
 			</testResource>
