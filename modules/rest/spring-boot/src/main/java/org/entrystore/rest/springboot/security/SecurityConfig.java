@@ -23,16 +23,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.RandomStringUtils;
 import org.entrystore.repository.security.Password;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
 import org.entrystore.rest.springboot.configuration.CorsConfig;
 import org.entrystore.rest.springboot.configuration.HttpBasicAuthConfiguration;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.entrystore.rest.springboot.model.api.ErrorResponse;
-import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.model.auth.UserAuthRole;
-import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
@@ -53,6 +50,7 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -102,7 +100,7 @@ public class SecurityConfig {
 	private final SamlCustomConfiguration samlConfiguration;
 	private final SamlLoginSuccessHandler samlLoginSuccessHandler;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
-	private final SamlAuthStateCache samlAuthStateCache;
+	private final SamlRelayStateResolver samlRelayStateResolver;
 
 	// CAS-auth related beans (optional — only present when entrystore.auth.cas.enabled=true)
 	private final CasCustomConfiguration casConfiguration;
@@ -146,7 +144,7 @@ public class SecurityConfig {
 				// including permit-all public endpoints — which contradicts the per-request policy this app
 				// needs (private,no-store for authenticated; no header for anonymous so static and
 				// controller-set values can pass through unchanged).
-				.headers(headers -> headers.cacheControl(cache -> cache.disable()))
+				.headers(headers -> headers.cacheControl(HeadersConfigurer.CacheControlConfig::disable))
 				.csrf(csrf -> csrf
 						.csrfTokenRepository(csrfTokenRepository())
 						.csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
@@ -217,9 +215,14 @@ public class SecurityConfig {
 
 		if (samlConfiguration.enabled()) {
 			log.info("SAML Auth Enabled");
+			samlConfiguration.idp().forEach((id, idp) ->
+					log.info("SAML IdP \"{}\" - Domains: {}, Auto Provisioning: {}", id, idp.domains(), idp.userAutoProvisioning()));
+			log.info("SAML Default IdP: {}", samlConfiguration.defaultIdp());
+			samlConfiguration.redirectDomainWhitelist().forEach(domain -> log.info("Allowed domain for redirects: {}", domain));
 
-			// below modifies the login success handler, to set the redirect URL param name
-			samlLoginSuccessHandler.setTargetUrlParameter("successurl");
+			// Custom success URLs flow through the validated relay-state cache (SamlRelayStateResolver);
+			// the handler must NOT read a request parameter for the target (open-redirect, ENTRYSTORE-996),
+			// so only the trusted default target is configured here.
 			samlLoginSuccessHandler.setDefaultTargetUrl(samlConfiguration.redirectSuccess().url());
 			// Stamp Cache-Control: private, no-store on the 302 carrying the session Set-Cookie
 			// before sendRedirect commits the response — CacheControlFilter's post-chain check
@@ -368,20 +371,7 @@ public class SecurityConfig {
 		var registrationResolver = new DefaultRelyingPartyRegistrationResolver(repo.get());
 		var resolver = new OpenSaml4AuthenticationRequestResolver(registrationResolver);
 
-		resolver.setRelayStateResolver(request -> {
-
-			String relayStateToken = RandomStringUtils.secure().nextAlphanumeric(16);
-
-			String successUrl = request.getParameter("successurl");
-			String failureUrl = request.getParameter("failureurl");
-
-			if (successUrl != null || failureUrl != null) {
-				AuthState authState = new AuthState(successUrl, failureUrl);
-				samlAuthStateCache.storeAuthState(relayStateToken, authState);
-			}
-
-			return relayStateToken;
-		});
+		resolver.setRelayStateResolver(samlRelayStateResolver);
 
 		return resolver;
 	}

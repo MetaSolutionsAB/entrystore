@@ -137,6 +137,17 @@ entrystore.auth.temp.lockout.duration=0ms
 ## anything else logs a WARN and continues. Check the startup log for
 ## "SAML Auth Enabled" / "SAML Auth Disabled" to verify the state.
 # entrystore.auth.saml.enabled=true|false
+## Default IdP id used when the request carries no idp/username hint.
+# entrystore.auth.saml.default-idp=myIdp
+## Per-IdP settings, keyed by IdP id. An IdP is defined by the presence of any
+## `idp.{id}.*` key (6.0: the old explicit `idps` enumeration is no longer needed).
+## domains: comma-separated email domains routed to this IdP (default: * — wildcard fallback).
+## user-auto-provisioning: create the EntryStore user on first login (default: false).
+# entrystore.auth.saml.idp.myIdp.domains=example.com,example.org
+# entrystore.auth.saml.idp.myIdp.user-auto-provisioning=true
+## Comma-separated host whitelist for post-login successurl/failureurl redirects;
+## a redirect to any host not listed here is dropped (open-redirect protection).
+# entrystore.auth.saml.redirect-domain-whitelist=app.example.com,portal.example.com
 
 ## CAS authentication (default: false)
 ## Renamed in 6.0 — previously `entrystore.auth.cas`. The legacy key is
