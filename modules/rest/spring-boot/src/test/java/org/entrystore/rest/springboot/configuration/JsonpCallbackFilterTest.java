@@ -266,6 +266,44 @@ class JsonpCallbackFilterTest {
 		assertTrue(response.getContentType().startsWith("application/javascript"));
 	}
 
+	@Test
+	void existingCacheControl_isPreservedNotOverwritten() throws Exception {
+		// CacheControlFilter stamps `private, no-store` on authenticated responses before this filter
+		// writes the wrapped body. The no-store guard must leave that exactly as-is — overwriting it
+		// with a bare `no-store` would drop `private` and allow shared-cache storage of a per-user body.
+		// Pins the `if (getHeader(CACHE_CONTROL) == null)` guard (the absent-header path is asserted in
+		// getWithCallback_wrapsJsonAsJavascript).
+		var request = getRequestWithCallback("/90/entry/1", "cb");
+		var response = new MockHttpServletResponse();
+		response.setHeader("Cache-Control", "private, no-store");
+
+		filter.doFilter(request, response, chainWriting(200, "application/json", "{\"a\":1}".getBytes(UTF_8)));
+
+		assertEquals("cb({\"a\":1})", response.getContentAsString());
+		assertEquals("private, no-store", response.getHeader("Cache-Control"));
+	}
+
+	@Test
+	void committedResponse_isNotWrapped() throws Exception {
+		// Pins the post-chain `isAsyncStarted(request) || response.isCommitted()` short-circuit: if the
+		// underlying response was committed during the chain (e.g. an async or error path), the body
+		// must pass through via copyBodyToResponse and never be re-wrapped. Guards against a reorder
+		// that moved writeJsonpResponse ahead of this check.
+		var request = getRequestWithCallback("/90/entry/1", "cb");
+		var response = new MockHttpServletResponse();
+
+		filter.doFilter(request, response, (req, res) -> {
+			((HttpServletResponse) res).setStatus(200);
+			res.setContentType("application/json");
+			res.getOutputStream().write("{\"a\":1}".getBytes(UTF_8));
+			response.setCommitted(true); // underlying response commits during the chain
+		});
+
+		assertEquals("{\"a\":1}", response.getContentAsString());
+		assertTrue(response.getContentType().startsWith("application/json"));
+		assertNull(response.getHeader("X-Content-Type-Options"));
+	}
+
 	private static MockHttpServletRequest getRequestWithCallback(String uri, String callback) {
 		var request = new MockHttpServletRequest("GET", uri);
 		request.setParameter("callback", callback);
