@@ -146,9 +146,10 @@ public class SolrSearchInputValidator {
 			throw new BadRequestException(
 					"Query parameter 'filterQuery' contains more than " + maxFilterQueryCount + " entries");
 		}
-		// Also bound each decoded entry. The raw cap above bounds the wire payload; this bound
-		// covers payloads where percent-encoding expanded on URLDecoder.decode (e.g. each %20 → 1
-		// char) and the decoded entry exceeds what callers expect to send to Solr.
+		// Defense-in-depth per-entry cap. Currently unreachable from the controller flow
+		// (URLDecoder.decode only shrinks length, and rawFilterQuery is already length-capped
+		// above), but kept so a future caller that supplies pre-decoded entries from a different
+		// source cannot bypass the cap.
 		for (String fq : filterQueries) {
 			if (fq != null && fq.length() > maxFilterQueryLength) {
 				throw new BadRequestException(

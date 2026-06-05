@@ -163,8 +163,9 @@ class SolrSearchInputValidatorTest {
 
 	@Test
 	void validateFilterQueriesRejectsOverlongDecodedEntry() {
-		// Raw under the cap (1000 chars of %20 expands to 1000 chars after URLDecoder, but each
-		// percent-encoded triple shrinks to one char — simulate the post-decode result here).
+		// The per-entry cap is defense-in-depth: unreachable from the controller flow today
+		// (raw filterQuery is length-capped first, and URLDecoder only shrinks length), but this
+		// test pins the behaviour for a future caller that passes pre-decoded entries directly.
 		String decoded = "a".repeat(MAX_LEN + 1);
 		String raw = "f:v";   // raw fits under the cap
 		assertThrows(BadRequestException.class,

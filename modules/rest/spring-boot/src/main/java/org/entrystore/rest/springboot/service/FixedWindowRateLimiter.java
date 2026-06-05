@@ -74,13 +74,20 @@ public abstract class FixedWindowRateLimiter implements CaffeineCacheSource {
 		}
 
 		String effectiveKey = (key == null || key.isBlank()) ? "__unknown__" : key;
-		boolean[] firstOverLimit = new boolean[1];
 
+		// Read-only fast path once over the cap. Caffeine's expireAfterWrite resets on every
+		// successful compute (including one that returns the same reference), so writing on the
+		// reject path would keep pushing the expiry forward and prevent the window from ever
+		// resetting under continuous traffic. Read with getIfPresent here so a rejected client
+		// can recover after the window naturally expires.
+		Integer existing = attemptMap.getIfPresent(effectiveKey);
+		if (existing != null && existing > max) {
+			throw new CustomResponseException("Rate limit exceeded. Try again later.", HttpStatus.TOO_MANY_REQUESTS);
+		}
+
+		boolean[] firstOverLimit = new boolean[1];
 		Integer result = attemptMap.asMap().compute(effectiveKey, (_, current) -> {
 			int next = current == null ? 1 : current + 1;
-			if (next > max + 1) {
-				return current;
-			}
 			if (next == max + 1) {
 				firstOverLimit[0] = true;
 			}

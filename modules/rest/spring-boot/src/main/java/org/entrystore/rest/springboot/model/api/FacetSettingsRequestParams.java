@@ -44,7 +44,12 @@ public class FacetSettingsRequestParams {
 		SolrSearchIndex.FacetSettings facetSettings = new SolrSearchIndex.FacetSettings();
 
 		facetSettings.fields = this.facetFields;
-		facetSettings.minCount = this.facetMinCount;
+		// Clamp minCount to >= 1. The @Min(1) annotation is inert because this DTO is bound from
+		// @RequestParam without @Valid, so a guest can still bind minCount=0 or negative on the
+		// public /search endpoint; clamp here to mirror the facetLimit defense below.
+		facetSettings.minCount = this.facetMinCount != null && this.facetMinCount >= 1
+				? this.facetMinCount
+				: 1;
 
 		int limit = this.facetLimit != null
 				? Math.min(this.facetLimit, maxFacetLimit)
