@@ -53,6 +53,12 @@ entrystore.data.folder=/srv/entrystore/files/
 ## is set to a non-blank value.
 # entrystore.http.header.server.version-precision=major
 
+## JSONP support (default: true)
+## When on, a GET with a ?callback= parameter has its JSON response body wrapped as
+## callback(<json>) with Content-Type application/javascript. Legacy technique — CORS
+## (see entrystore.cors above) is the preferred mechanism and JSONP can be disabled here.
+# entrystore.jsonp=true
+
 ## SMTP settings, required for e.g. sign-up
 # entrystore.smtp.host=smtp.host.tld
 # entrystore.smtp.port=587
