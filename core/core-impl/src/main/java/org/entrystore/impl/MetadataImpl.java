@@ -120,33 +120,14 @@ public class MetadataImpl implements Metadata {
 
 		try {
 			synchronized (this.entry.repository) {
+				RepositoryConnection batchRc = this.entry.repositoryManager.getActiveBatchConnection();
+				if (batchRc != null) {
+					doSetGraph(batchRc, graph, newResourceUri, false);
+					return;
+				}
 				RepositoryConnection rc = this.entry.repository.getConnection();
-				rc.begin();
-				IRI oldResourceUri = this.resourceUri;
 				try {
-					Model oldGraph = removeGraphSynchronized(rc);
-					this.resourceUri = newResourceUri;
-					addGraphSynchronized(rc, graph);
-					ProvenanceImpl provenance = (ProvenanceImpl) this.entry.getProvenance();
-					if (provenance != null && !cached) {
-						provenance.addMetadataEntity(oldGraph, rc);
-					}
-					rc.commit();
-					if (cached) {
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ExternalMetadataUpdated, graph));
-					} else {
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.MetadataUpdated, graph));
-					}
-				} catch (AuthorizationException ae) {
-					rc.rollback();
-					this.resourceUri = oldResourceUri;
-					log.warn(ae.getMessage());
-					throw ae;
-				} catch (Exception e) {
-					rc.rollback();
-					this.resourceUri = oldResourceUri;
-					throw new org.entrystore.repository.RepositoryException(
-							"Unable to set metadata graph " + uri + " of entry " + entry.getEntryURI(), e);
+					doSetGraph(rc, graph, newResourceUri, true);
 				} finally {
 					rc.close();
 				}
@@ -154,6 +135,44 @@ public class MetadataImpl implements Metadata {
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+		}
+	}
+
+	private void doSetGraph(RepositoryConnection rc, Model graph, IRI newResourceUri, boolean manageTx) {
+		if (manageTx) {
+			rc.begin();
+		}
+		IRI oldResourceUri = this.resourceUri;
+		try {
+			Model oldGraph = removeGraphSynchronized(rc);
+			this.resourceUri = newResourceUri;
+			addGraphSynchronized(rc, graph);
+			ProvenanceImpl provenance = (ProvenanceImpl) this.entry.getProvenance();
+			if (provenance != null && !cached) {
+				provenance.addMetadataEntity(oldGraph, rc);
+			}
+			if (manageTx) {
+				rc.commit();
+			}
+			if (cached) {
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ExternalMetadataUpdated, graph));
+			} else {
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.MetadataUpdated, graph));
+			}
+		} catch (AuthorizationException ae) {
+			if (manageTx) {
+				rc.rollback();
+			}
+			this.resourceUri = oldResourceUri;
+			log.warn(ae.getMessage());
+			throw ae;
+		} catch (Exception e) {
+			if (manageTx) {
+				rc.rollback();
+			}
+			this.resourceUri = oldResourceUri;
+			throw new org.entrystore.repository.RepositoryException(
+					"Unable to set metadata graph " + uri + " of entry " + entry.getEntryURI(), e);
 		}
 	}
 	public Model removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {
