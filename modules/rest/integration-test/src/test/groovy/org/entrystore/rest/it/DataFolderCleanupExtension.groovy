@@ -61,7 +61,7 @@ class DataFolderCleanupExtension implements IGlobalExtension {
 		}
 		log.info('Cleaning up IT-managed data folder: {}', owned.absolutePath)
 		if (!owned.deleteDir()) {
-			log.warn('Incomplete cleanup of IT data folder {} — has to be cleaned up manually before next test run start', owned.absolutePath)
+			log.error('Incomplete cleanup of IT data folder {} — has to be cleaned up manually before next test run start', owned.absolutePath)
 		}
 	}
 }

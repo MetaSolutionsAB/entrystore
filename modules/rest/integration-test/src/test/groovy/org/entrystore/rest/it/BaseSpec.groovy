@@ -20,6 +20,7 @@ import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.stubbing.StubMapping
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
+import groovy.transform.PackageScope
 import org.awaitility.core.ConditionEvaluationLogger
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.UserUtil
@@ -179,26 +180,8 @@ abstract class BaseSpec extends Specification {
 				"entrystore.data.folder is not configured for the integration tests; it must be set in " +
 				"entrystore-it.properties so the suite has an isolated, disposable data folder.")
 		}
-		def dir = new File(configured.replaceFirst('^file://', '').replaceFirst('^file:', ''))
-
-		if (dir.exists() && !dir.isDirectory()) {
-			throw new IllegalStateException(
-				"Refusing to run integration tests: data folder '" + dir.absolutePath + "' exists but is not " +
-				"a directory. Point entrystore.data.folder at a directory the suite can own.")
-		}
-		def children = dir.isDirectory() ? dir.list() : null
-		if (dir.isDirectory() && children == null) {
-			throw new IllegalStateException(
-				"Refusing to run integration tests: data folder '" + dir.absolutePath + "' cannot be listed " +
-				"(I/O error or permissions), so its emptiness cannot be verified. Fix the config or permissions.")
-		}
-		if (children != null && children.length > 0) {
-			throw new IllegalStateException(
-				"Refusing to run integration tests: data folder '" + dir.absolutePath + "' is not empty " +
-				"at startup. The suite writes test data here and deletes it after the run, so it must start " +
-				"empty (or absent) to prove the run owns it — this guards a misconfigured " +
-				"entrystore.data.folder from polluting or deleting real data. Clear it or fix the config.")
-		}
+		def dir = toDataFolderFile(configured)
+		assertEmptyOrAbsentDir(dir)
 
 		// Empty/absent → this run owns it. Publish it for DataFolderCleanupExtension to delete once the
 		// whole run finishes (executionStop, inside the live test JVM, so its log is captured by Maven).
@@ -207,13 +190,53 @@ abstract class BaseSpec extends Specification {
 	}
 
 	/**
+	 * Resolves a configured {@code entrystore.data.folder} value to a {@link File}, stripping a
+	 * {@code file:}/{@code file://} scheme prefix. Shared by the pre-start guard and the post-start
+	 * cross-check so both resolve the configured value identically.
+	 */
+	@PackageScope
+	static File toDataFolderFile(String configured) {
+		return new File(configured.replaceFirst('^file://', '').replaceFirst('^file:', ''))
+	}
+
+	/**
+	 * Throws unless {@code dir} is safe for the suite to own: it must be absent, or an empty and listable
+	 * directory. A regular file, a directory that cannot be listed, or a non-empty directory each fail fast
+	 * — the suite both writes test data into this folder and deletes it after the run, so an unowned or
+	 * pre-populated path could pollute or delete real data.
+	 */
+	@PackageScope
+	static void assertEmptyOrAbsentDir(File dir) {
+		if (!dir.exists()) {
+			return
+		}
+		if (!dir.isDirectory()) {
+			throw new IllegalStateException(
+				"Refusing to run integration tests: data folder '" + dir.absolutePath + "' exists but is not " +
+				"a directory. Point entrystore.data.folder at a directory the suite can own.")
+		}
+		def children = dir.list()
+		if (children == null) {
+			throw new IllegalStateException(
+				"Refusing to run integration tests: data folder '" + dir.absolutePath + "' cannot be listed " +
+				"(I/O error or permissions), so its emptiness cannot be verified. Fix the config or permissions.")
+		}
+		if (children.length > 0) {
+			throw new IllegalStateException(
+				"Refusing to run integration tests: data folder '" + dir.absolutePath + "' is not empty " +
+				"at startup. The suite writes test data here and deletes it after the run, so it must start " +
+				"empty (or absent) to prove the run owns it — this guards a misconfigured " +
+				"entrystore.data.folder from polluting or deleting real data. Clear it or fix the config.")
+		}
+	}
+
+	/**
 	 * Confirms the running app resolved {@code entrystore.data.folder} to the same directory guarded before
 	 * startup. If override logic changed it, the pre-start emptiness guard and the shutdown cleanup would
 	 * target the wrong directory, so the run fails rather than continue against an unguarded folder.
 	 */
 	private static void verifyGuardedDataFolderUnchanged(File guardedDataFolder, String effectiveDataFolder) {
-		def effective = effectiveDataFolder == null ? null
-			: canonicalFile(new File(effectiveDataFolder.replaceFirst('^file://', '').replaceFirst('^file:', '')))
+		def effective = effectiveDataFolder == null ? null : canonicalFile(toDataFolderFile(effectiveDataFolder))
 		if (effective != guardedDataFolder) {
 			throw new IllegalStateException(
 				"entrystore.data.folder mismatch: guarded '" + guardedDataFolder + "' before startup, but the " +
@@ -222,10 +245,12 @@ abstract class BaseSpec extends Specification {
 		}
 	}
 
-	private static File canonicalFile(File f) {
+	@PackageScope
+	static File canonicalFile(File f) {
 		try {
 			return f.canonicalFile
-		} catch (IOException ignored) {
+		} catch (IOException e) {
+			log.warn('Could not canonicalize data folder path {} ({}); falling back to absolute path', f, e.message, e)
 			return f.absoluteFile
 		}
 	}
