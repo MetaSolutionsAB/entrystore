@@ -388,6 +388,10 @@ entrystore.solr.extract-fulltext=off
 ## Cleanup of all triples that track deleted entries
 # entrystore.repository.track-deleted-entries.cleanup=false
 
+## Writes inside one RepositoryManager.inBatch call are committed every N operations, so a large
+## batch does not hold one unbounded transaction; atomicity is per checkpoint. (default: 10000)
+# entrystore.repository.batch.max-operations=10000
+
 ## Temporary override of the admin-password
 # entrystore.auth.adminpw=newtempadminpw
 

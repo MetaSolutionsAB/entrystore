@@ -180,6 +180,9 @@ public interface Settings {
 	String REPOSITORY_TRACK_DELETED = "entrystore.repository.track-deleted-entries";
 	String REPOSITORY_TRACK_DELETED_CLEANUP = "entrystore.repository.track-deleted-entries.cleanup";
 
+	/** Batch-aware operations after which {@code inBatch} commits and begins again; bounds the transaction size. */
+	String REPOSITORY_BATCH_MAX_OPERATIONS = "entrystore.repository.batch.max-operations";
+
 	String PROXY_WHITELIST_ANONYMOUS = "entrystore.proxy.whitelist.anonymous";
 	String PROXY_WHITELIST_LOCAL = "entrystore.proxy.whitelist.local";
 	String PROXY_REMOTE_RESOURCE_DELETE_WHITELIST = "entrystore.proxy.remote-resource.delete.whitelist";

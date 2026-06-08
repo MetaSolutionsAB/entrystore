@@ -22,6 +22,7 @@ public class Arguments {
 	int interRequestsModulo = -1;
 	boolean withInterContexts = false;
 	boolean withAcl = false;
+	boolean batched = false;
 	File storePath;
 	File solrPath;
 
