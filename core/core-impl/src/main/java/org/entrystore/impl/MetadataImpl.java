@@ -105,32 +105,17 @@ public class MetadataImpl implements Metadata {
 		if (pm != null) {
 			pm.checkAuthenticatedUserAuthorized(entry, AccessProperty.WriteMetadata);
 		}
-		
+
 		try {
 			synchronized (this.entry.repository) {
+				RepositoryConnection batchRc = this.entry.repositoryManager.getActiveBatchConnection();
+				if (batchRc != null) {
+					doSetGraph(batchRc, graph, false);
+					return;
+				}
 				RepositoryConnection rc = this.entry.repository.getConnection();
-				rc.begin();
 				try {
-					Model oldGraph = removeGraphSynchronized(rc);
-					addGraphSynchronized(rc, graph);
-					ProvenanceImpl provenance = (ProvenanceImpl) this.entry.getProvenance();
-					if (provenance != null && !cached) {
-						provenance.addMetadataEntity(oldGraph, rc);
-					}
-					rc.commit();
-					if (cached) {
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ExternalMetadataUpdated, graph));
-					} else {
-						entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.MetadataUpdated, graph));
-					}
-				} catch (AuthorizationException ae) {
-					rc.rollback();
-					log.warn(ae.getMessage());
-					throw ae;
-				} catch (Exception e) {
-					rc.rollback();
-					log.error(e.getMessage());
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
+					doSetGraph(rc, graph, true);
 				} finally {
 					rc.close();
 				}
@@ -138,6 +123,40 @@ public class MetadataImpl implements Metadata {
 		} catch (RepositoryException e) {
 			log.error(e.getMessage());
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+		}
+	}
+
+	private void doSetGraph(RepositoryConnection rc, Model graph, boolean manageTx) {
+		if (manageTx) {
+			rc.begin();
+		}
+		try {
+			Model oldGraph = removeGraphSynchronized(rc);
+			addGraphSynchronized(rc, graph);
+			ProvenanceImpl provenance = (ProvenanceImpl) this.entry.getProvenance();
+			if (provenance != null && !cached) {
+				provenance.addMetadataEntity(oldGraph, rc);
+			}
+			if (manageTx) {
+				rc.commit();
+			}
+			if (cached) {
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ExternalMetadataUpdated, graph));
+			} else {
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.MetadataUpdated, graph));
+			}
+		} catch (AuthorizationException ae) {
+			if (manageTx) {
+				rc.rollback();
+			}
+			log.warn(ae.getMessage());
+			throw ae;
+		} catch (Exception e) {
+			if (manageTx) {
+				rc.rollback();
+			}
+			log.error(e.getMessage());
+			throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 		}
 	}
 	public Model removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {

@@ -817,108 +817,134 @@ public class ContextImpl extends ResourceImpl implements Context {
 	}
 
 	synchronized protected EntryImpl createNewMinimalItem(URI resourceURI, URI metadataURI, EntryType lType, GraphType bType, ResourceType rType, String entryId) {
+		RepositoryConnection batchRc = entry.repositoryManager.getActiveBatchConnection();
+		if (batchRc != null) {
+			try {
+				return doCreateNewMinimalItem(batchRc, false, resourceURI, metadataURI, lType, bType, rType, entryId);
+			} catch (RepositoryException e) {
+				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+			}
+		}
 		try {
-			// Factory and connection.
 			try (RepositoryConnection rc = entry.repository.getConnection()) {
-				ValueFactory vf = entry.repository.getValueFactory();
-				rc.begin();
-
-				// Find current counter
-				if (counter == -1) {
-					List<Statement> counters = rc.getStatements(
-						this.resourceURI,
-						RepositoryProperties.counter,
-						null,
-						false,
-						this.resourceURI).stream().toList();
-
-					if (!counters.isEmpty()) {
-						counter = ((Literal) counters.getFirst().getObject()).intValue();
-					} else {
-						counter = 0;
-					}
-				}
-
-				// Find new information identity
-				String base = entry.repositoryManager.getRepositoryURL().toString();
-				List<Statement> infoRecord;
-				String identity;
-				if (entryId != null) {
-					identity = entryId;
-				} else {
-					do {
-						counter++;
-						identity = Long.toString(counter);
-						IRI entryUri = vf.createIRI(base + this.id + "/" + RepositoryProperties.ENTRY_PATH + "/" + counter);
-						infoRecord = rc.getStatements(null, null, null, false, entryUri).stream().toList();
-					} while (!infoRecord.isEmpty()); // keep counting if a candidate is taken
-				}
-
-				// resURI - resourceURI
-				IRI resURI;
-				if (resourceURI != null) {
-					String resourceURIStr = resourceURI.toString().replace("_newId", identity);
-					resURI = vf.createIRI(resourceURIStr);
-				} else {
-					if (bType == GraphType.Context ||
-						bType == GraphType.SystemContext) {
-						resURI = vf.createIRI(URISplit.createURI(base, identity).toString());
-					} else {
-						resURI = vf.createIRI(URISplit.createURI(base, this.id, RepositoryProperties.getResourcePath(bType), identity).toString());
-					}
-				}
-
-				EntryImpl newEntry = null;
-				// Everything after rc.commit() runs on a transaction that has already landed, so a failure
-				// there must not be reported as, or answered with, a rollback: rolling back a committed
-				// transaction fails in its own right and that secondary failure would replace the original
-				// exception before anything logs it, while the caller is told the create did not happen.
-				boolean committed = false;
-				try {
-					// Initialize a new item and new info.
-					newEntry = new EntryImpl(identity, this, this.entry.repositoryManager, this.entry.getRepository());
-
-					// Initialize a new information object.
-					if (lType == EntryType.Reference || lType == EntryType.LinkReference) {
-						newEntry.create(resURI, vf.createIRI(metadataURI.toString()), bType, lType, rType, rc);
-					} else {
-						newEntry.create(resURI, null, bType, lType, rType, rc);
-					}
-					initResource(newEntry);
-
-					// Update index with new item. Collected, not applied: this transaction commits below,
-					// and an index op that outlived a rollback would name an entry that never existed.
-					List<IndexOp> txOps = new ArrayList<>();
-					addToIndex(newEntry.getSesameEntryURI(), newEntry.getSesameResourceURI(), newEntry.getSesameExternalMetadataURI(), rc, txOps);
-
-					// Update the index counter.
-					List<Statement> counters = rc.getStatements(this.resourceURI, RepositoryProperties.counter, null, false, this.resourceURI).stream().toList();
-					rc.remove(counters, this.resourceURI);
-					rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(counter), this.resourceURI);
-
-					rc.commit();
-					committed = true;
-					applyIndexOps(txOps);
-					softCache.put(newEntry);
-					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
-					return newEntry;
-				} catch (Exception e) {
-					if (committed) {
-						log.error("Entry {} in context {} was committed, but the work after the commit failed; "
-										+ "the entry exists in the store",
-								newEntry != null ? newEntry.getEntryURI() : identity, this.id, e);
-						throw new org.entrystore.repository.RepositoryException(
-								"Entry was created but could not be published to the in-memory state", e);
-					}
-					rc.rollback();
-					if (newEntry != null) {
-						newEntry.refreshFromRepository(rc);
-					}
-					throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
-				}
+				return doCreateNewMinimalItem(rc, true, resourceURI, metadataURI, lType, bType, rType, entryId);
 			}
 		} catch (RepositoryException e) {
 			throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository", e);
+		}
+	}
+
+	/**
+	 * Creates the entry on {@code rc}. With {@code manageTx} the caller's connection is this
+	 * method's to begin and commit; without it the connection belongs to a batch that commits
+	 * later, so this method neither begins, commits nor rolls back, and hands its index ops to
+	 * the batch instead of applying them.
+	 */
+	private EntryImpl doCreateNewMinimalItem(RepositoryConnection rc, boolean manageTx, URI resourceURI, URI metadataURI, EntryType lType, GraphType bType, ResourceType rType, String entryId) {
+		ValueFactory vf = entry.repository.getValueFactory();
+		if (manageTx) {
+			rc.begin();
+		}
+
+		// Find current counter
+		if (counter == -1) {
+			List<Statement> counters = rc.getStatements(
+				this.resourceURI,
+				RepositoryProperties.counter,
+				null,
+				false,
+				this.resourceURI).stream().toList();
+
+			if (!counters.isEmpty()) {
+				counter = ((Literal) counters.getFirst().getObject()).intValue();
+			} else {
+				counter = 0;
+			}
+		}
+
+		// Find new information identity
+		String base = entry.repositoryManager.getRepositoryURL().toString();
+		List<Statement> infoRecord;
+		String identity;
+		if (entryId != null) {
+			identity = entryId;
+		} else {
+			do {
+				counter++;
+				identity = Long.toString(counter);
+				IRI entryUri = vf.createIRI(base + this.id + "/" + RepositoryProperties.ENTRY_PATH + "/" + counter);
+				infoRecord = rc.getStatements(null, null, null, false, entryUri).stream().toList();
+			} while (!infoRecord.isEmpty()); // keep counting if a candidate is taken
+		}
+
+		// resURI - resourceURI
+		IRI resURI;
+		if (resourceURI != null) {
+			String resourceURIStr = resourceURI.toString().replace("_newId", identity);
+			resURI = vf.createIRI(resourceURIStr);
+		} else {
+			if (bType == GraphType.Context ||
+				bType == GraphType.SystemContext) {
+				resURI = vf.createIRI(URISplit.createURI(base, identity).toString());
+			} else {
+				resURI = vf.createIRI(URISplit.createURI(base, this.id, RepositoryProperties.getResourcePath(bType), identity).toString());
+			}
+		}
+
+		EntryImpl newEntry = null;
+		// Everything after rc.commit() runs on a transaction that has already landed, so a failure
+		// there must not be reported as, or answered with, a rollback: rolling back a committed
+		// transaction fails in its own right and that secondary failure would replace the original
+		// exception before anything logs it, while the caller is told the create did not happen.
+		boolean committed = false;
+		try {
+			// Initialize a new item and new info.
+			newEntry = new EntryImpl(identity, this, this.entry.repositoryManager, this.entry.getRepository());
+
+			// Initialize a new information object.
+			if (lType == EntryType.Reference || lType == EntryType.LinkReference) {
+				newEntry.create(resURI, vf.createIRI(metadataURI.toString()), bType, lType, rType, rc);
+			} else {
+				newEntry.create(resURI, null, bType, lType, rType, rc);
+			}
+			initResource(newEntry);
+
+			// Update index with new item. Collected, not applied: this transaction commits below —
+			// or, in a batch, when the batch ends — and an index op that outlived a rollback would
+			// name an entry that never existed.
+			List<IndexOp> txOps = new ArrayList<>();
+			addToIndex(newEntry.getSesameEntryURI(), newEntry.getSesameResourceURI(), newEntry.getSesameExternalMetadataURI(), rc, txOps);
+
+			// Update the index counter.
+			List<Statement> counters = rc.getStatements(this.resourceURI, RepositoryProperties.counter, null, false, this.resourceURI).stream().toList();
+			rc.remove(counters, this.resourceURI);
+			rc.add(this.resourceURI, RepositoryProperties.counter, vf.createLiteral(counter), this.resourceURI);
+
+			if (manageTx) {
+				rc.commit();
+				committed = true;
+				applyIndexOps(txOps);
+			} else {
+				entry.repositoryManager.runAfterBatchCommit(() -> applyIndexOps(txOps));
+			}
+			softCache.put(newEntry);
+			entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(newEntry, RepositoryEvent.EntryCreated));
+			return newEntry;
+		} catch (Exception e) {
+			if (committed) {
+				log.error("Entry {} in context {} was committed, but the work after the commit failed; "
+								+ "the entry exists in the store",
+						newEntry != null ? newEntry.getEntryURI() : identity, this.id, e);
+				throw new org.entrystore.repository.RepositoryException(
+						"Entry was created but could not be published to the in-memory state", e);
+			}
+			if (manageTx) {
+				rc.rollback();
+				if (newEntry != null) {
+					newEntry.refreshFromRepository(rc);
+				}
+			}
+			throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 		}
 	}
 
