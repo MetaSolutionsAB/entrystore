@@ -115,7 +115,11 @@ public class Benchmark {
 			try {
 
 				if (arguments.isWithTransactions()) {
-					MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
+					if (arguments.isBatched()) {
+						MultipleTransactionsBatched.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
+					} else {
+						MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
+					}
 
 					// reading
 					if (!arguments.isWithInterContexts()) {
