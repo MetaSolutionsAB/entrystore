@@ -1,5 +1,8 @@
 package org.entrystore;
 
+import org.eclipse.rdf4j.model.Statement;
+import org.eclipse.rdf4j.repository.RepositoryConnection;
+import org.eclipse.rdf4j.repository.RepositoryResult;
 import org.entrystore.config.Config;
 import org.entrystore.generator.ObjectGenerator;
 import org.entrystore.impl.RepositoryManagerImpl;
@@ -69,6 +72,28 @@ public class Benchmark {
 		LogUtils.logTimeDifference("Reading from database took", start, end);
 	}
 
+	private static void readAllFromRepository(RepositoryManagerImpl repositoryManager, int sizeToGenerate) {
+
+		LogUtils.logType(" READING");
+
+		LocalDateTime start = LocalDateTime.now();
+		LogUtils.logDate("Starting reading from database at", start);
+
+		try (RepositoryConnection connection = repositoryManager.getRepository().getConnection();
+			 RepositoryResult<Statement> result = connection.getStatements(null, null, null)) {
+			for (Statement statement : result) {
+				String value = statement.getObject().stringValue();
+				if (sizeToGenerate < 11) {
+					System.out.printf("Database contains: %s\n", statement);
+				}
+			}
+		}
+
+		LocalDateTime end = LocalDateTime.now();
+		LogUtils.logDate("Ended reading from database at", end);
+		LogUtils.logTimeDifference("Reading from database took", start, end);
+	}
+
 	public static void main(String[] args) {
 
 		try {
@@ -89,12 +114,17 @@ public class Benchmark {
 
 			try {
 
-				MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
+				if (arguments.isWithTransactions()) {
+					MultipleTransactions.runBenchmark(repositoryManager, persons, arguments.getInterRequestsModulo(), arguments.isWithInterContexts(), arguments.isWithAcl());
 
-				// reading
-				if (!arguments.isWithInterContexts()) {
-					Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS + "_1");
-					readAllFromDatabase(context, arguments.getSizeToGenerate());
+					// reading
+					if (!arguments.isWithInterContexts()) {
+						Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS + "_1");
+						readAllFromDatabase(context, arguments.getSizeToGenerate());
+					}
+				} else {
+					SingleTransaction.runBenchmark(repositoryManager, persons);
+					readAllFromRepository(repositoryManager, arguments.getSizeToGenerate());
 				}
 			} finally {
 				// close the connection and shutDown the database
