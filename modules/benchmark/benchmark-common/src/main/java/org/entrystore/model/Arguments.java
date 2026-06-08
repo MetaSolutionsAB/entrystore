@@ -43,6 +43,7 @@ public class Arguments {
 	boolean withContextRemoval = false;
 	boolean withContextImport = false;
 	boolean withTreeRemoval = false;
+	boolean batched = false;
 	File storePath;
 	File solrPath;
 	File dataPath;
