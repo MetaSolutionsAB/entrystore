@@ -62,6 +62,7 @@ public class BenchmarkCommons {
 		Option storePathOption = createOption("p", "path", "PATH", "Store path: @string.", false);
 		Option baseUrlOption = createOption("b", "base", "BASE", "Base URL: @string.", false);
 		Option batchedOption = createOption("B", "batched", "BATCHED", "Run EntryStore inserts inside RepositoryManager.inBatch(...) — one commit per person: @boolean.", false);
+		Option indexesOption = createOption("x", "indexes", "INDEXES", "Override the native/lmdb store triple indexes (default: 'cspo,spoc'). Example: 'cspo'.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -74,6 +75,7 @@ public class BenchmarkCommons {
 		options.addOption(storePathOption);
 		options.addOption(baseUrlOption);
 		options.addOption(batchedOption);
+		options.addOption(indexesOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -165,6 +167,13 @@ public class BenchmarkCommons {
 			boolean isBatched = commandLine.hasOption("B") && "true".equals(commandLine.getOptionValue(batchedOption));
 			arguments.setBatched(isBatched);
 			System.setProperty("log.batched", arguments.isBatched() ? "on" : "off");
+
+			if (commandLine.hasOption("x")) {
+				arguments.setIndexes(commandLine.getOptionValue(indexesOption));
+				System.setProperty("log.indexes", arguments.getIndexes());
+			} else {
+				System.setProperty("log.indexes", INDEXES);
+			}
 
 			// welcome message
 			LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());

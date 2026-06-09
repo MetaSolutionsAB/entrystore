@@ -23,6 +23,7 @@ public class Arguments {
 	boolean withInterContexts = false;
 	boolean withAcl = false;
 	boolean batched = false;
+	String indexes;
 	File storePath;
 	File solrPath;
 
