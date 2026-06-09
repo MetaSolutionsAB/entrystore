@@ -6,6 +6,7 @@ import org.entrystore.rest.it.util.NameSpaceConst
 import org.entrystore.rest.it.util.UserUtil
 import org.springframework.http.HttpMethod
 
+import java.nio.file.Files
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -1981,7 +1982,7 @@ class ResourceIT extends BaseSpec {
 
 		// Create a temp file whose name carries the malicious characters; multipart envelope
 		// reuses File.getName() in EntryStoreClient.buildMultipartContent.
-		def tempDir = java.nio.file.Files.createTempDirectory('entrystore-mp-it').toFile()
+		def tempDir = Files.createTempDirectory('entrystore-mp-it').toFile()
 		def maliciousFile = new File(tempDir, 'datei.exe%20')
 		maliciousFile.bytes = [0xDE, 0xAD, 0xBE, 0xEF] as byte[]
 		// Distinct per-part Content-Type — pins that the multipart code path was exercised.
