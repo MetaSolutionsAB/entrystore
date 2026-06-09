@@ -151,6 +151,28 @@ public class EntryImplTest extends AbstractCoreTest {
 		}
 	}
 
+	/**
+	 * The modification date is assigned in memory before the commit, so a rolled-back write leaves the entry holding a
+	 * date the store never saw. The next write must still replace the stored one rather than add a second.
+	 */
+	@Test
+	public void writeAfterARolledBackWrite_leavesExactlyOneModifiedDate() throws Exception {
+		EntryImpl entry = (EntryImpl) context.createLink(null, URI.create("http://example.com/modified"), null);
+		IRI entryIRI = entry.getSesameEntryURI();
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			rc.begin();
+			entry.updateModifiedDateSynchronized(rc, rc.getValueFactory());
+			rc.rollback();
+		}
+		entry.updateModificationDate();
+
+		try (RepositoryConnection rc = rm.getRepository().getConnection()) {
+			assertEquals(1, rc.getStatements(entryIRI, DCTERMS.MODIFIED, null, false, entryIRI).stream().count(),
+					"exactly one modification date may be stored");
+		}
+	}
+
 	@Test
 	public void referenceType() {
 		assertSame(EntryType.Local, listEntry.getEntryType());
