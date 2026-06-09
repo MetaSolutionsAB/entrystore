@@ -45,6 +45,9 @@ public class Benchmark {
 		} else if (arguments.getStoreType().equalsIgnoreCase(BenchmarkCommons.NATIVE)) {
 			config.addProperty(Settings.STORE_INDEXES, BenchmarkCommons.INDEXES);
 		}
+		if (arguments.getForceSync() != null && arguments.getStoreType().equalsIgnoreCase(BenchmarkCommons.NATIVE)) {
+			config.addProperty(Settings.STORE_FORCE_SYNC, arguments.getForceSync().toString());
+		}
 
 		config.setProperty(Settings.BASE_URL, arguments.getBaseUrl());
 		config.setProperty(Settings.SOLR, "off");

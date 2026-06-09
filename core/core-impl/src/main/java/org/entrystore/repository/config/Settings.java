@@ -151,6 +151,7 @@ public interface Settings {
 	String STORE_INDEXES = "entrystore.repository.store.indexes";
 	String STORE_WAL = "entrystore.repository.store.wal";
 	String STORE_TYPE = "entrystore.repository.store.type";
+	String STORE_FORCE_SYNC = "entrystore.repository.store.force-sync";
 	String STORE_INIT_WITH_TEST_DATA = "entrystore.repository.store.init-with-test-data";
 
 	String SOLR = "entrystore.solr";

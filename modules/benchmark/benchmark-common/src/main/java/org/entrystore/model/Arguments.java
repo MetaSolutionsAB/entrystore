@@ -44,6 +44,7 @@ public class Arguments {
 	boolean withContextImport = false;
 	boolean withTreeRemoval = false;
 	boolean batched = false;
+	Boolean forceSync;
 	File storePath;
 	File solrPath;
 	File dataPath;
