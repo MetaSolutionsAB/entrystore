@@ -49,6 +49,30 @@ public class MetadataImpl implements Metadata {
 	@Getter
 	private boolean cached;
 	private boolean localCache;
+	/**
+	 * True when the {@link #mdContext} named graph is known to contain no statements <em>because
+	 * this object put it in that state</em>. Set by {@link EntryImpl#create} for freshly created
+	 * entries (the only path where the mdContext is guaranteed empty) and maintained by
+	 * {@link #doSetGraph}. When true, the overwrite half of {@code doSetGraph} can skip its read +
+	 * clear + inverse-relation loop entirely. Volatile because creation and the first
+	 * {@code setGraph} can land on different threads.
+	 *
+	 * <p>{@code doSetGraph} drops the claim before it writes and restores it only once the write is
+	 * durable — after its own commit, or, inside a batch where its statements are merely staged,
+	 * from {@link RepositoryManagerImpl#runAfterBatchCommit}. A rolled-back write therefore leaves
+	 * the flag false rather than describing a graph the rollback put back. That costs a batch its
+	 * short-circuit on a second write to the same entry, which is the correct trade: the first
+	 * write's statements really are on the connection and have to be cleared.
+	 *
+	 * <p>{@link #markKnownEmpty} is the one exception and needs none of this. It fires from
+	 * {@link EntryImpl#create}, so if that transaction rolls back the entry never existed and its
+	 * mdContext is empty either way — which is what the flag says.
+	 *
+	 * <p>Deliberately <b>not</b> consulted by {@link #removeGraphSynchronized}; see
+	 * {@link #removeGraphSynchronized(RepositoryConnection, boolean)} for why the deletion path
+	 * cannot trust it.
+	 */
+	private volatile boolean knownEmpty = false;
 	Logger log = LoggerFactory.getLogger(MetadataImpl.class);
 
 	public MetadataImpl(EntryImpl entry, IRI uri, IRI resourceUri, boolean cached) {
@@ -58,6 +82,15 @@ public class MetadataImpl implements Metadata {
 		this.mdContext = uri;
 		this.cached = cached;
 		this.localCache = true; //TODO fix
+	}
+
+	/**
+	 * Package-private hint that the {@link #mdContext} is currently empty in the
+	 * repository. Called by {@link EntryImpl#create} for freshly created entries
+	 * so the first {@link #setGraph} can short-circuit its overwrite.
+	 */
+	void markKnownEmpty() {
+		this.knownEmpty = true;
 	}
 
 	public Model getGraph() {
@@ -130,8 +163,16 @@ public class MetadataImpl implements Metadata {
 		if (manageTx) {
 			rc.begin();
 		}
+		// Read once and drop the claim before touching the store. From here until the write is
+		// durable this object cannot say what mdContext holds, and every way out of this method
+		// short of a commit — a rollback below, a batch that rolls back later — leaves the store
+		// holding the pre-write graph. Leaving the flag set across such a failure would let the
+		// next setGraph skip its overwrite and merge onto data it believes is not there.
+		boolean wasKnownEmpty = knownEmpty;
+		knownEmpty = false;
+		boolean writingEmptyGraph = graph == null || graph.isEmpty();
 		try {
-			Model oldGraph = removeGraphSynchronized(rc);
+			Model oldGraph = removeGraphSynchronized(rc, wasKnownEmpty);
 			addGraphSynchronized(rc, graph);
 			ProvenanceImpl provenance = (ProvenanceImpl) this.entry.getProvenance();
 			if (provenance != null && !cached) {
@@ -139,6 +180,13 @@ public class MetadataImpl implements Metadata {
 			}
 			if (manageTx) {
 				rc.commit();
+				knownEmpty = writingEmptyGraph;
+			} else {
+				// Inside a batch the statements above are only staged, so the claim is published
+				// once the batch commits — and dropped with the batch if it does not. Registered
+				// for every write, empty or not, because the actions run in registration order:
+				// the last write in the batch is therefore the one that has the final say.
+				entry.repositoryManager.runAfterBatchCommit(() -> knownEmpty = writingEmptyGraph);
 			}
 			if (cached) {
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ExternalMetadataUpdated, graph));
@@ -160,6 +208,31 @@ public class MetadataImpl implements Metadata {
 		}
 	}
 	public Model removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {
+		return removeGraphSynchronized(rc, false);
+	}
+
+	/**
+	 * @param graphIsKnownEmpty whether {@link #mdContext} is already known to hold nothing, in which
+	 *                          case there is nothing to read, clear or un-relate. Only
+	 *                          {@link #doSetGraph} ever passes true, from {@link #knownEmpty}: it is
+	 *                          about to overwrite the graph this object itself last wrote, and
+	 *                          skipping the read there is what makes bulk creation viable
+	 *                          (ENTRYSTORE-1074).
+	 *                          <p>
+	 *                          Entry deletion passes false unconditionally. {@code knownEmpty} only
+	 *                          tracks writes that went through this instance, so it says nothing
+	 *                          about statements the graph acquired some other way — a restore, a
+	 *                          repair, a direct store write — and deletion's job is to leave none of
+	 *                          those behind. A skipped clear there orphans them permanently behind an
+	 *                          entry that no longer exists, and deletion is not a hot path, so it
+	 *                          pays the scan.
+	 */
+	private Model removeGraphSynchronized(RepositoryConnection rc, boolean graphIsKnownEmpty)
+			throws RepositoryException {
+		if (graphIsKnownEmpty) {
+			// mdContext is known empty: nothing to read, nothing to clear, no inverse relations to remove.
+			return new LinkedHashModel();
+		}
 		String base = this.entry.repositoryManager.getRepositoryURL().toString();
 		//Fetch old graph
 		Model graph = Iterations.addAll(rc.getStatements(null, null, null, false, mdContext), new LinkedHashModel());
