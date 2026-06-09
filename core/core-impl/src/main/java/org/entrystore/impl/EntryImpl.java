@@ -217,6 +217,14 @@ public class EntryImpl implements Entry {
 
 		initialize(bType, lType, rType, rc);
 		initMetadataObjects();
+
+		// A new entry's metadata graphs are empty, so its first setGraph need not remove an old graph
+		if (localMetadata instanceof MetadataImpl localMd) {
+			localMd.markKnownEmpty();
+		}
+		if (cachedExternalMetadata instanceof MetadataImpl cachedMd) {
+			cachedMd.markKnownEmpty();
+		}
 	}
 
 	private void initialize(GraphType bt, EntryType locT, ResourceType repT, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
