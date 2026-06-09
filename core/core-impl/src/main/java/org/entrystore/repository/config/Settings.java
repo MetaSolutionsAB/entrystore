@@ -152,6 +152,7 @@ public interface Settings {
 	String STORE_ENDPOINT_UPDATE = "entrystore.repository.store.endpoint-update";
 	String STORE_INDEXES = "entrystore.repository.store.indexes";
 	String STORE_TYPE = "entrystore.repository.store.type";
+	String STORE_FORCE_SYNC = "entrystore.repository.store.force-sync";
 	String STORE_INIT_WITH_TEST_DATA = "entrystore.repository.store.init-with-test-data";
 
 	String STOREJS_JS = "entrystore.repository.storejs.js";
