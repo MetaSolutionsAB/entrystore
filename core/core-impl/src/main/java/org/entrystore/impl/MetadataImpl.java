@@ -49,6 +49,15 @@ public class MetadataImpl implements Metadata {
 	@Getter
 	private boolean cached;
 	private boolean localCache;
+	/**
+	 * True when the {@link #mdContext} named graph is known to contain no statements.
+	 * Set by {@link EntryImpl#create} for freshly created entries (the only path where
+	 * the mdContext is guaranteed empty) and maintained by {@link #doSetGraph}. When
+	 * true, {@link #removeGraphSynchronized} can skip its read + clear + inverse-relation
+	 * loop entirely. Volatile because creation and the first {@code setGraph} can land
+	 * on different threads.
+	 */
+	private volatile boolean knownEmpty = false;
 	Logger log = LoggerFactory.getLogger(MetadataImpl.class);
 
 	public MetadataImpl(EntryImpl entry, IRI uri, IRI resourceUri, boolean cached) {
@@ -58,6 +67,15 @@ public class MetadataImpl implements Metadata {
 		this.mdContext = uri;
 		this.cached = cached;
 		this.localCache = true; //TODO fix
+	}
+
+	/**
+	 * Package-private hint that the {@link #mdContext} is currently empty in the
+	 * repository. Called by {@link EntryImpl#create} for freshly created entries
+	 * so {@link #removeGraphSynchronized} can short-circuit its first invocation.
+	 */
+	void markKnownEmpty() {
+		this.knownEmpty = true;
 	}
 
 	public Model getGraph() {
@@ -133,6 +151,7 @@ public class MetadataImpl implements Metadata {
 		try {
 			Model oldGraph = removeGraphSynchronized(rc);
 			addGraphSynchronized(rc, graph);
+			knownEmpty = graph == null || graph.isEmpty();
 			ProvenanceImpl provenance = (ProvenanceImpl) this.entry.getProvenance();
 			if (provenance != null && !cached) {
 				provenance.addMetadataEntity(oldGraph, rc);
@@ -160,6 +179,10 @@ public class MetadataImpl implements Metadata {
 		}
 	}
 	public Model removeGraphSynchronized(RepositoryConnection rc) throws RepositoryException {
+		if (knownEmpty) {
+			// mdContext is known empty: nothing to read, nothing to clear, no inverse relations to remove.
+			return new LinkedHashModel();
+		}
 		String base = this.entry.repositoryManager.getRepositoryURL().toString();
 		//Fetch old graph
 		Model graph = Iterations.addAll(rc.getStatements(null, null, null, false, mdContext), new LinkedHashModel());
