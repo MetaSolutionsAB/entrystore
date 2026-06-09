@@ -96,6 +96,7 @@ public class BenchmarkCommons {
 						+ "while another context is written to.")
 				.build();
 		Option batchedOption = createOption("B", "batched", "BATCHED", "Run all EntryStore inserts inside one RepositoryManagerImpl.inBatch(...) call, committed every entrystore.repository.batch.max-operations operations: @boolean.", false);
+		Option forceSyncOption = createOption("f", "force-sync", "FORCE_SYNC", "Override NativeStore forceSync (default off — no fsync per commit). 'true' forces an fsync on every commit at the durability/throughput trade-off: @boolean.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -112,6 +113,7 @@ public class BenchmarkCommons {
 		options.addOption(contextImportOption);
 		options.addOption(treeRemovalOption);
 		options.addOption(batchedOption);
+		options.addOption(forceSyncOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -225,6 +227,13 @@ public class BenchmarkCommons {
 						+ "not with -t true.");
 				printHelp(options);
 				System.exit(1);
+			}
+
+			if (commandLine.hasOption("f")) {
+				arguments.setForceSync(Boolean.valueOf("true".equals(commandLine.getOptionValue(forceSyncOption))));
+				System.setProperty("log.forceSync", arguments.getForceSync().toString());
+			} else {
+				System.setProperty("log.forceSync", "default");
 			}
 
 			// welcome message

@@ -238,7 +238,16 @@ public class RepositoryManagerImpl implements RepositoryManager {
 						path, indexes, walState(wal));
 				readingGraphsByScan = !hasContextFirstIndex(indexes);
 				warnIfNoContextFirstIndex(indexes);
-				this.repository = new SailRepository(newNativeStore(path, indexes, wal));
+				NativeStore store = newNativeStore(path, indexes, wal);
+				// NativeStore defaults to forceSync=false (no fsync per commit). Honor an
+				// explicit override so bulk-import or test harnesses can pick the
+				// durability/throughput trade-off deliberately.
+				if (configuration.containsKey(Settings.STORE_FORCE_SYNC)) {
+					boolean forceSync = configuration.getBoolean(Settings.STORE_FORCE_SYNC, false);
+					store.setForceSync(forceSync);
+					log.info("Native Store forceSync explicitly set to {}", forceSync);
+				}
+				this.repository = new SailRepository(store);
 			}
 		} else if (storeType.equalsIgnoreCase("http")) {
 			if (!configuration.containsKey(Settings.STORE_URL)) {
