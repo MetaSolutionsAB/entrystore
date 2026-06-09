@@ -63,6 +63,7 @@ public class BenchmarkCommons {
 		Option baseUrlOption = createOption("b", "base", "BASE", "Base URL: @string.", false);
 		Option batchedOption = createOption("B", "batched", "BATCHED", "Run EntryStore inserts inside RepositoryManager.inBatch(...) — one commit per person: @boolean.", false);
 		Option indexesOption = createOption("x", "indexes", "INDEXES", "Override the native/lmdb store triple indexes (default: 'cspo,spoc'). Example: 'cspo'.", false);
+		Option forceSyncOption = createOption("f", "force-sync", "FORCE_SYNC", "Override NativeStore forceSync (default off — no fsync per commit). 'true' forces an fsync on every commit at the durability/throughput trade-off: @boolean.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -76,6 +77,7 @@ public class BenchmarkCommons {
 		options.addOption(baseUrlOption);
 		options.addOption(batchedOption);
 		options.addOption(indexesOption);
+		options.addOption(forceSyncOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -173,6 +175,13 @@ public class BenchmarkCommons {
 				System.setProperty("log.indexes", arguments.getIndexes());
 			} else {
 				System.setProperty("log.indexes", INDEXES);
+			}
+
+			if (commandLine.hasOption("f")) {
+				arguments.setForceSync(Boolean.valueOf("true".equals(commandLine.getOptionValue(forceSyncOption))));
+				System.setProperty("log.forceSync", arguments.getForceSync().toString());
+			} else {
+				System.setProperty("log.forceSync", "default");
 			}
 
 			// welcome message
