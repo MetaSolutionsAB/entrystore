@@ -211,6 +211,16 @@ public class EntryImpl implements Entry {
 
 		initialize(bType, lType, rType, rc);
 		initMetadataObjects();
+
+		// Fresh entry: the local and cached-external mdContexts are empty in the repository.
+		// Mark the MetadataImpl instances so the first setGraph can skip the read+clear in
+		// removeGraphSynchronized. Skipped for LocalMetadataWrapper (delegates elsewhere).
+		if (localMetadata instanceof MetadataImpl localMd) {
+			localMd.markKnownEmpty();
+		}
+		if (cachedExternalMetadata instanceof MetadataImpl cachedMd) {
+			cachedMd.markKnownEmpty();
+		}
 	}
 
 	private void initialize(GraphType bt, EntryType locT, ResourceType repT, RepositoryConnection rc) throws RepositoryException, DatatypeConfigurationException {
