@@ -25,6 +25,9 @@ public class Benchmark {
 		if (arguments.getStoreType().equalsIgnoreCase("native")) {
 			String indexes = arguments.getIndexes() != null ? arguments.getIndexes() : BenchmarkCommons.INDEXES;
 			config.addProperty(Settings.STORE_INDEXES, indexes);
+			if (arguments.getForceSync() != null) {
+				config.addProperty(Settings.STORE_FORCE_SYNC, arguments.getForceSync().toString());
+			}
 		}
 
 		config.setProperty(Settings.BASE_URL, arguments.getBaseUrl());
