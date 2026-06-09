@@ -24,6 +24,7 @@ public class Arguments {
 	boolean withAcl = false;
 	boolean batched = false;
 	String indexes;
+	Boolean forceSync;
 	File storePath;
 	File solrPath;
 
