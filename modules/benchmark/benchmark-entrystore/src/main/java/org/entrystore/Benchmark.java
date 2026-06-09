@@ -23,7 +23,8 @@ public class Benchmark {
 		config.addProperty(Settings.STORE_PATH, "file:///" + arguments.getStorePath().getAbsolutePath().replace('\\', '/'));
 
 		if (arguments.getStoreType().equalsIgnoreCase("native")) {
-			config.addProperty(Settings.STORE_INDEXES, BenchmarkCommons.INDEXES);
+			String indexes = arguments.getIndexes() != null ? arguments.getIndexes() : BenchmarkCommons.INDEXES;
+			config.addProperty(Settings.STORE_INDEXES, indexes);
 		}
 
 		config.setProperty(Settings.BASE_URL, arguments.getBaseUrl());
