@@ -1166,12 +1166,18 @@ public class EntryImpl implements Entry {
 	}
 
 	protected void registerEntryModified(RepositoryConnection rc, ValueFactory vf) throws RepositoryException {
+		XMLGregorianCalendar previousModified = this.modified;
 		try {
 			modified = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
 		} catch (DatatypeConfigurationException e) {
 			log.error(e.getMessage());
 		}
-		rc.remove(rc.getStatements(entryURI, RepositoryProperties.Modified, null, false, entryURI), entryURI);
+		// The field is assigned before the commit and not restored by a rollback, so it may name a value the store
+		// never held; an exact-literal remove would then miss and leave a second Modified triple. A wildcard remove
+		// is idempotent and still avoids the getStatements scan. Null only right after creation, with nothing to remove.
+		if (previousModified != null) {
+			rc.remove(entryURI, RepositoryProperties.Modified, null, entryURI);
+		}
 		rc.add(entryURI, RepositoryProperties.Modified, vf.createLiteral(modified), entryURI);
 
 		//Also adding the one who updates using dcterms:contributor
@@ -1183,7 +1189,9 @@ public class EntryImpl implements Entry {
 			IRI contributorURI = vf.createIRI(contributor);
 
 		    //Do not add if the contributor is the same as the creator
-		    if (!contrib.equals(this.getCreator()) && !contributors.contains(contributorURI)) {
+		    if (!contrib.equals(this.getCreator())) {
+				// Added even when the in-memory set has it: that set, like the field above, outlives a rollback,
+				// and re-adding a statement the store holds is a no-op.
 				rc.add(this.entryURI, RepositoryProperties.Contributor, contributorURI, this.entryURI);
 		    	contributors.add(contributorURI);
 		    }
