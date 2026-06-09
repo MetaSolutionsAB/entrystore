@@ -28,6 +28,9 @@ entrystore.repository.store.indexes=cspo,posc
 ## if type=http: entrystore.repository.store.url=URL of Sesame HTTP repository
 ## if type=sparql: entrystore.repository.store.endpoint-query=Query URL of SPARQL repository
 ## if type=sparql: entrystore.repository.store.endpoint-update=Update URL of SPARQL repository
+## Native store only: fsync every commit. Survives an OS crash or power loss, at a measured cost of
+## ~25% on batched writes and ~2.3x on unbatched ones. Unset keeps the RDF4J default (off).
+# entrystore.repository.store.force-sync=true|false
 
 ## Populate an empty repository with test data (from TestSuite)
 # entrystore.repository.store.init-with-test-data=on|off (default: off)
