@@ -1141,12 +1141,22 @@ public class EntryImpl implements Entry {
 	}
 
 	protected void registerEntryModified(RepositoryConnection rc, ValueFactory vf) throws RepositoryException {
+		XMLGregorianCalendar previousModified = this.modified;
 		try {
 			modified = DatatypeFactory.newInstance().newXMLGregorianCalendar(new GregorianCalendar());
 		} catch (DatatypeConfigurationException e) {
 			log.error(e.getMessage());
 		}
-		rc.remove(rc.getStatements(entryURI, RepositoryProperties.Modified, null, false, entryURI), entryURI);
+		// Overwrite-in-place: when we already know the prior Modified value (either we
+		// wrote it on a previous call or loadFromStatements read it), exact-remove avoids
+		// the getStatements pattern scan. When previous is null (very first call right
+		// after entry creation in initialize()) there is no Modified triple to remove.
+		// Callers that bypass this method to manipulate the entry context (notably
+		// setGraphRaw, which rc.clear()s and rewrites everything) must reset this.modified
+		// to null beforehand if they need the legacy pattern-remove semantics.
+		if (previousModified != null) {
+			rc.remove(entryURI, RepositoryProperties.Modified, vf.createLiteral(previousModified), entryURI);
+		}
 		rc.add(entryURI, RepositoryProperties.Modified, vf.createLiteral(modified), entryURI);
 
 		//Also adding the one who updates using dcterms:contributor
