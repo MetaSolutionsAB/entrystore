@@ -21,14 +21,19 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
+import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration.Idp;
 import org.entrystore.rest.springboot.model.auth.AuthState;
 import org.entrystore.rest.springboot.service.SamlAuthService;
 import org.entrystore.rest.springboot.service.auth.SamlAuthStateCache;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.annotation.ConditionContext;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.saml2.provider.service.authentication.DefaultSaml2AuthenticatedPrincipal;
 import org.springframework.security.saml2.provider.service.authentication.Saml2Authentication;
@@ -38,12 +43,17 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * SAML-specific hook wiring: accepted token type, relay-state custom URL handling, and per-IdP
+ * auto-provisioning. The shared SSO invariants are covered by {@link AbstractSsoLoginSuccessHandlerTest}.
+ */
 @ExtendWith(MockitoExtension.class)
 class SamlLoginSuccessHandlerTest {
 
@@ -53,6 +63,7 @@ class SamlLoginSuccessHandlerTest {
 	private static final String CUSTOM_SUCCESS_URL = "http://localhost:8181/custom-success";
 	private static final String EVIL_URL = "http://evil.com/phishing";
 	private static final String RELAY_STATE = "relay";
+	private static final String IDP_ID = "keycloak";
 
 	@Mock
 	private ESUserDetailsService userService;
@@ -81,6 +92,9 @@ class SamlLoginSuccessHandlerTest {
 	@Mock
 	private User adminUser;
 
+	@Mock
+	private ConditionContext conditionContext;
+
 	private SamlLoginSuccessHandler handler;
 
 	@BeforeEach
@@ -101,9 +115,6 @@ class SamlLoginSuccessHandlerTest {
 
 	@Test
 	void nonSaml2AuthenticationIsRejectedWithoutLoadingUser() throws Exception {
-		// Defense-in-depth guard: if the filter wiring ever delivers a non-SAML token to this
-		// handler, we must not process it — the SecurityContext has already been persisted to
-		// the session by the filter chain, so the handler's reject path is what unwinds it.
 		var wrongToken = new UsernamePasswordAuthenticationToken("someone", "pw");
 
 		handler.onAuthenticationSuccess(request, response, wrongToken);
@@ -151,21 +162,6 @@ class SamlLoginSuccessHandlerTest {
 	}
 
 	@Test
-	void liveSuccessUrlRequestParameterIsNeverHonored() throws Exception {
-		// ENTRYSTORE-996 regression: even if a targetUrlParameter is (re)configured, a request-supplied
-		// ?successurl= must never drive the redirect — only the validated cache or the default target.
-		handler.setTargetUrlParameter("successurl");
-		when(request.getParameter("RelayState")).thenReturn(null);
-		lenient().when(request.getParameter("successurl")).thenReturn(EVIL_URL);
-		givenEnabledUserIsLoaded("jane");
-
-		handler.onAuthenticationSuccess(request, response, saml2Authentication("jane"));
-
-		verify(redirectStrategy).sendRedirect(request, response, SUCCESS_URL);
-		verify(redirectStrategy, never()).sendRedirect(request, response, EVIL_URL);
-	}
-
-	@Test
 	void whitelistedCachedSuccessUrlIsHonored() throws Exception {
 		when(request.getParameter("RelayState")).thenReturn(RELAY_STATE);
 		when(samlAuthStateCache.getAuthState(RELAY_STATE)).thenReturn(new AuthState(CUSTOM_SUCCESS_URL, null));
@@ -177,10 +173,79 @@ class SamlLoginSuccessHandlerTest {
 		verify(redirectStrategy).sendRedirect(request, response, CUSTOM_SUCCESS_URL);
 	}
 
-	// Mirrors CasLoginSuccessHandlerTest: stub the principalManager round-trip BasicVerifier.isUserDisabled
-	// performs so the handler reaches the authenticated-success branch for a non-disabled user.
+	@Test
+	void userNotFoundAndUnknownIdpRedirectsToFailure() throws Exception {
+		when(userService.loadUser("newuser")).thenReturn(null);
+		when(samlAuthService.findIdpForSamlResponse(IDP_ID)).thenReturn(null);
+
+		handler.onAuthenticationSuccess(request, response, saml2Authentication("newuser"));
+
+		verify(response).sendRedirect(FAILURE_URL);
+		verify(userService, never()).createUser(any());
+	}
+
+	@Test
+	void userNotFoundAndIdpAutoProvisioningDisabledRedirectsToFailure() throws Exception {
+		when(userService.loadUser("newuser")).thenReturn(null);
+		when(samlAuthService.findIdpForSamlResponse(IDP_ID)).thenReturn(new Idp(List.of("*"), false));
+
+		handler.onAuthenticationSuccess(request, response, saml2Authentication("newuser"));
+
+		verify(response).sendRedirect(FAILURE_URL);
+		verify(userService, never()).createUser(any());
+	}
+
+	@Test
+	void userNotFoundAndIdpAutoProvisioningEnabledCreatesUserAndProceedsToSuccess() throws Exception {
+		when(userService.loadUser("newuser")).thenReturn(null);
+		when(samlAuthService.findIdpForSamlResponse(IDP_ID)).thenReturn(new Idp(List.of("*"), true));
+		when(userService.createUser("newuser")).thenReturn(esUser);
+		givenUserIsEnabled();
+
+		handler.onAuthenticationSuccess(request, response, saml2Authentication("newuser"));
+
+		verify(userService).createUser("newuser");
+		verify(redirectStrategy).sendRedirect(request, response, SUCCESS_URL);
+		verify(response, never()).sendRedirect(FAILURE_URL);
+	}
+
 	private void givenEnabledUserIsLoaded(String username) {
 		when(userService.loadUser(username)).thenReturn(esUser);
+		givenUserIsEnabled();
+	}
+
+	// SamlEnabledCondition must mirror the relaxed Boolean binding SamlCustomConfiguration.enabled()
+	// uses — a literal-string match would make values like 'on' boot the SecurityConfig SAML branch
+	// without the handler bean and fail startup.
+	@ParameterizedTest(name = "entrystore.auth.saml.enabled={0} -> bean active: {1}")
+	@CsvSource({
+			"true, true",
+			"on, true",
+			"yes, true",
+			"1, true",
+			"false, false",
+			"off, false",
+			"no, false",
+			"0, false"
+	})
+	void samlEnabledConditionUsesRelaxedBooleanBinding(String value, boolean expected) {
+		var environment = new MockEnvironment().withProperty("entrystore.auth.saml.enabled", value);
+		when(conditionContext.getEnvironment()).thenReturn(environment);
+
+		assertEquals(expected,
+				new SamlLoginSuccessHandler.SamlEnabledCondition().matches(conditionContext, null));
+	}
+
+	@Test
+	void samlEnabledConditionDefaultsToDisabledWhenPropertyAbsent() {
+		when(conditionContext.getEnvironment()).thenReturn(new MockEnvironment());
+
+		assertFalse(new SamlLoginSuccessHandler.SamlEnabledCondition().matches(conditionContext, null));
+	}
+
+	// Stubs the principalManager round-trip BasicVerifier.isUserDisabled performs so the handler
+	// reaches the authenticated-success branch for a non-disabled user.
+	private void givenUserIsEnabled() {
 		when(esUser.isDisabled()).thenReturn(false);
 		when(principalManager.getAuthenticatedUserURI()).thenReturn(URI.create("urn:test:current"));
 		when(principalManager.getAdminUser()).thenReturn(adminUser);
@@ -189,6 +254,7 @@ class SamlLoginSuccessHandlerTest {
 
 	private static Saml2Authentication saml2Authentication(String username) {
 		var principal = new DefaultSaml2AuthenticatedPrincipal(username, Map.of());
+		principal.setRelyingPartyRegistrationId(IDP_ID);
 		return new Saml2Authentication(principal, "saml-response", List.of());
 	}
 }

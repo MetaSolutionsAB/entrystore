@@ -37,6 +37,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * CAS-specific hook wiring: accepted token type and the config-driven auto-provisioning flag
+ * and failure URL. The shared SSO invariants are covered by {@link AbstractSsoLoginSuccessHandlerTest}.
+ */
 @ExtendWith(MockitoExtension.class)
 class CasLoginSuccessHandlerTest {
 
@@ -68,18 +72,11 @@ class CasLoginSuccessHandlerTest {
 
 	@BeforeEach
 	void setUp() {
-		var server = new CasCustomConfiguration.Server("https://cas.example.org/cas", null);
-		var casConfiguration = new CasCustomConfiguration(true, CasVersion.CAS2, server, true,
-				new CasCustomConfiguration.RedirectSuccess(SUCCESS_URL),
-				new CasCustomConfiguration.RedirectFailure(FAILURE_URL));
-		handler = new CasLoginSuccessHandler(userService, principalManager, casConfiguration);
+		handler = newHandler(true);
 	}
 
 	@Test
 	void nonCasAuthenticationTokenIsRejectedWithoutLoadingUser() throws Exception {
-		// Defense-in-depth guard: if the filter wiring ever delivers a non-CAS token to this
-		// handler, we must not process it — the SecurityContext has already been persisted to
-		// the session by the filter chain, so the handler's reject path is what unwinds it.
 		var wrongToken = new UsernamePasswordAuthenticationToken("someone", "pw");
 
 		handler.onAuthenticationSuccess(request, response, wrongToken);
@@ -89,89 +86,15 @@ class CasLoginSuccessHandlerTest {
 	}
 
 	@Test
-	void adminUsernameIsBlocked() throws Exception {
-		when(authentication.getName()).thenReturn("admin");
-
-		handler.onAuthenticationSuccess(request, response, authentication);
-
-		verify(response).sendRedirect(FAILURE_URL);
-		verify(userService, never()).loadUser(any());
-	}
-
-	@Test
-	void adminUsernameBlockIsCaseInsensitive() throws Exception {
-		when(authentication.getName()).thenReturn("ADMIN");
-
-		handler.onAuthenticationSuccess(request, response, authentication);
-
-		verify(response).sendRedirect(FAILURE_URL);
-		verify(userService, never()).loadUser(any());
-	}
-
-	@Test
-	void guestUsernameIsBlocked() throws Exception {
-		when(authentication.getName()).thenReturn("guest");
-
-		handler.onAuthenticationSuccess(request, response, authentication);
-
-		verify(response).sendRedirect(FAILURE_URL);
-		verify(userService, never()).loadUser(any());
-	}
-
-	@Test
 	void userNotFoundAndAutoProvisioningDisabledRedirectsToFailure() throws Exception {
-		var configNoProvisioning = new CasCustomConfiguration(
-				true, CasVersion.CAS2,
-				new CasCustomConfiguration.Server("https://cas.example.org/cas", null),
-				false, // auto-provisioning disabled
-				new CasCustomConfiguration.RedirectSuccess(SUCCESS_URL),
-				new CasCustomConfiguration.RedirectFailure(FAILURE_URL));
-		handler = new CasLoginSuccessHandler(userService, principalManager, configNoProvisioning);
-
+		handler = newHandler(false);
 		when(authentication.getName()).thenReturn("newuser");
 		when(userService.loadUser("newuser")).thenReturn(null);
 
 		handler.onAuthenticationSuccess(request, response, authentication);
 
 		verify(response).sendRedirect(FAILURE_URL);
-	}
-
-	@Test
-	void disabledExistingUserRedirectsToFailure() throws Exception {
-		when(authentication.getName()).thenReturn("jane");
-		when(userService.loadUser("jane")).thenReturn(esUser);
-		when(esUser.isDisabled()).thenReturn(true);
-		when(principalManager.getAuthenticatedUserURI()).thenReturn(URI.create("urn:test:current"));
-		when(principalManager.getAdminUser()).thenReturn(adminUser);
-		when(adminUser.getURI()).thenReturn(URI.create("urn:test:admin"));
-
-		handler.onAuthenticationSuccess(request, response, authentication);
-
-		verify(response).sendRedirect(FAILURE_URL);
-	}
-
-	@Test
-	void autoProvisioningFailureRedirectsToFailure() throws Exception {
-		when(authentication.getName()).thenReturn("collidinguser");
-		when(userService.loadUser("collidinguser")).thenReturn(null);
-		when(userService.createUser("collidinguser"))
-				.thenThrow(new IllegalStateException("Principal name 'collidinguser' already in use"));
-
-		handler.onAuthenticationSuccess(request, response, authentication);
-
-		verify(response).sendRedirect(FAILURE_URL);
-	}
-
-	@Test
-	void autoProvisioningRuntimeExceptionRedirectsToFailure() throws Exception {
-		when(authentication.getName()).thenReturn("newuser");
-		when(userService.loadUser("newuser")).thenReturn(null);
-		when(userService.createUser("newuser"))
-				.thenThrow(new RuntimeException("RDF store unavailable"));
-
-		handler.onAuthenticationSuccess(request, response, authentication);
-
-		verify(response).sendRedirect(FAILURE_URL);
+		verify(userService, never()).createUser(any());
 	}
 
 	@Test
@@ -188,22 +111,11 @@ class CasLoginSuccessHandlerTest {
 		verify(response, never()).sendRedirect(FAILURE_URL);
 	}
 
-	@Test
-	void failureWithNullRedirectUrlWritesJsonError() throws Exception {
-		var configNoRedirect = new CasCustomConfiguration(
-				true, CasVersion.CAS2,
-				new CasCustomConfiguration.Server("https://cas.example.org/cas", null),
-				true,
+	private CasLoginSuccessHandler newHandler(boolean userAutoProvisioning) {
+		var server = new CasCustomConfiguration.Server("https://cas.example.org/cas", null);
+		var casConfiguration = new CasCustomConfiguration(true, CasVersion.CAS2, server, userAutoProvisioning,
 				new CasCustomConfiguration.RedirectSuccess(SUCCESS_URL),
-				new CasCustomConfiguration.RedirectFailure(null));
-		handler = new CasLoginSuccessHandler(userService, principalManager, configNoRedirect);
-
-		when(authentication.getName()).thenReturn("admin");
-		when(response.getWriter()).thenReturn(new java.io.PrintWriter(java.io.Writer.nullWriter()));
-
-		handler.onAuthenticationSuccess(request, response, authentication);
-
-		verify(response, never()).sendRedirect(any());
-		verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+				new CasCustomConfiguration.RedirectFailure(FAILURE_URL));
+		return new CasLoginSuccessHandler(userService, principalManager, casConfiguration);
 	}
 }

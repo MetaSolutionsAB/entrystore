@@ -96,9 +96,9 @@ public class SecurityConfig {
 	private final CsrfRequestMatcher csrfRequestMatcher;
 	private final CsrfCookieFilter csrfCookieFilter;
 
-	// SAML-auth related beans
+	// SAML-auth related beans (success handler optional — only present when entrystore.auth.saml.enabled=true)
 	private final SamlCustomConfiguration samlConfiguration;
-	private final SamlLoginSuccessHandler samlLoginSuccessHandler;
+	private final Optional<SamlLoginSuccessHandler> samlLoginSuccessHandler;
 	private final Optional<RelyingPartyRegistrationRepository> repo; // optional as it will be injected only when Spring's SAML properties are configured
 	private final SamlRelayStateResolver samlRelayStateResolver;
 
@@ -220,20 +220,23 @@ public class SecurityConfig {
 			log.info("SAML Default IdP: {}", samlConfiguration.defaultIdp());
 			samlConfiguration.redirectDomainWhitelist().forEach(domain -> log.info("Allowed domain for redirects: {}", domain));
 
+			var samlHandler = samlLoginSuccessHandler.orElseThrow(() -> new IllegalStateException(
+					"SAML is enabled but SamlLoginSuccessHandler bean is missing — check the " +
+							"entrystore.auth.saml.enabled binding."));
 			// Custom success URLs flow through the validated relay-state cache (SamlRelayStateResolver);
 			// the handler must NOT read a request parameter for the target (open-redirect, ENTRYSTORE-996),
 			// so only the trusted default target is configured here.
-			samlLoginSuccessHandler.setDefaultTargetUrl(samlConfiguration.redirectSuccess().url());
+			samlHandler.setDefaultTargetUrl(samlConfiguration.redirectSuccess().url());
 			// Stamp Cache-Control: private, no-store on the 302 carrying the session Set-Cookie
 			// before sendRedirect commits the response — CacheControlFilter's post-chain check
 			// cannot run after a committed response, so the redirect strategy closes that gap.
-			samlLoginSuccessHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
+			samlHandler.setRedirectStrategy(cacheAwareRedirectStrategy);
 
 			http.saml2Login(samlLogin -> samlLogin
 					.loginPage("/auth/saml")
 					.failureUrl(samlConfiguration.redirectFailure().url())
 					.authenticationRequestResolver(createCustomResolver())
-					.successHandler(samlLoginSuccessHandler));
+					.successHandler(samlHandler));
 		} else {
 			log.info("SAML Auth Disabled");
 		}

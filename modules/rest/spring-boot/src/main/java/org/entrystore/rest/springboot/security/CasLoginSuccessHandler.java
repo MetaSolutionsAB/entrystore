@@ -16,99 +16,43 @@
 
 package org.entrystore.rest.springboot.security;
 
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.entrystore.PrincipalManager;
-import org.entrystore.User;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
-import org.entrystore.rest.springboot.service.auth.BasicVerifier;
-import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.security.cas.authentication.CasAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
-import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 
-import java.io.IOException;
+public class CasLoginSuccessHandler extends AbstractSsoLoginSuccessHandler<CasAuthenticationToken, Void> {
 
-@Slf4j
-@RequiredArgsConstructor
-public class CasLoginSuccessHandler extends SavedRequestAwareAuthenticationSuccessHandler {
-
-	private final ESUserDetailsService userService;
-	private final PrincipalManager principalManager;
 	private final CasCustomConfiguration casConfiguration;
 
+	public CasLoginSuccessHandler(ESUserDetailsService userService, PrincipalManager principalManager,
+								  CasCustomConfiguration casConfiguration) {
+		super(userService, principalManager);
+		this.casConfiguration = casConfiguration;
+	}
+
 	@Override
-	public void onAuthenticationSuccess(HttpServletRequest request,
-										HttpServletResponse response,
-										Authentication authentication) throws IOException, ServletException {
-		try {
-			handleCasAuthentication(request, response, authentication);
-		} catch (IOException | ServletException e) {
-			throw e;
-		} catch (Exception e) {
-			String user = authentication != null ? authentication.getName() : "<unknown>";
-			log.error("Unexpected {} during CAS login for user '{}': {}",
-					e.getClass().getSimpleName(), user, e.getMessage(), e);
-			redirectToLoginFailureUrl(request, response);
-		}
+	protected String authTypeLabel() {
+		return "CAS";
 	}
 
-	private void handleCasAuthentication(HttpServletRequest request,
-										 HttpServletResponse response,
-										 Authentication authentication) throws IOException, ServletException {
-
-		if (!(authentication instanceof CasAuthenticationToken)) {
-			// Defense in depth: CasAuthenticationFilter only produces CasAuthenticationToken,
-			// but if a different token type ever reaches this handler we must not treat
-			// that as success — the filter has already persisted it to the SecurityContext.
-			// ERROR because reaching this branch indicates a Spring Security wiring bug.
-			log.error("Unexpected authentication type '{}' in CAS success handler",
-					authentication == null ? "null" : authentication.getClass().getName());
-			redirectToLoginFailureUrl(request, response);
-			return;
-		}
-
-		String username = authentication.getName();
-		log.info("Successfully authenticated via CAS, username: '{}'", username);
-
-		if ("admin".equalsIgnoreCase(username) || "guest".equalsIgnoreCase(username)) {
-			log.warn("Ignoring reserved username '{}' from CAS server", username);
-			redirectToLoginFailureUrl(request, response);
-			return;
-		}
-
-		User esUser = userService.loadUser(username);
-		if (esUser == null) {
-			if (!casConfiguration.userAutoProvisioning()) {
-				log.warn("Login denied for CAS user '{}': user not found in EntryStore and auto-provisioning is disabled", username);
-				redirectToLoginFailureUrl(request, response);
-				return;
-			}
-			log.info("User '{}' not found in EntryStore. Creating new user (auto-provisioning enabled)", username);
-			esUser = userService.createUser(username);
-		} else {
-			log.info("Existing EntryStore user '{}' logged in via CAS", username);
-		}
-
-		if (BasicVerifier.isUserDisabled(principalManager, esUser)) {
-			log.warn("Login denied for CAS user '{}': account is disabled", username);
-			redirectToLoginFailureUrl(request, response);
-			return;
-		}
-
-		new HttpSessionRequestCache().removeRequest(request, response);
-		super.onAuthenticationSuccess(request, response, authentication);
+	@Override
+	protected Class<CasAuthenticationToken> tokenType() {
+		return CasAuthenticationToken.class;
 	}
 
-	private void redirectToLoginFailureUrl(HttpServletRequest request, HttpServletResponse response) throws IOException {
-		// CasAuthenticationFilter already persisted the token to the SecurityContext; undo that
-		// before redirecting so the rejected user doesn't remain authenticated.
-		HttpUtil.clearAuthenticatedSession(request);
-		HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(),
-				casConfiguration.redirectFailure().url(), "CAS login failed");
+	@Override
+	protected Void resolveContext(HttpServletRequest request, CasAuthenticationToken token) {
+		return null;
+	}
+
+	@Override
+	protected boolean isAutoProvisioningEnabled(Void context) {
+		return casConfiguration.userAutoProvisioning();
+	}
+
+	@Override
+	protected String defaultFailureUrl() {
+		return casConfiguration.redirectFailure().url();
 	}
 }
