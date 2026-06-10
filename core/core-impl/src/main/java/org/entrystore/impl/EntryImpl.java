@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,6 +85,7 @@ public class EntryImpl implements Entry {
 	protected RepositoryManagerImpl repositoryManager;
 
 	protected volatile IRI entryURI;
+	private volatile URI entryUriCache;
 	protected volatile IRI resURI;
 	protected volatile EntryType locType = EntryType.Local;
 	protected volatile ResourceType repType = ResourceType.InformationResource;
@@ -384,6 +385,7 @@ public class EntryImpl implements Entry {
 		this.writeResourcePrincipals = writeResourcePrincipals;
 		this.contributors = contributors;
 		this.entryURI = entryURI;
+		this.entryUriCache = null;
 		this.resURI = resURI;
 		this.localMdURI = localMdURI;
 		this.cachedExternalMdURI = cachedExternalMdURI;
@@ -458,7 +460,12 @@ public class EntryImpl implements Entry {
 	}
 
 	public URI getEntryURI() {
-		return URI.create(entryURI.toString());
+		URI cached = entryUriCache;
+		if (cached == null) {
+			cached = URI.create(entryURI.toString());
+			entryUriCache = cached;
+		}
+		return cached;
 	}
 
 	public IRI getSesameEntryURI() {
@@ -1155,7 +1162,7 @@ public class EntryImpl implements Entry {
 			IRI contributorURI = vf.createIRI(contributor);
 
 		    //Do not add if the contributor is the same as the creator
-		    if (contrib != null && !contrib.equals(this.getCreator()) && contributors != null && !contributors.contains(contributorURI)) {
+		    if (!contrib.equals(this.getCreator()) && !contributors.contains(contributorURI)) {
 				rc.add(this.entryURI, RepositoryProperties.Contributor, contributorURI, this.entryURI);
 		    	contributors.add(contributorURI);
 		    }
@@ -1515,10 +1522,18 @@ public class EntryImpl implements Entry {
 
 	@Override
 	public boolean equals(Object obj) {
-		if (obj instanceof Entry) {
-			return getEntryURI().equals(((Entry) obj).getEntryURI());
+		if (this == obj) {
+			return true;
 		}
-		return false;
+		return entryURI != null
+				&& obj instanceof Entry entry
+				&& !(entry instanceof EntryImpl other && other.entryURI == null)
+				&& getEntryURI().equals(entry.getEntryURI());
+	}
+
+	@Override
+	public int hashCode() {
+		return entryURI == null ? 0 : getEntryURI().hashCode();
 	}
 
 	public boolean isExternalMetadataCached() {
