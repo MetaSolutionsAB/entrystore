@@ -62,8 +62,9 @@ import javax.xml.datatype.XMLGregorianCalendar;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
-import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -78,7 +79,6 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.StringJoiner;
-import java.util.TimeZone;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -108,6 +108,9 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final long MAX_PURGE_WAIT_NANOS = TimeUnit.MINUTES.toNanos(5);
 
+	private static final DateTimeFormatter SOLR_DATE_FORMATTER =
+			DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
+
 	private final String defaultSortLang;
 
 	private final boolean extractFulltext;
@@ -131,8 +134,6 @@ public class SolrSearchIndex implements SearchIndex {
 	private final Queue<URI> deleteQueue = Queues.newConcurrentLinkedQueue();
 
 	private final Map<URI, Future> reindexing = Collections.synchronizedMap(new HashMap<>());
-
-	private final SimpleDateFormat solrDateFormatter;
 
 	private final ExecutorService reindexExecutor = Executors.newSingleThreadExecutor();
 
@@ -432,8 +433,6 @@ public class SolrSearchIndex implements SearchIndex {
 	}
 
 	public SolrSearchIndex(RepositoryManager rm, SolrClient solrServer) {
-		solrDateFormatter = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-		solrDateFormatter.setTimeZone(TimeZone.getTimeZone("UTC"));
 		this.rm = rm;
 		valueFactory = this.rm.getValueFactory();
 		this.solrServer = solrServer;
@@ -567,7 +566,7 @@ public class SolrSearchIndex implements SearchIndex {
 		UpdateRequest req = new UpdateRequest();
 		String deleteQuery = "";
 		if (expirationDate != null) {
-			String solrExpirationDate = ClientUtils.escapeQueryChars(solrDateFormatter.format(expirationDate));
+			String solrExpirationDate = ClientUtils.escapeQueryChars(SOLR_DATE_FORMATTER.format(expirationDate.toInstant()));
 			deleteQuery += "indexedAt:[* TO " + solrExpirationDate + "}";
 		}
 		if (contextEntry != null) {
@@ -1255,7 +1254,7 @@ public class SolrSearchIndex implements SearchIndex {
 		if (c.getTimezone() == DatatypeConstants.FIELD_UNDEFINED) {
 			c.setTimezone(0);
 		}
-		return solrDateFormatter.format(c.toGregorianCalendar().getTime());
+		return SOLR_DATE_FORMATTER.format(c.toGregorianCalendar().toInstant());
 	}
 
 	public void postEntry(Entry entry) {

@@ -17,7 +17,10 @@
 package org.entrystore.repository.util;
 
 import org.apache.solr.client.solrj.SolrClient;
+import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.entrystore.Entry;
 import org.entrystore.config.Config;
 import org.entrystore.repository.RepositoryManager;
 import org.entrystore.repository.config.PropertiesConfiguration;
@@ -25,16 +28,25 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
+import javax.xml.datatype.DatatypeFactory;
+import javax.xml.datatype.XMLGregorianCalendar;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.URI;
+import java.time.Instant;
+import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class SolrSearchIndexTest {
@@ -104,10 +116,72 @@ public class SolrSearchIndexTest {
 		// TODO
 	}
 
-	@Disabled("To be implemented")
 	@Test
-	public void testClearSolrIndex() throws Exception {
-		// TODO
+	public void clearSolrIndexBuildsUtcMillisecondDateRangeDeleteQuery() throws Exception {
+		SolrClient client = mock(SolrClient.class);
+		Date expiration = Date.from(Instant.parse("2024-01-15T10:30:00.123Z"));
+
+		assertTrue(index.clearSolrIndex(client, expiration, null));
+
+		ArgumentCaptor<UpdateRequest> captor = ArgumentCaptor.forClass(UpdateRequest.class);
+		verify(client).request(captor.capture(), any());
+		assertEquals(
+			"indexedAt:[* TO 2024\\-01\\-15T10\\:30\\:00.123Z}",
+			captor.getValue().getDeleteQuery().getFirst());
+	}
+
+	@Test
+	public void clearSolrIndexBuildsContextOnlyDeleteQuery() throws Exception {
+		SolrClient client = mock(SolrClient.class);
+		Entry contextEntry = mock(Entry.class);
+		when(contextEntry.getResourceURI()).thenReturn(URI.create("http://localhost:8181/1"));
+
+		assertTrue(index.clearSolrIndex(client, null, contextEntry));
+
+		ArgumentCaptor<UpdateRequest> captor = ArgumentCaptor.forClass(UpdateRequest.class);
+		verify(client).request(captor.capture(), any());
+		assertEquals(
+			"context:http\\:\\/\\/localhost\\:8181\\/1",
+			captor.getValue().getDeleteQuery().getFirst());
+	}
+
+	@Test
+	public void clearSolrIndexCombinesDateAndContextClausesWithAnd() throws Exception {
+		SolrClient client = mock(SolrClient.class);
+		Entry contextEntry = mock(Entry.class);
+		when(contextEntry.getResourceURI()).thenReturn(URI.create("http://localhost:8181/1"));
+		Date expiration = Date.from(Instant.parse("2024-01-15T10:30:00.123Z"));
+
+		assertTrue(index.clearSolrIndex(client, expiration, contextEntry));
+
+		ArgumentCaptor<UpdateRequest> captor = ArgumentCaptor.forClass(UpdateRequest.class);
+		verify(client).request(captor.capture(), any());
+		assertEquals(
+			"indexedAt:[* TO 2024\\-01\\-15T10\\:30\\:00.123Z} AND context:http\\:\\/\\/localhost\\:8181\\/1",
+			captor.getValue().getDeleteQuery().getFirst());
+	}
+
+	@Test
+	public void clearSolrIndexReturnsFalseWhenSolrRequestFails() throws Exception {
+		SolrClient client = mock(SolrClient.class);
+		when(client.request(any(), any())).thenThrow(new SolrServerException("solr down"));
+
+		assertFalse(index.clearSolrIndex(client, new Date(), null));
+	}
+
+	@Test
+	public void dateToSolrDateStringNormalizesOffsetAndUndefinedTimezoneToUtc() throws Exception {
+		Method dateToSolrDateString = SolrSearchIndex.class.getDeclaredMethod("dateToSolrDateString", XMLGregorianCalendar.class);
+		dateToSolrDateString.setAccessible(true);
+		DatatypeFactory factory = DatatypeFactory.newInstance();
+
+		// +02:00 offset must be shifted to the same instant in UTC
+		XMLGregorianCalendar withOffset = factory.newXMLGregorianCalendar("2024-01-15T12:30:00.123+02:00");
+		assertEquals("2024-01-15T10:30:00.123Z", dateToSolrDateString.invoke(index, withOffset));
+
+		// undefined timezone must be interpreted as UTC, not the JVM default zone
+		XMLGregorianCalendar undefinedTimezone = factory.newXMLGregorianCalendar("2024-01-15T10:30:00.123");
+		assertEquals("2024-01-15T10:30:00.123Z", dateToSolrDateString.invoke(index, undefinedTimezone));
 	}
 
 	@Disabled("To be implemented")
