@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,10 +33,14 @@ import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.net.URI;
+import java.util.HashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -185,6 +189,37 @@ public class EntryImplTest extends AbstractCoreTest {
 	public void refLocalEntry() {
 		Entry ref = context.createReference(null, linkEntry.getResourceURI(), linkEntry.getLocalMetadataURI(), null);
 		assertEquals(ref.getCachedExternalMetadata().getGraph().size(), linkEntry.getLocalMetadata().getGraph().size());
+	}
+
+	@Test
+	public void equalsAndHashCode() {
+		EntryImpl original = (EntryImpl) linkEntry;
+		// a distinct instance for the same entry, as after a SoftCache eviction/miss
+		EntryImpl duplicate = new EntryImpl(original.getId(), (ContextImpl) context, rm, original.getRepository());
+
+		assertNotSame(original, duplicate);
+		assertEquals(original, duplicate);
+		assertEquals(original.hashCode(), duplicate.hashCode());
+
+		Set<Entry> entries = new HashSet<>();
+		entries.add(original);
+		entries.add(duplicate);
+		assertEquals(1, entries.size());
+
+		assertNotEquals(listEntry, linkEntry);
+		assertNotEquals(null, linkEntry);
+		assertNotEquals("not an entry", linkEntry);
+	}
+
+	@Test
+	public void equalsAndHashCodeOnUninitializedEntry() {
+		// the package-private bootstrap constructor leaves entryURI null
+		EntryImpl uninitialized = new EntryImpl(rm, ((EntryImpl) linkEntry).getRepository());
+
+		assertEquals(uninitialized, uninitialized);
+		assertNotEquals(uninitialized, linkEntry);
+		assertNotEquals(linkEntry, uninitialized);
+		assertEquals(0, uninitialized.hashCode());
 	}
 
 	@Test
