@@ -120,6 +120,7 @@ public class AuthService {
 	private final RecaptchaVerifier rcVerifier;
 	private final SignupTokenCache signupTokenCache;
 	private final RedirectUrlValidator redirectUrlValidator;
+	private final EmailValidator emailValidator;
 	private final Config config;
 	private final SessionRegistry sessionRegistry;
 	private final SignupRateLimiter signupRateLimiter;
@@ -314,15 +315,7 @@ public class AuthService {
 		String rcResponseV2;
 		String password;
 
-		if (StringUtils.isNotEmpty(requestBody.email())) {
-			ci.setEmail(requestBody.email());
-		} else {
-			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
-		}
-
-		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
-			throw new BadRequestHtmlException(INVALID_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
-		}
+		validateAndSetEmail(requestBody.email(), ci, title);
 
 		if (StringUtils.isNotEmpty(requestBody.password())) {
 			password = requestBody.password().trim();
@@ -541,15 +534,7 @@ public class AuthService {
 		String rcResponseV2;
 		String password;
 
-		if (StringUtils.isNotEmpty(requestBody.email())) {
-			ci.setEmail(requestBody.email());
-		} else {
-			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
-		}
-
-		if (!EmailValidator.getInstance().isValid(ci.getEmail())) {
-			throw new BadRequestHtmlException(INVALID_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
-		}
+		validateAndSetEmail(requestBody.email(), ci, title);
 
 		if (StringUtils.isNotEmpty(requestBody.password())) {
 			password = requestBody.password().trim();
@@ -626,6 +611,18 @@ public class AuthService {
 		}
 
 		return POST_SUCCESS_MESSAGE.replace("{}", ci.getEmail());
+	}
+
+	private void validateAndSetEmail(String email, SignupInfo ci, String title) {
+		if (StringUtils.isNotEmpty(email)) {
+			ci.setEmail(email);
+		} else {
+			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
+		}
+
+		if (!emailValidator.isValid(ci.getEmail())) {
+			throw new BadRequestHtmlException(INVALID_EMAIL_MESSAGE.replace("{}", ci.getEmail()), title);
+		}
 	}
 
 	private void setRedirectUrlIfPermitted(String url, Consumer<String> setter, String label) {

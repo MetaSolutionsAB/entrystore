@@ -19,6 +19,7 @@ package org.entrystore.rest.springboot.service;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
+import org.entrystore.rest.springboot.service.auth.EmailValidator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,11 +46,13 @@ class AuthServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		// AuthService has 11 collaborators via @RequiredArgsConstructor; only meterRegistry is
-		// touched by submitPasswordResetDispatch so the rest stay null. The real executor created
-		// by init() is replaced below with a Mockito mock so we can program the rejection path.
+		// Only meterRegistry is touched by submitPasswordResetDispatch, so the other
+		// @RequiredArgsConstructor collaborators stay null — except the stateless EmailValidator,
+		// which is cheap to pass for real. The real executor created by init() is replaced below
+		// with a Mockito mock so we can program the rejection path.
 		meterRegistry = new SimpleMeterRegistry();
-		authService = new AuthService(null, null, null, null, null, null, null, null, null, null, meterRegistry);
+		authService = new AuthService(null, null, null, null, null, null, new EmailValidator(),
+				null, null, null, null, meterRegistry);
 		// Register the Micrometer counter without standing up the real ThreadPoolExecutor — we'll
 		// inject a mocked ExecutorService explicitly per test.
 		ReflectionTestUtils.setField(authService, "passwordResetRejectedCounter",

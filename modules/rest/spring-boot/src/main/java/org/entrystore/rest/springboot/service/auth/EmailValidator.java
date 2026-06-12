@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package org.entrystore.rest.springboot.service.auth;
 
 import org.apache.commons.validator.routines.InetAddressValidator;
+import org.springframework.stereotype.Service;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,22 +28,24 @@ import java.util.regex.Pattern;
  * less strict validation of domain names (it does not compare against a white * list),
  * but maintains a sufficient level of validation.
  */
+@Service
 public class EmailValidator extends org.apache.commons.validator.routines.EmailValidator {
 
-	private static final String IP_DOMAIN_REGEX = "^\\[(.*)]$";
+	private static final Pattern IP_DOMAIN_PATTERN = Pattern.compile("^\\[(.*)]$");
 
-	private static final Pattern IP_DOMAIN_PATTERN = Pattern.compile(IP_DOMAIN_REGEX);
-
-	private static final EmailValidator EMAIL_VALIDATOR_WITH_LOCAL = new EmailValidator();
-
-	protected EmailValidator() {
+	public EmailValidator() {
 		super(true);
 	}
 
+	/**
+	 * Hides the inherited Commons factory so stale {@code getInstance()} calls fail fast
+	 * instead of silently returning the stricter Commons validator. Inject the Spring bean instead.
+	 */
 	public static EmailValidator getInstance() {
-		return EMAIL_VALIDATOR_WITH_LOCAL;
+		throw new UnsupportedOperationException("Inject the EmailValidator Spring bean instead");
 	}
 
+	@Override
 	protected boolean isValidDomain(String domain) {
 		// see if domain is an IP address in brackets
 		Matcher ipDomainMatcher = IP_DOMAIN_PATTERN.matcher(domain);
