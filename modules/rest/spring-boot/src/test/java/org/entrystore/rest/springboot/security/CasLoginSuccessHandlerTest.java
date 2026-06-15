@@ -29,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.cas.authentication.CasAuthenticationToken;
+import org.springframework.security.web.RedirectStrategy;
 
 import java.net.URI;
 
@@ -61,6 +62,9 @@ class CasLoginSuccessHandlerTest {
 
 	@Mock
 	private CasAuthenticationToken authentication;
+
+	@Mock
+	private RedirectStrategy redirectStrategy;
 
 	@Mock
 	private User esUser;
@@ -108,6 +112,24 @@ class CasLoginSuccessHandlerTest {
 
 		handler.onAuthenticationSuccess(request, response, authentication);
 
+		verify(redirectStrategy).sendRedirect(request, response, SUCCESS_URL);
+		verify(response, never()).sendRedirect(FAILURE_URL);
+	}
+
+	@Test
+	void userNotFoundAndAutoProvisioningEnabledCreatesUserAndProceedsToSuccess() throws Exception {
+		when(authentication.getName()).thenReturn("newuser");
+		when(userService.loadUser("newuser")).thenReturn(null);
+		when(userService.createUser("newuser")).thenReturn(esUser);
+		when(esUser.isDisabled()).thenReturn(false);
+		when(principalManager.getAuthenticatedUserURI()).thenReturn(URI.create("urn:test:current"));
+		when(principalManager.getAdminUser()).thenReturn(adminUser);
+		when(adminUser.getURI()).thenReturn(URI.create("urn:test:admin"));
+
+		handler.onAuthenticationSuccess(request, response, authentication);
+
+		verify(userService).createUser("newuser");
+		verify(redirectStrategy).sendRedirect(request, response, SUCCESS_URL);
 		verify(response, never()).sendRedirect(FAILURE_URL);
 	}
 
@@ -116,6 +138,12 @@ class CasLoginSuccessHandlerTest {
 		var casConfiguration = new CasCustomConfiguration(true, CasVersion.CAS2, server, userAutoProvisioning,
 				new CasCustomConfiguration.RedirectSuccess(SUCCESS_URL),
 				new CasCustomConfiguration.RedirectFailure(FAILURE_URL));
-		return new CasLoginSuccessHandler(userService, principalManager, casConfiguration);
+		var newHandler = new CasLoginSuccessHandler(userService, principalManager, casConfiguration);
+		// CAS has no custom-success hook, so success flows through super.onAuthenticationSuccess ->
+		// determineTargetUrl -> RedirectStrategy. Mocking the strategy and default target makes the
+		// success redirect observable; the failure path writes directly to the response.
+		newHandler.setRedirectStrategy(redirectStrategy);
+		newHandler.setDefaultTargetUrl(SUCCESS_URL);
+		return newHandler;
 	}
 }

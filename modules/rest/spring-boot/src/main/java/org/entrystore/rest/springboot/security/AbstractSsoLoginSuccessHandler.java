@@ -63,8 +63,12 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 		} catch (Exception e) {
 			String user = authentication != null ? authentication.getName() : "<unknown>";
 			log.error("Unexpected {} during {} login for user '{}': {}",
-					e.getClass().getSimpleName(), authTypeLabel(), user, e.getMessage(), e);
-			redirectToLoginFailureUrl(request, response, defaultFailureUrl());
+					e.getClass().getSimpleName(), authTypeLabel(), HttpUtil.sanitizeForLog(user), e.getMessage(), e);
+			// Undo the filter-persisted token before resolving the (subclass-supplied) failure URL: a
+			// throwing defaultFailureUrl() must not leave the rejected user authenticated behind the 500.
+			HttpUtil.clearAuthenticatedSession(request);
+			HttpUtil.redirectOrWriteUnauthorized(response, request.getRequestURI(), defaultFailureUrl(),
+					authTypeLabel() + " login failed");
 		}
 	}
 
@@ -85,10 +89,11 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 
 		String username = authentication.getName();
 		C context = resolveContext(request, tokenType().cast(authentication));
-		log.info("Successfully authenticated via {}, username: '{}'", describeAuthSource(context), username);
+		log.info("Successfully authenticated via {}, username: '{}'",
+				describeAuthSource(context), HttpUtil.sanitizeForLog(username));
 
 		if (isReservedUsername(username)) {
-			log.warn("Ignoring reserved username '{}' from {}", username, describeAuthSource(context));
+			log.warn("Ignoring reserved username '{}' from {}", HttpUtil.sanitizeForLog(username), describeAuthSource(context));
 			redirectToLoginFailureUrl(request, response, resolveFailureUrl(context));
 			return;
 		}
@@ -96,19 +101,23 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 		User esUser = userService.loadUser(username);
 		if (esUser == null) {
 			if (!isAutoProvisioningEnabled(context)) {
-				log.warn("Login denied for {} user '{}': user not found in EntryStore and auto-provisioning is disabled",
-						describeAuthSource(context), username);
+				// Cause-neutral: the protocol subclass logs the specific reason (e.g. unknown SAML IdP)
+				// where it differs, so this shared line must not assert "auto-provisioning is disabled".
+				log.warn("Login denied for {} user '{}': not found in EntryStore and not auto-provisioned",
+						describeAuthSource(context), HttpUtil.sanitizeForLog(username));
 				redirectToLoginFailureUrl(request, response, resolveFailureUrl(context));
 				return;
 			}
-			log.info("User '{}' not found in EntryStore. Creating new user (auto-provisioning enabled)", username);
+			log.info("User '{}' not found in EntryStore. Creating new user (auto-provisioning enabled)",
+					HttpUtil.sanitizeForLog(username));
 			esUser = userService.createUser(username);
 		} else {
-			log.info("Existing EntryStore user '{}' logged in via {}", username, authTypeLabel());
+			log.info("Existing EntryStore user '{}' logged in via {}", HttpUtil.sanitizeForLog(username), authTypeLabel());
 		}
 
 		if (BasicVerifier.isUserDisabled(principalManager, esUser)) {
-			log.warn("Login denied for {} user '{}': account is disabled", describeAuthSource(context), username);
+			log.warn("Login denied for {} user '{}': account is disabled",
+					describeAuthSource(context), HttpUtil.sanitizeForLog(username));
 			redirectToLoginFailureUrl(request, response, resolveFailureUrl(context));
 			return;
 		}
@@ -147,6 +156,15 @@ abstract class AbstractSsoLoginSuccessHandler<T extends Authentication, C>
 		// open redirect, since the SSO callback filters process their callbacks independently.
 		// Overriding the two-arg variant intercepts the parameter/referer logic in the Spring base class.
 		return getDefaultTargetUrl();
+	}
+
+	@Override
+	protected final String determineTargetUrl(HttpServletRequest request, HttpServletResponse response,
+											  Authentication authentication) {
+		// Spring's handle() calls this 3-arg variant; its default delegates to the 2-arg determineTargetUrl.
+		// Sealing it final stops a subclass from re-opening the ENTRYSTORE-996 open-redirect hole by
+		// overriding the variant the framework actually invokes.
+		return determineTargetUrl(request, response);
 	}
 
 	/** Protocol label used in log lines and the failure message, e.g. {@code "CAS"} or {@code "SAML"}. */
