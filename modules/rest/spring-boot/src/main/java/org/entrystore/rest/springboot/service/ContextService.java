@@ -32,7 +32,6 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.FileOperations;
 import org.entrystore.rest.springboot.model.exception.BadRequestException;
-import org.entrystore.rest.springboot.model.exception.BadRequestHtmlException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.util.GraphUtil;
@@ -157,7 +156,11 @@ public class ContextService {
 					throw new InternalServerErrorException("Exception copying the data to a temporary file for context import", e);
 				}
 
-				repositoryManager.getContextManager().importContext(context.getEntry(), tmpFile);
+				try {
+					repositoryManager.getContextManager().importContext(context.getEntry(), tmpFile);
+				} catch (org.entrystore.repository.RepositoryException e) {
+					throw new BadRequestException("Failed to import context data from the uploaded file", e);
+				}
 
 			} else {
 				throw new BadRequestException("Unable to import file, received null data");

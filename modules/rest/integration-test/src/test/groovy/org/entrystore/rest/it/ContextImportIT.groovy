@@ -1,7 +1,27 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.springframework.http.HttpMethod
+
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 import static java.net.HttpURLConnection.HTTP_BAD_REQUEST
 import static java.net.HttpURLConnection.HTTP_FORBIDDEN
@@ -206,5 +226,104 @@ class ContextImportIT extends BaseSpec {
 		def contextNameConn2 = EntryStoreClient.getRequest('/_contexts/entry/' + contextImportId + '/name')
 		contextNameConn2.getResponseCode() == HTTP_OK
 		JSON_PARSER.parseText(contextNameConn2.inputStream.text) == [name: 'context for Import 2']
+	}
+
+	def "POST /{context-id}/import with corrupt triples.rdf should fail with Bad-Request 400 and preserve existing entries"() {
+		given: 'a context holding an entry that must survive a failed import'
+		def corruptImportId = 'context-import-corrupt'
+		def preservedEntryId = 'should-survive-failed-import'
+		getOrCreateContext([contextId: corruptImportId, name: 'context for corrupt import'])
+		getOrCreateEntry(corruptImportId, [entrytype: 'link', resource: resourceUrl, id: preservedEntryId])
+
+		def beforeConn = EntryStoreClient.getRequest('/' + corruptImportId)
+		assert beforeConn.getResponseCode() == HTTP_OK
+		assert JSON_PARSER.parseText(beforeConn.inputStream.text) == [preservedEntryId]
+
+		and: 'a valid export ZIP whose triples.rdf has been replaced with invalid RDF'
+		def exportConn = EntryStoreClient.getRequest('/' + contextExportId + '/export')
+		assert exportConn.getResponseCode() == HTTP_OK
+		byte[] corruptZip = corruptTriplesInZip(exportConn.getInputStream())
+
+		when: 'importing the corrupted ZIP'
+		def connection = EntryStoreClient.sendRequestAsStream(HttpMethod.POST, '/' + corruptImportId + '/import',
+			new ByteArrayInputStream(corruptZip), 'admin', 'application/zip')
+
+		then: 'the import is rejected'
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+
+		and: 'the original entry is still present - the failed parse must not have wiped the context'
+		def afterConn = EntryStoreClient.getRequest('/' + corruptImportId)
+		afterConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(afterConn.inputStream.text) == [preservedEntryId]
+	}
+
+	def "POST /{context-id}/import with a ZIP missing triples.rdf should fail with Bad-Request 400 and preserve existing entries"() {
+		given: 'a context holding an entry that must survive a failed import'
+		def missingTriplesImportId = 'context-import-missing-triples'
+		def preservedEntryId = 'should-survive-missing-triples-import'
+		getOrCreateContext([contextId: missingTriplesImportId, name: 'context for missing-triples import'])
+		getOrCreateEntry(missingTriplesImportId, [entrytype: 'link', resource: resourceUrl, id: preservedEntryId])
+
+		def beforeConn = EntryStoreClient.getRequest('/' + missingTriplesImportId)
+		assert beforeConn.getResponseCode() == HTTP_OK
+		assert JSON_PARSER.parseText(beforeConn.inputStream.text) == [preservedEntryId]
+
+		and: 'a valid export ZIP with its triples.rdf entry removed'
+		def exportConn = EntryStoreClient.getRequest('/' + contextExportId + '/export')
+		assert exportConn.getResponseCode() == HTTP_OK
+		byte[] zipWithoutTriples = dropTriplesFromZip(exportConn.getInputStream())
+
+		when: 'importing the ZIP that has no triples.rdf'
+		def connection = EntryStoreClient.sendRequestAsStream(HttpMethod.POST, '/' + missingTriplesImportId + '/import',
+			new ByteArrayInputStream(zipWithoutTriples), 'admin', 'application/zip')
+
+		then: 'the import is rejected'
+		connection.getResponseCode() == HTTP_BAD_REQUEST
+
+		and: 'the original entry is still present - the missing triples.rdf must not have wiped the context'
+		def afterConn = EntryStoreClient.getRequest('/' + missingTriplesImportId)
+		afterConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(afterConn.inputStream.text) == [preservedEntryId]
+	}
+
+	// Copies a context-export ZIP while overwriting the triples.rdf entry with invalid RDF, leaving
+	// export.properties intact so the import reaches the parse step (which then fails).
+	private static byte[] corruptTriplesInZip(InputStream zipInput) {
+		def out = new ByteArrayOutputStream()
+		new ZipInputStream(zipInput).withCloseable { zis ->
+			new ZipOutputStream(out).withCloseable { zos ->
+				ZipEntry entry
+				while ((entry = zis.getNextEntry()) != null) {
+					zos.putNextEntry(new ZipEntry(entry.name))
+					if (entry.name == 'triples.rdf') {
+						zos.write('this is not valid TriG @@@ <<< >>>'.getBytes('UTF-8'))
+					} else {
+						zos << zis
+					}
+					zos.closeEntry()
+				}
+			}
+		}
+		out.toByteArray()
+	}
+
+	// Copies a context-export ZIP while dropping the triples.rdf entry entirely, so the import fails
+	// with an IOException when it tries to read the missing file (mapped to 400 by the REST layer).
+	private static byte[] dropTriplesFromZip(InputStream zipInput) {
+		def out = new ByteArrayOutputStream()
+		new ZipInputStream(zipInput).withCloseable { zis ->
+			new ZipOutputStream(out).withCloseable { zos ->
+				ZipEntry entry
+				while ((entry = zis.getNextEntry()) != null) {
+					if (entry.name == 'triples.rdf') {
+						continue
+					}
+					zos.putNextEntry(new ZipEntry(entry.name))
+					zos << zis
+					zos.closeEntry()
+				}
+			}
+		}
+		out.toByteArray()
 	}
 }

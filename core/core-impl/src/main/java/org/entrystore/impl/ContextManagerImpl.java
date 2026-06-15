@@ -240,7 +240,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 				rc = entry.getRepository().getConnection();
 
 				RepositoryResult<org.eclipse.rdf4j.model.Resource> availableNGs = rc.getContextIDs();
-				List<org.eclipse.rdf4j.model.Resource> filteredNGs = new ArrayList<org.eclipse.rdf4j.model.Resource>();
+				List<org.eclipse.rdf4j.model.Resource> filteredNGs = new ArrayList<>();
 				while (availableNGs.hasNext()) {
 					org.eclipse.rdf4j.model.Resource ng = availableNGs.next();
 					String ngURI = ng.stringValue();
@@ -312,9 +312,26 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 
 	public void importContext(Entry contextEntry, File srcFile) throws RepositoryException, IOException {
-		Date before = new Date();
-
 		File unzippedDir = FileOperations.createTempDirectory("entrystore_import", null);
+		try {
+			importContextFromUnzippedDir(contextEntry, srcFile, unzippedDir);
+		} finally {
+			log.info("Removing temporary files");
+			File[] tempFiles = unzippedDir.listFiles();
+			if (tempFiles != null) {
+				for (File f : tempFiles) {
+					if (f.isDirectory()) {
+						FileOperations.deleteAllFilesInDir(f);
+					}
+					f.delete();
+				}
+			}
+			unzippedDir.delete();
+		}
+	}
+
+	private void importContextFromUnzippedDir(Entry contextEntry, File srcFile, File unzippedDir) throws RepositoryException, IOException {
+		Date before = new Date();
 		FileOperations.unzipFile(srcFile, unzippedDir);
 
 		File propFile = new File(unzippedDir, "export.properties");
@@ -352,7 +369,25 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 		}
 
+		// parse all statements from the file before removing anything, so that a parse failure
+		// aborts the import without first destroying the existing context
+
+		File tripleFile = new File(unzippedDir, "triples.rdf");
+		log.info("Loading quadruples from {}", tripleFile);
+		StatementCollector collector = new StatementCollector();
+		try (InputStream rdfInput = new BufferedInputStream(Files.newInputStream(tripleFile.toPath()))) {
+			TriGParser parser = new TriGParser();
+			parser.getParserConfig().set(BasicParserSettings.VERIFY_DATATYPE_VALUES, false);
+			parser.setRDFHandler(collector);
+			parser.parse(rdfInput, srcBaseURI);
+		} catch (RDFParseException | RDFHandlerException e) {
+			throw new org.entrystore.repository.RepositoryException("Failed to parse RDF data from the import file", e);
+		}
+
 		// remove entries from context
+		// NOTE: removal happens outside the add transaction below, so a failure during the add
+		// (after this point) still leaves the context emptied. Parsing first only guards against
+		// malformed RDF; making removal+add fully atomic is tracked as a separate follow-up.
 
 		log.info("Removing old entries from context...");
 		Context cont = getContext(contextEntry.getId());
@@ -384,14 +419,10 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			}
 		}
 
-		// load all statements from file
+		// add the parsed statements to the repository
 
 		long amountTriples = 0;
 		long importedTriples = 0;
-		File tripleFile = new File(unzippedDir, "triples.rdf");
-		log.info("Loading quadruples from {}", tripleFile);
-		InputStream rdfInput = new BufferedInputStream(Files.newInputStream(tripleFile.toPath()));
-
 		PrincipalManager pm = entry.getRepositoryManager().getPrincipalManager();
 
 		synchronized (this.entry.repository) {
@@ -400,12 +431,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			try {
 				rc = entry.getRepository().getConnection();
 				rc.begin();
-
-				TriGParser parser = new TriGParser();
-				parser.getParserConfig().set(BasicParserSettings.VERIFY_DATATYPE_VALUES, false);
-				StatementCollector collector = new StatementCollector();
-				parser.setRDFHandler(collector);
-				parser.parse(rdfInput, srcBaseURI);
 
 				String oldBaseURI = srcBaseURI;
 				if (!oldBaseURI.endsWith("/")) {
@@ -549,25 +574,20 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 				rc.commit();
 			} catch (Exception e) {
-				rc.rollback();
-				log.error(e.getMessage(), e);
+				if (rc != null) {
+					try {
+						rc.rollback();
+					} catch (Exception rollbackEx) {
+						log.error("Failed to roll back import transaction", rollbackEx);
+					}
+				}
+				throw new org.entrystore.repository.RepositoryException("Failed to import context data", e);
 			} finally {
 				if (rc != null) {
 					rc.close();
 				}
 			}
 		}
-
-		// clean up temp files
-
-		log.info("Removing temporary files");
-		for (File f : unzippedDir.listFiles()) {
-			if (f.isDirectory()) {
-				FileOperations.deleteAllFilesInDir(f);
-			}
-			f.delete();
-		}
-		unzippedDir.delete();
 
 		// reindex the context to get everything reloaded
 
@@ -699,7 +719,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	public List<Date> listBackups(URI contexturi) {
 		File dir = new File(getContextBackupFolder(contexturi));
 		String[] children = dir.list();
-		List<Date> backups = new ArrayList<Date>();
+		List<Date> backups = new ArrayList<>();
 		for (int i = 0; i < children.length; i++) {
 			Date bkp = parseTimestamp(children[i]);
 			if (bkp != null) {
@@ -767,7 +787,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		File backupFolder = new File(getContextBackupFolder(contexturi));
 		File datedFolder = new File(backupFolder, timestampStr);
 
-		HashMap<String, String> map = new HashMap<String,String>();
+		HashMap<String, String> map = new HashMap<>();
 		map.put("dateFolder", datedFolder.toString());
 		map.put("timestampStr", timestampStr);
 		return map;
@@ -919,7 +939,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 
 	private Set<Entry> getLinksOrReferences(URI uri, boolean findLinks) {
-		HashSet<Entry> entries = new HashSet<Entry>();
+		HashSet<Entry> entries = new HashSet<>();
 		try {
 			RepositoryConnection rc = entry.repository.getConnection();
 			try {
@@ -1066,7 +1086,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		// Remove entries which do not contain the contexts which are in the context list
 		List<Entry> foundEntries = intersectEntriesFromContexts(intersectionEntries, contextList);
 
-		List<Entry> result = new ArrayList<Entry>();
+		List<Entry> result = new ArrayList<>();
 		for (Entry entry : foundEntries) {
 			if (entry != null && isEntryMetadataReadable(entry)) {
 				result.add(entry);
@@ -1077,7 +1097,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	}
 
 	public Map<Entry, Integer> searchLiterals(Set<IRI> predicates, String[] terms, String lang, List<URI> context, boolean andOperation) {
-		Map<org.eclipse.rdf4j.model.Resource, Integer> matches = new HashMap<org.eclipse.rdf4j.model.Resource, Integer>();
+		Map<org.eclipse.rdf4j.model.Resource, Integer> matches = new HashMap<>();
 		RepositoryConnection rc = null;
 		try {
 			rc = entry.getRepository().getConnection();
@@ -1225,8 +1245,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	 * @param mdQueryString a SPARQL syntax string
 	 * @return a list with entries
 	 * @throws RepositoryException
-	 * @throws
-	 * @throws Exception
 	 */
 	private List<Entry> searchMetadataQuery(String mdQueryString) throws RepositoryException {
 		if(mdQueryString == null) {
@@ -1295,7 +1313,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 		}
 
 		// filter the list so that only entrys wich belong to one of the specified contexts are included
-		List<Entry> resultList = new ArrayList<Entry>();
+		List<Entry> resultList = new ArrayList<>();
 		if (intersectionEntries != null) {
 			for (URI u: contextList) {
 				for (Entry e: intersectionEntries) {
@@ -1323,7 +1341,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			return null;
 		}
 
-		List<Entry> entries = new ArrayList<Entry>();
+		List<Entry> entries = new ArrayList<>();
 		RepositoryConnection rc = null;
 		try {
 			rc = entry.getRepository().getConnection();
