@@ -255,6 +255,11 @@ class ContextImportIT extends BaseSpec {
 		def afterConn = EntryStoreClient.getRequest('/' + corruptImportId)
 		afterConn.getResponseCode() == HTTP_OK
 		JSON_PARSER.parseText(afterConn.inputStream.text) == [preservedEntryId]
+
+		and: 'the context name is unchanged too'
+		def nameConn = EntryStoreClient.getRequest('/_contexts/entry/' + corruptImportId + '/name')
+		nameConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(nameConn.inputStream.text) == [name: 'context for corrupt import']
 	}
 
 	def "POST /{context-id}/import with a ZIP missing triples.rdf should fail with Bad-Request 400 and preserve existing entries"() {
@@ -284,6 +289,11 @@ class ContextImportIT extends BaseSpec {
 		def afterConn = EntryStoreClient.getRequest('/' + missingTriplesImportId)
 		afterConn.getResponseCode() == HTTP_OK
 		JSON_PARSER.parseText(afterConn.inputStream.text) == [preservedEntryId]
+
+		and: 'the context name is unchanged too'
+		def nameConn = EntryStoreClient.getRequest('/_contexts/entry/' + missingTriplesImportId + '/name')
+		nameConn.getResponseCode() == HTTP_OK
+		JSON_PARSER.parseText(nameConn.inputStream.text) == [name: 'context for missing-triples import']
 	}
 
 	// Copies a context-export ZIP while overwriting the triples.rdf entry with invalid RDF, leaving

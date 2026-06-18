@@ -317,16 +317,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			importContextFromUnzippedDir(contextEntry, srcFile, unzippedDir);
 		} finally {
 			log.info("Removing temporary files");
-			File[] tempFiles = unzippedDir.listFiles();
-			if (tempFiles != null) {
-				for (File f : tempFiles) {
-					if (f.isDirectory()) {
-						FileOperations.deleteAllFilesInDir(f);
-					}
-					f.delete();
-				}
-			}
-			unzippedDir.delete();
+			FileOperations.deleteDirectory(unzippedDir);
 		}
 	}
 
@@ -386,8 +377,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 
 		// remove entries from context
 		// NOTE: removal happens outside the add transaction below, so a failure during the add
-		// (after this point) still leaves the context emptied. Parsing first only guards against
-		// malformed RDF; making removal+add fully atomic is tracked as a separate follow-up.
+		// (after this point) still leaves the context emptied, and the Solr index stale until the
+		// next reindex. Parsing first only guards against malformed RDF; making removal+add fully
+		// atomic (and keeping Solr consistent on failure) is tracked in ENTRYSTORE-1064.
 
 		log.info("Removing old entries from context...");
 		Context cont = getContext(contextEntry.getId());
