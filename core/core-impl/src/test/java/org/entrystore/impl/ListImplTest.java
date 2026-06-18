@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -106,6 +106,30 @@ public class ListImplTest extends AbstractCoreTest {
 		((List) listE2.getResource()).moveEntryHere(linkEntry.getEntryURI(), listE1.getEntryURI(), false);
 		assertEquals(0, ((List) listE1.getResource()).getChildren().size());
 		assertEquals(1, ((List) listE2.getResource()).getChildren().size());
+	}
+
+	@Test
+	public void moveEntryHereRemovingFromAllListsInSameContext() throws QuotaException, IOException {
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry sourceList1 = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry sourceList2 = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry targetList = duck.createResource(null, GraphType.List, null, null); // since owner
+		Entry linkEntry = duck.createLink(null, URI.create("https://slashdot.org/"), sourceList1.getResourceURI());
+		((List) sourceList2.getResource()).addChild(linkEntry.getEntryURI());
+
+		// The same-context remove-from-all-lists branch is only reached when fromList does not resolve to an
+		// existing entry (a literal null URI is rejected earlier), so pass a well-formed but non-existent list URI.
+		URI unresolvedFromList = URI.create(rm.getRepositoryURL() + "duck/entry/_does_not_exist_");
+		((List) targetList.getResource()).moveEntryHere(linkEntry.getEntryURI(), unresolvedFromList, true);
+
+		// The branch resolves each source list by its resource URI, which replaces the soft-cache instances,
+		// so the references above are stale; re-fetch by entry URI to read the committed repository state.
+		assertEquals(0, ((List) duck.getByEntryURI(sourceList1.getEntryURI()).getResource()).getChildren().size());
+		assertEquals(0, ((List) duck.getByEntryURI(sourceList2.getEntryURI()).getResource()).getChildren().size());
+		List targetAfterMove = (List) duck.getByEntryURI(targetList.getEntryURI()).getResource();
+		assertEquals(1, targetAfterMove.getChildren().size());
+		assertTrue(targetAfterMove.getChildren().contains(linkEntry.getEntryURI()));
 	}
 
 	@Test

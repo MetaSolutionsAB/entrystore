@@ -267,7 +267,6 @@ public class ListImpl extends RDFResource implements List {
 			} else {
 				//Remove from all lists.
 				Set<URI> lists = e.getReferringListsInSameContext();
-				this.addChild(entry, false, true); //Disable multiple parent check for lists.
 				Context c = e.getContext();
 				for (URI list : lists) {
 					Entry refListE = c.getByEntryURI(list);
@@ -391,7 +390,7 @@ public class ListImpl extends RDFResource implements List {
 
 	private void copyGraphs(EntryImpl source, EntryImpl dest) {
 		Model eGraph = source.getGraph();
-		HashMap<IRI, IRI> map = new HashMap<IRI, IRI>();
+		HashMap<IRI, IRI> map = new HashMap<>();
 		map.put(source.getSesameEntryURI(), dest.getSesameEntryURI());
 		map.put(source.getSesameLocalMetadataURI(), dest.getSesameLocalMetadataURI());
 		map.put(source.getSesameResourceURI(), dest.getSesameResourceURI());
@@ -436,7 +435,7 @@ public class ListImpl extends RDFResource implements List {
 			IRI pred = statement.getPredicate();
 			Value obj = statement.getObject();
 			if (map.containsKey(subj)) {
-				subj = (org.eclipse.rdf4j.model.Resource) map.get(subj);
+				subj = map.get(subj);
 			}
 			if (map.containsKey(pred)) {
 				pred = map.get(pred);
