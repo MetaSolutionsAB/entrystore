@@ -216,22 +216,26 @@ public class ListImpl extends RDFResource implements List {
 					IRI childURI = vf.createIRI(nEntry.toString());
 					rc.add(this.resourceURI, li, childURI, this.resourceURI);
 					childEntry.addReferringList(this, rc); //TODO deprecate addReferringList.
-					children.add(nEntry);
 					entry.registerEntryModified(rc, vf);
 					rc.commit();
+					children.add(nEntry);
 
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 				} catch (Exception e) {
-					((EntryImpl) this.entry.getContext().getByEntryURI(nEntry)).refreshFromRepository(rc);
-					rc.rollback();
-					log.error(e.getMessage());
+					try {
+						rc.rollback();
+						childEntry.refreshFromRepository(rc);
+					} catch (Exception recoveryEx) {
+						e.addSuppressed(recoveryEx);
+					}
+					throw new org.entrystore.repository.RepositoryException("Failed to add child " + nEntry + " to list " + getURI(), e);
 				} finally {
 					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
-			log.error(e.getMessage(), e);
+			throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
 		}
 	}
 
