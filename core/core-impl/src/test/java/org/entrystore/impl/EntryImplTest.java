@@ -223,6 +223,40 @@ public class EntryImplTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void fileSizeSurvivesStoreReload() {
+		long expectedSize = 4096L;
+		resourceEntry.setFileSize(expectedSize);
+
+		// Drop the in-memory cache and reload from the repository, as happens
+		// after a SoftCache eviction. loadFromStatements resets fileSize to -1.
+		((EntryImpl) resourceEntry).load();
+
+		assertEquals(expectedSize, resourceEntry.getFileSize());
+	}
+
+	@Test
+	public void zeroFileSizeSurvivesStoreReload() {
+		// The guard pivots at 0: a stored size of 0 was returned as -1 by the old
+		// `fileSize > 0` guard, so this pins the fix at the boundary it changes.
+		resourceEntry.setFileSize(0L);
+
+		((EntryImpl) resourceEntry).load();
+
+		assertEquals(0L, resourceEntry.getFileSize());
+	}
+
+	@Test
+	public void fileSizeIsNegativeOneWhenNeverSet() {
+		// An entry with no fileSize statement must report -1 after reload rather
+		// than throwing on the absent statement.
+		Entry unsizedEntry = context.createResource(null, GraphType.None, ResourceType.InformationResource, null);
+
+		((EntryImpl) unsizedEntry).load();
+
+		assertEquals(-1L, unsizedEntry.getFileSize());
+	}
+
+	@Test
 	public void invRelCache() {
 		EntryImpl sourceEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);
 		EntryImpl targetEntry = (EntryImpl) context.createResource(null, GraphType.None, null, null);

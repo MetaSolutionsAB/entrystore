@@ -1628,7 +1628,7 @@ public class EntryImpl implements Entry {
 	}
 
 	public long getFileSize() {
-		if (this.fileSize > 0) {
+		if (this.fileSize < 0) {
 			Statement st = getStatement(resURI, RepositoryProperties.fileSize, null);
 			if (st != null) {
 				this.fileSize = ((Literal) st.getObject()).longValue();
