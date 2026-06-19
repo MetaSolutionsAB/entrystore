@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.rdf4j.common.iteration.Iterations;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.Model;
@@ -41,8 +42,6 @@ import org.entrystore.ResourceType;
 import org.entrystore.repository.RepositoryEvent;
 import org.entrystore.repository.RepositoryEventObject;
 import org.entrystore.repository.security.DisallowedException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -53,9 +52,8 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.Vector;
 
+@Slf4j
 public class ListImpl extends RDFResource implements List {
-
-	private static final Logger log = LoggerFactory.getLogger(ListImpl.class);
 
 	private Vector<URI> children;
 
@@ -219,9 +217,6 @@ public class ListImpl extends RDFResource implements List {
 					entry.registerEntryModified(rc, vf);
 					rc.commit();
 					children.add(nEntry);
-
-					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
-					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 				} catch (Exception e) {
 					try {
 						rc.rollback();
@@ -233,6 +228,11 @@ public class ListImpl extends RDFResource implements List {
 				} finally {
 					rc.close();
 				}
+
+				// Notify listeners only after the transaction has committed and the connection is closed, so a
+				// listener failure cannot trigger the rollback path above or be misreported as a failed add.
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
+				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 			}
 		} catch (RepositoryException e) {
 			throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
