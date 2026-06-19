@@ -162,8 +162,12 @@ entrystore.auth.temp.lockout.duration=0ms
 ## `idp.{id}.*` key (6.0: the old explicit `idps` enumeration is no longer needed).
 ## domains: comma-separated email domains routed to this IdP (default: * — wildcard fallback).
 ## user-auto-provisioning: create the EntryStore user on first login (default: false).
+## metadata.max-age: seconds before this IdP's asserting-party metadata is re-fetched at runtime, so
+## signing-certificate rollovers are picked up without a restart (default: 604800 = 7 days, minimum 60).
+## The metadata location itself is set via spring.security.saml2.relyingparty.registration.{id}.assertingparty.metadata-uri.
 # entrystore.auth.saml.idp.myIdp.domains=example.com,example.org
 # entrystore.auth.saml.idp.myIdp.user-auto-provisioning=true
+# entrystore.auth.saml.idp.myIdp.metadata.max-age=86400
 ## Comma-separated host whitelist for post-login successurl/failureurl redirects;
 ## a redirect to any host not listed here is dropped (open-redirect protection).
 # entrystore.auth.saml.redirect-domain-whitelist=app.example.com,portal.example.com

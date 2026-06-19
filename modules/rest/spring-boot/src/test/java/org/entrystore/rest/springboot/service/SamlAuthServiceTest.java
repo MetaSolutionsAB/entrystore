@@ -71,8 +71,8 @@ class SamlAuthServiceTest {
 	@Test
 	void findIdpIdForRequest_exactDomainMatchWinsOverWildcard() {
 		var svc = serviceWithIdps("keycloak", Map.of(
-				"keycloak", new Idp(List.of("*"), true),
-				"corp", new Idp(List.of("example.com"), false)));
+				"keycloak", new Idp(List.of("*"), true, null),
+				"corp", new Idp(List.of("example.com"), false, null)));
 
 		assertEquals("corp", svc.findIdpIdForRequest("user@example.com", null));
 	}
@@ -80,37 +80,37 @@ class SamlAuthServiceTest {
 	@Test
 	void findIdpIdForRequest_unmatchedDomainFallsBackToWildcardIdp() {
 		var svc = serviceWithIdps("keycloak", Map.of(
-				"keycloak", new Idp(List.of("*"), true),
-				"corp", new Idp(List.of("example.com"), false)));
+				"keycloak", new Idp(List.of("*"), true, null),
+				"corp", new Idp(List.of("example.com"), false, null)));
 
 		assertEquals("keycloak", svc.findIdpIdForRequest("user@other.com", null));
 	}
 
 	@Test
 	void findIdpIdForRequest_explicitIdpParameterIsUsedWhenNoUsername() {
-		var svc = serviceWithIdps("keycloak", Map.of("keycloak", new Idp(List.of("*"), true)));
+		var svc = serviceWithIdps("keycloak", Map.of("keycloak", new Idp(List.of("*"), true, null)));
 
 		assertEquals("explicit", svc.findIdpIdForRequest(null, "explicit"));
 	}
 
 	@Test
 	void findIdpIdForRequest_fallsBackToDefaultIdp() {
-		var svc = serviceWithIdps("keycloak", Map.of("keycloak", new Idp(List.of("*"), true)));
+		var svc = serviceWithIdps("keycloak", Map.of("keycloak", new Idp(List.of("*"), true, null)));
 
 		assertEquals("keycloak", svc.findIdpIdForRequest(null, null));
 	}
 
 	@Test
 	void findIdpForSamlResponse_returnsKeyedIdp() {
-		var corp = new Idp(List.of("example.com"), false);
-		var svc = serviceWithIdps("keycloak", Map.of("keycloak", new Idp(List.of("*"), true), "corp", corp));
+		var corp = new Idp(List.of("example.com"), false, null);
+		var svc = serviceWithIdps("keycloak", Map.of("keycloak", new Idp(List.of("*"), true, null), "corp", corp));
 
 		assertEquals(corp, svc.findIdpForSamlResponse("corp"));
 	}
 
 	@Test
 	void findIdpForSamlResponse_blankNameResolvesToDefaultIdp() {
-		var keycloak = new Idp(List.of("*"), true);
+		var keycloak = new Idp(List.of("*"), true, null);
 		var svc = serviceWithIdps("keycloak", Map.of("keycloak", keycloak));
 
 		assertEquals(keycloak, svc.findIdpForSamlResponse(null));
@@ -118,7 +118,7 @@ class SamlAuthServiceTest {
 
 	@Test
 	void findIdpForSamlResponse_unknownIdpReturnsNull() {
-		var svc = serviceWithIdps("keycloak", Map.of("keycloak", new Idp(List.of("*"), true)));
+		var svc = serviceWithIdps("keycloak", Map.of("keycloak", new Idp(List.of("*"), true, null)));
 
 		assertNull(svc.findIdpForSamlResponse("nope"));
 	}
