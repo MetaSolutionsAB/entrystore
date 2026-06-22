@@ -75,16 +75,19 @@ class ZzzSamlLoginIT extends KeycloakBaseSpec {
 		connection.getContentType().contains('text/html')
 		def response = connection.inputStream.text
 		response.contains('action="' + keycloakTestRealmUrl + '"')
-		response.contains('<input type="hidden" name="SAMLRequest" value="')
+		// Spring Security renders the hidden form inputs with attributes in an unspecified order
+		// (name/type were swapped between Spring Security 6.5.9 and 6.5.11), so assert on the name
+		// attribute and tolerate any other attributes before value instead of pinning exact markup.
+		response.contains('name="SAMLRequest"')
 
 		// Extract SAMLRequest value from the HTML form
-		def samlRequestMatcher = response =~ /name="SAMLRequest" value="([^"]+)"/
+		def samlRequestMatcher = response =~ /name="SAMLRequest"[^>]*\bvalue="([^"]+)"/
 		String samlRequestValue = samlRequestMatcher ? samlRequestMatcher[0][1] : null
 		samlRequestValue != null
 
-		response.contains('<input type="hidden" name="RelayState" value="')
+		response.contains('name="RelayState"')
 		// Extract RelayState value
-		def relayStateMatcher = response =~ /name="RelayState" value="([^"]+)"/
+		def relayStateMatcher = response =~ /name="RelayState"[^>]*\bvalue="([^"]+)"/
 		String relayStateValue = relayStateMatcher ? relayStateMatcher[0][1] : null
 
 		cleanup: 'store the URL to IDP for next step'
