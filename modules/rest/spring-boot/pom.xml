@@ -37,6 +37,14 @@
 			<artifactId>spring-security-saml2-service-provider</artifactId>
 		</dependency>
 
+		<!-- Boot 4 split the SAML2 relying-party auto-configuration (Saml2RelyingPartyProperties,
+		     package org.springframework.boot.security.saml2.autoconfigure) out of spring-boot-autoconfigure
+		     into this module; spring-boot-starter-security does not pull it transitively. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-security-saml2</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-cas</artifactId>

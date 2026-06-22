@@ -16,7 +16,7 @@
 
 package org.entrystore.rest.springboot.security;
 
-import net.shibboleth.utilities.java.support.resource.Resource;
+import net.shibboleth.shared.resource.Resource;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,7 +32,7 @@ import java.net.URL;
  * client.
  *
  * <p>Spring Security ships an identical adapter as the private nested class {@code SpringResource}
- * inside {@code OpenSaml4AssertingPartyMetadataRepository.MetadataLocationRepositoryBuilder} and
+ * inside {@code OpenSaml5AssertingPartyMetadataRepository.MetadataLocationRepositoryBuilder} and
  * therefore cannot be reused; {@link RefreshableRelyingPartyRegistrationRepository} needs its own
  * copy to configure the resolver's refresh interval (which the Spring builder does not expose).
  */

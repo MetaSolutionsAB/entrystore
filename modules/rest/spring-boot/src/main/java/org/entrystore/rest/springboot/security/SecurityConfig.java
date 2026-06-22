@@ -56,7 +56,7 @@ import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistrationRepository;
 import org.springframework.security.saml2.provider.service.web.DefaultRelyingPartyRegistrationResolver;
-import org.springframework.security.saml2.provider.service.web.authentication.OpenSaml4AuthenticationRequestResolver;
+import org.springframework.security.saml2.provider.service.web.authentication.OpenSaml5AuthenticationRequestResolver;
 import org.springframework.security.saml2.provider.service.web.authentication.Saml2AuthenticationRequestResolver;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
@@ -372,7 +372,7 @@ public class SecurityConfig {
 		}
 
 		var registrationResolver = new DefaultRelyingPartyRegistrationResolver(repo.get());
-		var resolver = new OpenSaml4AuthenticationRequestResolver(registrationResolver);
+		var resolver = new OpenSaml5AuthenticationRequestResolver(registrationResolver);
 
 		resolver.setRelayStateResolver(samlRelayStateResolver);
 
