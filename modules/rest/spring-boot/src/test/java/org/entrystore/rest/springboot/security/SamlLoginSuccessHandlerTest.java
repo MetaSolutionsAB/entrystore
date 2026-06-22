@@ -187,7 +187,7 @@ class SamlLoginSuccessHandlerTest {
 	@Test
 	void userNotFoundAndIdpAutoProvisioningDisabledRedirectsToFailure() throws Exception {
 		when(userService.loadUser("newuser")).thenReturn(null);
-		when(samlAuthService.findIdpForSamlResponse(IDP_ID)).thenReturn(new Idp(List.of("*"), false));
+		when(samlAuthService.findIdpForSamlResponse(IDP_ID)).thenReturn(new Idp(List.of("*"), false, null));
 
 		handler.onAuthenticationSuccess(request, response, saml2Authentication("newuser"));
 
@@ -198,7 +198,7 @@ class SamlLoginSuccessHandlerTest {
 	@Test
 	void userNotFoundAndIdpAutoProvisioningEnabledCreatesUserAndProceedsToSuccess() throws Exception {
 		when(userService.loadUser("newuser")).thenReturn(null);
-		when(samlAuthService.findIdpForSamlResponse(IDP_ID)).thenReturn(new Idp(List.of("*"), true));
+		when(samlAuthService.findIdpForSamlResponse(IDP_ID)).thenReturn(new Idp(List.of("*"), true, null));
 		when(userService.createUser("newuser")).thenReturn(esUser);
 		givenUserIsEnabled();
 

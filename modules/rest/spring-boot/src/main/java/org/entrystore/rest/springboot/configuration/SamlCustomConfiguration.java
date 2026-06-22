@@ -42,10 +42,32 @@ public record SamlCustomConfiguration(
 	// Per-IdP configuration, keyed in the map by the IdP id (entrystore.auth.saml.idp.{id}.*).
 	public record Idp(
 			@DefaultValue("*") List<String> domains,
-			@DefaultValue("false") boolean userAutoProvisioning
+			@DefaultValue("false") boolean userAutoProvisioning,
+			Metadata metadata
 	) {
 		public Idp {
 			domains = domains == null ? List.of("*") : List.copyOf(domains);
+			metadata = metadata == null ? new Metadata(Metadata.DEFAULT_MAX_AGE_SECONDS) : metadata;
+		}
+
+		// Asserting-party (IdP) metadata refresh settings; binds entrystore.auth.saml.idp.{id}.metadata.*.
+		// max-age is the staleness ceiling in seconds before the IdP metadata is re-fetched at runtime,
+		// so signing-certificate rollovers are picked up without a restart (revived for ENTRYSTORE-1061).
+		public record Metadata(@DefaultValue("604800") long maxAge) {
+			// 604800 s = 7 days, the legacy default refresh interval (Settings.AUTH_SAML_IDP_METADATA_MAXAGE).
+			// Keep the @DefaultValue literal above in sync with this constant.
+			public static final long DEFAULT_MAX_AGE_SECONDS = 604800L;
+			// Refreshing IdP metadata more often than this would hammer the federation endpoint; below it
+			// is treated as a misconfiguration rather than a useful refresh ceiling.
+			public static final long MIN_MAX_AGE_SECONDS = 60L;
+
+			public Metadata {
+				if (maxAge < MIN_MAX_AGE_SECONDS) {
+					throw new IllegalArgumentException(
+							"entrystore.auth.saml.idp.<id>.metadata.max-age must be at least "
+									+ MIN_MAX_AGE_SECONDS + " seconds");
+				}
+			}
 		}
 	}
 
