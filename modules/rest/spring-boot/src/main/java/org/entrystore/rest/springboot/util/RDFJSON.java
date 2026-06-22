@@ -16,8 +16,7 @@
 
 package org.entrystore.rest.springboot.util;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonGenerator;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.eclipse.rdf4j.model.BNode;
@@ -37,6 +36,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.core.json.JsonFactory;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -254,7 +254,8 @@ public class RDFJSON {
 	 * @return An RDF/JSON string if successful, otherwise null.
 	 */
 	public static String graphToRdfJsonJackson(Model graph) {
-		JsonFactory f = new JsonFactory();
+		JsonFactory f = JsonFactory.builder()
+				.build();
 		StringWriter sw = new StringWriter();
 		JsonGenerator g;
 		try {
@@ -273,35 +274,35 @@ public class RDFJSON {
 			}
 			for (Resource subject : subjects) {
 				if (subject instanceof BNode && !subject.stringValue().startsWith("_:")) {
-					g.writeObjectFieldStart("_:" + subject.stringValue()); // subject
+					g.writeObjectPropertyStart("_:" + subject.stringValue()); // subject
 				} else {
-					g.writeObjectFieldStart(subject.stringValue()); // subject
+					g.writeObjectPropertyStart(subject.stringValue()); // subject
 				}
 				Set<IRI> predicates = new HashSet<>();
 				for (Statement statement : graph.filter(subject, null, null)) {
 					predicates.add(statement.getPredicate());
 				}
 				for (IRI predicate : predicates) {
-					g.writeArrayFieldStart(predicate.stringValue()); // predicate
+					g.writeArrayPropertyStart(predicate.stringValue()); // predicate
 					for (Statement statement : graph.filter(subject, predicate, null)) {
 						Value v = statement.getObject();
 						g.writeStartObject(); // value
 						if (v instanceof BNode && !v.stringValue().startsWith("_:")) {
-							g.writeStringField("value", "_:" + v.stringValue());
+							g.writeStringProperty("value", "_:" + v.stringValue());
 						} else {
-							g.writeStringField("value", v.stringValue());
+							g.writeStringProperty("value", v.stringValue());
 						}
 						if (v instanceof Literal l) {
-							g.writeStringField("type", "literal");
+							g.writeStringProperty("type", "literal");
 							if (l.getLanguage().isPresent()) {
-								g.writeStringField("lang", l.getLanguage().get());
+								g.writeStringProperty("lang", l.getLanguage().get());
 							} else if (l.getDatatype() != null) {
-								g.writeStringField("datatype", l.getDatatype().stringValue());
+								g.writeStringProperty("datatype", l.getDatatype().stringValue());
 							}
 						} else if (v instanceof BNode) {
-							g.writeStringField("type", "bnode");
+							g.writeStringProperty("type", "bnode");
 						} else if (v instanceof IRI) {
-							g.writeStringField("type", "uri");
+							g.writeStringProperty("type", "uri");
 						}
 						g.writeEndObject(); // value
 					}

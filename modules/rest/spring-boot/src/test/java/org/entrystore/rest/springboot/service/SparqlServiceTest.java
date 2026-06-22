@@ -16,7 +16,8 @@
 
 package org.entrystore.rest.springboot.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.eclipse.rdf4j.model.IRI;
 import org.eclipse.rdf4j.model.ValueFactory;
 import org.eclipse.rdf4j.query.QueryEvaluationException;
@@ -155,7 +156,7 @@ class SparqlServiceTest {
 
 		// Parse the SPARQL-results JSON instead of substring-matching, since the writer
 		// pretty-prints whitespace into the body.
-		var json = new ObjectMapper().readTree(out.toByteArray());
+		var json = new JsonMapper().readTree(out.toByteArray());
 		assertTrue(json.path("results").path("bindings").isArray(),
 				"Expected SPARQL-results 'results.bindings' array, got: " + json);
 		assertEquals(0, json.path("results").path("bindings").size(),
@@ -447,7 +448,7 @@ class SparqlServiceTest {
 		service.runQuery(SparqlResultFormat.SPARQL_RESULTS_JSON, SELECT_ALL, "sparql", out);
 
 		verify(contextService, never()).getContext("sparql");
-		var json = new ObjectMapper().readTree(out.toByteArray());
+		var json = new JsonMapper().readTree(out.toByteArray());
 		assertEquals(0, json.path("results").path("bindings").size(),
 				"Expected empty bindings for reserved-name context, got: " + json);
 	}
@@ -465,7 +466,7 @@ class SparqlServiceTest {
 
 		verify(contextService, never()).getContext("SPARQL");
 		verify(contextService, never()).getContext("sparql");
-		var json = new ObjectMapper().readTree(out.toByteArray());
+		var json = new JsonMapper().readTree(out.toByteArray());
 		assertEquals(0, json.path("results").path("bindings").size(),
 				"Expected empty bindings for mixed-case reserved-name context, got: " + json);
 	}

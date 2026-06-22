@@ -1,10 +1,8 @@
 package org.entrystore.rest.springboot.model.serializer;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
-
-import java.io.IOException;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.databind.SerializationContext;
+import tools.jackson.databind.ValueSerializer;
 
 /**
  * Custom Jackson serializer to handle a case when a field sometimes is a raw json, but can be also just a String.
@@ -13,10 +11,10 @@ import java.io.IOException;
  * Without this String-entry "resource" is an invalid json, e.g. {"resource": Some text}, should be {"resource": "Some text"}
  *
  */
-public class RawOrStringSerializer extends JsonSerializer<String> {
+public class RawOrStringSerializer extends ValueSerializer<String> {
 
 	@Override
-	public void serialize(String value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+	public void serialize(String value, JsonGenerator gen, SerializationContext serializers) {
 
 		if (value == null) {
 			gen.writeNull();

@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.model.api;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 public enum TransportType {
@@ -24,6 +25,7 @@ public enum TransportType {
 
 	private final String value;
 
+	@JsonCreator
 	TransportType(String value) {
 		this.value = value;
 	}

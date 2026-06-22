@@ -141,14 +141,14 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-solr</artifactId>
-			<version>2.0.3</version>
+			<version>2.0.5</version>
 			<scope>test</scope>
 		</dependency>
 
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-spock</artifactId>
-			<version>2.0.3</version>
+			<version>2.0.5</version>
 			<scope>test</scope>
 		</dependency>
 
@@ -162,6 +162,12 @@
 		<dependency>
 			<groupId>org.awaitility</groupId>
 			<artifactId>awaitility</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
 			<scope>test</scope>
 		</dependency>
 

@@ -95,9 +95,9 @@ public class ContextService {
 					.map(uri -> uri.substring(uri.lastIndexOf("/") + 1))
 					.collect(Collectors.toList());
 
-		} else if (context instanceof EntryNamesContext && entryName != null) {
+		} else if (context instanceof EntryNamesContext namesContext && entryName != null) {
 
-			Entry matchedEntry = ((EntryNamesContext) context).getEntryByName(entryName);
+			Entry matchedEntry = namesContext.getEntryByName(entryName);
 			if (matchedEntry != null) {
 				return List.of(matchedEntry.getId());
 			} else {

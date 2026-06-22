@@ -1,7 +1,7 @@
 package org.entrystore.rest.springboot.model.api;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.annotation.JsonDeserialize;
 import org.entrystore.rest.springboot.model.serializer.RawJsonDeserializer;
 
 public record CreateEntryRequestBody(

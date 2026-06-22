@@ -172,25 +172,24 @@ public class Pipeline {
 		Transform first = tsteps.get(0);
 		Object result = first.transform(this, sourceEntry);
 		for (int idx = 1; idx < tsteps.size(); idx++) {
-            if (result instanceof Model) {
-                result = tsteps.get(idx).transform(this, (Model) result);
-            } else if (result instanceof Entry) {
-                result = tsteps.get(idx).transform(this, (Entry) result);
+            if (result instanceof Model model) {
+                result = tsteps.get(idx).transform(this, model);
+            } else if (result instanceof Entry entry1) {
+                result = tsteps.get(idx).transform(this, entry1);
             } else {
                 throw new IllegalStateException("Transform result must be either Graph or Entry.");
             }
 		}
 
-        if (result instanceof Model) {
-            Model graph = (Model) result;
+        if (result instanceof Model graph) {
             Graph2Entries g2e = new Graph2Entries(this.entry.getContext());
             if (detectDestination) {
                 return g2e.merge(graph, null, null);
             } else {
                 return g2e.merge(graph, destination, listIRI);
             }
-        } else if (result instanceof Entry) {
-            return new HashSet<Entry>(Arrays.asList((Entry) result));
+        } else if (result instanceof Entry entry11) {
+            return new HashSet<Entry>(Arrays.asList(entry11));
         } else {
             throw new IllegalStateException("Transform result must be either Graph or Entry.");
         }

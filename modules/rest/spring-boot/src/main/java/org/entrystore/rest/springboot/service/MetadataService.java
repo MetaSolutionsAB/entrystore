@@ -146,8 +146,8 @@ public class MetadataService {
 			Provenance provenance = entry.getProvenance();
 			if (revision != null && provenance != null) {
 				Entity entity = provenance.getEntityFor(revision, ProvenanceType.Metadata);
-				if (entity instanceof GraphEntity) {
-					return ((GraphEntity) entity);
+				if (entity instanceof GraphEntity graphEntity) {
+					return graphEntity;
 				}
 				return null;
 			}

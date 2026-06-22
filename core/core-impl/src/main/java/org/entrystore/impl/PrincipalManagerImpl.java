@@ -103,8 +103,9 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 						principalEntry.getGraphType() == GraphType.Group) {
 			return principalEntry;
 		}
-		throw new org.entrystore.repository.RepositoryException("Found entry for the name is not a principal...\n" +
-				"this is either a programming error or someone have been tampering with the RDF directly.");
+		throw new org.entrystore.repository.RepositoryException("""
+				Found entry for the name is not a principal...
+				this is either a programming error or someone have been tampering with the RDF directly.""");
 	}
 
 	public boolean setPrincipalName(URI principal, String newName) {

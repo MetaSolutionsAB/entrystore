@@ -406,8 +406,8 @@ public class ListImpl extends RDFResource implements List {
 			dest.getCachedExternalMetadata().setGraph(replaceURI(source.getCachedExternalMetadata().getGraph(), source.getSesameResourceURI(), dest.getSesameResourceURI()));
 		}
 		Object obj = source.getResource();
-		if (obj instanceof RDFResource && !(obj instanceof List)) {
-			((RDFResource) dest.getResource()).setGraph(replaceURI(((RDFResource) obj).getGraph(), source.getSesameResourceURI(), dest.getSesameResourceURI()));
+		if (obj instanceof RDFResource resource && !(obj instanceof List)) {
+			((RDFResource) dest.getResource()).setGraph(replaceURI(resource.getGraph(), source.getSesameResourceURI(), dest.getSesameResourceURI()));
 		}
 	}
 

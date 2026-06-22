@@ -25,9 +25,9 @@ import org.opensaml.saml.metadata.resolver.impl.AbstractReloadingMetadataResolve
 import org.opensaml.saml.metadata.resolver.impl.ResourceBackedMetadataResolver;
 import org.opensaml.saml.metadata.resolver.index.impl.RoleMetadataIndex;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.security.saml2.Saml2RelyingPartyProperties;
-import org.springframework.boot.autoconfigure.security.saml2.Saml2RelyingPartyProperties.AssertingParty;
-import org.springframework.boot.autoconfigure.security.saml2.Saml2RelyingPartyProperties.Registration;
+import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
+import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.AssertingParty;
+import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.Registration;
 import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.security.saml2.core.OpenSamlInitializationService;

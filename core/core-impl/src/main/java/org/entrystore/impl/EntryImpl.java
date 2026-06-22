@@ -588,8 +588,8 @@ public class EntryImpl implements Entry {
 		try (RepositoryConnection rc = this.repository.getConnection()) {
 			Model graph = Iterations.addAll(rc.getStatements(null, null, null, false, entryURI), new LinkedHashModel());
 			//TODO following is a fix for backwards compatability where homeContext is set on user object rather than in the entryinfo.
-			if (this.resource instanceof User && ((User) this.resource).getHomeContext() != null) {
-				Context context = ((User) this.resource).getHomeContext();
+			if (this.resource instanceof User user && user.getHomeContext() != null) {
+				Context context = user.getHomeContext();
 				graph.add(this.getSesameResourceURI(), RepositoryProperties.homeContext, ((ContextImpl) context).getSesameURI());
 			}
 			//End of fix.
@@ -781,9 +781,7 @@ public class EntryImpl implements Entry {
 					rc.rollback();
 					log.error(e.getMessage(), e);
 				} finally {
-					if (rc != null) {
-						rc.close();
-					}
+					rc.close();
 				}
 			}
 		} catch (RepositoryException re) {
@@ -846,9 +844,7 @@ public class EntryImpl implements Entry {
 					rc.rollback();
 					log.error(e.getMessage(), e);
 				} finally {
-					if (rc != null) {
-						rc.close();
-					}
+					rc.close();
 				}
 			}
 		} catch (RepositoryException re) {
@@ -1583,8 +1579,8 @@ public class EntryImpl implements Entry {
 		}
 
 		if ((locType == EntryType.LinkReference) || (locType == EntryType.Reference)) {
-            if (cachedExternalMetadata instanceof MetadataImpl) {
-                ((MetadataImpl) cachedExternalMetadata).removeGraphSynchronized(rc);
+            if (cachedExternalMetadata instanceof MetadataImpl impl) {
+                impl.removeGraphSynchronized(rc);
             } else {
                 rc.clear(cachedExternalMdURI);
             }

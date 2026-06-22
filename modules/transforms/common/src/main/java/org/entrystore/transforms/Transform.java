@@ -42,8 +42,8 @@ public abstract class Transform implements Comparable<Transform> {
 		Iterator<Statement> prios = graph.filter(null, Pipeline.transformPriority, null).iterator();
 		if (prios.hasNext()) {
 			Value obj = prios.next().getObject();
-			if (obj instanceof Literal) {
-				this.prio = ((Literal) obj).integerValue().intValue();
+			if (obj instanceof Literal literal) {
+				this.prio = literal.integerValue().intValue();
 			}
 		}
 
@@ -56,13 +56,13 @@ public abstract class Transform implements Comparable<Transform> {
 				Iterator<Statement> argKeyIt = graph.filter((BNode) s.getObject(), Pipeline.transformArgumentKey, null).iterator();
 				if (argKeyIt.hasNext()) {
 					Value argKey = argKeyIt.next().getObject();
-					if (argKey instanceof Literal) {
-						keyStr = ((Literal) argKey).stringValue();
+					if (argKey instanceof Literal literal2) {
+						keyStr = literal2.stringValue();
 						Iterator<Statement> argValueIt = graph.filter((BNode) s.getObject(), Pipeline.transformArgumentValue, null).iterator();
 						if (argValueIt.hasNext()) {
 							Value argValue = argValueIt.next().getObject();
-							if (argValue instanceof Literal) {
-								valueStr = ((Literal) argValue).stringValue();
+							if (argValue instanceof Literal literal1) {
+								valueStr = literal1.stringValue();
 							}
 						}
 					}

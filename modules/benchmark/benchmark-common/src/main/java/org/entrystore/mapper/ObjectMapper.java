@@ -32,10 +32,10 @@ public class ObjectMapper {
 
 		persons.forEach(person -> {
 			if (person != null) {
-				if (person instanceof FakeComplexPerson) {
-					ObjectMapper.mapComplexPersonToBuilder((FakeComplexPerson) person, builder);
-				} else if (person instanceof FakePerson) {
-					ObjectMapper.mapSimplePersonToBuilder((FakePerson) person, builder);
+				if (person instanceof FakeComplexPerson complexPerson) {
+					ObjectMapper.mapComplexPersonToBuilder(complexPerson, builder);
+				} else if (person instanceof FakePerson fakePerson) {
+					ObjectMapper.mapSimplePersonToBuilder(fakePerson, builder);
 				}
 			}
 		});
@@ -50,18 +50,18 @@ public class ObjectMapper {
 		IRI rootIRI = iri(entry.getResourceURI().toString());
 
 		try {
-			if (object instanceof FakeAddress) {
-				addAddressToModel(model, rootIRI, (FakeAddress) object);
-			} else if (object instanceof FakeCompany) {
+			if (object instanceof FakeAddress address1) {
+				addAddressToModel(model, rootIRI, address1);
+			} else if (object instanceof FakeCompany company1) {
 				IRI addressIRI = null;
-				FakeAddress address = ((FakeCompany) object).getAddress();
+				FakeAddress address = company1.getAddress();
 				if (address != null) {
 					Entry entryAddress = mapObjectToContext(context, address);
 					addressIRI = iri(entryAddress.getResourceURI().toString());
 				}
 
-				addCompanyToModel(model, rootIRI, (FakeCompany) object, addressIRI);
-			} else if (object instanceof FakeComplexPerson) {
+				addCompanyToModel(model, rootIRI, company1, addressIRI);
+			} else if (object instanceof FakeComplexPerson person1) {
 				IRI addressIRI = null;
 				FakeAddress address = ((FakePerson) object).getAddress();
 				if (address != null) {
@@ -70,26 +70,26 @@ public class ObjectMapper {
 				}
 
 				IRI companyIRI = null;
-				FakeCompany company = ((FakeComplexPerson) object).getCompany();
+				FakeCompany company = person1.getCompany();
 				if (company != null) {
 					Entry entryCompany = mapObjectToContext(context, company);
 					companyIRI = iri(entryCompany.getResourceURI().toString());
 				}
 
 				IRI spouseIRI = null;
-				FakeComplexPerson spouse = ((FakeComplexPerson) object).getSpouse();
+				FakeComplexPerson spouse = person1.getSpouse();
 				if (spouse != null) {
 					Entry entrySpouse = mapObjectToContext(context, spouse);
 					spouseIRI = iri(entrySpouse.getResourceURI().toString());
 				}
 
 				addPersonToModel(model, rootIRI, (FakePerson) object, addressIRI, companyIRI, spouseIRI);
-			} else if (object instanceof FakePerson) {
-				FakeAddress address = ((FakePerson) object).getAddress();
+			} else if (object instanceof FakePerson person) {
+				FakeAddress address = person.getAddress();
 				Entry entryAddress = mapObjectToContext(context, address);
 				IRI addressIRI = iri(entryAddress.getResourceURI().toString());
 
-				addPersonToModel(model, rootIRI, (FakePerson) object, addressIRI, null, null);
+				addPersonToModel(model, rootIRI, person, addressIRI, null, null);
 			}
 		} catch (RepositoryException e) {
 			e.printStackTrace();

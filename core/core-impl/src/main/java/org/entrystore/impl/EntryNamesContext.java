@@ -166,8 +166,7 @@ public class EntryNamesContext extends ContextImpl {
 				if (names2EntryURI != null) {
 					return;
 				}
-				RepositoryConnection rc = entry.repository.getConnection();
-				try {
+				try (RepositoryConnection rc = entry.repository.getConnection()) {
 					names2EntryURI = new HashMap<String, URI>();
 					entryURI2Name = new HashMap<URI, String>();
 					List<Statement> statements = rc.getStatements(null, RepositoryProperties.alias, null, false, this.resourceURI).asList();
@@ -182,8 +181,6 @@ public class EntryNamesContext extends ContextImpl {
 							throw new org.entrystore.repository.RepositoryException("Error in connection to repository", e);
 						}
 					}
-				} finally {
-					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {

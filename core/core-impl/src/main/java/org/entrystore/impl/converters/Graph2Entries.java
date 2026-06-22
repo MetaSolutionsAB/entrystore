@@ -239,9 +239,9 @@ public class Graph2Entries {
 		for (Statement statement : from.filter(resource, null, null)) {
 			Value object = statement.getObject();
 			// Recursive step.
-			if (object instanceof BNode && !collected.contains((Resource) object)) {
-				collected.add((BNode) object);
-				this._extract(from, to, (BNode) object, collected, translate);
+			if (object instanceof BNode node && !collected.contains((Resource) object)) {
+				collected.add(node);
+				this._extract(from, to, node, collected, translate);
 			}
 
 			if (checkPredicate(statement.getPredicate())) {
