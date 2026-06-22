@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -137,10 +137,10 @@ public class Email {
 		try {
 			MimeMessage message = new MimeMessage(session);
 			message.setFrom(new InternetAddress(msgFrom));
-			if (msgReplyTo != null) {
+			if (msgReplyTo != null && !msgReplyTo.isBlank()) {
 				message.setReplyTo(InternetAddress.parse(msgReplyTo));
 			}
-			if (msgBcc != null) {
+			if (msgBcc != null && !msgBcc.isBlank()) {
 				message.addRecipients(Message.RecipientType.BCC, InternetAddress.parse(msgBcc));
 			}
 			message.addRecipients(Message.RecipientType.TO, InternetAddress.parse(msgTo));
@@ -187,7 +187,7 @@ public class Email {
 		}
 
 		String messageText = messageBodySignup.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
-		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
+		messageText = messageText.replaceAll("__DOMAIN__", resolveDomain(config));
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
@@ -221,7 +221,7 @@ public class Email {
 		}
 
 		String messageText = messageBodyPasswordReset.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
-		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
+		messageText = messageText.replaceAll("__DOMAIN__", resolveDomain(config));
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
@@ -257,16 +257,49 @@ public class Email {
 			return;
 		}
 
-		String messageText = messageBodyPasswordChanged.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
-		messageText = messageText.replaceAll("__DOMAIN__", URI.create(config.getString(Settings.BASE_URL)).getHost());
-		String msgSubject = config.getString(Settings.AUTH_PASSWORD_CHANGE_SUBJECT, "Your password has been changed");
-		String recipientName = EntryUtil.getName(userEntry);
-		if (recipientName == null) {
-			recipientName = "";
-		}
-		messageText = messageText.replaceAll("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
+		// The password has already been changed by the caller; sending the confirmation email is
+		// best-effort. Never let an email failure (e.g. unconfigured SMTP/base URL) escape and turn a
+		// successful password change into an HTTP 500 (ENTRYSTORE-1028).
+		try {
+			String messageText = messageBodyPasswordChanged.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
+			messageText = messageText.replaceAll("__DOMAIN__", resolveDomain(config));
+			String msgSubject = config.getString(Settings.AUTH_PASSWORD_CHANGE_SUBJECT, "Your password has been changed");
+			String recipientName = EntryUtil.getName(userEntry);
+			if (recipientName == null) {
+				recipientName = "";
+			}
+			messageText = messageText.replaceAll("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
 
-		sendMessage(config, msgTo, msgSubject, messageText);
+			if (!sendMessage(config, msgTo, msgSubject, messageText)) {
+				log.warn("Password change confirmation email to {} could not be sent", msgTo);
+			}
+		} catch (RuntimeException e) {
+			log.error("Failed to send password change confirmation email", e);
+		}
+	}
+
+	/**
+	 * Resolves the host of the configured base URL for {@code __DOMAIN__} substitution, returning an
+	 * empty string when the base URL is unset, blank, has no host (e.g. a schemeless value such as
+	 * {@code store}), or is not a valid URI. Avoids the {@code URI.create(null)} / {@code getHost()}-is-null
+	 * NPEs that previously escaped the email helpers; a misconfigured (but non-blank) base URL is logged.
+	 */
+	static String resolveDomain(Config config) {
+		String baseUrl = config.getString(Settings.BASE_URL);
+		if (baseUrl == null || baseUrl.isBlank()) {
+			return "";
+		}
+		try {
+			String host = URI.create(baseUrl).getHost();
+			if (host == null) {
+				log.warn("Configured base URL '{}' has no host; '__DOMAIN__' in emails will be empty", baseUrl);
+				return "";
+			}
+			return host;
+		} catch (IllegalArgumentException e) {
+			log.warn("Configured base URL '{}' is not a valid URI; '__DOMAIN__' in emails will be empty", baseUrl);
+			return "";
+		}
 	}
 
 	private static String loadClasspathTemplate(String resourceName) {
