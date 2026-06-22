@@ -16,7 +16,9 @@
 
 package org.entrystore.rest.springboot.util;
 
+import tools.jackson.databind.MapperFeature;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 import com.google.common.net.InetAddresses;
 import jakarta.servlet.http.HttpServletRequest;
@@ -46,7 +48,10 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class HttpUtil {
 
 	private static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
-	private static final ObjectMapper OBJECT_MAPPER = new JsonMapper();
+	private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder()
+			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+			.disable(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY)
+			.build();
 
 	/**
 	 * Determines the media type based on the provided format parameter or content type header.

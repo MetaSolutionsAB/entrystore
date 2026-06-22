@@ -34,6 +34,11 @@ spring:
     - file:entrystore.properties
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  jackson:
+    # Jackson 3 defaults to alphabetical property ordering; keep declaration order to preserve the
+    # pre-migration JSON response shape (ENTRYSTORE-1062).
+    mapper:
+      sort-properties-alphabetically: false
   mvc.problemdetails.enabled: false
   servlet.multipart:
     max-file-size: 100MB
