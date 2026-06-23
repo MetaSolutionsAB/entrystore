@@ -111,14 +111,6 @@
 			<artifactId>spring-boot-starter-restclient</artifactId>
 		</dependency>
 
-		<!-- ENTRYSTORE-1062 (TEMPORARY): logs renamed/removed property keys at startup to guide the
-		     application.yaml migration; removed once the property review is complete. -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-properties-migrator</artifactId>
-			<scope>runtime</scope>
-		</dependency>
-
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-thymeleaf</artifactId>

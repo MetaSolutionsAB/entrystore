@@ -1,6 +1,7 @@
 package org.entrystore.rest.springboot.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,9 +34,13 @@ public class AuthUserController {
 	@GetMapping(path = "/auth/user", produces = MediaType.APPLICATION_JSON_VALUE)
 	public GetAuthUserResponse userInfo(
 			@RequestHeader(name = HttpHeaders.ACCEPT_LANGUAGE, defaultValue = HttpHeaders.ACCEPT_LANGUAGE) String acceptLanguage,
-			HttpSession session
+			HttpServletRequest request
 	) {
-		return userService.getUserInfo(acceptLanguage, session.getMaxInactiveInterval());
+		// Read the existing session without creating one: a guest must not get a session (and thus no
+		// auth_token cookie / Cache-Control). The interval is only used for authenticated, non-guest users.
+		HttpSession session = request.getSession(false);
+		int maxInactiveInterval = session != null ? session.getMaxInactiveInterval() : 0;
+		return userService.getUserInfo(acceptLanguage, maxInactiveInterval);
 	}
 
 	@Operation(summary = "Provides list of active tokens of a currently logged-in user.")

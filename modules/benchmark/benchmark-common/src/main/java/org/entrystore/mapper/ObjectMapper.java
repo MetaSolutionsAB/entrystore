@@ -63,7 +63,7 @@ public class ObjectMapper {
 				addCompanyToModel(model, rootIRI, company1, addressIRI);
 			} else if (object instanceof FakeComplexPerson person1) {
 				IRI addressIRI = null;
-				FakeAddress address = ((FakePerson) object).getAddress();
+				FakeAddress address = person1.getAddress();
 				if (address != null) {
 					Entry entryAddress = mapObjectToContext(context, address);
 					addressIRI = iri(entryAddress.getResourceURI().toString());
@@ -83,7 +83,7 @@ public class ObjectMapper {
 					spouseIRI = iri(entrySpouse.getResourceURI().toString());
 				}
 
-				addPersonToModel(model, rootIRI, (FakePerson) object, addressIRI, companyIRI, spouseIRI);
+				addPersonToModel(model, rootIRI, person1, addressIRI, companyIRI, spouseIRI);
 			} else if (object instanceof FakePerson person) {
 				FakeAddress address = person.getAddress();
 				Entry entryAddress = mapObjectToContext(context, address);

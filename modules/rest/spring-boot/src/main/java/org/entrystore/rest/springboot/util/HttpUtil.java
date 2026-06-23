@@ -18,7 +18,6 @@ package org.entrystore.rest.springboot.util;
 
 import tools.jackson.databind.MapperFeature;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 import com.google.common.net.InetAddresses;
 import jakarta.servlet.http.HttpServletRequest;
@@ -48,8 +47,9 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class HttpUtil {
 
 	private static final String HEADER_X_FORWARDED_FOR = "X-Forwarded-For";
+	// Jackson 3 already serializes dates as ISO-8601 by default (WRITE_DATES_AS_TIMESTAMPS is now off);
+	// only the property-ordering default changed (now alphabetical), so keep declaration order.
 	private static final ObjectMapper OBJECT_MAPPER = JsonMapper.builder()
-			.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
 			.disable(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY)
 			.build();
 
