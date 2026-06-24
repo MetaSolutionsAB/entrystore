@@ -60,7 +60,9 @@ public class CsrfRequestMatcher implements RequestMatcher {
 		this.exemptPaths = new OrRequestMatcher(
 				pathMatcher.matcher(HttpMethod.POST, "/auth/cookie"),
 				pathMatcher.matcher(HttpMethod.POST, "/auth/signup"),
+				pathMatcher.matcher(HttpMethod.POST, "/auth/signup/confirm"),
 				pathMatcher.matcher(HttpMethod.POST, "/auth/pwreset"),
+				pathMatcher.matcher(HttpMethod.POST, "/auth/pwreset/confirm"),
 				pathMatcher.matcher(HttpMethod.POST, "/login/saml2/sso/**")
 		);
 	}

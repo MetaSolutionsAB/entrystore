@@ -46,6 +46,12 @@ public class SignupInfo {
 
 	private Map<String, String> customProperties;
 
+	/**
+	 * Number of failed credential-confirmation attempts made against this pending token. Once it
+	 * reaches the configured limit the token is invalidated (see {@code SignupTokenCache#confirmAttempt}).
+	 */
+	private int confirmationAttempts;
+
 	public void setEmail(@NonNull String email) {
 		// we have to store it in lower case only to avoid problems with different cases in
 		// different steps of the process (if the user provides inconsistent information)

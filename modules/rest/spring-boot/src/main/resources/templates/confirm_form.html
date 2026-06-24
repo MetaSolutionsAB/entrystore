@@ -1,0 +1,21 @@
+<html xmlns:th="https://www.thymeleaf.org">
+<head>
+    <title th:text="${title}">EntryStore</title>
+</head>
+<body style="width:500px;margin-left:auto;margin-right:auto;font-family:verdana;font-size:10pt;">
+<div th:fragment="content">
+    <br/>
+    <h3 th:text="${title}">Confirm</h3>
+    <br/>
+    <p th:text="${intro}">Please confirm this request.</p>
+    <p th:if="${error}" th:text="${error}" style="color:#b00020;">error</p>
+    <form th:action="${action}" method="post">
+        E-Mail address<br/><input type="text" name="email"><br/>
+        <span th:text="${passwordLabel}">Password</span><br/><input type="password" name="password"><br/>
+        <input type="hidden" name="confirm" th:value="${token}"/>
+        <br/>
+        <input type="submit" value="Confirm"/>
+    </form>
+</div>
+</body>
+</html>

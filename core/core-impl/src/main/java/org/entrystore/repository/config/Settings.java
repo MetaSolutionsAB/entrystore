@@ -85,6 +85,9 @@ public interface Settings {
 	String AUTH_PASSWORD_CHANGE_SUBJECT = "entrystore.auth.password-change.email.subject";
 	String AUTH_PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH = "entrystore.auth.password-change.email.template";
 
+	String AUTH_CONFIRMATION_LEGACY = "entrystore.auth.confirmation.legacy";
+	String AUTH_CONFIRMATION_MAX_ATTEMPTS = "entrystore.auth.confirmation.max-attempts";
+
 	String AUTH_TEMP_LOCKOUT_MAX_ATTEMPTS = "entrystore.auth.temp.lockout.max.attempts";
 	String AUTH_TEMP_LOCKOUT_DURATION = "entrystore.auth.temp.lockout.duration";
 	String AUTH_TEMP_LOCKOUT_ADMIN = "entrystore.auth.temp.lockout.admin";

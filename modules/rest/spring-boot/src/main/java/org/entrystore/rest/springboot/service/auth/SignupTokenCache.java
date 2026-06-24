@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +19,13 @@ package org.entrystore.rest.springboot.service.auth;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.entrystore.rest.springboot.model.auth.ConfirmAttemptResult;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * @author Hannes Ebner
@@ -47,6 +49,43 @@ public class SignupTokenCache extends TokenCache<String, SignupInfo> {
 	public void removeAllTokens(String userEmail) {
 		synchronized (tokenCache) {
 			tokenCache.entrySet().removeIf(userInfo -> userEmail.equals(userInfo.getValue().getEmail()));
+		}
+	}
+
+	/**
+	 * Atomically verifies a credential-confirmation attempt against the pending record for {@code token}.
+	 * Verification, the failed-attempt count, and token removal all happen under the cache lock so that
+	 * parallel attempts cannot race past the limit. The {@code credentialsValid} predicate (a password
+	 * hash check) runs inside the lock; this serializes confirmations, which is acceptable because the
+	 * initiation endpoints are rate-limited.
+	 *
+	 * <ul>
+	 *   <li>match → the token is removed and {@link ConfirmAttemptResult.Status#VALID} is returned with the record</li>
+	 *   <li>mismatch below the limit → the attempt counter is incremented and {@link ConfirmAttemptResult.Status#INVALID_CREDENTIALS} is returned</li>
+	 *   <li>mismatch reaching the limit → the token is removed and {@link ConfirmAttemptResult.Status#TOKEN_INVALIDATED} is returned</li>
+	 *   <li>no record → {@link ConfirmAttemptResult.Status#TOKEN_NOT_FOUND}</li>
+	 * </ul>
+	 */
+	public ConfirmAttemptResult confirmAttempt(String token, Predicate<SignupInfo> credentialsValid, int maxAttempts) {
+		synchronized (tokenCache) {
+			cleanup(); // drop expired tokens first so an expired token confirms as TOKEN_NOT_FOUND
+			// A missing token field on the confirm request arrives here as null; treat it as not-found
+			// rather than letting ConcurrentHashMap.get(null) throw and surface as a 500.
+			SignupInfo info = (token == null) ? null : tokenCache.get(token);
+			if (info == null) {
+				return ConfirmAttemptResult.tokenNotFound();
+			}
+			if (credentialsValid.test(info)) {
+				tokenCache.remove(token);
+				return ConfirmAttemptResult.valid(info);
+			}
+			int attempts = info.getConfirmationAttempts() + 1;
+			info.setConfirmationAttempts(attempts);
+			if (attempts >= maxAttempts) {
+				tokenCache.remove(token);
+				return ConfirmAttemptResult.tokenInvalidated();
+			}
+			return ConfirmAttemptResult.invalidCredentials(maxAttempts - attempts);
 		}
 	}
 

@@ -23,8 +23,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apereo.cas.client.util.CommonUtils;
 import org.entrystore.rest.springboot.configuration.CasCustomConfiguration;
+import org.entrystore.rest.springboot.model.api.ConfirmRequestBody;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
+import org.entrystore.rest.springboot.model.auth.ConfirmationResult;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.service.AuthService;
 import org.entrystore.rest.springboot.service.SamlAuthService;
@@ -55,6 +57,15 @@ public class AuthController {
 	private static final int MAX_REQUEST_SIZE = 32 * 1024;
 	private static final String SIGNUP_TITLE = "Sign-up";
 	private static final String PASSWORD_RESET_TITLE = "Password reset";
+
+	/** Per-flow attributes for the shared {@code confirm_form} template (new confirmation mode). */
+	private record ConfirmForm(String title, String action, String passwordLabel, String intro) {
+	}
+
+	private static final ConfirmForm SIGNUP_FORM = new ConfirmForm(SIGNUP_TITLE, "/auth/signup/confirm", "Password",
+			"To confirm your sign-up, re-enter the email address and the password you chose.");
+	private static final ConfirmForm PWRESET_FORM = new ConfirmForm(PASSWORD_RESET_TITLE, "/auth/pwreset/confirm", "New password",
+			"To reset your password, enter your email address and choose a new password.");
 
 	@Value("${entrystore.auth.saml.enabled:false}")
 	private boolean isSamlAuthEnabled;
@@ -153,7 +164,7 @@ public class AuthController {
 		return "auth";
 	}
 
-	@Operation(summary = "Checks if the password-reset-token is valid and confirms user's password change")
+	@Operation(summary = "Legacy mode: confirms the password change. New mode: renders the confirmation form for a valid token.")
 	@GetMapping(path = "/auth/pwreset")
 	public String confirmPasswordReset(
 			Model model,
@@ -163,10 +174,39 @@ public class AuthController {
 			return "pwreset_form";
 		}
 
-		String message = authService.confirmPassword(confirm, PASSWORD_RESET_TITLE);
-		model.addAttribute("title", PASSWORD_RESET_TITLE);
-		model.addAttribute("message", message);
-		return "auth";
+		if (authService.isLegacyConfirmationMode()) {
+			String message = authService.confirmPasswordLegacy(confirm, PASSWORD_RESET_TITLE);
+			model.addAttribute("title", PASSWORD_RESET_TITLE);
+			model.addAttribute("message", message);
+			return "auth";
+		}
+
+		authService.assertPasswordResetTokenValid(confirm, PASSWORD_RESET_TITLE);
+		addConfirmFormAttributes(model, PWRESET_FORM, confirm, null);
+		return "confirm_form";
+	}
+
+	@Operation(summary = "Confirms a password change after the user re-enters the email and chosen password.")
+	@PostMapping(path = "/auth/pwreset/confirm", consumes = {MediaType.APPLICATION_JSON_VALUE})
+	public String confirmPasswordResetSubmit(
+			HttpServletRequest request,
+			HttpServletResponse response,
+			Model model,
+			@RequestBody ConfirmRequestBody body) {
+
+		return submitPasswordResetConfirmation(request, response, model, body.confirm(), body.email(), body.password());
+	}
+
+	@Operation(summary = "Confirms a password change after the user re-enters the email and chosen password. Request is an html form.")
+	@PostMapping(path = "/auth/pwreset/confirm", consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE})
+	public String confirmPasswordResetSubmitViaForm(
+			HttpServletRequest request,
+			HttpServletResponse response,
+			Model model,
+			@RequestParam MultiValueMap<String, String> paramMap) {
+
+		return submitPasswordResetConfirmation(request, response, model, paramMap.getFirst("confirm"),
+				paramMap.getFirst("email"), paramMap.getFirst("password"));
 	}
 
 	@Operation(summary = "Generates new link for user sign-up confirmation and sends an email to provided email address.")
@@ -239,21 +279,87 @@ public class AuthController {
 		return "auth";
 	}
 
-	@Operation(summary = "Checks if the signup-token is valid and confirms new user creation")
+	@Operation(summary = "Legacy mode: confirms new user creation. New mode: renders the confirmation form for a valid token.")
 	@GetMapping(path = "/auth/signup")
 	public String confirmSignup(
 			Model model,
-			@RequestParam(required = false) String confirm,
-			HttpServletResponse response
+			HttpServletResponse response,
+			@RequestParam(required = false) String confirm
 	) {
 		if (confirm == null || confirm.isEmpty()) {
 			return "signup_form";
 		}
 
-		String message = authService.confirmSignup(confirm, SIGNUP_TITLE);
-		model.addAttribute("title", SIGNUP_TITLE);
-		model.addAttribute("message", message);
-		response.setStatus(HttpStatus.CREATED.value());
-		return "auth";
+		if (authService.isLegacyConfirmationMode()) {
+			String message = authService.confirmSignupLegacy(confirm, SIGNUP_TITLE);
+			model.addAttribute("title", SIGNUP_TITLE);
+			model.addAttribute("message", message);
+			response.setStatus(HttpStatus.CREATED.value());
+			return "auth";
+		}
+
+		authService.assertSignupTokenValid(confirm, SIGNUP_TITLE);
+		addConfirmFormAttributes(model, SIGNUP_FORM, confirm, null);
+		return "confirm_form";
+	}
+
+	@Operation(summary = "Confirms new user creation after the user re-enters the email and chosen password.")
+	@PostMapping(path = "/auth/signup/confirm", consumes = {MediaType.APPLICATION_JSON_VALUE})
+	public String confirmSignupSubmit(
+			HttpServletRequest request,
+			HttpServletResponse response,
+			Model model,
+			@RequestBody ConfirmRequestBody body) {
+
+		return submitSignupConfirmation(request, response, model, body.confirm(), body.email(), body.password());
+	}
+
+	@Operation(summary = "Confirms new user creation after the user re-enters the email and chosen password. Request is an html form.")
+	@PostMapping(path = "/auth/signup/confirm", consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE})
+	public String confirmSignupSubmitViaForm(
+			HttpServletRequest request,
+			HttpServletResponse response,
+			Model model,
+			@RequestParam MultiValueMap<String, String> paramMap) {
+
+		return submitSignupConfirmation(request, response, model, paramMap.getFirst("confirm"),
+				paramMap.getFirst("email"), paramMap.getFirst("password"));
+	}
+
+	private String submitSignupConfirmation(HttpServletRequest request, HttpServletResponse response, Model model,
+											String confirm, String email, String password) {
+		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
+		ConfirmationResult result = authService.confirmSignup(confirm, email, password, SIGNUP_TITLE);
+		return renderConfirmation(model, response, result, SIGNUP_FORM, confirm, HttpStatus.CREATED.value());
+	}
+
+	private String submitPasswordResetConfirmation(HttpServletRequest request, HttpServletResponse response, Model model,
+												   String confirm, String email, String password) {
+		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
+		ConfirmationResult result = authService.confirmPassword(confirm, email, password, PASSWORD_RESET_TITLE);
+		return renderConfirmation(model, response, result, PWRESET_FORM, confirm, HttpStatus.OK.value());
+	}
+
+	private String renderConfirmation(Model model, HttpServletResponse response, ConfirmationResult result,
+									  ConfirmForm form, String token, int successStatus) {
+		if (result.success()) {
+			model.addAttribute("title", form.title());
+			model.addAttribute("message", result.message());
+			response.setStatus(successStatus);
+			return "auth";
+		}
+		String error = "The information you entered is incorrect. " + result.remainingAttempts() + " attempt(s) remaining.";
+		addConfirmFormAttributes(model, form, token, error);
+		response.setStatus(HttpStatus.UNAUTHORIZED.value());
+		return "confirm_form";
+	}
+
+	private void addConfirmFormAttributes(Model model, ConfirmForm form, String token, String error) {
+		model.addAttribute("title", form.title());
+		model.addAttribute("action", form.action());
+		model.addAttribute("passwordLabel", form.passwordLabel());
+		model.addAttribute("intro", form.intro());
+		model.addAttribute("token", token);
+		model.addAttribute("error", error);
 	}
 }

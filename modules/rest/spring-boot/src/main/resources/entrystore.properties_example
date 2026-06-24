@@ -124,6 +124,16 @@ entrystore.data.folder=/srv/entrystore/files/
 # entrystore.auth.password-change.email.subject=Your password has been changed
 # entrystore.auth.password-change.email.template=/path/to/template.html
 
+## Sign-up / password-reset confirmation behaviour.
+## Legacy (default): clicking the emailed confirmation link immediately activates the account or
+## applies the password change.
+## New (legacy=false): after clicking the link the user must prove they initiated the request before
+## anything happens — sign-up requires re-entering the chosen email + password; password reset
+## requires the email, then lets the user choose a new password on the confirmation form. The token
+## is invalidated after entrystore.auth.confirmation.max-attempts failed attempts.
+# entrystore.auth.confirmation.legacy=true
+# entrystore.auth.confirmation.max-attempts=3
+
 ## Temporary user lockout
 entrystore.auth.temp.lockout.max.attempts=0
 entrystore.auth.temp.lockout.duration=0ms

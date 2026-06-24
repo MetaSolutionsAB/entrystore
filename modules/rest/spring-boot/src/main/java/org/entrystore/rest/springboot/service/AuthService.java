@@ -43,6 +43,8 @@ import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.NS;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
+import org.entrystore.rest.springboot.model.auth.ConfirmAttemptResult;
+import org.entrystore.rest.springboot.model.auth.ConfirmationResult;
 import org.entrystore.rest.springboot.model.auth.SignupInfo;
 import org.entrystore.rest.springboot.model.exception.BadRequestHtmlException;
 import org.entrystore.rest.springboot.model.exception.DataConflictHtmlException;
@@ -70,7 +72,6 @@ import java.net.URL;
 import java.security.SecureRandom;
 import java.util.function.Consumer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -112,6 +113,11 @@ public class AuthService {
 			"This may be because you already clicked the link and have an account, " +
 			"the confirmation link has expired, or the token never existed. " +
 			"Visit the link below to sign up again and receive a new confirmation link.";
+	private static final String SIGNUP_TOKEN_INVALIDATED_MESSAGE = "Too many failed attempts. " +
+			"This confirmation link has been invalidated for security reasons. " +
+			"Visit the link below to sign up again and receive a new confirmation link.";
+	private static final String PASSWORD_RESET_TOKEN_INVALIDATED_MESSAGE = "Too many failed attempts. " +
+			"This confirmation link has been invalidated for security reasons. Please request a new password reset.";
 	private static final String UNABLE_TO_CREATE_USER_MESSAGE = "Unable to create user.";
 
 	private final RepositoryManagerImpl repositoryManager;
@@ -242,13 +248,49 @@ public class AuthService {
 		return sessionsList;
 	}
 
-	public String confirmPassword(String token, String title) {
+	/**
+	 * Legacy password-reset confirmation: clicking the emailed link immediately applies the password
+	 * the requester chose at request time. Used when {@code entrystore.auth.confirmation.legacy=true}.
+	 */
+	public String confirmPasswordLegacy(String token, String title) {
 		SignupInfo ci = signupTokenCache.getTokenValue(token);
 		if (ci == null) {
 			throw new BadRequestHtmlException(INVALID_TOKEN_MESSAGE, title);
 		}
 		signupTokenCache.removeToken(token);
+		return applyPasswordReset(ci, title);
+	}
 
+	/**
+	 * New-mode password-reset confirmation (ENTRYSTORE-529). After clicking the emailed link the user
+	 * must re-enter the account's email (username) and choose a new password on the confirmation form.
+	 * The new password is applied only when the supplied username matches the one the reset was
+	 * requested for — a wrong recipient or email scanner that clicks the link does not know the username
+	 * and cannot set a password. The token is invalidated after the configured number of failed
+	 * username attempts. The new password is collected here (not at request time) so the requester
+	 * never picks the password that ends up on the account. It is format-validated (non-empty, at least
+	 * 8 characters) before the token is touched, so a malformed password neither consumes the token nor
+	 * counts as a failed username attempt.
+	 */
+	public ConfirmationResult confirmPassword(String token, String username, String newPassword, String title) {
+		// Validate the chosen password before touching the token so a malformed password neither
+		// consumes the token nor counts as a failed username attempt.
+		String validatedPassword = validatePasswordFormat(newPassword, title);
+		ConfirmAttemptResult attempt = signupTokenCache.confirmAttempt(token,
+				ci -> usernameMatches(ci, username), maxConfirmationAttempts());
+		return switch (attempt.status()) {
+			case TOKEN_NOT_FOUND -> throw new BadRequestHtmlException(INVALID_TOKEN_MESSAGE, title);
+			case TOKEN_INVALIDATED -> throw new BadRequestHtmlException(PASSWORD_RESET_TOKEN_INVALIDATED_MESSAGE, title);
+			case INVALID_CREDENTIALS -> ConfirmationResult.retry(attempt.remainingAttempts());
+			case VALID -> {
+				SignupInfo ci = attempt.info();
+				ci.setSaltedHashedPassword(Password.getSaltedHash(validatedPassword));
+				yield ConfirmationResult.success(applyPasswordReset(ci, title));
+			}
+		};
+	}
+
+	private String applyPasswordReset(SignupInfo ci, String title) {
 		URI authUser = principalManager.getAuthenticatedUserURI();
 		Throwable primary = null;
 		try {
@@ -313,17 +355,22 @@ public class AuthService {
 		ci.setExpirationDate(new Date(new Date().getTime() + TTL)); // 24 hours later
 
 		String rcResponseV2;
-		String password;
 
 		validateAndSetEmail(requestBody.email(), ci, title);
 
-		if (StringUtils.isNotEmpty(requestBody.password())) {
-			password = requestBody.password().trim();
-			if (password.length() < 8) {
-				throw new BadRequestHtmlException(SHORT_PASSWORD_MESSAGE, title);
+		// Legacy mode collects the new password now and applies it on link click. New mode collects the
+		// new password on the confirmation form instead, so the requester never picks the password that
+		// ends up on the account (ENTRYSTORE-529); only the email is needed to start the flow.
+		String password = null;
+		if (isLegacyConfirmationMode()) {
+			if (StringUtils.isNotEmpty(requestBody.password())) {
+				password = requestBody.password().trim();
+				if (password.length() < 8) {
+					throw new BadRequestHtmlException(SHORT_PASSWORD_MESSAGE, title);
+				}
+			} else {
+				throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 			}
-		} else {
-			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
 		}
 
 		setRedirectUrlIfPermitted(requestBody.urlFailure(), ci::setUrlFailure, "failure");
@@ -427,7 +474,11 @@ public class AuthService {
 		// UncaughtExceptionHandler (which already logs at ERROR) and no cleanup is needed because the
 		// token was never stored. Once we reach the try block, putToken has returned successfully, so
 		// the catch can unconditionally remove the token without an extra flag.
-		ci.setSaltedHashedPassword(Password.getSaltedHash(password));
+		// In new mode the password is null here — it is chosen on the confirmation form instead, so we
+		// only hash and store it for legacy mode.
+		if (password != null) {
+			ci.setSaltedHashedPassword(Password.getSaltedHash(password));
+		}
 		signupTokenCache.putToken(token, ci);
 
 		try {
@@ -453,15 +504,38 @@ public class AuthService {
 		}
 	}
 
-	public String confirmSignup(String token, String title) {
+	/**
+	 * Legacy sign-up confirmation: clicking the emailed link immediately creates the account using the
+	 * credentials chosen at sign-up time. Used when {@code entrystore.auth.confirmation.legacy=true}.
+	 */
+	public String confirmSignupLegacy(String token, String title) {
 		SignupInfo signupInfo = signupTokenCache.getTokenValue(token);
 		if (signupInfo == null) {
-			URL bURL = repositoryManager.getRepositoryURL();
-			String appURL = bURL.getProtocol() + "://" + bURL.getHost() + (Arrays.asList(-1, 80, 443).contains(bURL.getPort()) ? "" : ":" + bURL.getPort());
-			throw new BadRequestHtmlException(INVALID_SIGNUP_TOKEN_MESSAGE, title, appURL);
+			throw new BadRequestHtmlException(INVALID_SIGNUP_TOKEN_MESSAGE, title, appBaseUrl());
 		}
 		signupTokenCache.removeToken(token);
+		return createUserFromSignup(signupInfo, title);
+	}
 
+	/**
+	 * New-mode sign-up confirmation (ENTRYSTORE-529): only creates the account if the supplied email and
+	 * password match the credentials the requester chose at sign-up time. This proves the person clicking
+	 * the emailed link is the one who initiated the sign-up — a mistyped recipient or email scanner that
+	 * clicks the link does not know the chosen password and cannot activate the account. The token is
+	 * invalidated after the configured number of failed attempts.
+	 */
+	public ConfirmationResult confirmSignup(String token, String email, String password, String title) {
+		ConfirmAttemptResult attempt = signupTokenCache.confirmAttempt(token,
+				ci -> credentialsMatch(ci, email, password), maxConfirmationAttempts());
+		return switch (attempt.status()) {
+			case TOKEN_NOT_FOUND -> throw new BadRequestHtmlException(INVALID_SIGNUP_TOKEN_MESSAGE, title, appBaseUrl());
+			case TOKEN_INVALIDATED -> throw new BadRequestHtmlException(SIGNUP_TOKEN_INVALIDATED_MESSAGE, title, appBaseUrl());
+			case INVALID_CREDENTIALS -> ConfirmationResult.retry(attempt.remainingAttempts());
+			case VALID -> ConfirmationResult.success(createUserFromSignup(attempt.info(), title));
+		};
+	}
+
+	private String createUserFromSignup(SignupInfo signupInfo, String title) {
 		URI authUser = principalManager.getAuthenticatedUserURI();
 		Throwable primary = null;
 		try {
@@ -525,6 +599,75 @@ public class AuthService {
 		}
 
 		return CONFIRM_SIGNUP_SUCCESS_MESSAGE;
+	}
+
+	/**
+	 * Verifies that there is still a pending sign-up for the token without consuming it, so the GET
+	 * handler can render the confirmation form. Throws if the token is unknown, expired, or used.
+	 */
+	public void assertSignupTokenValid(String token, String title) {
+		if (signupTokenCache.getTokenValue(token) == null) {
+			throw new BadRequestHtmlException(INVALID_SIGNUP_TOKEN_MESSAGE, title, appBaseUrl());
+		}
+	}
+
+	/**
+	 * Verifies that there is still a pending password reset for the token without consuming it, so the
+	 * GET handler can render the confirmation form. Throws if the token is unknown, expired, or used.
+	 */
+	public void assertPasswordResetTokenValid(String token, String title) {
+		if (signupTokenCache.getTokenValue(token) == null) {
+			throw new BadRequestHtmlException(INVALID_TOKEN_MESSAGE, title);
+		}
+	}
+
+	/**
+	 * Whether the legacy confirmation behaviour is active (clicking the emailed link completes the
+	 * action immediately). Defaults to {@code true} so existing deployments keep working until an
+	 * operator opts into the credential-confirmation flow (ENTRYSTORE-529).
+	 */
+	public boolean isLegacyConfirmationMode() {
+		return config.getBoolean(Settings.AUTH_CONFIRMATION_LEGACY, true);
+	}
+
+	private int maxConfirmationAttempts() {
+		return config.getInt(Settings.AUTH_CONFIRMATION_MAX_ATTEMPTS, 3);
+	}
+
+	private boolean credentialsMatch(SignupInfo ci, String email, String password) {
+		if (StringUtils.isEmpty(email) || StringUtils.isEmpty(password)) {
+			return false;
+		}
+		if (!ci.getEmail().equalsIgnoreCase(email.trim())) {
+			return false;
+		}
+		try {
+			return Password.check(password.trim(), ci.getSaltedHashedPassword());
+		} catch (IllegalArgumentException e) {
+			// Password.check rejects empty/oversized input; treat as a failed attempt rather than an error.
+			return false;
+		}
+	}
+
+	private boolean usernameMatches(SignupInfo ci, String username) {
+		return StringUtils.isNotEmpty(username) && ci.getEmail().equalsIgnoreCase(username.trim());
+	}
+
+	private String validatePasswordFormat(String password, String title) {
+		if (StringUtils.isEmpty(password)) {
+			throw new BadRequestHtmlException(PARAMETERS_MISSING_MESSAGE, title);
+		}
+		String trimmed = password.trim();
+		if (trimmed.length() < 8) {
+			throw new BadRequestHtmlException(SHORT_PASSWORD_MESSAGE, title);
+		}
+		return trimmed;
+	}
+
+	private String appBaseUrl() {
+		URL url = repositoryManager.getRepositoryURL();
+		boolean isDefaultPort = url.getPort() == -1 || url.getPort() == 80 || url.getPort() == 443;
+		return url.getProtocol() + "://" + url.getHost() + (isDefaultPort ? "" : ":" + url.getPort());
 	}
 
 	public String signup(HttpServletRequest request, SignupRequestBody requestBody, Map<String, String> extraProperties, String title) {
