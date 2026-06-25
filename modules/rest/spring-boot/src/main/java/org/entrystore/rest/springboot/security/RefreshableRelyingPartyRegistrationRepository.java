@@ -25,16 +25,16 @@ import org.opensaml.saml.metadata.resolver.impl.AbstractReloadingMetadataResolve
 import org.opensaml.saml.metadata.resolver.impl.ResourceBackedMetadataResolver;
 import org.opensaml.saml.metadata.resolver.index.impl.RoleMetadataIndex;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.security.saml2.Saml2RelyingPartyProperties;
-import org.springframework.boot.autoconfigure.security.saml2.Saml2RelyingPartyProperties.AssertingParty;
-import org.springframework.boot.autoconfigure.security.saml2.Saml2RelyingPartyProperties.Registration;
+import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
+import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.AssertingParty;
+import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties.Registration;
 import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.security.saml2.core.OpenSamlInitializationService;
 import org.springframework.security.saml2.provider.service.registration.AssertingPartyMetadata;
 import org.springframework.security.saml2.provider.service.registration.AssertingPartyMetadataRepository;
 import org.springframework.security.saml2.provider.service.registration.IterableRelyingPartyRegistrationRepository;
-import org.springframework.security.saml2.provider.service.registration.OpenSaml4AssertingPartyMetadataRepository;
+import org.springframework.security.saml2.provider.service.registration.OpenSaml5AssertingPartyMetadataRepository;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -112,7 +112,7 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 			long maxAge = maxAgeSeconds(id);
 			AbstractReloadingMetadataResolver resolver = buildRefreshingResolver(id, metadataUri, maxAge);
 			resolvers.add(resolver);
-			metadataByRegistrationId.put(id, new OpenSaml4AssertingPartyMetadataRepository(resolver));
+			metadataByRegistrationId.put(id, new OpenSaml5AssertingPartyMetadataRepository(resolver));
 			log.info("SAML IdP metadata for registration '{}' auto-refreshes (max-age {}s) from {}", id, maxAge, metadataUri);
 		});
 	}
@@ -158,13 +158,12 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 
 	/**
 	 * Builds an OpenSAML resolver that reloads the metadata in the background, capped at {@code maxAge}.
-	 * Mirrors how {@code OpenSaml4AssertingPartyMetadataRepository.withTrustedMetadataLocation} constructs
+	 * Mirrors how {@code OpenSaml5AssertingPartyMetadataRepository.withTrustedMetadataLocation} constructs
 	 * its resolver (a {@link ResourceBackedMetadataResolver} over a Spring resource), adding the
 	 * refresh-interval and require-valid-metadata configuration the Spring builder does not expose.
 	 *
-	 * <p>Spring Boot 4 / Spring Security 7 touch-point: swap {@link OpenSaml4AssertingPartyMetadataRepository}
-	 * for {@code OpenSaml5AssertingPartyMetadataRepository} and the OpenSAML 4 resolver for its OpenSAML 5
-	 * equivalent. The rest of this class uses version-neutral Spring Security APIs.
+	 * <p>Uses the OpenSAML 5 backend (Spring Security 7); the rest of this class uses version-neutral
+	 * Spring Security APIs.
 	 */
 	private AbstractReloadingMetadataResolver buildRefreshingResolver(String id, String metadataUri, long maxAgeSeconds) {
 		try {
@@ -241,7 +240,9 @@ public class RefreshableRelyingPartyRegistrationRepository implements IterableRe
 	// metadata-derived asserting-party fields with any explicitly configured property (non-null only).
 	private Consumer<AssertingPartyMetadata.Builder<?>> mapAssertingParty(AssertingParty assertingParty) {
 		return (details) -> {
-			PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
+			// Boot 4's PropertyMapper filters null source values by default, so the former
+			// alwaysApplyingWhenNonNull() is no longer needed (and was removed).
+			PropertyMapper map = PropertyMapper.get();
 			map.from(assertingParty::getEntityId).to(details::entityId);
 			map.from(assertingParty.getSinglesignon()::getBinding).to(details::singleSignOnServiceBinding);
 			map.from(assertingParty.getSinglesignon()::getUrl).to(details::singleSignOnServiceLocation);

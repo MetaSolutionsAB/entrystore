@@ -291,9 +291,9 @@ public class SCAM2Import {
 			}
 			collect.add(st);
 			//If blank
-			if (object instanceof Resource
+			if (object instanceof Resource resource
 					&& !(object instanceof IRI)) {
-				collectAnonymousClosure(graph, (Resource) object, collect);
+				collectAnonymousClosure(graph, resource, collect);
 			}
 		}
 	}
@@ -319,8 +319,8 @@ public class SCAM2Import {
 		Iterator<Statement> it = graph.filter(item, IMScontent, null).iterator();
 		if (it.hasNext()) {
 			Value obj = it.next().getObject();
-			if (obj instanceof IRI) {
-				return (IRI) obj;
+			if (obj instanceof IRI rI) {
+				return rI;
 			} else {
 				return null;
 			}
@@ -332,8 +332,8 @@ public class SCAM2Import {
 		Iterator<Statement> it = graph.filter(item, LOMTlocation, null).iterator();
 		if (it.hasNext()) {
 			Value obj = it.next().getObject();
-			if (obj instanceof IRI) {
-				return (IRI) obj;
+			if (obj instanceof IRI rI) {
+				return rI;
 			} else {
 				return null;
 			}
@@ -345,8 +345,8 @@ public class SCAM2Import {
 		Iterator<Statement> it = graph.filter(subject, firstChild, null).iterator();
 		if (it.hasNext()) {
 			Value obj = it.next().getObject();
-			if (obj instanceof IRI) {
-				return (IRI) obj;
+			if (obj instanceof IRI rI) {
+				return rI;
 			} else {
 				return null;
 			}

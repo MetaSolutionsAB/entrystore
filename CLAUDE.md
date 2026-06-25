@@ -108,6 +108,7 @@ springboot/
 - Config: `application.yaml` imports `entrystore.properties` via `spring.config.import` — every `entrystore.*` key is bound to the Spring `Environment` and is readable via `@Value`, `@ConfigurationProperties`, and `@ConditionalOnProperty`, not only via the legacy `Config` wrapper
 - Default port: 8080 (production), 8181 (integration tests)
 - Embedded server: Jetty 12 (`spring-boot-starter-jetty`), not Tomcat
+- JSON: Jackson 3 — use `tools.jackson.*` (not `com.fasterxml.jackson.*`); annotations stay in `com.fasterxml.jackson.annotation.*` **except** `@JsonSerialize`/`@JsonDeserialize` (`tools.jackson.databind.annotation.*`). Custom serializers extend `ValueSerializer`/`ValueDeserializer`; mappers are immutable (`JsonMapper.builder()...build()`).
 
 **REST routes** (Spring Boot controllers):
 `/{context-id}/entry/{entry-id}`, `/{context-id}/resource/{entry-id}`, `/{context-id}/metadata/{entry-id}`, `/{context-id}/relation/{entry-id}`, `/search`, `/proxy`, `/{context-id}/proxy`, `/echo`, `/validator`, `/auth/*`, `/management/*`

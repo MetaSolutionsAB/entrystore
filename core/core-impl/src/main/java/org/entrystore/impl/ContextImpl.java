@@ -130,13 +130,13 @@ public class ContextImpl extends ResourceImpl implements Context {
 					while (resources.hasNext()) {
 						Statement statement = resources.next();
 						Resource mmd = statement.getContext();
-						if (mmd instanceof IRI) {
+						if (mmd instanceof IRI rI) {
 							if (!mmd.stringValue().startsWith(entry.getRepositoryManager().getRepositoryURL().toString())) {
 								log.warn("This Entry URI does not belong to this repository: {}", mmd.stringValue());
 								continue;
 							}
 
-							StringTokenizer tokenizer = Util.extractParameters(entry.repositoryManager, (IRI) mmd);
+							StringTokenizer tokenizer = Util.extractParameters(entry.repositoryManager, rI);
 							if (tokenizer.countTokens() == 3 && tokenizer.nextToken().equals(this.id)) { // Belongs to this context.
 								try {
 									tokenizer.nextToken(); //Ignoring the M
@@ -157,8 +157,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 					while (externalMD.hasNext()) {
 						Statement statement = externalMD.next();
 						Resource mmd = statement.getContext();
-						if (mmd instanceof IRI) {
-							StringTokenizer stok = Util.extractParameters(entry.repositoryManager, (IRI) mmd);
+						if (mmd instanceof IRI rI1) {
+							StringTokenizer stok = Util.extractParameters(entry.repositoryManager, rI1);
 							if (stok.countTokens() == 3 && stok.nextToken().equals(this.id)) { //Belongs to this context.
 								stmntsToAdd.add(vf.createStatement((Resource) statement.getObject(), RepositoryProperties.mdHasEntry, statement.getContext(), this.resourceURI));
 							}
@@ -221,9 +221,9 @@ public class ContextImpl extends ResourceImpl implements Context {
 		}
 		Object existingTo = map.get(from);
 		if (existingTo != null) {
-			if (existingTo instanceof Set) {
-				((Set) existingTo).remove(to);
-				if (((Set) existingTo).isEmpty()) {
+			if (existingTo instanceof Set set) {
+				set.remove(to);
+				if (set.isEmpty()) {
 					map.remove(from);
 				}
 			} else if (existingTo.equals(to)) {
@@ -258,8 +258,7 @@ public class ContextImpl extends ResourceImpl implements Context {
 				if (res2entry != null) {
 					return;
 				}
-				RepositoryConnection rc = entry.repository.getConnection();
-				try {
+				try (RepositoryConnection rc = entry.repository.getConnection()) {
 					res2entry = new HashMap<>();
 					extMdUri2entry = new HashMap<>();
 					RepositoryResult<Statement> statements = rc.getStatements(null, null, null, false, this.resourceURI);
@@ -283,8 +282,6 @@ public class ContextImpl extends ResourceImpl implements Context {
 						}
 					}
 					statements.close();
-				} finally {
-					rc.close();
 				}
 			}
 		} catch (RepositoryException e) {
@@ -763,8 +760,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 		HashSet<Entry> entries = new HashSet<>();
 		Object value = extMdUri2entry.get(metadataURI);
 		if (value != null) {
-			if (value instanceof URI) {
-				entries.add(getByEntryURI((URI) value));
+			if (value instanceof URI rI) {
+				entries.add(getByEntryURI(rI));
 			} else {
 				Set<URI> mmdURIs = (Set<URI>) value;
 				for (URI uri : mmdURIs) {
@@ -782,8 +779,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 		HashSet<Entry> entries = new HashSet<>();
 		Object value = res2entry.get(resourceURI);
 		if (value != null) {
-			if (value instanceof URI) {
-				entries.add(getByEntryURI((URI) value));
+			if (value instanceof URI rI) {
+				entries.add(getByEntryURI(rI));
 			} else {
 				Set<URI> mmdURIs = (Set<URI>) value;
 				for (URI uri : mmdURIs) {
@@ -806,8 +803,8 @@ public class ContextImpl extends ResourceImpl implements Context {
 		Set<URI> entries = new HashSet<>();
 		Collection<Object> val = res2entry.values();
 		for (Object object : val) {
-			if (object instanceof URI) {
-				entries.add((URI) object);
+			if (object instanceof URI rI) {
+				entries.add(rI);
 			} else {
 				entries.addAll((Collection<URI>) object);
 			}

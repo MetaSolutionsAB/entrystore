@@ -25,7 +25,7 @@ import org.entrystore.rest.springboot.configuration.SamlCustomConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.boot.autoconfigure.security.saml2.Saml2RelyingPartyProperties;
+import org.springframework.boot.security.saml2.autoconfigure.Saml2RelyingPartyProperties;
 import org.springframework.security.saml2.provider.service.registration.RelyingPartyRegistration;
 
 import java.io.File;

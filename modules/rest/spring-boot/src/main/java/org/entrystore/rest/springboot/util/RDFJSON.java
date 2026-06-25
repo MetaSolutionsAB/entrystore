@@ -16,8 +16,6 @@
 
 package org.entrystore.rest.springboot.util;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerator;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.eclipse.rdf4j.model.BNode;
@@ -38,15 +36,11 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.StringWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Objects;
-import java.util.Set;
 
 import static org.eclipse.rdf4j.model.util.Values.iri;
 
@@ -245,77 +239,6 @@ public class RDFJSON {
 		} else {
 			return null;
 		}
-	}
-
-	/**
-	 * Implementation using the Streaming API of the Jackson framework.
-	 *
-	 * @param graph A Sesame Graph.
-	 * @return An RDF/JSON string if successful, otherwise null.
-	 */
-	public static String graphToRdfJsonJackson(Model graph) {
-		JsonFactory f = new JsonFactory();
-		StringWriter sw = new StringWriter();
-		JsonGenerator g;
-		try {
-			g = f.createGenerator(sw);
-			g.useDefaultPrettyPrinter();
-		} catch (IOException e) {
-			log.error(e.getMessage(), e);
-			return null;
-		}
-
-		try {
-			g.writeStartObject(); // root object
-			Set<Resource> subjects = new HashSet<>();
-			for (Statement s1 : graph) {
-				subjects.add(s1.getSubject());
-			}
-			for (Resource subject : subjects) {
-				if (subject instanceof BNode && !subject.stringValue().startsWith("_:")) {
-					g.writeObjectFieldStart("_:" + subject.stringValue()); // subject
-				} else {
-					g.writeObjectFieldStart(subject.stringValue()); // subject
-				}
-				Set<IRI> predicates = new HashSet<>();
-				for (Statement statement : graph.filter(subject, null, null)) {
-					predicates.add(statement.getPredicate());
-				}
-				for (IRI predicate : predicates) {
-					g.writeArrayFieldStart(predicate.stringValue()); // predicate
-					for (Statement statement : graph.filter(subject, predicate, null)) {
-						Value v = statement.getObject();
-						g.writeStartObject(); // value
-						if (v instanceof BNode && !v.stringValue().startsWith("_:")) {
-							g.writeStringField("value", "_:" + v.stringValue());
-						} else {
-							g.writeStringField("value", v.stringValue());
-						}
-						if (v instanceof Literal l) {
-							g.writeStringField("type", "literal");
-							if (l.getLanguage().isPresent()) {
-								g.writeStringField("lang", l.getLanguage().get());
-							} else if (l.getDatatype() != null) {
-								g.writeStringField("datatype", l.getDatatype().stringValue());
-							}
-						} else if (v instanceof BNode) {
-							g.writeStringField("type", "bnode");
-						} else if (v instanceof IRI) {
-							g.writeStringField("type", "uri");
-						}
-						g.writeEndObject(); // value
-					}
-					g.writeEndArray(); // predicate
-				}
-				g.writeEndObject(); // subject
-			}
-			g.writeEndObject(); // root object
-			g.close();
-			return sw.toString();
-		} catch (IOException e) {
-			log.error(e.getMessage(), e);
-		}
-		return null;
 	}
 
 	private static IRI parseAndValidateIRI(String iri) {

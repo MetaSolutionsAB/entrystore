@@ -1,20 +1,18 @@
 package org.entrystore.rest.springboot.model.serializer;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ValueDeserializer;
 
-import java.io.IOException;
-
-public class RawJsonDeserializer extends JsonDeserializer<String> {
+public class RawJsonDeserializer extends ValueDeserializer<String> {
 
 	@Override
-	public String deserialize(JsonParser parser, DeserializationContext ctx) throws IOException {
+	public String deserialize(JsonParser parser, DeserializationContext ctx) {
 		JsonNode node = parser.readValueAsTree();
-		if (node.isTextual()) {
+		if (node.isString()) {
 			// Already a plain string
-			return node.textValue();
+			return node.asString();
 		} else {
 			// Serialize object/array to JSON string
 			return node.toString();

@@ -33,7 +33,6 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Scanner;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
@@ -50,7 +49,7 @@ public class FileOperationsTest {
 	private final String content = "foo\nbar";
 	private final File tempFileSource = Files.createTempFile("tempSource", ".txt").toFile();
 	private final File tempFileDestination = Files.createTempFile("tempDestination", ".txt").toFile();
-	private final Path path = Paths.get(FileUtils.getTempDirectory().getAbsolutePath(), "temp-" + UUID.randomUUID());
+	private final Path path = Path.of(FileUtils.getTempDirectory().getAbsolutePath(), "temp-" + UUID.randomUUID());
 	private final File tempBadFile = Files.createDirectories(path).toFile();
 
 	private FileOperationsTest() throws IOException {

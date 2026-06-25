@@ -496,13 +496,13 @@ public class UserImpl extends RDFResource implements User {
 				Iterator<Statement> argKeyIt = userResourceGraph.filter((BNode) s.getObject(), customPropertyKey, null).iterator();
 				if (argKeyIt.hasNext()) {
 					Value argKey = argKeyIt.next().getObject();
-					if (argKey instanceof Literal) {
-						keyStr = ((Literal) argKey).stringValue();
+					if (argKey instanceof Literal literal1) {
+						keyStr = literal1.stringValue();
 						Iterator<Statement> argValueIt = userResourceGraph.filter((BNode) s.getObject(), customPropertyValue, null).iterator();
 						if (argValueIt.hasNext()) {
 							Value argValue = argValueIt.next().getObject();
-							if (argValue instanceof Literal) {
-								valueStr = ((Literal) argValue).stringValue();
+							if (argValue instanceof Literal literal) {
+								valueStr = literal.stringValue();
 							}
 						}
 					}
@@ -603,9 +603,7 @@ public class UserImpl extends RDFResource implements User {
 					log.error(e.getMessage(), e);
 					rc.rollback();
 				} finally {
-					if (rc != null) {
-						rc.close();
-					}
+					rc.close();
 				}
 			}
 		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {

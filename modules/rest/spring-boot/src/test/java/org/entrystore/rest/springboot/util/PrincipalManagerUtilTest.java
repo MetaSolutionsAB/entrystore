@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
@@ -42,7 +41,6 @@ class PrincipalManagerUtilTest {
 
 	@Test
 	void restoreAuthenticatedUserSafely_happyPath_withNullPrimary_returnsSilently() {
-		doNothing().when(pm).setAuthenticatedUserURI(PREVIOUS);
 
 		assertDoesNotThrow(() -> PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, PREVIOUS, null));
 
@@ -54,7 +52,6 @@ class PrincipalManagerUtilTest {
 		// A successful cleanup must NOT decorate the primary with a suppressed entry — that would lie
 		// about a failure that did not occur.
 		RuntimeException tryBodyFailure = new RuntimeException("try body blew up");
-		doNothing().when(pm).setAuthenticatedUserURI(PREVIOUS);
 
 		PrincipalManagerUtil.restoreAuthenticatedUserSafely(pm, PREVIOUS, tryBodyFailure);
 

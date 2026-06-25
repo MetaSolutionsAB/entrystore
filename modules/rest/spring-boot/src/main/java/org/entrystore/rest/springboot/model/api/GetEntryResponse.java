@@ -3,7 +3,7 @@ package org.entrystore.rest.springboot.model.api;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonRawValue;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.annotation.JsonSerialize;
 import lombok.Builder;
 import org.entrystore.rest.springboot.model.serializer.RawOrStringSerializer;
 

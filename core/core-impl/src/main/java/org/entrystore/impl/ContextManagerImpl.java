@@ -820,8 +820,9 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 						contextEntry.getGraphType() == GraphType.SystemContext) {
 			return contextEntry.getResourceURI();
 		}
-		throw new org.entrystore.repository.RepositoryException("Found entry for the alias is not a context...\n" +
-				"this is either a programming error or someone have been tampering with the RDF directly.");
+		throw new org.entrystore.repository.RepositoryException("""
+				Found entry for the alias is not a context...
+				this is either a programming error or someone have been tampering with the RDF directly.""");
 	}
 
 	public Set<String> getNames() {
@@ -865,8 +866,8 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 			if (entry.getGraphType() == GraphType.Context ||
 					entry.getGraphType() == GraphType.SystemContext) {
 				Resource context = entry.getResource();
-				if (context instanceof Context) {
-					return (Context) context;
+				if (context instanceof Context context1) {
+					return context1;
 				}
 			}
 		}
@@ -933,8 +934,7 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 	private Set<Entry> getLinksOrReferences(URI uri, boolean findLinks) {
 		HashSet<Entry> entries = new HashSet<>();
 		try {
-			RepositoryConnection rc = entry.repository.getConnection();
-			try {
+			try (RepositoryConnection rc = entry.repository.getConnection()) {
 				ValueFactory vf = entry.repository.getValueFactory();
 				IRI resource = vf.createIRI(uri.toString());
 				if (findLinks) {
@@ -964,8 +964,6 @@ public class ContextManagerImpl extends EntryNamesContext implements ContextMana
 					}
 					resources.close();
 				}
-			} finally {
-				rc.close();
 			}
 		} catch (RepositoryException e) {
 			log.error("Repository error", e);

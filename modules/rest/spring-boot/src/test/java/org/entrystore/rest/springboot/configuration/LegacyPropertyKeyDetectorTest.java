@@ -20,11 +20,10 @@ import org.apache.commons.logging.Log;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.boot.DefaultBootstrapContext;
-import org.springframework.boot.env.EnvironmentPostProcessor;
-import org.springframework.boot.env.EnvironmentPostProcessorsFactory;
+import org.springframework.boot.EnvironmentPostProcessor;
 import org.springframework.boot.logging.DeferredLogFactory;
 import org.springframework.core.Ordered;
+import org.springframework.core.io.support.SpringFactoriesLoader;
 import org.springframework.mock.env.MockEnvironment;
 
 import java.util.ArrayList;
@@ -310,15 +309,23 @@ class LegacyPropertyKeyDetectorTest {
 
 	@Test
 	void springFactoriesWiresThisDetector() {
-		var warnings = new ArrayList<String>();
-		DeferredLogFactory deferredLogFactory = _ -> new RecordingLog(warnings);
+		// EnvironmentPostProcessorsFactory is no longer public API in Boot 4, so drive Boot's own SPI
+		// loader (SpringFactoriesLoader) directly. This proves META-INF/spring.factories registers the
+		// detector under the EnvironmentPostProcessor key AND that Boot can instantiate it from a
+		// DeferredLogFactory — not merely that the file contains the expected text.
+		DeferredLogFactory logFactory = _ -> new RecordingLog(new ArrayList<>());
+		var loader = SpringFactoriesLoader.forDefaultResourceLocation(getClass().getClassLoader());
 
-		var factory = EnvironmentPostProcessorsFactory.fromSpringFactories(getClass().getClassLoader());
-		List<EnvironmentPostProcessor> processors =
-				factory.getEnvironmentPostProcessors(deferredLogFactory, new DefaultBootstrapContext());
+		List<EnvironmentPostProcessor> processors = loader.load(
+				EnvironmentPostProcessor.class,
+				SpringFactoriesLoader.ArgumentResolver.of(DeferredLogFactory.class, logFactory),
+				// Boot's own EnvironmentPostProcessors need constructor args this test does not supply;
+				// skip them so only processors constructable from a DeferredLogFactory are instantiated.
+				(factoryType, factoryImplementationName, failure) -> { });
 
 		assertTrue(processors.stream().anyMatch(LegacyPropertyKeyDetector.class::isInstance),
-				"META-INF/spring.factories must register LegacyPropertyKeyDetector as an EnvironmentPostProcessor");
+				"META-INF/spring.factories must register LegacyPropertyKeyDetector under "
+						+ EnvironmentPostProcessor.class.getName() + " and Boot must be able to instantiate it");
 	}
 
 	private LegacyPropertyKeyDetector newDetector(List<String> warningSink) {

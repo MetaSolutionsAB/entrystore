@@ -16,8 +16,8 @@
 
 package org.entrystore.rest.springboot.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.entrystore.Context;
 import org.entrystore.Entry;
 import org.entrystore.GraphType;
@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tools.jackson.core.JacksonException;
 
 import java.net.URI;
 import java.util.Arrays;
@@ -79,7 +80,7 @@ class EntryServiceTest {
 	void setUp() {
 		service = new EntryService(
 				principalManager, repositoryManager, contextService,
-				reservedNamesService, resourceSerializer, new ObjectMapper());
+				reservedNamesService, resourceSerializer, new JsonMapper());
 	}
 
 	@Test
@@ -106,7 +107,7 @@ class EntryServiceTest {
 
 		assertEquals("Cannot create an entry with provided JSON/RDF", thrown.getMessage());
 		Throwable cause = thrown.getCause();
-		assertInstanceOf(JsonProcessingException.class, cause, "Original parse error must be the cause");
+		assertInstanceOf(JacksonException.class, cause, "Original parse error must be the cause");
 		// Walk both levels: the cleanup failure may be attached to the original parse error (current
 		// implementation) OR to the rethrown BadRequestException (a plausible future refactor — the
 		// cleanup failure relates to this operation, not to the parse error). Either is acceptable

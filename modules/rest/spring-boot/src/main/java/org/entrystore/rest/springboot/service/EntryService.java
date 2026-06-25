@@ -1,8 +1,7 @@
 package org.entrystore.rest.springboot.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.json.JsonException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +49,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -429,7 +429,7 @@ public class EntryService {
 				}
 				return entry;
 			}
-		} catch (JsonProcessingException | RDFParseException e) {
+		} catch (JacksonException | RDFParseException e) {
 			// Both fire on user-supplied content (JSON envelope or inner RDFJSON in `info`/`metadata`)
 			// — client-side input failure, mapped to 400. The cause chain preserves the underlying
 			// parser detail for server-side debugging without echoing it to the client.
@@ -663,9 +663,9 @@ public class EntryService {
 	 * @param requestBody Input data with "resource" field to be read
 	 * @param groupUri    GroupURI
 	 * @return false if there is a resource provided, but it cannot be interpreted.
-	 * @throws JsonProcessingException Exception if request resource is a malformed JSON
+	 * @throws JacksonException Exception if request resource is a malformed JSON
 	 */
-	private boolean setResource(Context context, Entry entry, CreateEntryRequestBody requestBody, URI groupUri) throws JsonProcessingException {
+	private boolean setResource(Context context, Entry entry, CreateEntryRequestBody requestBody, URI groupUri) throws JacksonException {
 
 		ContextManager cm = repositoryManager.getContextManager();
 

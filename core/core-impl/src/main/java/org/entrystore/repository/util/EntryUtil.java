@@ -263,14 +263,14 @@ public class EntryUtil {
 				for (Statement statement : graph.filter(resURI, titlePred, null)) {
 					Value value = statement.getObject();
 					Literal lit = null;
-					if (value instanceof Literal) {
-						lit = (Literal) value;
-					} else if (value instanceof org.eclipse.rdf4j.model.Resource) {
-						Iterator<Statement> indirectLables = graph.filter((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null).iterator();
+					if (value instanceof Literal literal1) {
+						lit = literal1;
+					} else if (value instanceof org.eclipse.rdf4j.model.Resource resource) {
+						Iterator<Statement> indirectLables = graph.filter(resource, RDF.VALUE, null).iterator();
 						if (indirectLables.hasNext()) {
 							Value indirectValue = indirectLables.next().getObject();
-							if (indirectValue instanceof Literal) {
-								lit = (Literal) indirectValue;
+							if (indirectValue instanceof Literal literal) {
+								lit = literal;
 							}
 						}
 					}
@@ -302,8 +302,8 @@ public class EntryUtil {
 			IRI resURI = valueFactory.createIRI(resourceURI.toString());
 			for (Statement statement : graph.filter(resURI, predicate, null)) {
 				Value value = statement.getObject();
-				if (value instanceof IRI) {
-					return (IRI) value;
+				if (value instanceof IRI rI) {
+					return rI;
 				}
 			}
 		}
@@ -575,8 +575,8 @@ public class EntryUtil {
 
 						valuesSet.add(lit.getLanguage().orElse(null));
 						result.put(lit.stringValue(), valuesSet);
-					} else if (value instanceof org.eclipse.rdf4j.model.Resource) {
-						Iterator<Statement> stmnts2 = graph.filter((org.eclipse.rdf4j.model.Resource) value, RDF.VALUE, null).iterator();
+					} else if (value instanceof org.eclipse.rdf4j.model.Resource resource) {
+						Iterator<Statement> stmnts2 = graph.filter(resource, RDF.VALUE, null).iterator();
 						if (stmnts2.hasNext()) {
 							Value value2 = stmnts2.next().getObject();
 							if (value2 instanceof Literal lit2) {
@@ -822,8 +822,8 @@ public class EntryUtil {
 	public static Set<IRI> valueToURI(Set<Value> values) {
 		Set<IRI> result = new HashSet<>();
 		for (Value v : values) {
-			if (v instanceof IRI) {
-				result.add((IRI) v);
+			if (v instanceof IRI rI) {
+				result.add(rI);
 			}
 		}
 		return result;
