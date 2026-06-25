@@ -95,12 +95,28 @@ class ResourceServiceTest {
 	}
 
 	@Test
-	void importEntryResource_zipWithoutRdfEntries_deletesTempFile() throws IOException {
+	void importEntryResource_zipWithoutRdfEntries_throwsNotImplementedAndDeletesTempFile() throws IOException {
 		when(entry.getGraphType()).thenReturn(GraphType.List);
+		byte[] zipBytes = buildZip("readme.txt", "hello");
 
-		service.importEntryResource(entry, buildZip("readme.txt", "hello"), true);
+		// No .rdf entries to import, so importFromZIP returns and importEntryResource throws
+		// NotImplementedException afterwards; the temp file must still be cleaned up.
+		assertThrows(NotImplementedException.class,
+				() -> service.importEntryResource(entry, zipBytes));
 
-		assertIsolatedTmpDirIsEmpty("success path");
+		assertIsolatedTmpDirIsEmpty("not-implemented path, no rdf entries");
+	}
+
+	@Test
+	void importEntryResource_nonListGraphType_throwsBadRequest() throws IOException {
+		when(entry.getGraphType()).thenReturn(GraphType.None);
+		byte[] zipBytes = buildZip("data.rdf", "<rdf:RDF/>");
+
+		// The else branch rejects non-List entries before any ZIP is read.
+		assertThrows(BadRequestException.class,
+				() -> service.importEntryResource(entry, zipBytes));
+
+		assertIsolatedTmpDirIsEmpty("non-List graphType rejected before importFromZIP");
 	}
 
 	@Test
@@ -111,7 +127,7 @@ class ResourceServiceTest {
 		// importRDFResource is currently stubbed and throws NotImplementedException;
 		// the finally block in importFromZIP must still clean up.
 		assertThrows(NotImplementedException.class,
-				() -> service.importEntryResource(entry, zipBytes, true));
+				() -> service.importEntryResource(entry, zipBytes));
 
 		assertIsolatedTmpDirIsEmpty("exception path from importRDFResource stub");
 	}
@@ -180,7 +196,7 @@ class ResourceServiceTest {
 		// new ZipFile(tmpFile) throws ZipException (an IOException) for a non-ZIP
 		// payload; importFromZIP wraps it as InternalServerErrorException.
 		InternalServerErrorException ex = assertThrows(InternalServerErrorException.class,
-				() -> service.importEntryResource(entry, notAZip, true));
+				() -> service.importEntryResource(entry, notAZip));
 		assertInstanceOf(ZipException.class, ex.getCause());
 
 		assertIsolatedTmpDirIsEmpty("exception path from ZipFile constructor");

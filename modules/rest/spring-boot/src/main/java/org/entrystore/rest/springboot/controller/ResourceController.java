@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.controller;
 
 import com.rometools.rome.feed.synd.SyndFeed;
@@ -239,23 +255,19 @@ public class ResourceController {
 		return new ModifyListResourceResponse(movedEntry.getEntryURI().toString());
 	}
 
-	// below is not implemented in Restlet yet, however all the params handling was there, hence below Spring version
 	@Operation(
-			summary = "Imports a ZIP file resource.")
+			summary = "Imports a ZIP file resource (not yet implemented).")
 	@PostMapping(
 			path = "/{context-id}/resource/{entry-id}",
 			consumes = "application/zip")
-	public ModifyListResourceResponse importListResource(
+	public void importListResource(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(name = "import") String importParam,
 			@RequestBody byte[] body
 	) {
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
-		Entry movedEntry = resourceService.importEntryResource(entry, body, importParam != null);
-
-		return new ModifyListResourceResponse(movedEntry.getEntryURI().toString());
+		resourceService.importEntryResource(entry, body);
 	}
 
 	@Operation(

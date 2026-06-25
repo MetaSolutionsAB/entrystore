@@ -505,18 +505,16 @@ public class ResourceService {
 		}
 	}
 
-	public Entry importEntryResource(Entry entry, byte[] requestBody, boolean isImport) {
+	public void importEntryResource(Entry entry, byte[] requestBody) {
 
 		GraphType graphType = entry.getGraphType();
 
-		if (graphType == GraphType.List
-				&& isImport) {
-
-			// Below code does not mutate anything on the entry, only reads a zip file into memory
+		if (graphType == GraphType.List) {
+			// Reads the ZIP; a .rdf entry throws from importRDFResource, otherwise the throw below signals not-implemented.
 			importFromZIP(requestBody);
-			return null;
+			throw new NotImplementedException("Resource ZIP import is not yet implemented");
 		} else {
-			throw new BadRequestException("Bad request: supports only Entry graphType of List (given: " + graphType + ") and import with 'application/zip' format and 'import' parameter");
+			throw new BadRequestException("Bad request: ZIP import supports only Entry graphType of List (given: " + graphType + ") with 'application/zip' format");
 		}
 	}
 
@@ -579,7 +577,7 @@ public class ResourceService {
 
 		// Capture the next URL while the current connection is open, then disconnect before
 		// recursing so a redirect chain doesn't hold N concurrent connections on the call stack.
-		String nextUrl = null;
+		String nextUrl;
 		HttpURLConnection conn = null;
 		try {
 			conn = ssrfValidator.openPinnedConnection(target.uri(), target.resolved());
