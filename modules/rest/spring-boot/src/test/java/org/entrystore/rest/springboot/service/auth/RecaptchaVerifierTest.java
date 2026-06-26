@@ -22,28 +22,36 @@ import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.test.web.client.ResponseActions;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.client.UnknownHttpStatusCodeException;
+import org.springframework.web.client.RestClient;
+
+import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 @ExtendWith(MockitoExtension.class)
 class RecaptchaVerifierTest {
@@ -54,85 +62,81 @@ class RecaptchaVerifierTest {
 	@Mock
 	private Config esConfig;
 
-	@Mock
-	private RestTemplate recaptchaRestTemplate;
-
-	@InjectMocks
+	private MockRestServiceServer server;
 	private RecaptchaVerifier verifier;
 
 	@BeforeEach
-	void primeConfig() {
+	void primeVerifier() {
 		when(esConfig.getString(eq(Settings.AUTH_RECAPTCHA_URL), anyString())).thenReturn(VERIFIER_URL);
 		when(esConfig.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY)).thenReturn(SECRET);
+
+		// MockRestServiceServer must be bound to the same builder the RestClient is built from,
+		// so the stubbed transport intercepts the verifier's siteverify POST.
+		RestClient.Builder builder = RestClient.builder();
+		server = MockRestServiceServer.bindTo(builder).build();
+		verifier = new RecaptchaVerifier(esConfig, builder.build());
 		verifier.init();
+	}
+
+	private ResponseActions expectSiteverifyPost() {
+		return server.expect(requestTo(VERIFIER_URL)).andExpect(method(HttpMethod.POST));
 	}
 
 	@Test
 	void verify_transportFailure_throws503() {
-		ResourceAccessException cause = new ResourceAccessException("connect refused");
-		when(recaptchaRestTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(String.class)))
-			.thenThrow(cause);
+		expectSiteverifyPost().andRespond(withException(new IOException("connect refused")));
 
 		CustomResponseException ex = assertThrows(CustomResponseException.class,
 			() -> verifier.verify("token", "203.0.113.1"));
 
 		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
-		assertEquals(cause, ex.getCause());
+		assertInstanceOf(ResourceAccessException.class, ex.getCause());
 	}
 
 	@Test
 	void verify_upstream5xx_throws503() {
-		HttpServerErrorException cause = HttpServerErrorException.create(
-			HttpStatus.BAD_GATEWAY, "Bad Gateway", new HttpHeaders(), new byte[0], null);
-		when(recaptchaRestTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(String.class)))
-			.thenThrow(cause);
+		expectSiteverifyPost().andRespond(withStatus(HttpStatus.BAD_GATEWAY));
 
 		CustomResponseException ex = assertThrows(CustomResponseException.class,
 			() -> verifier.verify("token", null));
 
 		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
-		assertEquals(cause, ex.getCause());
+		assertInstanceOf(HttpServerErrorException.class, ex.getCause());
 	}
 
-	@Test
-	void verify_unknownHttpStatus_throws503() {
-		UnknownHttpStatusCodeException cause = new UnknownHttpStatusCodeException(
-			599, "Network Connect Timeout", new HttpHeaders(), new byte[0], null);
-		when(recaptchaRestTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(String.class)))
-			.thenThrow(cause);
-
-		CustomResponseException ex = assertThrows(CustomResponseException.class,
-			() -> verifier.verify("token", null));
-
-		assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
-		assertInstanceOf(UnknownHttpStatusCodeException.class, ex.getCause());
-	}
+	// No dedicated UnknownHttpStatusCodeException case: verify() still catches it defensively, but
+	// RestClient's default error handler classifies every error status by series (4xx -> client,
+	// 5xx -> server), so that exception is unreachable through a real response and can only be
+	// produced by force-mocking — which would be a tautological test.
 
 	@Test
 	void verify_upstream4xx_propagates() {
-		HttpClientErrorException cause = HttpClientErrorException.create(
-			HttpStatus.BAD_REQUEST, "Bad Request", new HttpHeaders(), new byte[0], null);
-		when(recaptchaRestTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(String.class)))
-			.thenThrow(cause);
+		// 4xx is deliberately not remapped to 503: a misconfigured secret must surface.
+		expectSiteverifyPost().andRespond(withStatus(HttpStatus.BAD_REQUEST));
 
 		HttpClientErrorException thrown = assertThrows(HttpClientErrorException.class,
 			() -> verifier.verify("token", null));
 
-		assertEquals(cause, thrown);
+		assertEquals(HttpStatus.BAD_REQUEST, thrown.getStatusCode());
 	}
 
 	@Test
 	void verify_validResponse_returnsTrue() {
-		when(recaptchaRestTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(String.class)))
-			.thenReturn(ResponseEntity.ok("{\"success\": true}"));
+		MultiValueMap<String, String> expectedForm = new LinkedMultiValueMap<>();
+		expectedForm.add("secret", SECRET);
+		expectedForm.add("response", "token");
+
+		expectSiteverifyPost()
+			.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_FORM_URLENCODED))
+			.andExpect(content().formData(expectedForm))
+			.andRespond(withSuccess("{\"success\": true}", MediaType.APPLICATION_JSON));
 
 		assertTrue(verifier.verify("token", null));
 	}
 
 	@Test
 	void verify_invalidResponse_returnsFalse() {
-		when(recaptchaRestTemplate.postForEntity(anyString(), any(HttpEntity.class), eq(String.class)))
-			.thenReturn(ResponseEntity.ok("{\"success\": false}"));
+		expectSiteverifyPost().andRespond(withSuccess("{\"success\": false}", MediaType.APPLICATION_JSON));
 
 		assertFalse(verifier.verify("token", null));
 	}
