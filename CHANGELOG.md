@@ -1,5 +1,11 @@
 # ENTRYSTORE CHANGELOG
 
+## Version 6.1
+
+### Improvement
+
+[ENTRYSTORE-1029](https://metasolutions.atlassian.net/browse/ENTRYSTORE-1029) Index xsd:decimal/float/double literals via new metadata.predicate.decimal.* Solr field
+
 ## Version 5.7.1 (2025-06-17)
 
 ### Bug
