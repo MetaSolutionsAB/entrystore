@@ -48,6 +48,27 @@ public class ListImplTest extends AbstractCoreTest {
 	}
 
 	@Test
+	public void addChildPersistsToRepositoryAndCache() {
+		// Use the Donald user.
+		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
+		Context duck = cm.getContext("duck");
+		Entry list = duck.createResource(null, GraphType.List, null, null);
+		Entry child = duck.createLink(null, URI.create("https://slashdot.org/"), null);
+
+		((List) list.getResource()).addChild(child.getEntryURI());
+
+		// The list instance that performed the add reflects it in its in-memory cache.
+		assertTrue(((List) list.getResource()).getChildren().contains(child.getEntryURI()));
+
+		// Evict the entry so getByEntryURI rebuilds a fresh ListImpl that loads its children straight from the
+		// committed RDF, proving the add was actually persisted (not just cached) and that the two agree.
+		((ContextImpl) duck).softCache.remove(list);
+		List reloaded = (List) duck.getByEntryURI(list.getEntryURI()).getResource();
+		assertEquals(1, reloaded.getChildren().size());
+		assertTrue(reloaded.getChildren().contains(child.getEntryURI()));
+	}
+
+	@Test
 	public void singleOccurrenceOfChild2() {
 		// Use the Donald user.
 		pm.setAuthenticatedUserURI(pm.getPrincipalEntry("Donald").getResourceURI());
