@@ -187,7 +187,7 @@ public class Email {
 		}
 
 		String messageText = messageBodySignup.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
-		messageText = messageText.replaceAll("__DOMAIN__", resolveDomain(config));
+		messageText = messageText.replaceAll("__DOMAIN__", resolveBaseUrlHost(config));
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
@@ -221,7 +221,7 @@ public class Email {
 		}
 
 		String messageText = messageBodyPasswordReset.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
-		messageText = messageText.replaceAll("__DOMAIN__", resolveDomain(config));
+		messageText = messageText.replaceAll("__DOMAIN__", resolveBaseUrlHost(config));
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
@@ -233,42 +233,43 @@ public class Email {
 	}
 
 	public static void sendPasswordChangeConfirmation(Config config, Entry userEntry) {
-		String msgTo = ((User) userEntry.getResource()).getName();
-		if (!msgTo.contains("@")) {
-			msgTo = EntryUtil.getEmail(userEntry);
-		}
-
-		if (msgTo == null || !msgTo.contains("@")) {
-			log.warn("Unable to send email, invalid email address of recipient: {}", msgTo);
-			return;
-		}
-
-		if (messageBodyPasswordChanged == null) {
-			String templatePath = config.getString(Settings.AUTH_PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
-			if (templatePath != null) {
-				messageBodyPasswordChanged = loadTemplate(templatePath);
-			} else {
-				messageBodyPasswordChanged = loadClasspathTemplate("email_pwchange.html");
-			}
-		}
-
-		if (messageBodyPasswordChanged == null) {
-			log.error("Unable to load email template for password change confirmation");
-			return;
-		}
-
 		// The password has already been changed by the caller; sending the confirmation email is
-		// best-effort. Never let an email failure (e.g. unconfigured SMTP/base URL) escape and turn a
-		// successful password change into an HTTP 500 (ENTRYSTORE-1028).
+		// best-effort. Never let an email failure (e.g. unconfigured SMTP/base URL, or an unexpected
+		// recipient/template problem) escape and turn a successful password change into an HTTP 500
+		// (ENTRYSTORE-1028).
 		try {
+			String msgTo = ((User) userEntry.getResource()).getName();
+			if (!msgTo.contains("@")) {
+				msgTo = EntryUtil.getEmail(userEntry);
+			}
+
+			if (msgTo == null || !msgTo.contains("@")) {
+				log.warn("Unable to send email, invalid email address of recipient: {}", msgTo);
+				return;
+			}
+
+			if (messageBodyPasswordChanged == null) {
+				String templatePath = config.getString(Settings.AUTH_PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
+				if (templatePath != null) {
+					messageBodyPasswordChanged = loadTemplate(templatePath);
+				} else {
+					messageBodyPasswordChanged = loadClasspathTemplate("email_pwchange.html");
+				}
+			}
+
+			if (messageBodyPasswordChanged == null) {
+				log.error("Unable to load email template for password change confirmation");
+				return;
+			}
+
 			String messageText = messageBodyPasswordChanged.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
-			messageText = messageText.replaceAll("__DOMAIN__", resolveDomain(config));
+			messageText = messageText.replaceAll("__DOMAIN__", resolveBaseUrlHost(config));
 			String msgSubject = config.getString(Settings.AUTH_PASSWORD_CHANGE_SUBJECT, "Your password has been changed");
 			String recipientName = EntryUtil.getName(userEntry);
 			if (recipientName == null) {
 				recipientName = "";
 			}
-			messageText = messageText.replaceAll("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
+			messageText = messageText.replace("__NAME__", HtmlEscapers.htmlEscaper().escape(recipientName));
 
 			if (!sendMessage(config, msgTo, msgSubject, messageText)) {
 				log.warn("Password change confirmation email to {} could not be sent", msgTo);
@@ -280,11 +281,11 @@ public class Email {
 
 	/**
 	 * Resolves the host of the configured base URL for {@code __DOMAIN__} substitution, returning an
-	 * empty string when the base URL is unset, blank, has no host (e.g. a schemeless value such as
+	 * empty string when the base URL is unset, blank, has no host (e.g., a schemeless value such as
 	 * {@code store}), or is not a valid URI. Avoids the {@code URI.create(null)} / {@code getHost()}-is-null
 	 * NPEs that previously escaped the email helpers; a misconfigured (but non-blank) base URL is logged.
 	 */
-	static String resolveDomain(Config config) {
+	static String resolveBaseUrlHost(Config config) {
 		String baseUrl = config.getString(Settings.BASE_URL);
 		if (baseUrl == null || baseUrl.isBlank()) {
 			return "";

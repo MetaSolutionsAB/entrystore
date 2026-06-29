@@ -111,10 +111,11 @@ class EmailTest {
 			"NULL,                              ''",
 			"'   ',                             ''",
 			"store,                             ''",
+			"ht tp://bad,                       ''",
 			"https://entrystore.example/store/, entrystore.example"
 	})
 	void resolveDomain_returnsHostOrEmpty(String baseUrl, String expectedDomain) {
-		assertEquals(expectedDomain, Email.resolveDomain(configWithBaseUrl(baseUrl)));
+		assertEquals(expectedDomain, Email.resolveBaseUrlHost(configWithBaseUrl(baseUrl)));
 	}
 
 	private static void assertPasswordChangeTemplateOnClasspath() {
