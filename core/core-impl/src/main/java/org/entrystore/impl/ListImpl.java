@@ -228,15 +228,15 @@ public class ListImpl extends RDFResource implements List {
 				} finally {
 					rc.close();
 				}
-
-				// Notify listeners only after the transaction has committed and the connection is closed, so a
-				// listener failure cannot trigger the rollback path above or be misreported as a failed add.
-				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
-				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 			}
 		} catch (RepositoryException e) {
 			throw new org.entrystore.repository.RepositoryException("Failed to obtain repository connection for entry " + entry.getId(), e);
 		}
+
+		// Notify listeners only after the transaction has committed and the connection is closed, and outside the
+		// try/catch above, so a listener failure propagates on its own and is never misreported as a failed add.
+		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(childEntry, RepositoryEvent.EntryUpdated));
+		entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 	}
 
 	public Entry moveEntryHere(URI entry, URI fromList, boolean removeFromAllLists) throws QuotaException {
