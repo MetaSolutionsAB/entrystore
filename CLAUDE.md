@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3) - a Linked Data framework for managing resources and their metadata using "entries". Built with Java 25, RDF4J, and Solr. The REST layer uses Spring Boot (Jetty 12).
+EntryStore is the reference implementation of the Resource and Metadata Management Model (ReM3) - a Linked Data framework for managing resources and their metadata using "entries". Built with Java 25, RDF4J, and Solr. The REST layer uses Spring Boot 4.1 (Jetty 12).
 
 ## Build Commands
 
@@ -102,6 +102,7 @@ springboot/
 ```
 
 **Key patterns:**
+- Spring Boot **4.1** (`spring-boot-starter-parent` version in root `pom.xml`). Verify APIs against Boot 4.1, not Boot 3.x — 4.x relocated/renamed packages. Prefer `RestClient` over the deprecated `RestTemplate`.
 - Controllers: `@RestController` + `@RequiredArgsConstructor` (Lombok) + `@Operation` (Swagger)
 - Services: `@Slf4j` + `@Service` + `@RequiredArgsConstructor`
 - For new services, read config via Spring Boot mechanisms (`@Value("${prop:default}")` or `@ConfigurationProperties`). Some services still call `repositoryManager.getConfiguration().get*` directly — migrate when touching them.

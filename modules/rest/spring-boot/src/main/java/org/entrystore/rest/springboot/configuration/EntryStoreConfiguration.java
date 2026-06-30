@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.configuration;
 
 import com.github.benmanes.caffeine.cache.Ticker;
@@ -16,14 +32,15 @@ import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.config.SortedProperties;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.restclient.RestTemplateBuilder;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.HttpClientSettings;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.PropertySource;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClient;
 
 import java.net.URI;
 import java.time.Duration;
@@ -115,21 +132,18 @@ public class EntryStoreConfiguration {
 		}
 	}
 
-	@Bean
-	public RestTemplate restTemplate() {
-		return new RestTemplate();
-	}
-
 	/**
-	 * Dedicated RestTemplate for the reCAPTCHA verifier. Tight timeouts ensure that a hung
+	 * Dedicated RestClient for the reCAPTCHA verifier. Tight timeouts ensure that a hung
 	 * Google siteverify call cannot pin a Jetty request thread indefinitely while users
 	 * try to sign up or reset their password.
 	 */
 	@Bean
-	public RestTemplate recaptchaRestTemplate(RestTemplateBuilder builder) {
+	public RestClient recaptchaRestClient(RestClient.Builder builder) {
+		HttpClientSettings settings = HttpClientSettings.defaults()
+			.withConnectTimeout(Duration.ofSeconds(3))
+			.withReadTimeout(Duration.ofSeconds(5));
 		return builder
-			.connectTimeout(Duration.ofSeconds(3))
-			.readTimeout(Duration.ofSeconds(5))
+			.requestFactory(ClientHttpRequestFactoryBuilder.detect().build(settings))
 			.build();
 	}
 

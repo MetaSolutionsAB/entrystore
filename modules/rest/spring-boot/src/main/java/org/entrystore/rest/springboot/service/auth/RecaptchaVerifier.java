@@ -25,8 +25,6 @@ import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -35,7 +33,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.client.UnknownHttpStatusCodeException;
 
 /**
@@ -54,8 +52,8 @@ public class RecaptchaVerifier {
 
 	private final Config esConfig;
 
-	@Qualifier("recaptchaRestTemplate")
-	private final RestTemplate recaptchaRestTemplate;
+	@Qualifier("recaptchaRestClient")
+	private final RestClient recaptchaRestClient;
 
 	private static String url;
 	private static String secret;
@@ -84,9 +82,6 @@ public class RecaptchaVerifier {
 
 		log.debug("reCaptcha URL: {}", reCaptchaUrl);
 
-		HttpHeaders headers = new HttpHeaders();
-		headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
 		MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
 		params.add("secret", secret);
 		params.add("response", rcResponseV2);
@@ -94,10 +89,14 @@ public class RecaptchaVerifier {
 			params.add("remoteip", userIP);
 		}
 
-		HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(params, headers);
 		ResponseEntity<String> response;
 		try {
-			response = recaptchaRestTemplate.postForEntity(url, request, String.class);
+			response = recaptchaRestClient.post()
+				.uri(url)
+				.contentType(MediaType.APPLICATION_FORM_URLENCODED)
+				.body(params)
+				.retrieve()
+				.toEntity(String.class);
 		} catch (ResourceAccessException | HttpServerErrorException | UnknownHttpStatusCodeException e) {
 			// 4xx (HttpClientErrorException) is deliberately not remapped: a misconfigured
 			// secret must surface, not be masked as a transient 503.
