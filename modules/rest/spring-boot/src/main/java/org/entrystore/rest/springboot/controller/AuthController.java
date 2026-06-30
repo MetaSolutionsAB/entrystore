@@ -329,14 +329,14 @@ public class AuthController {
 	private String submitSignupConfirmation(HttpServletRequest request, HttpServletResponse response, Model model,
 											String confirm, String email, String password) {
 		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
-		ConfirmationResult result = authService.confirmSignup(confirm, email, password, SIGNUP_TITLE);
+		ConfirmationResult result = authService.confirmSignup(request, confirm, email, password, SIGNUP_TITLE);
 		return renderConfirmation(model, response, result, SIGNUP_FORM, confirm, HttpStatus.CREATED.value());
 	}
 
 	private String submitPasswordResetConfirmation(HttpServletRequest request, HttpServletResponse response, Model model,
 												   String confirm, String email, String password) {
 		HttpUtil.checkRequestSize(request, MAX_REQUEST_SIZE);
-		ConfirmationResult result = authService.confirmPassword(confirm, email, password, PASSWORD_RESET_TITLE);
+		ConfirmationResult result = authService.confirmPassword(request, confirm, email, password, PASSWORD_RESET_TITLE);
 		return renderConfirmation(model, response, result, PWRESET_FORM, confirm, HttpStatus.OK.value());
 	}
 

@@ -263,21 +263,22 @@ public class AuthService {
 
 	/**
 	 * New-mode password-reset confirmation (ENTRYSTORE-529). After clicking the emailed link the user
-	 * must re-enter the account's email (username) and choose a new password on the confirmation form.
-	 * The new password is applied only when the supplied username matches the one the reset was
-	 * requested for — a wrong recipient or email scanner that clicks the link does not know the username
-	 * and cannot set a password. The token is invalidated after the configured number of failed
-	 * username attempts. The new password is collected here (not at request time) so the requester
-	 * never picks the password that ends up on the account. It is format-validated (non-empty, at least
-	 * 8 characters) before the token is touched, so a malformed password neither consumes the token nor
-	 * counts as a failed username attempt.
+	 * must re-enter the account's email and choose a new password on the confirmation form. The new
+	 * password is applied only when the supplied email matches the one the reset was requested for — a
+	 * wrong recipient or email scanner that clicks the link does not know which account it is for and
+	 * cannot set a password. The token is invalidated after the configured number of failed email
+	 * attempts. The new password is collected here (not at request time) so the requester never picks
+	 * the password that ends up on the account. It is format-validated (non-empty, at least 8 characters)
+	 * before the token is touched, so a malformed password neither consumes the token nor counts as a
+	 * failed email attempt.
 	 */
-	public ConfirmationResult confirmPassword(String token, String username, String newPassword, String title) {
+	public ConfirmationResult confirmPassword(HttpServletRequest request, String token, String email, String newPassword, String title) {
+		passwordResetRateLimiter.acquirePermit(clientIp(request));
 		// Validate the chosen password before touching the token so a malformed password neither
-		// consumes the token nor counts as a failed username attempt.
+		// consumes the token nor counts as a failed email attempt.
 		String validatedPassword = validatePasswordFormat(newPassword, title);
 		ConfirmAttemptResult attempt = signupTokenCache.confirmAttempt(token,
-				ci -> usernameMatches(ci, username), maxConfirmationAttempts());
+				ci -> emailMatches(ci, email), maxConfirmationAttempts());
 		return switch (attempt.status()) {
 			case TOKEN_NOT_FOUND -> throw new BadRequestHtmlException(INVALID_TOKEN_MESSAGE, title);
 			case TOKEN_INVALIDATED -> throw new BadRequestHtmlException(PASSWORD_RESET_TOKEN_INVALIDATED_MESSAGE, title);
@@ -524,7 +525,8 @@ public class AuthService {
 	 * clicks the link does not know the chosen password and cannot activate the account. The token is
 	 * invalidated after the configured number of failed attempts.
 	 */
-	public ConfirmationResult confirmSignup(String token, String email, String password, String title) {
+	public ConfirmationResult confirmSignup(HttpServletRequest request, String token, String email, String password, String title) {
+		signupRateLimiter.acquirePermit(clientIp(request));
 		ConfirmAttemptResult attempt = signupTokenCache.confirmAttempt(token,
 				ci -> credentialsMatch(ci, email, password), maxConfirmationAttempts());
 		return switch (attempt.status()) {
@@ -631,7 +633,19 @@ public class AuthService {
 	}
 
 	private int maxConfirmationAttempts() {
-		return config.getInt(Settings.AUTH_CONFIRMATION_MAX_ATTEMPTS, 3);
+		int configured;
+		try {
+			configured = config.getInt(Settings.AUTH_CONFIRMATION_MAX_ATTEMPTS, 3);
+		} catch (NumberFormatException e) {
+			log.warn("{} is not a valid integer; falling back to the default of 3.", Settings.AUTH_CONFIRMATION_MAX_ATTEMPTS);
+			return 3;
+		}
+		if (configured < 1) {
+			log.warn("{} is {} (< 1); clamping to 1. A value below 1 would invalidate every confirmation token on the first attempt.",
+					Settings.AUTH_CONFIRMATION_MAX_ATTEMPTS, configured);
+			return 1;
+		}
+		return configured;
 	}
 
 	private boolean credentialsMatch(SignupInfo ci, String email, String password) {
@@ -645,12 +659,14 @@ public class AuthService {
 			return Password.check(password.trim(), ci.getSaltedHashedPassword());
 		} catch (IllegalArgumentException e) {
 			// Password.check rejects empty/oversized input; treat as a failed attempt rather than an error.
+			// Logged (without the value) so an over-long paste is distinguishable from a genuine mismatch.
+			log.info("Sign-up confirmation attempt rejected: supplied password failed format validation (empty or oversized).");
 			return false;
 		}
 	}
 
-	private boolean usernameMatches(SignupInfo ci, String username) {
-		return StringUtils.isNotEmpty(username) && ci.getEmail().equalsIgnoreCase(username.trim());
+	private boolean emailMatches(SignupInfo ci, String email) {
+		return StringUtils.isNotEmpty(email) && ci.getEmail().equalsIgnoreCase(email.trim());
 	}
 
 	private String validatePasswordFormat(String password, String title) {

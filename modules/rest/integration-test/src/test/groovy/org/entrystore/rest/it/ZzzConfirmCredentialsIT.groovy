@@ -222,6 +222,39 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		conn.inputStream.text.contains('Sign-up successful.')
 	}
 
+	def "POST /auth/signup/confirm with a wrong email but the right password does not create the user"() {
+		given:
+		def username = 'newSignupWrongEmail@test.com'
+		def token = startSignup(username)
+
+		when: "the link is opened by someone who re-enters a different email (with the correct password)"
+		def conn = confirmSignup(token, 'someoneElse@test.com')
+
+		then: "the email-mismatch branch rejects it and consumes an attempt"
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		conn.errorStream.text.contains('2 attempt(s) remaining')
+
+		and: "the token survives, so the genuine requester can still confirm with the correct email"
+		confirmSignup(token, username).getResponseCode() == HTTP_CREATED
+		login(username, newPassword) == HTTP_OK
+	}
+
+	def "POST /auth/signup/confirm with a too-short password consumes an attempt (sign-up does not pre-validate format, unlike reset)"() {
+		given:
+		def username = 'newSignupShortPass@test.com'
+		def token = startSignup(username)
+
+		when: "a too-short password is submitted at confirm time"
+		def conn = confirmSignup(token, username, 'short')
+
+		then: "it is treated as a failed credential attempt (not a format error), so it consumes an attempt"
+		conn.getResponseCode() == HTTP_UNAUTHORIZED
+		conn.errorStream.text.contains('2 attempt(s) remaining')
+
+		and: "the token survives, so the correct password still works"
+		confirmSignup(token, username).getResponseCode() == HTTP_CREATED
+	}
+
 	// ---------- password reset ----------
 
 	def "POST /auth/pwreset starts the flow with the email only and sends a link"() {
@@ -255,6 +288,15 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		body.contains('name="email"')
 		body.contains('name="password"')
 		body.contains(token)
+	}
+
+	def "GET /auth/pwreset with an unknown token does not render the form"() {
+		when:
+		def conn = EntryStoreClient.getRequest('/auth/pwreset?confirm=bogusToken123456')
+
+		then: "assertPasswordResetTokenValid rejects it before the form is rendered"
+		conn.getResponseCode() == HTTP_BAD_REQUEST
+		!conn.errorStream.text.contains('name="password"')
 	}
 
 	def "POST /auth/pwreset/confirm sets the new password chosen at confirm time when the username matches"() {

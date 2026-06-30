@@ -45,6 +45,9 @@ public record ConfirmAttemptResult(Status status, SignupInfo info, int remaining
 		if (status != Status.INVALID_CREDENTIALS && remainingAttempts != 0) {
 			throw new IllegalArgumentException("remainingAttempts is only meaningful for INVALID_CREDENTIALS");
 		}
+		if (status == Status.INVALID_CREDENTIALS && remainingAttempts < 1) {
+			throw new IllegalArgumentException("remainingAttempts must be >= 1 for INVALID_CREDENTIALS (a retryable result must leave at least one attempt)");
+		}
 	}
 
 	public static ConfirmAttemptResult valid(SignupInfo info) {

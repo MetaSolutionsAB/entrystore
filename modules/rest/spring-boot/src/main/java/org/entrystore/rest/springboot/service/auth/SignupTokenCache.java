@@ -55,32 +55,39 @@ public class SignupTokenCache extends TokenCache<String, SignupInfo> {
 	/**
 	 * Atomically verifies a credential-confirmation attempt against the pending record for {@code token}.
 	 * Verification, the failed-attempt count, and token removal all happen under the cache lock so that
-	 * parallel attempts cannot race past the limit. The {@code credentialsValid} predicate (a password
-	 * hash check) runs inside the lock; this serializes confirmations, which is acceptable because the
-	 * initiation endpoints are rate-limited.
+	 * parallel attempts cannot race past the limit (the lock-out invariant this feature relies on). The
+	 * {@code credentialsValid} predicate runs inside the lock — for sign-up it is a PBKDF2 password check,
+	 * for password reset a plain email comparison. Holding the lock across it serializes confirmations;
+	 * that work is bounded because the predicate runs only for a found, non-expired token and the confirm
+	 * endpoints are themselves per-IP rate-limited and capped at {@code maxAttempts}.
 	 *
 	 * <ul>
 	 *   <li>match → the token is removed and {@link ConfirmAttemptResult.Status#VALID} is returned with the record</li>
 	 *   <li>mismatch below the limit → the attempt counter is incremented and {@link ConfirmAttemptResult.Status#INVALID_CREDENTIALS} is returned</li>
 	 *   <li>mismatch reaching the limit → the token is removed and {@link ConfirmAttemptResult.Status#TOKEN_INVALIDATED} is returned</li>
-	 *   <li>no record → {@link ConfirmAttemptResult.Status#TOKEN_NOT_FOUND}</li>
+	 *   <li>no record (unknown or expired) → {@link ConfirmAttemptResult.Status#TOKEN_NOT_FOUND}</li>
 	 * </ul>
 	 */
 	public ConfirmAttemptResult confirmAttempt(String token, Predicate<SignupInfo> credentialsValid, int maxAttempts) {
 		synchronized (tokenCache) {
-			cleanup(); // drop expired tokens first so an expired token confirms as TOKEN_NOT_FOUND
 			// A missing token field on the confirm request arrives here as null; treat it as not-found
 			// rather than letting ConcurrentHashMap.get(null) throw and surface as a 500.
 			SignupInfo info = (token == null) ? null : tokenCache.get(token);
 			if (info == null) {
 				return ConfirmAttemptResult.tokenNotFound();
 			}
+			// Check only the fetched token's expiry, avoiding an O(n) full-map cleanup() scan under the
+			// lock on the confirm hot path; an expired token confirms as TOKEN_NOT_FOUND. Expired entries
+			// for other tokens are still reaped by cleanup() via getTokenValue/removeToken/size.
+			if (info.getExpirationDate().before(new Date())) {
+				tokenCache.remove(token);
+				return ConfirmAttemptResult.tokenNotFound();
+			}
 			if (credentialsValid.test(info)) {
 				tokenCache.remove(token);
 				return ConfirmAttemptResult.valid(info);
 			}
-			int attempts = info.getConfirmationAttempts() + 1;
-			info.setConfirmationAttempts(attempts);
+			int attempts = info.recordFailedConfirmation();
 			if (attempts >= maxAttempts) {
 				tokenCache.remove(token);
 				return ConfirmAttemptResult.tokenInvalidated();

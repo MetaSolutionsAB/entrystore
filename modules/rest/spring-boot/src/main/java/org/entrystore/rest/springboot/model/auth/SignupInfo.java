@@ -16,6 +16,7 @@
 
 package org.entrystore.rest.springboot.model.auth;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.Setter;
@@ -49,8 +50,18 @@ public class SignupInfo {
 	/**
 	 * Number of failed credential-confirmation attempts made against this pending token. Once it
 	 * reaches the configured limit the token is invalidated (see {@code SignupTokenCache#confirmAttempt}).
+	 * This counter is the sole enforcement of the confirmation lockout, so it has no public setter and is
+	 * mutated only via {@link #recordFailedConfirmation()}, keeping its monotonic increment owned here.
 	 */
+	@Setter(AccessLevel.NONE)
 	private int confirmationAttempts;
+
+	/**
+	 * Records a failed credential-confirmation attempt by incrementing the counter and returning the new total.
+	 */
+	public int recordFailedConfirmation() {
+		return ++confirmationAttempts;
+	}
 
 	public void setEmail(@NonNull String email) {
 		// we have to store it in lower case only to avoid problems with different cases in
