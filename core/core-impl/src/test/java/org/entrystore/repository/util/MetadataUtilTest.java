@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,6 +46,9 @@ public class MetadataUtilTest {
 	private final Literal unsignedIntLiteral = valueFactory.createLiteral("1", CoreDatatype.XSD.UNSIGNED_INT);
 	private final Literal unsignedShortLiteral = valueFactory.createLiteral("1", CoreDatatype.XSD.UNSIGNED_SHORT);
 	private final Literal unsignedByteLiteral = valueFactory.createLiteral("1", CoreDatatype.XSD.UNSIGNED_BYTE);
+	private final Literal decimalLiteral = valueFactory.createLiteral("3.14", CoreDatatype.XSD.DECIMAL);
+	private final Literal floatLiteral = valueFactory.createLiteral("1.5", CoreDatatype.XSD.FLOAT);
+	private final Literal doubleLiteral = valueFactory.createLiteral("2.718", CoreDatatype.XSD.DOUBLE);
 	private final Literal gYearLiteral = valueFactory.createLiteral("1999", CoreDatatype.XSD.GYEAR);
 	private final Literal gYearMonthLiteral = valueFactory.createLiteral("1999-11", CoreDatatype.XSD.GYEARMONTH);
 	private final Literal gMonthLiteral = valueFactory.createLiteral("--11Z", CoreDatatype.XSD.GMONTH);
@@ -61,6 +64,15 @@ public class MetadataUtilTest {
 	public void isIntegerLiteral_null() {
 		try {
 			MetadataUtil.isIntegerLiteral(null);
+		} catch (Exception e) {
+			assertEquals("Literal must not be null.", e.getMessage());
+		}
+	}
+
+	@Test
+	public void isDecimalLiteral_null() {
+		try {
+			MetadataUtil.isDecimalLiteral(null);
 		} catch (Exception e) {
 			assertEquals("Literal must not be null.", e.getMessage());
 		}
@@ -87,6 +99,7 @@ public class MetadataUtilTest {
 	@Test
 	public void isAnyLiteral_nullDatatype() {
 		assertFalse(MetadataUtil.isIntegerLiteral(nullLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(nullLiteral));
 		assertFalse(MetadataUtil.isDateLiteral(nullLiteral));
 		assertTrue(MetadataUtil.isStringLiteral(nullLiteral));
 	}
@@ -113,9 +126,42 @@ public class MetadataUtilTest {
 		assertFalse(MetadataUtil.isIntegerLiteral(dateLiteral));
 		assertFalse(MetadataUtil.isIntegerLiteral(dateTimeLiteral));
 		assertFalse(MetadataUtil.isIntegerLiteral(dateTimeStampLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(decimalLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(floatLiteral));
+		assertFalse(MetadataUtil.isIntegerLiteral(doubleLiteral));
 		assertFalse(MetadataUtil.isIntegerLiteral(booleanLiteral));
 		assertFalse(MetadataUtil.isIntegerLiteral(stringLiteral));
 		assertFalse(MetadataUtil.isIntegerLiteral(langStringLiteral));
+	}
+
+	@Test
+	public void isDecimalLiteral() {
+		assertTrue(MetadataUtil.isDecimalLiteral(decimalLiteral));
+		assertTrue(MetadataUtil.isDecimalLiteral(floatLiteral));
+		assertTrue(MetadataUtil.isDecimalLiteral(doubleLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(byteLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(intLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(integerLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(longLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(negativeIntegerLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(nonNegativeIntegerLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(nonPositiveIntegerLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(positiveIntegerLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(shortIntegerLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(unsignedLongLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(unsignedIntLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(unsignedShortLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(unsignedByteLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(gYearLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(gDayLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(gYearMonthLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(gMonthLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(dateLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(dateTimeLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(dateTimeStampLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(booleanLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(stringLiteral));
+		assertFalse(MetadataUtil.isDecimalLiteral(langStringLiteral));
 	}
 
 	@Test
@@ -141,6 +187,9 @@ public class MetadataUtilTest {
 		assertTrue(MetadataUtil.isDateLiteral(dateLiteral));
 		assertTrue(MetadataUtil.isDateLiteral(dateTimeLiteral));
 		assertTrue(MetadataUtil.isDateLiteral(dateTimeStampLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(decimalLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(floatLiteral));
+		assertFalse(MetadataUtil.isDateLiteral(doubleLiteral));
 		assertFalse(MetadataUtil.isDateLiteral(booleanLiteral));
 		assertFalse(MetadataUtil.isDateLiteral(stringLiteral));
 		assertFalse(MetadataUtil.isDateLiteral(langStringLiteral));
@@ -169,6 +218,9 @@ public class MetadataUtilTest {
 		assertFalse(MetadataUtil.isStringLiteral(dateLiteral));
 		assertFalse(MetadataUtil.isStringLiteral(dateTimeLiteral));
 		assertFalse(MetadataUtil.isStringLiteral(dateTimeStampLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(decimalLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(floatLiteral));
+		assertFalse(MetadataUtil.isStringLiteral(doubleLiteral));
 		assertFalse(MetadataUtil.isStringLiteral(booleanLiteral));
 		assertTrue(MetadataUtil.isStringLiteral(stringLiteral));
 		assertTrue(MetadataUtil.isStringLiteral(langStringLiteral));

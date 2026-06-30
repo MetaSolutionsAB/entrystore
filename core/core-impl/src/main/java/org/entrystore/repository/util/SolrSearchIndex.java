@@ -1187,6 +1187,15 @@ public class SolrSearchIndex implements SearchIndex {
 						log.warn("Unable to index date literal: {}. (Subject: {}, Predicate: {}, Object: {})", iae.getMessage(), s.getSubject(), predString, l.getLabel());
 					}
 				}
+
+				// special handling of decimal/float/double values, to be used for e.g., numeric range queries and sorting
+				if (MetadataUtil.isDecimalLiteral(l)) {
+					try {
+						doc.setField(prefix + "metadata.predicate.decimal." + predMD5Trunc8, l.doubleValue());
+					} catch (NumberFormatException nfe) {
+						log.warn("Unable to index decimal literal: {}. (Subject: {}, Predicate: {}, Object: {})", nfe.getMessage(), s.getSubject(), predString, l.getLabel());
+					}
+				}
 			}
 		}
 	}

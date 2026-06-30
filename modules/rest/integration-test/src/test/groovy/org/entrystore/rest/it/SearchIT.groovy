@@ -17,6 +17,8 @@
 package org.entrystore.rest.it
 
 import groovy.xml.XmlParser
+import org.entrystore.repository.util.HashType
+import org.entrystore.repository.util.Hashing
 import org.entrystore.rest.it.util.EntryStoreClient
 import org.entrystore.rest.it.util.NameSpaceConst
 import spock.lang.Unroll
@@ -31,12 +33,29 @@ class SearchIT extends BaseSpec {
 
 	def static contextId = 'searchContextId'
 	def static entryId = ''
+	def static decimalEntryId = ''
+	def static malformedDecimalEntryId = ''
 
 	// Test-only predicate attached to this IT's entries so SPARQL syndication tests can query
 	// for a result set containing only SearchIT's entries, regardless of what other ITs have
 	// added to the shared repository. Without this the feed's default-size window fills with
 	// dc:title-bearing entries from other ITs and pushes SearchIT's entries out.
 	static final String MARKER_PREDICATE_IRI = 'http://example.org/ns/searchIT-marker'
+
+	// Test-only predicate carrying an xsd:double literal, used by the numeric range-query specs.
+	// Its Solr dynamic field is derived from the predicate IRI with the same MD5 truncation the
+	// indexer uses (SolrSearchIndex.addGenericMetadataFields), so the test queries the exact field
+	// the entry was indexed under.
+	static final String DECIMAL_PREDICATE_IRI = 'http://example.org/ns/searchIT-decimal'
+	static final String DECIMAL_FIELD = 'metadata.predicate.decimal.' + Hashing.hash(DECIMAL_PREDICATE_IRI, HashType.MD5).substring(0, 8)
+
+	// Test-only predicate carrying a plain string literal, attached to the malformed-decimal entry so
+	// that entry can be located in Solr via its literal_s field. Used to prove the entry is still
+	// indexed even though its xsd:double-typed literal has a non-numeric lexical form (which the
+	// indexer skips via the NumberFormatException guard).
+	static final String MALFORMED_MARKER_IRI = 'http://example.org/ns/searchIT-malformed-marker'
+	static final String MALFORMED_MARKER_FIELD = 'metadata.predicate.literal_s.' + Hashing.hash(MALFORMED_MARKER_IRI, HashType.MD5).substring(0, 8)
+	static final String MALFORMED_MARKER_VALUE = 'malformedmarkervalue'
 
 	def setupSpec() {
 		getOrCreateContext([contextId: contextId])
@@ -105,6 +124,40 @@ class SearchIT extends BaseSpec {
 						  ]]]
 		getOrCreateEntry(contextId, secondParams, secondBody)
 
+		// Entry carrying only an xsd:double literal — deliberately no dc:title/dc:description/marker
+		// predicate, so the count assertions in the other specs (results == 1, item.size() == 2) stay
+		// valid. Used by the numeric range-query specs below.
+		def decimalParams = [id: 'searchDecimalEntryId', graphtype: 'string']
+		def decimalBody = [resource: 'Decimal text',
+						   metadata: [(newResourceIri): [
+							   (DECIMAL_PREDICATE_IRI): [
+								   [type    : 'literal',
+									value   : '42.5',
+									datatype: 'http://www.w3.org/2001/XMLSchema#double']
+							   ]
+						   ]]]
+		decimalEntryId = getOrCreateEntry(contextId, decimalParams, decimalBody)
+		assert decimalEntryId.length() > 0
+
+		// Entry whose DECIMAL_PREDICATE_IRI value is typed xsd:double but has a non-numeric lexical
+		// form. The indexer's isDecimalLiteral guard matches (datatype is xsd:double), l.doubleValue()
+		// throws NumberFormatException, and the decimal field is skipped — but the rest of the entry
+		// must still index. The plain-string MALFORMED_MARKER_IRI lets us confirm that in Solr.
+		def malformedParams = [id: 'searchMalformedDecimalEntryId', graphtype: 'string']
+		def malformedBody = [resource: 'Malformed decimal text',
+							 metadata: [(newResourceIri): [
+								 (DECIMAL_PREDICATE_IRI): [
+									 [type    : 'literal',
+									  value   : 'not-a-number',
+									  datatype: 'http://www.w3.org/2001/XMLSchema#double']
+								 ],
+								 (MALFORMED_MARKER_IRI) : [
+									 [type: 'literal', value: MALFORMED_MARKER_VALUE]
+								 ]
+							 ]]]
+		malformedDecimalEntryId = getOrCreateEntry(contextId, malformedParams, malformedBody)
+		assert malformedDecimalEntryId.length() > 0
+
 		Thread.sleep(100)
 		waitForSolrProcessing()
 		// Solr needs even more time to finish processing
@@ -167,6 +220,76 @@ class SearchIT extends BaseSpec {
 																   value: 'lokalne metadane tytułsearch jawnie po polsku',
 																   lang : 'pl'])
 
+	}
+
+	def "GET /search?type=solr with numeric range query covering an indexed decimal literal should return the entry"() {
+		// This is the numeric-vs-lexicographic discriminator: 10 <= 42.5 <= 100 numerically, but as
+		// strings "42.5" > "100" (because '4' > '1'), so a string-typed field would NOT match. Passing
+		// proves the field is indexed and queried as a number.
+		given:
+		def query = DECIMAL_FIELD + ':[10 TO 100]'
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + URLEncoder.encode(query, 'UTF-8'))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		respJson['results'] >= 1
+		def results = respJson['resource']['children'].collect()
+		results.find { it['entryId'] == decimalEntryId } != null
+	}
+
+	def "GET /search?type=solr with a fractional range tightly bracketing the literal should return the entry"() {
+		// Proves fractional double precision: only a value of ~42.5 falls inside the 0.2-wide window
+		// [42.4 TO 42.6]. A field that stored the value as an integer (truncated 42 or rounded 43)
+		// would be excluded, so this guards against the field type regressing to slong.
+		given:
+		def query = DECIMAL_FIELD + ':[42.4 TO 42.6]'
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + URLEncoder.encode(query, 'UTF-8'))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		def results = respJson['resource']['children'].collect()
+		results.find { it['entryId'] == decimalEntryId } != null
+	}
+
+	def "GET /search?type=solr with a range above the indexed decimal literal should not return the entry"() {
+		given: 'a range [100 TO 200] that does not numerically contain 42.5 (out-of-range sanity check)'
+		def query = DECIMAL_FIELD + ':[100 TO 200]'
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + URLEncoder.encode(query, 'UTF-8'))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		def results = respJson['resource']['children'].collect()
+		results.find { it['entryId'] == decimalEntryId } == null
+	}
+
+	def "GET /search?type=solr should still index an entry whose xsd:double literal has a non-numeric value"() {
+		// The malformed entry's decimal literal throws NumberFormatException during indexing and is
+		// skipped; the entry must still be indexed. We locate it via its plain-string marker field,
+		// proving the bad literal did not abort indexing of the whole document.
+		given:
+		def query = MALFORMED_MARKER_FIELD + ':' + MALFORMED_MARKER_VALUE
+
+		when:
+		def conn = EntryStoreClient.getRequest('/search?type=solr&query=' + URLEncoder.encode(query, 'UTF-8'))
+
+		then:
+		conn.getResponseCode() == HTTP_OK
+		conn.getContentType().contains('application/json')
+		def respJson = JSON_PARSER.parseText(conn.inputStream.text)
+		def results = respJson['resource']['children'].collect()
+		results.find { it['entryId'] == malformedDecimalEntryId } != null
 	}
 
 	def "GET /search?type=solr&syndication=rss_2.0 as guest should return empty syndication feed"() {

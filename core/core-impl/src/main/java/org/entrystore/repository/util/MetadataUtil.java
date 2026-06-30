@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2024 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,10 +31,13 @@ import java.util.Set;
 public class MetadataUtil {
 
 	public static final String INTEGER_TYPE = "integer";
+	public static final String DECIMAL_TYPE = "decimal";
 	public static final String DATE_TYPE = "date";
 	public static final String STRING_TYPE = "string";
 
 	public static Set<CoreDatatype> integerDataTypes;
+
+	public static Set<CoreDatatype> decimalDataTypes;
 
 	public static Set<CoreDatatype> dateDataTypes;
 
@@ -56,6 +59,11 @@ public class MetadataUtil {
 		integerDataTypes.add(CoreDatatype.XSD.UNSIGNED_SHORT);
 		integerDataTypes.add(CoreDatatype.XSD.UNSIGNED_BYTE);
 		integerDataTypes.add(CoreDatatype.XSD.GYEAR);
+
+		decimalDataTypes = new HashSet<>();
+		decimalDataTypes.add(CoreDatatype.XSD.DECIMAL);
+		decimalDataTypes.add(CoreDatatype.XSD.FLOAT);
+		decimalDataTypes.add(CoreDatatype.XSD.DOUBLE);
 
 		dateDataTypes = new HashSet<>();
 		dateDataTypes.add(CoreDatatype.XSD.DATE);
@@ -111,6 +119,10 @@ public class MetadataUtil {
 		return isTypedLiteral(l, INTEGER_TYPE);
 	}
 
+	public static boolean isDecimalLiteral(Literal l) {
+		return isTypedLiteral(l, DECIMAL_TYPE);
+	}
+
 	public static boolean isDateLiteral(Literal l) {
 		return isTypedLiteral(l, DATE_TYPE);
 	}
@@ -133,6 +145,7 @@ public class MetadataUtil {
 
 		return switch (type) {
 			case INTEGER_TYPE -> integerDataTypes.contains(datatype);
+			case DECIMAL_TYPE -> decimalDataTypes.contains(datatype);
 			case DATE_TYPE -> dateDataTypes.contains(datatype);
 			default -> stringDataTypes.contains(datatype);
 		};
