@@ -38,6 +38,7 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 	static def firstName = 'First'
 	static def lastName = 'Last'
 	static def grecaptcharesponse = 'anything'
+	static def formUrlEncoded = 'application/x-www-form-urlencoded'
 
 	static GreenMail greenMail = new GreenMail(SMTP)
 
@@ -75,6 +76,8 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		return content.substring(start, start + 16)
 	}
 
+	// Setup helper: performs the sign-up request that mints a confirmation token and returns it.
+	// Convention-consistent with the sibling ITs' given:-block setup (see CLAUDE.md testing guidelines).
 	private static String startSignup(String email) {
 		def body = JsonOutput.toJson([
 			firstname         : firstName,
@@ -87,26 +90,12 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		return extractToken()
 	}
 
+	// Setup helper: starts a password-reset flow for an existing user and returns the token.
 	private static String startPwreset(String email) {
 		def body = JsonOutput.toJson([email: email, grecaptcharesponse: grecaptcharesponse])
 		assert EntryStoreClient.postRequest('/auth/pwreset', body).getResponseCode() == HTTP_OK
 		assert greenMail.waitForIncomingEmail(5000, 1)
 		return extractToken()
-	}
-
-	private static confirmSignup(String token, String email, String password = newPassword) {
-		def body = 'confirm=' + token + '&email=' + email + '&password=' + password
-		return EntryStoreClient.postRequest('/auth/signup/confirm', body, null, 'application/x-www-form-urlencoded')
-	}
-
-	private static confirmPwreset(String token, String username, String password) {
-		def body = 'confirm=' + token + '&email=' + username + '&password=' + password
-		return EntryStoreClient.postRequest('/auth/pwreset/confirm', body, null, 'application/x-www-form-urlencoded')
-	}
-
-	private static int login(String username, String password) {
-		def body = 'auth_username=' + username + '&auth_password=' + password
-		return EntryStoreClient.postRequest('/auth/cookie', body, '', 'application/x-www-form-urlencoded').getResponseCode()
 	}
 
 	// ---------- sign-up ----------
@@ -133,14 +122,17 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def token = startSignup(username)
 
 		when:
-		def conn = confirmSignup(token, username)
+		def body = 'confirm=' + token + '&email=' + username + '&password=' + newPassword
+		def conn = EntryStoreClient.postRequest('/auth/signup/confirm', body, null, formUrlEncoded)
 
 		then:
 		conn.getResponseCode() == HTTP_CREATED
 		conn.inputStream.text.contains('Sign-up successful.')
 
 		and: "the user can now log in"
-		login(username, newPassword) == HTTP_OK
+		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
+		loginConn.getResponseCode() == HTTP_OK
 	}
 
 	def "POST /auth/signup/confirm with a wrong password does not create the user"() {
@@ -149,12 +141,15 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def token = startSignup(username)
 
 		when: "the link is opened by someone who does not know the chosen password"
-		def conn = confirmSignup(token, username, 'totallyWrong123')
+		def body = 'confirm=' + token + '&email=' + username + '&password=totallyWrong123'
+		def conn = EntryStoreClient.postRequest('/auth/signup/confirm', body, null, formUrlEncoded)
 
 		then:
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.errorStream.text.contains('2 attempt(s) remaining')
-		login(username, newPassword) == HTTP_UNAUTHORIZED
+		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
+		loginConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "POST /auth/signup/confirm invalidates the token after three failed attempts"() {
@@ -163,10 +158,14 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def token = startSignup(username)
 
 		when:
-		def first = confirmSignup(token, username, 'wrongPass001')
-		def second = confirmSignup(token, username, 'wrongPass002')
-		def third = confirmSignup(token, username, 'wrongPass003')
-		def fourth = confirmSignup(token, username)
+		def firstBody = 'confirm=' + token + '&email=' + username + '&password=wrongPass001'
+		def first = EntryStoreClient.postRequest('/auth/signup/confirm', firstBody, null, formUrlEncoded)
+		def secondBody = 'confirm=' + token + '&email=' + username + '&password=wrongPass002'
+		def second = EntryStoreClient.postRequest('/auth/signup/confirm', secondBody, null, formUrlEncoded)
+		def thirdBody = 'confirm=' + token + '&email=' + username + '&password=wrongPass003'
+		def third = EntryStoreClient.postRequest('/auth/signup/confirm', thirdBody, null, formUrlEncoded)
+		def fourthBody = 'confirm=' + token + '&email=' + username + '&password=' + newPassword
+		def fourth = EntryStoreClient.postRequest('/auth/signup/confirm', fourthBody, null, formUrlEncoded)
 
 		then: "the third failure invalidates the token; a later correct attempt cannot succeed"
 		first.getResponseCode() == HTTP_UNAUTHORIZED
@@ -174,7 +173,9 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		third.getResponseCode() == HTTP_BAD_REQUEST
 		third.errorStream.text.contains('invalidated')
 		fourth.getResponseCode() == HTTP_BAD_REQUEST
-		login(username, newPassword) == HTTP_UNAUTHORIZED
+		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
+		loginConn.getResponseCode() == HTTP_UNAUTHORIZED
 	}
 
 	def "POST /auth/signup/confirm accepts a JSON body"() {
@@ -193,7 +194,8 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 
 	def "POST /auth/signup/confirm with an unknown token is rejected"() {
 		when:
-		def conn = confirmSignup('bogusToken123456', 'whoever@test.com')
+		def body = 'confirm=bogusToken123456&email=whoever@test.com&password=' + newPassword
+		def conn = EntryStoreClient.postRequest('/auth/signup/confirm', body, null, formUrlEncoded)
 
 		then:
 		conn.getResponseCode() == HTTP_BAD_REQUEST
@@ -215,7 +217,8 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def token = startSignup(username)
 
 		when: "the email is re-entered in a different case"
-		def conn = confirmSignup(token, username.toUpperCase())
+		def body = 'confirm=' + token + '&email=' + username.toUpperCase() + '&password=' + newPassword
+		def conn = EntryStoreClient.postRequest('/auth/signup/confirm', body, null, formUrlEncoded)
 
 		then:
 		conn.getResponseCode() == HTTP_CREATED
@@ -228,15 +231,20 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def token = startSignup(username)
 
 		when: "the link is opened by someone who re-enters a different email (with the correct password)"
-		def conn = confirmSignup(token, 'someoneElse@test.com')
+		def body = 'confirm=' + token + '&email=someoneElse@test.com&password=' + newPassword
+		def conn = EntryStoreClient.postRequest('/auth/signup/confirm', body, null, formUrlEncoded)
 
 		then: "the email-mismatch branch rejects it and consumes an attempt"
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.errorStream.text.contains('2 attempt(s) remaining')
 
 		and: "the token survives, so the genuine requester can still confirm with the correct email"
-		confirmSignup(token, username).getResponseCode() == HTTP_CREATED
-		login(username, newPassword) == HTTP_OK
+		def retryBody = 'confirm=' + token + '&email=' + username + '&password=' + newPassword
+		def retryConn = EntryStoreClient.postRequest('/auth/signup/confirm', retryBody, null, formUrlEncoded)
+		retryConn.getResponseCode() == HTTP_CREATED
+		def loginBody = 'auth_username=' + username + '&auth_password=' + newPassword
+		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
+		loginConn.getResponseCode() == HTTP_OK
 	}
 
 	def "POST /auth/signup/confirm with a too-short password consumes an attempt (sign-up does not pre-validate format, unlike reset)"() {
@@ -245,14 +253,17 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def token = startSignup(username)
 
 		when: "a too-short password is submitted at confirm time"
-		def conn = confirmSignup(token, username, 'short')
+		def body = 'confirm=' + token + '&email=' + username + '&password=short'
+		def conn = EntryStoreClient.postRequest('/auth/signup/confirm', body, null, formUrlEncoded)
 
 		then: "it is treated as a failed credential attempt (not a format error), so it consumes an attempt"
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
 		conn.errorStream.text.contains('2 attempt(s) remaining')
 
 		and: "the token survives, so the correct password still works"
-		confirmSignup(token, username).getResponseCode() == HTTP_CREATED
+		def retryBody = 'confirm=' + token + '&email=' + username + '&password=' + newPassword
+		def retryConn = EntryStoreClient.postRequest('/auth/signup/confirm', retryBody, null, formUrlEncoded)
+		retryConn.getResponseCode() == HTTP_CREATED
 	}
 
 	// ---------- password reset ----------
@@ -307,14 +318,17 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def token = startPwreset(username)
 
 		when:
-		def conn = confirmPwreset(token, username, chosenNewPassword)
+		def body = 'confirm=' + token + '&email=' + username + '&password=' + chosenNewPassword
+		def conn = EntryStoreClient.postRequest('/auth/pwreset/confirm', body, null, formUrlEncoded)
 
 		then:
 		conn.getResponseCode() == HTTP_OK
 		conn.inputStream.text.contains('Password reset was successful.')
 
 		and: "the password chosen on the confirmation form works"
-		login(username, chosenNewPassword) == HTTP_OK
+		def loginBody = 'auth_username=' + username + '&auth_password=' + chosenNewPassword
+		def loginConn = EntryStoreClient.postRequest('/auth/cookie', loginBody, '', formUrlEncoded)
+		loginConn.getResponseCode() == HTTP_OK
 	}
 
 	def "POST /auth/pwreset/confirm with a wrong username does not change the password"() {
@@ -324,7 +338,8 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def token = startPwreset(username)
 
 		when: "a clicker who does not know the account's email tries to set a password"
-		def conn = confirmPwreset(token, 'someoneElse@test.com', 'freshPass4567')
+		def body = 'confirm=' + token + '&email=someoneElse@test.com&password=freshPass4567'
+		def conn = EntryStoreClient.postRequest('/auth/pwreset/confirm', body, null, formUrlEncoded)
 
 		then: "the attempt is rejected and no password-change confirmation email is sent"
 		conn.getResponseCode() == HTTP_UNAUTHORIZED
@@ -332,7 +347,9 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		!greenMail.waitForIncomingEmail(500, 2)
 
 		and: "the token survives, and the password is applied only once the correct username is supplied"
-		confirmPwreset(token, username, 'freshPass4567').getResponseCode() == HTTP_OK
+		def retryBody = 'confirm=' + token + '&email=' + username + '&password=freshPass4567'
+		def retryConn = EntryStoreClient.postRequest('/auth/pwreset/confirm', retryBody, null, formUrlEncoded)
+		retryConn.getResponseCode() == HTTP_OK
 	}
 
 	def "POST /auth/pwreset/confirm invalidates the token after three failed username attempts"() {
@@ -342,10 +359,14 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def token = startPwreset(username)
 
 		when:
-		def first = confirmPwreset(token, 'wrong1@test.com', 'freshPass4567')
-		def second = confirmPwreset(token, 'wrong2@test.com', 'freshPass4567')
-		def third = confirmPwreset(token, 'wrong3@test.com', 'freshPass4567')
-		def fourth = confirmPwreset(token, username, 'freshPass4567')
+		def firstBody = 'confirm=' + token + '&email=wrong1@test.com&password=freshPass4567'
+		def first = EntryStoreClient.postRequest('/auth/pwreset/confirm', firstBody, null, formUrlEncoded)
+		def secondBody = 'confirm=' + token + '&email=wrong2@test.com&password=freshPass4567'
+		def second = EntryStoreClient.postRequest('/auth/pwreset/confirm', secondBody, null, formUrlEncoded)
+		def thirdBody = 'confirm=' + token + '&email=wrong3@test.com&password=freshPass4567'
+		def third = EntryStoreClient.postRequest('/auth/pwreset/confirm', thirdBody, null, formUrlEncoded)
+		def fourthBody = 'confirm=' + token + '&email=' + username + '&password=freshPass4567'
+		def fourth = EntryStoreClient.postRequest('/auth/pwreset/confirm', fourthBody, null, formUrlEncoded)
 
 		then:
 		first.getResponseCode() == HTTP_UNAUTHORIZED
@@ -362,11 +383,14 @@ class ZzzConfirmCredentialsIT extends BaseSpec {
 		def token = startPwreset(username)
 
 		when: "a too-short password is submitted"
-		def conn = confirmPwreset(token, username, 'short')
+		def body = 'confirm=' + token + '&email=' + username + '&password=short'
+		def conn = EntryStoreClient.postRequest('/auth/pwreset/confirm', body, null, formUrlEncoded)
 
 		then: "it is rejected and the token survives so a valid retry still works"
 		conn.getResponseCode() == HTTP_BAD_REQUEST
 		conn.errorStream.text.contains('at least 8 characters')
-		confirmPwreset(token, username, 'freshPass4567').getResponseCode() == HTTP_OK
+		def retryBody = 'confirm=' + token + '&email=' + username + '&password=freshPass4567'
+		def retryConn = EntryStoreClient.postRequest('/auth/pwreset/confirm', retryBody, null, formUrlEncoded)
+		retryConn.getResponseCode() == HTTP_OK
 	}
 }
