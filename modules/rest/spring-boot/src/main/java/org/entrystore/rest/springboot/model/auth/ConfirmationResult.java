@@ -32,6 +32,9 @@ public record ConfirmationResult(boolean success, String message, int remainingA
 		if (success == (message == null)) {
 			throw new IllegalArgumentException("message must be present exactly when success is true");
 		}
+		if (!success && remainingAttempts < 1) {
+			throw new IllegalArgumentException("remainingAttempts must be >= 1 for a retryable result");
+		}
 	}
 
 	public static ConfirmationResult success(String message) {
