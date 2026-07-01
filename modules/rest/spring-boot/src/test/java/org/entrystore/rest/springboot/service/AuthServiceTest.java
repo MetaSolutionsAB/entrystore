@@ -49,10 +49,11 @@ class AuthServiceTest {
 		// Only meterRegistry is touched by submitPasswordResetDispatch, so the other
 		// @RequiredArgsConstructor collaborators stay null — except the stateless EmailValidator,
 		// which is cheap to pass for real. The real executor created by init() is replaced below
-		// with a Mockito mock so we can program the rejection path.
+		// with a Mockito mock so we can program the rejection path. signupWhitelistProperties is
+		// null too: this test only drives the password-reset dispatch-rejection path.
 		meterRegistry = new SimpleMeterRegistry();
 		authService = new AuthService(null, null, null, null, null, null, new EmailValidator(),
-				null, null, null, null, meterRegistry);
+				null, null, null, null, meterRegistry, null);
 		// Register the Micrometer counter without standing up the real ThreadPoolExecutor — we'll
 		// inject a mocked ExecutorService explicitly per test.
 		ReflectionTestUtils.setField(authService, "passwordResetRejectedCounter",

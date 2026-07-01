@@ -41,6 +41,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.security.Password;
 import org.entrystore.repository.util.NS;
+import org.entrystore.rest.springboot.configuration.SignupWhitelistProperties;
 import org.entrystore.rest.springboot.model.api.PwResetRequestBody;
 import org.entrystore.rest.springboot.model.api.SignupRequestBody;
 import org.entrystore.rest.springboot.model.auth.ConfirmAttemptResult;
@@ -61,6 +62,7 @@ import org.entrystore.rest.springboot.service.auth.SignupTokenCache;
 import org.entrystore.rest.springboot.util.Email;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.PrincipalManagerUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.session.SessionInformation;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -72,6 +74,7 @@ import java.net.URL;
 import java.security.SecureRandom;
 import java.util.function.Consumer;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -132,6 +135,27 @@ public class AuthService {
 	private final SignupRateLimiter signupRateLimiter;
 	private final PasswordResetRateLimiter passwordResetRateLimiter;
 	private final MeterRegistry meterRegistry;
+	private final SignupWhitelistProperties signupWhitelistProperties;
+
+	@Value("${entrystore.auth.confirmation.legacy:true}")
+	private boolean confirmationLegacy;
+
+	// Bound as a String (not int) so a non-numeric value falls back to the default at read time in
+	// maxConfirmationAttempts() rather than failing application startup on bind — see that method.
+	@Value("${entrystore.auth.confirmation.max-attempts:3}")
+	private String confirmationMaxAttempts;
+
+	@Value("${entrystore.auth.recaptcha:off}")
+	private String recaptcha;
+
+	@Value("${entrystore.auth.recaptcha.private-key:#{null}}")
+	private String recaptchaPrivateKey;
+
+	@Value("${entrystore.auth.signup.create-home-context:off}")
+	private String signupCreateHomeContext;
+
+	@Value("${entrystore.trust.x-forwarded-for:false}")
+	private boolean trustForwardedFor;
 
 	private static final Object mutex = new Object();
 	private static Set<String> domainWhitelist = null;
@@ -161,7 +185,7 @@ public class AuthService {
 	public void init() {
 		synchronized (mutex) {
 			if (domainWhitelist == null) {
-				List<String> tmpDomainWhitelist = config.getStringList(Settings.SIGNUP_WHITELIST, new ArrayList<>());
+				Collection<String> tmpDomainWhitelist = signupWhitelistProperties.whitelist().values();
 				domainWhitelist = new HashSet<>();
 				// we normalize the list to lower case and to not contain null
 				for (String domain : tmpDomainWhitelist) {
@@ -381,8 +405,8 @@ public class AuthService {
 
 		passwordResetRateLimiter.acquirePermit(clientIp(request));
 
-		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
-				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
+		if ("on".equalsIgnoreCase(recaptcha)
+				&& recaptchaPrivateKey != null) {
 			if (StringUtils.isNotEmpty(requestBody.rcResponseV2())) {
 				log.info("Checking reCaptcha for {}", ci.getEmail());
 				rcResponseV2 = requestBody.rcResponseV2();
@@ -576,7 +600,7 @@ public class AuthService {
 				}
 				log.info("Created user {}", u.getURI());
 
-				if ("on".equalsIgnoreCase(repositoryManager.getConfiguration().getString(Settings.SIGNUP_CREATE_HOME_CONTEXT, "off"))) {
+				if ("on".equalsIgnoreCase(signupCreateHomeContext)) {
 					// Create context and set ACL and alias
 					Entry homeContext = contextManager.createResource(null, GraphType.Context, null, null);
 					homeContext.addAllowedPrincipalsFor(PrincipalManager.AccessProperty.Administer, u.getURI());
@@ -629,13 +653,13 @@ public class AuthService {
 	 * operator opts into the credential-confirmation flow (ENTRYSTORE-529).
 	 */
 	public boolean isLegacyConfirmationMode() {
-		return config.getBoolean(Settings.AUTH_CONFIRMATION_LEGACY, true);
+		return confirmationLegacy;
 	}
 
 	private int maxConfirmationAttempts() {
 		int configured;
 		try {
-			configured = config.getInt(Settings.AUTH_CONFIRMATION_MAX_ATTEMPTS, 3);
+			configured = Integer.parseInt(confirmationMaxAttempts.trim());
 		} catch (NumberFormatException e) {
 			log.warn("{} is not a valid integer; falling back to the default of 3.", Settings.AUTH_CONFIRMATION_MAX_ATTEMPTS);
 			return 3;
@@ -738,8 +762,8 @@ public class AuthService {
 
 		signupRateLimiter.acquirePermit(clientIp(request));
 
-		if ("on".equalsIgnoreCase(config.getString(Settings.AUTH_RECAPTCHA, "off"))
-				&& config.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY) != null) {
+		if ("on".equalsIgnoreCase(recaptcha)
+				&& recaptchaPrivateKey != null) {
 			if (StringUtils.isNotEmpty(requestBody.rcResponseV2())) {
 				log.info("Checking reCaptcha for {}", ci.getEmail());
 				rcResponseV2 = requestBody.rcResponseV2();
@@ -846,7 +870,6 @@ public class AuthService {
 	}
 
 	private String clientIp(HttpServletRequest request) {
-		boolean trustForwardedFor = config.getBoolean(Settings.TRUST_X_FORWARDED_FOR, false);
 		return HttpUtil.getClientIpAddress(request, trustForwardedFor);
 	}
 }
