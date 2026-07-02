@@ -807,7 +807,7 @@ public class EntryService {
 				entry.getLocalMetadata().setGraph(graph);
 			}
 		} catch (JSONException e) {
-			log.warn(e.getMessage(), e);
+			log.info("Failed to parse local metadata for entry {}: {}", entry.getEntryURI(), e.getMessage());
 		}
 	}
 
@@ -831,7 +831,7 @@ public class EntryService {
 					entry.getCachedExternalMetadata().setGraph(graph);
 				}
 			} catch (JSONException e) {
-				log.warn(e.getMessage(), e);
+				log.info("Failed to parse cached external metadata for entry {}: {}", entry.getEntryURI(), e.getMessage());
 			}
 		}
 	}
@@ -858,7 +858,7 @@ public class EntryService {
 				entry.setGraph(graph);
 			}
 		} catch (JSONException e) {
-			log.warn(e.getMessage(), e);
+			log.info("Failed to parse entry info for entry {}: {}", entry.getEntryURI(), e.getMessage());
 		}
 	}
 

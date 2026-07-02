@@ -525,6 +525,35 @@ class EntryIT extends BaseSpec {
 		(entryExternalMetaRespJson as Map).keySet().size() == 0
 	}
 
+	def "POST /{context-id}?entrytype=reference with malformed JSON in cached-external-metadata field should create the entry with empty cached metadata"() {
+		given:
+		// A syntactically unparseable 'cached-external-metadata' value makes
+		// EntryService.setCachedMetadataGraph's `new org.json.JSONObject(...)` throw
+		// org.json.JSONException, which is caught-and-logged — the reference entry is still created,
+		// with an empty cached external metadata graph. Guards against a future revert of the catch
+		// to jakarta.json.JsonException (never thrown there), which would turn this request into a
+		// 500 (ENTRYSTORE-1068).
+		def metadataUrl = 'https://bbc.co.uk/metadata'
+		def params = [entrytype: 'reference', resource: resourceUrl, 'cached-external-metadata': metadataUrl]
+		def body = JsonOutput.toJson(['cached-external-metadata': '{not-json'])
+
+		when:
+		def connection = EntryStoreClient.postRequest('/' + contextId + convertMapToQueryParams(params), body)
+
+		then: 'the entry is created (201), not rejected with a 500'
+		connection.getResponseCode() == HTTP_CREATED
+		connection.getContentType().contains('application/json')
+		def entryId = JSON_PARSER.parseText(connection.inputStream.text)['entryId'].toString()
+		entryId.length() > 0
+
+		and: 'the malformed cached metadata was silently dropped — the cached external metadata graph is empty'
+		def entryConn = EntryStoreClient.getRequest('/' + contextId + '/entry/' + entryId + '?includeAll')
+		entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
+		entryRespJson['cached-external-metadata'] != null
+		entryRespJson['cached-external-metadata'] as Map == [:]
+	}
+
 	def "POST /{context-id}?entrytype=reference with metadata, should create a new reference entry *without* local metadata"() {
 		given:
 		def metadataUrl = 'https://bbc.co.uk/metadata'

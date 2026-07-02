@@ -32,7 +32,9 @@
 		The flagged jackson-databind 2.x is transitive-only (solr-solrj, rdf4j-rio-api); EntryStore never
 		deserializes untrusted input through it. Integrity-only, CVSS 5.3.
 	-->
-	<!-- Added 2026-07-01. Remove and bump Jackson 2.x to 2.21.5 once it is released (ENTRYSTORE-1068). -->
+	<!-- Added 2026-07-01. Once 2.21.5 is released: remove this suppression and override the Spring Boot
+	     parent property jackson-2-bom.version (manages com.fasterxml.jackson:jackson-bom) to 2.21.5
+	     in the root pom (ENTRYSTORE-1068). -->
 	<suppress>
 		<notes><![CDATA[
 			CVE-2026-54515 / GHSA-5jmj-h7xm-6q6v in transitive jackson-databind 2.x (via solr-solrj,
@@ -67,7 +69,8 @@
 		build tooling). EntryStore is a Java project; kotlin-stdlib is only a runtime transitive (RDF4J
 		LMDB / native sails) and never exercises the build-cache code path. Not reachable at runtime.
 	-->
-	<!-- Added 2026-07-01. Optional: bump kotlin.version to >= 2.4.20 to clear the scanner match. -->
+	<!-- Added 2026-07-01. Optional: override the Spring Boot parent property kotlin.version
+	     (Boot 4.1 BOM manages 2.3.21) to >= 2.4.20 in the root pom to clear the scanner match. -->
 	<suppress>
 		<notes><![CDATA[
 			CVE-2026-53914 is unsafe deserialization in the Kotlin build-cache metadata (build-time
