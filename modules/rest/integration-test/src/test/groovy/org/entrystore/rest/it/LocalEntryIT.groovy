@@ -291,6 +291,34 @@ class LocalEntryIT extends BaseSpec {
 		entryRespJson['metadata'] as Map == [:]
 	}
 
+	def "POST /_principals?graphtype=user with malformed JSON in info field should create the entry with the default entry info"() {
+		given:
+		// Same swallow contract as the malformed-'metadata' case above, but through setEntryGraph:
+		// a syntactically unparseable 'info' value throws org.json.JSONException, which is
+		// caught-and-logged, so the entry keeps its system-generated info graph. Guards against a
+		// future revert of the catch to jakarta.json.JsonException (never thrown there), which would
+		// turn this request into a 500 (ENTRYSTORE-1068).
+		def params = [graphtype: 'user']
+		def body = JsonOutput.toJson([resource: [name: 'malformedInfoUser'], info: '{not-json'])
+
+		when:
+		def connection = EntryStoreClient.postRequest('/_principals' + convertMapToQueryParams(params), body)
+
+		then: 'the entry is created (201), not rejected with a 500'
+		connection.getResponseCode() == HTTP_CREATED
+		connection.getContentType().contains('application/json')
+		def entryId = JSON_PARSER.parseText(connection.inputStream.text)['entryId'].toString()
+		entryId.length() > 0
+
+		and: 'the malformed info was silently dropped — the system-generated entry info is intact'
+		def entryConn = EntryStoreClient.getRequest('/_principals/entry/' + entryId)
+		entryConn.getResponseCode() == HTTP_OK
+		def entryRespJson = JSON_PARSER.parseText(entryConn.inputStream.text)
+		def entryUri = EntryStoreClient.baseUrl + '/_principals/entry/' + entryId
+		entryRespJson['info'][entryUri] != null
+		entryRespJson['info'][entryUri][NameSpaceConst.TERM_RESOURCE] != null
+	}
+
 	def "POST /_principals?graphtype=user should create a local entry of type User"() {
 		given:
 		def requestResourceName = [name: 'Test User name']
