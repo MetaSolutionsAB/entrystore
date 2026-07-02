@@ -58,8 +58,11 @@ public class SignupTokenCache extends TokenCache<String, SignupInfo> {
 	 * parallel attempts cannot race past the limit (the lock-out invariant this feature relies on). The
 	 * {@code credentialsValid} predicate runs inside the lock — for sign-up it is a PBKDF2 password check,
 	 * for password reset a plain email comparison. Holding the lock across it serializes confirmations;
-	 * that work is bounded because the predicate runs only for a found, non-expired token and the confirm
-	 * endpoints are themselves per-IP rate-limited and capped at {@code maxAttempts}.
+	 * that work is bounded because the predicate runs only for a found, non-expired token and is capped at
+	 * {@code maxAttempts} strikes per token. This method does not itself throttle by IP: callers must
+	 * rate-limit the confirm endpoint so a single token cannot be hammered with attempts — the
+	 * {@code AuthService.confirmSignup} / {@code confirmPassword} callers acquire a per-IP permit before
+	 * invoking it.
 	 *
 	 * <ul>
 	 *   <li>match → the token is removed and {@link ConfirmAttemptResult.Status#VALID} is returned with the record</li>
