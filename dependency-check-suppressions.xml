@@ -4,20 +4,81 @@
 	<!--
 		velocity-engine-core shades (embeds) an older commons-io inside its JAR.
 		CVE-2024-47554 is a DoS vulnerability in commons-io's XmlStreamReader, which
-		Velocity does not use. We cannot override the shaded dependency without
-		upgrading Velocity itself, which is a transitive dependency of OpenSAML
-		(via spring-security-saml2-service-provider). Upgrading OpenSAML to v5
-		requires Spring Security 7 / Spring Boot 4.
+		Velocity does not use. Velocity is pulled transitively by the SAML stack
+		(spring-security-saml2-service-provider -> net.shibboleth:shib-velocity:9.2.2 ->
+		velocity-engine-core), not by solr-solrj; EntryStore does not use Velocity at all.
+		The shaded commons-io cannot be overridden without upgrading Velocity itself, which
+		is controlled by the OpenSAML/Shibboleth dependency.
 	-->
-	<!-- Added 2026-04-01. Review when upgrading to Spring Boot 4 / OpenSAML 5.x. -->
+	<!-- Added 2026-04-01. Re-evaluate when the OpenSAML/Shibboleth SAML stack drops or upgrades velocity-engine-core. -->
 	<suppress>
 		<notes><![CDATA[
 			CVE-2024-47554: DoS in commons-io XmlStreamReader, shaded inside velocity-engine-core
-			(transitive from OpenSAML). Velocity does not exercise the vulnerable code path.
-			Cannot fix without upgrading to OpenSAML 5.x (requires Spring Boot 4).
+			(transitive from the SAML stack: spring-security-saml2-service-provider -> shib-velocity ->
+			velocity-engine-core, not solr-solrj). Velocity does not exercise the vulnerable code path
+			and EntryStore does not use Velocity. The shaded commons-io cannot be overridden without
+			upgrading Velocity, which is controlled by the OpenSAML/Shibboleth dependency.
 		]]></notes>
 		<filePath regex="true">.*velocity-engine-core.*</filePath>
 		<cve>CVE-2024-47554</cve>
+	</suppress>
+
+	<!--
+		CVE-2026-54515 / GHSA-5jmj-h7xm-6q6v: case-insensitive deserialization
+		(@JsonFormat ACCEPT_CASE_INSENSITIVE_PROPERTIES) bypasses per-property @JsonIgnoreProperties
+		in jackson-databind. No fixed Jackson 2.x release exists yet: 2.21.x ends at 2.21.4 and 2.18.x
+		at 2.18.8, the announced 2.21.5 / 2.18.9 are unpublished, and 2.22.0 (latest) is also affected.
+		Only Jackson 3.x is patched (3.1.4), which EntryStore already uses for its own (de)serialization.
+		The flagged jackson-databind 2.x is transitive-only (solr-solrj, rdf4j-rio-api); EntryStore never
+		deserializes untrusted input through it. Integrity-only, CVSS 5.3.
+	-->
+	<!-- Added 2026-07-01. Once 2.21.5 is released: remove this suppression and override the Spring Boot
+	     parent property jackson-2-bom.version (manages com.fasterxml.jackson:jackson-bom) to 2.21.5
+	     in the root pom (ENTRYSTORE-1068). -->
+	<suppress>
+		<notes><![CDATA[
+			CVE-2026-54515 / GHSA-5jmj-h7xm-6q6v in transitive jackson-databind 2.x (via solr-solrj,
+			rdf4j-rio-api). No patched 2.x release exists yet; EntryStore's own code is on Jackson 3
+			(3.1.4, fixed) and never deserializes untrusted input via Jackson 2. Bump to 2.21.5 when released.
+		]]></notes>
+		<packageUrl regex="true">^pkg:maven/com\.fasterxml\.jackson\.core/jackson-databind@.*$</packageUrl>
+		<cve>CVE-2026-54515</cve>
+		<vulnerabilityName>GHSA-5jmj-h7xm-6q6v</vulnerabilityName>
+	</suppress>
+
+	<!--
+		CVE-2026-44825: hardcoded default credentials installed by the Apache Solr SERVER's
+		"bin/solr auth enable" setup tool. EntryStore embeds the SolrJ CLIENT (solr-solrj /
+		solr-solrj-jetty) to reach an externally-run Solr; the client jar does not contain bin/solr and
+		EntryStore never runs that tool. dependency-check matched purely on the apache:solr version CPE.
+		False positive.
+	-->
+	<!-- Added 2026-07-01. -->
+	<suppress>
+		<notes><![CDATA[
+			CVE-2026-44825 is in the Solr server "bin/solr auth enable" setup tool, not the SolrJ client
+			library. EntryStore embeds solr-solrj to reach an external Solr and never runs that tool.
+			CPE version-only match; false positive.
+		]]></notes>
+		<packageUrl regex="true">^pkg:maven/org\.apache\.solr/solr-solrj(-jetty)?@.*$</packageUrl>
+		<cve>CVE-2026-44825</cve>
+	</suppress>
+
+	<!--
+		CVE-2026-53914: unsafe deserialization in Kotlin's build-cache metadata (compile-time / Kotlin
+		build tooling). EntryStore is a Java project; kotlin-stdlib is only a runtime transitive (RDF4J
+		LMDB / native sails) and never exercises the build-cache code path. Not reachable at runtime.
+	-->
+	<!-- Added 2026-07-01. Optional: override the Spring Boot parent property kotlin.version
+	     (Boot 4.1 BOM manages 2.3.21) to >= 2.4.20 in the root pom to clear the scanner match. -->
+	<suppress>
+		<notes><![CDATA[
+			CVE-2026-53914 is unsafe deserialization in the Kotlin build-cache metadata (build-time
+			tooling). EntryStore is a Java project; kotlin-stdlib is a runtime transitive via RDF4J and
+			does not exercise the build-cache path. Not reachable.
+		]]></notes>
+		<packageUrl regex="true">^pkg:maven/org\.jetbrains\.kotlin/kotlin-stdlib@.*$</packageUrl>
+		<cve>CVE-2026-53914</cve>
 	</suppress>
 
 </suppressions>
