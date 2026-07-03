@@ -452,11 +452,19 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				//listenerExecutor.shutdown();
 				repositoryListeners.clear();
 				if (softCache != null) {
-					softCache.shutdown();
+					try {
+						softCache.shutdown();
+					} catch (RuntimeException e) {
+						log.error("Error when shutting down SoftCache: {}", e.getMessage(), e);
+					}
 				}
 				if (solrIndex != null) {
 					log.info("Shutting down Solr support");
-					solrIndex.shutdown();
+					try {
+						solrIndex.shutdown();
+					} catch (RuntimeException e) {
+						log.error("Error when shutting down Solr support: {}", e.getMessage(), e);
+					}
 				}
 				if (repository != null) {
 					log.info("Shutting down RDF4J repository");
@@ -468,7 +476,11 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				}
 				if (publicRepository != null) {
 					log.info("Shutting down public repository");
-					publicRepository.shutdown();
+					try {
+						publicRepository.shutdown();
+					} catch (RuntimeException e) {
+						log.error("Error when shutting down public repository: {}", e.getMessage(), e);
+					}
 				}
 				if (provenanceRepository != null) {
 					log.info("Shutting down RDF4J provenance repository");
