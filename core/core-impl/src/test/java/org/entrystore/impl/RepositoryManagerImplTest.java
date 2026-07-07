@@ -16,6 +16,7 @@
 
 package org.entrystore.impl;
 
+import org.apache.solr.client.solrj.SolrClient;
 import org.entrystore.config.Config;
 import org.entrystore.repository.config.PropertiesConfiguration;
 import org.entrystore.repository.config.Settings;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -52,24 +54,55 @@ public class RepositoryManagerImplTest {
 	}
 
 	@Test
-	public void shutdownContinuesAfterAStepThrows() throws Exception {
-		Config config = new PropertiesConfiguration("EntryStore Configuration");
-		config.setProperty(Settings.STORE_TYPE, "memory");
-		config.setProperty(Settings.BASE_URL, "http://localhost:8181/");
-		config.setProperty(Settings.SOLR, "off");
-		RepositoryManagerImpl rm = new RepositoryManagerImpl("http://localhost:8181/", config);
-
-		// Make the Solr index shutdown throw so a later step (setting the shutdown flag)
-		// proves cleanup continued past the failure.
+	public void shutdownContinuesWhenSolrIndexShutdownThrows() throws Exception {
 		SolrSearchIndex throwingSolrIndex = mock(SolrSearchIndex.class);
-		doThrow(new RuntimeException("simulated Solr shutdown failure")).when(throwingSolrIndex).shutdown();
-		setField(rm, "solrIndex", throwingSolrIndex);
+		doThrow(new RuntimeException("simulated Solr index shutdown failure")).when(throwingSolrIndex).shutdown();
 
-		assertDoesNotThrow(rm::shutdown, "shutdown() must swallow a subsystem failure and continue");
+		assertShutdownCompletesAfterInjecting("solrIndex", throwingSolrIndex);
 
 		verify(throwingSolrIndex).shutdown();
-		assertTrue(getBooleanField(rm, "shutdown"),
-				"shutdown flag must be set, proving the steps after the failing one still ran");
+	}
+
+	@Test
+	public void shutdownContinuesWhenPublicRepositoryShutdownThrows() throws Exception {
+		PublicRepository throwingPublicRepository = mock(PublicRepository.class);
+		doThrow(new RuntimeException("simulated public repository shutdown failure")).when(throwingPublicRepository).shutdown();
+
+		assertShutdownCompletesAfterInjecting("publicRepository", throwingPublicRepository);
+
+		verify(throwingPublicRepository).shutdown();
+	}
+
+	@Test
+	public void shutdownContinuesWhenSolrServerCloseThrows() throws Exception {
+		SolrClient throwingSolrServer = mock(SolrClient.class);
+		doThrow(new RuntimeException("simulated Solr server close failure")).when(throwingSolrServer).close();
+
+		assertShutdownCompletesAfterInjecting("solrServer", throwingSolrServer);
+
+		verify(throwingSolrServer).close();
+	}
+
+	// Builds a minimal RepositoryManagerImpl, injects a collaborator whose shutdown throws into the named
+	// field, then asserts shutdown() swallows the failure and still reaches its final step. Deregisters the
+	// instance from the static instances map afterwards so it cannot be served stale to a later same-URL test.
+	private void assertShutdownCompletesAfterInjecting(String fieldName, Object throwingCollaborator) throws Exception {
+		String baseUrl = "http://localhost:8181/";
+		Config config = new PropertiesConfiguration("EntryStore Configuration");
+		config.setProperty(Settings.STORE_TYPE, "memory");
+		config.setProperty(Settings.BASE_URL, baseUrl);
+		config.setProperty(Settings.SOLR, "off");
+		RepositoryManagerImpl rm = new RepositoryManagerImpl(baseUrl, config);
+		try {
+			setField(rm, fieldName, throwingCollaborator);
+
+			assertDoesNotThrow(rm::shutdown, "shutdown() must swallow a subsystem failure and continue");
+
+			assertTrue(getBooleanField(rm, "shutdown"),
+					"shutdown flag must be set, proving the steps after the failing one still ran");
+		} finally {
+			deregisterInstance(baseUrl);
+		}
 	}
 
 	private static void setField(Object target, String name, Object value) throws Exception {
@@ -82,6 +115,13 @@ public class RepositoryManagerImplTest {
 		Field field = RepositoryManagerImpl.class.getDeclaredField(name);
 		field.setAccessible(true);
 		return field.getBoolean(target);
+	}
+
+	@SuppressWarnings("unchecked")
+	private static void deregisterInstance(String baseUrl) throws Exception {
+		Field field = RepositoryManagerImpl.class.getDeclaredField("instances");
+		field.setAccessible(true);
+		((Map<String, ?>) field.get(null)).remove(baseUrl);
 	}
 
 	@Disabled("To be implemented")

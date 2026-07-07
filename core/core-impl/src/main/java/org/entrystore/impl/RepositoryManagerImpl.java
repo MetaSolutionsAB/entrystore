@@ -452,53 +452,38 @@ public class RepositoryManagerImpl implements RepositoryManager {
 				//listenerExecutor.shutdown();
 				repositoryListeners.clear();
 				if (softCache != null) {
-					try {
-						softCache.shutdown();
-					} catch (RuntimeException e) {
-						log.error("Error when shutting down SoftCache: {}", e.getMessage(), e);
-					}
+					shutdownQuietly("SoftCache", softCache::shutdown);
 				}
 				if (solrIndex != null) {
-					log.info("Shutting down Solr support");
-					try {
-						solrIndex.shutdown();
-					} catch (RuntimeException e) {
-						log.error("Error when shutting down Solr support: {}", e.getMessage(), e);
-					}
+					shutdownQuietly("Solr support", solrIndex::shutdown);
 				}
 				if (repository != null) {
-					log.info("Shutting down RDF4J repository");
-					try {
-						repository.shutDown();
-					} catch (RepositoryException re) {
-						log.error("Error when shutting down RDF4J repository: {}", re.getMessage(), re);
-					}
+					shutdownQuietly("RDF4J repository", repository::shutDown);
 				}
 				if (publicRepository != null) {
-					log.info("Shutting down public repository");
-					try {
-						publicRepository.shutdown();
-					} catch (RuntimeException e) {
-						log.error("Error when shutting down public repository: {}", e.getMessage(), e);
-					}
+					shutdownQuietly("public repository", publicRepository::shutdown);
 				}
 				if (provenanceRepository != null) {
-					log.info("Shutting down RDF4J provenance repository");
-					try {
-						provenanceRepository.shutDown();
-					} catch (RepositoryException re) {
-						log.error("Error when shutting down RDF4J provenance repository: {}", re.getMessage());
-					}
+					shutdownQuietly("RDF4J provenance repository", provenanceRepository::shutDown);
 				}
 				if (solrServer != null) {
 					try {
 						solrServer.close();
-					} catch (IOException e) {
-						log.error("Error when shutting down Solr Server");
+					} catch (IOException | RuntimeException e) {
+						log.error("Error when shutting down Solr Server: {}", e.getMessage(), e);
 					}
 				}
 				shutdown = true;
 			}
+		}
+	}
+
+	private void shutdownQuietly(String name, Runnable shutdownAction) {
+		log.info("Shutting down {}", name);
+		try {
+			shutdownAction.run();
+		} catch (RuntimeException e) {
+			log.error("Error when shutting down {}: {}", name, e.getMessage(), e);
 		}
 	}
 
