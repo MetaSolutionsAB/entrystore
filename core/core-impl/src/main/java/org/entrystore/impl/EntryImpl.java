@@ -292,88 +292,78 @@ public class EntryImpl implements Entry {
 		String filename = null;
 		boolean invRelations = false;
 
-		RepositoryConnection rc = null;
-
-		try {
-			String base = repositoryManager.getRepositoryURL().toString();
-			rc = this.repository.getConnection();
-			//referredIn = new HashSet<>();
-			for (Statement statement : existingStatements) {
-				IRI predicate = statement.getPredicate();
-				if (predicate.equals(RepositoryProperties.resource)) {
-					entryURI = (IRI) statement.getSubject();
-					resURI = (IRI) statement.getObject();
-				} else if (predicate.equals(RepositoryProperties.metadata)) {
-					localMdURI = ((IRI) statement.getObject());
-				} else if (predicate.equals(RepositoryProperties.externalMetadata)) {
-					externalMdURI = ((IRI) statement.getObject());
-				} else if (predicate.equals(RepositoryProperties.cachedExternalMetadata)) {
-					cachedExternalMdURI = ((IRI) statement.getObject());
-				} else if (predicate.equals(RepositoryProperties.relation)) {
-					relationURI = ((IRI) statement.getObject());
-				} else if (predicate.equals(RepositoryProperties.cached)) {
-					// TODO: also wrong
-					cachedAt = ((Literal) statement.getObject()).calendarValue();
-//				} else if (predicate.equals(RepositoryProperties.referredIn)) {
-//					referredIn.add(URI.create(statement.getObject().stringValue()));
-				} else if (predicate.equals(RepositoryProperties.Created)) {
-					created = ((Literal) statement.getObject()).calendarValue();
-				} else if (predicate.equals(RepositoryProperties.Creator)) {
-					creator = ((IRI) statement.getObject());
-				} else if (predicate.equals(RepositoryProperties.Contributor)) {
-					contributors.add((IRI) statement.getObject());
-				} else if (predicate.equals(RepositoryProperties.Modified)) {
-					try {
-						//log.info(statement.getObject().stringValue());
-						modified = ((Literal) statement.getObject()).calendarValue();
-					} catch (NullPointerException e) {
-						log.error(e.getMessage());
-					}
-				} else {
-					//Check if statement refer other entries that affect their inv-rel cache.
-					if (!predicate.equals(RepositoryProperties.Read)
-							&& !predicate.equals(RepositoryProperties.Write)
-							&& !predicate.equals(RepositoryProperties.Pipeline)
-							&& !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
-						Value obj = statement.getObject();
-						org.eclipse.rdf4j.model.Resource subj = statement.getSubject();
-						//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
-						if (obj instanceof IRI
-								&& obj.stringValue().startsWith(base)
-								&& subj.stringValue().startsWith(base)) {
-							invRelations = true;
-						}
+		String base = repositoryManager.getRepositoryURL().toString();
+		//referredIn = new HashSet<>();
+		for (Statement statement : existingStatements) {
+			IRI predicate = statement.getPredicate();
+			if (predicate.equals(RepositoryProperties.resource)) {
+				entryURI = (IRI) statement.getSubject();
+				resURI = (IRI) statement.getObject();
+			} else if (predicate.equals(RepositoryProperties.metadata)) {
+				localMdURI = ((IRI) statement.getObject());
+			} else if (predicate.equals(RepositoryProperties.externalMetadata)) {
+				externalMdURI = ((IRI) statement.getObject());
+			} else if (predicate.equals(RepositoryProperties.cachedExternalMetadata)) {
+				cachedExternalMdURI = ((IRI) statement.getObject());
+			} else if (predicate.equals(RepositoryProperties.relation)) {
+				relationURI = ((IRI) statement.getObject());
+			} else if (predicate.equals(RepositoryProperties.cached)) {
+				// TODO: also wrong
+				cachedAt = ((Literal) statement.getObject()).calendarValue();
+//			} else if (predicate.equals(RepositoryProperties.referredIn)) {
+//				referredIn.add(URI.create(statement.getObject().stringValue()));
+			} else if (predicate.equals(RepositoryProperties.Created)) {
+				created = ((Literal) statement.getObject()).calendarValue();
+			} else if (predicate.equals(RepositoryProperties.Creator)) {
+				creator = ((IRI) statement.getObject());
+			} else if (predicate.equals(RepositoryProperties.Contributor)) {
+				contributors.add((IRI) statement.getObject());
+			} else if (predicate.equals(RepositoryProperties.Modified)) {
+				try {
+					//log.info(statement.getObject().stringValue());
+					modified = ((Literal) statement.getObject()).calendarValue();
+				} catch (NullPointerException e) {
+					log.error(e.getMessage());
+				}
+			} else {
+				//Check if statement refer other entries that affect their inv-rel cache.
+				if (!predicate.equals(RepositoryProperties.Read)
+						&& !predicate.equals(RepositoryProperties.Write)
+						&& !predicate.equals(RepositoryProperties.Pipeline)
+						&& !predicate.equals(RepositoryProperties.originallyCreatedIn)) {
+					Value obj = statement.getObject();
+					org.eclipse.rdf4j.model.Resource subj = statement.getSubject();
+					//Check for relations between this resource and another entry (resourceURI (has to be a repository resource), metadataURI, or entryURI)
+					if (obj instanceof IRI
+							&& obj.stringValue().startsWith(base)
+							&& subj.stringValue().startsWith(base)) {
+						invRelations = true;
 					}
 				}
 			}
+		}
 
-			//Detect types.
-			for (Statement statement : existingStatements) {
-				org.eclipse.rdf4j.model.Resource subject = statement.getSubject();
-				if (statement.getPredicate().equals(RDF.TYPE)) {
-					if (resURI.equals(subject)) {
-						GraphType gt = getGraphType(statement.getObject());
-						if (gt != null) {
-							graphType = gt;
-						} else {
-							ResourceType rt = getResourceType(statement.getObject());
-							if (rt != null) {
-								repType = rt;
-							}
+		//Detect types.
+		for (Statement statement : existingStatements) {
+			org.eclipse.rdf4j.model.Resource subject = statement.getSubject();
+			if (statement.getPredicate().equals(RDF.TYPE)) {
+				if (resURI.equals(subject)) {
+					GraphType gt = getGraphType(statement.getObject());
+					if (gt != null) {
+						graphType = gt;
+					} else {
+						ResourceType rt = getResourceType(statement.getObject());
+						if (rt != null) {
+							repType = rt;
 						}
-					} else if (entryURI.equals(subject)) {
-						EntryType lt = getEntryType(statement.getObject());
-						if (lt != null) {
-							locType = lt;
-						}
+					}
+				} else if (entryURI.equals(subject)) {
+					EntryType lt = getEntryType(statement.getObject());
+					if (lt != null) {
+						locType = lt;
 					}
 				}
 			}
-		} catch (RepositoryException e) {
-			log.error(e.getMessage());
-			throw e;
-		} finally {
-			rc.close();
 		}
 
 		// We set all values at once to avoid any delays and possible
