@@ -24,6 +24,7 @@ import org.entrystore.repository.util.SolrSearchIndex;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.Map;
 
@@ -74,9 +75,19 @@ public class RepositoryManagerImplTest {
 	}
 
 	@Test
-	public void shutdownContinuesWhenSolrServerCloseThrows() throws Exception {
+	public void shutdownContinuesWhenSolrServerCloseThrowsRuntimeException() throws Exception {
 		SolrClient throwingSolrServer = mock(SolrClient.class);
 		doThrow(new RuntimeException("simulated Solr server close failure")).when(throwingSolrServer).close();
+
+		assertShutdownCompletesAfterInjecting("solrServer", throwingSolrServer);
+
+		verify(throwingSolrServer).close();
+	}
+
+	@Test
+	public void shutdownContinuesWhenSolrServerCloseThrowsCheckedException() throws Exception {
+		SolrClient throwingSolrServer = mock(SolrClient.class);
+		doThrow(new IOException("simulated Solr server close failure")).when(throwingSolrServer).close();
 
 		assertShutdownCompletesAfterInjecting("solrServer", throwingSolrServer);
 
