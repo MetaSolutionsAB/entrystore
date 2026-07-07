@@ -59,7 +59,6 @@ import org.entrystore.repository.util.DataCorrection;
 import org.entrystore.repository.util.NS;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.repository.util.StringUtils;
-import org.quartz.SchedulerException;
 import org.quartz.impl.StdSchedulerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -442,51 +441,44 @@ public class RepositoryManagerImpl implements RepositoryManager {
 	public void shutdown() {
 		synchronized (mutex) {
 			if (!shutdown) {
-				try {
-					log.info("Shutting down Quartz scheduler");
-					StdSchedulerFactory.getDefaultScheduler().shutdown();
-				} catch (SchedulerException se) {
-					log.error("Cannot shutdown Quartz scheduler: {}", se.getMessage());
-				}
+				shutdownQuietly("Quartz scheduler", () -> StdSchedulerFactory.getDefaultScheduler().shutdown());
 				log.info("Shutting down repository listeners and executor");
 				//listenerExecutor.shutdown();
 				repositoryListeners.clear();
 				if (softCache != null) {
-					softCache.shutdown();
+					shutdownQuietly("SoftCache", softCache::shutdown);
 				}
 				if (solrIndex != null) {
-					log.info("Shutting down Solr support");
-					solrIndex.shutdown();
+					shutdownQuietly("Solr support", solrIndex::shutdown);
 				}
 				if (repository != null) {
-					log.info("Shutting down RDF4J repository");
-					try {
-						repository.shutDown();
-					} catch (RepositoryException re) {
-						log.error("Error when shutting down RDF4J repository: {}", re.getMessage(), re);
-					}
+					shutdownQuietly("RDF4J repository", repository::shutDown);
 				}
 				if (publicRepository != null) {
-					log.info("Shutting down public repository");
-					publicRepository.shutdown();
+					shutdownQuietly("public repository", publicRepository::shutdown);
 				}
 				if (provenanceRepository != null) {
-					log.info("Shutting down RDF4J provenance repository");
-					try {
-						provenanceRepository.shutDown();
-					} catch (RepositoryException re) {
-						log.error("Error when shutting down RDF4J provenance repository: {}", re.getMessage());
-					}
+					shutdownQuietly("RDF4J provenance repository", provenanceRepository::shutDown);
 				}
 				if (solrServer != null) {
-					try {
-						solrServer.close();
-					} catch (IOException e) {
-						log.error("Error when shutting down Solr Server");
-					}
+					shutdownQuietly("Solr Server", solrServer::close);
 				}
 				shutdown = true;
 			}
+		}
+	}
+
+	@FunctionalInterface
+	private interface ShutdownAction {
+		void run() throws Exception;
+	}
+
+	private void shutdownQuietly(String name, ShutdownAction shutdownAction) {
+		log.info("Shutting down {}", name);
+		try {
+			shutdownAction.run();
+		} catch (Exception e) {
+			log.error("Error when shutting down {}: {}", name, e.getMessage(), e);
 		}
 	}
 
