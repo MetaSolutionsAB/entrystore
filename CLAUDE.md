@@ -96,6 +96,8 @@ springboot/
 **Prefer Lombok annotations over hand-written boilerplate.**
 Reach for the annotation first; only write the expansion manually when Lombok can't express the intent.
 
+**Comments explain why, not what.** Put the explanation in the class or method Javadoc — contract, caller obligations, non-obvious constraints. Inline line comments only where the code itself is controversial (a deliberate fail-open, a lock/transaction subtlety, a workaround), and then 1 line, 2 at most. Decision history, alternatives rejected, and issue background belong in the commit message or the JIRA issue, not in the source.
+
 Formatting is IntelliJ-based, defined in `.editorconfig` (with `ij_*` properties) and `.idea/codeStyles/`. No Eclipse formatter is used.
 
 From `.editorconfig`:

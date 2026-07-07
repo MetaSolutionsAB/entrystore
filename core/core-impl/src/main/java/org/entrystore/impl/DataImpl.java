@@ -18,7 +18,7 @@ package org.entrystore.impl;
 
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.eclipse.rdf4j.repository.RepositoryConnection;
 import org.entrystore.Data;
 import org.entrystore.Entry;
@@ -34,13 +34,15 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-import static org.apache.commons.codec.Charsets.UTF_8;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.apache.commons.codec.digest.MessageDigestAlgorithms.SHA_256;
 import static org.eclipse.rdf4j.model.util.Values.iri;
 
@@ -67,8 +69,8 @@ public class DataImpl extends ResourceImpl implements Data {
 			String dataDirStr = entry.getRepositoryManager().getConfiguration().getString(Settings.DATA_FOLDER);
 			if (dataDirStr != null) {
 				// Workaround to handle allowed "file:" prefixes.
-				dataDirStr = StringUtils.removeStart(dataDirStr, "file://");
-				dataDirStr = StringUtils.removeStart(dataDirStr, "file:");
+				dataDirStr = Strings.CS.removeStart(dataDirStr, "file://");
+				dataDirStr = Strings.CS.removeStart(dataDirStr, "file:");
 				File dataDir = new File(dataDirStr);
 				if (!dataDir.exists()) {
 					if (!dataDir.mkdirs()) {
@@ -174,7 +176,23 @@ public class DataImpl extends ResourceImpl implements Data {
 		return deleteFile();
 	}
 
-	private boolean deleteFile() {
+	/**
+	 * Tells whether the resource has a file on disk, without any access control check.
+	 */
+	protected boolean hasFile() {
+		try {
+			File f = getFile();
+			return f != null && f.exists();
+		} catch (IOException e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Deletes the resource's file from disk WITHOUT any access control check (cf. ENTRYSTORE-1006). Callers
+	 * must have verified the caller's rights themselves; user-facing deletion goes through {@link #delete()}.
+	 */
+	protected boolean deleteFile() {
 		boolean success = false;
 		try {
 			File f = getFile();
@@ -191,9 +209,27 @@ public class DataImpl extends ResourceImpl implements Data {
 				entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceDeleted));
 			}
 		} catch (IOException ioe) {
-			log.error(ioe.getMessage());
+			log.error("Failed to delete data file of entry {}", entry.getEntryURI(), ioe);
 		}
 		return success;
+	}
+
+	/**
+	 * Truncates the resource's file in place WITHOUT any access control check, as a fallback when
+	 * {@link #deleteFile()} fails (truncation works even while another process holds the file open), so
+	 * stale content cannot be served if the file path is later reused by another entry.
+	 */
+	protected void truncateFile() {
+		try {
+			File f = getFile();
+			if (f != null && f.exists()) {
+				try (OutputStream os = Files.newOutputStream(f.toPath(), StandardOpenOption.TRUNCATE_EXISTING)) {
+					// opening with TRUNCATE_EXISTING empties the file
+				}
+			}
+		} catch (IOException ioe) {
+			log.error("Failed to truncate data file of entry {}", entry.getEntryURI(), ioe);
+		}
 	}
 
 	public File getDataFile() {
@@ -210,8 +246,14 @@ public class DataImpl extends ResourceImpl implements Data {
 	}
 
 	private File getDigestFile() {
-		File dataFile = getDataFile();
-		if (dataFile == null) {
+		File dataFile;
+		try {
+			dataFile = getFile();
+		} catch (IOException e) {
+			log.error("Could not resolve data file of entry {}", entry.getEntryURI(), e);
+			return null;
+		}
+		if (dataFile == null || !dataFile.exists()) {
 			return null;
 		}
 		String digestFileName;
