@@ -30,11 +30,18 @@ import java.util.Map;
  *
  * <p>The prefix is {@code entrystore.auth.signup} (not {@code ...signup.whitelist}) so the map binds
  * to the {@code whitelist} component; other {@code entrystore.auth.signup.*} keys are ignored here.
+ *
+ * <p>Only the indexed form binds. The legacy {@code Config.getStringList} also accepted a bare,
+ * un-indexed value ({@code entrystore.auth.signup.whitelist=example.com}); the {@code Map} binding does
+ * not, so a bare-only value fails startup with a bind error and a mixed bare+indexed value silently
+ * drops the bare entry (both fail-closed — the effective whitelist is never widened). The bare form was
+ * never documented in {@code entrystore.properties_example}; use the indexed form.
  */
 @ConfigurationProperties(prefix = "entrystore.auth.signup")
 public record SignupWhitelistProperties(Map<String, String> whitelist) {
 
 	public SignupWhitelistProperties {
-		whitelist = (whitelist == null) ? Map.of() : whitelist;
+		// Copy so the singleton never hands out the binder's mutable LinkedHashMap by reference.
+		whitelist = (whitelist == null) ? Map.of() : Map.copyOf(whitelist);
 	}
 }

@@ -35,6 +35,7 @@ import org.entrystore.rest.springboot.service.SearchService;
 import org.entrystore.rest.springboot.service.SolrSearchInputValidator;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.entrystore.rest.springboot.util.Syndication;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -66,6 +67,10 @@ public class SearchController {
 	private final SearchRateLimiter searchRateLimiter;
 	private final Config esConfig;
 
+	// Bound via the same Spring @Value channel as AuthService so both rate limiters agree on whether to
+	// honour X-Forwarded-For. Reading it here via the legacy Config.getBoolean instead would diverge:
+	// Config coerces yes/1 to false while Spring's relaxed binding maps them to true.
+	@Value("${entrystore.trust.x-forwarded-for:false}")
 	private boolean trustForwardedFor;
 
 	@PostConstruct
@@ -73,7 +78,6 @@ public class SearchController {
 		// Runs after class constructor
 		MAX_LIMIT = esConfig.getInt(Settings.SOLR_MAX_LIMIT, 100);
 		MAX_FACET_LIMIT = esConfig.getInt(Settings.SOLR_FACET_MAX_LIMIT, 1000);
-		trustForwardedFor = esConfig.getBoolean(Settings.TRUST_X_FORWARDED_FOR, false);
 	}
 
 	@Operation(summary = "Searches the repository and returns entries")

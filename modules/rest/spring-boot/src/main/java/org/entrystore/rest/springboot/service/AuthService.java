@@ -661,7 +661,8 @@ public class AuthService {
 		try {
 			configured = Integer.parseInt(confirmationMaxAttempts.trim());
 		} catch (NumberFormatException e) {
-			log.warn("{} is not a valid integer; falling back to the default of 3.", Settings.AUTH_CONFIRMATION_MAX_ATTEMPTS);
+			log.warn("{} value [{}] is not a valid integer; falling back to the default of 3.",
+					Settings.AUTH_CONFIRMATION_MAX_ATTEMPTS, confirmationMaxAttempts, e);
 			return 3;
 		}
 		if (configured < 1) {

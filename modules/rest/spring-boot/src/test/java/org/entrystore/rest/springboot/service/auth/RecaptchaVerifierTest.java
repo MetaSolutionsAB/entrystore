@@ -16,17 +16,13 @@
 
 package org.entrystore.rest.springboot.service.auth;
 
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.client.ResponseActions;
 import org.springframework.util.LinkedMultiValueMap;
@@ -43,9 +39,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
@@ -53,29 +46,24 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
-@ExtendWith(MockitoExtension.class)
 class RecaptchaVerifierTest {
 
 	private static final String VERIFIER_URL = "https://verifier.test/recaptcha/api/siteverify";
 	private static final String SECRET = "test-secret";
-
-	@Mock
-	private Config esConfig;
 
 	private MockRestServiceServer server;
 	private RecaptchaVerifier verifier;
 
 	@BeforeEach
 	void primeVerifier() {
-		when(esConfig.getString(eq(Settings.AUTH_RECAPTCHA_URL), anyString())).thenReturn(VERIFIER_URL);
-		when(esConfig.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY)).thenReturn(SECRET);
-
 		// MockRestServiceServer must be bound to the same builder the RestClient is built from,
 		// so the stubbed transport intercepts the verifier's siteverify POST.
 		RestClient.Builder builder = RestClient.builder();
 		server = MockRestServiceServer.bindTo(builder).build();
-		verifier = new RecaptchaVerifier(esConfig, builder.build());
-		verifier.init();
+		verifier = new RecaptchaVerifier(builder.build());
+		// url/secret are @Value-injected in production; seed them directly for this unit test.
+		ReflectionTestUtils.setField(verifier, "url", VERIFIER_URL);
+		ReflectionTestUtils.setField(verifier, "secret", SECRET);
 	}
 
 	private ResponseActions expectSiteverifyPost() {

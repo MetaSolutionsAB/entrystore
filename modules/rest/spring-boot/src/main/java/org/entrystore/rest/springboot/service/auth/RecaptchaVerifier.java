@@ -16,15 +16,13 @@
 
 package org.entrystore.rest.springboot.service.auth;
 
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.entrystore.config.Config;
-import org.entrystore.repository.config.Settings;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -48,21 +46,19 @@ import org.springframework.web.client.UnknownHttpStatusCodeException;
 @RequiredArgsConstructor
 public class RecaptchaVerifier {
 
-	private static final String RECAPTCHA_URL_DEFAULT = "https://www.google.com/recaptcha/api/siteverify";
-
-	private final Config esConfig;
-
 	@Qualifier("recaptchaRestClient")
 	private final RestClient recaptchaRestClient;
 
-	private static String url;
-	private static String secret;
+	// Read through the same Spring property channel as the AuthService enable-gate
+	// (@Value("${entrystore.auth.recaptcha.private-key}") + "${entrystore.auth.recaptcha:off}"). Reading
+	// the secret via the legacy Config bean instead would diverge: EntryStoreConfiguration only copies
+	// Spring keys literally starting with "entrystore." into Config, so a key supplied only as an env var
+	// (ENTRYSTORE_AUTH_RECAPTCHA_PRIVATE_KEY) would pass the gate yet leave this secret null.
+	@Value("${entrystore.auth.recaptcha.url:https://www.google.com/recaptcha/api/siteverify}")
+	private String url;
 
-	@PostConstruct
-	public void init() {
-		url = esConfig.getString(Settings.AUTH_RECAPTCHA_URL, RECAPTCHA_URL_DEFAULT);
-		secret = esConfig.getString(Settings.AUTH_RECAPTCHA_PRIVATE_KEY);
-	}
+	@Value("${entrystore.auth.recaptcha.private-key:#{null}}")
+	private String secret;
 
 	/**
 	 * Verifies a user response token using reCaptcha 2.0 API.
