@@ -14,12 +14,11 @@ Maven is supplied by the Maven Wrapper (`./mvnw` / `mvnw.cmd`), pinned to 3.9.16
 
 ```bash
 ./mvnw clean install                                                # full build: unit + integration tests
-./mvnw clean install -Dmaven.test.skip=true                         # quick build without tests (or: ./build.sh install)
+./mvnw clean install -Dmaven.test.skip=true                         # quick build without tests (or: ./build.sh clean)
 ./mvnw clean install -pl core/core-impl                             # single module
 ./mvnw clean install -pl modules/rest/spring-boot -am -DskipTests   # single module plus its dependencies
 ./mvnw clean test                                                   # unit tests only (one class: -Dtest=EntryImplTest)
-./mvnw clean verify -pl modules/rest/integration-test               # integration tests only (one class: -Dtest=ProxyIT)
-./mvnw clean install -DskipDependencyCheck=true                     # skip OWASP dependency check (faster)
+./mvnw clean verify -pl modules/rest/integration-test               # integration tests only (one class: -Dit.test=ProxyIT)
 ```
 
 **Test structure:**
@@ -84,7 +83,7 @@ springboot/
 - JSON: Jackson 3 — use `tools.jackson.*` (not `com.fasterxml.jackson.*`); annotations stay in `com.fasterxml.jackson.annotation.*` **except** `@JsonSerialize`/`@JsonDeserialize` (`tools.jackson.databind.annotation.*`). Custom serializers extend `ValueSerializer`/`ValueDeserializer`; mappers are immutable (`JsonMapper.builder()...build()`).
 
 **REST routes** (one controller per route family in `controller/`):
-`/{context-id}/entry/{entry-id}`, `/{context-id}/resource/{entry-id}`, `/{context-id}/metadata/{entry-id}`, `/{context-id}/relation/{entry-id}`, `/{context-id}/merge`, `/{context-id}/execute`, `/search`, `/sparql`, `/lookup`, `/proxy` (the last three also exist context-scoped, e.g. `/{context-id}/proxy`), `/message`, `/echo`, `/validator`, `/auth/*`, `/management/*`
+`/{context-id}` (the context itself, plus `/{context-id}/export`, `/{context-id}/import`), `/{context-id}/entry/{entry-id}`, `/{context-id}/resource/{entry-id}`, `/{context-id}/metadata/{entry-id}`, `/{context-id}/relations/{entry-id}`, `/{context-id}/merge`, `/{context-id}/execute`, `/search`, `/sparql`, `/lookup`, `/proxy` (each of `/sparql`, `/lookup`, `/proxy` also exists context-scoped, e.g. `/{context-id}/proxy`), `/message`, `/echo`, `/validator`, `/_principals/groups`, `/auth/*`, `/management/*`
 
 **Spring bean dependency rules:**
 - **Avoid and verify that no circular bean dependencies are introduced.** A `@Configuration` class is a wiring spec, not an actor — if it needs to do something beyond constructing objects, that logic belongs in a separate `@Service` or `@Component`. A common violation: a `@Configuration` class injecting a bean it itself produces (via constructor / `@RequiredArgsConstructor`), creating a self-referencing cycle that prevents startup.
