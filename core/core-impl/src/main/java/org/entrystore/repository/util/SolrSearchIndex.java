@@ -1395,21 +1395,22 @@ public class SolrSearchIndex implements SearchIndex {
 		query.setIncludeScore(true);
 		int resultFillIteration = 0;
 		do {
-			if (resultFillIteration++ > 0) {
+			if (resultFillIteration > 0) {
 				// We have a small limit and we don't get enough results with permissive ACL per iteration,
-				// so we need to increase the result size windows, but not the result limit itself
-				// (i.e., we only change the rows towards Solr, but not the query limit of EntryStore.
-				// We only need to do this once when resultFillIteration equals 1.
+				// so we need to increase the result size window, but not the result limit itself
+				// (i.e., we only change the rows towards Solr, but not the query limit of EntryStore).
+				// We only need to do this once, on the first refill iteration.
 				if (resultFillIteration == 1 && limit <= 10) {
 					query.setRows(100);
 				}
-				if (resultFillIteration > 10) {
-					log.warn("Breaking after 10 result fill interations to prevent too many loops");
+				if (resultFillIteration >= 10) {
+					log.warn("Breaking after 10 result fill iterations to prevent too many loops");
 					break;
 				}
 				offset += Math.min(limit, 50);
 				log.warn("Increasing offset to " + offset + " in an attempt to fill the result limit");
 			}
+			resultFillIteration++;
 			Set<URI> entryURIs = new LinkedHashSet<>();
 			hits = sendQueryForEntryURIs(query, entryURIs, facetFields, solrServer, offset);
 			Date before = new Date();
