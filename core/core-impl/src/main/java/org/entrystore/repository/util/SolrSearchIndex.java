@@ -78,6 +78,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -109,6 +110,10 @@ public class SolrSearchIndex implements SearchIndex {
 
 	private static final DateTimeFormatter SOLR_DATE_FORMATTER =
 			DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
+
+	// Predicates repeat heavily across indexed statements while the vocabulary itself stays
+	// small, so the map is effectively bounded by the number of distinct predicates in use.
+	private static final ConcurrentMap<String, String> PREDICATE_MD5_CACHE = new ConcurrentHashMap<>();
 
 	private final String defaultSortLang;
 
@@ -1175,7 +1180,8 @@ public class SolrSearchIndex implements SearchIndex {
 		for (Statement s : metadata) {
 			// predicate
 			String predString = s.getPredicate().stringValue();
-			String predMD5Trunc8 = Hashing.hash(predString, HashType.MD5).substring(0, 8);
+			String predMD5Trunc8 = PREDICATE_MD5_CACHE.computeIfAbsent(predString,
+					pred -> Hashing.hash(pred, HashType.MD5).substring(0, 8));
 
 			// object
 			if (s.getObject() instanceof IRI) {
