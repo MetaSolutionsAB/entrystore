@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -235,7 +235,9 @@ public class RDFJSON {
 	public static String graphToRdfJson(Model graph) {
 		JSONObject obj = graphToRdfJsonObject(graph);
 		if (obj != null) {
-			return obj.toString(2);
+			// Compact output: pretty-printing inflates payloads by 10-30% and costs CPU
+			// on every RDF/JSON response; EntryService serializes compactly as well.
+			return obj.toString(0);
 		} else {
 			return null;
 		}
