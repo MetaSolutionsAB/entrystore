@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore;
 
 import org.apache.commons.io.FileUtils;
@@ -16,6 +32,12 @@ import java.util.List;
 public class Benchmark {
 
 	private static Config createConfiguration(Arguments arguments) throws IOException {
+		String solrUrl = arguments.getSolrUrl();
+		if (solrUrl == null || !(solrUrl.startsWith("http://") || solrUrl.startsWith("https://"))) {
+			throw new IllegalArgumentException("benchmark-solr requires -S/--solr-url pointing at an http(s) Solr core "
+					+ "(EntryStore no longer supports embedded Solr). Example: -S http://localhost:8983/solr/entrystore-core");
+		}
+
 		Config config = new PropertiesConfiguration("EntryStore Configuration");
 		config.setProperty(Settings.STORE_TYPE, arguments.getStoreType());
 		config.addProperty(Settings.STORE_PATH, "file:///" + arguments.getStorePath().getAbsolutePath().replace('\\', '/'));
@@ -26,7 +48,7 @@ public class Benchmark {
 
 		config.setProperty(Settings.BASE_URL, BenchmarkCommons.BASE_URL);
 		config.setProperty(Settings.SOLR, "on");
-		config.setProperty(Settings.SOLR_URL, arguments.getSolrPath());
+		config.setProperty(Settings.SOLR_URL, solrUrl);
 
 		return config;
 	}
