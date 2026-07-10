@@ -36,7 +36,9 @@ import org.entrystore.rest.springboot.model.exception.BadRequestException;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.RDFJSON;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -47,6 +49,9 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class LookupService {
+
+	@Value("${entrystore.rest.json.pretty-print:true}")
+	private boolean jsonPrettyPrint;
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final ContextService contextService;
@@ -121,7 +126,7 @@ public class LookupService {
 					scope, entryType, entry.getResourceURI());
 		}
 
-		return GraphUtil.serializeGraph(graph, mediaType);
+		return GraphUtil.serializeGraph(graph, mediaType, RDFJSON.jsonIndent(jsonPrettyPrint));
 	}
 
 	private Entry extractSingleEntry(Set<Entry> entries, URI resourceURI) {

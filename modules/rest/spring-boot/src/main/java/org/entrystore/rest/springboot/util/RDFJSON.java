@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -233,12 +233,24 @@ public class RDFJSON {
 	 * @return An RDF/JSON string if successful, otherwise null.
 	 */
 	public static String graphToRdfJson(Model graph) {
+		return graphToRdfJson(graph, JSON_PRETTY_INDENT);
+	}
+
+	/**
+	 * As {@link #graphToRdfJson(Model)}, with {@code indent} spaces per level; 0 is the compact form, which
+	 * pretty-printing inflates by 10-30% and costs CPU on every RDF/JSON response.
+	 */
+	public static String graphToRdfJson(Model graph, int indent) {
 		JSONObject obj = graphToRdfJsonObject(graph);
-		if (obj != null) {
-			return obj.toString(2);
-		} else {
-			return null;
-		}
+		return obj != null ? obj.toString(indent) : null;
+	}
+
+	/** The indent of the pretty-printed form, the default unless {@code entrystore.rest.json.pretty-print=false}. */
+	public static final int JSON_PRETTY_INDENT = 2;
+
+	/** The indent {@code entrystore.rest.json.pretty-print} selects. */
+	public static int jsonIndent(boolean prettyPrint) {
+		return prettyPrint ? JSON_PRETTY_INDENT : 0;
 	}
 
 	private static IRI parseAndValidateIRI(String iri) {
