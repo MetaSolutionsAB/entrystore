@@ -385,6 +385,9 @@ entrystore.auth.temp.lockout.duration=0ms
 ## When unset the two consumers differ: search caps at 100, syndication at 50.
 ## Setting this applies one cap to both.
 # entrystore.solr.max-limit=200
+## RDF/JSON and search JSON responses are pretty-printed. The compact form (false) trims 10-30% off
+## the payload and the CPU to produce it; clients that parse the JSON see no difference.
+# entrystore.rest.json.pretty-print=true
 entrystore.solr=on
 entrystore.solr.reindex-on-startup=off
 entrystore.solr.url=http://localhost:8080/solr/entrystore-core1

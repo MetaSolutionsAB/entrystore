@@ -91,6 +91,9 @@ import static org.entrystore.rest.springboot.service.ResourceSerializationServic
 @RequiredArgsConstructor
 public class EntryService {
 
+	@org.springframework.beans.factory.annotation.Value("${entrystore.rest.json.pretty-print:true}")
+	private boolean jsonPrettyPrint;
+
 	private static final int JSON_OBJECT_TO_STRING_INDENT_SIZE = 0;
 	private static final Pattern ENTRY_ID_PATTERN = Pattern.compile("^[\\w\\-]+$");
 
@@ -112,7 +115,7 @@ public class EntryService {
 	}
 
 	public String getEntryInRdfFormat(Entry entry, String mediaType) {
-		return GraphUtil.serializeGraph(entry.getGraph(), mediaType);
+		return GraphUtil.serializeGraph(entry.getGraph(), mediaType, RDFJSON.jsonIndent(jsonPrettyPrint));
 	}
 
 	public Entry getEntryByContextIdAndEntryId(String contextId, String entryId) {

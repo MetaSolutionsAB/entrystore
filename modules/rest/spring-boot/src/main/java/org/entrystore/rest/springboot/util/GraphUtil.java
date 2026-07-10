@@ -365,12 +365,17 @@ public class GraphUtil {
 	 * @throws InternalServerErrorException if the graph cannot be serialized in full
 	 */
 	public static String serializeGraph(Model graph, String mediaType) {
+		return serializeGraph(graph, mediaType, RDFJSON.JSON_PRETTY_INDENT);
+	}
+
+	/** As {@link #serializeGraph(Model, String)}, indenting JSON by {@code jsonIndent}; see {@link RDFJSON#jsonIndent}. */
+	public static String serializeGraph(Model graph, String mediaType, int jsonIndent) {
 		if (graph == null) {
 			throw new IllegalArgumentException("Graph must not be null");
 		}
 		mediaType = normalizeLegacyMediaType(mediaType);
 		if (MediaType.APPLICATION_JSON_VALUE.equals(mediaType) || RDFFormat.RDFJSON.getDefaultMIMEType().equals(mediaType)) {
-			String rdfJson = RDFJSON.graphToRdfJson(graph);
+			String rdfJson = RDFJSON.graphToRdfJson(graph, jsonIndent);
 			if (rdfJson == null) {
 				throw new InternalServerErrorException("Failed to serialize RDF graph as RDF/JSON");
 			}

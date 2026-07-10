@@ -217,8 +217,9 @@ class ResourceServiceTest {
 
 		String result = service.serializeResourceAsJson(entry, "application/json", emptyListFilter());
 
-		// Routing: RDF/JSON, not the id array the isList branch would have produced.
-		assertEquals(RDFJSON.graphToRdfJson(graph), result);
+		// Routing: RDF/JSON, not the id array the isList branch would have produced. Built without Spring, the service has
+		// entrystore.rest.json.pretty-print unbound, so it serializes compactly.
+		assertEquals(RDFJSON.graphToRdfJson(graph, RDFJSON.jsonIndent(false)), result);
 		// Content, asserted independently of RDFJSON: were graphToRdfJson to regress to an empty object,
 		// both sides of the equality above would move together and still match.
 		assertTrue(result.contains("http://purl.org/dc/terms/title"),
