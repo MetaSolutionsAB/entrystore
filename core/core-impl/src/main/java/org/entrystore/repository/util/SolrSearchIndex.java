@@ -246,11 +246,10 @@ public class SolrSearchIndex implements SearchIndex {
 					return false;
 				}
 
-				StringJoiner joiner = new StringJoiner(" OR ", "uri:(", ")");
-				deleteBatch.forEach(uri -> joiner.add(ClientUtils.escapeQueryChars(uri.toString())));
-
+				// uri is the schema uniqueKey, so deleteById applies directly to the version
+				// buckets instead of a deleteByQuery, which blocks concurrent adds and merges.
 				UpdateRequest delReq = new UpdateRequest();
-				delReq.deleteByQuery(joiner.toString());
+				delReq.deleteById(deleteBatch.stream().map(URI::toString).toList());
 				delReq.setCommitWithin(SOLR_COMMIT_WITHIN);
 
 				for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
