@@ -51,6 +51,8 @@ import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.RDFJSON;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -64,6 +66,9 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class MetadataService {
+
+	@Value("${entrystore.rest.json.pretty-print:true}")
+	private boolean jsonPrettyPrint;
 
 	private final RepositoryManagerImpl repositoryManager;
 	private final TraversalProperties traversalProperties;
@@ -105,7 +110,7 @@ public class MetadataService {
 		}
 
 		Model graphToSerialize = graphQuery != null ? applyGraphQuery(graphQuery, metadataGraph) : metadataGraph;
-		return new MetadataResult(GraphUtil.serializeGraph(graphToSerialize, format), null);
+		return new MetadataResult(GraphUtil.serializeGraph(graphToSerialize, format, RDFJSON.jsonIndent(jsonPrettyPrint)), null);
 	}
 
 	/**
@@ -189,7 +194,7 @@ public class MetadataService {
 		Model graphToSerialize = graphQuery != null
 				? applyGraphQuery(graphQuery, travResult.getGraph())
 				: travResult.getGraph();
-		return new MetadataResult(GraphUtil.serializeGraph(graphToSerialize, format), latestModified);
+		return new MetadataResult(GraphUtil.serializeGraph(graphToSerialize, format, RDFJSON.jsonIndent(jsonPrettyPrint)), latestModified);
 	}
 
 	private String getFirstProfile(String predCSV) {

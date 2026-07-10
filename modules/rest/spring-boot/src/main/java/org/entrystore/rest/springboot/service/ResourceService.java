@@ -37,7 +37,9 @@ import org.entrystore.rest.springboot.model.exception.EntityNotFoundException;
 import org.entrystore.rest.springboot.model.exception.InternalServerErrorException;
 import org.entrystore.rest.springboot.model.exception.RedirectSeeOtherException;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.RDFJSON;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -53,6 +55,9 @@ import java.util.Objects;
 @Service
 @RequiredArgsConstructor
 public class ResourceService {
+
+	@Value("${entrystore.rest.json.pretty-print:true}")
+	private boolean jsonPrettyPrint;
 
 	private static final String EMPTY_REPRESENTATION = "";
 
@@ -134,7 +139,7 @@ public class ResourceService {
 					return listResourceService.serializeChildrenIds(entry, listFilter);
 				}
 				// serializeGraph routes application/json and application/rdf+json through RDFJSON itself
-				return GraphUtil.serializeGraph(graph, mediaType);
+				return GraphUtil.serializeGraph(graph, mediaType, RDFJSON.jsonIndent(jsonPrettyPrint));
 			}
 		}
 
