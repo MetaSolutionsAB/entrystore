@@ -1177,7 +1177,16 @@ public class EntryImpl implements Entry {
 
 	public void updateModificationDate() {
 		try (RepositoryConnection rc = repository.getConnection()) {
-			this.updateModifiedDateSynchronized(rc, getRepositoryManager().getValueFactory());
+			synchronized (this.repository) {
+				rc.begin();
+				try {
+					registerEntryModified(rc, getRepositoryManager().getValueFactory());
+					rc.commit();
+				} catch (Exception e) {
+					rc.rollback();
+					throw e;
+				}
+			}
 		}
 	}
 
