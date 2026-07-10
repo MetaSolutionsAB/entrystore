@@ -27,6 +27,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.StringTokenizer;
+import java.util.regex.Pattern;
 
 @Getter
 public class URISplit {
@@ -34,8 +35,10 @@ public class URISplit {
 	private static final Logger log = LoggerFactory.getLogger(URISplit.class);
 
 	private static final String SLASH_DELIMITER = "/";
-	private static final String URI_REGEX = "^_?[a-zA-Z0-9-_]+/?";
-	private static final String URI_PARAMS_REGEX = "^_?[a-zA-Z0-9-_]+\\?\\S+";
+	// Precompiled: URISplit runs on every entry-URI resolution, and String.matches
+	// would recompile the pattern per call.
+	private static final Pattern URI_PATTERN = Pattern.compile("^_?[a-zA-Z0-9-_]+/?");
+	private static final Pattern URI_PARAMS_PATTERN = Pattern.compile("^_?[a-zA-Z0-9-_]+\\?\\S+");
 
 	URIType uriType;
 	String contextId;
@@ -48,8 +51,9 @@ public class URISplit {
 
 		if (isValidURI(anyURI)) {
 			base = baseURL.toString();
-			if (anyURI.toString().startsWith(base)) {
-				String anyURIWithoutBase = anyURI.toString().substring(base.length());
+			String anyURIString = anyURI.toString();
+			if (anyURIString.startsWith(base)) {
+				String anyURIWithoutBase = anyURIString.substring(base.length());
 				StringTokenizer st = new StringTokenizer(anyURIWithoutBase, SLASH_DELIMITER);
 				contextId = st.nextToken();
 				if (st.hasMoreTokens()) {
@@ -57,10 +61,10 @@ public class URISplit {
 					if (st.hasMoreTokens()) {
 						id = st.nextToken();
 					} else throw new IllegalArgumentException("URI is incompatible with EntryStore");
-				} else if (anyURIWithoutBase.matches(URI_PARAMS_REGEX)) {
+				} else if (URI_PARAMS_PATTERN.matcher(anyURIWithoutBase).matches()) {
 					uriType = URIType.Unknown;
 					return;
-				} else if (!anyURIWithoutBase.matches(URI_REGEX)) {
+				} else if (!URI_PATTERN.matcher(anyURIWithoutBase).matches()) {
 					throw new IllegalArgumentException("URI is malformed or encoded");
 				} else {
 					id = contextId;
