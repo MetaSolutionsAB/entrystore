@@ -45,6 +45,7 @@ public class Arguments {
 	boolean withTreeRemoval = false;
 	boolean batched = false;
 	Boolean forceSync;
+	String solrUrl;
 	File storePath;
 	File solrPath;
 	File dataPath;

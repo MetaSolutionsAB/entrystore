@@ -97,6 +97,7 @@ public class BenchmarkCommons {
 				.build();
 		Option batchedOption = createOption("B", "batched", "BATCHED", "Run all EntryStore inserts inside one RepositoryManagerImpl.inBatch(...) call, committed every entrystore.repository.batch.max-operations operations: @boolean.", false);
 		Option forceSyncOption = createOption("f", "force-sync", "FORCE_SYNC", "Override NativeStore forceSync (default off — no fsync per commit). 'true' forces an fsync on every commit at the durability/throughput trade-off: @boolean.", false);
+		Option solrUrlOption = createOption("S", "solr-url", "SOLR_URL", "External Solr URL used by benchmark-solr (embedded Solr is not supported). Example: 'http://localhost:8983/solr/entrystore-core'.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -114,6 +115,7 @@ public class BenchmarkCommons {
 		options.addOption(treeRemovalOption);
 		options.addOption(batchedOption);
 		options.addOption(forceSyncOption);
+		options.addOption(solrUrlOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -199,7 +201,9 @@ public class BenchmarkCommons {
 			arguments.setWithTransactions(isWithTransaction);
 			System.setProperty("log.transactions", arguments.isWithTransactions() ? "multi" : "single");
 
-			boolean isWithAcl = !commandLine.hasOption("a") || "false".equals(commandLine.getOptionValue(isWithTransactionsOption));
+			// An explicit '-a false' disables ACL mode; absence of the flag keeps it on
+			// (an earlier version read the '-t' option value here by mistake).
+			boolean isWithAcl = !commandLine.hasOption("a") || Boolean.parseBoolean(commandLine.getOptionValue(isWithAclOption));
 			arguments.setWithAcl(isWithAcl);
 			System.setProperty("log.acl", arguments.isWithAcl() ? "on" : "off");
 
@@ -234,6 +238,13 @@ public class BenchmarkCommons {
 				System.setProperty("log.forceSync", arguments.getForceSync().toString());
 			} else {
 				System.setProperty("log.forceSync", "default");
+			}
+
+			if (commandLine.hasOption("S")) {
+				arguments.setSolrUrl(commandLine.getOptionValue(solrUrlOption));
+				System.setProperty("log.solrUrl", arguments.getSolrUrl());
+			} else {
+				System.setProperty("log.solrUrl", "none");
 			}
 
 			// welcome message
