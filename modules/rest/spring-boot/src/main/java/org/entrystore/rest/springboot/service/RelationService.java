@@ -29,6 +29,8 @@ import org.entrystore.Entry;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.util.URISplit;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.RDFJSON;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -44,11 +46,14 @@ import static org.eclipse.rdf4j.model.util.Values.iri;
 @RequiredArgsConstructor
 public class RelationService {
 
+	@Value("${entrystore.rest.json.pretty-print:true}")
+	private boolean jsonPrettyPrint;
+
 	private final RepositoryManagerImpl repositoryManager;
 
 
 	public String getEntryRelations(Entry entry, String prefFormat) {
-		return GraphUtil.serializeGraph(entry.getRelations(), prefFormat);
+		return GraphUtil.serializeGraph(entry.getRelations(), prefFormat, RDFJSON.jsonIndent(jsonPrettyPrint));
 	}
 
 	public Map<String, Object> getRelationStats(boolean verbose) {
