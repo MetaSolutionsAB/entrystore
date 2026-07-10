@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore;
 
 import org.apache.commons.cli.CommandLine;
@@ -64,6 +80,7 @@ public class BenchmarkCommons {
 		Option batchedOption = createOption("B", "batched", "BATCHED", "Run EntryStore inserts inside RepositoryManager.inBatch(...) — one commit per person: @boolean.", false);
 		Option indexesOption = createOption("x", "indexes", "INDEXES", "Override the native/lmdb store triple indexes (default: 'cspo,spoc'). Example: 'cspo'.", false);
 		Option forceSyncOption = createOption("f", "force-sync", "FORCE_SYNC", "Override NativeStore forceSync (default off — no fsync per commit). 'true' forces an fsync on every commit at the durability/throughput trade-off: @boolean.", false);
+		Option solrUrlOption = createOption("S", "solr-url", "SOLR_URL", "External Solr URL used by benchmark-solr (embedded Solr is not supported). Example: 'http://localhost:8983/solr/entrystore-core'.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -78,6 +95,7 @@ public class BenchmarkCommons {
 		options.addOption(batchedOption);
 		options.addOption(indexesOption);
 		options.addOption(forceSyncOption);
+		options.addOption(solrUrlOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -162,7 +180,9 @@ public class BenchmarkCommons {
 			arguments.setWithTransactions(isWithTransaction);
 			System.setProperty("log.transactions", arguments.isWithTransactions() ? "multi" : "single");
 
-			boolean isWithAcl = !commandLine.hasOption("a") || "false".equals(commandLine.getOptionValue(isWithTransactionsOption));
+			// An explicit '-a false' disables ACL mode; absence of the flag keeps it on
+			// (an earlier version read the '-t' option value here by mistake).
+			boolean isWithAcl = !commandLine.hasOption("a") || Boolean.parseBoolean(commandLine.getOptionValue(isWithAclOption));
 			arguments.setWithAcl(isWithAcl);
 			System.setProperty("log.acl", arguments.isWithAcl() ? "on" : "off");
 
@@ -182,6 +202,13 @@ public class BenchmarkCommons {
 				System.setProperty("log.forceSync", arguments.getForceSync().toString());
 			} else {
 				System.setProperty("log.forceSync", "default");
+			}
+
+			if (commandLine.hasOption("S")) {
+				arguments.setSolrUrl(commandLine.getOptionValue(solrUrlOption));
+				System.setProperty("log.solrUrl", arguments.getSolrUrl());
+			} else {
+				System.setProperty("log.solrUrl", "none");
 			}
 
 			// welcome message
