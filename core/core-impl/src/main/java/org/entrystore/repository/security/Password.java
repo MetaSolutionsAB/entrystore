@@ -70,6 +70,9 @@ public class Password {
 
 	private static final int desiredKeyLen = 192;
 
+	// F5: precompiled once instead of Pattern.compile per password-rule check.
+	private static final Pattern SYMBOL_PATTERN = Pattern.compile("[^a-zA-Z\\d]");
+
 	public static final int PASSWORD_MAX_LENGTH = 2048;
 
 	private static SecureRandom random;
@@ -270,7 +273,7 @@ public class Password {
 	}
 
 	private static boolean containsSymbol(String value) {
-		return Pattern.compile("[^a-zA-Z\\d]").matcher(value).find();
+		return SYMBOL_PATTERN.matcher(value).find();
 	}
 
 	private static boolean contains(String value, IntPredicate predicate) {

@@ -95,9 +95,10 @@ public class NS {
 			return URI.create(abbreviatedURI);
 		}
 
-		String namespace = uriSplits[0];
-		if (NS.getMap().containsKey(namespace)) {
-			return URI.create(NS.getMap().get(namespace) + uriSplits[1]);
+		// F4: single map lookup instead of containsKey + get.
+		String expanded = NS.getMap().get(uriSplits[0]);
+		if (expanded != null) {
+			return URI.create(expanded + uriSplits[1]);
 		}
 
 		try {
