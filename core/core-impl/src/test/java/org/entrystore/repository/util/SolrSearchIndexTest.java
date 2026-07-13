@@ -403,7 +403,7 @@ public class SolrSearchIndexTest {
 	public void reindexOfRepairedEntryCancelsThePendingRemovalOfItsDocument() throws Exception {
 		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", ENTRY_1_1);
 		Entry repairedEntry = mock(Entry.class);
@@ -426,7 +426,7 @@ public class SolrSearchIndexTest {
 	public void reindexOfCorruptEntryKeepsItsQueuedDocument() throws Exception {
 		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", ENTRY_1_1);
 		Entry loadableEntry = mock(Entry.class);
@@ -445,7 +445,7 @@ public class SolrSearchIndexTest {
 	public void reindexDoesNotRestoreTheDocumentOfAnEntryDeletedConcurrently() throws Exception {
 		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", ENTRY_1_1);
 		AtomicBoolean deleted = new AtomicBoolean();
@@ -577,7 +577,7 @@ public class SolrSearchIndexTest {
 		stopDocumentSubmitter();
 		SolrSearchIndex indexFailingDocuments = spy(index);
 		doThrow(new IllegalStateException("Unable to extract fulltext"))
-				.when(indexFailingDocuments).constructSolrInputDocument(any(), anyBoolean());
+				.when(indexFailingDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), deletedEntry(cm, ENTRY_1_2));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
@@ -632,7 +632,7 @@ public class SolrSearchIndexTest {
 	public void reindexOfContextPurgesOnlyAfterTheLastQueuedEntryHasLeftTheQueue() throws Exception {
 		stopDocumentSubmitter(); // keeps posted documents in the submission queue
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		// The deleted entry comes last, so the purge must wait for the entry before it, not for the last entry.
 		// The corrupt entry does not prevent the purge, and its document is removed right away.
@@ -747,7 +747,7 @@ public class SolrSearchIndexTest {
 		index = new SolrSearchIndex(rm, solrServer, maxReindexQueueSize);
 		index.markRepositoryInitialized();
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		return indexWithoutDocuments;
 	}
 
