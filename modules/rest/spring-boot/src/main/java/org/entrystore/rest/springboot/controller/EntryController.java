@@ -52,8 +52,6 @@ import static org.entrystore.rest.springboot.util.HttpUtil.determineMediaType;
 @RequiredArgsConstructor
 public class EntryController {
 
-	private static final String DEFAULT_MEDIA_TYPE = "application/rdf+xml";
-
 	private final EntryService entryService;
 
 	@Operation(
@@ -64,17 +62,12 @@ public class EntryController {
 	public GetEntryResponse getEntryInJsonFormat(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(required = false) String rdfFormat,
+			@RequestParam(required = false) MediaType rdfFormat,
 			@RequestParam(required = false) String includeAll,
 			@ModelAttribute ListFilter listFilter
 	) {
-		// for rdfFormat param, data should be sent properly - i.e. html encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to replace the space back to '+'
-		if (rdfFormat != null) {
-			rdfFormat = GraphUtil.validateRdfMediaType(rdfFormat.trim().replace(' ', '+'));
-		}
-		return entryService.getEntryInJsonFormat(contextId, entryId, rdfFormat, includeAll != null, listFilter);
+		String mediaType = rdfFormat != null ? GraphUtil.validateRdfMediaType(rdfFormat.toString()) : null;
+		return entryService.getEntryInJsonFormat(contextId, entryId, mediaType, includeAll != null, listFilter);
 	}
 
 	@Operation(
@@ -87,12 +80,12 @@ public class EntryController {
 	public ResponseEntity<String> getEntryInRdfFormat(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@RequestHeader(value = "Accept", required = false, defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
+			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
 		// Return ResponseEntity instead of String to control the response Content-Type. Spring MVC would otherwise
 		// echo back the client's Accept type (text/rdf+n3) as the response Content-Type, but we respond with
 		// the normalized form (text/n3) since text/rdf+n3 is a non-standard legacy N3 MIME type.
-		String mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, DEFAULT_MEDIA_TYPE);
+		String mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, GraphUtil.DEFAULT_RDF_MEDIA_TYPE);
 		String body = entryService.getEntryInRdfFormat(contextId, entryId, mediaType);
 		return ResponseEntity.ok()
 				.contentType(MediaType.parseMediaType(mediaType))
@@ -106,7 +99,7 @@ public class EntryController {
 	public ResponseEntity<Void> modifyEntry(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(required = false) String format,
+			@RequestParam(required = false) MediaType format,
 			@RequestParam(required = false) String applyACLtoChildren,
 			@RequestHeader("Content-Type") String contentType,
 			@RequestBody String body

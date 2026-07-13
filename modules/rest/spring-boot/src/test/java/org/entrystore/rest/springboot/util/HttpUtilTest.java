@@ -20,6 +20,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -100,19 +101,9 @@ class HttpUtilTest {
 	}
 
 	@Test
-	void determineMediaType_formatWithSpace_restoresPlus() {
-		// Spring decodes an unencoded '+' in the format param to a space; the util must restore it.
-		assertEquals("application/rdf+xml", HttpUtil.determineMediaType("application/rdf xml", null));
-	}
-
-	@Test
-	void determineMediaType_trimsFormat() {
-		assertEquals("text/turtle", HttpUtil.determineMediaType(" text/turtle ", null));
-	}
-
-	@Test
 	void determineMediaType_formatTakesPrecedenceOverContentType() {
-		assertEquals("text/turtle", HttpUtil.determineMediaType("text/turtle", "application/json; charset=UTF-8"));
+		assertEquals("text/turtle", HttpUtil.determineMediaType(
+				MediaType.parseMediaType("text/turtle"), "application/json; charset=UTF-8"));
 	}
 
 	@Test

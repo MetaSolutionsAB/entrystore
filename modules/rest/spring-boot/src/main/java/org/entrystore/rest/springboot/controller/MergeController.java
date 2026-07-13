@@ -23,6 +23,7 @@ import org.entrystore.rest.springboot.service.MergeService;
 import org.entrystore.rest.springboot.util.GraphUtil;
 import org.entrystore.rest.springboot.util.HttpUtil;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,7 +46,7 @@ public class MergeController {
 	public void mergeRdfIntoContext(
 			@PathVariable("context-id") String contextId,
 			@RequestParam(required = false) String resourceId,
-			@RequestParam(required = false) String format,
+			@RequestParam(required = false) MediaType format,
 			@RequestHeader(value = "Content-Type", required = false) String contentType,
 			@RequestBody String body,
 			HttpServletRequest request

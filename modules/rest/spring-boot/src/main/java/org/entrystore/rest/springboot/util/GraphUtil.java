@@ -79,6 +79,9 @@ import java.util.Set;
 @Slf4j
 public class GraphUtil {
 
+	/** Default media type for RDF responses when neither a format parameter nor an Accept header selects one. */
+	public static final String DEFAULT_RDF_MEDIA_TYPE = "application/rdf+xml";
+
 	private static final String LEGACY_N3_MEDIA_TYPE = "text/rdf+n3";
 
 	private static final Map<String, Class<? extends RDFWriter>> MEDIATYPE_TO_RDFWRITER_MAP = Map.of(

@@ -37,8 +37,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class RelationController {
 
-	private static final String DEFAULT_MEDIA_TYPE = "application/rdf+xml";
-
 	private final EntryService entryService;
 	private final RelationService relationService;
 
@@ -56,17 +54,14 @@ public class RelationController {
 	public ResponseEntity<String> getResource(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(required = false) String format,
-			@RequestHeader(value = "Accept", defaultValue = DEFAULT_MEDIA_TYPE) String acceptHeader
+			@RequestParam(required = false) MediaType format,
+			@RequestHeader(value = "Accept", defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
 		String mediaType;
-		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to replace the space back to '+'
 		if (format != null) {
-			mediaType = GraphUtil.validateRdfMediaType(format.trim().replace(' ', '+'));
+			mediaType = GraphUtil.validateRdfMediaType(format.toString());
 		} else {
-			mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, DEFAULT_MEDIA_TYPE);
+			mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, GraphUtil.DEFAULT_RDF_MEDIA_TYPE);
 		}
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);

@@ -77,23 +77,15 @@ public class ResourceController {
 	public ResponseEntity<Object> getResource(
 			@PathVariable("context-id") String contextId,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(required = false) String rdfFormat,
+			@RequestParam(required = false) MediaType rdfFormat,
 			@RequestParam(required = false) String syndication,
 			@RequestParam(required = false, defaultValue = "50") Integer feedSize,
 			@RequestParam(name = "lang", required = false, defaultValue = "en") String language,
 			@RequestParam(required = false) String download,
 			@ModelAttribute ListFilter listFilter,
-			@RequestHeader(value = "Accept", required = false, defaultValue = "application/rdf+xml") String acceptHeader
+			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
-		String mediaType;
-		// for 'rdfFormat' param data should be sent properly - i.e. HTML encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to replace the space back to '+'
-		if (rdfFormat != null) {
-			mediaType = rdfFormat.trim().replace(' ', '+');
-		} else {
-			mediaType = acceptHeader;
-		}
+		String mediaType = rdfFormat != null ? rdfFormat.toString() : acceptHeader;
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
 
@@ -133,7 +125,7 @@ public class ResourceController {
 				if (rdfFormat != null) {
 					mediaType = GraphUtil.validateRdfMediaType(mediaType);
 				} else {
-					mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, "application/rdf+xml");
+					mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, GraphUtil.DEFAULT_RDF_MEDIA_TYPE);
 				}
 				responseMediaType = MediaType.parseMediaType(mediaType);
 			} else {

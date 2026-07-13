@@ -58,8 +58,6 @@ import static org.entrystore.rest.springboot.util.HttpUtil.determineMediaType;
 @RequiredArgsConstructor
 public class MetadataController {
 
-	private static final String DEFAULT_MEDIA_TYPE = "application/rdf+xml";
-
 	private static final RDFFormat RDFJSON_WITH_APPLICATION_JSON
 			= new RDFFormat("RDF/JSON", List.of("application/json"), StandardCharsets.UTF_8, List.of("json"),
 			SimpleValueFactory.getInstance().createIRI("http://www.w3.org/ns/formats/RDF_JSON"), false, true, false);
@@ -75,23 +73,20 @@ public class MetadataController {
 			@PathVariable("context-id") String contextId,
 			@PathVariable("type") MetadataType metadataType,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(required = false) String format,
+			@RequestParam(required = false) MediaType format,
 			@RequestParam(required = false) String graphQuery,
 			@RequestParam(required = false, defaultValue = "10") Integer depth,
 			@RequestParam(required = false) String recursive,
 			@RequestParam(required = false) String scope,
 			@RequestParam(name = "rev", required = false) String revision,
 			@RequestParam(required = false) String download,
-			@RequestHeader(value = "Accept", required = false, defaultValue = "application/rdf+xml") String acceptHeader
+			@RequestHeader(value = "Accept", required = false, defaultValue = GraphUtil.DEFAULT_RDF_MEDIA_TYPE) String acceptHeader
 	) {
 		String mediaType;
-		// for 'format' param data should be sent properly - i.e. html encoded '+' as %2B
-		// however, we also support the non-encoded values here, and since Spring-boot automatically decodes the params
-		// (+ is replaced with a space) we need to replace the space back to '+'
 		if (format != null) {
-			mediaType = GraphUtil.validateRdfMediaType(format.trim().replace(' ', '+'));
+			mediaType = GraphUtil.validateRdfMediaType(format.toString());
 		} else {
-			mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, DEFAULT_MEDIA_TYPE);
+			mediaType = GraphUtil.resolveAcceptedMediaType(acceptHeader, GraphUtil.DEFAULT_RDF_MEDIA_TYPE);
 		}
 
 		Entry entry = entryService.getEntryByContextIdAndEntryId(contextId, entryId);
@@ -115,7 +110,7 @@ public class MetadataController {
 			@PathVariable("context-id") String contextId,
 			@PathVariable("type") MetadataType metadataType,
 			@PathVariable("entry-id") String entryId,
-			@RequestParam(required = false) String format,
+			@RequestParam(required = false) MediaType format,
 			@RequestParam(name = "rev", required = false) String revision,
 			@RequestHeader("Content-Type") String contentType,
 			@RequestBody String body
