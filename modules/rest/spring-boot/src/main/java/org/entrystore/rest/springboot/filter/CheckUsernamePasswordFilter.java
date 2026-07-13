@@ -110,7 +110,7 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			}
 
 			try {
-				Password.check(password, Password.getSaltedHash(password));
+				Password.checkMinimumRequirements(password);
 			} catch (IllegalArgumentException ex) {
 				log.warn("Password validation failed: {}", ex.getMessage(), ex);
 				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()

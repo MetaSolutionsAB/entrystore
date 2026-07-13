@@ -196,7 +196,11 @@ public class Password {
 		return null;
 	}
 
-	private static void checkMinimumRequirements(String password) {
+	/**
+	 * Throws {@link IllegalArgumentException} unless the password is non-empty and within the maximum length.
+	 * Does no hashing, so it is safe to call on every login attempt before authentication.
+	 */
+	public static void checkMinimumRequirements(String password) {
 		if (password == null || password.isEmpty()) {
 			throw new IllegalArgumentException("Empty passwords are not supported");
 		}
