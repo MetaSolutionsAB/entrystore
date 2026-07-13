@@ -51,6 +51,11 @@ drain. Canaries clean (209–249 ms) and tight throughout.
 Rounds split 2–2; the spread (before 42–49 k, after 44–52 k) swamps the
 1.5 k difference → **within noise, no measurable delta**.
 
+**Addendum (2026-07-13) — AC re-run: flat confirmed.** Under stable AC
+conditions (same snapshots, interleaved, order-alternated, canaries
+228–255 ms): before avg 43 494 ms, after avg 43 268 ms → **−0.5%, within
+noise** — same verdict as above, now free of the envelope caveat.
+
 Why A7 doesn't move the needle *here*: the benchmark uses a **single
 context** whose entry graph is tiny (a handful of context-metadata
 triples) and stays SoftCache-hot, so each avoided read costs microseconds
