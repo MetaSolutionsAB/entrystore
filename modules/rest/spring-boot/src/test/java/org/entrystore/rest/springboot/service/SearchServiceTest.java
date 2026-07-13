@@ -27,9 +27,11 @@ import org.entrystore.PrincipalManager;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.config.Config;
 import org.entrystore.impl.RepositoryManagerImpl;
+import org.entrystore.impl.RepositoryProperties;
 import org.entrystore.rest.springboot.model.dto.QueryResultsDto;
 import org.entrystore.rest.springboot.service.auth.LoginAttemptService;
 import org.entrystore.rest.springboot.util.ResourceJsonSerializer;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -158,8 +160,8 @@ class SearchServiceTest {
 
 	@Test
 	void generateJson_noRights_omitsRightsKey() {
-		// Search children only get a "rights" key when at least one right exists (JSONObject.append
-		// creates the key lazily) — unlike list serialization, which always emits the key.
+		// Search children only get a "rights" key when at least one right exists (generateJson only
+		// puts the key for a non-empty rights array) — unlike list serialization, which always emits the key.
 		Entry entry = mockSearchHit("e1");
 		when(principalManager.getRights(entry)).thenReturn(Set.of());
 		var service = new SearchService(repositoryManager, esConfig, realSerializer());
@@ -172,12 +174,25 @@ class SearchServiceTest {
 	@Test
 	void generateJson_withRights_emitsRightsArray() {
 		Entry entry = mockSearchHit("e1");
-		when(principalManager.getRights(entry)).thenReturn(Set.of(AccessProperty.ReadMetadata));
+		when(principalManager.getRights(entry)).thenReturn(Set.of(AccessProperty.Administer, AccessProperty.WriteResource));
 		var service = new SearchService(repositoryManager, esConfig, realSerializer());
 
 		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
 
-		assertEquals("readmetadata", child.getJSONArray("rights").getString(0));
+		JSONArray rights = child.getJSONArray("rights");
+		assertEquals(2, rights.length());
+		assertEquals(Set.of("administer", "writeresource"), Set.of(rights.getString(0), rights.getString(1)));
+	}
+
+	@Test
+	void generateJson_withRelations_emitsRelationKey() {
+		Entry entry = mockSearchHit("e1");
+		when(entry.getRelations()).thenReturn(new LinkedHashModel());
+		var service = new SearchService(repositoryManager, esConfig, realSerializer());
+
+		JSONObject child = firstChild(service.generateJson(0, 10, new QueryResultsDto(List.of(entry)), null));
+
+		assertTrue(child.has(RepositoryProperties.RELATION));
 	}
 
 	private Entry mockSearchHit(String id) {

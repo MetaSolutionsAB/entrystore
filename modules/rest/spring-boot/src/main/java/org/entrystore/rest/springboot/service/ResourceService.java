@@ -675,7 +675,7 @@ public class ResourceService {
 				}
 			}
 
-			ResourceJsonSerializer.sortChildrenEntries(childrenEntries, new ResourceJsonSerializer.ListParams(listFilter));
+			ResourceJsonSerializer.sortChildrenEntries(childrenEntries, ResourceJsonSerializer.ListParams.withoutPagination(listFilter));
 
 			for (Entry childEntry : childrenEntries) {
 				URI childURI = childEntry.getEntryURI();

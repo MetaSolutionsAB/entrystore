@@ -74,7 +74,8 @@ class ResourceJsonSerializerTest {
 	@BeforeEach
 	void setUp() {
 		serializer = new ResourceJsonSerializer(pm, repositoryManager, loginAttemptService);
-		when(user.getCustomProperties()).thenReturn(Map.of());
+		// only the serializeResourceUser tests reach this stub
+		lenient().when(user.getCustomProperties()).thenReturn(Map.of());
 	}
 
 	@Test
@@ -233,11 +234,32 @@ class ResourceJsonSerializerTest {
 	}
 
 	@Test
+	void serializeResourceList_childWithRelations_emitsRelationKey() {
+		Entry child = mockListChild("a", new Date(1000));
+		when(child.getRelations()).thenReturn(new LinkedHashModel());
+		var params = new ResourceJsonSerializer.ListParams(null, null, null, null, true, 0, 0);
+
+		JSONObject result = serializeList(List.of(child), params);
+
+		JSONObject childJson = result.getJSONArray("children").getJSONObject(0);
+		assertTrue(childJson.has(RepositoryProperties.RELATION));
+	}
+
+	@Test
 	void appendMetadataInfoAndRelations_flagFalse_propagatesInfoAuthorizationException() {
 		// The list path relies on info/relations exceptions reaching serializeResourceList's
 		// outer catch — the helper must not guard them when flagNoAccess is false.
 		Entry child = mockListChild("a", new Date(1000));
 		when(child.getGraph()).thenThrow(new AuthorizationException(null, null, null));
+
+		assertThrows(AuthorizationException.class,
+				() -> serializer.appendMetadataInfoAndRelations(child, new JSONObject(), null, false));
+	}
+
+	@Test
+	void appendMetadataInfoAndRelations_flagFalse_propagatesRelationsAuthorizationException() {
+		Entry child = mockListChild("a", new Date(1000));
+		when(child.getRelations()).thenThrow(new AuthorizationException(null, null, null));
 
 		assertThrows(AuthorizationException.class,
 				() -> serializer.appendMetadataInfoAndRelations(child, new JSONObject(), null, false));

@@ -262,12 +262,13 @@ public class ResourceJsonSerializer {
 
 	/**
 	 * Appends the cached-external-metadata, local-metadata, entry-info and relations sections of an
-	 * entry to {@code childJSON}. With {@code flagNoAccess=true} (search behavior) each section
-	 * catches {@link AuthorizationException} and records a {@code noAccessToMetadata} /
-	 * {@code noAccessToEntryInfo} / {@code noAccessToRelations} flag instead. With
-	 * {@code flagNoAccess=false} (list behavior) a metadata {@link AuthorizationException} is
-	 * swallowed silently and the info/relations sections are left unguarded so the exception
-	 * propagates to the caller.
+	 * entry to {@code childJSON}. With {@code flagNoAccess=true} (search behavior) the two metadata
+	 * sections share one guard that records a {@code noAccessToMetadata} flag (an
+	 * {@link AuthorizationException} on external metadata also skips local metadata), while the
+	 * entry-info and relations sections each record {@code noAccessToEntryInfo} /
+	 * {@code noAccessToRelations}. With {@code flagNoAccess=false} (list behavior) a metadata
+	 * {@link AuthorizationException} is swallowed silently and the info/relations sections are left
+	 * unguarded so the exception propagates to the caller.
 	 */
 	public void appendMetadataInfoAndRelations(Entry entry, JSONObject childJSON, String rdfFormat, boolean flagNoAccess) {
 		try {
@@ -430,18 +431,6 @@ public class ResourceJsonSerializer {
 		int offset,
 		int limit) {
 
-		public ListParams(Map<String, String> params) {
-			this(
-				params.get("sort"),
-				params.get("lang"),
-				params.get("prio"),
-				params.get("desc"),
-				!"desc".equalsIgnoreCase(params.get("order")),
-				Integer.parseInt(params.getOrDefault("offset", "0")),
-				Integer.parseInt(params.getOrDefault("limit", "0"))
-			);
-		}
-
 		public ListParams(ListFilter filter) {
 			this(
 				filter.sort(),
@@ -452,6 +441,12 @@ public class ResourceJsonSerializer {
 				Integer.parseInt(Optional.ofNullable(filter.offset()).orElse("0")),
 				Integer.parseInt(Optional.ofNullable(filter.limit()).orElse("0"))
 			);
+		}
+
+		/** Params with offset/limit left unparsed (defaulted to 0) — for callers that ignore pagination. */
+		public static ListParams withoutPagination(ListFilter filter) {
+			return new ListParams(filter.sort(), filter.lang(), filter.prio(), filter.desc(),
+					!"desc".equalsIgnoreCase(filter.order()), 0, 0);
 		}
 	}
 }

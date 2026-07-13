@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.it
 
 import groovy.xml.XmlParser
@@ -71,7 +87,8 @@ class ResourceSyndicationIT extends BaseSpec {
 
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
-		resourceConn.getContentType().contains('application/rss+xml')
+		// charset pinned deliberately: unified with the /search syndication Content-Type
+		resourceConn.getContentType().contains('application/rss+xml;charset=UTF-8')
 		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes()['xmlns:dc'] == null
 		respXml.attributes()['version'] != null
@@ -290,7 +307,8 @@ class ResourceSyndicationIT extends BaseSpec {
 
 		then:
 		resourceConn.getResponseCode() == HTTP_OK
-		resourceConn.getContentType().contains('application/atom+xml')
+		// charset pinned deliberately: unified with the /search syndication Content-Type
+		resourceConn.getContentType().contains('application/atom+xml;charset=UTF-8')
 		def respXml = new XmlParser(false, false).parseText(resourceConn.inputStream.text)
 		respXml.attributes().size() > 0
 		respXml.attributes()['xmlns'] == 'http://www.w3.org/2005/Atom'

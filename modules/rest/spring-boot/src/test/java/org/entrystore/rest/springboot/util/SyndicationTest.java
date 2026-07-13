@@ -62,13 +62,15 @@ class SyndicationTest {
 
 	@Test
 	void convertSyndFeedToXml_unserializableFeed_throwsInsteadOfReturningErrorMessageAsBody() {
-		// rss_2.0 requires channel title/description/link, so an empty feed fails serialization
+		// rss_2.0 requires channel title/description/link, so a feed without description/link
+		// fails serialization; the title identifies the failing feed in the logs
 		SyndFeed feed = new SyndFeedImpl();
 		feed.setFeedType("rss_2.0");
+		feed.setTitle("Broken feed");
 
 		var ex = assertThrows(InternalServerErrorException.class, () -> Syndication.convertSyndFeedToXml(feed));
 
-		assertEquals("Error serializing the syndication feed", ex.getMessage());
+		assertEquals("Error serializing the syndication feed with title: Broken feed", ex.getMessage());
 		assertInstanceOf(FeedException.class, ex.getCause());
 	}
 
@@ -111,6 +113,12 @@ class SyndicationTest {
 		when(config.getString(Settings.SYNDICATION_URL_TEMPLATE + ".default"))
 				.thenReturn("https://example.com/view/{entryid}");
 		Entry entry = mockFeedEntry("e1");
+		// the {contextid} replacement resolves the context eagerly even when the template omits it
+		Entry contextEntry = mock(Entry.class);
+		when(contextEntry.getId()).thenReturn("c1");
+		Context context = mock(Context.class);
+		when(context.getEntry()).thenReturn(contextEntry);
+		when(entry.getContext()).thenReturn(context);
 
 		SyndFeed feed = Syndication.createFeedFromEntries(pm, config, List.of(entry), null, 10, null);
 
@@ -159,6 +167,18 @@ class SyndicationTest {
 		SyndFeed feed = Syndication.createFeedFromEntries(pm, config, entries, null, 10, null);
 
 		assertEquals(1, feed.getEntries().size());
+	}
+
+	@Test
+	void createFeedFromEntries_linkBuilder_isUsedPerEntry() {
+		PrincipalManager pm = mock(PrincipalManager.class);
+		List<Entry> entries = List.of(mockFeedEntry("e1"), mockFeedEntry("e2"));
+
+		SyndFeed feed = Syndication.createFeedFromEntries(pm, entries, null, 10,
+				entry -> "https://custom.example.com/" + entry.getId());
+
+		assertEquals("https://custom.example.com/e1", feed.getEntries().get(0).getLink());
+		assertEquals("https://custom.example.com/e2", feed.getEntries().get(1).getLink());
 	}
 
 	@Test

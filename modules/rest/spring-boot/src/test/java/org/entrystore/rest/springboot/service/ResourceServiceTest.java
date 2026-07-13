@@ -258,6 +258,20 @@ class ResourceServiceTest {
 		assertEquals(List.of("a", "c"), jsonArrayToList(result));
 	}
 
+	@Test
+	void serializeResourceAsJson_listWithSort_ignoresNonNumericOffsetAndLimit() {
+		// The sorting path ignores offset/limit, so malformed values must not fail the request
+		// (ListParams.withoutPagination skips the Integer.parseInt done by ListParams(ListFilter)).
+		Context context = mockListEntry(List.of("a", "b"));
+		mockResolvableChild(context, "a", new Date(2000));
+		mockResolvableChild(context, "b", new Date(1000));
+		var filter = new ListFilter("modified", null, null, null, null, "abc", "xyz");
+
+		String result = service.serializeResourceAsJson(entry, "application/json", filter);
+
+		assertEquals(List.of("b", "a"), jsonArrayToList(result));
+	}
+
 	/** Stubs {@code entry} as a List-type entry whose list resource references the given child IDs. */
 	private Context mockListEntry(List<String> childIds) {
 		Context context = mock(Context.class);

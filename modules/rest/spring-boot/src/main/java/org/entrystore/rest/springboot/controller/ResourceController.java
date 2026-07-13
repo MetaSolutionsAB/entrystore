@@ -17,8 +17,6 @@
 package org.entrystore.rest.springboot.controller;
 
 import com.rometools.rome.feed.synd.SyndFeed;
-import com.rometools.rome.io.FeedException;
-import com.rometools.rome.io.SyndFeedOutput;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +34,7 @@ import org.entrystore.rest.springboot.service.EntryService;
 import org.entrystore.rest.springboot.service.ResourceService;
 import org.entrystore.rest.springboot.service.SyndicationService;
 import org.entrystore.rest.springboot.util.GraphUtil;
+import org.entrystore.rest.springboot.util.Syndication;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -94,8 +93,9 @@ public class ResourceController {
 
 		if (syndication != null) {
 			SyndFeed feed = syndicationService.getSyndicationFeedSolr(entry, syndication, language, feedSize);
-			responseBody = convertSyndFeedToXml(feed);
-			responseMediaType = mapFeedTypeToMediaType(feed.getFeedType(), mediaType);
+			responseBody = Syndication.convertSyndFeedToXml(feed);
+			MediaType feedMediaType = Syndication.convertFeedTypeToMediaType(feed.getFeedType());
+			responseMediaType = feedMediaType != null ? feedMediaType : MediaType.parseMediaType(mediaType);
 
 		} else if (entry.getEntryType() == EntryType.Local && entry.getGraphType() == GraphType.None) {
 
@@ -271,30 +271,6 @@ public class ResourceController {
 		resourceService.deleteResource(entry, proxy, recursive != null);
 
 		return ResponseEntity.noContent().build();
-	}
-
-	private static String convertSyndFeedToXml(SyndFeed feed) {
-		try {
-			// TODO: SyndFeedOutput seems thread-safe, hence should be fine to instantiate it only once per application, instead of per request?
-			return new SyndFeedOutput().outputString(feed, true);
-		} catch (FeedException fe) {
-			throw new IllegalStateException("Exception serializing the syndication feed with title: " + feed.getTitle());
-		}
-	}
-
-	private static MediaType mapFeedTypeToMediaType(String feedType, String requestMediaType) {
-
-		String feedMediaType = null;
-		if (feedType != null) {
-			if (feedType.startsWith("rss_")) {
-				feedMediaType = MediaType.APPLICATION_RSS_XML_VALUE;
-			} else if (feedType.startsWith("atom_")) {
-				feedMediaType = MediaType.APPLICATION_ATOM_XML_VALUE;
-			}
-		}
-
-		String responseMediaType = (feedMediaType != null) ? feedMediaType : requestMediaType;
-		return MediaType.parseMediaType(responseMediaType);
 	}
 
 	private HttpHeaders buildFileDownloadResponseHeaders(Entry entry, String mediaType, boolean isDownload) {

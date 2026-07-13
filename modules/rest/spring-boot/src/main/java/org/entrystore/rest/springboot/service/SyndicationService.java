@@ -16,40 +16,30 @@
 
 package org.entrystore.rest.springboot.service;
 
-import com.rometools.rome.feed.synd.SyndContent;
-import com.rometools.rome.feed.synd.SyndContentImpl;
-import com.rometools.rome.feed.synd.SyndEntry;
-import com.rometools.rome.feed.synd.SyndEntryImpl;
 import com.rometools.rome.feed.synd.SyndFeed;
-import com.rometools.rome.feed.synd.SyndFeedImpl;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.util.ClientUtils;
-import org.entrystore.AuthorizationException;
 import org.entrystore.ContextManager;
 import org.entrystore.Entry;
 import org.entrystore.EntryType;
 import org.entrystore.GraphType;
-import org.entrystore.PrincipalManager;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.EntryUtil;
 import org.entrystore.repository.util.SolrSearchIndex;
 import org.entrystore.rest.springboot.model.exception.MethodNotAllowedException;
 import org.entrystore.rest.springboot.model.exception.NotImplementedException;
+import org.entrystore.rest.springboot.util.Syndication;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
-
-import static java.lang.String.format;
 
 @Slf4j
 @Service
@@ -96,7 +86,8 @@ public class SyndicationService {
 			alias = EntryUtil.getTitle(entry, language);
 		}
 
-		SyndFeed feed = createFeedFromEntries(repositoryManager.getPrincipalManager(), recursiveEntries, language, feedSize);
+		SyndFeed feed = Syndication.createFeedFromEntries(repositoryManager.getPrincipalManager(), recursiveEntries,
+				language, feedSize, e -> e.getResourceURI().toString());
 		feed.setTitle("Feed of \"" + alias + "\"");
 		feed.setLink(entry.getResourceURI().toString());
 		feed.setFeedType(type);
@@ -126,70 +117,6 @@ public class SyndicationService {
 
 		return recursiveEntries;
 	}
-
-	public static SyndFeed createFeedFromEntries(PrincipalManager principalManager,
-												 List<Entry> entries,
-												 String language,
-												 int limit) {
-
-		SyndFeed feed = new SyndFeedImpl();
-		feed.setDescription(format("Syndication feed containing max %d items", limit));
-
-		List<SyndEntry> syndEntries = new ArrayList<>();
-		int limitedCount = 0;
-
-		for (Entry entry : entries) {
-			try {
-				String title = EntryUtil.getTitle(entry, language);
-				String description = EntryUtil.getDescription(entry, language);
-
-				if (title == null && description == null) {
-					log.debug("Entry has neither title, nor description: {}", entry.getEntryURI());
-				}
-
-				SyndEntry syndEntry = new SyndEntryImpl();
-				syndEntry.setTitle(Objects.requireNonNullElse(title, "Missing title"));
-
-				if (description != null) {
-					SyndContent syndContentDescription = new SyndContentImpl();
-					syndContentDescription.setType("text/plain");
-					syndContentDescription.setValue(description);
-					syndEntry.setDescription(syndContentDescription);
-				}
-
-				syndEntry.setPublishedDate(entry.getCreationDate());
-				syndEntry.setUpdatedDate(entry.getModifiedDate());
-				syndEntry.setLink(entry.getResourceURI().toString());
-
-				URI creator = entry.getCreator();
-				if (creator != null) {
-					try {
-						Entry creatorEntry = principalManager.getByEntryURI(creator);
-						String creatorName = EntryUtil.getName(creatorEntry);
-						if (creatorName != null) {
-							syndEntry.setAuthor(creatorName);
-						}
-					} catch (AuthorizationException ae) {
-						log.debug(ae.getMessage());
-					}
-				}
-
-				syndEntries.add(syndEntry);
-			} catch (AuthorizationException e) {
-				log.debug(e.getMessage());
-				continue;
-			}
-
-			if (limitedCount++ >= limit) {
-				break;
-			}
-		}
-
-		feed.setEntries(syndEntries);
-
-		return feed;
-	}
-
 
 	private Set<Entry> getListChildrenRecursively(Entry listEntry) {
 		Set<Entry> result = new HashSet<>();

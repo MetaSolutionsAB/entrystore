@@ -39,6 +39,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Function;
 
 import static java.lang.String.format;
 import static java.net.URLEncoder.encode;
@@ -60,7 +61,7 @@ public class Syndication {
 			// TODO: SyndFeedOutput seems thread-safe, hence should be fine to instantiate it only once?
 			return new SyndFeedOutput().outputString(feed, true);
 		} catch (FeedException fe) {
-			throw new InternalServerErrorException("Error serializing the syndication feed", fe);
+			throw new InternalServerErrorException("Error serializing the syndication feed with title: " + feed.getTitle(), fe);
 		}
 	}
 
@@ -81,6 +82,17 @@ public class Syndication {
 												 String language,
 												 int limit,
 												 String urlTemplate) {
+		return createFeedFromEntries(principalManager, entries, language, limit, entry -> {
+			String link = constructSyndLinkFromUrlTemplate(esConfig, Objects.requireNonNullElse(urlTemplate, "default"), entry);
+			return link != null ? link : entry.getResourceURI().toString();
+		});
+	}
+
+	public static SyndFeed createFeedFromEntries(PrincipalManager principalManager,
+												 List<Entry> entries,
+												 String language,
+												 int limit,
+												 Function<Entry, String> linkBuilder) {
 
 		SyndFeed feed = new SyndFeedImpl();
 		feed.setDescription(format("Syndication feed containing max %d items", limit));
@@ -109,12 +121,7 @@ public class Syndication {
 
 				syndEntry.setPublishedDate(entry.getCreationDate());
 				syndEntry.setUpdatedDate(entry.getModifiedDate());
-
-				String link = constructSyndLinkFromUrlTemplate(esConfig, Objects.requireNonNullElse(urlTemplate, "default"), entry);
-				if (link == null) {
-					link = entry.getResourceURI().toString();
-				}
-				syndEntry.setLink(link);
+				syndEntry.setLink(linkBuilder.apply(entry));
 
 				URI creator = entry.getCreator();
 				if (creator != null) {
