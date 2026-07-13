@@ -23,6 +23,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.DateUtils;
 import org.entrystore.repository.util.FileOperations;
+import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.Job;
 import org.quartz.JobDataMap;
@@ -47,6 +48,12 @@ import java.util.List;
  * @author Hannes Ebner
  * @author Eric Johansson (eric.johansson@educ.umu.se)
  */
+/**
+ * E9: {@link DisallowConcurrentExecution} stops Quartz from starting a new backup while one is
+ * still running. Overlapping fires previously queued on the static {@code synchronized} lock and
+ * then ran redundant backups back-to-back, each re-triggering the write lockout.
+ */
+@DisallowConcurrentExecution
 public class BackupJob implements Job, InterruptableJob {
 
 	private static final Logger log = LoggerFactory.getLogger(BackupJob.class);
