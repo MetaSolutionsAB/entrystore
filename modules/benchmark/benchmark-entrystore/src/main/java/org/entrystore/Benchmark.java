@@ -76,6 +76,55 @@ public class Benchmark {
 		LogUtils.logTimeDifference("Reading from database took", start, end);
 	}
 
+	/**
+	 * Reads every entry of the benchmark context as a non-admin user whose read access is granted
+	 * only through group membership. This forces the group-resolution path in
+	 * PrincipalManagerImpl.hasAccess/getGroupUris that admin and direct-grant reads bypass, so it
+	 * measures the B-theme authorization findings.
+	 */
+	private static void readAllAsGroupUser(RepositoryManagerImpl repositoryManager, int sizeToGenerate) {
+		PrincipalManager pm = repositoryManager.getPrincipalManager();
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+
+		// A user that is NOT granted anything directly.
+		Entry readerEntry = pm.createResource(null, GraphType.User, null, null);
+		User reader = (User) readerEntry.getResource();
+		pm.setPrincipalName(readerEntry.getResourceURI(), "Group Reader");
+		reader.setSecret(BenchmarkCommons.BENCHMARK_USER_SECRET);
+
+		// A group the user belongs to, granted ReadResource on the context (which grants read on all
+		// its entries by inheritance).
+		Entry groupEntry = pm.createResource(null, GraphType.Group, null, null);
+		Group group = (Group) groupEntry.getResource();
+		pm.setPrincipalName(groupEntry.getResourceURI(), "Reader Group");
+		group.addMember(reader);
+
+		Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS + "_1");
+		context.getEntry().addAllowedPrincipalsFor(PrincipalManager.AccessProperty.ReadResource, group.getURI());
+
+		pm.setAuthenticatedUserURI(reader.getURI());
+
+		LogUtils.logType(" READING");
+		LocalDateTime start = LocalDateTime.now();
+		LogUtils.logDate("Starting reading as group-member user at", start);
+
+		int read = 0;
+		for (URI entryURI : context.getEntries()) {
+			Entry entry = context.getByEntryURI(entryURI);
+			try {
+				entry.getMetadataGraph().objects();
+				read++;
+			} catch (Exception e) {
+				// authorization or load failure — counted as skipped
+			}
+		}
+
+		LocalDateTime end = LocalDateTime.now();
+		LogUtils.logDate("Ended reading as group-member user at", end);
+		LogUtils.logTimeDifference("Reading as group-member user took", start, end);
+		LogUtils.log.info("Read {} entries as group-member user", read);
+	}
+
 	private static void readAllFromRepository(RepositoryManagerImpl repositoryManager, int sizeToGenerate) {
 
 		LogUtils.logType(" READING");
@@ -129,6 +178,9 @@ public class Benchmark {
 					if (!arguments.isWithInterContexts()) {
 						Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS + "_1");
 						readAllFromDatabase(context, arguments.getSizeToGenerate());
+						if (arguments.isReadAsGroupUser() && arguments.isWithAcl()) {
+							readAllAsGroupUser(repositoryManager, arguments.getSizeToGenerate());
+						}
 					}
 				} else {
 					SingleTransaction.runBenchmark(repositoryManager, persons);

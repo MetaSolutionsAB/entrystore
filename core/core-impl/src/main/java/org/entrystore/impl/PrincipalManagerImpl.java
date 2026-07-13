@@ -378,32 +378,35 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 				return true;
 			}
 
+			//B1: resolve the user's groups at most once for this whole decision.
+			UserGroupsMemo groupsMemo = new UserGroupsMemo(userURI);
+
 			Entry contextEntry = entry.getContext().getEntry();
 			//Check if user is owner of surrounding context
-			if (hasAccess(user, contextEntry, AccessProperty.Administer)) {
+			if (hasAccess(user, contextEntry, AccessProperty.Administer, groupsMemo)) {
 				return true;
 			} else {
 				//If entry overrides Context ACL (only relevant if the user is not an owner of the context)
 				if (entry.hasAllowedPrincipals()) {
-					if (hasAccess(user, entry, AccessProperty.Administer)
-							|| hasAccess(user, entry, accessProperty)) {
+					if (hasAccess(user, entry, AccessProperty.Administer, groupsMemo)
+							|| hasAccess(user, entry, accessProperty, groupsMemo)) {
 						return true;
 					} else if (accessProperty == AccessProperty.ReadMetadata
-							&& hasAccess(user, entry, AccessProperty.WriteMetadata)) {
+							&& hasAccess(user, entry, AccessProperty.WriteMetadata, groupsMemo)) {
 						return true; //WriteMetadata implies ReadMetadata
 					} else if (accessProperty == AccessProperty.ReadResource
-							&& hasAccess(user, entry, AccessProperty.WriteResource)) {
+							&& hasAccess(user, entry, AccessProperty.WriteResource, groupsMemo)) {
 						return true; //WriteResource implies ReadResource
 					}
 				} else {
 					//Check if user has access to the surrounding context of the entry.
 					if (accessProperty == AccessProperty.ReadMetadata || accessProperty == AccessProperty.ReadResource) {
-						if (hasAccess(user, contextEntry, AccessProperty.ReadResource)
-								|| hasAccess(user, contextEntry, AccessProperty.WriteResource)) {
+						if (hasAccess(user, contextEntry, AccessProperty.ReadResource, groupsMemo)
+								|| hasAccess(user, contextEntry, AccessProperty.WriteResource, groupsMemo)) {
 							return true; //Both read and write on the context resource implies read on all entries for both the metadata and the resource.
 						}
 					} else {
-						if (hasAccess(user, contextEntry, AccessProperty.WriteResource)) {
+						if (hasAccess(user, contextEntry, AccessProperty.WriteResource, groupsMemo)) {
 							return true;
 						}
 					}
@@ -418,6 +421,37 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 	}
 
 	protected boolean hasAccess(User currentUser, Entry entry, AccessProperty prop) {
+		// A null currentUser is denied by the overload below, before the memo is ever consulted, so
+		// there is nothing to resolve groups for in that case.
+		return hasAccess(currentUser, entry, prop,
+				currentUser == null ? null : new UserGroupsMemo(currentUser.getURI()));
+	}
+
+	/**
+	 * B1: per-authorization-decision lazy memo of a user's group URIs. {@link #getGroupUris(URI)}
+	 * scans the entire principals context, and one {@link #isUserAuthorized}/{@link #getRights}
+	 * decision can consult it up to a dozen times across repeated hasAccess calls. Scoping the memo
+	 * to a single decision collapses those to at most one scan, and because it never outlives the
+	 * decision it needs no cross-request invalidation (unlike a shared cache).
+	 */
+	private final class UserGroupsMemo {
+		private final URI userURI;
+		private Set<URI> groups;
+
+		UserGroupsMemo(URI userURI) {
+			this.userURI = userURI;
+		}
+
+		/** Returns a fresh copy each call; callers mutate the result via retainAll. */
+		Set<URI> copy() {
+			if (groups == null) {
+				groups = getGroupUris(userURI);
+			}
+			return new HashSet<>(groups);
+		}
+	}
+
+	private boolean hasAccess(User currentUser, Entry entry, AccessProperty prop, UserGroupsMemo groupsMemo) {
 		if (currentUser == null) {
 			// Fail closed on a principal that could not be resolved. Without this, the "_users" check below
 			// reads currentUser != getGuestUser() as true, so every entry granting the user group would be
@@ -453,7 +487,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			}
 
 			//Check if any of the groups the user belongs to is in principals
-			Set<URI> groups = getGroupUris(currentUser.getURI());
+			Set<URI> groups = groupsMemo.copy();
 			groups.retainAll(principals);
 			if (!groups.isEmpty()) {
 				return true;
@@ -470,7 +504,7 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 				}
 
 				//Check if any of the groups the user belongs to is in principals
-				Set<URI> groups = getGroupUris(currentUser.getURI());
+				Set<URI> groups = groupsMemo.copy();
 				groups.retainAll(principals);
 				return !groups.isEmpty();
 			}
@@ -515,32 +549,35 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 				return set;
 			}
 
+			//B1: resolve the user's groups at most once for this whole decision.
+			UserGroupsMemo groupsMemo = new UserGroupsMemo(currentUserURI);
+
 			Entry contextEntry = entry.getContext().getEntry();
 			//Check if user is owner of surrounding context
-			if (hasAccess(currentUser, contextEntry, AccessProperty.Administer)) {
+			if (hasAccess(currentUser, contextEntry, AccessProperty.Administer, groupsMemo)) {
 				set.add(AccessProperty.Administer);
 			} else {
 				//If entry overrides Context ACL (only relevant if the user is not an owner of the context)
 				if(entry.hasAllowedPrincipals()) {
-					if (hasAccess(currentUser, entry, AccessProperty.Administer)) {
+					if (hasAccess(currentUser, entry, AccessProperty.Administer, groupsMemo)) {
 						set.add(AccessProperty.Administer);
 						return set;
 					} else {
-						if (hasAccess(currentUser, entry, AccessProperty.WriteMetadata)) {
+						if (hasAccess(currentUser, entry, AccessProperty.WriteMetadata, groupsMemo)) {
 							set.add(AccessProperty.WriteMetadata);
-						} else if (hasAccess(currentUser, entry, AccessProperty.ReadMetadata)) {
+						} else if (hasAccess(currentUser, entry, AccessProperty.ReadMetadata, groupsMemo)) {
 							set.add(AccessProperty.ReadMetadata);
 						}
-						if (hasAccess(currentUser, entry, AccessProperty.WriteResource)) {
+						if (hasAccess(currentUser, entry, AccessProperty.WriteResource, groupsMemo)) {
 							set.add(AccessProperty.WriteResource);
-						} else if (hasAccess(currentUser, entry, AccessProperty.ReadResource)) {
+						} else if (hasAccess(currentUser, entry, AccessProperty.ReadResource, groupsMemo)) {
 							set.add(AccessProperty.ReadResource);
 						}
 					}
 				} else {
-					if (hasAccess(currentUser, contextEntry, AccessProperty.WriteResource)) {
+					if (hasAccess(currentUser, contextEntry, AccessProperty.WriteResource, groupsMemo)) {
 						set.add(AccessProperty.Administer);
-					} else if (hasAccess(currentUser, contextEntry, AccessProperty.ReadResource)) {
+					} else if (hasAccess(currentUser, contextEntry, AccessProperty.ReadResource, groupsMemo)) {
 						set.add(AccessProperty.ReadMetadata);
 						set.add(AccessProperty.ReadResource);
 					}

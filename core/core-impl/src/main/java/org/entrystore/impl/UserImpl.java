@@ -60,6 +60,10 @@ public class UserImpl extends RDFResource implements User {
 
 	private String language;
 
+	// B5: cached like the other UserImpl fields; a repository read per authenticated request and
+	// per serialized user row otherwise. Invalidated in setDisabled.
+	private Boolean disabled;
+
 	private URI homeContext;
 	
 	private String externalID;
@@ -561,14 +565,20 @@ public class UserImpl extends RDFResource implements User {
 
 	public boolean isDisabled() {
 		rm.getPrincipalManager().checkAuthenticatedUserAuthorized(entry, AccessProperty.ReadResource);
+		if (this.disabled != null) {
+			return this.disabled;
+		}
 		RepositoryConnection rc = null;
 		try {
 			rc = this.entry.repository.getConnection();
 			List<Statement> matches = rc.getStatements(resourceURI, RepositoryProperties.disabled, null, false, resourceURI).asList();
 			if (!matches.isEmpty()) {
 				Literal l = (Literal) matches.get(0).getObject();
-				return l.booleanValue();
+				this.disabled = l.booleanValue();
+			} else {
+				this.disabled = false;
 			}
+			return this.disabled;
 		} catch (org.eclipse.rdf4j.repository.RepositoryException e) {
 			log.error(e.getMessage());
 			throw new RepositoryException("Failed to connect to repository", e);
@@ -581,7 +591,6 @@ public class UserImpl extends RDFResource implements User {
 				log.error(e.getMessage());
 			}
 		}
-		return false;
 	}
 
 	public void setDisabled(boolean disabled) {
@@ -598,6 +607,7 @@ public class UserImpl extends RDFResource implements User {
 					}
 					this.entry.updateModifiedDateSynchronized(rc, vf);
 					rc.commit();
+					this.disabled = disabled;
 					entry.getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(entry, RepositoryEvent.ResourceUpdated));
 				} catch (Exception e) {
 					log.error(e.getMessage(), e);
