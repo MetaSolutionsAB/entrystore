@@ -99,6 +99,40 @@ principals-context size, so the production argument now rests explicitly
 on scaling, not on the toy measurement. Doc 20's assessment is revised
 accordingly.
 
+### Addendum 2 (2026-07-13) — scaling measured: −49% at a 2 207-principal directory
+
+The scaling argument above is now empirical, not reasoned. A new
+`-P/--principals` harness flag (commit `3cf5031d`) seeds N secret-less
+users plus one group per ten users before the group-read pass. A/B of the
+pre-B1 core (`26933b31`) vs the tip, both with this harness, on AC,
+order-alternated, canaries 192–227 ms, **2 000 seeded users + 200 groups
+(≈ 2 207 principals total)**, 4 000 entries read per run:
+
+| Round | after (B1) | before (no B1) |
+|---|---:|---:|
+| 1 | 5 667 | 11 696 |
+| 2 (after ran first) | 5 753 | 10 821 |
+| 3 | 5 617 | 10 825 |
+| **avg** | **5 679** | **11 114** |
+
+**−48.9% — group-authorized reads are 2.0× faster** — with tight,
+non-overlapping distributions (after 5.6–5.8 k, before 10.8–11.7 k).
+Per read: 2.78 ms → 1.42 ms.
+
+Putting the three measurements together:
+
+| Principals in directory | B1 effect on group-authorized reads |
+|---|---|
+| ~7 (built-ins only, AC) | −5.3% |
+| ~7 (built-ins only, battery) | −15% (CPU-starved, amplified) |
+| **~2 207 (seeded, AC)** | **−48.9%** |
+
+The memo's win grows with directory size exactly as the O(principals ×
+group members) analysis predicts. Note the "after" side still pays **one**
+scan per decision (1.42 ms/read at this size) — that remaining linear
+cost is what the deferred cross-request user→groups cache would remove,
+which quantifies the headroom of that follow-up.
+
 ### Why the toy-scale number (whatever the envelope) understates production
 
 The benchmark's principals context is **tiny** — roughly seven principals
