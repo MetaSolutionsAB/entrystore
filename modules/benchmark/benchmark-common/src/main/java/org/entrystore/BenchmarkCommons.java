@@ -82,6 +82,7 @@ public class BenchmarkCommons {
 		Option forceSyncOption = createOption("f", "force-sync", "FORCE_SYNC", "Override NativeStore forceSync (default off — no fsync per commit). 'true' forces an fsync on every commit at the durability/throughput trade-off: @boolean.", false);
 		Option solrUrlOption = createOption("S", "solr-url", "SOLR_URL", "External Solr URL used by benchmark-solr (embedded Solr is not supported). Example: 'http://localhost:8983/solr/entrystore-core'.", false);
 		Option readAsGroupUserOption = createOption("r", "read-as-user", "READ_AS_USER", "After the write phase, read every entry as a non-admin user whose access is granted only via a group (exercises group-based authorization): @boolean. Requires -a true.", false);
+		Option seededPrincipalsOption = createOption("P", "principals", "PRINCIPALS", "Seed this many extra users (plus 1 group per 10 users) into the principals context before the read-as-user pass, so group resolution scans a realistically sized directory: @int. Requires -r true.", false);
 
 		Options options = new Options();
 		options.addOption(storTypeOption);
@@ -98,6 +99,7 @@ public class BenchmarkCommons {
 		options.addOption(forceSyncOption);
 		options.addOption(solrUrlOption);
 		options.addOption(readAsGroupUserOption);
+		options.addOption(seededPrincipalsOption);
 
 		try {
 			CommandLineParser commandLineParser = new DefaultParser();
@@ -216,6 +218,23 @@ public class BenchmarkCommons {
 			boolean readAsGroupUser = commandLine.hasOption("r") && "true".equals(commandLine.getOptionValue(readAsGroupUserOption));
 			arguments.setReadAsGroupUser(readAsGroupUser);
 			System.setProperty("log.readAsGroupUser", readAsGroupUser ? "on" : "off");
+
+			if (commandLine.hasOption("P")) {
+				try {
+					int seeded = Integer.parseInt(commandLine.getOptionValue(seededPrincipalsOption));
+					if (seeded < 0) {
+						throw new NumberFormatException();
+					}
+					arguments.setSeededPrincipals(seeded);
+					System.setProperty("log.seededPrincipals", seeded + "");
+				} catch (NumberFormatException ex) {
+					System.err.println("Number of seeded principals must be an @int >= 0.");
+					printHelp(options);
+					System.exit(1);
+				}
+			} else {
+				System.setProperty("log.seededPrincipals", "0");
+			}
 
 			// welcome message
 			LogUtils.logWelcome(storeType, arguments.isWithTransactions(), arguments.getSizeToGenerate());
