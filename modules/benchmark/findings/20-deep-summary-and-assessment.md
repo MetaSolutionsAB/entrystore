@@ -54,7 +54,7 @@ items the harness cannot time.
 | 12 | A15 — context purge off request thread | context DELETE | not on harness path | synchronous Solr DBQ round-trip leaves the request thread | low |
 | 13 | A7 — per-batch projectType cache | Solr doc build | **−0.5%** on AC (43 494 vs 43 268; noise, both envelopes agree) | context-graph reads per batch: ~100 → ~1 per context (win scales with context size/count; benchmark's single tiny context is cache-hot) | none |
 | 13 | A8 — cached related-context set | global `solr.related` mode | config-gated, off in bench/ITs | all-context enumeration per document → cached set | none |
-| 14 | **B1 — per-decision group memo** | every group-based authorization | **−5.3%** on AC group-authorized reads (1 178 → 1 116 ms; the −15% battery figure was CPU-starvation-amplified ~3× — see doc 14 addendum) | up to ~12 full principals-context scans per decision → ≤1; cost scales with principals-context size (benchmark has ~7 principals) | low (decision-scoped, no invalidation needed) |
+| 14 | **B1 — per-decision group memo** | every group-based authorization | **−5.3%** at the ~7-principal toy directory; **−48.9% (2.0×) at a seeded 2 207-principal directory** (11 114 → 5 679 ms, AC, non-overlapping — doc 14 addendum 2). The −15% battery figure was CPU-starvation-amplified. | up to ~12 full principals-context scans per decision → ≤1; win grows with directory size, measured | low (decision-scoped, no invalidation needed) |
 | 14 | B3 — ACL sets parsed at load | first auth check per entry | (inside B1 bundle) | up to 6 lazy ACL queries per entry → 0 | low |
 | 14 | B5 — cached `isDisabled` | authenticated requests | (inside B1 bundle) | 1 repo read per authenticated request removed | none |
 | 15 | D14 — SPARQL search dedup | SPARQL search results | n/a (correctness) | **duplicate results no longer leak**; O(n²) → O(n) | none |
@@ -95,6 +95,17 @@ F4/F5     mechanical micro                  ·                              0%  
   none of which a single-threaded insert loop can exhibit. See §3b.
 ```
 
+The toy-scale chart above hides B1's real behaviour, because its cost
+scales with directory size. Re-measured with a **seeded 2 207-principal
+directory** (`-P 2000`, doc 14 addendum 2):
+
+```
+                                            0%    10%    20%    30%    40%    50%
+                                            |      |      |      |      |      |
+B1/B3/B5  group-auth reads, 2 207 principals█████████████████████████████████   ~48.9%  REAL (2.0×)
+B1/B3/B5  group-auth reads, 7 principals    ███▌                                ~5.3%
+```
+
 Two changes cleared the noise floor, and both are the two doc-08
 predicted as the top per-write and read-path levers: **A2 (metadata-graph
 loads in the Solr doc build)** and **B1 (authorization group
@@ -105,15 +116,16 @@ resolution)** — with an important honesty note on B1:
   measured result of the round. Measured on ~6-triple graphs — the
   saving is proportional to graph size × writes, so richer production
   metadata pays more per avoided materialisation.
-- **B1**'s original −15% was measured on battery; the AC re-run gives
-  **−5.3%** (and the whole-branch A/B −2.0% on the same metric). The
-  slow battery CPU amplified the CPU-bound principals scan ~3×. The
-  mechanism (≤12 scans → ≤1 per decision) is confirmed either way, but at
-  the benchmark's ~7-principal directory its absolute cost is small on a
-  fast CPU. The production case for B1 therefore rests on **scaling**:
-  `getGroupUris` is O(principals × group members) per scan, so avoided
-  work grows with directory size — a claim that is reasoned, not measured
-  here.
+- **B1**'s original −15% was measured on battery; the AC re-run at the
+  ~7-principal toy directory gives **−5.3%** (battery CPU starvation had
+  amplified the scan cost ~3×). The scaling behaviour was then measured
+  directly with a seeded directory: at **2 207 principals, group-
+  authorized reads are 2.0× faster (−48.9%)**, tight and non-overlapping.
+  The production case for B1 is no longer reasoned — it is measured, and
+  it grows with directory size exactly as the O(principals × group
+  members) analysis predicts. The remaining 1.42 ms/read on the "after"
+  side is the single scan the per-decision memo still pays, which is the
+  measured headroom for the deferred cross-request cache (§5.2).
 
 ### 3b. Structural/unmeasurable impact ranking (reasoned, IT-gated)
 
@@ -159,7 +171,7 @@ Classification criteria:
 |--------|--------|------------------|
 | **D14** SPARQL dedup fix | `43447622` | Correctness: duplicate entries leaked into SPARQL search results (the dedup compared `Entry` objects to a URI list — never matched). Users see wrong results without it. |
 | **A6** dead widening branch | `542747b0` | Correctness: the search result-fill windowing that the code *documents* never executed; ACL-filtered small-limit searches silently paid up to 10 sequential Solr round-trips. |
-| **B1/B3/B5** auth caching | `844be061` | Measured **~5%** on AC group-authorized reads at toy directory size (~7 principals); the mechanism (≤1 principals scan per decision instead of ~12) is O(principals × group members) per avoided scan, so the win **grows with user count** — that scaling, plus zero staleness risk (decision-scoped memo), is the must-have case. See the borderline note below. |
+| **B1/B3/B5** auth caching | `844be061` | Measured **−48.9% (2.0×)** on group-authorized reads at a seeded 2 207-principal directory (−5.3% at the 7-principal toy size) — the win grows with user count, now demonstrated, with zero staleness risk (decision-scoped memo). The strongest measured result of the round. |
 | **A2** one graph load per Solr doc | `49324e13` | Measured **~6.9%** (AC) / −7.7% (battery) on every Solr-indexed write — envelope-independent, all rounds, order-robust, non-overlapping. Paid on *every* write, not just reindex. Low risk (delegating overloads). |
 | **A1/A9/A13/A15** Solr write-path decoupling | `203154ed` | (a) A9 removes an **OOM class**: reindexing a large repo previously pinned every fully-built `SolrInputDocument` in an unbounded queue; (b) A1 takes the doc build (10+ repo reads + ACL eval) out of the global `synchronized(repository)` chain every concurrent writer serializes behind — the doc-08 #1 finding; (c) ≤500 ms indexing latency removed (A13). Flat on the single-writer bench *by design*; gated by 759 ITs. |
 | **D2** paginate before loading list children | `43447622` | Removes unbounded work from a user-facing endpoint: a page of 20 from a 10 000-child list loaded 10 000 entries before; now ~20. |
@@ -200,16 +212,13 @@ Classification criteria:
   it cannot run away — but ~4 500 graph loads per sorted-list request is
   a user-visible stall on a common operation, and the fix is risk-free.
   Kept in MUST; demoting it to NICE would be defensible.
-- **B1 as MUST HAVE after the AC re-run**: with the honest number at ~5%
-  (toy directory) instead of 15%, criterion (d) alone no longer carries
-  it. It stays MUST on the scaling argument — the avoided work is
-  O(principals × group members) × ~12 per decision, so a directory with
-  thousands of users pays orders of magnitude more than the benchmark's
-  seven — plus zero regression risk. A reviewer who only accepts measured
-  evidence at production scale could reasonably demote B1 to
-  strongly-recommended; the deciding data would be a benchmark run with a
-  large seeded principals context (easy follow-up: generate N users/
-  groups in the `-r` pass).
+- **B1 as MUST HAVE — resolved**: the AC re-run at toy scale (−5.3%)
+  briefly made this a judgment call resting on a reasoned scaling
+  argument. The deciding data has since been collected (doc 14 addendum
+  2): with a seeded 2 207-principal directory, group-authorized reads are
+  **2.0× faster**. Criterion (d) — measured, reproducible win on a hot
+  path at low risk — is met at production-like scale. No longer
+  borderline.
 
 ## 5. What to do next (deferred items ranked)
 
@@ -220,10 +229,13 @@ value-per-risk order:
    reindex phase) — prerequisite to *prove* A1's throughput claim and to
    evaluate A3/G2 (parallel reindex). Everything Solr-side is blocked on
    measurement without it.
-2. **Cross-request user→groups cache** (full B1) — would push the ~15%
-   further; needs listener-based invalidation on membership change,
-   group/user delete. Security-sensitive; single-instance deployment
-   makes local invalidation feasible.
+2. **Cross-request user→groups cache** (full B1) — measured headroom:
+   even with the per-decision memo, each group-authorized decision still
+   pays one full principals scan (1.42 ms/read at 2 207 principals, doc
+   14 addendum 2); a cross-request cache would amortise that toward zero.
+   Needs listener-based invalidation on membership change and group/user
+   delete. Security-sensitive; single-instance deployment makes local
+   invalidation feasible.
 3. **E1–E4 maintenance-op isolation** — removes worst-case multi-minute
    write stalls (export/import/reIndex under the global monitor, backup
    lockout scope). High operational value, needs its own test rig.
@@ -259,7 +271,8 @@ The same session also re-ran every battery-era per-change A/B on AC
 | Per-change pair | before | after | Δ | Verdict |
 |---|---:|---:|---:|---|
 | A2 (Solr doc build) | 45 544 | 42 389 | **−6.9%** | real, envelope-independent |
-| B1 (group-auth read) | 1 178 | 1 116 | **−5.3%** | real but modest at toy scale |
+| B1 (group-auth read, 7 principals) | 1 178 | 1 116 | **−5.3%** | real but modest at toy scale |
+| **B1 (group-auth read, 2 207 principals, `-P 2000`)** | 11 114 | 5 679 | **−48.9%** | **real, 2.0×** — scales with directory size |
 | F1 | 18 113 | 18 037 | −0.4% | noise |
 | P3 bundle | 42 634 | 43 835 | +2.8% | flat (spread > delta) |
 | P4 (A7/A8) | 43 494 | 43 268 | −0.5% | noise |
@@ -288,15 +301,15 @@ Reading the two tables together, honestly:
 
 - **28 commits, 12 findings docs, 759/759 ITs green** at the tip.
 - On identical hardware/conditions, the branch end-to-end is **~3–7%
-  faster on the Solr-indexed write path** and neutral on the (already
-  heavily optimized) core write path — plus a set of wins the harness
-  structurally cannot price: two correctness fixes users would notice
-  (D14 duplicates, A6 dead branch), three security/availability closures
-  (D10, A17, E9), two unbounded-work removals (D2 list loads, A9 reindex
-  heap), lock-scope decoupling for concurrent writers (A1), and
-  authorization-scan collapse whose value grows with directory size (B1).
-- The strongest single measured change is **A2 (−6.9%, envelope-
-  independent)**; the most consequential unmeasured ones are **A1/A9**
-  and **D2**. The ten MUST-HAVEs of §4 stand, with B1's justification
-  now explicitly resting on scaling rather than the (battery-inflated)
-  toy measurement.
+  faster on the Solr-indexed write path**, **2.0× faster on
+  group-authorized reads at a realistic (2 207-principal) directory
+  size**, and neutral on the (already heavily optimized) core write path
+  — plus a set of wins the harness structurally cannot price: two
+  correctness fixes users would notice (D14 duplicates, A6 dead branch),
+  three security/availability closures (D10, A17, E9), two
+  unbounded-work removals (D2 list loads, A9 reindex heap), and
+  lock-scope decoupling for concurrent writers (A1).
+- The strongest measured changes are **B1 (−48.9% at scale)** and
+  **A2 (−6.9%, envelope-independent)**; the most consequential unmeasured
+  ones are **A1/A9** and **D2**. The ten MUST-HAVEs of §4 stand, B1 now
+  on measured evidence at production-like scale.
