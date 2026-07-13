@@ -53,6 +53,20 @@ public interface PrincipalManager extends Context {
 	void checkAuthenticatedUserAuthorized(Entry entry, AccessProperty accessProperty)
 			throws AuthorizationException;
 
+	/**
+	 * Non-throwing authorization check for an explicitly given user. Returns the same decision
+	 * {@link #checkAuthenticatedUserAuthorized(Entry, AccessProperty)} would make for that user
+	 * (including admin, admin-group, context-ACL inheritance and the read/write implication rules),
+	 * but as a boolean instead of throwing {@link AuthorizationException}. Intended for probes such
+	 * as "is this entry guest-readable?" where the throw is pure control flow.
+	 *
+	 * @param userURI the resource URI of the user to check (null is treated as the guest user)
+	 * @param entry the entry to check
+	 * @param accessProperty the access to check for
+	 * @return true if the given user is authorized
+	 */
+	boolean isUserAuthorized(URI userURI, Entry entry, AccessProperty accessProperty);
+
 	boolean isValidSecret(String name);
 
 	User getAdminUser();
