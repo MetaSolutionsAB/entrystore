@@ -1779,6 +1779,58 @@ public class EntryImpl implements Entry {
 		}
 	}
 
+	// C5: single-transaction combined setter for the upload finalization path, replacing the three
+	// separate setFileSize/setMimetype/setFilename transactions (each with its own modified-date
+	// write and EntryUpdated event) with one.
+	public void setFileMetadata(Long size, String mimeType, String filename) {
+		PrincipalManager pm = this.getRepositoryManager().getPrincipalManager();
+		pm.checkAuthenticatedUserAuthorized(this, AccessProperty.WriteResource);
+
+		ValueFactory vf = this.repository.getValueFactory();
+		synchronized (this.repository) {
+			try (RepositoryConnection rc = this.repository.getConnection()) {
+				rc.begin();
+				try {
+					if (size != null) {
+						rc.remove(resURI, RepositoryProperties.fileSize, null, entryURI);
+						rc.add(resURI, RepositoryProperties.fileSize, vf.createLiteral(size), entryURI);
+					}
+					if (mimeType != null) {
+						rc.remove(resURI, RepositoryProperties.format, null, entryURI);
+						rc.add(resURI, RepositoryProperties.format, vf.createLiteral(mimeType), entryURI);
+					}
+					if (filename != null) {
+						rc.remove(resURI, RepositoryProperties.filename, null, entryURI);
+						rc.add(resURI, RepositoryProperties.filename, vf.createLiteral(filename), entryURI);
+					}
+					registerEntryModified(rc, vf);
+					rc.commit();
+				} catch (Exception e) {
+					rc.rollback();
+					throw new org.entrystore.repository.RepositoryException("Error in repository connection.", e);
+				}
+			} catch (RepositoryException e) {
+				throw new org.entrystore.repository.RepositoryException("Failed to connect to Repository.", e);
+			}
+
+			if (size != null) {
+				this.fileSize = size;
+			}
+			if (mimeType != null) {
+				this.format = mimeType;
+				// a mime-type set (overwritten) in the metadata takes precedence, as in setMimetype
+				String mtMd = getMimetypeFromMetadata();
+				if (mtMd != null) {
+					this.format = mtMd;
+				}
+			}
+			if (filename != null) {
+				this.filename = filename;
+			}
+		}
+		getRepositoryManager().fireRepositoryEvent(new RepositoryEventObject(this, RepositoryEvent.EntryUpdated));
+	}
+
 	private String getMimetypeFromMetadata() {
 		Statement st = getStatementFromLocalMetadata(resURI, RepositoryProperties.format, null);
 		if (st != null) {

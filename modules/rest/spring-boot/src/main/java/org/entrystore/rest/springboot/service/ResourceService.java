@@ -281,14 +281,12 @@ public class ResourceService {
 			} else {
 				try {
 					((Data) entry.getResource()).setData(new ByteArrayInputStream(requestBody));
-					entry.setFileSize(((Data) entry.getResource()).getDataFile().length());
 					if (mimeType == null) {
 						mimeType = Objects.requireNonNullElse(mediaType, MediaType.APPLICATION_OCTET_STREAM_VALUE);
 					}
-					entry.setMimetype(mimeType);
-					if (StringUtils.isNotEmpty(filename)) {
-						entry.setFilename(FileUtil.sanitizeFilename(filename));
-					}
+					// C5: one transaction for size + mime type + filename instead of three.
+					String sanitizedFilename = StringUtils.isNotEmpty(filename) ? FileUtil.sanitizeFilename(filename) : null;
+					entry.setFileMetadata(((Data) entry.getResource()).getDataFile().length(), mimeType, sanitizedFilename);
 				} catch (QuotaException qe) {
 					throw new EntityTooLargeException(qe.getMessage(), qe);
 				} catch (IOException ioe) {
