@@ -329,65 +329,91 @@ public class PrincipalManagerImpl extends EntryNamesContext implements Principal
 			log.warn("Authenticated user not set, assuming guest user");
 		}
 
+		if (isUserAuthorized(currentUserURI, entry, accessProperty)) {
+			return;
+		}
+
+		//Load the user for the exception message under admin rights, matching the historic behaviour.
+		URI savedUserURI = getAuthenticatedUserURI();
+		try {
+			setAuthenticatedUserURI(getAdminUser().getURI());
+			throw new AuthorizationException(getUser(currentUserURI), entry, accessProperty);
+		} finally {
+			setAuthenticatedUserURI(savedUserURI);
+		}
+	}
+
+	@Override
+	public boolean isUserAuthorized(URI userURI, Entry entry, AccessProperty accessProperty) {
+
+		//is check authorization on?
+		if (!entry.getRepositoryManager().isCheckForAuthorization()) {
+			return true;
+		}
+
+		if (userURI == null) {
+			userURI = getGuestUser().getURI();
+		}
+
 		//is admin?
-		if(currentUserURI.equals(getAdminUser().getURI())) {
-			return;
+		if (userURI.equals(getAdminUser().getURI())) {
+			return true;
 		}
 
-		if (currentUserURI.equals(entry.getResourceURI()) &&
+		if (userURI.equals(entry.getResourceURI()) &&
 				(accessProperty == AccessProperty.ReadMetadata || accessProperty == AccessProperty.ReadResource)) {
-			return;
+			return true;
 		}
 
+		URI savedUserURI = getAuthenticatedUserURI();
 		try {
 			//Switch to admin so that the PrincipalManager can perform all
 			//neccessary checks without being hindered by itself (results in loops).
 			setAuthenticatedUserURI(getAdminUser().getURI());
 
-			//Fetch the current user from thread local.
-			User currentUser = getUser(currentUserURI);
+			User user = getUser(userURI);
 
 			//Check if user is in admingroup.
-			if (getAdminGroup().isMember(currentUser)) {
-				return;
+			if (getAdminGroup().isMember(user)) {
+				return true;
 			}
 
 			Entry contextEntry = entry.getContext().getEntry();
 			//Check if user is owner of surrounding context
-			if (hasAccess(currentUser, contextEntry, AccessProperty.Administer)) {
-				return;
+			if (hasAccess(user, contextEntry, AccessProperty.Administer)) {
+				return true;
 			} else {
 				//If entry overrides Context ACL (only relevant if the user is not an owner of the context)
-				if(entry.hasAllowedPrincipals()) {
-					if (hasAccess(currentUser, entry, AccessProperty.Administer)
-                    || hasAccess(currentUser, entry, accessProperty)) {
-						return;
+				if (entry.hasAllowedPrincipals()) {
+					if (hasAccess(user, entry, AccessProperty.Administer)
+							|| hasAccess(user, entry, accessProperty)) {
+						return true;
 					} else if (accessProperty == AccessProperty.ReadMetadata
-                            && hasAccess(currentUser, entry, AccessProperty.WriteMetadata)) {
-                        return; //WriteMetadata implies ReadMetadata
-                    } else if (accessProperty == AccessProperty.ReadResource
-                        && hasAccess(currentUser, entry, AccessProperty.WriteResource)) {
-                        return; //WriteResource implies ReadResource
-                    }
+							&& hasAccess(user, entry, AccessProperty.WriteMetadata)) {
+						return true; //WriteMetadata implies ReadMetadata
+					} else if (accessProperty == AccessProperty.ReadResource
+							&& hasAccess(user, entry, AccessProperty.WriteResource)) {
+						return true; //WriteResource implies ReadResource
+					}
 				} else {
 					//Check if user has access to the surrounding context of the entry.
 					if (accessProperty == AccessProperty.ReadMetadata || accessProperty == AccessProperty.ReadResource) {
-						if (hasAccess(currentUser, contextEntry, AccessProperty.ReadResource)
-                                || hasAccess(currentUser, contextEntry, AccessProperty.WriteResource)) {
-							return; //Both read and write on the context resource implies read on all entries for both the metadata and the resource.
+						if (hasAccess(user, contextEntry, AccessProperty.ReadResource)
+								|| hasAccess(user, contextEntry, AccessProperty.WriteResource)) {
+							return true; //Both read and write on the context resource implies read on all entries for both the metadata and the resource.
 						}
 					} else {
-						if (hasAccess(currentUser, contextEntry, AccessProperty.WriteResource)) {
-							return;
+						if (hasAccess(user, contextEntry, AccessProperty.WriteResource)) {
+							return true;
 						}
 					}
 				}
 			}
 
-			throw new AuthorizationException(currentUser, entry, accessProperty);
+			return false;
 		} finally {
-			//Switch back to the current user.
-			setAuthenticatedUserURI(currentUserURI);
+			//Switch back to the previously authenticated user.
+			setAuthenticatedUserURI(savedUserURI);
 		}
 	}
 
