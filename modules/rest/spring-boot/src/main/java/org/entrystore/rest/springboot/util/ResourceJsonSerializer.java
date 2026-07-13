@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2007-2026 MetaSolutions AB
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.entrystore.rest.springboot.util;
 
 import lombok.RequiredArgsConstructor;
@@ -43,11 +59,6 @@ import static org.entrystore.EntryType.LinkReference;
 import static org.entrystore.EntryType.Local;
 import static org.entrystore.EntryType.Reference;
 import static org.entrystore.GraphType.SystemContext;
-import static org.entrystore.PrincipalManager.AccessProperty.Administer;
-import static org.entrystore.PrincipalManager.AccessProperty.ReadMetadata;
-import static org.entrystore.PrincipalManager.AccessProperty.ReadResource;
-import static org.entrystore.PrincipalManager.AccessProperty.WriteMetadata;
-import static org.entrystore.PrincipalManager.AccessProperty.WriteResource;
 
 @Slf4j
 @Component
@@ -212,7 +223,6 @@ public class ResourceJsonSerializer {
 					/*
 					 * Children-rights
 					 */
-//					this.accumulateRights(childEntry, childJSON);
 					JSONArray rights = this.serializeRights(childEntry);
 					childJSON.put("rights", rights);
 
@@ -354,24 +364,6 @@ public class ResourceJsonSerializer {
 
 	public JSONArray serializeResourceSystemContext(Resource resource) {
 		return serializeResourceContext(resource);
-	}
-
-	public void accumulateRights(Entry entry, JSONObject jdilObj) throws JSONException {
-		Set<PrincipalManager.AccessProperty> rights = pm.getRights(entry);
-		if (!rights.isEmpty()) {
-			for (PrincipalManager.AccessProperty ap : rights) {
-				if (ap == Administer)
-					jdilObj.append("rights", "administer");
-				else if (ap == WriteMetadata)
-					jdilObj.append("rights", "writemetadata");
-				else if (ap == WriteResource)
-					jdilObj.append("rights", "writeresource");
-				else if (ap == ReadMetadata)
-					jdilObj.append("rights", "readmetadata");
-				else if (ap == ReadResource)
-					jdilObj.append("rights", "readresource");
-			}
-		}
 	}
 
 	public JSONArray serializeRights(Entry entry) throws JSONException {
