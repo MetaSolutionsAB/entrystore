@@ -25,6 +25,7 @@ import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.config.Settings;
 import org.entrystore.repository.util.DateUtils;
 import org.entrystore.repository.util.FileOperations;
+import org.quartz.DisallowConcurrentExecution;
 import org.quartz.InterruptableJob;
 import org.quartz.Job;
 import org.quartz.JobDataMap;
@@ -49,11 +50,14 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Runs a backup of the repository.
+ * Runs a backup of the repository. {@link DisallowConcurrentExecution} keeps Quartz from starting a backup
+ * while one is still running; overlapping fires would otherwise run redundant backups back-to-back, each
+ * locking out writes again.
  *
  * @author Hannes Ebner
  * @author Eric Johansson (eric.johansson@educ.umu.se)
  */
+@DisallowConcurrentExecution
 public class BackupJob implements Job, InterruptableJob {
 
 	private static final Logger log = LoggerFactory.getLogger(BackupJob.class);
