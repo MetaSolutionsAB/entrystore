@@ -76,7 +76,30 @@ decision). Round 1 is excluded — a concurrent build contaminated it
 Admin/direct-grant read (`readAllFromDatabase`) was ~900–1 000 ms on both
 sides — unchanged, confirming that path never touched `getGroupUris`.
 
-### Why ~15% here understates the production win
+### ⚠ Addendum (2026-07-13) — AC re-run revises the headline down to ~5%
+
+The table above was measured **on battery power** (~4× reduced sustained
+clock). Re-run under stable AC conditions with the **same jar snapshots**,
+interleaved, order-alternated, canaries matched (232–251 ms):
+
+| Round | after (ms) | before (ms) |
+|---|---:|---:|
+| 1 | 1 170 | 1 166 |
+| 2 | 1 104 | 1 220 |
+| 3 | 1 075 | 1 148 |
+| **avg** | **1 116** | **1 178** |
+
+**−5.3% on AC** (round 1 flat, rounds 2–3 clearly faster). The
+whole-branch A/B (doc 20 §6) independently shows −2.0% on the same
+metric. Honest headline: at this benchmark's directory size the measured
+win is **~2–5%**, not 15% — the battery's slow CPU amplified the
+CPU-bound principals scan roughly 3×. The mechanism (≤1 scan per decision
+instead of ~12) is unchanged and its absolute cost grows with
+principals-context size, so the production argument now rests explicitly
+on scaling, not on the toy measurement. Doc 20's assessment is revised
+accordingly.
+
+### Why the toy-scale number (whatever the envelope) understates production
 
 The benchmark's principals context is **tiny** — roughly seven principals
 and three groups — so a single `getGroupUris` scan is cheap, and
