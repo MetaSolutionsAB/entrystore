@@ -23,15 +23,21 @@ import org.entrystore.GraphType;
 import org.entrystore.Group;
 import org.entrystore.PrincipalManager.AccessProperty;
 import org.entrystore.ResourceType;
+import org.entrystore.User;
 import org.entrystore.repository.security.DisallowedException;
 import org.entrystore.repository.test.TestSuite;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.net.URI;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
@@ -207,6 +213,81 @@ public class PrincipalManagerImplTest extends AbstractCoreTest {
 		}
 	}
 
+
+	/**
+	 * {@code isUserAuthorized} is a second entry point into the authorization decision, so it must answer exactly what
+	 * {@code checkAuthenticatedUserAuthorized} decides, for every principal kind and every access property: admin,
+	 * admin-group member, context owner, group member, entry-level override, the user's own entry, and guest. The
+	 * Write-to-Read implications are covered because each property is checked against the same grants.
+	 */
+	@ParameterizedTest(name = "{0} on {1}")
+	@MethodSource("authorizationMatrix")
+	public void isUserAuthorized_agreesWithCheckAuthenticatedUserAuthorized(String user, String entryRef) {
+		URI userURI = principalURI(user);
+		Entry entry = entryFor(entryRef, user);
+
+		for (AccessProperty prop : AccessProperty.values()) {
+			boolean allowed;
+			URI saved = pm.getAuthenticatedUserURI();
+			pm.setAuthenticatedUserURI(userURI);
+			try {
+				pm.checkAuthenticatedUserAuthorized(entry, prop);
+				allowed = true;
+			} catch (AuthorizationException e) {
+				allowed = false;
+			} finally {
+				pm.setAuthenticatedUserURI(saved);
+			}
+			assertEquals(allowed, pm.isUserAuthorized(userURI, entry, prop), user + " " + prop + " on " + entryRef);
+		}
+	}
+
+	private static Stream<Arguments> authorizationMatrix() {
+		List<String> users = List.of("admin", "adminGroupMember", "Mickey", "Donald", "Daisy", "guest");
+		List<String> entries = List.of("mouse", "mouse/1", "mouse/2", "duck/1", "self");
+		return users.stream().flatMap(user -> entries.stream().map(entry -> Arguments.of(user, entry)));
+	}
+
+	private URI principalURI(String user) {
+		return switch (user) {
+			case "admin" -> pm.getAdminUser().getURI();
+			case "guest" -> pm.getGuestUser().getURI();
+			case "adminGroupMember" -> adminGroupMember();
+			default -> pm.getPrincipalEntry(user).getResourceURI();
+		};
+	}
+
+	private URI adminGroupMember() {
+		URI saved = pm.getAuthenticatedUserURI();
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		try {
+			Entry existing = pm.getPrincipalEntry("adminGroupMember");
+			if (existing != null) {
+				return existing.getResourceURI();
+			}
+			Entry userEntry = pm.createResource(null, GraphType.User, null, null);
+			pm.setPrincipalName(userEntry.getResourceURI(), "adminGroupMember");
+			pm.getAdminGroup().addMember((User) userEntry.getResource());
+			return userEntry.getResourceURI();
+		} finally {
+			pm.setAuthenticatedUserURI(saved);
+		}
+	}
+
+	private Entry entryFor(String entryRef, String user) {
+		URI saved = pm.getAuthenticatedUserURI();
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+		try {
+			return switch (entryRef) {
+				case "mouse" -> cm.getContext("mouse").getEntry();
+				case "self" -> pm.getByEntryURI(pm.getUser(principalURI(user)).getEntry().getEntryURI());
+				default -> cm.getContext(entryRef.substring(0, entryRef.indexOf('/')))
+						.get(entryRef.substring(entryRef.indexOf('/') + 1));
+			};
+		} finally {
+			pm.setAuthenticatedUserURI(saved);
+		}
+	}
 
 	@Test
 	public void getGroupUris_skipsNullEntriesFromConcurrentDelete() {

@@ -173,6 +173,21 @@ public class EntryImplTest extends AbstractCoreTest {
 		}
 	}
 
+	/**
+	 * A Reference has no local metadata, so its metadata grants are looked up without a subject. Bucketing the ACL at
+	 * load time by the local metadata URI found none and silently dropped them once the entry was reloaded.
+	 */
+	@Test
+	public void referenceKeepsItsMetadataGrantsAfterAReload() {
+		URI guest = pm.getGuestUser().getURI();
+		refEntry.addAllowedPrincipalsFor(AccessProperty.ReadMetadata, guest);
+		evictFromSoftCache(refEntry);
+
+		Entry reloaded = context.getByEntryURI(refEntry.getEntryURI());
+
+		assertEquals(Set.of(guest), reloaded.getAllowedPrincipalsFor(AccessProperty.ReadMetadata));
+	}
+
 	@Test
 	public void referenceType() {
 		assertSame(EntryType.Local, listEntry.getEntryType());
