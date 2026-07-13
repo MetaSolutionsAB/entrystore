@@ -123,10 +123,8 @@ class FileResourceServiceTest {
 		service.setData(entry, new byte[]{1, 2, 3}, "application/octet-stream", "image/png", "../a.png");
 
 		verify(data).setData(any(InputStream.class));
-		verify(entry).setFileSize(dataFile.length());
-		// The explicit mimeType parameter wins over the request media type.
-		verify(entry).setMimetype("image/png");
-		verify(entry).setFilename(FileUtil.sanitizeFilename("../a.png"));
+		// The explicit mimeType parameter wins over the request media type; C5 records all three in one call.
+		verify(entry).setFileMetadata(dataFile.length(), "image/png", FileUtil.sanitizeFilename("../a.png"));
 	}
 
 	@Test
