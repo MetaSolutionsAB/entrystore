@@ -110,7 +110,11 @@ public class CheckUsernamePasswordFilter extends OncePerRequestFilter {
 			}
 
 			try {
-				Password.check(password, Password.getSaltedHash(password));
+				// D10: validate only the submitted password's format. The previous
+				// Password.check(password, Password.getSaltedHash(password)) ran PBKDF2 twice per
+				// login attempt (a self-comparison that is always true), amplifying credential-
+				// stuffing CPU cost, purely to reach this same format validation.
+				Password.validateFormat(password);
 			} catch (IllegalArgumentException ex) {
 				log.warn("Password validation failed: {}", ex.getMessage(), ex);
 				errorResponseWriter.writeErrorResponseAsJson(response, ErrorResponse.builder()
