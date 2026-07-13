@@ -205,6 +205,16 @@ public class Password {
 		}
 	}
 
+	/**
+	 * Validates that a submitted password is of an acceptable format (non-empty, within the maximum
+	 * length), throwing {@link IllegalArgumentException} otherwise. This is the format probe callers
+	 * want before authentication; it does no PBKDF2 hashing and touches only the submitted password,
+	 * so it introduces no timing side-channel about valid users (finding D10).
+	 */
+	public static void validateFormat(String password) {
+		checkMinimumRequirements(password);
+	}
+
 	public static boolean conformsToRules(String password) {
 		try {
 			checkMinimumRequirements(password);
