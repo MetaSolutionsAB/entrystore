@@ -486,7 +486,7 @@ public class SolrSearchIndexTest {
 	public void reindexOfRepairedEntryCancelsThePendingRemovalOfItsDocument() throws Exception {
 		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", ENTRY_1_1);
 		Entry repairedEntry = mock(Entry.class);
@@ -509,7 +509,7 @@ public class SolrSearchIndexTest {
 	public void reindexOfCorruptEntryKeepsItsQueuedDocument() throws Exception {
 		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", ENTRY_1_1);
 		Entry loadableEntry = mock(Entry.class);
@@ -528,7 +528,7 @@ public class SolrSearchIndexTest {
 	public void reindexDoesNotRestoreTheDocumentOfAnEntryDeletedConcurrently() throws Exception {
 		stopDocumentSubmitter(); // keeps queued deletions and documents in their queues
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", ENTRY_1_1);
 		AtomicBoolean deleted = new AtomicBoolean();
@@ -728,7 +728,7 @@ public class SolrSearchIndexTest {
 		stopDocumentSubmitter();
 		SolrSearchIndex indexFailingDocuments = spy(index);
 		doThrow(new IllegalStateException("Unable to extract fulltext"))
-				.when(indexFailingDocuments).constructSolrInputDocument(any(), anyBoolean());
+				.when(indexFailingDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), deletedEntry(cm, ENTRY_1_2));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
@@ -783,7 +783,7 @@ public class SolrSearchIndexTest {
 	public void reindexOfContextPurgesOnlyAfterEveryQueuedEntryHasLeftTheQueue() throws Exception {
 		stopDocumentSubmitter(); // keeps posted documents in the submission queue
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		// The corrupt entry does not prevent the purge, and its document is removed right away; the deleted entry
 		// is not posted.
@@ -812,7 +812,7 @@ public class SolrSearchIndexTest {
 		stopDocumentSubmitter(); // keeps posted documents in the submission queue
 		index.purgePollMillis = TimeUnit.MINUTES.toMillis(1);
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
@@ -832,7 +832,7 @@ public class SolrSearchIndexTest {
 		stopDocumentSubmitter(); // keeps posted documents in the submission queue
 		index.purgePollMillis = TimeUnit.MINUTES.toMillis(1);
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
@@ -942,7 +942,7 @@ public class SolrSearchIndexTest {
 		index.purgePollMillis = PURGE_POLL_MILLIS;
 		index.markRepositoryInitialized();
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		return indexWithoutDocuments;
 	}
 
@@ -993,7 +993,7 @@ public class SolrSearchIndexTest {
 	public void reindexOfContextDoesNotPurgeWhileAnAddBatchIsInFlightOrRequeued() throws Exception {
 		stopDocumentSubmitter(); // keeps posted documents in the submission queue
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
@@ -1031,7 +1031,7 @@ public class SolrSearchIndexTest {
 			}).when(solrServer).request(any(), any());
 			SolrSearchIndex indexWithoutDocuments = spy(index);
 			doReturn(new SolrInputDocument()).when(indexWithoutDocuments)
-					.constructSolrInputDocument(any(), anyBoolean());
+					.constructSolrInputDocument(any(), anyBoolean(), any());
 			ContextManager cm = contextManagerListing(CONTEXT_1);
 			resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
 			stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
@@ -1068,7 +1068,7 @@ public class SolrSearchIndexTest {
 			return null;
 		}).when(solrServer).request(any(), any());
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
@@ -1092,7 +1092,7 @@ public class SolrSearchIndexTest {
 			return null;
 		}).when(solrServer).request(any(), any());
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
@@ -1108,7 +1108,7 @@ public class SolrSearchIndexTest {
 	public void reindexOfContextTreatsAnEntryDeletedWhilePendingAsSent() throws Exception {
 		stopDocumentSubmitter(); // keeps posted documents in the submission queue
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
@@ -1130,7 +1130,7 @@ public class SolrSearchIndexTest {
 		index.purgePollMillis = 2000;
 		index.purgeStallNanos = TimeUnit.MILLISECONDS.toNanos(500);
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
@@ -1156,7 +1156,7 @@ public class SolrSearchIndexTest {
 		index.purgePollMillis = 1000;
 		index.purgeStallNanos = TimeUnit.MILLISECONDS.toNanos(500);
 		SolrSearchIndex indexWithoutDocuments = spy(index);
-		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean());
+		doReturn(new SolrInputDocument()).when(indexWithoutDocuments).constructSolrInputDocument(any(), anyBoolean(), any());
 		ContextManager cm = contextManagerListing(CONTEXT_1);
 		resolvableContext(cm, "1", indexableEntry(cm, ENTRY_1_1), indexableEntry(cm, ENTRY_1_2));
 		stubContextEntry(cm, CONTEXT_1, "http://localhost:8181/1");
