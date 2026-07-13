@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2017 MetaSolutions AB
+ * Copyright (c) 2007-2026 MetaSolutions AB
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -405,30 +405,42 @@ public class EntryUtil {
 
 	public static String getFirstName(Entry entry) {
 		if (entry != null) {
-			Set<IRI> foafFN = new HashSet<>();
-			foafFN.add(valueFactory.createIRI(NS.foaf + "givenName"));
-			foafFN.add(valueFactory.createIRI(NS.foaf + "firstName"));
-			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafFN, null);
+			return getFirstName(entry.getMetadataGraph(), entry.getResourceURI());
 		}
 		return null;
+	}
+
+	public static String getFirstName(Model metadata, URI resourceURI) {
+		Set<IRI> foafFN = new HashSet<>();
+		foafFN.add(valueFactory.createIRI(NS.foaf + "givenName"));
+		foafFN.add(valueFactory.createIRI(NS.foaf + "firstName"));
+		return getLabel(metadata, resourceURI, foafFN, null);
 	}
 
 	public static String getLastName(Entry entry) {
 		if (entry != null) {
-			Set<IRI> foafLN = new HashSet<>();
-			foafLN.add(valueFactory.createIRI(NS.foaf + "surname"));
-			foafLN.add(valueFactory.createIRI(NS.foaf + "lastName"));
-			foafLN.add(valueFactory.createIRI(NS.foaf + "familyName"));
-			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), foafLN, null);
+			return getLastName(entry.getMetadataGraph(), entry.getResourceURI());
 		}
 		return null;
 	}
 
+	public static String getLastName(Model metadata, URI resourceURI) {
+		Set<IRI> foafLN = new HashSet<>();
+		foafLN.add(valueFactory.createIRI(NS.foaf + "surname"));
+		foafLN.add(valueFactory.createIRI(NS.foaf + "lastName"));
+		foafLN.add(valueFactory.createIRI(NS.foaf + "familyName"));
+		return getLabel(metadata, resourceURI, foafLN, null);
+	}
+
 	public static String getEmail(Entry entry) {
 		if (entry != null) {
-			return getLabel(entry.getMetadataGraph(), entry.getResourceURI(), valueFactory.createIRI(NS.foaf + "mbox"), null);
+			return getEmail(entry.getMetadataGraph(), entry.getResourceURI());
 		}
 		return null;
+	}
+
+	public static String getEmail(Model metadata, URI resourceURI) {
+		return getLabel(metadata, resourceURI, valueFactory.createIRI(NS.foaf + "mbox"), null);
 	}
 
 	public static String getMemberOf(Entry entry) {
@@ -455,6 +467,18 @@ public class EntryUtil {
 	 *         and dc:title
 	 */
 	public static Map<String, Set<String>> getTitles(Entry entry) {
+		return getLiteralValues(entry, titlePredicates());
+	}
+
+	/**
+	 * Same as {@link #getTitles(Entry)} but operates on an already fetched metadata graph,
+	 * avoiding a repeated repository read.
+	 */
+	public static Map<String, Set<String>> getTitles(Model metadata, URI resourceURI) {
+		return getLiteralValues(metadata, resourceURI, titlePredicates());
+	}
+
+	private static List<IRI> titlePredicates() {
 		List<IRI> titlePredicates = new ArrayList<>();
 		titlePredicates.add(valueFactory.createIRI(NS.foaf, "name"));
 		titlePredicates.add(valueFactory.createIRI(NS.vcard, "fn"));
@@ -465,8 +489,7 @@ public class EntryUtil {
 		titlePredicates.add(valueFactory.createIRI(NS.skos, "hiddenLabel"));
 		titlePredicates.add(valueFactory.createIRI(NS.rdfs, "label"));
 		titlePredicates.add(valueFactory.createIRI(NS.schema, "name"));
-
-		return getLiteralValues(entry, titlePredicates);
+		return titlePredicates;
 	}
 
 	/**
@@ -479,10 +502,22 @@ public class EntryUtil {
 	 *         and dc:description
 	 */
 	public static Map<String, Set<String>> getDescriptions(Entry entry) {
+		return getLiteralValues(entry, descriptionPredicates());
+	}
+
+	/**
+	 * Same as {@link #getDescriptions(Entry)} but operates on an already fetched metadata graph,
+	 * avoiding a repeated repository read.
+	 */
+	public static Map<String, Set<String>> getDescriptions(Model metadata, URI resourceURI) {
+		return getLiteralValues(metadata, resourceURI, descriptionPredicates());
+	}
+
+	private static List<IRI> descriptionPredicates() {
 		List<IRI> descPreds = new ArrayList<>();
 		descPreds.add(valueFactory.createIRI(NS.dcterms, "description"));
 		descPreds.add(valueFactory.createIRI(NS.dc, "description"));
-		return getLiteralValues(entry, descPreds);
+		return descPreds;
 	}
 
 	public static String getDescription(Entry entry, String language) {
@@ -521,11 +556,23 @@ public class EntryUtil {
 	 * @return Returns all matching literal-language pairs.
 	 */
 	public static Map<String, Set<String>> getTagLiterals(Entry entry) {
+		return getLiteralValues(entry, tagLiteralPredicates());
+	}
+
+	/**
+	 * Same as {@link #getTagLiterals(Entry)} but operates on an already fetched metadata graph,
+	 * avoiding a repeated repository read.
+	 */
+	public static Map<String, Set<String>> getTagLiterals(Model metadata, URI resourceURI) {
+		return getLiteralValues(metadata, resourceURI, tagLiteralPredicates());
+	}
+
+	private static List<IRI> tagLiteralPredicates() {
 		List<IRI> preds = new ArrayList<>();
 		preds.add(valueFactory.createIRI(NS.dcterms, "subject"));
 		preds.add(valueFactory.createIRI(NS.dc, "subject"));
 		preds.add(valueFactory.createIRI(NS.dcat, "keyword"));
-		return getLiteralValues(entry, preds);
+		return preds;
 	}
 
 	/**
@@ -536,10 +583,22 @@ public class EntryUtil {
 	 * @return Returns all matching literal-language pairs.
 	 */
 	public static List<String> getTagResources(Entry entry) {
+		return getResourceValues(entry, tagResourcePredicates());
+	}
+
+	/**
+	 * Same as {@link #getTagResources(Entry)} but operates on an already fetched metadata graph,
+	 * avoiding a repeated repository read.
+	 */
+	public static List<String> getTagResources(Model metadata, URI resourceURI) {
+		return getResourceValues(metadata, resourceURI, tagResourcePredicates());
+	}
+
+	private static Set<IRI> tagResourcePredicates() {
 		Set<IRI> preds = new HashSet<>();
 		preds.add(valueFactory.createIRI(NS.dc, "subject"));
 		preds.add(valueFactory.createIRI(NS.dcterms, "subject"));
-		return getResourceValues(entry, preds);
+		return preds;
 	}
 
 	/**
@@ -562,35 +621,47 @@ public class EntryUtil {
 		}
 
 		if (graph != null) {
-			IRI resourceURI = valueFactory.createIRI(entry.getResourceURI().toString());
-			Map<String, Set<String>> result = new LinkedHashMap<>();
-			for (IRI pred : predicates) {
-				for (Statement statement : graph.filter(resourceURI, pred, null)) {
-					Value value = statement.getObject();
-					Set<String> valuesSet;
+			return getLiteralValues(graph, entry.getResourceURI(), predicates);
+		}
+		return null;
+	}
 
-					if (value instanceof Literal lit) {
+	/**
+	 * Same as {@link #getLiteralValues(Entry, List)} but operates on an already fetched
+	 * metadata graph, avoiding a repeated repository read.
+	 */
+	public static Map<String, Set<String>> getLiteralValues(Model graph, URI resourceURI, List<IRI> predicates) {
+		if (graph == null || resourceURI == null || predicates == null) {
+			throw new IllegalArgumentException("Parameters must not be null");
+		}
 
-						valuesSet = result.get(lit.stringValue()) == null ? new HashSet<>() : result.get(lit.stringValue());
+		IRI resourceIRI = valueFactory.createIRI(resourceURI.toString());
+		Map<String, Set<String>> result = new LinkedHashMap<>();
+		for (IRI pred : predicates) {
+			for (Statement statement : graph.filter(resourceIRI, pred, null)) {
+				Value value = statement.getObject();
+				Set<String> valuesSet;
 
-						valuesSet.add(lit.getLanguage().orElse(null));
-						result.put(lit.stringValue(), valuesSet);
-					} else if (value instanceof org.eclipse.rdf4j.model.Resource resource) {
-						Iterator<Statement> stmnts2 = graph.filter(resource, RDF.VALUE, null).iterator();
-						if (stmnts2.hasNext()) {
-							Value value2 = stmnts2.next().getObject();
-							if (value2 instanceof Literal lit2) {
-								valuesSet = result.get(lit2.stringValue()) == null ? new HashSet<>() : result.get(lit2.stringValue());
-								valuesSet.add(lit2.getLanguage().orElse(null));
-								result.put(lit2.stringValue(), valuesSet);
-							}
+				if (value instanceof Literal lit) {
+
+					valuesSet = result.get(lit.stringValue()) == null ? new HashSet<>() : result.get(lit.stringValue());
+
+					valuesSet.add(lit.getLanguage().orElse(null));
+					result.put(lit.stringValue(), valuesSet);
+				} else if (value instanceof org.eclipse.rdf4j.model.Resource resource) {
+					Iterator<Statement> stmnts2 = graph.filter(resource, RDF.VALUE, null).iterator();
+					if (stmnts2.hasNext()) {
+						Value value2 = stmnts2.next().getObject();
+						if (value2 instanceof Literal lit2) {
+							valuesSet = result.get(lit2.stringValue()) == null ? new HashSet<>() : result.get(lit2.stringValue());
+							valuesSet.add(lit2.getLanguage().orElse(null));
+							result.put(lit2.stringValue(), valuesSet);
 						}
 					}
 				}
 			}
-			return result;
 		}
-		return null;
+		return result;
 	}
 
 	/**

@@ -1051,13 +1051,13 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// titles
-		Map<String, Set<String>> titles = EntryUtil.getTitles(entry);
+		Map<String, Set<String>> titles = EntryUtil.getTitles(mdGraph, resourceURI);
 		if (titles != null && !titles.isEmpty()) {
 			storeLiteralsWithLanguages(doc, titles, "title");
 		}
 
-		String firstName = EntryUtil.getFirstName(entry);
-		String lastName = EntryUtil.getLastName(entry);
+		String firstName = EntryUtil.getFirstName(mdGraph, resourceURI);
+		String lastName = EntryUtil.getLastName(mdGraph, resourceURI);
 		String name = "";
 		if (firstName != null) {
 			name += firstName;
@@ -1091,19 +1091,19 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// description
-		Map<String, Set<String>> descriptions = EntryUtil.getDescriptions(entry);
+		Map<String, Set<String>> descriptions = EntryUtil.getDescriptions(mdGraph, resourceURI);
 		if (descriptions != null && !descriptions.isEmpty()) {
 			storeLiteralsWithLanguages(doc, descriptions, "description");
 		}
 
 		// tag.literal[.*]
-		Map<String, Set<String>> tagLiterals = EntryUtil.getTagLiterals(entry);
+		Map<String, Set<String>> tagLiterals = EntryUtil.getTagLiterals(mdGraph, resourceURI);
 		if (tagLiterals != null) {
 			storeLiteralsWithLanguages(doc, tagLiterals, "tag.literal");
 		}
 
 		// tag.uri
-		for (String s : EntryUtil.getTagResources(entry)) {
+		for (String s : EntryUtil.getTagResources(mdGraph, resourceURI)) {
 			doc.addField("tag.uri", s);
 		}
 
@@ -1118,7 +1118,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 
 		// email (foaf:mbox)
-		String email = EntryUtil.getEmail(entry);
+		String email = EntryUtil.getEmail(mdGraph, resourceURI);
 		if (email != null) {
 			doc.addField("email", email);
 		}
@@ -1144,7 +1144,7 @@ public class SolrSearchIndex implements SearchIndex {
 		addGenericMetadataFields(doc, mdGraph, false);
 
 		if (related) {
-			addRelatedFields(doc, entry);
+			addRelatedFields(doc, entry, mdGraph, resourceURI);
 		}
 
 		// Full text extraction using Apache Tika
@@ -1232,7 +1232,7 @@ public class SolrSearchIndex implements SearchIndex {
 		}
 	}
 
-	private void addRelatedFields(SolrInputDocument doc, Entry entry) {
+	private void addRelatedFields(SolrInputDocument doc, Entry entry, Model mdGraph, URI resourceURI) {
 		if (doc == null || entry == null) {
 			throw new IllegalArgumentException("Neither SolrInputDocument nor Entry must be null");
 		}
@@ -1254,7 +1254,7 @@ public class SolrSearchIndex implements SearchIndex {
 
 		Set<Entry> relatedEntries = new HashSet<>();
 		for (IRI relProp : relatedProperties.keySet()) {
-			List<String> relatedURIs = EntryUtil.getResourceValues(entry, Collections.singleton(relProp));
+			List<String> relatedURIs = EntryUtil.getResourceValues(mdGraph, resourceURI, Collections.singleton(relProp));
 			if (relatedURIs.isEmpty()) {
 				continue;
 			}
