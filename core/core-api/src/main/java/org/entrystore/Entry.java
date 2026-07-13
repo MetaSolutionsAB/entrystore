@@ -281,12 +281,23 @@ public interface Entry {
 	void setFilename(String name);
 
 	long getFileSize();
-	
+
 	void setFileSize(long size);
 
 	String getMimetype();
-	
+
 	void setMimetype(String mt);
+
+	/**
+	 * Sets file size, mime type and filename in a single transaction (one modification-date write and
+	 * one repository event), instead of the three separate transactions the individual setters incur.
+	 * Any null argument is left unchanged.
+	 *
+	 * @param size the file size, or null to leave it unchanged
+	 * @param mimeType the mime type, or null to leave it unchanged
+	 * @param filename the file name, or null to leave it unchanged
+	 */
+	void setFileMetadata(Long size, String mimeType, String filename);
 
 	/**
 	 * Changes the resource URI of a Link, Reference or LinkReference, rewriting it in the entry graph, the
