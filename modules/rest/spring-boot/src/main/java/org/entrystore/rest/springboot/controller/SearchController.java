@@ -97,27 +97,13 @@ public class SearchController {
 
 		searchRateLimiter.acquirePermit(HttpUtil.getClientIpAddress(request, trustForwardedFor));
 
-		if (limit > MAX_LIMIT) {
-			limit = MAX_LIMIT;
-		} else if (limit < 0) {
-			// we allow 0 on purpose, this enables requests for the purpose of getting a result count only
-			limit = 50;
-		}
+		limit = clampLimit(limit);
 
 		List<Entry> foundEntries = searchService.findEntriesSparql(query);
 
-		String responseBody;
-		MediaType responseMediaType;
-		if (StringUtils.isNotEmpty(syndication)) {
-			responseBody = searchService.generateSyndication(request, foundEntries, syndication, lang, limit, urlTemplate, feedTitle);
-			responseMediaType = Syndication.convertFeedTypeToMediaType(syndication);
-		} else {
-			// In Restlet's SPARQL search logic, the "offset" param is accepted from the user but not used
-			responseBody = searchService.generateJson(0, limit, new QueryResultsDto(foundEntries), rdfFormat);
-			responseMediaType = MediaType.APPLICATION_JSON;
-		}
-
-		return ResponseEntity.ok().contentType(responseMediaType).body(responseBody);
+		// In Restlet's SPARQL search logic, the "offset" param is accepted from the user but not used
+		return buildSearchResponse(request, new QueryResultsDto(foundEntries), syndication, lang, 0, limit,
+				urlTemplate, feedTitle, rdfFormat);
 	}
 
 	@Operation(summary = "Searches the repository and returns entries")
@@ -153,12 +139,7 @@ public class SearchController {
 		}
 
 		// Query parameter: limit
-		if (limit > MAX_LIMIT) {
-			limit = MAX_LIMIT;
-		} else if (limit < 0) {
-			// we allow 0 on purpose, this enables requests for the purpose of getting a result count only
-			limit = 50;
-		}
+		limit = clampLimit(limit);
 
 		// Query parameter: filterQuery
 		List<String> filterQueries = new ArrayList<>();
@@ -175,6 +156,23 @@ public class SearchController {
 
 		QueryResultsDto queryResults = searchService.findEntriesSolr(query, sort, offset, limit, filterQueries, facetSettings);
 
+		return buildSearchResponse(request, queryResults, syndication, lang, offset, limit, urlTemplate, feedTitle, rdfFormat);
+	}
+
+	static int clampLimit(int limit) {
+		if (limit > MAX_LIMIT) {
+			return MAX_LIMIT;
+		}
+		if (limit < 0) {
+			// we allow 0 on purpose, this enables requests for the purpose of getting a result count only
+			return 50;
+		}
+		return limit;
+	}
+
+	private ResponseEntity<String> buildSearchResponse(HttpServletRequest request, QueryResultsDto queryResults,
+													   String syndication, String lang, int offset, int limit,
+													   String urlTemplate, String feedTitle, String rdfFormat) {
 		String responseBody;
 		MediaType responseMediaType;
 		if (StringUtils.isNotEmpty(syndication)) {

@@ -173,18 +173,7 @@ public class GraphUtil {
 			return null;
 		}
 
-		try {
-			rdfWriter.startRDF();
-			for (String nsName : namespaces.keySet()) {
-				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
-			}
-			for (Statement statement : graph) {
-				rdfWriter.handleStatement(statement);
-			}
-			rdfWriter.endRDF();
-		} catch (RDFHandlerException rdfe) {
-			log.error(rdfe.getMessage());
-		}
+		writeGraph(graph, rdfWriter, namespaces);
 		return stringWriter.toString();
 	}
 
@@ -192,9 +181,12 @@ public class GraphUtil {
 		if (graph == null || rdfWriter == null) {
 			throw new IllegalArgumentException("Parameters must not be null");
 		}
+		writeGraph(graph, rdfWriter, NS.getMap());
+	}
+
+	private static void writeGraph(Model graph, RDFWriter rdfWriter, Map<String, String> namespaces) {
 		try {
 			rdfWriter.startRDF();
-			Map<String, String> namespaces = NS.getMap();
 			for (String nsName : namespaces.keySet()) {
 				rdfWriter.handleNamespace(nsName, namespaces.get(nsName));
 			}
@@ -203,7 +195,7 @@ public class GraphUtil {
 			}
 			rdfWriter.endRDF();
 		} catch (RDFHandlerException rdfe) {
-			log.error(rdfe.getMessage());
+			log.error("Failed to serialize RDF graph: {}", rdfe.getMessage(), rdfe);
 		}
 	}
 

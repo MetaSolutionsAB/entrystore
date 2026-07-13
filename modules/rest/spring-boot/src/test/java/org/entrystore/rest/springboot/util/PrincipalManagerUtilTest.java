@@ -117,9 +117,7 @@ class PrincipalManagerUtilTest {
 		stubAdminElevation();
 		List<URI> uriChanges = recordUriChanges();
 
-		PrincipalManagerUtil.runAsAdmin(pm, () -> {
-			assertEquals(List.of(ADMIN), uriChanges, "action must run after elevation and before restore");
-		});
+		PrincipalManagerUtil.runAsAdmin(pm, () -> assertEquals(List.of(ADMIN), uriChanges, "action must run after elevation and before restore"));
 
 		assertEquals(List.of(ADMIN, PREVIOUS), uriChanges);
 	}
@@ -157,6 +155,33 @@ class PrincipalManagerUtilTest {
 
 		assertSame(actionFailure, thrown, "the action's exception must keep propagating");
 		assertArrayEquals(new Throwable[]{cleanupFailure}, thrown.getSuppressed());
+	}
+
+	@Test
+	void runAsAdmin_restoreFailsAfterActionSucceeded_propagatesCleanupFailure() {
+		stubAdminElevation();
+		RuntimeException cleanupFailure = new RuntimeException("restore failed");
+		// stub both argument values: strict stubbing rejects the elevation call (ADMIN) when only
+		// the restore call (PREVIOUS) has a stubbing on the same method
+		doNothing().when(pm).setAuthenticatedUserURI(ADMIN);
+		doThrow(cleanupFailure).when(pm).setAuthenticatedUserURI(PREVIOUS);
+
+		RuntimeException thrown = assertThrows(RuntimeException.class,
+				() -> PrincipalManagerUtil.runAsAdmin(pm, () -> "value"));
+
+		assertSame(cleanupFailure, thrown,
+				"with no action exception to attach to, a failed restore must propagate — not be swallowed");
+	}
+
+	@Test
+	void runAsAdmin_functionOverload_passesPreElevationUserToAction() {
+		stubAdminElevation();
+		List<URI> uriChanges = recordUriChanges();
+
+		URI observed = PrincipalManagerUtil.runAsAdmin(pm, previous -> previous);
+
+		assertEquals(PREVIOUS, observed, "action must receive the pre-elevation user, not the admin user");
+		assertEquals(List.of(ADMIN, PREVIOUS), uriChanges, "must elevate to admin, then restore the previous user");
 	}
 
 	private void stubAdminElevation() {

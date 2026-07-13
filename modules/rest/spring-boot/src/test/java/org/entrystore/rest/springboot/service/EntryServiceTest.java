@@ -16,13 +16,15 @@
 
 package org.entrystore.rest.springboot.service;
 
-import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import org.entrystore.Context;
 import org.entrystore.Entry;
+import org.entrystore.EntryType;
 import org.entrystore.GraphType;
+import org.entrystore.Metadata;
 import org.entrystore.PrincipalManager;
 import org.entrystore.User;
+import org.entrystore.impl.ContextImpl;
 import org.entrystore.impl.RepositoryManagerImpl;
 import org.entrystore.repository.RepositoryException;
 import org.entrystore.rest.springboot.model.api.CreateEntryRequestBody;
@@ -40,11 +42,16 @@ import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -117,5 +124,55 @@ class EntryServiceTest {
 				|| Arrays.asList(cause.getSuppressed()).contains(cleanupFailure);
 		assertTrue(cleanupVisible, "Cleanup failure must be visible somewhere on the exception chain");
 		verify(context).remove(entryUri);
+	}
+
+	@Test
+	void createLinkEntry_malformedMetadataJson_logsAndStillReturnsEntry() {
+		// The graph setters log-and-continue on malformed RDF/JSON — entry creation must not fail.
+		when(context.createLink(any(), any(), any())).thenReturn(entry);
+		when(entry.getEntryType()).thenReturn(EntryType.Link);
+		when(entry.getId()).thenReturn("e1");
+		when(entry.getEntryURI()).thenReturn(URI.create("http://example.org/1/entry/e1"));
+		CreateEntryRequestBody body = new CreateEntryRequestBody(null, "{not-json", null, null);
+
+		Entry result = service.createLinkEntry(context, "e1", null, URI.create("http://external.example.com/doc"), null, body);
+
+		assertSame(entry, result);
+		verify(entry, never()).setGraphType(any());
+	}
+
+	@Test
+	void createReferenceEntry_nullResourceUri_returnsNullWithoutCreating() {
+		Entry result = service.createReferenceEntry(context, "e1", null, null, null,
+				URI.create("http://external.example.com/md"), null);
+
+		assertNull(result);
+		verifyNoInteractions(context);
+	}
+
+	@Test
+	void createLinkReferenceEntry_setsAllGraphsAndCopiesAcl() {
+		ContextImpl contextImpl = mock(ContextImpl.class);
+		when(contextImpl.createLinkReference(any(), any(), any(), any())).thenReturn(entry);
+		when(entry.getEntryType()).thenReturn(EntryType.LinkReference);
+		when(entry.getId()).thenReturn("e1");
+		Metadata localMetadata = mock(Metadata.class);
+		Metadata cachedMetadata = mock(Metadata.class);
+		when(entry.getLocalMetadata()).thenReturn(localMetadata);
+		when(entry.getCachedExternalMetadata()).thenReturn(cachedMetadata);
+		URI listUri = URI.create("http://example.org/1/resource/list1");
+		String rdfJson = "{\"http://example.org/1/resource/e1\":"
+				+ "{\"http://purl.org/dc/terms/title\":[{\"value\":\"t\",\"type\":\"literal\"}]}}";
+		CreateEntryRequestBody body = new CreateEntryRequestBody(null, rdfJson, rdfJson, rdfJson);
+
+		Entry result = service.createLinkReferenceEntry(contextImpl, "e1", GraphType.List,
+				URI.create("http://external.example.com/doc"), listUri, URI.create("http://external.example.com/md"), body);
+
+		assertSame(entry, result);
+		verify(localMetadata).setGraph(any());
+		verify(cachedMetadata).setGraph(any());
+		verify(entry).setGraph(any());
+		verify(entry).setGraphType(GraphType.List);
+		verify(contextImpl).copyACL(listUri, entry);
 	}
 }

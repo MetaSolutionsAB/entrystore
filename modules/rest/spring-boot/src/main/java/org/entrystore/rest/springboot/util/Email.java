@@ -173,12 +173,7 @@ public class Email {
 		String subject = config.getString(Settings.SIGNUP_SUBJECT, "User sign-up request");
 
 		if (messageBodySignup == null) {
-			String templatePath = config.getString(Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
-			if (templatePath != null) {
-				messageBodySignup = loadTemplate(templatePath);
-			} else {
-				messageBodySignup = loadClasspathTemplate("email_signup.html");
-			}
+			messageBodySignup = resolveTemplate(config, Settings.SIGNUP_CONFIRMATION_MESSAGE_TEMPLATE_PATH, "email_signup.html");
 		}
 
 		if (messageBodySignup == null) {
@@ -186,8 +181,7 @@ public class Email {
 			return false;
 		}
 
-		String messageText = messageBodySignup.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
-		messageText = messageText.replaceAll("__DOMAIN__", resolveBaseUrlHost(config));
+		String messageText = renderBaseTemplate(messageBodySignup, config);
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
@@ -207,12 +201,7 @@ public class Email {
 		String subject = config.getString(Settings.AUTH_PASSWORD_RESET_SUBJECT, "Password reset request");
 
 		if (messageBodyPasswordReset == null) {
-			String templatePath = config.getString(Settings.AUTH_PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
-			if (templatePath != null) {
-				messageBodyPasswordReset = loadTemplate(templatePath);
-			} else {
-				messageBodyPasswordReset = loadClasspathTemplate("email_pwreset.html");
-			}
+			messageBodyPasswordReset = resolveTemplate(config, Settings.AUTH_PASSWORD_RESET_CONFIRMATION_MESSAGE_TEMPLATE_PATH, "email_pwreset.html");
 		}
 
 		if (messageBodyPasswordReset == null) {
@@ -220,8 +209,7 @@ public class Email {
 			return false;
 		}
 
-		String messageText = messageBodyPasswordReset.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
-		messageText = messageText.replaceAll("__DOMAIN__", resolveBaseUrlHost(config));
+		String messageText = renderBaseTemplate(messageBodyPasswordReset, config);
 		if (confirmationLink != null) {
 			messageText = messageText.replaceAll("__CONFIRMATION_LINK__", confirmationLink);
 		}
@@ -249,12 +237,7 @@ public class Email {
 			}
 
 			if (messageBodyPasswordChanged == null) {
-				String templatePath = config.getString(Settings.AUTH_PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH);
-				if (templatePath != null) {
-					messageBodyPasswordChanged = loadTemplate(templatePath);
-				} else {
-					messageBodyPasswordChanged = loadClasspathTemplate("email_pwchange.html");
-				}
+				messageBodyPasswordChanged = resolveTemplate(config, Settings.AUTH_PASSWORD_CHANGE_CONFIRMATION_MESSAGE_TEMPLATE_PATH, "email_pwchange.html");
 			}
 
 			if (messageBodyPasswordChanged == null) {
@@ -262,8 +245,7 @@ public class Email {
 				return;
 			}
 
-			String messageText = messageBodyPasswordChanged.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)));
-			messageText = messageText.replaceAll("__DOMAIN__", resolveBaseUrlHost(config));
+			String messageText = renderBaseTemplate(messageBodyPasswordChanged, config);
 			String msgSubject = config.getString(Settings.AUTH_PASSWORD_CHANGE_SUBJECT, "Your password has been changed");
 			String recipientName = EntryUtil.getName(userEntry);
 			if (recipientName == null) {
@@ -277,6 +259,28 @@ public class Email {
 		} catch (RuntimeException e) {
 			log.error("Failed to send password change confirmation email", e);
 		}
+	}
+
+	/**
+	 * Loads the template from the path configured under {@code templatePathSetting}, or the bundled
+	 * classpath template when no path is configured. Returns null when the chosen source cannot be
+	 * loaded — a configured path that fails to load does not fall back to the classpath template.
+	 */
+	private static String resolveTemplate(Config config, String templatePathSetting, String classpathTemplate) {
+		String templatePath = config.getString(templatePathSetting);
+		if (templatePath != null) {
+			return loadTemplate(templatePath);
+		}
+		return loadClasspathTemplate(classpathTemplate);
+	}
+
+	/**
+	 * Applies the substitutions common to every email template: {@code __YEAR__} and {@code __DOMAIN__}.
+	 */
+	private static String renderBaseTemplate(String template, Config config) {
+		return template
+				.replaceAll("__YEAR__", Integer.toString(Calendar.getInstance().get(Calendar.YEAR)))
+				.replaceAll("__DOMAIN__", resolveBaseUrlHost(config));
 	}
 
 	/**
