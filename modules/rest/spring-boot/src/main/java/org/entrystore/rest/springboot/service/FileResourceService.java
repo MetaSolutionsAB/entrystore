@@ -86,14 +86,12 @@ public class FileResourceService {
 		try {
 			Data data = (Data) entry.getResource();
 			data.setData(new RequestBodyInputStream(in, maxFileSize));
-			entry.setFileSize(data.getDataFile().length());
 			if (mimeType == null) {
 				mimeType = Objects.requireNonNullElse(mediaType, MediaType.APPLICATION_OCTET_STREAM_VALUE);
 			}
-			entry.setMimetype(mimeType);
-			if (StringUtils.isNotEmpty(filename)) {
-				entry.setFilename(FileUtil.sanitizeFilename(filename));
-			}
+			// C5: one transaction for size + mime type + filename instead of three.
+			String sanitizedFilename = StringUtils.isNotEmpty(filename) ? FileUtil.sanitizeFilename(filename) : null;
+			entry.setFileMetadata(data.getDataFile().length(), mimeType, sanitizedFilename);
 		} catch (QuotaException qe) {
 			throw new EntityTooLargeException(qe.getMessage(), qe);
 		} catch (SizeLimitExceededException e) {
