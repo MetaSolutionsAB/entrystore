@@ -13,6 +13,7 @@ import org.entrystore.repository.config.Settings;
 import java.io.IOException;
 import java.net.URI;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 public class Benchmark {
@@ -74,6 +75,53 @@ public class Benchmark {
 		LocalDateTime end = LocalDateTime.now();
 		LogUtils.logDate("Ended reading from database at", end);
 		LogUtils.logTimeDifference("Reading from database took", start, end);
+	}
+
+	/**
+	 * Seeds the principals context with bystander users and groups (10 members per group) so that
+	 * group resolution (PrincipalManagerImpl.getGroupUris - a scan over ALL principal entries)
+	 * operates on a realistically sized directory instead of the handful of built-in principals.
+	 * Seeded users get no secret (they never log in), which keeps seeding free of PBKDF2 cost.
+	 */
+	private static void seedPrincipals(RepositoryManagerImpl repositoryManager, int count) {
+		PrincipalManager pm = repositoryManager.getPrincipalManager();
+		pm.setAuthenticatedUserURI(pm.getAdminUser().getURI());
+
+		LogUtils.logType("  SEED  ");
+		LocalDateTime start = LocalDateTime.now();
+
+		List<User> users = new ArrayList<>(count);
+		repositoryManager.inBatch(() -> {
+			for (int i = 0; i < count; i++) {
+				Entry userEntry = pm.createResource(null, GraphType.User, null, null);
+				users.add((User) userEntry.getResource());
+			}
+		});
+
+		int groupCount = Math.max(1, count / 10);
+		List<Group> groups = new ArrayList<>(groupCount);
+		repositoryManager.inBatch(() -> {
+			for (int g = 0; g < groupCount; g++) {
+				Entry groupEntry = pm.createResource(null, GraphType.Group, null, null);
+				groups.add((Group) groupEntry.getResource());
+			}
+		});
+
+		// Memberships outside the batches: ListImpl.addChild manages its own connection and must
+		// see the committed user and group entries.
+		for (int g = 0; g < groupCount; g++) {
+			Group group = groups.get(g);
+			for (int k = 0; k < 10; k++) {
+				int userIndex = g * 10 + k;
+				if (userIndex >= users.size()) {
+					break;
+				}
+				group.addMember(users.get(userIndex));
+			}
+		}
+
+		LocalDateTime end = LocalDateTime.now();
+		LogUtils.logTimeDifference("Seeding " + count + " users and " + groupCount + " groups took", start, end);
 	}
 
 	/**
@@ -179,6 +227,9 @@ public class Benchmark {
 						Context context = repositoryManager.getContextManager().getContext(BenchmarkCommons.CONTEXT_ALIAS + "_1");
 						readAllFromDatabase(context, arguments.getSizeToGenerate());
 						if (arguments.isReadAsGroupUser() && arguments.isWithAcl()) {
+							if (arguments.getSeededPrincipals() > 0) {
+								seedPrincipals(repositoryManager, arguments.getSeededPrincipals());
+							}
 							readAllAsGroupUser(repositoryManager, arguments.getSizeToGenerate());
 						}
 					}
