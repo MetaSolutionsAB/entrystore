@@ -136,7 +136,7 @@ class FileResourceServiceTest {
 				() -> new ByteArrayInputStream(new byte[1025]), -1, "application/octet-stream", null, null));
 
 		assertEquals("Received file exceeds maximum allowed size of: 1024b", e.getMessage());
-		verify(entry, never()).setFileSize(anyLong());
+		verify(entry, never()).setFileMetadata(any(), any(), any());
 	}
 
 	@Test
@@ -150,7 +150,7 @@ class FileResourceServiceTest {
 
 		service.setData(entry, () -> new ByteArrayInputStream(new byte[1024]), -1, "application/octet-stream", null, null);
 
-		verify(entry).setFileSize(dataFile.length());
+		verify(entry).setFileMetadata(dataFile.length(), "application/octet-stream", null);
 	}
 
 	@Test
@@ -197,7 +197,7 @@ class FileResourceServiceTest {
 		assertThrows(EntityNotFoundException.class, () -> service.setData(entry,
 				() -> new ByteArrayInputStream(new byte[3]), 3, "application/octet-stream", null, null));
 
-		verify(entry, never()).setFileSize(anyLong());
+		verify(entry, never()).setFileMetadata(any(), any(), any());
 	}
 
 	@Test
@@ -231,10 +231,8 @@ class FileResourceServiceTest {
 				"image/png", "../a.png");
 
 		assertArrayEquals(new byte[]{1, 2, 3}, stored.toByteArray());
-		verify(entry).setFileSize(dataFile.length());
-		// The explicit mimeType parameter wins over the request media type.
-		verify(entry).setMimetype("image/png");
-		verify(entry).setFilename(FileUtil.sanitizeFilename("../a.png"));
+		// The explicit mimeType parameter wins over the request media type; C5 records all three in one call.
+		verify(entry).setFileMetadata(dataFile.length(), "image/png", FileUtil.sanitizeFilename("../a.png"));
 	}
 
 	/** Reads the stream passed to {@code Data.setData} to its end, as the data store does. */
