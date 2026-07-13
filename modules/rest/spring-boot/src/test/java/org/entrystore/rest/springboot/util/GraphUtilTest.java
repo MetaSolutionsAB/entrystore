@@ -16,15 +16,25 @@
 
 package org.entrystore.rest.springboot.util;
 
+import org.eclipse.rdf4j.model.Model;
+import org.eclipse.rdf4j.model.ValueFactory;
+import org.eclipse.rdf4j.model.impl.LinkedHashModel;
+import org.eclipse.rdf4j.model.impl.SimpleValueFactory;
+import org.eclipse.rdf4j.rio.jsonld.JSONLDWriter;
+import org.eclipse.rdf4j.rio.turtle.TurtleWriter;
 import org.entrystore.rest.springboot.model.exception.CustomResponseException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 
+import java.io.StringWriter;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GraphUtilTest {
 
@@ -233,5 +243,51 @@ class GraphUtilTest {
 	@Test
 	void normalizeLegacyMediaType_shouldReturnNullForNullInput() {
 		assertNull(GraphUtil.normalizeLegacyMediaType(null));
+	}
+
+	@Test
+	void serializeGraph_classOverloadAndWriterOverload_produceSameTurtle() {
+		Model graph = sampleGraph();
+
+		String viaClassOverload = GraphUtil.serializeGraph(graph, TurtleWriter.class);
+		StringWriter stringWriter = new StringWriter();
+		GraphUtil.serializeGraph(graph, new TurtleWriter(stringWriter));
+
+		assertEquals(viaClassOverload, stringWriter.toString());
+	}
+
+	@Test
+	void serializeGraph_jsonld_limitsNamespacesToUsedOnes() {
+		String jsonld = GraphUtil.serializeGraph(sampleGraph(), JSONLDWriter.class);
+
+		assertTrue(jsonld.contains("http://purl.org/dc/terms/"),
+				"the namespace used by the graph must appear in the JSON-LD context");
+		assertFalse(jsonld.contains("http://xmlns.com/foaf/0.1/"),
+				"unused namespaces must not appear in the JSON-LD context");
+	}
+
+	@Test
+	void serializeGraph_stringDispatcher_rdfJsonMatchesRdfJsonUtil() {
+		Model graph = sampleGraph();
+		assertEquals(RDFJSON.graphToRdfJson(graph), GraphUtil.serializeGraph(graph, "application/rdf+json"));
+	}
+
+	@Test
+	void serializeGraph_stringDispatcher_turtleMatchesClassOverload() {
+		Model graph = sampleGraph();
+		assertEquals(GraphUtil.serializeGraph(graph, TurtleWriter.class), GraphUtil.serializeGraph(graph, "text/turtle"));
+	}
+
+	@Test
+	void serializeGraph_stringDispatcher_unknownMediaType_throwsIllegalArgument() {
+		assertThrows(IllegalArgumentException.class, () -> GraphUtil.serializeGraph(sampleGraph(), "image/png"));
+	}
+
+	private static Model sampleGraph() {
+		ValueFactory vf = SimpleValueFactory.getInstance();
+		Model model = new LinkedHashModel();
+		model.add(vf.createIRI("http://example.com/s"), vf.createIRI("http://purl.org/dc/terms/title"),
+				vf.createLiteral("Sample"));
+		return model;
 	}
 }
